@@ -117,12 +117,9 @@ function moduleWantsSharedMemory(wasmModule, desc) {
       (i.kind === "function" &&
         i.module === "Dream" &&
         (i.name === "workerSpawn" ||
-          i.name === "workerPost" ||
-          i.name === "workerRecv" ||
+          i.name === "workerDispatch" ||
           i.name === "workerShutdown" ||
-          i.name === "workerTerminate" ||
-          i.name === "workerPoolSpawn" ||
-          i.name === "workerPoolDispatch")),
+          i.name === "workerTerminate")),
   );
 }
 

@@ -50,6 +50,39 @@ async fun structured_shared_workers(): void {
     Assert.is_true(cancelled.is_err());
 }
 
+async fun structured_parallel_joiners(): void {
+    let released = CancellationSource();
+    let local = Task.scope<int, string>(async (scope) => {
+        let child = scope.spawn<int>(async () => {
+            released.token.wait_cancelled().await;
+            return Result.Ok(21);
+        });
+        let abandoned = child.join();
+        let waiting = child.join();
+        Promise.start(abandoned);
+        Promise.start(waiting);
+        Time.delay(1).await;
+        Promise.cancel(abandoned);
+        released.cancel();
+        Assert.eq(waiting.await.unwrap(), 21);
+        Assert.eq(child.join().await.unwrap(), 21);
+        return Result.Ok(42);
+    }).await;
+    Assert.eq(local.unwrap(), 42);
+    let result = Task.scope<int, string>(async (scope) => {
+        let child = scope.spawn_parallel<int>(() => 21);
+        let first = child.join();
+        let second = child.join();
+        Promise.start(first);
+        Promise.start(second);
+        Assert.eq(first.await.unwrap(), 21);
+        Assert.eq(second.await.unwrap(), 21);
+        Assert.eq(child.join().await.unwrap(), 21);
+        return Result.Ok(42);
+    }).await;
+    Assert.eq(result.unwrap(), 42);
+}
+
 async fun structured_value(value: int): Result<int, string> {
     Time.delay(1).await;
     return Result.Ok(value);
@@ -75,6 +108,7 @@ async fun structured_wait(scope: TaskScope<string>, counter: StructuredCounter):
 @test
 async fun structured_concurrency(): void {
     structured_shared_workers().await;
+    structured_parallel_joiners().await;
     let success = Task.scope<int, string>(async (scope) => {
         let first = scope.spawn<int>(async () => structured_value(20).await);
         let second = scope.spawn<int>(async () => structured_value(22).await);

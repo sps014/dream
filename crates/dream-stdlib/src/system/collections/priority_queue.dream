@@ -7,15 +7,17 @@ public class PriorityQueue<T> : Collection<T> {
     items: T[];
     count: int;
     cmp_fn: fun(T, T): int;
+    natural: bool;
     comparing: bool;
 
     // Empty queue ordered by `T`'s natural `Comparable` order.
-    public constructor() {
+    public constructor() where T : Comparable<T> {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
         this.comparing = false;
         let natural: fun(T, T): int = (a, b) => a.compare(b);
         this.cmp_fn = natural;
+        this.natural = true;
     }
 
     // Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when
@@ -24,6 +26,7 @@ public class PriorityQueue<T> : Collection<T> {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
         this.cmp_fn = cmp;
+        this.natural = false;
         this.comparing = false;
     }
 
@@ -70,7 +73,21 @@ public class PriorityQueue<T> : Collection<T> {
     fun less(i: int, j: int): bool {
         let cmp = this.cmp_fn;
         this.comparing = true;
-        let result = cmp(this.items[i], this.items[j]);
+        // Heap traversal supplies live indices; comparator mutation is rejected until it returns.
+        let result = cmp(Buffer.get_unchecked<T>(this.items, i), Buffer.get_unchecked<T>(this.items, j));
+        this.comparing = false;
+        return result < 0;
+    }
+
+    fun less(i: int, j: int): bool where T : Comparable<T> {
+        this.comparing = true;
+        let result = 0;
+        if this.natural {
+            result = Buffer.get_unchecked<T>(this.items, i).compare(Buffer.get_unchecked<T>(this.items, j));
+        } else {
+            let cmp = this.cmp_fn;
+            result = cmp(Buffer.get_unchecked<T>(this.items, i), Buffer.get_unchecked<T>(this.items, j));
+        }
         this.comparing = false;
         return result < 0;
     }

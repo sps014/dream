@@ -41,7 +41,7 @@ public class Task {
     }
 
     @runtime("workerSpawn")
-    static extern fun spawn_host(funcidx: int, env: long): int;
+    internal static extern fun spawn_host(one_shot: bool): int;
 
     @intrinsic(Intrinsic.FuncboxFuncidx)
     internal static extern fun funcidx(borrow body: fun(string): string): int;
@@ -55,12 +55,9 @@ public class Task {
     @intrinsic(Intrinsic.FuncboxEnv)
     internal static extern fun env_async(borrow body: fun(string): Future<string>): long;
 
-    @runtime("workerPost")
-    static extern fun post_host(id: int, borrow msg: string): void;
-
     @async_host
-    @runtime("workerRecv")
-    static extern async fun recv_host(id: int): string;
+    @runtime("workerDispatch")
+    internal static extern async fun dispatch_host(id: int, funcidx: int, env: long, borrow msg: string): string;
 
     @runtime("workerShutdown")
     static extern fun shutdown_host(id: int): void;
@@ -71,15 +68,19 @@ public class Task {
     // Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
     public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut {
         CancellationToken.throw_if_opt(token);
-        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
-        let id = Task.spawn_host(Task.funcidx(wrapped), Task.env(wrapped));
-        let session = TaskSession(id, wrapped);
-        Task.post_host(id, "");
-        let wire = Task.recv_host(id).await;
+        let session = Task.start<TOut>(body);
+        let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
         return result;
+    }
+
+    internal static fun start<TOut : shared>(body: fun(): TOut): TaskSession {
+        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
+        let id = Task.spawn_host(true);
+        let session = TaskSession(id, wrapped);
+        return session;
     }
 
     // Runs an async function on a separate worker; local async scope children need no worker.
@@ -88,10 +89,9 @@ public class Task {
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
             return Bytes.toWire<TOut>(body().await);
         };
-        let id = Task.spawn_host(Task.funcidx_async(wrapped), Task.env_async(wrapped));
+        let id = Task.spawn_host(true);
         let session = TaskSession(id, wrapped);
-        Task.post_host(id, "");
-        let wire = Task.recv_host(id).await;
+        let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
         let result = Bytes.fromWire<TOut>(wire);
         session.hold();
@@ -121,24 +121,34 @@ public class Task {
 @allow_cycle
 class TaskSession {
     id: int;
+    funcidx: int;
+    env: long;
     sync_body: fun(string): string;
     async_body: fun(string): Future<string>;
 
     public constructor(id: int, sync_body: fun(string): string) {
         this.id = id;
         this.sync_body = sync_body;
+        this.funcidx = Task.funcidx(this.sync_body);
+        this.env = Task.env(this.sync_body);
     }
 
     public constructor(id: int, async_body: fun(string): Future<string>) {
         this.id = id;
         this.async_body = async_body;
+        this.funcidx = Task.funcidx_async(this.async_body);
+        this.env = Task.env_async(this.async_body);
+    }
+
+    internal fun receive(): Future<string> {
+        return Task.dispatch_host(this.id, this.funcidx, this.env, "");
     }
 
     del() {
         Task.terminate_host(this.id);
     }
 
-    // After `recv_host(...).await`: last-use `del` (terminate) must not run in the pre-await poll block.
+    // After the host reply: last-use `del` (terminate) must not run in the pre-await poll block.
     public fun hold() {
         this.id = this.id;
     }

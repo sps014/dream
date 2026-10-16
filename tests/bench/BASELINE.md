@@ -1,12 +1,14 @@
 # Benchmark measurement protocol
 
-## CI comparison with .NET 10
+## CI comparison with .NET 10 Native AOT
 
-The **Dream vs .NET 10** workflow runs on pull requests, pushes to `main`, and manual
+The **Dream vs .NET 10 Native AOT** workflow runs on pull requests, pushes to `main`, and manual
 dispatches. Each micro/macro job builds Dream and its host libraries from the checked-out
 revision, installs the latest stable .NET 10 SDK, and uses `bench.py --arms current csharp`
-to compile both implementations and compare them on the same runner. It uses two warmups,
-20 measured process starts per arm, and ten passes per process.
+to compile both implementations and compare them on the same runner. C# is published with
+`PublishAot=true`, `OptimizationPreference=Speed`, and `IlcInstructionSet=native`; the harness
+runs the self-contained native executable directly. There is no JIT compilation in the measured
+C# process. It uses two warmups, 20 measured process starts per arm, and ten passes per process.
 The micro and macro jobs run one at a time; within each job Dream and .NET processes also
 run sequentially, alternating order between rounds.
 
@@ -29,8 +31,10 @@ includes the engine and JIT. Rebuild references after changing the fixture or ha
 `--benchmark <path>` selects a preserved fixture snapshot; each invocation reads it once for
 all arms and fingerprints those exact bytes, so editing the live fixture cannot mix arm inputs.
 `--diagnostics` also saves first-pass remarks and optimized IR, plus native assembly or WAT;
-C# diagnostics save JIT disassembly for n-body, Fibonacci and quicksort. .NET SDK, host and
-installed runtime binaries are fingerprinted alongside the benchmark assembly.
+C# diagnostics save a Native AOT code map (`csharp/native-map.xml`). The .NET SDK and host
+are fingerprinted alongside the native executable; `csharp/build.json` records the publish
+command, runtime targets and resolved package versions, including the Native AOT compiler.
+Historical DLL/JIT results are a different deployment mode and must be rerun for AOT comparisons.
 `build.json` records compile duration and artifact size. Compile duration includes diagnostic
 emission when requested and must be compared with matching flags.
 
@@ -128,6 +132,11 @@ reuse threads between jobs. Dream may run a worker per active job; C# controls i
 worker count dynamically, so the row does not establish equal worker utilization.
 Each job executes the same integer kernel and both arms validate
 the same final checksum.
+
+The Dream-only `workers` suite also measures sequential `task_spawn` calls and tiny structured
+bursts. `task_scope_16` and `task_scope_64` report nanoseconds per whole batch of sixteen or
+sixty-four jobs, respectively; the other worker rows report nanoseconds per dispatch/session.
+Keep those units separate when comparing submission overhead with the CPU-heavy macro row.
 
 ## Graph queue attribution
 

@@ -116,6 +116,34 @@ fn snapshot_read_under_a_quiet_call_drops_its_pair() {
 }
 
 #[test]
+fn destructor_effects_only_apply_to_calls_that_can_run_cleanup() {
+    for cleanup in [false, true] {
+        let mut t = types();
+        let drop_def = DefId::root(99);
+        t.layouts.structs.get_mut(&t.boxed).unwrap().destructor = Some(drop_def);
+        let mut destructor = peek_fn(&t, true);
+        destructor.def = drop_def;
+        let mut peek = FunctionBuilder::new("peek", t.i.void());
+        peek.set_def(PEEK, vec![]);
+        peek.new_param(t.i.string(), Some("s".into()));
+        if cleanup {
+            let owned = peek.new_local(t.boxed, None);
+            peek.push(Statement::Release(Operand::Copy(Place::Local(owned))));
+        }
+        peek.terminate(Terminator::Return(None));
+        let mir = Mir {
+            functions: vec![peek.finish(), destructor],
+            layouts: t.layouts.clone(),
+            ..Default::default()
+        };
+        let effects = ModRefTable::compute(&mir, &t.i);
+        let mut s = snapshot(&t, |_, _| {});
+        run_function(&mut s.func, &t.i, &t.layouts, &effects);
+        assert_eq!(rc_ops(&s.func, s.x), if cleanup { 2 } else { 0 });
+    }
+}
+
+#[test]
 fn callee_that_may_overwrite_the_slot_keeps_the_pair() {
     let t = types();
     let mut s = snapshot(&t, |_, _| {});

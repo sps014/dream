@@ -42,6 +42,10 @@ PriorityQueue uses a four-child heap with comparisons completed before opening a
 transient reference counts; their LLVM lowering keeps index checks and supports managed value
 fields. `List.reverse` uses the permutation operation. Reentrant queue mutation from a comparator
 is rejected before mutation, while callbacks can read the queue and change unrelated state.
+Natural-order queues call `Comparable.compare` directly when the element type supplies it;
+custom comparators retain their callback path and mutation guard. Live heap comparisons use
+unchecked buffer reads under the queue invariant. Custom-only element types remain supported.
+
 Option/Result success extraction uses internal zero storage for unreachable fallback values,
 rather than allocating a one-element array on every unwrap.
 
@@ -68,6 +72,8 @@ repetitive inputs and boundaries. Reverse search remains unchanged.
 
 Raw arenas cache the active cursor and end address, with chunk growth out of line.
 Reset rewinds the first chunk in constant time; later chunks are reset when revisited.
+String splitting writes its pre-counted output slots without repeating bounds checks; the
+separator scan establishes the exact output capacity before substring construction.
 String-backed span reads use an internal unchecked unit accessor after the logical span
 check, avoiding a duplicate backing-string check without changing public bounds behavior.
 
@@ -87,6 +93,26 @@ Wasm scratch returns to the guest heap; per-traversal uthash bookkeeping still a
 Ready overflow, timers and foreign completions obtain entries in bounded reusable blocks.
 Native idle caches are bounded; wasm returns storage to its guest heap. Cancellation removes raw
 queue references before discharging scheduler ownership. Timer ordering still uses a linked list.
+
+`TaskHandle` allocates its completion signal only when a join first observes an unfinished
+child; multiple joiners share that signal. Cancelling a join detaches its waiter without
+cancelling the scope-owned child.
+
+Structured parallel children prepare the same one-shot session as `Task.spawn` and await its
+dispatch directly, avoiding an intermediate async frame. Dispatch installs the completion before
+submitting work; separate post/receive hosts and their buffered replies are removed. Native
+one-shot replies become visible after closure cleanup, callback retirement and thread unbinding.
+The retired thread is available for reuse before the caller wakes. The session keeps its closure
+alive through the reply and still terminates on cancellation or cleanup; termination claims an
+active completion under the session mutex. Explicit pools use reusable sessions through the same
+dispatch ABI. A scope retains one cancellation token instead of constructing and publishing a new
+token on every access. Native and JS worker hosts use the same session/dispatch declarations.
+
+Parked native worker threads use individual condition-variable mutexes; the pool mutex protects
+only idle-list membership, so waking workers do not compete with the rest of a submission burst.
+Foreign completion queues wake their owner on the empty-to-nonempty transition and detach queued
+batches under one scheduler lock. Completion claiming, publication and scheduler retains keep
+their existing synchronization and ownership rules.
 
 Each native worker session retains at most one payload-free spare Job. Atomic adoption gives
 exclusive ownership; reply/completion/queue fields reset before reuse, and session destruction
@@ -120,7 +146,8 @@ Heap effects are shared by ARC insertion, held-owner snapshots, value borrowing 
 proofs. Their monotone closure includes direct calls, fresh constructors and closed interface
 targets; erased slots join all concrete instances. Destructor aggregation follows closure, and
 unknown/missing bodies stay conservative. Owning cleanup and ownership observations are explicit
-proof boundaries. Cursor inference rejects summarized overwrites, relevant destruction and heap
+proof boundaries. Held-owner snapshots consult destructor effects across calls only when the
+callee summary permits cleanup; pure numeric calls do not inherit unrelated destructor effects. Cursor inference rejects summarized overwrites, relevant destruction and heap
 or externally aliased value-slot writes; fresh inline storage remains separate. Initial borrowed
 expressions do not gain an owning token solely because their count is observed.
 

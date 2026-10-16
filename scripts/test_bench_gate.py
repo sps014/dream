@@ -252,6 +252,61 @@ class GateTests(unittest.TestCase):
                 stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
 
 
+class CSharpPublishTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.args = argparse.Namespace(csharp_source=b"class Program {}",
+                                       csharp_project=b"<Project />", diagnostics=False)
+
+    def publish(self, command, cwd):
+        self.command = command
+        artifact = cwd / "publish/DreamBench"
+        artifact.parent.mkdir()
+        artifact.write_bytes(b"native executable")
+        (cwd / "obj").mkdir(exist_ok=True)
+        (cwd / "obj/project.assets.json").write_text(json.dumps({
+            "libraries": {"Microsoft.DotNet.ILCompiler/10.0.2": {}},
+            "targets": {"net10.0/osx-arm64": {}},
+        }))
+        if self.args.diagnostics:
+            (cwd / "obj/DreamBench.map.xml").write_text("<map />")
+        return "publish succeeded"
+
+    def test_publishes_native_aot_and_runs_executable_directly(self):
+        with patch.object(bench.shutil, "which", return_value="dotnet"), \
+             patch.object(bench, "run", side_effect=self.publish):
+            command = bench.prepare_csharp(self.root, self.args)
+        self.assertEqual(command, [str(self.root.resolve() / "csharp/publish/DreamBench")])
+        self.assertEqual(self.command[:2], ["dotnet", "publish"])
+        for flag in ("-p:PublishAot=true", "-p:OptimizationPreference=Speed", "-p:IlcInstructionSet=native"):
+            self.assertIn(flag, self.command)
+        metadata = json.loads((self.root / "csharp/build.json").read_text())
+        self.assertEqual(metadata["deployment"], "native-aot")
+        self.assertEqual(metadata["sha256"], bench_gate.digest(command[0]))
+        self.assertIn("Microsoft.DotNet.ILCompiler/10.0.2", metadata["packages"])
+
+    def test_managed_only_publish_cannot_reuse_old_native_binary(self):
+        stale = self.root / "csharp/publish/DreamBench"
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b"stale native binary")
+        with patch.object(bench.shutil, "which", return_value="dotnet"), \
+             patch.object(bench, "run", return_value=""), \
+             self.assertRaisesRegex(SystemExit, "Native AOT executable not found"):
+            bench.prepare_csharp(self.root, self.args)
+        self.assertFalse(stale.exists())
+
+    def test_diagnostics_preserve_native_code_map_without_running_jit(self):
+        self.args.diagnostics = True
+        with patch.object(bench.shutil, "which", return_value="dotnet"), \
+             patch.object(bench, "run", side_effect=self.publish) as run:
+            bench.prepare_csharp(self.root, self.args)
+        self.assertEqual(run.call_count, 1)
+        self.assertIn("-p:IlcGenerateMapFile=true", self.command)
+        self.assertEqual((self.root / "csharp/native-map.xml").read_text(), "<map />")
+
+
 class MeasurementTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

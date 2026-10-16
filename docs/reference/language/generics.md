@@ -56,6 +56,10 @@ System.println(b.get());   // 100
 
 ### Generic constraints
 
+Constructors can also use a `where` clause after their parameters. For example,
+`constructor() where T : Comparable<T>` makes the natural-order constructor available only
+when `T` supports comparison; a separate custom-comparator constructor can remain unconstrained.
+
 Constrain a type parameter to one or more interfaces with `T : Iface`.
 Inside the body, that interface's methods are available.
 Constraints apply to functions, classes, structs, interfaces, and `extend` blocks:

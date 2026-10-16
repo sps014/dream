@@ -1692,11 +1692,8 @@ void dream_foreign_work_end(dream_ptr future);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 /* Called by runtime init when the program links C: worker threads then serve one session each. */
 void dream_worker_isolate_threads(void);
-int32_t workerSpawn(int32_t fn, dream_ptr env);
-int32_t workerPoolSpawn(void);
-void workerPost(int32_t id, dream_ptr msg);
-int32_t workerRecvAsync(dream_ptr future, int32_t id);
-int32_t workerPoolDispatchAsync(dream_ptr future, int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
+int32_t workerSpawn(int32_t one_shot);
+int32_t workerDispatchAsync(dream_ptr future, int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
 void workerShutdown(int32_t id);
 void workerTerminate(int32_t id);
 

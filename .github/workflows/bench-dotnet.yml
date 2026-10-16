@@ -1,4 +1,4 @@
-name: Dream vs .NET 10
+name: Dream vs .NET 10 Native AOT
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   compare:
-    name: Native micro and macro vs .NET 10
+    name: Native micro and macro vs .NET 10 Native AOT
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
@@ -106,8 +106,9 @@ jobs:
               if report.exists():
                   revision = (output / "revision.txt").read_text().strip()
                   with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-                      summary.write(f"## Dream vs .NET 10: {suite}\n\nRevision: `{revision}`\n\n")
-                      summary.write("Both arms were built and measured on this runner in this run. "
+                      summary.write(f"## Dream vs .NET 10 Native AOT: {suite}\n\nRevision: `{revision}`\n\n")
+                      summary.write("C# uses a speed-optimized Native AOT executable. "
+                                    "Both arms were built and measured on this runner in this run. "
                                     "`cur/C#` below 1 means Dream took less time. "
                                     "Hosted measurements are informational; lifecycle/engine differences "
                                     "are recorded in summary.json.\n\n```text\n")
@@ -123,5 +124,6 @@ jobs:
             target/bench-dotnet/*/*.txt
             target/bench-dotnet/*/*.json*
             target/bench-dotnet/*/*/build.json
+            target/bench-dotnet/*/csharp/publish.txt
           retention-days: 30
           if-no-files-found: warn

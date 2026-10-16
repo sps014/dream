@@ -7,6 +7,7 @@
 typedef struct Node { dream_ptr f; int64_t due; struct Node *next; } Node;
 static _Thread_local int owner_thread;
 static unsigned dropped, published, wakes, node_live;
+static void (*enqueue_hook)(void);
 int dream_rt_mt;
 static int32_t *i32_at(dream_ptr f, int32_t off) { return (int32_t *)((char *)dream_p(f) + off); }
 static dream_ptr *ptr_at(dream_ptr f, int32_t off) { return (dream_ptr *)((char *)dream_p(f) + off); }
@@ -35,7 +36,11 @@ int dream_rc_last_slow(int32_t *rc, int32_t value) {
         }
     }
 }
-void dream_enqueue(dream_ptr f) { assert(owner_thread && f); __atomic_fetch_add(&wakes, 1, __ATOMIC_RELAXED); }
+void dream_enqueue(dream_ptr f) {
+    assert(owner_thread && f);
+    __atomic_fetch_add(&wakes, 1, __ATOMIC_RELAXED);
+    if (enqueue_hook) { enqueue_hook(); }
+}
 static void scheduler_drop_start_retain(dream_ptr f) {
     assert(owner_thread && i32_at(f, F_NEXT)[0] == 1);
     i32_at(f, F_NEXT)[0] = 2;
@@ -143,6 +148,33 @@ static int wait_flag(int *flag) {
     }
     return __atomic_load_n(flag, __ATOMIC_ACQUIRE);
 }
+
+static dream_ptr during_drain;
+static void complete_during_drain(void) {
+    enqueue_hook = NULL;
+    dream_complete_foreign(during_drain, 43);
+}
+
+static void drain_detached_batches(void) {
+    dream_ptr frames[3] = {frame(), frame(), frame()};
+    dream_ptr waker = frame();
+    unsigned previous_wakes = wakes;
+    for (unsigned i = 0; i < 3; ++i) {
+        *ptr_at(frames[i], F_WAKER) = waker;
+        dream_foreign_work_begin(frames[i]);
+    }
+    dream_complete_foreign(frames[0], 41);
+    dream_complete_foreign(frames[1], 42);
+    during_drain = frames[2];
+    enqueue_hook = complete_during_drain;
+    foreign_drain();
+    assert(!foreign_outstanding() && wakes == previous_wakes + 3 && node_live == 0);
+    for (unsigned i = 0; i < 3; ++i) {
+        assert(*result_at(frames[i]) == 41 + i && !*ptr_at(frames[i], F_WAKER));
+        frame_free(frames[i]);
+    }
+    frame_free(waker);
+}
 int main(void) {
     owner_thread = 1;
     dream_ptr f = frame();
@@ -162,6 +194,7 @@ int main(void) {
     foreign_drain();
     assert(wakes == 1 && !*ptr_at(f, F_WAKER));
     frame_free(f); frame_free(waker);
+    drain_detached_batches();
 
     dream_thread drain_thread, wake_thread;
     assert(dream_thread_start(&drain_thread, independent_drain, NULL) == 0);
@@ -178,7 +211,7 @@ int main(void) {
     dream_thread threads[16];
     for (unsigned i = 0; i < 16; i++) { assert(dream_thread_start(&threads[i], scheduler_stress, NULL) == 0); }
     for (unsigned i = 0; i < 16; i++) { dream_thread_join(threads[i]); }
-    assert(dropped == 4100 && published == 7173 && node_live == 0);
+    assert(dropped == 4104 && published == 7179 && node_live == 0);
     puts("foreign queue scheduler isolation passed");
     return 0;
 }

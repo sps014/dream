@@ -3486,63 +3486,63 @@
         "page": "reference/api/collections-priority-queue.md"
       },
       {
-        "signature": "public constructor()",
+        "signature": "public constructor() where T : Comparable<T>",
         "description": "Empty queue ordered by `T`'s natural `Comparable` order.",
-        "line": 13,
+        "line": 14,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public constructor(cmp: fun(T, T): int)",
         "description": "Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when `a` should come out first, positive when `b` should).",
-        "line": 23,
+        "line": 25,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 31,
+        "line": 34,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the queue has no elements.",
-        "line": 36,
+        "line": 39,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later pushes overwrite them.",
-        "line": 42,
+        "line": 45,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void where T : unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 54,
+        "line": 57,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "",
-        "line": 78,
+        "line": 95,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "",
-        "line": 109,
+        "line": 126,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the smallest element without removing it, or `None` when empty. O(1).",
-        "line": 158,
+        "line": 175,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun iterator(): PriorityQueueIterator<T>",
         "description": "Iterates elements in ascending order under the active comparator, over a snapshot taken now, so later pushes/pops do not affect the cursor.",
-        "line": 167,
+        "line": 184,
         "page": "reference/api/collections-priority-queue.md"
       }
     ]
@@ -13536,13 +13536,13 @@
       {
         "signature": "public static async fun spawn<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): TOut",
         "description": "Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.",
-        "line": 72,
+        "line": 69,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): TOut",
         "description": "Runs an async function on a separate worker; local async scope children need no worker.",
-        "line": 86,
+        "line": 87,
         "page": "reference/api/task-task.md"
       },
       {
@@ -13701,37 +13701,37 @@
       {
         "signature": "public class TaskScope<E>",
         "description": "Owns async and parallel children; its enclosing Task.scope joins every child before returning.",
-        "line": 88,
+        "line": 95,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public get token(): CancellationToken",
         "description": "The inherited cancellation token for this scope and its children.",
-        "line": 106,
+        "line": 115,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun cancel(): void",
         "description": "Requests cooperative cancellation; completion still waits for child cleanup.",
-        "line": 109,
+        "line": 118,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>",
         "description": "Schedules a child immediately and retains it even if its result handle is discarded.",
-        "line": 112,
+        "line": 121,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on the runtime's shared worker threads and retains structured ownership.",
-        "line": 128,
+        "line": 136,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on an explicit reusable pool while retaining structured ownership.",
-        "line": 144,
+        "line": 151,
         "page": "reference/api/task-task-scope.md"
       }
     ]
@@ -14274,31 +14274,31 @@
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 350,
+        "line": 351,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 379,
+        "line": 381,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 411,
+        "line": 413,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 443,
+        "line": 445,
         "page": "reference/api/text-string-2.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins elements with `sep` between them.",
-        "line": 473,
+        "line": 475,
         "page": "reference/api/text-string-2.md"
       }
     ]

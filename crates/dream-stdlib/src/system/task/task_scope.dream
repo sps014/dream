@@ -4,11 +4,11 @@ module system.task;
 @allow_cycle
 public class TaskHandle<T, E> {
     internal value: Option<Result<T, TaskFailure<E>>>;
-    internal completed: CancellationSource;
+    internal completed: Option<CancellationSource>;
 
     internal constructor() {
         this.value = Option.None;
-        this.completed = CancellationSource();
+        this.completed = Option.None;
     }
 
     // Waits for completion without cancelling or transferring ownership of the child.
@@ -17,7 +17,11 @@ public class TaskHandle<T, E> {
     }
 
     static async fun join_owned(handle: TaskHandle<T, E>): Result<T, TaskFailure<E>> {
-        if handle.value.is_none() { handle.completed.token.wait_cancelled().await; }
+        if handle.value.is_none() {
+            // Completion runs on this scheduler; installing the first waiter cannot race a poll.
+            if handle.completed.is_none() { handle.completed = Option.Some(CancellationSource()); }
+            handle.completed.unwrap().token.wait_cancelled().await;
+        }
         return handle.value.unwrap();
     }
 
@@ -27,14 +31,17 @@ public class TaskHandle<T, E> {
 
     static async fun parallel_owned(handle: TaskHandle<T, E>, body: fun(): T, scope: TaskScope<E>): bool where T : shared {
         // The scope owns this wait: cancellation must settle the worker before exposing results.
-        let value = Task.spawn<T>(body).await;
+        let session = Task.start<T>(body);
+        let wire = session.receive().await;
+        let value = Bytes.fromWire<T>(wire);
+        session.hold();
         let outcome: Result<T, TaskFailure<E>> = Result.Ok(value);
         if scope.token.is_cancelled {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
             outcome = Result.Err(failure);
         }
         handle.value = Option.Some(outcome);
-        handle.completed.cancel();
+        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
         return true;
     }
 
@@ -54,7 +61,7 @@ public class TaskHandle<T, E> {
             outcome = Result.Err(failure);
         } else { outcome = Result.Ok(result.unwrap()); }
         handle.value = Option.Some(outcome);
-        handle.completed.cancel();
+        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
         return true;
     }
 
@@ -78,7 +85,7 @@ public class TaskHandle<T, E> {
             let outcome: Result<T, TaskFailure<E>> = Result.Ok(result.unwrap());
             handle.value = Option.Some(outcome);
         }
-        handle.completed.cancel();
+        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
         return true;
     }
 }
@@ -87,6 +94,7 @@ public class TaskHandle<T, E> {
 @allow_cycle
 public class TaskScope<E> {
     source: CancellationSource;
+    context: CancellationToken;
     jobs: List<Future<bool>>;
     internal failure: Option<E>;
     internal worker_failure: Option<TaskPoolError>;
@@ -95,6 +103,7 @@ public class TaskScope<E> {
 
     internal constructor() {
         this.source = CancellationSource();
+        this.context = this.source.token;
         this.jobs = List<Future<bool>>();
         this.failure = Option.None;
         this.worker_failure = Option.None;
@@ -103,7 +112,7 @@ public class TaskScope<E> {
     }
 
     // The inherited cancellation token for this scope and its children.
-    public get token(): CancellationToken { return this.source.token; }
+    public get token(): CancellationToken { return this.context; }
 
     // Requests cooperative cancellation; completion still waits for child cleanup.
     public fun cancel(): void { this.source.cancel(); }
@@ -115,7 +124,6 @@ public class TaskScope<E> {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
             let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
             handle.value = Option.Some(outcome);
-            handle.completed.cancel();
             return handle;
         }
         let pending = handle.execute(body, this);
@@ -131,7 +139,6 @@ public class TaskScope<E> {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
             let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
             handle.value = Option.Some(outcome);
-            handle.completed.cancel();
             return handle;
         }
         let pending = handle.execute_parallel(body, this);
@@ -147,7 +154,6 @@ public class TaskScope<E> {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
             let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
             handle.value = Option.Some(outcome);
-            handle.completed.cancel();
             return handle;
         }
         let pending = handle.execute_pool(body, pool, this);

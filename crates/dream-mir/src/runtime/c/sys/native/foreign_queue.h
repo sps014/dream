@@ -82,13 +82,15 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
     }
     dream_mutex_lock(&s->mu);
     s->foreign_pending -= 1;
+    int wake = s->fq_head == NULL;
     if (s->fq_tail) {
         s->fq_tail->next = n;
     } else {
         s->fq_head = n;
     }
     s->fq_tail = n;
-    dream_cond_signal(&s->cv);
+    /* A nonempty queue already has a wake in flight or an owner draining it. */
+    if (wake) { dream_cond_signal(&s->cv); }
     dream_mutex_unlock(&s->mu);
     dream_mutex_unlock(&foreign_claim_mu);
     if (owned && discarded) { dream_release((dream_ptr)res); }
@@ -99,32 +101,30 @@ void dream_complete_foreign_owned(dream_ptr f, dream_ptr res) { complete_foreign
 
 static void foreign_drain(void) {
     for (;;) {
-        Node *n;
         dream_mutex_lock(&sched.mu);
-        n = sched.fq_head;
-        if (n) {
-            sched.fq_head = n->next;
-            if (!sched.fq_head) {
-                sched.fq_tail = NULL;
-            }
-        }
+        Node *n = sched.fq_head;
+        sched.fq_head = sched.fq_tail = NULL;
         dream_mutex_unlock(&sched.mu);
         if (!n) {
             return;
         }
-        dream_ptr f = n->f;
-        foreign_node_put(n);
-        dream_ptr w = ptr_at(f, F_WAKER)[0];
-        if (w) {
-            ptr_at(f, F_WAKER)[0] = 0;
-            int32_t wk = i32_at(w, F_KIND)[0];
-            if (wk == FUTURE_KIND_ALL || wk == FUTURE_KIND_ANY) {
-                dream_combinator_progress(w, f);
-            } else {
-                dream_enqueue(w);
+        do {
+            Node *next = n->next;
+            dream_ptr f = n->f;
+            foreign_node_put(n);
+            dream_ptr w = ptr_at(f, F_WAKER)[0];
+            if (w) {
+                ptr_at(f, F_WAKER)[0] = 0;
+                int32_t wk = i32_at(w, F_KIND)[0];
+                if (wk == FUTURE_KIND_ALL || wk == FUTURE_KIND_ANY) {
+                    dream_combinator_progress(w, f);
+                } else {
+                    dream_enqueue(w);
+                }
             }
-        }
-        scheduler_drop_start_retain(f);
+            scheduler_drop_start_retain(f);
+            n = next;
+        } while (n);
     }
 }
 

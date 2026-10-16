@@ -9,6 +9,11 @@ class PqOwned : Comparable<PqOwned> {
     public fun compare(borrow other: PqOwned): int { return this.key - other.key; }
     del() { pq_drops = pq_drops + 1; }
 }
+class PqCustomOnly {
+    public key: int;
+    public constructor(key: int) { this.key = key; }
+}
+
 struct PqRecord : Comparable<PqRecord> {
     public item: PqOwned;
     public constructor(item: PqOwned) { this.item = item; }
@@ -63,6 +68,13 @@ fun pq_record_run(): void {
 
 @test
 fun priority_queue_ownership(): void {
+    let custom = PriorityQueue<PqCustomOnly>((a, b) => b.key - a.key);
+    custom.push(PqCustomOnly(1));
+    custom.push(PqCustomOnly(3));
+    custom.push(PqCustomOnly(2));
+    Assert.eq(custom.pop().unwrap().key, 3);
+    Assert.eq(custom.pop().unwrap().key, 2);
+    Assert.eq(custom.pop().unwrap().key, 1);
     let before = pq_drops;
     pq_owned_run();
     Assert.eq(pq_drops - before, 128);

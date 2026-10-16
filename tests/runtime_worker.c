@@ -32,6 +32,7 @@ static void pause_acquired(void *worker);
 #undef dream_thread_start
 
 void dream_complete_foreign_owned(dream_ptr future, dream_ptr reply) {
+    if (!future) { dream_release(reply); return; }
     TestCompletion *completion = (TestCompletion *)future;
     dream_mutex_lock(&completion->mu);
     assert(!completion->done);
@@ -57,17 +58,15 @@ static void completion_init(TestCompletion *completion) {
     dream_cond_init(&completion->cv);
 }
 
-static dream_ptr receive_reply(int32_t id) {
-    TestCompletion completion;
-    completion_init(&completion);
-    assert(workerRecvAsync((dream_ptr)&completion, id) == 1);
-    return completion_wait(&completion);
+static void post_job(TestCompletion *completion, int32_t id, int32_t fn, dream_ptr env, dream_ptr message) {
+    completion_init(completion);
+    assert(workerDispatchAsync((dream_ptr)completion, id, fn, env, message) == 1);
 }
 
 static dream_ptr dispatch_reply(int32_t id, int32_t fn, dream_ptr env, dream_ptr message) {
     TestCompletion completion;
     completion_init(&completion);
-    assert(workerPoolDispatchAsync((dream_ptr)&completion, id, fn, env, message) == 1);
+    assert(workerDispatchAsync((dream_ptr)&completion, id, fn, env, message) == 1);
     return completion_wait(&completion);
 }
 
@@ -127,7 +126,7 @@ dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
 
 static DREAM_THREAD_PROC(spawn_group) {
     int32_t *ids = arg;
-    for (int i = 0; i < 25; ++i) { ids[i] = workerPoolSpawn(); }
+    for (int i = 0; i < 25; ++i) { ids[i] = workerSpawn(0); }
     return 0;
 }
 
@@ -138,7 +137,9 @@ typedef struct {
 
 static DREAM_THREAD_PROC(receive_until_cancelled) {
     Operation *op = arg;
-    assert(receive_reply(op->id) == 0);
+    TestCompletion completion;
+    post_job(&completion, op->id, 8, 0, 0);
+    assert(completion_wait(&completion) == 0);
     return 0;
 }
 
@@ -156,7 +157,7 @@ static DREAM_THREAD_PROC(dispatch_message) {
 }
 
 static void concurrent_operations(void) {
-    int32_t id = workerPoolSpawn();
+    int32_t id = workerSpawn(0);
     Worker *pin = acquire_worker(id);
     Operation ops[8];
     dream_thread threads[8];
@@ -171,33 +172,91 @@ static void concurrent_operations(void) {
     assert(__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) == 1);
     release_worker(pin);
 
-    id = workerPoolSpawn();
+    id = workerSpawn(0);
     pin = acquire_worker(id);
+    entered = proceed = 0;
     ops[0].id = id;
     assert(dream_thread_start(&threads[0], receive_until_cancelled, &ops[0]) == 0);
-    /* A deferred receiver releases its session reference after installing the completion. */
+    /* Termination settles the active wait without waiting for the busy body. */
     for (;;) {
         dream_mutex_lock(&pin->mu);
-        int pending = pin->receiver != 0;
+        int pending = pin->active_future != 0;
         dream_mutex_unlock(&pin->mu);
         if (pending) { break; }
         dream_thread_yield();
     }
     workerTerminate(id);
     dream_thread_join(threads[0]);
+    dream_mutex_lock(&test_mu);
+    proceed = 1; dream_cond_broadcast(&test_cv);
+    dream_mutex_unlock(&test_mu);
+    while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 1) { dream_thread_yield(); }
     release_worker(pin);
     assert(debug_get_live_objects() == 0);
+}
+
+static DREAM_THREAD_PROC(repeated_sessions) {
+    (void)arg;
+    for (int i = 0; i < 100; ++i) {
+        int32_t id = workerSpawn(1);
+        Worker *pin = acquire_worker(id);
+        dream_ptr message = dream_utf8_to_string("handoff");
+        TestCompletion completion;
+        post_job(&completion, id, 7, 0, message);
+        dream_ptr reply = completion_wait(&completion);
+        assert(reply == message);
+        dream_mutex_lock(&pin->mu);
+        assert(!pin->bound && !pin->busy && pin->dead);
+        dream_mutex_unlock(&pin->mu);
+        dream_release(reply);
+        dream_release(message);
+        workerTerminate(id);
+        release_worker(pin);
+    }
+    return 0;
+}
+
+static void concurrent_session_handoffs(void) {
+    dream_thread threads[8];
+    for (int i = 0; i < 8; ++i) {
+        assert(dream_thread_start(&threads[i], repeated_sessions, NULL) == 0);
+    }
+    for (int i = 0; i < 8; ++i) { dream_thread_join(threads[i]); }
+    assert(HASH_COUNT(workers) == 0);
+    assert(debug_get_live_objects() == 0);
+}
+
+static void one_shot_cancellation(void) {
+    entered = proceed = 0;
+    int32_t id = workerSpawn(1);
+    Worker *pin = acquire_worker(id);
+    TestCompletion active, rejected;
+    post_job(&active, id, 8, 0, 0);
+    dream_mutex_lock(&test_mu);
+    while (!entered) { dream_cond_wait(&test_cv, &test_mu); }
+    dream_mutex_unlock(&test_mu);
+    post_job(&rejected, id, 7, 0, 0);
+    assert(completion_wait(&rejected) == 0);
+    workerTerminate(id);
+    assert(completion_wait(&active) == 0);
+    dream_mutex_lock(&test_mu);
+    proceed = 1; dream_cond_broadcast(&test_cv);
+    dream_mutex_unlock(&test_mu);
+    while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 1) { dream_thread_yield(); }
+    release_worker(pin);
 }
 
 static DREAM_THREAD_PROC(post_once) {
     int32_t id = *(int32_t *)arg;
     dream_ptr message = dream_utf8_to_string("acquired");
-    workerPost(id, message);
+    TestCompletion completion;
+    post_job(&completion, id, 7, 0, message);
+    assert(completion_wait(&completion) == 0);
     dream_release(message);
     return 0;
 }
 static void acquired_operation_survives_termination(void) {
-    int32_t id = workerPoolSpawn();
+    int32_t id = workerSpawn(0);
     Worker *pin = acquire_worker(id);
     dream_mutex_lock(&test_mu);
     paused_id = id; entered = proceed = 0;
@@ -220,21 +279,24 @@ static void acquired_operation_survives_termination(void) {
 
 static void termination_boundaries(void) {
     entered = proceed = 0;
-    int32_t id = workerSpawn(8, 0);
+    int32_t id = workerSpawn(0);
+    TestCompletion completions[21];
     Worker *pin = acquire_worker(id);
     dream_ptr msg = dream_utf8_to_string("busy");
-    workerPost(id, msg);
+    post_job(&completions[0], id, 8, 0, msg);
     dream_release(msg);
     dream_mutex_lock(&test_mu);
     while (!entered) { dream_cond_wait(&test_cv, &test_mu); }
     dream_mutex_unlock(&test_mu);
     for (int i = 0; i < 12; ++i) {
-        msg = dream_utf8_to_string("queued"); workerPost(id, msg); dream_release(msg);
+        msg = dream_utf8_to_string("queued"); post_job(&completions[i + 1], id, 7, 0, msg); dream_release(msg);
     }
     workerTerminate(id);
     assert(pin->dead && pin->busy && !pin->head);
     msg = dream_utf8_to_string("rejected");
-    workerPost(id, msg);
+    TestCompletion rejected;
+    post_job(&rejected, id, 7, 0, msg);
+    assert(completion_wait(&rejected) == 0);
     dream_release(msg);
     dream_mutex_lock(&test_mu);
     proceed = 1;
@@ -242,27 +304,29 @@ static void termination_boundaries(void) {
     dream_mutex_unlock(&test_mu);
     while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 1) { dream_thread_yield(); }
     release_worker(pin);
+    for (int i = 0; i < 13; ++i) { assert(completion_wait(&completions[i]) == 0); }
 
-    self_id = workerSpawn(9, 0);
+    self_id = workerSpawn(0);
     pin = acquire_worker(self_id);
     msg = dream_utf8_to_string("self");
-    workerPost(self_id, msg);
+    post_job(&completions[0], self_id, 9, 0, msg);
     dream_release(msg);
     while (__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) != 1) { dream_thread_yield(); }
     assert(pin->dead);
     release_worker(pin);
     workerTerminate(self_id);
+    assert(completion_wait(&completions[0]) == 0);
     assert(debug_get_live_objects() == 0);
 
-    id = workerSpawn(7, 0);
+    id = workerSpawn(0);
     for (int i = 0; i < 20; ++i) {
         msg = dream_array_new(1, 1);
         *((char *)dream_p(msg) + 4) = (char)i;
-        workerPost(id, msg);
+        post_job(&completions[i], id, 7, 0, msg);
         dream_release(msg);
     }
     for (int i = 0; i < 20; ++i) {
-        dream_ptr reply = receive_reply(id);
+        dream_ptr reply = completion_wait(&completions[i]);
         assert(*((char *)dream_p(reply) + 4) == i);
         dream_release(reply);
     }
@@ -292,7 +356,7 @@ static DREAM_THREAD_PROC(reuse_jobs) {
     for (int i = 0; i < 10000; i++) {
         Job *j = new_job(operation->worker, operation->slot, 0, 0);
         assert(j->fn == operation->slot);
-        assert(!j->env && !j->msg && !j->reply && !j->future && !j->next);
+        assert(!j->env && !j->msg && !j->future && !j->next);
         if ((i & 7) == 0) { dream_thread_yield(); }
         assert(j->fn == operation->slot);
         release_job(operation->worker, j);
@@ -300,19 +364,17 @@ static DREAM_THREAD_PROC(reuse_jobs) {
     return 0;
 }
 static void session_job_reuse(void) {
-    int32_t id = workerPoolSpawn();
+    int32_t id = workerSpawn(0);
     Worker *w = acquire_worker(id);
     dream_ptr payload = dream_utf8_to_string("reuse");
     Job *original = NULL;
     for (int i = 0; i < 1000; i++) {
         Job *j = new_job(w, 7, payload, payload);
         if (!original) { original = j; }
-        assert(j == original && !w->spare && !j->future && !j->next && !j->reply);
+        assert(j == original && !w->spare && !j->future && !j->next);
         j->next = j;
-        j->reply = payload;
-        dream_retain(payload);
         release_job(w, j);
-        assert(w->spare == original && !j->future && !j->msg && !j->env && !j->reply);
+        assert(w->spare == original && !j->future && !j->msg && !j->env);
     }
     dream_release(payload);
     assert(debug_get_live_objects() == 0);
@@ -335,34 +397,36 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         if (strcmp(argv[1], "start-failure") == 0) { fail_start = 1; }
         else { next_id = (int64_t)INT32_MAX + 1; }
-        /* Threads bind on the first job, so a start failure surfaces at the post. */
-        int32_t id = workerPoolSpawn();
+        /* Threads bind on the first job, so a start failure surfaces at dispatch. */
+        int32_t id = workerSpawn(0);
         dream_ptr msg = dream_utf8_to_string("start");
-        workerPost(id, msg);
+        TestCompletion completion;
+        post_job(&completion, id, 7, 0, msg);
         return 1;
     }
 
     for (int round = 0; round < 3; ++round) {
         int32_t ids[100];
+        TestCompletion completions[100];
         dream_ptr env = dream_utf8_to_string("env");
         for (int i = 0; i < 100; ++i) {
-            ids[i] = workerSpawn(7, env);
+            ids[i] = workerSpawn(0);
             assert(ids[i] > 0);
             if (i) { assert(ids[i] > ids[i - 1]); }
         }
-        dream_release(env);
         assert(HASH_COUNT(workers) == 100);
         for (int i = 0; i < 100; ++i) {
             char text[16];
             snprintf(text, sizeof(text), "job-%d", i);
             dream_ptr msg = dream_utf8_to_string(text);
-            workerPost(ids[i], msg);
+            post_job(&completions[i], ids[i], 7, env, msg);
             dream_release(msg);
         }
+        dream_release(env);
         for (int i = 0; i < 100; ++i) {
             char text[16];
             int len = snprintf(text, sizeof(text), "job-%d", i);
-            dream_ptr reply = receive_reply(ids[i]);
+            dream_ptr reply = completion_wait(&completions[i]);
             assert(dream_str_len(reply) == len);
             for (int j = 0; j < len; ++j) {
                 assert(dream_char_at_u(reply, j) == text[j]);
@@ -397,6 +461,8 @@ int main(int argc, char **argv) {
     session_job_reuse();
     acquired_operation_survives_termination();
     concurrent_operations();
+    concurrent_session_handoffs();
+    one_shot_cancellation();
     termination_boundaries();
     puts("worker registry stress passed");
 }

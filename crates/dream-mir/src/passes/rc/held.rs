@@ -591,26 +591,18 @@ impl Check<'_> {
                         && !self.pin_fields().contains(&(self.f.local_ty(b), field))
                 }
                 Effect::SlotStore(ty) => !self.hits_elem(ty),
-                // A callee may also release anything, running any `del`.
-                Effect::Call(c) => {
-                    !self.summary_hits(&self.modref.call(c))
-                        && !self.summary_hits(self.modref.del())
-                }
-                Effect::Iface(id, slot) => {
-                    let summary = self.modref.iface(id, slot);
-                    if summary.is_quiet() {
-                        true
-                    } else {
-                        !self.summary_hits(&summary) && !self.summary_hits(self.modref.del())
-                    }
-                }
-                Effect::Ctor(def) => {
-                    !self.summary_hits(&self.modref.ctor(def))
-                        && !self.summary_hits(self.modref.del())
-                }
+                Effect::Call(c) => !self.call_hits(&self.modref.call(c)),
+                Effect::Iface(id, slot) => !self.call_hits(&self.modref.iface(id, slot)),
+                Effect::Ctor(def) => !self.call_hits(&self.modref.ctor(def)),
             };
         });
         ok
+    }
+
+    fn call_hits(&self, summary: &ModRef) -> bool {
+        // Unrelated destructors cannot invalidate a snapshot across a call with no cleanup.
+        self.summary_hits(summary)
+            || (summary.may_destroy() && self.summary_hits(self.modref.del()))
     }
 
     /// The field-load owner and every local it is copied from. Any one of them being live keeps

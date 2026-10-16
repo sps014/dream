@@ -58,6 +58,34 @@ async fun sessions(iters: int): int {
     }
     return total;
 }
+@noinline
+async fun spawned_jobs(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        let value = i & 15;
+        total = total + Task.spawn(() => value * value).await;
+    }
+    return total;
+}
+@noinline
+async fun scoped_jobs(size: int, iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        total = total + Task.scope<int, string>(async (scope) => {
+            let jobs = List<TaskHandle<int, string>>(size);
+            for (let j = 0; j < size; j = j + 1) {
+                let value = j & 15;
+                jobs.push(scope.spawn_parallel<int>(() => value * value));
+            }
+            let sum = 0;
+            for (let j = 0; j < jobs.length; j = j + 1) {
+                sum = sum + jobs[j].join().await?;
+            }
+            return Result.Ok(sum);
+        }).await.unwrap();
+    }
+    return total;
+}
 async fun run_suite(): void {
     let sw = Stopwatch(); let v = pool_jobs(1, 1000).await; sw.stop();
     report("worker_pool_1", sw.elapsed_nanos, 1000, v);
@@ -67,6 +95,12 @@ async fun run_suite(): void {
     report("worker_pool_64", sw.elapsed_nanos, 1024, v);
     sw = Stopwatch(); v = sessions(100).await; sw.stop();
     report("worker_sessions", sw.elapsed_nanos, 100, v);
+    sw = Stopwatch(); v = spawned_jobs(1000).await; sw.stop();
+    report("task_spawn", sw.elapsed_nanos, 1000, v);
+    sw = Stopwatch(); v = scoped_jobs(16, 100).await; sw.stop();
+    report("task_scope_16", sw.elapsed_nanos, 100, v);
+    sw = Stopwatch(); v = scoped_jobs(64, 25).await; sw.stop();
+    report("task_scope_64", sw.elapsed_nanos, 25, v);
 }
 async fun main(): void {
     measuring = false;

@@ -24,7 +24,7 @@ public class TaskPool {
         let count = size;
         if count < 0 { count = 0; }
         this.ids = Buffer.alloc<int>(count);
-        for (let i = 0; i < count; i = i + 1) { this.ids[i] = TaskPool.spawn_host(); }
+        for (let i = 0; i < count; i = i + 1) { this.ids[i] = Task.spawn_host(false); }
         this.next = 0;
         this.active = 0;
         this.closing = false;
@@ -50,7 +50,7 @@ public class TaskPool {
         pool.next = (pool.next + 1) % pool.ids.length;
         if pool.active == 0 { pool.changed = CancellationSource(); }
         pool.active = pool.active + 1;
-        let wire = TaskPool.dispatch_host(id, Task.funcidx(wrapped), Task.env(wrapped), "").await;
+        let wire = Task.dispatch_host(id, Task.funcidx(wrapped), Task.env(wrapped), "").await;
         TaskPool.keep_alive(wrapped);
         pool.settled();
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) { return Result.Err(TaskPoolError.Cancelled); }
@@ -78,7 +78,7 @@ public class TaskPool {
         pool.next = (pool.next + 1) % pool.ids.length;
         if pool.active == 0 { pool.changed = CancellationSource(); }
         pool.active = pool.active + 1;
-        let wire = TaskPool.dispatch_host(id, Task.funcidx_async(wrapped), Task.env_async(wrapped), "").await;
+        let wire = Task.dispatch_host(id, Task.funcidx_async(wrapped), Task.env_async(wrapped), "").await;
         TaskPool.keep_alive(wrapped);
         pool.settled();
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) { return Result.Err(TaskPoolError.Cancelled); }
@@ -140,9 +140,4 @@ public class TaskPool {
     @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
 
-    @runtime("workerPoolSpawn")
-    static extern fun spawn_host(): int;
-    @async_host
-    @runtime("workerPoolDispatch")
-    static extern async fun dispatch_host(id: int, funcidx: int, env: long, borrow msg: string): string;
 }

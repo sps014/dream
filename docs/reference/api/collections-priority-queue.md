@@ -17,7 +17,7 @@ public class PriorityQueue<T> : Collection<T>
 Empty queue ordered by `T`'s natural `Comparable` order.
 
 ```dream
-public constructor()
+public constructor() where T : Comparable<T>
 ```
 
 ## `constructor`

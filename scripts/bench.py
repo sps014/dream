@@ -4,7 +4,7 @@
 Arms:
   current   target/release/dream compiling tests/bench/microbenches.dream
   baseline  a reference Dream build (default: target/bench-baseline worktree)
-  csharp    tests/bench/csharp Release build, run through its compiled assembly
+  csharp    tests/bench/csharp Release Native AOT publish, run as a native executable
 
 Every arm compiles once. Rounds rotate and alternate the arm order (ABBA-style) so drift in
 CPU frequency or thermal state is spread over all arms. Raw per-pass samples are kept as JSONL;
@@ -133,13 +133,7 @@ def tool_versions(args) -> dict:
         out["dotnet"] = run(["dotnet", "--version"]).strip()
         out["dotnet_info"] = run(["dotnet", "--info"]).strip()
         out["dotnet_sha256"] = bench_gate.digest(Path(shutil.which("dotnet")).resolve())
-        runtimes = run(["dotnet", "--list-runtimes"])
-        out["dotnet_runtimes"] = runtimes.strip()
-        out["dotnet_runtime_files"] = {
-            str(p): bench_gate.digest(p)
-            for version, directory in re.findall(r"^Microsoft.NETCore.App (\S+) \[(.+)\]$", runtimes, re.M)
-            for p in sorted((Path(directory) / version).iterdir()) if p.is_file()
-        }
+        out["csharp_deployment"] = "native-aot"
     out["runtime_sources"] = {str(p.relative_to(ROOT)): bench_gate.digest(p)
         for p in sorted((ROOT / "crates/dream-mir/src/runtime").rglob("*")) if p.is_file()}
     for arm in ("baseline", "current"):
@@ -213,21 +207,34 @@ def prepare_csharp(out, args) -> list[str]:
     work.mkdir(parents=True, exist_ok=True)
     (work / "Program.cs").write_bytes(args.csharp_source)
     (work / "DreamBench.csproj").write_bytes(args.csharp_project)
+    publish = work / "publish"
+    # An earlier publish must not let a managed-only build reuse a stale native executable.
+    if publish.exists():
+        shutil.rmtree(publish)
+    command = ["dotnet", "publish", "DreamBench.csproj", "-c", "Release",
+               "-p:PublishAot=true", "-p:OptimizationPreference=Speed",
+               "-p:IlcInstructionSet=native", "-o", str(publish), "--nologo", "-v", "q"]
+    if args.diagnostics:
+        command.append("-p:IlcGenerateMapFile=true")
     started = time.monotonic()
-    run(["dotnet", "build", "-c", "Release", "--nologo", "-v", "q"], cwd=work)
-    dlls = sorted(work.glob("bin/Release/*/DreamBench.dll"))
-    if not dlls:
-        raise SystemExit("csharp: DreamBench.dll not found after build")
-    artifact = dlls[-1]
-    (work / "build.json").write_text(json.dumps({"compile_seconds": time.monotonic() - started,
+    stdout = run(command, cwd=work)
+    elapsed = time.monotonic() - started
+    (work / "publish.txt").write_text(stdout)
+    artifact = with_exe(publish / "DreamBench")
+    if not artifact.is_file():
+        raise SystemExit("csharp: Native AOT executable not found after publish")
+    assets = json.loads((work / "obj/project.assets.json").read_text())
+    (work / "build.json").write_text(json.dumps({"compile_seconds": elapsed,
+        "deployment": "native-aot", "optimization": "Speed", "instruction_set": "native",
+        "publish_command": command, "runtime_targets": sorted(assets["targets"]),
+        "packages": sorted(assets["libraries"]),
         "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
     if args.diagnostics:
-        env = dict(os.environ, DREAM_BENCH_PASSES="1", DREAM_BENCH_SEED=str(args.input_seed),
-                   DOTNET_JitDisasm="BenchNbody Fib QsortRange",
-                   DOTNET_JitStdOutFile=str(work / "jit-disassembly.txt"))
-        stdout = run(["dotnet", str(artifact)], env=env)
-        (work / "diagnostic-stdout.txt").write_text(stdout)
-    return ["dotnet", str(artifact)]
+        maps = sorted((work / "obj").rglob("DreamBench.map.xml"))
+        if len(maps) != 1:
+            raise ValueError("csharp: expected one Native AOT code map")
+        shutil.copy2(maps[0], work / "native-map.xml")
+    return [str(artifact)]
 
 
 def run_once(cmd: list[str], env: dict) -> tuple[str, int]:
@@ -370,7 +377,7 @@ def main() -> int:
             commands[arm] = prepare_dream(arm, exe, out, args)
     for arm, command in commands.items():
         artifact = (Path(command[-1]).with_suffix(".wasm") if args.target == "wasm"
-                    else Path(command[-1]) if arm == "csharp" else Path(command[0]))
+                    else Path(command[0]))
         identities[f'{arm}_artifact_sha256'] = bench_gate.digest(artifact)
         if args.target == "wasm":
             identities[f"{arm}_runtime_sha256"] = bench_gate.digest(artifact.with_suffix(".node.runtime.mjs"))

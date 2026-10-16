@@ -129,6 +129,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 );
             }
             let params = self.parse_formal_parameters()?;
+            let where_constraints = if is_dtor {
+                Vec::new()
+            } else {
+                self.parse_where_constraints()
+            };
             if is_extern {
                 // `extern constructor(...)` binds a foreign constructor (`@cpp` classes); there is
                 // no foreign destructor to declare, since ownership decides whether one runs.
@@ -144,6 +149,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let mut node =
                     FunctionNode::new(attributes, ctor_name, None, None, params, empty, visibility);
                 node.is_extern = true;
+                node.where_constraints = where_constraints;
                 return Ok(node);
             }
             let block = self.parse_block()?;
@@ -155,6 +161,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let mut node =
                 FunctionNode::new(attributes, ctor_name, None, None, params, block, ctor_vis);
             node.is_override = is_override;
+            node.where_constraints = where_constraints;
             return Ok(node);
         }
 

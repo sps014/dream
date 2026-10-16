@@ -48,10 +48,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils \
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev \
             linux-tools-common "linux-tools-$(uname -r)" || \
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+            build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev
           sudo sysctl -w kernel.perf_event_paranoid=-1 || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -142,6 +142,9 @@ jobs:
           path: |
             target/bench-profile/*.txt
             target/bench-profile/*.s
+            target/bench-profile/csharp/native-map.xml
+            target/bench-profile/csharp/build.json
+            target/bench-profile/csharp/publish.txt
             target/bench-profile/current/target/release/*.opt.ll
             target/bench-profile/current/target/release/*.s
           retention-days: 14

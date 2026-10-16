@@ -1053,6 +1053,20 @@ fn test_parse_struct_constructor_and_destructor() {
 }
 
 #[test]
+fn constructors_keep_where_constraints() {
+    for declaration in [
+        "constructor() where T : Comparable<T> {}",
+        "extern constructor(value: T) where T : Comparable<T>;",
+    ] {
+        let arena = bumpalo::Bump::new();
+        let code = format!("class Box<T> {{ {declaration} }}");
+        let (program, diagnostics) = parse_code(&code, &arena);
+        assert!(!diagnostics.has_errors(), "{diagnostics:?}");
+        assert_eq!(program.structs[0].methods[0].where_constraints.len(), 1);
+    }
+}
+
+#[test]
 fn test_parse_primary_ctor_fields_default_public() {
     use crate::nodes::Visibility;
     let code = "class Point(x: int, y: int); struct Vec2(internal a: int, b: int);";

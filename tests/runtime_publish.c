@@ -8,14 +8,15 @@
 #include "dream_thread.h"
 typedef struct { dream_mutex mu; dream_cond cv; int done; dream_ptr reply; } TestCompletion;
 void dream_complete_foreign_owned(dream_ptr future, dream_ptr reply) {
+    if (!future) { dream_release(reply); return; }
     TestCompletion *c = (TestCompletion *)future;
     dream_mutex_lock(&c->mu);
     assert(!c->done); c->reply = reply; c->done = 1;
     dream_cond_signal(&c->cv); dream_mutex_unlock(&c->mu);
 }
-static dream_ptr receive_reply(int32_t worker) {
+static dream_ptr dispatch_reply(int32_t worker, int32_t fn, dream_ptr message) {
     TestCompletion c = {0}; dream_mutex_init(&c.mu); dream_cond_init(&c.cv);
-    assert(workerRecvAsync((dream_ptr)&c, worker) == 1);
+    assert(workerDispatchAsync((dream_ptr)&c, worker, fn, 0, message) == 1);
     dream_mutex_lock(&c.mu);
     while (!c.done) { dream_cond_wait(&c.cv, &c.mu); }
     dream_mutex_unlock(&c.mu); dream_cond_destroy(&c.cv); dream_mutex_destroy(&c.mu);
@@ -128,9 +129,8 @@ static void make_sized_nodes(size_t count, int32_t size) {
 static void make_nodes(size_t count) { make_sized_nodes(count, sizeof(Node)); }
 
 static void handoff_and_free(void) {
-    int32_t worker = workerSpawn(0, 0);
-    workerPost(worker, nodes[0]);
-    assert(receive_reply(worker) == 0);
+    int32_t worker = workerSpawn(0);
+    assert(dispatch_reply(worker, 0, nodes[0]) == 0);
     workerTerminate(worker);
     for (size_t i = 0; i < node_count; ++i) {
         assert((*dream_rc_word(nodes[i]) & INT32_MAX) == 1);
@@ -164,8 +164,10 @@ int main(void) {
     handoff_and_free();
 
     make_nodes(3);
-    int32_t observer = workerSpawn(1, 0);
-    workerPost(observer, nodes[0]);
+    int32_t observer = workerSpawn(0);
+    TestCompletion observation = {0};
+    dream_mutex_init(&observation.mu); dream_cond_init(&observation.cv);
+    assert(workerDispatchAsync((dream_ptr)&observation, observer, 1, 0, nodes[0]) == 1);
     /* The observer already owns the root: no second handoff can repair the missing barrier. */
     pthread_mutex_lock(&mutation_mu);
     ((Node *)dream_p(nodes[1]))->left = nodes[2];
@@ -178,7 +180,11 @@ int main(void) {
         dream_retain(nodes[1]);
         dream_release(nodes[1]);
     }
-    assert(receive_reply(observer) == 0);
+    dream_mutex_lock(&observation.mu);
+    while (!observation.done) { dream_cond_wait(&observation.cv, &observation.mu); }
+    assert(observation.reply == 0);
+    dream_mutex_unlock(&observation.mu);
+    dream_cond_destroy(&observation.cv); dream_mutex_destroy(&observation.mu);
     workerTerminate(observer);
     for (size_t i = 0; i < node_count; ++i) {
         assert((*dream_rc_word(nodes[i]) & INT32_MAX) == 1);

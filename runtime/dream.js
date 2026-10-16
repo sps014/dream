@@ -3054,7 +3054,7 @@ parentPort.on('message', (m) => {
       parentPort.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'reset') {
       inst.__workerReset();
-    } else if (m.t === 'msg' || m.t === 'dispatch') {
+    } else if (m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       parentPort.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
@@ -3078,7 +3078,7 @@ self.onmessage = (e) => {
       self.postMessage({ t: 'ready', stack: inst.workerStack || 0 });
     } else if (m.t === 'reset') {
       inst.__workerReset();
-    } else if (m.t === 'msg' || m.t === 'dispatch') {
+    } else if (m.t === 'dispatch') {
       const reply = await inst.__workerInvoke(m.fnIdx, m.env, unpackWire(m.data));
       self.postMessage({ t: 'reply', data: packWire(reply), idle: inst._hostPending === 0 });
     } else if (m.t === 'term') {
@@ -3092,12 +3092,9 @@ self.onmessage = (e) => {
 }
 
 /**
- * Builds the `Dream`-module worker host functions (`workerSpawn`/`workerPost`/`workerRecv`/
- * `workerTerminate`/`workerPoolSpawn`/`workerPoolDispatch`) behind `system.task`'s `Task`/`TaskPool`.
- * Each worker is a real browser `Worker` or Node `worker_threads.Worker` running a fresh instance
- * of the same module, importing the parent's shared `WebAssembly.Memory`.
- * `workerRecv`/`workerPoolDispatch` are `extern async`, so they return Promises bridged into
- * Dream's scheduler.
+ * Builds the worker session/dispatch hosts behind `system.task`'s `Task` and `TaskPool`.
+ * Each slot runs a separate instance with shared memory; one-shot sessions retire before
+ * their reply resumes Dream. Dispatch returns a Promise bridged into Dream's scheduler.
  */
 function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
   const reg = new Map();
@@ -3142,7 +3139,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       state.inflight--;
       const text = unpackWire(m.data);
       if (state.pending.length > 0) state.pending.shift()(text);
-      else state.replies.push(text);
+      if (state.oneShot) terminateWorker(state.id);
     }
   };
 
@@ -3225,14 +3222,12 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     return slot;
   };
 
-  const spawnWorker = (fnIndex, env) => {
-    publish(env);
+  const spawnWorker = (oneShot) => {
     const state = {
       slot: null,
-      fnIndex: Number(fnIndex ?? 0),
-      env: Number(env ?? 0),
+      oneShot: !!oneShot,
+      id: 0,
       pending: [],
-      replies: [],
       inflight: 0,
     };
     const reused = idle.pop();
@@ -3245,22 +3240,67 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       state.slot = startWorker(state);
     }
     const id = nextId++;
+    state.id = id;
     reg.set(id, state);
     return id;
   };
 
+  const terminateWorker = (id) => {
+    const s = reg.get(id);
+    if (!s) return;
+    reg.delete(id);
+    for (const p of s.pending) p("");
+    const slot = s.slot;
+    // A worker mid-job, or whose last job left host calls running, cannot be handed on: they
+    // would settle into the next session's thread.
+    if (slot.worker && slot.ready && slot.idle && s.inflight === 0 && idle.length < IDLE_MAX) {
+      slot.state = null;
+      // An idle Node worker must not keep the process alive.
+      if (typeof slot.worker.unref === "function") slot.worker.unref();
+      idle.push(slot);
+      return;
+    }
+    const revokeBlob = () => {
+      if (!slot.blobUrl) return;
+      try {
+        URL.revokeObjectURL(slot.blobUrl);
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    const releaseStack = () => {
+      if (slot.stack && typeof getInstance === "function") {
+        getInstance().exports.dream_wasm_raw_free(slot.stack);
+      }
+    };
+    if (slot.worker || !slot.ready) {
+      const stopped = new Promise((resolve) => {
+        const terminate = () => {
+          const result = slot.worker.terminate();
+          if (result && typeof result.then === "function") {
+            result.then(() => { releaseStack(); resolve(); }, resolve);
+          } else { releaseStack(); resolve(); }
+        };
+        // A booting worker may hold the shared bootstrap gate, and killing it there would leave
+        // every later worker waiting on that gate forever. It retires once it reports ready.
+        // Finished bodies retire gracefully; a busy body still needs immediate termination.
+        if (!slot.ready) {
+          // The browser may not have fetched the boot script from its blob URL yet.
+          slot.terminateWhenReady = () => { revokeBlob(); terminate(); };
+        } else if (s.inflight === 0) {
+          slot.closed = terminate;
+          slot.worker.postMessage({ t: "term" });
+        } else { terminate(); }
+      });
+      stopping.add(stopped);
+      stopped.then(() => stopping.delete(stopped));
+    }
+    if (slot.ready) revokeBlob();
+  };
+
   return {
-    // `body` arrives marshaled as a JS callable wrapping the Dream funcref; recover its raw funcidx
-    // and closure-env word (0 for a non-capturing body).
-    workerSpawn: (body, env) =>
-      spawnWorker(body && body.__dreamFuncIndex != null ? body.__dreamFuncIndex : body, env),
-    workerPoolSpawn: () => spawnWorker(0, 0),
-    workerPost: (id, msg) => {
-      const s = reg.get(id);
-      if (!s) return;
-      postJob(s, { t: "msg", fnIdx: s.fnIndex, env: s.env, data: packWire(msg) });
-    },
-    workerPoolDispatch: (id, fnIndex, env, msg) =>
+    workerSpawn: spawnWorker,
+    workerDispatch: (id, fnIndex, env, msg) =>
       new Promise((resolve) => {
         const s = reg.get(id);
         if (!s) return resolve("");
@@ -3268,71 +3308,12 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         s.pending.push(resolve);
         postJob(s, { t: "dispatch", fnIdx: fnIndex, env, data: packWire(msg) });
       }),
-    // extern async: resolve with the next reply (or "" if the worker is gone).
-    workerRecv: (id) =>
-      new Promise((resolve) => {
-        const s = reg.get(id);
-        if (!s) return resolve("");
-        if (s.replies.length > 0) resolve(s.replies.shift());
-        else s.pending.push(resolve);
-      }),
     // JS termination never blocks the caller, so there is nothing to overlap.
     __drainWorkers: async () => {
       while (stopping.size) await Promise.all([...stopping]);
     },
     workerShutdown: () => {},
-    workerTerminate: (id) => {
-      const s = reg.get(id);
-      if (!s) return;
-      reg.delete(id);
-      for (const p of s.pending) p("");
-      const slot = s.slot;
-      // A worker mid-job, or whose last job left host calls running, cannot be handed on: they
-      // would settle into the next session's thread.
-      if (slot.worker && slot.ready && slot.idle && s.inflight === 0 && idle.length < IDLE_MAX) {
-        slot.state = null;
-        // An idle Node worker must not keep the process alive.
-        if (typeof slot.worker.unref === "function") slot.worker.unref();
-        idle.push(slot);
-        return;
-      }
-      const revokeBlob = () => {
-        if (!slot.blobUrl) return;
-        try {
-          URL.revokeObjectURL(slot.blobUrl);
-        } catch (_) {
-          /* ignore */
-        }
-      };
-      const releaseStack = () => {
-        if (slot.stack && typeof getInstance === "function") {
-          getInstance().exports.dream_wasm_raw_free(slot.stack);
-        }
-      };
-      if (slot.worker || !slot.ready) {
-        const stopped = new Promise((resolve) => {
-          const terminate = () => {
-            const result = slot.worker.terminate();
-            if (result && typeof result.then === "function") {
-              result.then(() => { releaseStack(); resolve(); }, resolve);
-            } else { releaseStack(); resolve(); }
-          };
-          // A booting worker may hold the shared bootstrap gate, and killing it there would leave
-          // every later worker waiting on that gate forever. It retires once it reports ready.
-          // Finished bodies retire gracefully; a busy body still needs immediate termination.
-          if (!slot.ready) {
-            // The browser may not have fetched the boot script from its blob URL yet.
-            slot.terminateWhenReady = () => { revokeBlob(); terminate(); };
-          } else if (s.inflight === 0) {
-            slot.closed = terminate;
-            slot.worker.postMessage({ t: "term" });
-          } else { terminate(); }
-        });
-        stopping.add(stopped);
-        stopped.then(() => stopping.delete(stopped));
-      }
-      if (slot.ready) revokeBlob();
-    },
+    workerTerminate: terminateWorker,
   };
 }
 
@@ -3473,12 +3454,9 @@ function moduleWantsSharedMemory(wasmModule, desc) {
       (i.kind === "function" &&
         i.module === "Dream" &&
         (i.name === "workerSpawn" ||
-          i.name === "workerPost" ||
-          i.name === "workerRecv" ||
+          i.name === "workerDispatch" ||
           i.name === "workerShutdown" ||
-          i.name === "workerTerminate" ||
-          i.name === "workerPoolSpawn" ||
-          i.name === "workerPoolDispatch")),
+          i.name === "workerTerminate")),
   );
 }
 

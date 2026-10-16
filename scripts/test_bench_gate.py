@@ -320,6 +320,7 @@ class MeasurementTests(unittest.TestCase):
     def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=()):
         args = argparse.Namespace(
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
+            fail_on_regression=False,
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
             regression_threshold=.1, benchmark=self.fixture, csharp=bench.SUITES['micro'][1], runner_id='test',
             filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',

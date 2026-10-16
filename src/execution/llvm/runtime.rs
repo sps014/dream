@@ -236,6 +236,29 @@ pub(super) fn clang_unit(
     )
 }
 
+fn bitcode_flags(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    spec: &TargetSpec,
+    opt: OptLevel,
+    level: &[&'static str],
+) -> Vec<&'static str> {
+    let mut flags = Vec::new();
+    if spec.can_link_on_host() {
+        flags.push("-emit-llvm");
+    }
+    // Zig writes nothing for `-emit-llvm` combined with the cache's `-MD`.
+    if opt != OptLevel::O0 || !spec.can_link_on_host() {
+        flags.push("-flto=full");
+    }
+    if native_sanitize_flag(config, spec).is_some() {
+        // Early instrumentation lets internalize privatize ASan's shared registration counter,
+        // so the vendor objects register the same ELF globals twice. Instrument after linking.
+        flags.extend(["-Xclang", "-disable-llvm-passes"]);
+    }
+    flags.extend_from_slice(level);
+    flags
+}
+
 pub fn llvm_runtime(
     tools: &LlvmTools,
     spec: &TargetSpec,
@@ -301,6 +324,7 @@ pub(super) fn build_native_runtime(
     if !spec.is_windows() {
         level.push("-fPIC");
     }
+    let bc_flags = bitcode_flags(config, spec, opt, &level);
     let mut inputs: Vec<PathBuf> = rt_stamp::files_under(root);
     inputs.push(clang.clone());
     inputs.push(tools.tool("llvm-link"));
@@ -322,7 +346,7 @@ pub(super) fn build_native_runtime(
         format!(
             "{}{}\n{}\n{}|{}|{:?}\n",
             rt_stamp::content_fingerprint(all),
-            level.join(" "),
+            bc_flags.join(" "),
             native_target_arg(spec),
             sysroot_args(config, spec).join(" "),
             config.fingerprint(),
@@ -347,16 +371,6 @@ pub(super) fn build_native_runtime(
         return snapshot_runtime(dir, bc, sigs, archive);
     }
 
-    // Cross units go through `zig cc`, which writes nothing for `-emit-llvm` combined with the
-    // cache's `-MD`; `-c -flto=full` yields the same bitcode from Zig and clang alike.
-    let mut bc_flags = Vec::new();
-    if spec.can_link_on_host() {
-        bc_flags.push("-emit-llvm");
-    }
-    if opt != OptLevel::O0 || !spec.can_link_on_host() {
-        bc_flags.push("-flto=full");
-    }
-    bc_flags.extend(&level);
     let namespaces = Default::default();
     let mut dependencies = Vec::new();
     let mut parts = Vec::new();
@@ -584,6 +598,10 @@ pub(super) fn reduce_disassembly(ll: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+#[path = "runtime_sanitizer_tests.rs"]
+mod sanitizer_tests;
 
 #[cfg(test)]
 mod tests {

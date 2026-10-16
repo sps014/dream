@@ -1,9 +1,10 @@
-"""Card hubs and page metadata for the documentation site, registered as an MkDocs hook.
+"""Section directories and page metadata for the documentation site, registered as an MkDocs hook.
 
-A page containing ``<!-- cards -->`` gets a card for every sibling in its nav section (or every
-top-level section on the home page). ``<!-- cards grouped -->`` renders one heading per child
-section followed by that section's cards. Cards come from front matter, so a new page or folder
-appears without editing any list:
+A page containing ``<!-- pages -->`` lists every sibling in its nav section. The home page shows
+the top-level sections as cards; section pages show a directory of rows, so navigating deeper never
+means another wall of cards. ``<!-- pages grouped -->`` renders one column per child section with
+that section's pages. Entries come from front matter, so a new page or folder appears without
+editing any list:
 
     title: Async / Await
     summary: Write non-blocking code with async functions and await.
@@ -34,7 +35,7 @@ STATUS_LABELS = {"stable": "Stable", "experimental": "Experimental", "planned": 
 TARGET_LABELS = {"native": "Native", "web": "Browser", "node": "Node"}
 VALIDATED_ROOTS = ("language/",)
 WORDS_PER_MINUTE = 220
-MARKER = re.compile(r"<!--\s*cards(\s+grouped)?\s*-->")
+MARKER = re.compile(r"<!--\s*pages(\s+grouped)?\s*-->")
 DEFAULT_ICONS = {"section": "material/folder-outline", "page": "material/file-document-outline"}
 
 _state = {"nav": None, "files": None, "icons": None}
@@ -81,7 +82,7 @@ def card_items(page, nav_items):
         siblings = page.parent.children
     else:
         return None
-    return [item for item in siblings if item is not page and _card_meta(item).get("card", True) is not False]
+    return _listable(item for item in siblings if item is not page)
 
 
 def _card_meta(item):
@@ -143,49 +144,79 @@ def _url_for(src_uri, files):
     return file.url if file is not None else None
 
 
-def render_card(item, page, files=None, icon_root=None):
+def _entry(item, page, files):
+    """Link target, title, and metadata for one hub entry, or None when it cannot be linked."""
     meta = _card_meta(item)
-    if isinstance(item, Section):
-        target = index_page(item)
-        if target is None:
-            log.warning("Section '%s' has no index.md, so it cannot be shown as a card on %s",
-                        item.title, page.file.src_uri)
-            return ""
-        title = item.title
-        kind = "section"
-        count = page_count(item)
-        footer = f'<span class="dream-card__count">{count} {"page" if count == 1 else "pages"}</span>' if count else ""
-    else:
-        target = item
-        title = item.title
-        kind = "page"
-        footer = ""
-    summary = meta.get("summary")
-    if not summary:
-        log.warning("%s is shown as a card on %s but has no `summary` front matter",
-                    target.file.src_uri, page.file.src_uri)
-    icon = icon_svg(meta.get("icon") or DEFAULT_ICONS[kind], icon_root)
-    if icon is None:
-        log.warning("Unknown icon %r in %s", meta.get("icon"), target.file.src_uri)
-        icon = icon_svg(DEFAULT_ICONS[kind], icon_root) or ""
-    href = get_relative_url(target.url, page.url)
+    target = index_page(item) if isinstance(item, Section) else item
+    if target is None:
+        log.warning("Section '%s' has no index.md, so it cannot be listed on %s", item.title, page.file.src_uri)
+        return None
+    if not meta.get("summary"):
+        log.warning("%s is listed on %s but has no `summary` front matter", target.file.src_uri, page.file.src_uri)
     api = ""
     if meta.get("api"):
         api_url = _url_for(meta["api"], files)
         if api_url is None:
             log.warning("`api` in %s points to a missing page: %s", target.file.src_uri, meta["api"])
         else:
-            api = f'<a class="dream-card__api" href="{html.escape(get_relative_url(api_url, page.url))}">API</a>'
+            api = get_relative_url(api_url, page.url)
+    return {
+        "kind": "section" if isinstance(item, Section) else "page",
+        "title": item.title,
+        "href": get_relative_url(target.url, page.url),
+        "summary": meta.get("summary") or "",
+        "meta": meta,
+        "count": page_count(item) if isinstance(item, Section) else 0,
+        "api": api,
+        "src_uri": target.file.src_uri,
+    }
+
+
+def _filter_attrs(meta):
     status = meta.get("status") if meta.get("status") in STATUSES else ""
     targets = " ".join(t for t in meta.get("targets") or [] if t in TARGETS)
-    tail = badges(meta, compact=True) + footer + api
+    return f'data-status="{status}" data-targets="{targets}"'
+
+
+def _count_label(count):
+    return f'{count} {"page" if count == 1 else "pages"}' if count else ""
+
+
+def render_card(item, page, files=None, icon_root=None):
+    entry = _entry(item, page, files)
+    if entry is None:
+        return ""
+    icon = icon_svg(entry["meta"].get("icon") or DEFAULT_ICONS[entry["kind"]], icon_root)
+    if icon is None:
+        log.warning("Unknown icon %r in %s", entry["meta"].get("icon"), entry["src_uri"])
+        icon = icon_svg(DEFAULT_ICONS[entry["kind"]], icon_root) or ""
+    count = _count_label(entry["count"])
     return (
-        f'<div class="dream-card dream-card--{kind}" data-status="{status}" data-targets="{targets}">'
+        f'<div class="dream-card">'
         f'<span class="dream-card__icon">{icon}</span>'
-        f'<a class="dream-card__title" href="{html.escape(href)}">{inline_markup(title)}</a>'
-        f'<p class="dream-card__summary">{inline_markup(summary or "")}</p>'
-        + (f'<div class="dream-card__meta">{tail}</div>' if tail else "")
+        f'<a class="dream-card__title" href="{html.escape(entry["href"])}">{inline_markup(entry["title"])}</a>'
+        f'<p class="dream-card__summary">{inline_markup(entry["summary"])}</p>'
+        + (f'<span class="dream-card__count">{count}</span>' if count else "")
         + "</div>"
+    )
+
+
+def render_row(item, page, files=None):
+    entry = _entry(item, page, files)
+    if entry is None:
+        return ""
+    tail = badges(entry["meta"], compact=True)
+    if entry["count"]:
+        tail += f'<span class="dream-index__count">{_count_label(entry["count"])}</span>'
+    if entry["api"]:
+        tail += f'<a class="dream-index__api" href="{html.escape(entry["api"])}">API</a>'
+    return (
+        f'<li class="dream-index__item" {_filter_attrs(entry["meta"])}>'
+        f'<a class="dream-index__link" href="{html.escape(entry["href"])}">'
+        f'<span class="dream-index__title">{inline_markup(entry["title"])}</span>'
+        f'<span class="dream-index__summary">{inline_markup(entry["summary"])}</span></a>'
+        + (f'<span class="dream-index__meta">{tail}</span>' if tail else "")
+        + "</li>"
     )
 
 
@@ -193,33 +224,40 @@ def _slug(title):
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
 
 
+def _listable(items):
+    return [item for item in items if _card_meta(item).get("listed", True) is not False]
+
+
 def render_hub(page, items, grouped, files=None, icon_root=None):
-    def grid(entries):
-        cards = "".join(render_card(entry, page, files, icon_root) for entry in entries)
+    if page.is_homepage:
+        cards = "".join(render_card(item, page, files, icon_root) for item in items)
         return f'<div class="dream-cards">{cards}</div>' if cards else ""
 
+    def rows(entries):
+        body = "".join(render_row(entry, page, files) for entry in entries)
+        return f'<ul class="dream-index">{body}</ul>' if body else ""
+
     if not grouped:
-        return grid(items)
+        return rows(items)
     leaves = [item for item in items if not isinstance(item, Section)]
-    parts = [grid(leaves)] if leaves else []
+    parts = [rows(leaves)] if leaves else []
+    groups = []
     for section in (item for item in items if isinstance(item, Section)):
         index = index_page(section)
         if index is None:
             log.warning("Section '%s' has no index.md, so it cannot be grouped on %s",
                         section.title, page.file.src_uri)
             continue
-        children = [child for child in section.children
-                    if child is not index and _card_meta(child).get("card", True) is not False]
-        summary = index.meta.get("summary", "")
+        children = _listable(child for child in section.children if child is not index)
         href = html.escape(get_relative_url(index.url, page.url))
-        icon = icon_svg(index.meta.get("icon") or DEFAULT_ICONS["section"], icon_root) or ""
-        parts.append(
-            f'<section class="dream-card-group" id="{_slug(section.title)}">'
-            f'<div class="dream-card-group__header"><span class="dream-card__icon">{icon}</span>'
-            f'<div><h2><a href="{href}">{inline_markup(section.title)}</a></h2>'
-            f'<p>{inline_markup(summary)}</p></div></div>'
-            f"{grid(children)}</section>"
+        groups.append(
+            f'<section class="dream-directory__group" id="{_slug(section.title)}">'
+            f'<h2><a href="{href}">{inline_markup(section.title)}</a></h2>'
+            f'<p>{inline_markup(index.meta.get("summary", ""))}</p>'
+            f"{rows(children)}</section>"
         )
+    if groups:
+        parts.append(f'<div class="dream-directory">{"".join(groups)}</div>')
     return "".join(parts)
 
 
@@ -263,12 +301,12 @@ def on_page_context(context, page, config, nav):
         log.warning("%s: %s", page.file.src_uri, problem)
     context["dream_related"] = related(page, files)
     match = MARKER.search(page.content or "")
-    if not match and "navigation" not in (page.meta.get("hide") or []):
+    if not match and not page.is_homepage:
         page.content = page_header(page.content or "", page.meta)
     if match:
         items = card_items(page, nav.items)
         if items is None:
-            log.warning("%s uses a cards marker but is not a section index", page.file.src_uri)
+            log.warning("%s uses a pages marker but is not a section index", page.file.src_uri)
         else:
             hub = render_hub(page, items, bool(match.group(1)), files)
             page.content = MARKER.sub(lambda _: hub, page.content, count=1)

@@ -9,4 +9,4 @@ hide: [toc]
 
 Build and search text, format messages, match patterns, convert encodings, and process numbers in batches.
 
-<!-- cards -->
+<!-- pages -->

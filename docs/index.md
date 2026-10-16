@@ -47,7 +47,7 @@ fun main() {
 
 ## Explore the docs { .dream-home__heading }
 
-<!-- cards -->
+<!-- pages -->
 
 ## Why Dream { .dream-home__heading }
 

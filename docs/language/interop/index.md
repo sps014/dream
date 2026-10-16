@@ -165,4 +165,4 @@ input uses a prompt because there is no stdin.
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->

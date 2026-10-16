@@ -1,5 +1,5 @@
 {#- The sidebar shows only the top-level section that contains the current page. Other sections
-    are reached from the home page cards or the "All docs" link, so the tree stays short. -#}
+    are reached from the home page or the "All docs" link, so the tree stays short. -#}
 {% import "partials/nav-item.html" as item with context %}
 {% set ns = namespace(section=none, index=none) %}
 {% for nav_item in nav.items %}

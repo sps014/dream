@@ -24,7 +24,7 @@ Collections hold several values. Choose the type based on how you will read and 
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 ## Start with a list
 

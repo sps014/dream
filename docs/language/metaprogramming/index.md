@@ -9,4 +9,4 @@ hide: [toc]
 
 Generate or replace Dream code while your program is built.
 
-<!-- cards -->
+<!-- pages -->

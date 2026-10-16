@@ -4,34 +4,10 @@
   max-width: 76rem;
 }
 
-/* Glass: a fixed tinted backdrop sits behind every page, and surfaces above it are translucent
-   and blurred. Surfaces must stay translucent for the effect, so they use --dream-surface. */
-body {
-  background-color: var(--md-default-bg-color);
-  background-image: var(--dream-backdrop);
-  background-attachment: fixed;
-}
-
-.md-container,
-.md-main {
-  background: transparent;
-}
-
-.md-typeset .dream-card,
-.md-typeset .admonition.glance,
-.md-typeset .highlight,
-.md-typeset table:not([class]),
-.md-footer__link {
-  -webkit-backdrop-filter: var(--dream-blur);
-  backdrop-filter: var(--dream-blur);
-}
-
-/* Header: translucent surface instead of a solid brand bar, in both schemes. */
+/* Header: page-colored bar with a hairline instead of a solid brand bar, in both schemes. */
 .md-header {
-  background-color: color-mix(in srgb, var(--md-default-bg-color) 55%, transparent);
+  background-color: var(--md-default-bg-color);
   color: var(--md-default-fg-color);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
   border-bottom: 1px solid var(--dream-border);
   box-shadow: none;
 }
@@ -56,9 +32,9 @@ body {
 
 @media screen and (min-width: 60em) {
   .md-search__form {
-    background-color: var(--dream-surface-raised);
+    background-color: var(--dream-surface);
     border: 1px solid var(--dream-border);
-    border-radius: 0.5rem;
+    border-radius: var(--dream-radius-sm);
     transition: border-color 150ms var(--dream-ease), background-color 150ms var(--dream-ease);
   }
 
@@ -77,19 +53,28 @@ body {
   }
 
   [data-md-toggle="search"]:checked ~ .md-header .md-search__form {
-    border-radius: 0.5rem 0.5rem 0 0;
+    border-radius: var(--dream-radius-sm) var(--dream-radius-sm) 0 0;
   }
 }
 
 .md-search__output {
-  border-radius: 0 0 0.5rem 0.5rem;
+  border-radius: 0 0 var(--dream-radius-sm) var(--dream-radius-sm);
 }
 
-/* Reading column. Hub pages hide both sidebars and use the full grid width for cards. */
+/* Reading column. Section directories get a wider column; the home page hides both sidebars and
+   uses the full grid width. */
 .md-content__inner {
   max-width: var(--dream-reading-width);
   margin-left: 1.6rem;
   padding-top: 0.4rem;
+}
+
+.md-content__inner:has(> .dream-index) {
+  max-width: 48rem;
+}
+
+.md-content__inner:has(> .dream-directory) {
+  max-width: 56rem;
 }
 
 .md-main__inner:has(.md-sidebar--primary[hidden]) .md-content__inner {
@@ -105,15 +90,15 @@ body {
 }
 
 .md-typeset h1 {
-  font-weight: 750;
-  letter-spacing: -0.025em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--md-default-fg-color);
   margin-bottom: 0.6em;
 }
 
 .md-typeset h2 {
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin-top: 2em;
 }
 
@@ -159,8 +144,7 @@ body {
 }
 
 .dream-nav-home:hover {
-  background-color: var(--dream-tint);
-  color: var(--md-primary-fg-color);
+  color: var(--md-default-fg-color);
 }
 
 .dream-nav-section {
@@ -168,9 +152,8 @@ body {
   margin: 0.2rem 0.6rem 0.4rem;
   padding: 0.35rem 0.6rem;
   border-radius: var(--dream-radius-sm);
-  font-size: 0.8rem;
-  font-weight: 750;
-  letter-spacing: -0.01em;
+  font-size: 0.78rem;
+  font-weight: 650;
   color: var(--md-default-fg-color);
 }
 
@@ -179,7 +162,6 @@ a.dream-nav-section:hover {
 }
 
 .dream-nav-section--active {
-  background-color: var(--dream-tint);
   color: var(--md-primary-fg-color);
 }
 
@@ -306,7 +288,7 @@ a.dream-nav-section:hover {
   }
 }
 
-/* Footer: previous/next become cards; project links replace the generator credit. */
+/* Footer: bordered previous/next links; project links replace the generator credit. */
 .md-footer {
   background-color: transparent;
   color: var(--md-default-fg-color);
@@ -314,24 +296,67 @@ a.dream-nav-section:hover {
 }
 
 .md-footer__inner {
-  gap: 0.8rem;
+  gap: 0.6rem;
   padding: 1rem 0.8rem;
+}
+
+/* With the sidebar visible, previous/next sit under the reading column instead of spanning the
+   whole grid. 12.1rem is Material's sidebar width; 1.2rem lines the links up with the text column. */
+@media screen and (min-width: 76.25em) {
+  .md-footer__inner {
+    max-width: calc(12.1rem + 1.2rem + var(--dream-reading-width));
+    padding-left: calc(12.1rem + 1.2rem);
+    padding-right: 0;
+    margin-left: max(0px, calc((100vw - 76rem) / 2));
+  }
 }
 
 .md-footer__link {
   flex: 1 1 0;
+  align-items: center;
   margin: 0;
-  padding: 0.7rem 0.9rem;
+  padding: 0.5rem 0.7rem;
   border: 1px solid var(--dream-border);
-  border-radius: var(--dream-radius);
-  background-color: var(--dream-surface);
+  border-radius: var(--dream-radius-sm);
   opacity: 1;
-  transition: border-color 150ms var(--dream-ease), transform 150ms var(--dream-ease);
+  transition: border-color 150ms var(--dream-ease);
+}
+
+.md-footer__button {
+  margin: 0;
+  padding: 0;
+}
+
+.md-footer__button svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.md-footer__title {
+  position: relative;
+  margin: 0;
+  padding: 0 0.6rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.md-footer__link--next .md-footer__title {
+  text-align: right;
+}
+
+.md-footer__direction {
+  position: static;
+  display: block;
+  font-size: 0.6rem;
+  opacity: 1;
 }
 
 .md-footer__link:hover {
-  border-color: var(--md-primary-fg-color);
-  transform: translateY(-1px);
+  border-color: var(--dream-border-strong);
+}
+
+.md-footer__link:hover .md-footer__title {
+  color: var(--md-primary-fg-color);
 }
 
 .md-footer__link--next {

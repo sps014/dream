@@ -9,4 +9,4 @@ hide: [toc]
 
 How files and modules fit together, what happens on an unrecoverable error, and the rules behind common compiler errors.
 
-<!-- cards -->
+<!-- pages -->

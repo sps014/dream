@@ -1,4 +1,4 @@
-"""Card hubs and front matter validation for the documentation site hook."""
+"""Section directories, home cards, and front matter validation for the documentation site hook."""
 
 import unittest
 
@@ -61,7 +61,7 @@ class HubTests(unittest.TestCase):
     def test_homepage_lists_top_level_sections_except_hidden_ones(self):
         home = page("index.md", "Home")
         _, _, _, language = language_tree()
-        internals = section("Contributors", page("internals/README.md", "Contributors", card=False))
+        internals = section("Contributors", page("internals/README.md", "Contributors", listed=False))
         self.assertEqual(card_items(home, [home, language, internals]), [language])
 
     def test_leaf_page_has_no_cards(self):
@@ -75,14 +75,22 @@ class HubTests(unittest.TestCase):
         self.assertIn("Building blocks.", html)
         self.assertIn("1 page", html)
 
-    def test_grouped_hub_renders_heading_then_feature_cards(self):
+    def test_grouped_hub_renders_heading_then_feature_rows(self):
         hub, basics, _, _ = language_tree()
         html = render_hub(hub, [basics], grouped=True)
-        self.assertLess(html.index("<h2>"), html.index("Variables"))
+        self.assertLess(html.index("<h2"), html.index("Variables"))
         self.assertIn("<code>let</code>", html)
         self.assertIn('data-targets="native web node"', html)
 
-    def test_cards_mark_only_restricted_targets(self):
+    def test_only_the_homepage_renders_cards(self):
+        hub, basics, _, language = language_tree()
+        home = page("index.md", "Home", summary="Docs.")
+        self.assertIn("dream-card", render_hub(home, [language], grouped=False))
+        section_html = render_hub(hub, [basics], grouped=False)
+        self.assertNotIn("dream-card", section_html)
+        self.assertIn("dream-index__item", section_html)
+
+    def test_rows_mark_only_restricted_targets(self):
         hub, _, _, _ = language_tree()
         everywhere = page("language/a.md", "A", summary="s", targets=["native", "web", "node"])
         browser = page("language/b.md", "B", summary="s", targets=["web"])

@@ -1,118 +1,104 @@
 /* Design tokens for both color schemes. Layout and components read only these variables, so a
-   palette change never touches the other stylesheets. */
+   palette change never touches the other stylesheets. One accent color; everything else is
+   neutral, so links and the current location are the only things that stand out. */
 
 :root {
-  --dream-gradient: linear-gradient(120deg, #00f5a0 0%, #00e0d0 45%, #00c8ff 100%);
-  --dream-headline: linear-gradient(100deg, #00f5a0 0%, #00d9f5 45%, #8b7bff 100%);
-  --dream-radius: 0.8rem;
-  --dream-radius-sm: 0.45rem;
-  --dream-reading-width: 39rem;
+  --dream-radius: 0.5rem;
+  --dream-radius-sm: 0.35rem;
+  --dream-reading-width: 40rem;
   --dream-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --dream-blur: blur(16px) saturate(140%);
-  --dream-amber: #f59e0b;
-  --dream-on-gradient: #032019;
+  --dream-amber: #d29922;
 }
 
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color: #030a0c;
-  --md-default-bg-color--light: rgba(3, 10, 12, 0.7);
-  --md-default-fg-color: #e3f2ee;
-  --md-default-fg-color--light: rgba(227, 242, 238, 0.74);
-  --md-default-fg-color--lighter: rgba(227, 242, 238, 0.46);
-  --md-default-fg-color--lightest: rgba(227, 242, 238, 0.08);
+  --md-default-bg-color: #0d1012;
+  --md-default-bg-color--light: rgba(13, 16, 18, 0.7);
+  --md-default-fg-color: #e6e9ea;
+  --md-default-fg-color--light: rgba(230, 233, 234, 0.72);
+  --md-default-fg-color--lighter: rgba(230, 233, 234, 0.48);
+  --md-default-fg-color--lightest: rgba(230, 233, 234, 0.07);
 
-  --md-primary-fg-color: #1ef0b0;
-  --md-primary-fg-color--light: #7dfad2;
-  --md-primary-fg-color--dark: #00d192;
+  --md-primary-fg-color: #3fd69a;
+  --md-primary-fg-color--light: #6ee3b4;
+  --md-primary-fg-color--dark: #2bb882;
   --md-primary-bg-color: #ffffff;
   --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
-  --md-accent-fg-color: #00d9ff;
-  --md-accent-fg-color--transparent: rgba(0, 217, 255, 0.14);
-  --md-typeset-a-color: #4ff5d0;
+  --md-accent-fg-color: #6ee3b4;
+  --md-accent-fg-color--transparent: rgba(63, 214, 154, 0.1);
+  --md-typeset-a-color: #5edfaa;
 
   --md-footer-bg-color: transparent;
-  --md-footer-bg-color--dark: rgba(255, 255, 255, 0.02);
+  --md-footer-bg-color--dark: transparent;
 
-  --dream-backdrop:
-    radial-gradient(55rem 38rem at 5% -12%, rgba(0, 245, 160, 0.26), transparent 60%),
-    radial-gradient(48rem 34rem at 100% 0%, rgba(0, 200, 255, 0.22), transparent 60%),
-    radial-gradient(44rem 32rem at 60% 115%, rgba(139, 123, 255, 0.2), transparent 60%);
-  --dream-surface: rgba(255, 255, 255, 0.045);
-  --dream-surface-raised: rgba(255, 255, 255, 0.08);
-  --dream-border: rgba(120, 255, 220, 0.13);
-  --dream-border-strong: rgba(120, 255, 220, 0.26);
-  --dream-tint: rgba(30, 240, 176, 0.14);
-  --dream-shadow: 0 20px 44px -24px rgba(0, 0, 0, 0.9);
-  --dream-glow: rgba(0, 245, 160, 0.4);
+  --dream-surface: #13171a;
+  --dream-surface-raised: #191e22;
+  --dream-border: #232a2f;
+  --dream-border-strong: #313a40;
+  --dream-tint: rgba(63, 214, 154, 0.1);
+  --dream-on-primary: #05170f;
 
-  --md-code-bg-color: rgba(2, 10, 14, 0.62);
-  --md-code-fg-color: #e3f2ee;
-  --md-code-hl-color: rgba(52, 211, 153, 0.16);
-  --md-code-hl-keyword-color: #00d9ff;
-  --md-code-hl-string-color: #fde68a;
-  --md-code-hl-number-color: #ff8fd0;
-  --md-code-hl-constant-color: #ff8fd0;
-  --md-code-hl-special-color: #fdba74;
-  --md-code-hl-function-color: #3dffb8;
-  --md-code-hl-class-color: #a99bff;
-  --md-code-hl-comment-color: #6b8f88;
-  --md-code-hl-generic-color: #a99bff;
-  --md-code-hl-variable-color: #e3f2ee;
-  --md-code-hl-operator-color: #67e8f9;
-  --md-code-hl-punctuation-color: #b6cec8;
-  --md-code-hl-name-color: #e3f2ee;
+  --md-code-bg-color: #12161a;
+  --md-code-fg-color: #adbac7;
+  --md-code-hl-color: rgba(63, 214, 154, 0.12);
+  --md-code-hl-keyword-color: #f47067;
+  --md-code-hl-string-color: #96d0ff;
+  --md-code-hl-number-color: #6cb6ff;
+  --md-code-hl-constant-color: #6cb6ff;
+  --md-code-hl-special-color: #f69d50;
+  --md-code-hl-function-color: #dcbdfb;
+  --md-code-hl-class-color: #f69d50;
+  --md-code-hl-comment-color: #768390;
+  --md-code-hl-generic-color: #f69d50;
+  --md-code-hl-variable-color: #adbac7;
+  --md-code-hl-operator-color: #adbac7;
+  --md-code-hl-punctuation-color: #8b98a5;
+  --md-code-hl-name-color: #adbac7;
 }
 
 [data-md-color-scheme="default"] {
-  --md-default-bg-color: #f3faf7;
-  --md-default-bg-color--light: rgba(243, 250, 247, 0.7);
-  --md-default-fg-color: #0f2421;
-  --md-default-fg-color--light: rgba(15, 36, 33, 0.72);
-  --md-default-fg-color--lighter: rgba(15, 36, 33, 0.46);
-  --md-default-fg-color--lightest: rgba(15, 36, 33, 0.07);
+  --md-default-bg-color: #ffffff;
+  --md-default-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-default-fg-color: #1b1f22;
+  --md-default-fg-color--light: rgba(27, 31, 34, 0.74);
+  --md-default-fg-color--lighter: rgba(27, 31, 34, 0.5);
+  --md-default-fg-color--lightest: rgba(27, 31, 34, 0.06);
 
-  --md-primary-fg-color: #00a876;
-  --md-primary-fg-color--light: #00c98d;
-  --md-primary-fg-color--dark: #047857;
+  --md-primary-fg-color: #0a8a5c;
+  --md-primary-fg-color--light: #11a06d;
+  --md-primary-fg-color--dark: #07714b;
   --md-primary-bg-color: #ffffff;
   --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
-  --md-accent-fg-color: #0891b2;
-  --md-accent-fg-color--transparent: rgba(8, 145, 178, 0.08);
-  --md-typeset-a-color: #00936a;
+  --md-accent-fg-color: #07714b;
+  --md-accent-fg-color--transparent: rgba(10, 138, 92, 0.08);
+  --md-typeset-a-color: #087a52;
 
-  --md-footer-fg-color: #0f2421;
-  --md-footer-fg-color--light: rgba(15, 36, 33, 0.72);
-  --md-footer-fg-color--lighter: rgba(15, 36, 33, 0.46);
+  --md-footer-fg-color: #1b1f22;
+  --md-footer-fg-color--light: rgba(27, 31, 34, 0.74);
+  --md-footer-fg-color--lighter: rgba(27, 31, 34, 0.5);
   --md-footer-bg-color: transparent;
-  --md-footer-bg-color--dark: rgba(255, 255, 255, 0.4);
+  --md-footer-bg-color--dark: transparent;
 
-  --dream-backdrop:
-    radial-gradient(55rem 38rem at 5% -12%, rgba(0, 245, 160, 0.28), transparent 60%),
-    radial-gradient(48rem 34rem at 100% 0%, rgba(0, 200, 255, 0.24), transparent 60%),
-    radial-gradient(44rem 32rem at 60% 115%, rgba(139, 123, 255, 0.2), transparent 60%);
-  --dream-surface: rgba(255, 255, 255, 0.55);
-  --dream-surface-raised: rgba(255, 255, 255, 0.75);
-  --dream-border: rgba(15, 80, 70, 0.1);
-  --dream-border-strong: rgba(15, 80, 70, 0.2);
-  --dream-tint: rgba(5, 150, 105, 0.09);
-  --dream-shadow: 0 20px 44px -26px rgba(10, 60, 50, 0.35);
-  --dream-glow: rgba(0, 220, 150, 0.35);
-  --dream-headline: linear-gradient(100deg, #009b6e 0%, #0891b2 50%, #6d4cff 100%);
+  --dream-surface: #f8f9f9;
+  --dream-surface-raised: #f1f3f3;
+  --dream-border: #e3e7e8;
+  --dream-border-strong: #cfd5d8;
+  --dream-tint: rgba(10, 138, 92, 0.08);
+  --dream-on-primary: #ffffff;
 
-  --md-code-bg-color: rgba(255, 255, 255, 0.6);
-  --md-code-fg-color: #12302b;
-  --md-code-hl-color: rgba(5, 150, 105, 0.1);
-  --md-code-hl-keyword-color: #0e7490;
-  --md-code-hl-string-color: #a16207;
-  --md-code-hl-number-color: #be185d;
-  --md-code-hl-constant-color: #be185d;
-  --md-code-hl-special-color: #c2410c;
-  --md-code-hl-function-color: #047857;
-  --md-code-hl-class-color: #6d28d9;
-  --md-code-hl-comment-color: #64807a;
-  --md-code-hl-generic-color: #6d28d9;
-  --md-code-hl-variable-color: #12302b;
-  --md-code-hl-operator-color: #0e7490;
-  --md-code-hl-punctuation-color: #3f5a55;
-  --md-code-hl-name-color: #12302b;
+  --md-code-bg-color: #f6f8fa;
+  --md-code-fg-color: #1f2328;
+  --md-code-hl-color: rgba(10, 138, 92, 0.1);
+  --md-code-hl-keyword-color: #cf222e;
+  --md-code-hl-string-color: #0a3069;
+  --md-code-hl-number-color: #0550ae;
+  --md-code-hl-constant-color: #0550ae;
+  --md-code-hl-special-color: #953800;
+  --md-code-hl-function-color: #8250df;
+  --md-code-hl-class-color: #953800;
+  --md-code-hl-comment-color: #6e7781;
+  --md-code-hl-generic-color: #953800;
+  --md-code-hl-variable-color: #1f2328;
+  --md-code-hl-operator-color: #1f2328;
+  --md-code-hl-punctuation-color: #57606a;
+  --md-code-hl-name-color: #1f2328;
 }

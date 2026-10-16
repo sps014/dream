@@ -55,7 +55,7 @@ extra_css:
 
 extra_javascript:
   - javascripts/shortcuts.js
-  - javascripts/card-filter.js
+  - javascripts/directory-filter.js
 
 extra:
   social:

@@ -2,7 +2,7 @@
 title: Deploy
 summary: "Package apps for desktop, browser, Node, and mobile, and publish packages."
 icon: material/rocket-launch-outline
-hide: [navigation, toc]
+hide: [toc]
 ---
 
 # Package and share an app
@@ -11,7 +11,7 @@ Packaging puts a finished app and the files it needs into a distributable layout
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 ## Start with your own computer
 

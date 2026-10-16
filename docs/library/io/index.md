@@ -9,4 +9,4 @@ hide: [toc]
 
 Read and write files and streams, build paths, and talk to HTTP services.
 
-<!-- cards -->
+<!-- pages -->

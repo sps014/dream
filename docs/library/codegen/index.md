@@ -9,4 +9,4 @@ hide: [toc]
 
 Libraries for writing [source generators](../../language/metaprogramming/generators.md).
 
-<!-- cards -->
+<!-- pages -->

@@ -9,4 +9,4 @@ hide: [toc]
 
 The building blocks every Dream program uses: named values, operators, decisions, and loops.
 
-<!-- cards -->
+<!-- pages -->

@@ -2,7 +2,7 @@
 title: Tooling
 summary: "Create, build, test, and manage projects with `dreamer`, plus editor and formatter setup."
 icon: material/tools
-hide: [navigation, toc]
+hide: [toc]
 ---
 
 # Dreamer: manage your project
@@ -17,7 +17,7 @@ dreamer run
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 To share a finished app or publish a package, see [Deploy](../deploy/index.md).
 

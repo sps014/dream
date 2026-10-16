@@ -2,7 +2,7 @@
 title: Contributors
 summary: The compiler engineering handbook.
 icon: material/hammer-wrench
-card: false
+listed: false
 ---
 
 # Contributing — Compiler handbook

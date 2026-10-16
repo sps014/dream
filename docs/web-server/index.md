@@ -2,7 +2,7 @@
 title: Web server
 summary: "Typed HTTP services with routers, validation, auth, OpenAPI, and WebSockets."
 icon: material/server-network
-hide: [navigation, toc]
+hide: [toc]
 ---
 
 # Web APIs
@@ -19,7 +19,7 @@ Transport guides cover [uploads](uploads.md), [streaming and SSE](streaming.md),
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 ## Requirements
 

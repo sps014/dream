@@ -9,4 +9,4 @@ hide: [toc]
 
 Types and helpers almost every program uses. Most are available after `import system;`, and `Option` and `Result` need no import at all.
 
-<!-- cards -->
+<!-- pages -->

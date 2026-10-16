@@ -10,7 +10,7 @@ A type describes the values a variable can hold and the operations it supports. 
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 ## Primitives
 

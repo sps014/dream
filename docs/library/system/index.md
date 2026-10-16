@@ -9,4 +9,4 @@ hide: [toc]
 
 Talk to the machine your program runs on: time, randomness, logging, tests, child processes, and command-line arguments.
 
-<!-- cards -->
+<!-- pages -->

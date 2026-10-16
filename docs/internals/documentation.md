@@ -46,29 +46,29 @@ Integration examples require their documented environment. Record which environm
 
 ## Add a page or section
 
-The navigation, the card grids, and the previous/next links are generated from folders and front matter. You never edit a central page list.
+The navigation, the section directories, and the previous/next links are generated from folders and front matter. You never edit a central page list.
 
 - **New page:** add a Markdown file to the folder for its topic. It appears at the end of that section until you place it in the folder's `.nav.yml`.
-- **New category or section:** add a folder with an `index.md` and a `.nav.yml` that sets its `title`. Its parent's card grid picks it up automatically.
+- **New category or section:** add a folder with an `index.md` and a `.nav.yml` that sets its `title`. Its parent's directory picks it up automatically.
 - **Order:** list file and folder names in the `nav:` of the folder's `.nav.yml`. Unlisted entries still appear after the listed ones.
 
-Every page shown as a card needs front matter:
+Every page listed in a directory needs front matter:
 
 ```yaml
 ---
-title: Async / Await          # short name for cards and the sidebar
+title: Async / Await          # short name for directories and the sidebar
 summary: Write work that waits without blocking, using futures and `await`.
 icon: material/timer-sand     # any Material Design icon name
 status: stable                # language pages: stable, experimental, or planned
 targets: [native, web, node]  # language pages: where the feature works
-api: reference/api/system-task.md   # optional "API" link on the card
+api: reference/api/system-task.md   # optional "API" link in directories
 related: [language/concurrency/tasks.md]  # optional related-guide strip
 ---
 ```
 
-`status` and `targets` are required for pages under `docs/language/`, and section index pages need `summary` and `icon`. `tooling/docs/site_hook.py` reports a missing or unknown value as a build warning, which `mkdocs build --strict` turns into a failure. Set `card: false` on an index page to keep its section off its parent's card grid.
+`status` and `targets` are required for pages under `docs/language/`, and section index pages need `summary` and `icon`. `tooling/docs/site_hook.py` reports a missing or unknown value as a build warning, which `mkdocs build --strict` turns into a failure. Set `listed: false` on an index page to keep its section out of its parent's directory.
 
-An index page renders its children as cards where it contains `<!-- cards -->`. `<!-- cards grouped -->` adds a heading for each child section, as on the Language and Standard library pages. Hub pages hide the sidebar and table of contents with `hide: [navigation, toc]`.
+An index page lists its children where it contains `<!-- pages -->`. The home page shows the top-level sections as cards; every other index page shows a directory with one row per page. `<!-- pages grouped -->` gives each child section its own column, as on the Language and Standard library pages. Section pages keep the sidebar and hide only the table of contents with `hide: [toc]`. `icon` appears on the home page cards.
 
 Language feature pages follow the shape in `docs/language/_template.md`: front matter, a title and one-paragraph introduction, an **At a glance** block with the key syntax, then sections for usage, rules and edge cases, and examples. Keep the glance snippet short and copy it from code the page already explains. Write it as an indented fence inside the `!!! glance` block so `check_examples.py` block positions do not change.
 

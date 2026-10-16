@@ -5,16 +5,18 @@
   {% if dream_related %}
     <aside class="dream-related" aria-label="Related guides">
       <h2 class="dream-related__title">Related</h2>
-      <div class="dream-cards dream-cards--compact">
+      <ul class="dream-index">
         {% for entry in dream_related %}
-          <div class="dream-card dream-card--page">
-            <a class="dream-card__title" href="{{ entry.url }}">{{ entry.title }}</a>
-            {% if entry.summary %}
-              <p class="dream-card__summary">{{ entry.summary }}</p>
-            {% endif %}
-          </div>
+          <li class="dream-index__item">
+            <a class="dream-index__link" href="{{ entry.url }}">
+              <span class="dream-index__title">{{ entry.title }}</span>
+              {% if entry.summary %}
+                <span class="dream-index__summary">{{ entry.summary }}</span>
+              {% endif %}
+            </a>
+          </li>
         {% endfor %}
-      </div>
+      </ul>
     </aside>
   {% endif %}
 {% endblock %}

@@ -9,4 +9,4 @@ hide: [toc]
 
 Secure randomness, hashing, and authenticated encryption.
 
-<!-- cards -->
+<!-- pages -->

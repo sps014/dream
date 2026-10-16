@@ -9,4 +9,4 @@ hide: [toc]
 
 Give work a name, pass values in and out, treat functions as values, and produce sequences lazily.
 
-<!-- cards -->
+<!-- pages -->

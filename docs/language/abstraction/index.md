@@ -9,4 +9,4 @@ hide: [toc]
 
 Write code once and reuse it across types: type parameters, shared method contracts, and operators for your own types.
 
-<!-- cards -->
+<!-- pages -->

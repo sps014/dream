@@ -12,7 +12,7 @@ Available memory and the selected environment limit allocation size. A request t
 
 ## Guides in this section
 
-<!-- cards -->
+<!-- pages -->
 
 ## What lives on the heap
 

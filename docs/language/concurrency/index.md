@@ -9,4 +9,4 @@ hide: [toc]
 
 Wait for I/O without blocking, run CPU work in parallel, and keep every piece of concurrent work owned by a scope.
 
-<!-- cards -->
+<!-- pages -->

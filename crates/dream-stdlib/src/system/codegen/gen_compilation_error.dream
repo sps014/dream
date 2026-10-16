@@ -6,6 +6,7 @@ import system.json;
 public class GenCompilationError {
     /// Target declaration or build target associated with this result.
     public target: string;
+
     /// Human-readable explanation of the result or failure.
     public message: string;
 

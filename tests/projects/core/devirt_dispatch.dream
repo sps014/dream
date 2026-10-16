@@ -12,6 +12,7 @@ interface cbc_Shape {
 
 class cbc_Circle: cbc_Shape {
     public r: int;
+
     public constructor(r: int) {
         this.r = r;
     }
@@ -27,6 +28,7 @@ class cbc_Circle: cbc_Shape {
 
 class cbc_Square: cbc_Shape {
     public s: int;
+
     public constructor(s: int) {
         this.s = s;
     }
@@ -69,6 +71,7 @@ interface cbc_Sized {
 @allow_cycle
 class cbc_Holder<T>: cbc_Sized {
     public items: List<T>;
+
     public constructor() {
         this.items = List<T>();
     }

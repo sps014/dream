@@ -3,6 +3,7 @@ import system;
 
 class ce5_B {
     public value: string;
+
     public constructor(value: string) {
         this.value = value;
     }
@@ -10,6 +11,7 @@ class ce5_B {
 
 class ce5_A<T> {
     public value: T;
+
     public constructor(value: T) {
         this.value = value;
     }
@@ -17,6 +19,7 @@ class ce5_A<T> {
 
 class ce5_A_B {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }
@@ -24,6 +27,7 @@ class ce5_A_B {
 
 class ce5_Box<T> {
     public value: T;
+
     public constructor(value: T) {
         this.value = value;
     }

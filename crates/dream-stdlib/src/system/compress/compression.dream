@@ -12,6 +12,7 @@ internal class CompressionStep {
     internal consumed: int;
     internal bytes: byte[];
     internal finished: bool;
+
     internal constructor(consumed: int, bytes: byte[], finished: bool) {
         this.consumed = consumed;
         this.bytes = bytes;
@@ -21,12 +22,14 @@ internal class CompressionStep {
 
 internal class CompressionCodec {
     id: int;
+
     internal constructor(id: int) {
         this.id = id;
     }
 
     @runtime("dataCodec")
     static extern fun host(request: string): string;
+
     internal static fun request(value: JsonValue): Result<JsonValue, IoError> {
         let parsed = Json.deserialize<JsonValue>(CompressionCodec.host(Json.serialize(value)));
         if parsed.is_err() {
@@ -115,6 +118,7 @@ internal class CompressionCodec {
         CompressionCodec.request(request);
         this.id = 0;
     }
+
     del() {
         this.close();
     }
@@ -154,6 +158,7 @@ public class CompressionWriter: Writer {
     destination: Writer;
     codec: CompressionCodec;
     closed: bool;
+
     internal constructor(destination: Writer, codec: CompressionCodec) {
         this.destination = destination;
         this.codec = codec;
@@ -251,6 +256,7 @@ public class CompressionWriter: Writer {
         this.codec.close();
         this.closed = true;
     }
+
     del() {
         this.close();
     }
@@ -266,6 +272,7 @@ public class CompressionReader: Reader {
     eof: bool;
     finished: bool;
     closed: bool;
+
     internal constructor(source: Reader, codec: CompressionCodec) {
         this.source = source;
         this.codec = codec;
@@ -353,6 +360,7 @@ public class CompressionReader: Reader {
         this.codec.close();
         this.closed = true;
     }
+
     del() {
         this.close();
     }

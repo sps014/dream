@@ -31,7 +31,9 @@ import system;
 import system.collections;
 
 fun main() {
-    let scores: Map<string, int> = {"Ada": 92, "Sam": 78};
+    let scores: Map<string, int> = {
+        "Ada": 92, "Sam": 78
+    };
 
     for (let entry in scores) {
         System.println($"{entry.key}: {entry.value}");

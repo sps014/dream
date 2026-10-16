@@ -6,6 +6,7 @@ public class ProcessReader: AsyncReader {
     stream: int;
     pending: byte[];
     position: int;
+
     internal constructor(owner: ChildProcess, stream: int) {
         this.owner = owner;
         this.stream = stream;
@@ -122,6 +123,7 @@ public class ProcessReader: AsyncReader {
 // A borrowed child input pipe implementing partial async writes.
 public class ProcessWriter: AsyncWriter {
     owner: ChildProcess;
+
     internal constructor(owner: ChildProcess) {
         this.owner = owner;
     }

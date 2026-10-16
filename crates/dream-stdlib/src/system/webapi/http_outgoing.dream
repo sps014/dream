@@ -4,12 +4,16 @@ module system.webapi;
 public class HttpOutgoing {
     /// HTTP response status code.
     public status: int;
+
     /// HTTP headers associated with this message.
     public headers: HttpHeaders;
+
     /// Text response body.
     public body: string;
+
     /// Binary response body; use `bytes` to construct a binary response.
     public body_bytes: byte[];
+
     internal use_bytes: bool;
     internal skip_send: bool;
 

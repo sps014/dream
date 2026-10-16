@@ -7,6 +7,7 @@ import system.collections;
 
 class c7c_Counter {
     public count: int;
+
     public constructor() {
         this.count = 0;
     }
@@ -14,6 +15,7 @@ class c7c_Counter {
 
 class c7c_Named {
     public name: string;
+
     public constructor(name: string) {
         this.name = name;
     }

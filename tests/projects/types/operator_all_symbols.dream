@@ -3,6 +3,7 @@ import system;
 
 class c177_Bits {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }

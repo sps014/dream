@@ -34,6 +34,7 @@ public class CreateMessage {
     @min_length(1)
     @max_length(200)
     public text: string;
+
     public constructor(text: string) {
         this.text = text;
     }
@@ -48,6 +49,7 @@ import system.webapi.auth;
 
 public class DemoAccounts: AuthAccounts {
     hash: string;
+
     public constructor(hash: string) {
         this.hash = hash;
     }

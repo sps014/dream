@@ -158,6 +158,7 @@ A default can call the interface's other methods on `this`, which still go to th
 ```dream
 interface Greeter {
     fun name(): string;
+
     fun greet(): string { // default body
         return "Hello, I am " + this.name();
     }
@@ -245,6 +246,7 @@ interface Container<T> {
 
 class Box<T>: Container<T> {
     public value: T;
+
     public fun get(): T {
         return this.value;
     }
@@ -281,6 +283,7 @@ interface Fetcher {
 
 class Remote: Fetcher {
     public base: int;
+
     public async fun fetch(): int {
         Time.sleep(10).await;
         return this.base + 1;

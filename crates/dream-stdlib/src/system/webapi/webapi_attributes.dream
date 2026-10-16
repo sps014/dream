@@ -81,6 +81,7 @@ public struct UseAttribute {
 public struct DepAttribute {
     /// Dependency function to evaluate for this parameter or replace for this application.
     public provider: DeclarationPath;
+
     /// Whether the dependency result is reused within this request; omitted means true.
     public cache: Option<bool>;
 }
@@ -150,12 +151,16 @@ public struct FileAttribute {
 public struct SecuritySchemeAttribute {
     /// Identifier used to reference this security scheme in OpenAPI.
     public id: string;
+
     /// OpenAPI scheme kind, such as `http`, `apiKey`, or `oauth2`.
     public kind: string;
+
     /// HTTP authentication scheme, such as `bearer`.
     public scheme: string;
+
     /// Name of the API-key header, query parameter, or cookie, when applicable.
     public name: Option<string>;
+
     /// Where an API key is supplied: `header`, `query`, or `cookie`.
     public location: Option<string>;
 }
@@ -172,12 +177,16 @@ public struct RequiresScopesAttribute {
 public struct OperationAttribute {
     /// Short summary displayed in the API documentation.
     public summary: Option<string>;
+
     /// Description displayed in the API documentation.
     public description: Option<string>;
+
     /// Optional tags grouping the operation in the API documentation.
     public tags: Option<string>;
+
     /// HTTP response status code.
     public status: Option<int>;
+
     /// Whether the operation is marked deprecated in the API description.
     public deprecated: Option<bool>;
 }
@@ -188,10 +197,13 @@ public struct OperationAttribute {
 public struct ResponseAttribute {
     /// HTTP response status code.
     public status: int;
+
     /// Description displayed in the API documentation.
     public description: string;
+
     /// Optional declaration describing the response body.
     public model: Option<DeclarationPath>;
+
     /// Media type of the response body.
     public content_type: Option<string>;
 }
@@ -201,10 +213,13 @@ public struct ResponseAttribute {
 public struct OAuth2SchemeAttribute {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Endpoint where the user authorizes this application.
     public authorization_url: string;
+
     /// Provider endpoint used to exchange authorization codes for tokens.
     public token_url: string;
+
     /// Space-separated permissions granted to this account or token.
     public scopes: Option<string>;
 }

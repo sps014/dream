@@ -12,6 +12,7 @@ interface Shape {
 
 class Sq: Shape {
     public s: int;
+
     public fun area(): int {
         return this.s * this.s;
     }
@@ -19,6 +20,7 @@ class Sq: Shape {
 
 class Tri: Shape {
     public b: int;
+
     public fun area(): int {
         return this.b / 2;
     }

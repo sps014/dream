@@ -10,6 +10,7 @@ public interface Iterable<T> {
 public interface AsyncIterator<T> {
     /// Returns the next value, or `None` when the sequence has ended.
     async unique fun next(): Option<T>;
+
     /// Ends iteration and releases resources held by the cursor.
     unique fun close(): void;
 }
@@ -25,9 +26,11 @@ public static class YieldSignals {
     /// Creates a signal that stays pending until explicitly completed.
     @intrinsic(Intrinsic.DreamYieldSignal)
     public static extern fun pending(): Future<void>;
+
     /// Completes the pending signal or advancement operation.
     @intrinsic(Intrinsic.DreamYieldSignalComplete)
     public static extern fun complete(borrow signal: Future<void>): void;
+
     /// Runs the producer until a value is ready or the producer finishes.
     @intrinsic(Intrinsic.DreamYieldRun)
     public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void;
@@ -38,10 +41,13 @@ public static class YieldSignals {
 public class YieldChannel<T> {
     /// Next value waiting for the consumer, or `None` when no value is ready.
     public value: Option<T>;
+
     /// Whether the producer has finished yielding values.
     public ended: bool;
+
     /// Signal completed when the next yielded value is available.
     public ready: Future<void>;
+
     /// Signal allowing the producer to continue after a value is consumed.
     public resume: Future<void>;
 
@@ -211,6 +217,7 @@ public class YieldAsyncIterable<T>: AsyncIterable<T> {
 @allow_cycle
 public class IteratorLease<T> {
     cursor: Iterator<T>;
+
     /// Creates a `IteratorLease` with `cursor`.
     public constructor(cursor: Iterator<T>) {
         this.cursor = cursor;
@@ -230,6 +237,7 @@ public class IteratorLease<T> {
 @allow_cycle
 public class AsyncIteratorLease<T> {
     cursor: AsyncIterator<T>;
+
     /// Creates a `AsyncIteratorLease` with `cursor`.
     public constructor(cursor: AsyncIterator<T>) {
         this.cursor = cursor;
@@ -250,6 +258,7 @@ public class AsyncIteratorLease<T> {
 public class YieldAdvanceLease<T> {
     cursor: YieldAsyncCursor<T>;
     complete_: bool;
+
     /// Creates a `YieldAdvanceLease` with `cursor`.
     public constructor(cursor: YieldAsyncCursor<T>) {
         this.cursor = cursor;

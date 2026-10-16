@@ -36,6 +36,7 @@ referents may point back to the owner. Weak and unowned edges do not participate
 @allow_cycle
 class Node {
     public next: Option<Node>;
+
     public constructor() {
         this.next = Option.None;
     }

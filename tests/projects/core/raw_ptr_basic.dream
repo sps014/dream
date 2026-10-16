@@ -4,6 +4,7 @@ import system.testing;
 struct RawPair {
     public small: byte;
     public count: long;
+
     public constructor(small: byte, count: long) {
         this.small = small;
         this.count = count;
@@ -14,6 +15,7 @@ struct RawPair {
 struct RawPackedPair {
     public small: byte;
     public count: long;
+
     public constructor(small: byte, count: long) {
         this.small = small;
         this.count = count;
@@ -23,6 +25,7 @@ struct RawPackedPair {
 struct RawNode {
     public value: int;
     public next: RawPtr<RawNode>;
+
     public constructor(value: int, next: RawPtr<RawNode>) {
         this.value = value;
         this.next = next;
@@ -31,6 +34,7 @@ struct RawNode {
 
 struct T {
     public value: long;
+
     public constructor(value: long) {
         this.value = value;
     }

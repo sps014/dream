@@ -4,6 +4,7 @@ module system.collections;
 public struct KeyValuePair<K, V> {
     /// Key associated with this entry.
     public key: K;
+
     /// Value carried by this entry.
     public value: V;
 

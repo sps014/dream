@@ -6,12 +6,16 @@ public class RequestContext {
     internal cleanups: List<fun(CancellationToken): Future<void>>;
     internal dependencies: Map<string, object>;
     internal overrides: Map<string, string>;
+
     /// Request received from the client.
     public incoming: HttpIncoming;
+
     /// Application values shared by requests.
     public app_state: Map<string, string>;
+
     /// Values stored for this request by handlers and middleware.
     public state: Map<string, string>;
+
     /// Cancellation signal for the current request, when available.
     public cancellation_token: Option<CancellationToken>;
 

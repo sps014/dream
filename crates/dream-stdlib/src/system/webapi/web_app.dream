@@ -17,6 +17,7 @@ public class WebApp {
     startup: List<fun(WebApp): Future<Result<bool, IoError>>>;
     shutdown_hooks: List<fun(WebApp): Future<void>>;
     started_hooks: int;
+
     /// Values stored for this request by handlers and middleware.
     public state: Map<string, string>;
 
@@ -57,6 +58,7 @@ public class WebApp {
     @native
     @runtime("httpServerClose")
     static extern fun close_host(id: int): void;
+
     @native
     @runtime("httpServerShutdown")
     static extern fun shutdown_host(id: int): void;

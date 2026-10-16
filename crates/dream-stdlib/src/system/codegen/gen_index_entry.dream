@@ -8,8 +8,10 @@ import system.json;
 public class GenIndexEntry {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Name identifying this entry.
     public name: string;
+
     /// Category of this entry.
     public kind: DeclKind;
 

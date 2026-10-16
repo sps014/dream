@@ -5,6 +5,7 @@ import system;
 
 class c20_Job {
     public name: string;
+
     public constructor(name: string) {
         this.name = name;
     }
@@ -12,6 +13,7 @@ class c20_Job {
 
 class c20_SlotBox {
     public head: Option<c20_Job>;
+
     public constructor() {
         this.head = Option.None;
     }

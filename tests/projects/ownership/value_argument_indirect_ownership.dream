@@ -3,6 +3,7 @@ import system;
 
 struct c28c_Payload {
     public data: string;
+
     public constructor(borrow data: string) {
         this.data = data;
     }

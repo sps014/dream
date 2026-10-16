@@ -9,6 +9,7 @@ public class ArtifactBuilder {
     buf: StringBuilder;
     current_line: int;
     current_column: int;
+
     /// Locations mapping generated text back to source declarations.
     public source_map: GenSourceMap;
 

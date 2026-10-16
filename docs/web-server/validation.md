@@ -18,10 +18,12 @@ class Person {
     @min_length(2)
     @max_length(80)
     public name: string;
+
     @minimum(0.0)
     @maximum(150.0)
     @default_json("18")
     public age: int;
+
     public constructor(name: string, age: int) {
         this.name = name;
         this.age = age;

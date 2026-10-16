@@ -50,6 +50,7 @@ internal class WebRoute {
     internal uses: List<UseAttribute>;
     internal websocket: bool;
     internal index: int;
+
     internal constructor(
         function: GenFunction,
         method: string,
@@ -82,6 +83,7 @@ internal class WebGenerator {
     internal source: CodeBuilder;
     internal sequence: int;
     internal colors: Map<string, int>;
+
     internal constructor(ctx: GenContext) {
         this.ctx = ctx;
         this.functions = Map<string, GenFunction>();

@@ -6,6 +6,7 @@ import system.json;
 public class GenConstant {
     /// Category of this entry.
     public kind: string;
+
     /// Value carried by this entry.
     public value: string;
 

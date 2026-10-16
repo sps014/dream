@@ -22,6 +22,7 @@ let measuring: bool = true;
 // constant-fold (interned `==`, `char_at` over a literal, …).
 class BenchSink {
     public v: int;
+
     public constructor() {
         this.v = 0;
     }

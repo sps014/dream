@@ -133,6 +133,7 @@ module utils.math;
 public class Counter {
     count: int; // private: only Counter's methods
     internal step: int; // visible anywhere in module utils.math
+
     public fun value(): int {
         return this.count;
     }
@@ -148,6 +149,7 @@ Declare methods with `fun`; each receives an implicit `this`:
 ```dream
 class Counter {
     count: int;
+
     public fun increment(): void {
         this.count = this.count + 1;
     }
@@ -260,6 +262,7 @@ A type is **`shared`** (and may be captured by a [`Task`](../concurrency/tasks.m
 shared class Counter {
     public value: int;
     public label: string; // legal — string is shared
+
     public constructor() {
         this.value = 0;
         this.label = "";
@@ -283,6 +286,7 @@ class Plain {
 shared class Holder {
     // legal: managed heap references — the graph below `h` is part of the shared object
     public p: Option<Plain>;
+
     public xs: int[];
 
     public constructor() {

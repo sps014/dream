@@ -8,24 +8,34 @@ import system.json;
 public class GenStmt {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Category of this entry.
     public kind: StmtKind;
+
     /// Source range occupied by this node.
     public span: GenSpan;
+
     /// Constant value of the expression, when known.
     public constant: Option<GenConstant>;
+
     /// Source text represented by this entry.
     public text: string;
+
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
+
     /// Identifier of the referenced symbol.
     public symbol: string;
+
     /// Identifier distinguishing this function's overload.
     public overload: string;
+
     /// Concrete type arguments, in parameter order.
     public type_args: List<GenTypeRef>;
+
     /// Type references associated with this expression.
     public types: List<GenTypeRef>;
+
     nodes: List<GenExpr>;
 
     // Creates this model from snapshot JSON.

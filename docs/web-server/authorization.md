@@ -24,6 +24,7 @@ class Routes {
 
 class Accounts: AuthAccounts {
     hash: string;
+
     public constructor(hash: string) {
         this.hash = hash;
     }

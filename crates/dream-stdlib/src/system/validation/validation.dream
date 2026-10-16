@@ -5,9 +5,11 @@ public static class Validation {
     /// Decodes and validates JSON as `T`, returning the collected validation issues on failure.
     @intrinsic(Intrinsic.ValidationDecode)
     public static extern fun decode<T>(text: string): Result<T, ValidationErrors>;
+
     /// Checks `value` against its validation attributes; returns the value or collected issues.
     @intrinsic(Intrinsic.ValidationValidate)
     public static extern fun validate<T>(value: T): Result<T, ValidationErrors>;
+
     /// Returns the JSON Schema describing `T` and its validation constraints.
     @intrinsic(Intrinsic.ValidationSchema)
     public static extern fun schema<T>(): JsonValue;

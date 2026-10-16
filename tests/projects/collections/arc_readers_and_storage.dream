@@ -6,9 +6,11 @@ let arc_reader_drops = 0;
 
 class ArcReaderItem {
     public value: string;
+
     public constructor(value: string) {
         this.value = value;
     }
+
     del() {
         arc_reader_drops = arc_reader_drops + 1;
     }
@@ -16,6 +18,7 @@ class ArcReaderItem {
 
 struct ArcReaderRecord {
     public item: ArcReaderItem;
+
     public constructor(item: ArcReaderItem) {
         this.item = item;
     }

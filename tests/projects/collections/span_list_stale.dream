@@ -6,6 +6,7 @@ import system.collections;
 
 class c200_Box {
     public v: int;
+
     public constructor(v: int) {
         this.v = v;
     }

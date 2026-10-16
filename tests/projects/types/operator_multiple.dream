@@ -3,6 +3,7 @@ import system;
 
 class c17c_Number {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }
@@ -42,6 +43,7 @@ class c17c_Number {
 
 class c17c_Generic<T> {
     public value: T;
+
     public constructor(value: T) {
         this.value = value;
     }

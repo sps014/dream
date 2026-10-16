@@ -4,8 +4,10 @@ module system.webapi;
 public class UploadedFile {
     /// Original filename reported with the upload.
     public filename: string;
+
     /// Media type of the response body.
     public content_type: string;
+
     /// Contents as a byte array.
     public bytes: byte[];
 

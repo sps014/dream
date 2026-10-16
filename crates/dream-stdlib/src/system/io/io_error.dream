@@ -4,6 +4,7 @@ module system.io;
 public class IoError: Error {
     // Path involved in the failure (may be empty for non-path errors).
     public path: string;
+
     _code: string;
     _message: string;
 

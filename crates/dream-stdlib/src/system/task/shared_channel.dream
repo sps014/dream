@@ -3,15 +3,18 @@ module system.task;
 // A shared queue's native state outlives every endpoint on every worker.
 shared internal class SharedChannelState {
     internal handle: usize;
+
     internal constructor(capacity: int) {
         this.handle = SharedChannelState.create_host(capacity);
     }
+
     del() {
         SharedChannelState.free_host(this.handle);
     }
 
     @intrinsic(Intrinsic.DreamChannelNew)
     static extern fun create_host(capacity: int): usize;
+
     @intrinsic(Intrinsic.DreamChannelFree)
     static extern fun free_host(handle: usize): void;
 }
@@ -19,6 +22,7 @@ shared internal class SharedChannelState {
 // Endpoint factories for a queue that can transfer shared values across workers.
 public class SharedChannelEndpoints<T: shared> {
     state: SharedChannelState;
+
     internal constructor(capacity: int) {
         this.state = SharedChannelState(capacity);
     }
@@ -37,20 +41,26 @@ public class SharedChannelEndpoints<T: shared> {
 internal static class SharedChannelHost {
     @intrinsic(Intrinsic.DreamChannelEndpoint)
     internal static extern fun endpoint(state: usize, sending: int): usize;
+
     @intrinsic(Intrinsic.DreamChannelClose)
     internal static extern fun close(endpoint: usize): void;
+
     @intrinsic(Intrinsic.DreamChannelEndpointFree)
     internal static extern fun free(endpoint: usize): void;
+
     @intrinsic(Intrinsic.DreamChannelSend)
     internal static extern fun send<T: shared>(endpoint: usize, borrow value: T[]): int;
+
     @intrinsic(Intrinsic.DreamChannelReceive)
     internal static extern fun receive<T: shared>(endpoint: usize): T[];
+
     @intrinsic(Intrinsic.DreamChannelStatus)
     internal static extern fun status(endpoint: usize): int;
 }
 
 class SharedChannelWait {
     registration: usize;
+
     internal constructor(endpoint: usize) {
         this.registration = SharedChannelWait.register_host(endpoint);
     }
@@ -65,14 +75,17 @@ class SharedChannelWait {
             this.registration = (usize)0;
         }
     }
+
     del() {
         this.close();
     }
 
     @intrinsic(Intrinsic.DreamChannelWait)
     static extern fun register_host(endpoint: usize): usize;
+
     @intrinsic(Intrinsic.DreamCancellationSignal)
     static extern fun signal_host(registration: usize): Future<int>;
+
     @intrinsic(Intrinsic.DreamCancellationUnregister)
     static extern fun unregister_host(registration: usize): void;
 }
@@ -81,6 +94,7 @@ class SharedChannelWait {
 shared public class SharedSender<T: shared> {
     owner: SharedChannelState;
     endpoint: usize;
+
     internal constructor(owner: SharedChannelState) {
         this.owner = owner;
         this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 1);
@@ -143,6 +157,7 @@ shared public class SharedSender<T: shared> {
     public fun close(): void {
         SharedChannelHost.close(this.endpoint);
     }
+
     del() {
         SharedChannelHost.free(this.endpoint);
     }
@@ -152,6 +167,7 @@ shared public class SharedSender<T: shared> {
 shared public class SharedReceiver<T: shared> {
     owner: SharedChannelState;
     endpoint: usize;
+
     internal constructor(owner: SharedChannelState) {
         this.owner = owner;
         this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 0);
@@ -216,6 +232,7 @@ shared public class SharedReceiver<T: shared> {
     public fun close(): void {
         SharedChannelHost.close(this.endpoint);
     }
+
     del() {
         SharedChannelHost.free(this.endpoint);
     }

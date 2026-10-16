@@ -8,12 +8,16 @@ import system.json;
 public class GenSymbol {
     /// Concrete uses of this generic symbol.
     public instances: List<GenSymbolInstance>;
+
     /// Stable identifier of this entry.
     public id: string;
+
     /// Category of this entry.
     public kind: string;
+
     /// Declaration associated with this entry.
     public declaration: Option<GenDecl>;
+
     /// Function declaration associated with this entry, when available.
     public function: Option<GenFunction>;
 

@@ -46,6 +46,7 @@ async fun main(): void {
 ```dream
 shared class Counter {
     public value: int;
+
     public constructor() {
         this.value = 0;
     }

@@ -5,6 +5,7 @@ import system;
 
 class c1f_Bucket {
     public names: List<string>;
+
     public constructor() {
         this.names = List<string>();
     }

@@ -2,6 +2,7 @@ module system.net;
 
 internal class SocketOperation {
     id: int;
+
     internal static fun start(request: JsonValue, bytes: byte[]): SocketOperation {
         return SocketOperation(SocketOperation.start_host(Json.serialize(request), bytes));
     }
@@ -12,17 +13,23 @@ internal class SocketOperation {
 
     @runtime("netSocketStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
+
     @async_host
     @runtime("netSocketWait")
     static extern async fun wait_host(id: int): int;
+
     @runtime("netSocketResult")
     static extern fun result_host(id: int): byte[];
+
     @runtime("netSocketCancel")
     static extern fun cancel_host(id: int): void;
+
     @runtime("netSocketRelease")
     static extern fun release_host(id: int): void;
+
     @runtime("netSocketClaim")
     static extern fun claim_host(id: int): void;
+
     internal fun claim(): void {
         SocketOperation.claim_host(this.id);
     }
@@ -33,6 +40,7 @@ internal class SocketOperation {
             this.id = 0;
         }
     }
+
     del() {
         this.close();
     }
@@ -80,6 +88,7 @@ internal class SocketOperation {
 internal class SocketState {
     internal id: int;
     internal metadata: JsonValue;
+
     internal constructor(metadata: JsonValue) {
         this.id = metadata.at("id").as_int().unwrap_or(0);
         this.metadata = metadata;
@@ -87,14 +96,17 @@ internal class SocketState {
 
     @runtime("netSocketClose")
     static extern fun close_host(id: int): void;
+
     @runtime("netSocketControl")
     static extern fun control_host(id: int, request: string): string;
+
     internal fun close(): void {
         if this.id > 0 {
             SocketState.close_host(this.id);
             this.id = 0;
         }
     }
+
     del() {
         this.close();
     }

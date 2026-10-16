@@ -4,12 +4,16 @@ module system.json.derive;
 public class JsonCollectionSpec {
     /// Category of this entry.
     public kind: CollectionKind;
+
     /// Dream type name of each collection element.
     public elem_type: string;
+
     /// Dream type name of values in this collection.
     public value_type: string;
+
     /// Dream type name of the collection being described.
     public self_ty: string;
+
     /// Suffix that distinguishes generated helper names.
     public fn_suffix: string;
 

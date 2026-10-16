@@ -4,6 +4,7 @@ module system.net;
 public static class SocketCapabilities {
     @runtime("netCapabilities")
     static extern fun flags_host(): int;
+
     // True on native and Node; browsers return EUNSUPPORTED for raw socket requests.
     public static get supported(): bool {
         return (SocketCapabilities.flags_host() & 8) != 0;
@@ -14,6 +15,7 @@ public static class SocketCapabilities {
 @allow_cycle
 public class TcpStream: AsyncReader, AsyncWriter {
     state: SocketState;
+
     internal constructor(state: SocketState) {
         this.state = state;
     }
@@ -138,6 +140,7 @@ public class TcpStream: AsyncReader, AsyncWriter {
 // An owned TCP listener; accepted connections retain independent ownership.
 public class TcpListener {
     state: SocketState;
+
     internal constructor(state: SocketState) {
         this.state = state;
     }

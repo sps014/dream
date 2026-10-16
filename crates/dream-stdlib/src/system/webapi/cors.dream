@@ -6,14 +6,19 @@ module system.webapi;
 public class CorsOptions {
     /// Allowed request origins, or `*` for any origin.
     public allow_origins: string;
+
     /// Allowed HTTP methods, or `*` to allow all.
     public allow_methods: string;
+
     /// Allowed request headers, or `*` to allow all.
     public allow_headers: string;
+
     /// Response headers that browsers may expose to cross-origin callers.
     public expose_headers: string;
+
     /// Whether cross-origin requests may include credentials.
     public allow_credentials: bool;
+
     /// How long browsers may cache preflight results, in seconds.
     public max_age: int;
 

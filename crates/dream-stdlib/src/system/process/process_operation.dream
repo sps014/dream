@@ -2,9 +2,11 @@ module system.process;
 
 internal class ProcessOperation {
     id: int;
+
     internal constructor(request: JsonValue, bytes: byte[]) {
         this.id = ProcessOperation.start_host(Json.serialize(request), bytes);
     }
+
     del() {
         this.close();
     }
@@ -22,15 +24,20 @@ internal class ProcessOperation {
 
     @runtime("processStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
+
     @async_host
     @runtime("processOperationWait")
     static extern async fun wait_host(id: int): int;
+
     @runtime("processOperationResult")
     static extern fun result_host(id: int): byte[];
+
     @runtime("processOperationCancel")
     static extern fun cancel_host(id: int): void;
+
     @runtime("processOperationRelease")
     static extern fun release_host(id: int): void;
+
     @runtime("processOperationClaim")
     static extern fun claim_host(id: int): void;
 

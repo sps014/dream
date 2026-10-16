@@ -10,6 +10,7 @@ public static class Buffer {
     // Storage initialization may contain internal null references; it is not a constructor API.
     @intrinsic(Intrinsic.BufferZero)
     internal static extern fun zero<T>(): T;
+
     // `Buffer.alloc<T>(n)` returns a fresh, zero-initialized `T[]` of length `n`.
     @intrinsic(Intrinsic.ArrayNew)
     public static extern fun alloc<T>(len: int): T[];

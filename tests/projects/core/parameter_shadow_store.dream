@@ -3,6 +3,7 @@ import system;
 
 class c1a7_Holder {
     public items: int[];
+
     public constructor(items: int[]) {
         this.items = items;
     }

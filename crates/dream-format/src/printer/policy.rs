@@ -6,6 +6,9 @@ impl Printer {
     pub(super) fn print_collapsed_empty_block(&mut self, i: usize, tokens: &[SyntaxToken]) {
         let closes_do = self.pending_do;
         self.pending_do = false;
+        self.pending_type = false;
+        self.pending_enum = false;
+        self.pending_switch = false;
         let open = &tokens[i];
         let close = &tokens[i + 1];
         let space_before = !self.layout.at_line_start()
@@ -55,6 +58,80 @@ impl Printer {
                 | TokenKind::DotToken
                 | TokenKind::QuestionMarkToken
         ) || (next == TokenKind::WhileToken && do_body)
+    }
+
+    /// Members with a body, attributes, or comments get a blank line on each side within a
+    /// type body; consecutive plain fields and signatures stay grouped.
+    pub(super) fn separate_members(&mut self, i: usize, tokens: &[SyntaxToken]) {
+        let kind = tokens[i].kind;
+        if !matches!(
+            self.prev_kind,
+            Some(
+                TokenKind::SemicolonToken
+                    | TokenKind::CurlyOpenBracketToken
+                    | TokenKind::CurlyCloseBracketToken
+            )
+        ) || matches!(
+            kind,
+            TokenKind::CurlyCloseBracketToken
+                | TokenKind::SemicolonToken
+                | TokenKind::CommaToken
+                | TokenKind::CloseParenthesisToken
+                | TokenKind::CloseBracketToken
+                | TokenKind::DotToken
+                | TokenKind::QuestionMarkToken
+        ) {
+            return;
+        }
+        let first = self.prev_kind == Some(TokenKind::CurlyOpenBracketToken);
+        let spaced = Self::member_is_spaced(i, tokens);
+        let Some(Ctx::Block {
+            type_body: true,
+            member_spaced,
+            ..
+        }) = self.ctxs.last_mut()
+        else {
+            return;
+        };
+        let previous = std::mem::replace(member_spaced, spaced);
+        if !first && (previous || spaced) && !self.layout.has_pending_blank() {
+            self.layout.blank_line();
+        }
+    }
+
+    fn member_is_spaced(i: usize, tokens: &[SyntaxToken]) -> bool {
+        let start = &tokens[i];
+        if start.kind == TokenKind::AtToken
+            || start.leading_trivia.iter().any(|trivia| {
+                matches!(
+                    trivia.kind,
+                    TokenKind::LineCommentToken | TokenKind::BlockCommentToken
+                )
+            })
+        {
+            return true;
+        }
+        let mut depth = 0usize;
+        for token in &tokens[i..] {
+            match token.kind {
+                TokenKind::OpenParenthesisToken | TokenKind::OpenBracketToken => depth += 1,
+                TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken => {
+                    depth = depth.saturating_sub(1);
+                }
+                TokenKind::CurlyOpenBracketToken | TokenKind::FatArrowToken if depth == 0 => {
+                    return true;
+                }
+                TokenKind::SemicolonToken
+                | TokenKind::CurlyCloseBracketToken
+                | TokenKind::EndOfFileToken
+                    if depth == 0 =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     pub(super) fn insert_blank_lines(&mut self, kind: TokenKind) {

@@ -5,6 +5,7 @@ import system.testing;
 class StreamingShortWriter: Writer {
     public memory: MemoryStream;
     public fail: bool;
+
     public constructor() {
         this.memory = MemoryStream();
         this.fail = false;

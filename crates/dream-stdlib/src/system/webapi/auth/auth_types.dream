@@ -4,8 +4,10 @@ module system.webapi.auth;
 public class AuthError {
     /// Error code identifying the failure.
     public code: string;
+
     /// Human-readable explanation of the result or failure.
     public message: string;
+
     /// Creates a `AuthError` with `code`, `message`.
     public constructor(code: string, message: string) {
         this.code = code;
@@ -18,8 +20,10 @@ public class AuthError {
 public class AuthPrincipal {
     /// Stable identifier of the authenticated account.
     public subject: string;
+
     /// Space-separated permissions granted to this account or token.
     public scopes: string;
+
     /// Creates a `AuthPrincipal` with `subject`, `scopes`.
     public constructor(subject: string, scopes: string) {
         this.subject = subject;
@@ -41,10 +45,13 @@ public class AuthPrincipal {
 public class AuthAccount {
     /// Stable identifier of the authenticated account.
     public subject: string;
+
     /// Encoded password hash; never a plain-text password.
     public password_hash: string;
+
     /// Space-separated permissions granted to this account or token.
     public scopes: string;
+
     /// Creates a `AuthAccount` with `subject`, `password_hash`, `scopes`.
     public constructor(subject: string, password_hash: string, scopes: string = "") {
         this.subject = subject;
@@ -57,6 +64,7 @@ public class AuthAccount {
 public interface AuthAccounts {
     /// Looks up an account by login name; returns `AuthError` if authentication cannot proceed.
     async unique fun find_login(login: string): Result<AuthAccount, AuthError>;
+
     /// Resolves an external identity to a local account, returning an authentication error on
     /// failure.
     async unique fun link_identity(
@@ -71,18 +79,25 @@ public interface AuthAccounts {
 public class AuthSession {
     /// Hash of the refresh token; the raw refresh token is not stored.
     public hash: string;
+
     /// Identifier shared by successive refresh tokens for the same session.
     public family: string;
+
     /// Stable identifier of the authenticated account.
     public subject: string;
+
     /// Space-separated permissions granted to this account or token.
     public scopes: string;
+
     /// Expiry time in Unix epoch seconds.
     public expires: long;
+
     /// Secret used to validate requests made with session cookies.
     public csrf: string;
+
     /// Whether this refresh session has already been rotated.
     public consumed: bool;
+
     /// Creates a `AuthSession` with `hash`, `family`, `subject`, `scopes`, `expires`, `csrf`.
     public constructor(
         hash: string,
@@ -106,12 +121,16 @@ public class AuthSession {
 public class OidcTransaction {
     /// Name of the identity provider handling this login.
     public provider: string;
+
     /// Random value used to bind an identity response to its login request.
     public nonce: string;
+
     /// PKCE verifier kept until the authorization code is exchanged.
     public verifier: string;
+
     /// Expiry time in Unix epoch seconds.
     public expires: long;
+
     /// Creates a `OidcTransaction` with `provider`, `nonce`, `verifier`, `expires`.
     public constructor(provider: string, nonce: string, verifier: string, expires: long) {
         this.provider = provider;
@@ -125,9 +144,11 @@ public class OidcTransaction {
 public interface AuthSessionStore {
     /// Stores a new refresh session; returns an error if its token hash already exists.
     async unique fun create(session: AuthSession): Result<bool, AuthError>;
+
     /// Finds an unexpired session at epoch-second time `now`; rejects revoked or missing
     /// sessions.
     async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>;
+
     /// Consumes a refresh session and stores its replacement. Replay revokes the family;
     /// invalid replacements return an error.
     async unique fun rotate(
@@ -135,16 +156,20 @@ public interface AuthSessionStore {
         replacement: AuthSession,
         now: long
     ): Result<AuthSession, AuthError>;
+
     /// Revokes all refresh sessions in `family`.
     async unique fun revoke(family: string): Result<bool, AuthError>;
+
     /// Returns whether `family` has an unexpired, unconsumed session at epoch-second time
     /// `now`.
     async unique fun active(family: string, now: long): bool;
+
     /// Stores a login transaction under `state`; duplicate state returns an error.
     async unique fun put_transaction(
         state: string,
         transaction: OidcTransaction
     ): Result<bool, AuthError>;
+
     /// Removes and returns the login transaction. Missing or expired state returns an error.
     async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>;
 }
@@ -153,14 +178,19 @@ public interface AuthSessionStore {
 public class JwtOptions {
     /// Identity of the token issuer.
     public issuer: string;
+
     /// Expected token audience.
     public audience: string;
+
     /// Private key used to sign tokens; keep it secret.
     public signing_key: string;
+
     /// Public key used to verify token signatures.
     public verification_key: string;
+
     /// Signature algorithm name, such as `RS256`.
     public algorithm: string;
+
     /// Creates a `JwtOptions` with `issuer`, `audience`, `signing_key`, `verification_key`,
     /// `algorithm`.
     public constructor(
@@ -182,14 +212,19 @@ public class JwtOptions {
 public class OidcOptions {
     /// Name identifying this entry.
     public name: string;
+
     /// Identity of the token issuer.
     public issuer: string;
+
     /// Application identifier registered with the identity provider.
     public client_id: string;
+
     /// Confidential client credential; keep this value secret.
     public client_secret: string;
+
     /// Registered callback URL receiving the authorization response.
     public redirect_uri: string;
+
     /// Creates a `OidcOptions` with `name`, `issuer`, `client_id`, `redirect_uri`,
     /// `client_secret`.
     public constructor(
@@ -212,14 +247,19 @@ public class OidcOptions {
 public class AuthTokens {
     /// Signed token sent with authenticated requests.
     public access_token: string;
+
     /// Secret used to obtain a new access token.
     public refresh_token: string;
+
     /// Authorization scheme returned with the tokens, usually `Bearer`.
     public token_type: string;
+
     /// Access token lifetime in seconds.
     public expires_in: int;
+
     /// Token the browser must send to protect cookie-authenticated requests.
     public csrf_token: string;
+
     /// Creates a `AuthTokens` with `access_token`, `refresh_token`, `token_type`, `expires_in`,
     /// `csrf_token`.
     public constructor(

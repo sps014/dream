@@ -64,9 +64,12 @@ public class Store {
     extern fun find(key: string): Option<Entry>; // borrowed; keeps the Store alive
     extern fun compact(): Result<bool, string>; // Ok(true), or Err(e.what())
     extern fun on_change(f: fun(string): void): void; // capturing closures are fine
+
     @cpp_name("get_as<int>")
     extern fun get_int(key: string): int;
+
     extern fun scaled(): int; // C++ fills in `factor`
+
     @owned
     static extern fun open_default(): Store;
 }

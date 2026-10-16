@@ -5,6 +5,7 @@ import system;
 
 class c261_Log {
     public text: string;
+
     public constructor() {
         this.text = "";
     }

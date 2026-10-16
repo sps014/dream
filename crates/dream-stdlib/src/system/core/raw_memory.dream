@@ -4,11 +4,14 @@ internal static class RawMemory {
     @intrinsic(Intrinsic.RawLoad)
     @unsafe
     internal static extern fun load<T: unmanaged>(address: usize): T;
+
     @intrinsic(Intrinsic.RawStore)
     @unsafe
     internal static extern fun store<T: unmanaged>(address: usize, value: T): void;
+
     @intrinsic(Intrinsic.DreamRawSize)
     internal static extern fun size(count: usize, element_size: usize): usize;
+
     @intrinsic(Intrinsic.DreamRawAlloc)
     @unsafe
     internal static extern fun alloc(
@@ -17,24 +20,31 @@ internal static class RawMemory {
         minimum: usize,
         zeroed: int
     ): usize;
+
     @intrinsic(Intrinsic.DreamRawRealloc)
     @unsafe
     internal static extern fun realloc(address: usize, size: usize, minimum: usize): usize;
+
     @intrinsic(Intrinsic.DreamRawFree)
     @unsafe
     internal static extern fun free(address: usize): void;
+
     @intrinsic(Intrinsic.DreamRawCopy)
     @unsafe
     internal static extern fun copy(dst: usize, src: usize, size: usize): void;
+
     @intrinsic(Intrinsic.DreamRawMove)
     @unsafe
     internal static extern fun move(dst: usize, src: usize, size: usize): void;
+
     @intrinsic(Intrinsic.DreamRawFill)
     @unsafe
     internal static extern fun fill(dst: usize, value: int, size: usize): void;
+
     @intrinsic(Intrinsic.DreamArenaNew)
     @unsafe
     internal static extern fun arena_new(initial: usize): usize;
+
     @intrinsic(Intrinsic.DreamArenaAlloc)
     @unsafe
     internal static extern fun arena_alloc(
@@ -43,9 +53,11 @@ internal static class RawMemory {
         alignment: usize,
         zeroed: int
     ): usize;
+
     @intrinsic(Intrinsic.DreamArenaReset)
     @unsafe
     internal static extern fun arena_reset(state: usize): void;
+
     @intrinsic(Intrinsic.DreamArenaFree)
     @unsafe
     internal static extern fun arena_free(state: usize): void;

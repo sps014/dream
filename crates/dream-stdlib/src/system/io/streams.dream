@@ -54,6 +54,7 @@ public interface Writer {
     // Accepts up to the supplied bytes and returns the number accepted.
     // Empty input makes no progress; failures do not undo bytes already written.
     unique fun write(data: byte[]): Result<int, IoError>;
+
     // Delivers buffered output to the underlying destination and reports failures.
     // Flushing does not imply durable storage or close the destination.
     unique fun flush(): Result<bool, IoError>;
@@ -99,6 +100,7 @@ public interface AsyncWriter {
         data: byte[],
         token: Option<CancellationToken> = Option.None
     ): Result<int, IoError>;
+
     // Flushes pending output with cancellation; does not close the destination
     // or guarantee durable storage.
     async unique fun flush_async(

@@ -60,6 +60,7 @@ public static class Time {
 @allow_cycle
 class TimerGuard {
     pending: Future<void>;
+
     internal constructor(pending: Future<void>) {
         this.pending = pending;
     }
@@ -67,6 +68,7 @@ class TimerGuard {
     internal fun close(): void {
         Promise.cancel(this.pending);
     }
+
     del() {
         this.close();
     }

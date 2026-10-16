@@ -5,6 +5,7 @@ public class MemoryAuthStore: AuthSessionStore {
     sessions: Map<string, AuthSession>;
     revoked: Set<string>;
     transactions: Map<string, OidcTransaction>;
+
     /// Creates a `MemoryAuthStore` with default settings.
     public constructor() {
         this.sessions = Map<string, AuthSession>();

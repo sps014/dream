@@ -5,6 +5,7 @@ public class c6f_CharacterCell {
     public before: byte;
     public value: char;
     public after: int;
+
     public constructor(value: char) {
         this.before = 123;
         this.value = value;

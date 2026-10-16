@@ -4,6 +4,7 @@ import system;
 struct c28f_View {
     public source: string;
     public count: int;
+
     public constructor(borrow source: string, count: int) {
         if count < 0 || count > source.length {
             System.panic("invalid view");

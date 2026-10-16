@@ -48,6 +48,7 @@ public static class Channel {
 // A local async queue with independently owned sending and receiving endpoints.
 public class ChannelEndpoints<T> {
     state: ChannelState<T>;
+
     internal constructor(capacity: int) {
         this.state = ChannelState<T>(capacity);
     }
@@ -120,6 +121,7 @@ class ChannelWait {
     waiters: List<CancellationSource>;
     internal source: CancellationSource;
     closed: bool;
+
     internal constructor(waiters: List<CancellationSource>) {
         this.waiters = waiters;
         this.source = CancellationSource();
@@ -135,6 +137,7 @@ class ChannelWait {
             }
         }
     }
+
     del() {
         this.close();
     }
@@ -145,6 +148,7 @@ class ChannelWait {
 public class Sender<T> {
     state: ChannelState<T>;
     closed: bool;
+
     internal constructor(state: ChannelState<T>) {
         this.state = state;
         this.closed = false;
@@ -214,6 +218,7 @@ public class Sender<T> {
             this.state.close_sends();
         }
     }
+
     del() {
         this.close();
     }
@@ -224,6 +229,7 @@ public class Sender<T> {
 public class Receiver<T> {
     state: ChannelState<T>;
     closed: bool;
+
     internal constructor(state: ChannelState<T>) {
         this.state = state;
         this.closed = false;
@@ -295,6 +301,7 @@ public class Receiver<T> {
             this.state.close_receives();
         }
     }
+
     del() {
         this.close();
     }

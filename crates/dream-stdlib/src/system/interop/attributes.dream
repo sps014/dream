@@ -24,6 +24,7 @@ public enum MarshalKind {
 public struct CAttribute {
     /// Optional native library containing the foreign symbol.
     public library: Option<string>;
+
     /// Identifier of the referenced symbol.
     public symbol: Option<string>;
 }
@@ -52,6 +53,7 @@ public struct PackedAttribute {}
 public struct CppAttribute {
     /// Header file declaring the foreign symbol.
     public header: string;
+
     /// Name identifying this entry.
     public name: Option<string>;
 }

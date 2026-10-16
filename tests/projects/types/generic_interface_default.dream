@@ -8,6 +8,7 @@ import system;
 
 interface ce6_Container<T> {
     fun get(): T;
+
     public fun firstOr(fallback: T): T {
         return this.get();
     }
@@ -19,6 +20,7 @@ interface ce6_Container<T> {
 
 class ce6_Box<T>: ce6_Container<T> {
     public value: T;
+
     public constructor(value: T) {
         this.value = value;
     }
@@ -30,6 +32,7 @@ class ce6_Box<T>: ce6_Container<T> {
 
 class ce6_IntBox: ce6_Container<int> {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }

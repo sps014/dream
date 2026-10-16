@@ -5,6 +5,7 @@ let yi_dropped: int = 0;
 
 class YiResource {
     public value: int;
+
     public constructor() {
         this.value = 1;
     }
@@ -55,6 +56,7 @@ fun yi_forward(xs: Iterable<int>): Iterable<int> {
 
 class YiValues<T> {
     value: T;
+
     public constructor(value: T) {
         this.value = value;
     }
@@ -72,6 +74,7 @@ class YiStatics {
 
 struct YiCounter {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }

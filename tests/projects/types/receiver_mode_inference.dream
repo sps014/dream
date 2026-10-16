@@ -6,6 +6,7 @@ import system;
 public class c1c9_IntStack {
     items: int[];
     count: int;
+
     public constructor() {
         this.items = Buffer.alloc<int>(16);
         this.count = 0;

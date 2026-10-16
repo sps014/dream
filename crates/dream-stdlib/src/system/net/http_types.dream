@@ -26,8 +26,10 @@ public class HttpError: Error {
 public class HttpOptions {
     // Total request deadline including response-body consumption; zero disables the deadline.
     public timeout_ms: int;
+
     // Native connection establishment timeout; zero uses the host default. Fetch requires zero.
     public connect_timeout_ms: int;
+
     // Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node.
     // Browsers require -1 because redirect counts and responses are not reliably observable.
     public max_redirects: int;
@@ -48,6 +50,7 @@ public class HttpOptions {
 public class HttpHeaders {
     names: List<string>;
     values: List<string>;
+
     // Creates an empty header collection.
     public constructor() {
         this.names = List<string>();
@@ -137,12 +140,16 @@ public class HttpHeaders {
 public class HttpRequest {
     // HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.
     public method: string;
+
     // Absolute http/https destination; credentials in URLs are rejected.
     public url: Url;
+
     // Request headers; browsers reject forbidden names instead of silently ignoring them.
     public headers: HttpHeaders;
+
     // Byte body copied for each send; GET and HEAD require an empty body.
     public body: byte[];
+
     // Creates a request with empty headers and body.
     public constructor(method: string, url: Url) {
         this.method = method;
@@ -197,6 +204,7 @@ public class HttpRequest {
 public static class HttpCapabilities {
     @runtime("netCapabilities")
     static extern fun flags_host(): int;
+
     // Whether a separate connection-establishment timeout can be configured (native hosts).
     public static get connection_timeouts(): bool {
         return (HttpCapabilities.flags_host() & 1) != 0;

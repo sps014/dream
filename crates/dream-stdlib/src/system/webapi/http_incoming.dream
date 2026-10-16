@@ -4,16 +4,22 @@ module system.webapi;
 public class HttpIncoming {
     /// Identifier of the active HTTP request.
     public req_id: int;
+
     /// HTTP request method.
     public method: string;
+
     /// Request or resource path.
     public path: string;
+
     /// Query string supplied with the request.
     public query: string;
+
     /// HTTP headers associated with this message.
     public headers: HttpHeaders;
+
     multipart: Option<JsonValue>;
     internal cancellation_token: Option<CancellationToken>;
+
     internal constructor(metadata: JsonValue) {
         this.req_id = metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0);
         this.method = metadata.get_or("method", JsonValue.none()).as_string().unwrap_or("");
@@ -38,6 +44,7 @@ public class HttpIncoming {
     @native
     @runtime("httpServerReleaseRequest")
     static extern fun release_host(id: int): void;
+
     del() {
         if this.req_id > 0 {
             HttpIncoming.release_host(this.req_id);

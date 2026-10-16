@@ -4,11 +4,14 @@ module system.core;
 // package (collections included) can build strings in O(n); always available without imports.
 public class StringBuilder {
     bytes: byte[];
+
     // Payload bytes used in `bytes` (always even; two bytes per UTF-16 unit).
     count: int;
+
     // Backing-buffer capacity in bytes (mirrors `this.bytes.length`; the native fast path
     // reads this field instead of chasing the array header on every append).
     cap: int;
+
     // Set once `as_span` has shared `bytes`; `clear` then swaps in a fresh buffer so viewed units
     // are never overwritten.
     viewed: bool;

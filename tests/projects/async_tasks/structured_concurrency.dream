@@ -7,6 +7,7 @@ class StructuredCounter {
     public count: int;
     public active: int;
     public maximum: int;
+
     public constructor() {
         this.count = 0;
         this.active = 0;
@@ -16,6 +17,7 @@ class StructuredCounter {
 
 shared class StructuredParallelGate {
     count: int;
+
     public constructor() {
         this.count = 0;
     }

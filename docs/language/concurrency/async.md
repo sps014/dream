@@ -186,6 +186,7 @@ import system.io;
 
 class Reader {
     path: string;
+
     async fun fetch(): string {
         let body = File.read(this.path).await.unwrap_or("");
         return body;

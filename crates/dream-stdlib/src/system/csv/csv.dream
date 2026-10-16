@@ -4,9 +4,12 @@ module system.csv;
 public class CsvError: Error {
     // One-based logical record number associated with the error.
     public record: long;
+
     // Zero-based absolute byte offset reached before the failure.
     public offset: long;
+
     detail: string;
+
     // Creates a CSV diagnostic; offsets count bytes rather than UTF-16 code units.
     public constructor(record: long, offset: long, message: string) {
         this.record = record;
@@ -28,6 +31,7 @@ public class CsvError: Error {
 internal static class CsvCodec {
     @runtime("dataCodec")
     internal static extern fun request_host(request: string): string;
+
     internal static fun request(value: JsonValue): Result<JsonValue, CsvError> {
         let parsed = Json.deserialize<JsonValue>(CsvCodec.request_host(Json.serialize(value)));
         if parsed.is_err() {
@@ -60,6 +64,7 @@ public class CsvReader {
     record: long;
     skip_lf: bool;
     failed: bool;
+
     // Borrows source; record limits count encoded bytes including embedded newlines.
     public constructor(source: Reader, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.source = source;
@@ -211,6 +216,7 @@ public class CsvWriter {
     destination: Writer;
     delimiter: char;
     limit: int;
+
     // Borrows destination; callers retain responsibility for closure and explicit flushing.
     public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.destination = destination;

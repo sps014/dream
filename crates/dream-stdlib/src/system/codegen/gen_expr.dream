@@ -9,34 +9,49 @@ import system.json;
 public class GenExpr {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Category of this entry.
     public kind: ExprKind;
+
     /// Category of the containing statement.
     public statement_kind: StmtKind;
+
     /// Source range occupied by this node.
     public span: GenSpan;
+
     /// Constant value of the expression, when known.
     public constant: Option<GenConstant>;
+
     /// Source text represented by this entry.
     public text: string;
+
     /// Operator spelling used by the expression.
     public op: string;
+
     /// Source spelling of the literal.
     public literal: string;
+
     /// Category of the literal, such as a number or string.
     public literal_kind: string;
+
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
+
     /// Identifier of the referenced symbol.
     public symbol: string;
+
     /// Category of the referenced symbol.
     public symbol_kind: string;
+
     /// Identifier distinguishing this function's overload.
     public overload: string;
+
     /// Concrete type arguments, in parameter order.
     public type_args: List<GenTypeRef>;
+
     /// Type references associated with this expression.
     public types: List<GenTypeRef>;
+
     nodes: List<GenExpr>;
 
     // Creates this model from snapshot JSON.

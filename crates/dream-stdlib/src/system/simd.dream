@@ -4,6 +4,7 @@ module system.simd;
 public struct Vector<T: unmanaged> {
     // Raw 16-byte payload (four i32 words). An implementation detail of the WASM `v128` layout.
     w0: int;
+
     w1: int;
     w2: int;
     w3: int;

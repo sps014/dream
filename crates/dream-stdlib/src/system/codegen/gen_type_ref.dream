@@ -9,16 +9,21 @@ import system.json;
 public class GenTypeRef {
     /// Category of this entry.
     public kind: TypeRefKind;
+
     // `int`, `List`, `T`, or empty for arrays/tuples/functions.
     public name: string;
+
     // Display spelling, including canonical module qualification for resolved names.
     public display: string;
+
     // Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.
     /// Unique type spelling that distinguishes concrete generic instantiations; useful for
     /// generated names.
     public mangled: string;
+
     // Identity of the named declaration (`::User`, `system.collections::List`), or empty.
     public decl: string;
+
     // Type arguments; the element of an array; tuple members; function params then return.
     public args: List<GenTypeRef>;
 

@@ -4,9 +4,12 @@ module system.config;
 public class ConfigError: Error {
     // Logical setting name associated with the failure.
     public key: string;
+
     // The default, JSON filename, environment variable, or CLI argument that supplied it.
     public source: string;
+
     detail: string;
+
     // Creates a diagnostic with setting provenance.
     public constructor(key: string, source: string, message: string) {
         this.key = key;
@@ -29,6 +32,7 @@ public class ConfigError: Error {
 public class Config {
     internal values: Map<string, string>;
     internal sources: Map<string, string>;
+
     internal constructor() {
         this.values = Map<string, string>();
         this.sources = Map<string, string>();
@@ -96,6 +100,7 @@ public class ConfigBuilder {
     arguments: Option<ParsedArguments>;
     required: List<string>;
     validators: Map<string, fun(string): bool>;
+
     // Creates an empty builder; source precedence is independent of method call order.
     public constructor() {
         this.defaults = Map<string, string>();

@@ -5,6 +5,7 @@ import system.task;
 shared class c25d_Session {
     public id: int;
     public label: string;
+
     public constructor(id: int) {
         this.id = id;
         this.label = "live" + " child";

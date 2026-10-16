@@ -3,6 +3,7 @@ import system;
 
 struct c1cf_Counter {
     public value: int;
+
     public constructor() {
         this.value = 0;
     }

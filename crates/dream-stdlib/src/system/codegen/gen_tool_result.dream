@@ -8,12 +8,16 @@ import system.json;
 public class GenToolResult {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Process exit code.
     public exit: int;
+
     /// Text captured from standard output.
     public stdout: string;
+
     /// Text captured from standard error.
     public stderr: string;
+
     /// Files available to this operation.
     public files: List<GenToolFile>;
 

@@ -8,38 +8,55 @@ import system.json;
 public class GenSnapshot {
     /// Version identifying this API or snapshot format.
     public version: int;
+
     /// Current source-generation phase.
     public phase: int;
+
     /// Symbols available to the generator.
     public symbols: List<GenSymbol>;
+
     /// Errors available for the generator to inspect.
     public compilation_errors: List<GenCompilationError>;
+
     /// Tools available to the generator.
     public tools: List<GenToolInfo>;
+
     /// Results of tool requests made by the generator.
     public tool_results: List<GenToolResult>;
+
     /// Referenced type declarations available to the generator.
     public referenced: List<GenDecl>;
+
     /// Referenced function declarations available to the generator.
     public referenced_functions: List<GenFunction>;
+
     /// Name of the generator being executed.
     public generator: string;
+
     /// Stable identifier of the generator being executed.
     public generator_id: string;
+
     /// Target declaration or build target associated with this result.
     public target: string;
+
     /// Options supplied to this generator.
     public options: JsonValue;
+
     /// Files available to this operation.
     public files: List<GenFile>;
+
     /// Searchable declaration index available to the generator.
     public index: List<GenIndexEntry>;
+
     /// Type declarations available to the generator.
     public decls: List<GenDecl>;
+
     /// Function declarations available to the generator.
     public functions: List<GenFunction>;
+
     /// Syntax blocks available to the generator.
     public blocks: List<GenSyntaxBlock>;
+
     /// Function call sites available to the generator.
     public calls: List<GenCallSite>;
 

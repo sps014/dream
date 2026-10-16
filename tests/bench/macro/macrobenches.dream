@@ -17,6 +17,7 @@ let last_releases: long = 0;
 
 class Sink {
     public v: int;
+
     public constructor() {
         this.v = 0;
     }
@@ -67,6 +68,7 @@ fun seed_bit(): int {
 
 class Lcg {
     public s: int;
+
     public constructor(seed: int) {
         this.s = seed;
     }
@@ -244,6 +246,7 @@ fun bench_log_processor(iters: int): void {
 class Edge {
     public to: int;
     public w: int;
+
     public constructor(to: int, w: int) {
         this.to = to;
         this.w = w;
@@ -253,6 +256,7 @@ class Edge {
 class Vertex {
     public id: int;
     public out: List<Edge>;
+
     public constructor(id: int) {
         this.id = id;
         this.out = List<Edge>();
@@ -262,6 +266,7 @@ class Vertex {
 class Visit: Comparable<Visit> {
     public node: int;
     public dist: int;
+
     public constructor(node: int, dist: int) {
         this.node = node;
         this.dist = dist;
@@ -295,6 +300,7 @@ fun make_graph(rng: Lcg, n: int, degree: int): List<Vertex> {
 struct ValueVisit: Comparable<ValueVisit> {
     public node: int;
     public dist: int;
+
     public constructor(node: int, dist: int) {
         this.node = node;
         this.dist = dist;

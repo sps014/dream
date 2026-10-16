@@ -10,6 +10,7 @@ interface cff_Fetcher {
 
 class cff_Remote: cff_Fetcher {
     public base: int;
+
     public constructor(base: int) {
         this.base = base;
     }
@@ -22,6 +23,7 @@ class cff_Remote: cff_Fetcher {
 
 class cff_Cached: cff_Fetcher {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }

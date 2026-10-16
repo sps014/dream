@@ -4,24 +4,34 @@ module system.webapi;
 public class WebAppOptions {
     /// Title displayed in the API documentation.
     public title: string;
+
     /// Version identifying this API or snapshot format.
     public version: string;
+
     /// Path serving Swagger UI; an empty path disables it.
     public docs_url: string;
+
     /// Path serving the OpenAPI document.
     public openapi_url: string;
+
     /// Path serving ReDoc; an empty path disables it.
     public redoc_url: string;
+
     /// Path to the server certificate; leave empty to serve plain HTTP.
     public tls_cert_path: string;
+
     /// Path to the private key for the server certificate.
     public tls_key_path: string;
+
     /// Short summary displayed in the API documentation.
     public summary: string;
+
     /// Description displayed in the API documentation.
     public description: string;
+
     /// URL describing the API's terms of service.
     public terms_of_service: string;
+
     /// Options controlling the interactive API documentation.
     public swagger: SwaggerOptions;
 

@@ -383,12 +383,16 @@ class FileOperation {
         borrow data: byte[],
         position: long
     ): usize;
+
     @runtime("fileOperationDone")
     static extern fun done_host(id: usize): int;
+
     @runtime("fileOperationResult")
     static extern fun result_host(id: usize): long;
+
     @runtime("fileOperationBytes")
     static extern fun bytes_host(id: usize): byte[];
+
     @runtime("fileOperationRelease")
     static extern fun release_host(id: usize): void;
 

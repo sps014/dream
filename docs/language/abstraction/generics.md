@@ -131,6 +131,7 @@ Explicit `Class<Args>.method(...)` always works, and is required when a paramete
 ```dream
 class Cache<T> {
     seed: int;
+
     public constructor(seed: int) {
         this.seed = seed;
     }

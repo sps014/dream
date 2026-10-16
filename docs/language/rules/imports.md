@@ -196,6 +196,7 @@ module utils.math;
 
 public class Vector {
     internal x: int; // visible anywhere in module utils.math
+
     public fun length_sq(): int {
         return helper_square(this.x);
     }

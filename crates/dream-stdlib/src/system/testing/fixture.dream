@@ -6,6 +6,7 @@ public class TestFixture<T, E> {
     value: T;
     cleanup: fun(T): Result<bool, E>;
     outcome: Option<Result<bool, E>>;
+
     // Registers deterministic cleanup before the fixture is exposed to test code.
     public constructor(value: T, cleanup: fun(T): Result<bool, E>) {
         this.value = value;
@@ -29,6 +30,7 @@ public class TestFixture<T, E> {
         this.outcome = Option.Some(cleanup(this.value));
         return this.outcome.unwrap();
     }
+
     del() {
         this.close();
     }

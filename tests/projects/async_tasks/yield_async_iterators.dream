@@ -6,6 +6,7 @@ let ya_dropped: int = 0;
 
 class YaResource {
     public value: int;
+
     public constructor() {
         this.value = 1;
     }
@@ -37,6 +38,7 @@ interface YaSource<T> {
 
 class YaValues<T>: YaSource<T> {
     value: T;
+
     public constructor(value: T) {
         this.value = value;
     }

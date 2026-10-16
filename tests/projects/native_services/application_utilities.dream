@@ -9,6 +9,7 @@ import system.testing;
 
 class FixtureCounter {
     public count: int;
+
     public constructor() {
         this.count = 0;
     }

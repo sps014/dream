@@ -337,7 +337,7 @@ fn nested_switch_does_not_clear_the_outer_case_indent() {
 fn documentation_stays_above_members_instead_of_trailing_previous_tokens() {
     assert_format(
         "class C {\n    /// First member.\n    public x: int;\n    /// Second member.\n    public fun f() {}\n\n    /// Third member.\n    public fun g() {}\n}",
-        "class C {\n    /// First member.\n    public x: int;\n    /// Second member.\n    public fun f() {}\n\n    /// Third member.\n    public fun g() {}\n}\n",
+        "class C {\n    /// First member.\n    public x: int;\n\n    /// Second member.\n    public fun f() {}\n\n    /// Third member.\n    public fun g() {}\n}\n",
     );
 }
 
@@ -375,7 +375,7 @@ fn unicode_comments_do_not_move_documentation_onto_previous_statements() {
     );
     let result = format(&source);
     assert!(
-        result.contains("{\n    /// First field.\n    public x: int;\n    /// Second field."),
+        result.contains("{\n    /// First field.\n    public x: int;\n\n    /// Second field."),
         "{result}"
     );
     assert!(
@@ -468,4 +468,32 @@ fn opaque_dsl_payloads_preserve_all_bytes_including_adjacency_and_spaces() {
     let result = format(&source);
     assert!(result.contains(&format!("html {payload};")), "{result}");
     assert_idempotent(&source);
+}
+
+#[test]
+fn type_members_with_bodies_attributes_or_docs_are_separated() {
+    let source = "@json\nclass Person {\n    @min_length(2)\n    @max_length(80)\n    public name: string;\n    @minimum(0.0)\n    @maximum(150.0)\n    @default_json(\"18\")\n    public age: int;\n    public constructor(name: string, age: int) {\n        this.name = name;\n        this.age = age;\n    }\n    public fun greet(): string { return name; }\n}\n";
+    assert_format(
+        source,
+        "@json\nclass Person {\n    @min_length(2)\n    @max_length(80)\n    public name: string;\n\n    @minimum(0.0)\n    @maximum(150.0)\n    @default_json(\"18\")\n    public age: int;\n\n    public constructor(name: string, age: int) {\n        this.name = name;\n        this.age = age;\n    }\n\n    public fun greet(): string {\n        return name;\n    }\n}\n",
+    );
+    assert_idempotent(source);
+}
+
+#[test]
+fn plain_fields_stay_grouped_and_function_bodies_are_untouched() {
+    assert_format(
+        "class Point {\n    public x: int;\n    public y: int;\n    public fun f() {}\n}\nfun g() {\n    let a = 1;\n    let b = 2;\n}\n",
+        "class Point {\n    public x: int;\n    public y: int;\n\n    public fun f() {}\n}\n\nfun g() {\n    let a = 1;\n    let b = 2;\n}\n",
+    );
+    assert_format(
+        "interface Shape {\n    fun area(): double;\n    fun name(): string;\n}\n",
+        "interface Shape {\n    fun area(): double;\n    fun name(): string;\n}\n",
+    );
+}
+
+#[test]
+fn opaque_payloads_in_statement_fragments_are_preserved() {
+    let source = "System.println(\n    quote { Hello generators }\n);\n";
+    assert_format(source, source);
 }

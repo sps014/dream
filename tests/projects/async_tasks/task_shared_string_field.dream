@@ -5,6 +5,7 @@ import system.task;
 
 shared class c257_Named {
     public label: string;
+
     public constructor(label: string) {
         this.label = label;
     }

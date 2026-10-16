@@ -8,8 +8,10 @@ import system.json;
 public class GenParam {
     /// Name identifying this entry.
     public name: string;
+
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
+
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
 

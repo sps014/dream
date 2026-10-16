@@ -14,6 +14,7 @@ public class AuthService {
     internal browser_origin: string;
     internal browser_sessions: bool;
     internal frozen: bool;
+
     /// Creates a `AuthService` with `jwt`, `accounts`, `store`, `prefix`, `access_seconds`,
     /// `refresh_seconds`, `browser_sessions`, `browser_origin`.
     public constructor(

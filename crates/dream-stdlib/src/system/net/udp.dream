@@ -4,12 +4,16 @@ module system.net;
 public class UdpDatagram {
     // Received bytes, limited to the requested receive size.
     public data: byte[];
+
     // Numeric address of the sender.
     public host: string;
+
     // UDP port of the sender.
     public port: int;
+
     // True when the message contained more bytes than the receive buffer could retain.
     public truncated: bool;
+
     internal constructor(data: byte[], host: string, port: int, truncated: bool) {
         this.data = data;
         this.host = host;
@@ -21,6 +25,7 @@ public class UdpDatagram {
 // An owned UDP socket with explicit message boundaries and bounded receive buffers.
 public class UdpSocket {
     state: SocketState;
+
     internal constructor(state: SocketState) {
         this.state = state;
     }

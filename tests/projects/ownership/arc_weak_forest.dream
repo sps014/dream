@@ -6,6 +6,7 @@ class c25_ForestNode {
     public left: Option<c25_ForestNode>;
     public right: Option<c25_ForestNode>;
     public weak parent: Option<c25_ForestNode>;
+
     public constructor() {
         this.left = Option.None;
         this.right = Option.None;

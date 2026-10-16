@@ -19,6 +19,9 @@ enum Ctx {
         case_body: bool,
         enum_body: bool,
         do_body: bool,
+        type_body: bool,
+        /// Whether the most recent member of a type body is separated by blank lines.
+        member_spaced: bool,
     },
     Paren {
         multiline: bool,
@@ -43,6 +46,7 @@ pub(super) struct Printer {
     /// True while emitting statements after a `case ...:` header (one extra indent level).
     pending_enum: bool,
     pending_do: bool,
+    pending_type: bool,
     chain_indent: bool,
     attribute_end: Option<usize>,
     /// Armed after a `case`/`default` label; the next colon switches into its body indent.
@@ -66,6 +70,7 @@ impl Printer {
             pending_switch: false,
             pending_enum: false,
             pending_do: false,
+            pending_type: false,
             chain_indent: false,
             attribute_end: None,
             case_colon_pending: false,
@@ -209,6 +214,7 @@ impl Printer {
                     .unwrap_or(name_end),
             );
         }
+        self.separate_members(i, tokens);
         self.insert_blank_lines(kind);
         self.emit_leading_trivia(token);
 
@@ -307,13 +313,23 @@ impl Printer {
                     case_body: false,
                     enum_body,
                     do_body: self.pending_do,
+                    type_body: self.pending_type && !enum_body,
+                    member_spaced: false,
                 });
                 self.pending_do = false;
+                self.pending_type = false;
                 self.chain_indent = false;
                 self.brace_indent += 1;
                 self.layout.break_line();
             }
+            TokenKind::ClassToken
+            | TokenKind::StructToken
+            | TokenKind::InterfaceToken
+            | TokenKind::ExtendToken => {
+                self.pending_type = true;
+            }
             TokenKind::OpenParenthesisToken => {
+                self.pending_type = false;
                 self.open_list(i, tokens, groups, true);
             }
             TokenKind::CloseParenthesisToken => {
@@ -340,6 +356,7 @@ impl Printer {
             }
             TokenKind::SemicolonToken => {
                 self.pending_switch = false;
+                self.pending_type = false;
                 self.chain_indent = false;
                 if !matches!(
                     self.ctxs.last(),

@@ -5,6 +5,7 @@ module system.core;
 @allow_cycle
 internal class CaptureCell<T> {
     public value: T;
+
     public constructor(v: T) {
         this.value = v;
     }

@@ -4,6 +4,7 @@ import system;
 class c19_OptionalScalar {
     public number: Option<int>;
     public text: Option<string>;
+
     public constructor() {
         this.number = Option.None;
         this.text = Option.None;

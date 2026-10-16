@@ -4,12 +4,16 @@ module system.webapi;
 public class SseEvent {
     /// Text payload of the event.
     public data: string;
+
     /// Optional event type sent to the client.
     public event: Option<string>;
+
     /// Optional event identifier used when reconnecting.
     public id: Option<string>;
+
     /// Optional reconnection delay in milliseconds.
     public retry: Option<int>;
+
     /// Creates a `SseEvent` with `data`, `event`, `id`, `retry`.
     public constructor(
         data: string,

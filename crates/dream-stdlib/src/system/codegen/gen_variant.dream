@@ -8,10 +8,13 @@ import system.json;
 public class GenVariant {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Name identifying this entry.
     public name: string;
+
     /// Fields of this type, in declaration order.
     public fields: List<GenField>;
+
     /// Source location associated with this entry.
     public location: GenLocation;
 

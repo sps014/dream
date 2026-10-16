@@ -4,14 +4,19 @@ module system.process;
 public class ProcessOptions {
     // Working directory; empty inherits the parent directory.
     public cwd: string;
+
     // Environment overrides applied after the inherited environment.
     public env: Map<string, string>;
+
     // Starts with an empty environment when true.
     public clear_env: bool;
+
     // Wall-clock deadline in milliseconds; zero disables the deadline.
     public timeout_ms: int;
+
     // Maximum captured bytes per output stream for run; defaults to 8 MiB.
     public max_output_bytes: int;
+
     // Bytes written to stdin by run before closing the input pipe.
     public input: byte[];
 

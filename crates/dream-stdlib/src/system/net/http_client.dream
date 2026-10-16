@@ -4,18 +4,22 @@ module system.net;
 // Received responses own their bodies independently and must also be closed.
 public class HttpClient {
     id: int;
+
     // Creates a client; allocation failures are reported by `send`.
     public constructor() {
         this.id = HttpClient.create_host();
     }
+
     del() {
         HttpClient.close_host(this.id);
     }
 
     @runtime("netClientCreate")
     static extern fun create_host(): int;
+
     @runtime("netClientClose")
     static extern fun close_host(id: int): void;
+
     @runtime("netHttpStart")
     static extern fun send_host(id: int, borrow request: string, borrow bytes: byte[]): int;
 
@@ -85,9 +89,11 @@ public class HttpClient {
 
 class HttpOperation {
     id: int;
+
     internal constructor(id: int) {
         this.id = id;
     }
+
     del() {
         this.close();
     }
@@ -101,14 +107,17 @@ class HttpOperation {
 
     @runtime("netOperationPoll")
     static extern fun poll_host(id: int): byte[];
+
     internal fun claim(): void {
         HttpOperation.claim_host(this.id);
     }
 
     @runtime("netOperationClaim")
     static extern fun claim_host(id: int): void;
+
     @runtime("netOperationRelease")
     static extern fun release_host(id: int): void;
+
     @async_host
     @runtime("netOperationWait")
     static extern async fun wait_host(id: int): int;
@@ -167,6 +176,7 @@ public class HttpResponse {
     url_value: Url;
     header_values: HttpHeaders;
     body_value: HttpBody;
+
     internal constructor(status: int, url: Url, headers: HttpHeaders, body: HttpBody) {
         this.status_value = status;
         this.url_value = url;
@@ -267,17 +277,21 @@ public class HttpResponse {
 // An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
 public class HttpBody: AsyncReader {
     id: int;
+
     internal constructor(id: int) {
         this.id = id;
     }
+
     del() {
         HttpBody.close_host(this.id);
     }
 
     @runtime("netBodyRead")
     static extern fun read_host(id: int, count: int): int;
+
     @runtime("netBodyClose")
     static extern fun close_host(id: int): void;
+
     // Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
     // Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
     public async unique fun read_async(

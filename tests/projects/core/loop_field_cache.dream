@@ -4,6 +4,7 @@ import system;
 class c142_Particle {
     public x: double;
     public velocity: double;
+
     public constructor(x: double) {
         this.x = x;
         this.velocity = 0.0d;

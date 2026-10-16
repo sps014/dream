@@ -3,6 +3,7 @@ import system;
 
 class ca3_Box {
     public value: int;
+
     public constructor(value: int) {
         this.value = value;
     }

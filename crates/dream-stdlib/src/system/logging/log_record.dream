@@ -4,10 +4,13 @@ module system.logging;
 public class LogRecord {
     // Severity of this record.
     public level: LogLevel;
+
     // Logger name that produced this record.
     public name: string;
+
     // Message text.
     public message: string;
+
     // UTC epoch milliseconds when the record was created.
     public timestamp_ms: long;
 

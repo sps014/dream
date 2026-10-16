@@ -7,6 +7,7 @@ import system;
 class Profile {
     public name: string;
     public nickname: Option<string>;
+
     public constructor(name: string, nickname: Option<string>) {
         this.name = name;
         this.nickname = nickname;

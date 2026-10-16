@@ -6,6 +6,7 @@ import system.collections;
 
 class cd8_Box {
     public items: List<string>;
+
     public constructor() {
         this.items = List<string>();
     }

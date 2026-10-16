@@ -12,6 +12,7 @@ enum c97_Color {
 
 class c97_P {
     public x: int;
+
     public constructor(x: int) {
         this.x = x;
     }

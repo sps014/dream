@@ -4,14 +4,19 @@ module system.json.derive;
 public class JsonTypeSpec {
     /// Name identifying this entry.
     public name: string;
+
     /// Whether the declaration is a discriminated union.
     public is_union: bool;
+
     /// Names of the declared type parameters, in order.
     public generic_params: List<string>;
+
     /// Fields of this type, in declaration order.
     public fields: List<JsonFieldSpec>;
+
     /// Choices declared by this union or enum, in declaration order.
     public variants: List<JsonVariantSpec>;
+
     // Built with a zero-argument constructor plus field stores, because no constructor takes
     // every field in declaration order.
     public assign_fields: bool;

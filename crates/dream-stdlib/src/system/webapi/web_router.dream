@@ -9,6 +9,7 @@ public class WebEndpoint {
     internal paths: string;
     internal components: string;
     internal websocket: bool;
+
     /// Creates a `WebEndpoint` with `method`, `path`, `handler`, `paths`, `websocket`,
     /// `components`.
     public constructor(
@@ -32,6 +33,7 @@ public class WebEndpoint {
 @allow_cycle
 public class WebRouter {
     internal routes: List<WebEndpoint>;
+
     /// Creates a `WebRouter` with `routes`.
     public constructor(routes: List<WebEndpoint>) {
         this.routes = List<WebEndpoint>();

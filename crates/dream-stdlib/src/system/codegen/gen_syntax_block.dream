@@ -8,12 +8,16 @@ import system.json;
 public class GenSyntaxBlock {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Name identifying this entry.
     public name: string;
+
     // Reconstructed body text; splices appear as `{expr}`.
     public body: string;
+
     // Dream source of each `{ ... }` splice, in order.
     public splices: List<string>;
+
     /// Source location associated with this entry.
     public location: GenLocation;
 

@@ -8,12 +8,16 @@ import system.json;
 public class GenSymbolInstance {
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
+
     /// Base types declared by this type.
     public bases: List<GenTypeRef>;
+
     /// Fields of this type, in declaration order.
     public fields: List<GenField>;
+
     /// Methods declared by this type.
     public methods: List<GenFunction>;
+
     /// Choices declared by this union or enum, in declaration order.
     public variants: List<GenVariant>;
 

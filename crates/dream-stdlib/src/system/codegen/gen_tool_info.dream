@@ -8,8 +8,10 @@ import system.json;
 public class GenToolInfo {
     /// Name identifying this entry.
     public name: string;
+
     /// Version identifying this API or snapshot format.
     public version: string;
+
     /// Content fingerprint identifying this version of the tool.
     public fingerprint: string;
 

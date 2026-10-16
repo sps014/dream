@@ -30,6 +30,7 @@ interface c102_ReadWrite: c102_Readable + c102_Writable {
 
 class c102_Store: c102_ReadWrite {
     value: int;
+
     public constructor() {
         this.value = 0;
     }

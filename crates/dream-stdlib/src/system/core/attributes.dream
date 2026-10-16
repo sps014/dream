@@ -40,8 +40,10 @@ public enum AttributeTarget {
 public struct DeclarationPath {
     /// Source text represented by this entry.
     public text: string;
+
     /// Resolved declaration identifier, or an empty string when unresolved.
     public symbol: string;
+
     /// Creates a `DeclarationPath` with `text`, `symbol`.
     public constructor(text: string, symbol: string) {
         this.text = text;
@@ -123,6 +125,7 @@ public struct OwnedAttribute {
 public struct JsAttribute {
     /// Fully qualified module containing the declaration.
     public module_name: string;
+
     /// Name exposed to callers of the foreign function.
     public export_name: string;
 }

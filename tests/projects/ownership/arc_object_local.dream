@@ -3,6 +3,7 @@ import system;
 
 class c18_Value {
     public n: int;
+
     public constructor(n: int) {
         this.n = n;
     }

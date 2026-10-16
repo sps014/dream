@@ -8,14 +8,19 @@ import system.json;
 public class GenField {
     /// Stable identifier of this entry.
     public id: string;
+
     /// Name identifying this entry.
     public name: string;
+
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
+
     /// Declared access level of this symbol.
     public visibility: string;
+
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
+
     /// Source location associated with this entry.
     public location: GenLocation;
 

@@ -6,6 +6,7 @@ import system;
 
 class cc7_Note {
     public text: string;
+
     public constructor(text: string) {
         this.text = text;
     }

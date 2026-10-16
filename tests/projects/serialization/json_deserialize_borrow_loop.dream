@@ -6,6 +6,7 @@ import system.json;
 class c112_Address {
     public city: string;
     public zip: string;
+
     public constructor(city: string, zip: string) {
         this.city = city;
         this.zip = zip;
@@ -18,6 +19,7 @@ class c112_User {
     public age: int;
     public address: c112_Address;
     public scores: int[];
+
     public constructor(name: string, age: int, address: c112_Address, scores: int[]) {
         this.name = name;
         this.age = age;

@@ -22,16 +22,19 @@ extend js {
     @web
     @js("Dream", "jsGlobal")
     static extern fun global(borrow name: string): js;
+
     // `globalThis` itself, backing the `js.global.<member>` property syntax.
     @node
     @web
     @js("Dream", "jsGlobalThis")
     static extern fun global_this(): js;
+
     // A fresh empty JS object (`{}`) to populate and hand to a JS API.
     @node
     @web
     @js("Dream", "jsObject")
     static extern fun object(): js;
+
     // A fresh empty JS array (`[]`).
     @node
     @web
@@ -44,10 +47,12 @@ extend js {
     @web
     @js("Dream", "jsNull")
     static extern fun host_null(): js;
+
     @node
     @web
     @js("Dream", "jsUndefined")
     static extern fun host_undefined(): js;
+
     /// The JavaScript `null` value.
     @node
     @web
@@ -71,10 +76,12 @@ extend js {
     @web
     @js("Dream", "jsFunc")
     static extern fun func(handler: fun(js): void): js;
+
     @node
     @web
     @js("Dream", "jsFunc0")
     static extern fun func0(handler: fun(): void): js;
+
     // Generalized boxing for a handler of any arity (two or more `js` parameters, e.g. a
     // `(value, index)` iteratee or an `(a, b, c)` reducer). The compiler passes the raw funcref-table
     // index and the parameter count; the host wraps it as `fun(js, …): void`. A bare
@@ -89,18 +96,22 @@ extend js {
     @web
     @js("Dream", "jsInt")
     static extern fun box_int(value: int): js;
+
     @node
     @web
     @js("Dream", "jsLong")
     static extern fun box_long(value: long): js;
+
     @node
     @web
     @js("Dream", "jsDouble")
     static extern fun box_double(value: double): js;
+
     @node
     @web
     @js("Dream", "jsBool")
     static extern fun box_bool(value: bool): js;
+
     @node
     @web
     @js("Dream", "jsString")
@@ -111,10 +122,12 @@ extend js {
     @web
     @js("Dream", "jsGetV")
     static extern fun get(borrow target: js, borrow name: string): js;
+
     @node
     @web
     @js("Dream", "jsSetV")
     static extern fun set(borrow target: js, borrow name: string, value: js): void;
+
     // Property write with one shadow-stack value slot (no pre-box bridge for primitives/string).
     @node
     @web
@@ -125,6 +138,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): void;
+
     // Variadic call/invoke. The compiler does not call these with a Dream argument list: it emits a
     // shadow-stack buffer of tagged 16-byte slots and passes its pointer + count, so all arguments
     // cross in a single boundary crossing with no per-argument boxing or heap array. The `args_ptr`
@@ -133,10 +147,12 @@ extend js {
     @web
     @js("Dream", "jsCallV")
     static extern fun call(borrow target: js, borrow name: string, args_ptr: int, argc: int): js;
+
     @node
     @web
     @js("Dream", "jsInvokeV")
     static extern fun invoke(borrow target: js, args_ptr: int, argc: int): js;
+
     // `target[prop][method](...args)` in one crossing (fused get + call).
     @node
     @web
@@ -148,14 +164,17 @@ extend js {
         args_ptr: int,
         argc: int
     ): js;
+
     @node
     @web
     @js("Dream", "jsIndexGetV")
     static extern fun index_get(borrow target: js, borrow key: js): js;
+
     @node
     @web
     @js("Dream", "jsIndexSetV")
     static extern fun index_set(borrow target: js, borrow key: js, value: js): void;
+
     // Index write with key+value in two shadow-stack slots (no per-value boxing bridges).
     @node
     @web
@@ -168,18 +187,22 @@ extend js {
     @web
     @js("Dream", "jsGetAsInt")
     static extern fun get_as_int(borrow target: js, borrow name: string): int;
+
     @node
     @web
     @js("Dream", "jsGetAsLong")
     static extern fun get_as_long(borrow target: js, borrow name: string): long;
+
     @node
     @web
     @js("Dream", "jsGetAsDouble")
     static extern fun get_as_double(borrow target: js, borrow name: string): double;
+
     @node
     @web
     @js("Dream", "jsGetAsBool")
     static extern fun get_as_bool(borrow target: js, borrow name: string): bool;
+
     @node
     @web
     @js("Dream", "jsGetAsString")
@@ -195,6 +218,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): int;
+
     @node
     @web
     @js("Dream", "jsCallAsLong")
@@ -204,6 +228,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): long;
+
     @node
     @web
     @js("Dream", "jsCallAsDouble")
@@ -213,6 +238,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): double;
+
     @node
     @web
     @js("Dream", "jsCallAsBool")
@@ -222,6 +248,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): bool;
+
     @node
     @web
     @js("Dream", "jsCallAsString")
@@ -231,22 +258,27 @@ extend js {
         args_ptr: int,
         argc: int
     ): string;
+
     @node
     @web
     @js("Dream", "jsInvokeAsInt")
     static extern fun invoke_as_int(borrow target: js, args_ptr: int, argc: int): int;
+
     @node
     @web
     @js("Dream", "jsInvokeAsLong")
     static extern fun invoke_as_long(borrow target: js, args_ptr: int, argc: int): long;
+
     @node
     @web
     @js("Dream", "jsInvokeAsDouble")
     static extern fun invoke_as_double(borrow target: js, args_ptr: int, argc: int): double;
+
     @node
     @web
     @js("Dream", "jsInvokeAsBool")
     static extern fun invoke_as_bool(borrow target: js, args_ptr: int, argc: int): bool;
+
     @node
     @web
     @js("Dream", "jsInvokeAsString")
@@ -263,6 +295,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): int;
+
     @node
     @web
     @js("Dream", "jsGetCallAsLong")
@@ -273,6 +306,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): long;
+
     @node
     @web
     @js("Dream", "jsGetCallAsDouble")
@@ -283,6 +317,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): double;
+
     @node
     @web
     @js("Dream", "jsGetCallAsBool")
@@ -293,6 +328,7 @@ extend js {
         args_ptr: int,
         argc: int
     ): bool;
+
     @node
     @web
     @js("Dream", "jsGetCallAsString")
@@ -337,22 +373,27 @@ extend js {
     @web
     @js("Dream", "jsAsInt")
     static extern fun as_int(borrow target: js): int;
+
     @node
     @web
     @js("Dream", "jsAsLong")
     static extern fun as_long(borrow target: js): long;
+
     @node
     @web
     @js("Dream", "jsAsDouble")
     static extern fun as_double(borrow target: js): double;
+
     @node
     @web
     @js("Dream", "jsAsBool")
     static extern fun as_bool(borrow target: js): bool;
+
     @node
     @web
     @js("Dream", "jsAsString")
     static extern fun as_string(borrow target: js): string;
+
     @node
     @web
     @js("Dream", "jsIsNull")

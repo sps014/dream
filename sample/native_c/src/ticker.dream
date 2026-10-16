@@ -29,6 +29,7 @@ extern fun checksum(data: byte[], len: usize): int;
 @allow_cycle
 public class Ticker {
     handle: CPtr;
+
     // C holds the callback between calls, so the Ticker keeps it alive.
     listener: Option<NativeCallback<fun(int): int>>;
 

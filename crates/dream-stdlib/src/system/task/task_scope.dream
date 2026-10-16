@@ -259,6 +259,7 @@ public class TaskScope<E> {
 @allow_cycle
 class TaskWaitGuard<T> {
     pending: Future<T>;
+
     internal constructor(pending: Future<T>) {
         this.pending = pending;
     }
@@ -266,6 +267,7 @@ class TaskWaitGuard<T> {
     internal fun close(): void {
         Promise.cancel(this.pending);
     }
+
     del() {
         this.close();
     }

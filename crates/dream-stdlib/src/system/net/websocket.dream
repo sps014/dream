@@ -3,14 +3,17 @@ module system.net;
 /// An owned RFC 6455 WebSocket, available on native, Node and browser hosts.
 public class WebSocket {
     id: int;
+
     internal constructor(id: int) {
         this.id = id;
     }
 
     @runtime("netWsStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
+
     @runtime("netWsClose")
     static extern fun close_host(id: int): void;
+
     del() {
         if this.id > 0 {
             WebSocket.close_host(this.id);

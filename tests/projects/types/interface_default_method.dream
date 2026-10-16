@@ -6,6 +6,7 @@ import system;
 
 interface c100_Greeter {
     fun name(): string;
+
     fun greet(): string {
         return "Hello, I am " + this.name();
     }

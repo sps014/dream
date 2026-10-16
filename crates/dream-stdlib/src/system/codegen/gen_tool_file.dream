@@ -8,10 +8,13 @@ import system.json;
 public class GenToolFile {
     /// Request or resource path.
     public path: string;
+
     /// Text contents of the file.
     public contents: string;
+
     /// Whether the message contains binary data.
     public binary: bool;
+
     /// Hash of the refresh token; the raw refresh token is not stored.
     public hash: string;
 

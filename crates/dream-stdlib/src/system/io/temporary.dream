@@ -4,6 +4,7 @@ module system.io;
 public static class TempCapabilities {
     @runtime("tempSupported")
     static extern fun supported_host(): bool;
+
     // True on native and Node; browser virtual filesystems do not provide OS-private resources.
     public static get supported(): bool {
         return TempCapabilities.supported_host();
@@ -14,6 +15,7 @@ public static class TempCapabilities {
 public class TempDirectory {
     location: string;
     closed: bool;
+
     internal constructor(path: string) {
         this.location = path;
         this.closed = false;
@@ -26,8 +28,10 @@ public class TempDirectory {
 
     @runtime("tempDirectoryCreate")
     static extern fun create_host(directory: string): string;
+
     @runtime("dirRemoveAll")
     static extern fun remove_host(path: string): bool;
+
     // Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.
     public static fun create(): Result<TempDirectory, IoError> {
         return TempDirectory.create_in("");
@@ -64,6 +68,7 @@ public class TempDirectory {
         this.closed = true;
         return Result.Ok(true);
     }
+
     del() {
         this.close();
     }
@@ -73,11 +78,14 @@ public class TempDirectory {
 public class TempFile {
     // File access remains owned by this temporary resource; close or persist before releasing it.
     handle: FileHandle;
+
     // Borrowed access to the owned temporary file.
     public get file(): FileHandle {
         return this.handle;
     }
+
     directory: TempDirectory;
+
     internal constructor(file: FileHandle, directory: TempDirectory) {
         this.handle = file;
         this.directory = directory;
@@ -106,6 +114,7 @@ public class TempFile {
 
     @runtime("tempReplace")
     static extern fun replace_host(source: string, destination: string): bool;
+
     // Flushes and closes the file, then atomically replaces a destination on the same filesystem.
     // Failed replacement leaves the destination and temporary file intact; durability is not implied.
     public fun persist_replace(destination: string): Result<bool, IoError> {
@@ -126,6 +135,7 @@ public class TempFile {
         file?;
         return directory;
     }
+
     del() {
         this.close();
     }

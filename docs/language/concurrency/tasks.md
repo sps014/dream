@@ -14,11 +14,7 @@ Use [structured concurrency](structured.md) for concurrent I/O and owned task li
 !!! glance "At a glance"
 
     ```dream
-    let values = Task.map<int, int, string>(
-        [1, 2, 3],
-        compute,
-        concurrency: 2
-    ).await;
+    let values = Task.map<int, int, string>([1, 2, 3], compute, concurrency: 2).await;
     ```
 
     - Tasks run CPU work in parallel on runtime workers.

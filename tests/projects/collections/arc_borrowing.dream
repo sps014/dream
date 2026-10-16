@@ -6,9 +6,11 @@ let arc_borrowing_drops = 0;
 
 class ArcBorrowingItem {
     public value: string;
+
     public constructor(value: string) {
         this.value = value;
     }
+
     del() {
         arc_borrowing_drops = arc_borrowing_drops + 1;
     }
@@ -16,6 +18,7 @@ class ArcBorrowingItem {
 
 struct ArcBorrowingRecord {
     public item: ArcBorrowingItem;
+
     public constructor(item: ArcBorrowingItem) {
         this.item = item;
     }

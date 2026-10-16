@@ -4,6 +4,7 @@ module system.cli;
 public class CliError: Error {
     error_code: string;
     error_message: string;
+
     // Creates an error with a stable machine code and diagnostic text.
     public constructor(code: string, message: string) {
         this.error_code = code;
@@ -24,6 +25,7 @@ public class CliError: Error {
 // Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
 public class ParsedArguments {
     wire: JsonValue;
+
     internal constructor(wire: JsonValue) {
         this.wire = wire;
     }

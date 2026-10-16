@@ -34,6 +34,7 @@ This page is only about **who owns that value** when you pass or assign somethin
 ```dream
 class Point {
     public x: int;
+
     public constructor(x: int) {
         this.x = x;
     }
@@ -192,9 +193,11 @@ Pin a contract explicitly with `borrow fun` / `unique fun` when inference isn't 
 ```dream
 class Counter {
     count: int;
+
     borrow fun value(): int {
         return this.count;
     }
+
     unique fun increment(): void {
         this.count += 1;
     }

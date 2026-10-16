@@ -4,6 +4,7 @@ module system.webapi;
 public class ServerWebSocket {
     id: int;
     token: Option<CancellationToken>;
+
     internal constructor(id: int, token: Option<CancellationToken>) {
         this.id = id;
         this.token = token;
@@ -20,9 +21,11 @@ public class ServerWebSocket {
     @native
     @runtime("netWsStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
+
     @native
     @runtime("netWsClose")
     static extern fun close_host(id: int): void;
+
     del() {
         ServerWebSocket.close_host(this.id);
     }

@@ -51,6 +51,7 @@ public struct DateTime: Equatable<DateTime> {
 
     // The instant this value represents, as UTC epoch milliseconds.
     _epoch_millis: long;
+
     // The UTC offset in minutes.
     _offset_minutes: int;
 

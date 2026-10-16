@@ -11,8 +11,10 @@ shared public class CancellationToken {
 
     @intrinsic(Intrinsic.DreamTaskIsProtected)
     static extern fun protected_host(borrow future: object): bool;
+
     @intrinsic(Intrinsic.DreamTaskHasContext)
     static extern fun has_context_host(): bool;
+
     @intrinsic(Intrinsic.DreamTaskContext)
     static extern fun context_host(): CancellationToken;
 
@@ -164,17 +166,21 @@ shared public class CancellationToken {
 // the subscription and settles its signal even if its awaiting frame was cancelled.
 class CancellationRegistration {
     id: usize;
+
     internal constructor(id: usize) {
         this.id = id;
     }
+
     del() {
         this.close();
     }
 
     @intrinsic(Intrinsic.DreamCancellationSignal)
     static extern fun signal_host(id: usize): Future<int>;
+
     @intrinsic(Intrinsic.DreamCancellationUnregister)
     static extern fun release_host(id: usize): void;
+
     internal fun signal(): Future<int> {
         return CancellationRegistration.signal_host(this.id);
     }

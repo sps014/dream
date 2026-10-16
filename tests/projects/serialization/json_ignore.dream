@@ -6,10 +6,13 @@ import system.json;
 class c116_User {
     public name: string;
     public age: int;
+
     @json_ignore
     public password: string;
+
     @json_ignore
     public login_count: int;
+
     @json_ignore
     public nickname: Option<string>;
 

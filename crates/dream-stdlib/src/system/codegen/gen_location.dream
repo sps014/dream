@@ -8,8 +8,10 @@ import system.json;
 public class GenLocation {
     // Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
     public file: string;
+
     /// One-based line number in the source file.
     public line: int;
+
     /// One-based column number in the source file.
     public column: int;
 

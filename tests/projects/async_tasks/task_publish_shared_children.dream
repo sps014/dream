@@ -4,6 +4,7 @@ import system.task;
 
 shared class c255_Named {
     public label: string;
+
     public constructor(label: string) {
         this.label = label;
     }

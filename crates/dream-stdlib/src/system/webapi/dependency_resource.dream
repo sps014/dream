@@ -5,8 +5,10 @@ module system.webapi;
 public class DependencyResource<T> {
     /// Value carried by this entry.
     public value: T;
+
     /// Asynchronous cleanup action, given the cancellation token.
     public cleanup: fun(CancellationToken): Future<void>;
+
     /// Creates a `DependencyResource` with `value`, `cleanup`.
     public constructor(value: T, cleanup: fun(CancellationToken): Future<void>) {
         this.value = value;
@@ -17,6 +19,7 @@ public class DependencyResource<T> {
 /// Generated, type-checked dependency replacement selection for one application.
 public class DependencyOverrides {
     internal providers: Map<string, string>;
+
     /// Creates a `DependencyOverrides` with `providers`.
     public constructor(providers: Map<string, string>) {
         this.providers = Map<string, string>();
@@ -30,6 +33,7 @@ public class DependencyOverrides {
 @allow_cycle
 internal class DependencyValue<T> {
     internal value: T;
+
     internal constructor(value: T) {
         this.value = value;
     }

@@ -19,10 +19,13 @@ fun gen_snapshot_version(): int {
 public class GenContext {
     // The running generator's name and `module::name` identity.
     public generator_name: string;
+
     /// Stable identifier of the generator being executed.
     public generator_id: string;
+
     // Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
     public target: string;
+
     snapshot: GenSnapshot;
     result_path: string;
     outputs: JsonValue;

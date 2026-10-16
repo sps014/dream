@@ -6,6 +6,7 @@ import system.json;
 class c126_Reply {
     public ok: bool;
     public tags: List<string>;
+
     public constructor() {
         this.ok = false;
         this.tags = List<string>();

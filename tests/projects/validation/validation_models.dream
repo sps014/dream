@@ -16,10 +16,12 @@ class ValidatedUser {
     @max_length(20)
     @validate_with(valid_name)
     public name: string;
+
     @minimum(1.0)
     @maximum(120.0)
     @default_json("18")
     public age: int;
+
     public constructor(name: string, age: int) {
         this.name = name;
         this.age = age;
@@ -39,6 +41,7 @@ class ValidatedUser {
 class ValidatedEnvelope {
     public user: ValidatedUser;
     public tags: List<string>;
+
     public constructor(user: ValidatedUser, tags: List<string>) {
         this.user = user;
         this.tags = tags;

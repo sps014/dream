@@ -7,6 +7,7 @@ import system.testing;
 @json
 class WebapiPayload {
     public name: string;
+
     public constructor(name: string) {
         this.name = name;
     }
@@ -66,9 +67,11 @@ let webapi_stream_dropped: int = 0;
 
 class WebapiStreamGuard {
     public value: string;
+
     public constructor() {
         this.value = "later";
     }
+
     del() {
         webapi_stream_dropped++;
     }

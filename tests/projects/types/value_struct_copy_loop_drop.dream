@@ -5,6 +5,7 @@ import system;
 
 struct c290_P {
     public a: int[];
+
     public constructor(a: int[]) {
         this.a = a;
     }

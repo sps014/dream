@@ -5,12 +5,16 @@ module system.json.derive;
 public class JsonGenOutput {
     /// Whether the operation succeeded.
     public ok: bool;
+
     /// Generated Dream source text for this JSON result type.
     public source: string;
+
     /// Error message reported by the operation.
     public error: string;
+
     /// Dream type name of the error payload.
     public error_type: string;
+
     /// Name of the field used to represent the error payload.
     public error_field: string;
 

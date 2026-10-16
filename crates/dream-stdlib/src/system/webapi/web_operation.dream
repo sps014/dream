@@ -2,6 +2,7 @@ module system.webapi;
 
 internal class WebOperation {
     id: int;
+
     internal constructor(id: int) {
         this.id = id;
     }
@@ -13,22 +14,28 @@ internal class WebOperation {
     @native
     @runtime("httpServerStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
+
     @native
     @async_host
     @runtime("httpServerWait")
     static extern async fun wait_host(id: int): int;
+
     @native
     @runtime("httpServerResult")
     static extern fun result_host(id: int): byte[];
+
     @native
     @runtime("httpServerCancel")
     static extern fun cancel_host(id: int): void;
+
     @native
     @runtime("httpServerRelease")
     static extern fun release_host(id: int): void;
+
     @native
     @runtime("httpServerClaim")
     static extern fun claim_host(id: int): void;
+
     internal fun claim(): void {
         WebOperation.claim_host(this.id);
     }
@@ -39,6 +46,7 @@ internal class WebOperation {
             this.id = 0;
         }
     }
+
     del() {
         this.close();
     }

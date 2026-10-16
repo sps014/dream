@@ -8,6 +8,7 @@ import system;
 struct Point {
     public x: int;
     public y: int;
+
     public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
@@ -18,6 +19,7 @@ struct User {
     public name: string;
     public age: int;
     public home: Point;
+
     public constructor(name: string, age: int, home: Point) {
         this.name = name;
         this.age = age;

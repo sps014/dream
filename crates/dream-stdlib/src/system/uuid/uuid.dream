@@ -3,6 +3,7 @@ module system.uuid;
 // Invalid UUID text or an unavailable secure entropy source.
 public class UuidError: Error {
     detail: string;
+
     // Creates a UUID error without including secret input.
     public constructor(message: string) {
         this.detail = message;
@@ -23,6 +24,7 @@ public class UuidError: Error {
 public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
     high: ulong;
     low: ulong;
+
     internal constructor(high: ulong, low: ulong) {
         this.high = high;
         this.low = low;

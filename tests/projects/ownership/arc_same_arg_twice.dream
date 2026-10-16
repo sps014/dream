@@ -14,6 +14,7 @@ fun c1e_sum_lengths(a: int[], b: int[], c: int[]): int {
 // Constructor arguments are a separate branch of the same decision, so cover them too.
 class c1e_Holder {
     public n: int;
+
     public constructor(first: int[], second: int[]) {
         this.n = first.length + second.length;
     }

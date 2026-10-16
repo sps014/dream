@@ -142,6 +142,7 @@ public class Command {
 
     @runtime("cliParse")
     static extern fun parse_host(request: string): string;
+
     fun argument(
         name: string,
         kind: string,

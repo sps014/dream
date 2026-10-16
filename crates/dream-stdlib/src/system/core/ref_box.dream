@@ -9,6 +9,7 @@ module system.core;
 // is stable for the duration of the call.
 internal struct RefBox<T> {
     public value: T;
+
     public constructor(v: T) {
         this.value = v;
     }

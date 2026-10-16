@@ -4,6 +4,7 @@ internal static class AuthCrypto {
     @native
     @runtime("cryptoAuth")
     static extern fun host(request: string): string;
+
     @native
     internal static fun call(request: JsonValue): Result<JsonValue, AuthError> {
         let result = Json.deserialize<JsonValue>(AuthCrypto.host(Json.serialize(request)));

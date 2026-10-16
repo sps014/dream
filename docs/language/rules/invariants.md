@@ -38,6 +38,7 @@ let int = 3; // error: 'int' is a reserved word
 // good
 class Box {
     public constructor() {}
+
     del() {}
 }
 

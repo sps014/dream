@@ -54,6 +54,7 @@ Defaults also apply to constructors and methods:
 ```dream
 class Greeter {
     public factor: int;
+
     public constructor(factor: int = 3) {
         this.factor = factor;
     }
@@ -108,6 +109,7 @@ cannot express:
 class Rect {
     public width: int;
     public height: int;
+
     public constructor(width: int, height: int = 1) {
         this.width = width;
         this.height = height;

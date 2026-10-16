@@ -9,6 +9,7 @@ public fun add_numbers(a: int, b: int): int {
 public class Test {
     /* name is a string field */
     public name: string;
+
     /* age is an integer field */
     age: int;
 

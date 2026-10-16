@@ -7,8 +7,10 @@ module system.text;
 public class RegexMatchInfo {
     /// Text of the complete regular-expression match.
     public full: string;
+
     /// Text captured by each numbered group.
     public groups: string[];
+
     names: string[];
     name_numbers: int[]; // 1-based group numbers, parallel to `names`
 

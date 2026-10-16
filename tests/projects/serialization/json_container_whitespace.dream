@@ -7,6 +7,7 @@ import system.collections;
 class c10f_Record {
     public values: int[];
     public items: List<int>;
+
     public constructor(values: int[], items: List<int>) {
         this.values = values;
         this.items = items;

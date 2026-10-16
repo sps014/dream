@@ -3,6 +3,7 @@ import system;
 
 class c2a5_Session {
     public id: int;
+
     public constructor(id: int) {
         this.id = id;
     }

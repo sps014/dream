@@ -26,12 +26,16 @@ shared public class CancellationSource {
 
     @intrinsic(Intrinsic.DreamCancellationNew)
     static extern fun create_host(): usize;
+
     @intrinsic(Intrinsic.DreamCancellationRelease)
     static extern fun release_host(state: usize): void;
+
     @intrinsic(Intrinsic.DreamCancellationCancel)
     static extern fun cancel_host(state: usize): void;
+
     @intrinsic(Intrinsic.DreamCancellationIsCancelled)
     static extern fun cancelled_host(state: usize): int;
+
     @intrinsic(Intrinsic.DreamCancellationRegister)
     static extern fun register_host(state: usize): usize;
 

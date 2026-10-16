@@ -108,6 +108,7 @@ included). Fields that cannot cross (maps, interfaces, function values) are left
 class Point {
     public x: int;
     public y: int;
+
     public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;
@@ -125,6 +126,7 @@ structs fill the destination slot in place:
 class Point {
     public x: int;
     public y: int;
+
     public constructor(x: int, y: int) {
         this.x = x;
         this.y = y;

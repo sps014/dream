@@ -16,6 +16,7 @@ import system.json;
 @json
 class Message {
     public text: string;
+
     public constructor(text: string) {
         this.text = text;
     }

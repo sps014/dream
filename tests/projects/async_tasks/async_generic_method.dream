@@ -5,6 +5,7 @@ import system;
 
 class c33_Cell<T> {
     public value: T;
+
     public constructor(value: T) {
         this.value = value;
     }

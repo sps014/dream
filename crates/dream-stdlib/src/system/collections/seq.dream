@@ -14,12 +14,16 @@ module system.collections;
 public class Seq<T> {
     // Source storage; meaningful on the base node only.
     items: List<T>;
+
     start: int;
     end: int;
+
     // Previous stage; `None` on the base node.
     parent: Option<Seq<T>>;
+
     // Exactly one stage kind is active per node.
     has_pred: bool;
+
     pred: fun(T): bool;
     is_take: bool;
     take_n: int;

@@ -6,6 +6,7 @@ import system;
 
 interface c1f0_Greeter {
     fun name(): string;
+
     public fun greet(): string {
         return this.name();
     }

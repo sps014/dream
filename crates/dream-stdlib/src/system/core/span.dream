@@ -14,8 +14,10 @@ module system.core;
 /// cross an `await`.
 public ref struct Span<T> {
     internal array: T[];
+
     // Index into `array` of this span's first element.
     internal offset: int;
+
     internal _length: int;
 
     // A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`;

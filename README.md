@@ -95,24 +95,6 @@ Classes share identity; structs copy as values and live inline. Ordinary code ca
 
 Declare a foreign function with the right attribute and call it like any Dream function. The compiler generates the glue and converts values at the boundary.
 
-```dream
-import system.interop;
-
-// C: a system library on native, or C sources shipped in a package's native/ folder.
-@c("m", "cbrt")
-extern fun cube_root(x: double): double;
-
-// C++: map a class from an ordinary header, with no extern "C" wrapper.
-@cpp("kv.hpp", "kv::Store")
-public class Store {
-    extern constructor(path: string);
-    extern fun get(key: string): Option<string>; // std::optional becomes Option
-    extern fun compact(): Result<bool, string>; // a thrown exception becomes Err
-}
-
-// JavaScript: binds to the global `alert` in the browser or Node.
-extern fun alert(msg: string): void;
-```
 
 | Interop | Runs on | What you get |
 | --- | --- | --- |

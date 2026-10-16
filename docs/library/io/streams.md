@@ -12,9 +12,20 @@ Import `system.io` for file handles, memory streams, buffering, and the `Reader`
 
 ## File handles and cleanup
 
-File handles support `r`, `w`, `a`, `r+`, `w+`, and `a+`. Reads, writes, seeking,
-length queries, and explicit closure return `Result`. A successful empty read at a
-positive requested size means EOF; a read failure returns `IoError`.
+Open a file with `FileHandle.open(path, mode)` or `FileHandle.open_async(path, mode, token)`:
+
+| Mode | Access | If the file exists | If it is missing |
+|---|---|---|---|
+| `r` | read | Opens at the start | `ENOENT` |
+| `w` | write | Truncates it | Creates it |
+| `a` | append | Writes go to the end | Creates it |
+| `r+` | read and write | Opens at the start | `ENOENT` |
+| `w+` | read and write | Truncates it | Creates it |
+| `a+` | read and append | Writes go to the end | Creates it |
+
+Any other mode returns an `EIO` error. Reads, writes, seeking, length queries, and
+explicit closure return `Result`. A successful empty read at a positive requested
+size means EOF; a read failure returns `IoError`.
 
 ```dream
 import system.io;
@@ -30,6 +41,46 @@ fun main(): Result<bool, IoError> {
     return file.close();
 }
 ```
+
+| `FileHandle` member | Returns | Effect |
+|---|---|---|
+| `read(n)` | `Result<byte[], IoError>` | Reads up to `n` bytes. |
+| `read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
+| `write(data)` | `Result<int, IoError>` | Writes bytes; returns the count written. |
+| `write_text(text)` | `Result<int, IoError>` | Writes UTF-8 bytes of `text`. |
+| `write_all(data)` | `Result<bool, IoError>` | Retries until every byte is written. |
+| `read_exact(count)` | `Result<byte[], IoError>` | Reads exactly `count` bytes or fails with `EEOF`. |
+| `seek(pos)` | `Result<bool, IoError>` | Moves to an absolute byte offset. |
+| `seek_from_end(offset)` | `Result<bool, IoError>` | Moves relative to the end; negative moves backward. |
+| `seek_end()` | `Result<bool, IoError>` | Moves to the end. |
+| `tell()` | `Result<long, IoError>` | Current byte offset. |
+| `length()` | `Result<long, IoError>` | Current file length in bytes. |
+| `flush()` | `Result<bool, IoError>` | Checks the handle is open; writes are unbuffered. |
+| `close()` | `Result<bool, IoError>` | Closes the handle. |
+| `is_closed` | `bool` | Whether the handle is closed. |
+| `path` | `string` | Path used to open the file. |
+
+The async forms `read_async(n, token)`, `write_async(data, token)`,
+`seek_async(pos, token)`, and `flush_async(token)` return the same results.
+Neither `flush()` nor `flush_async()` forces data to durable storage.
+
+`File.open(path)` returns a read-only `FileStream`, a text-oriented wrapper over a
+handle:
+
+| `FileStream` member | Returns | Effect |
+|---|---|---|
+| `read_bytes(n)` | `Result<byte[], IoError>` | Reads up to `n` bytes. |
+| `read(n)` | `Result<string, IoError>` | Reads up to `n` bytes and decodes UTF-8. |
+| `read_all()` | `Result<string, IoError>` | Reads the rest of the file as UTF-8. |
+| `read_line()` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
+| `has_more()` | `Result<bool, IoError>` | Whether the position is before the end. |
+| `position` / `length` | `Result<long, IoError>` | Current offset and file length. |
+| `seek(offset)` / `seek_end()` / `reset()` | `Result<bool, IoError>` | Moves to an offset, the end, or byte zero. |
+| `tell()` | `Result<long, IoError>` | Current offset. |
+| `close()` | `Result<bool, IoError>` | Closes the underlying handle. |
+
+`FileStream.read(n)` limits bytes, not characters, and can split a UTF-8
+sequence; use an incremental decoder for streamed text.
 
 `close()` is idempotent. Operations after closure return `ECLOSED`. Dropping the
 last reference also closes the handle, but only explicit closure can report an
@@ -71,11 +122,31 @@ fun main(): Result<bool, IoError> {
 }
 ```
 
-`Streams.copy` returns the byte count and flushes the destination after reaching
-EOF. `Reader.read_exact` reports `EEOF` if the stream ends early. `Writer.write_all`
+| Function | Returns | Effect |
+|---|---|---|
+| `Streams.copy(source, destination, buffer_size)` | `Result<long, IoError>` | Copies a `Reader` to a `Writer`. |
+| `Streams.copy_async(source, destination, buffer_size, token)` | `async Result<long, IoError>` | Copies an `AsyncReader` to an `AsyncWriter`. |
+
+Both copy to EOF in chunks of at most `buffer_size` bytes (default 8192), flush the
+destination, and return the byte count. Neither closes either stream. A
+nonpositive `buffer_size` returns `EINVAL`. Completed writes stay in place
+after a failure or cancellation.
+
+## Stream interfaces
+
+Implement these interfaces to plug your own types into the copy helpers and
+buffered wrappers:
+
+| Interface | Members | Notes |
+|---|---|---|
+| `Reader` | `read(max_bytes)`, `seek(position)`, `tell()`, `read_exact(count)` | Only `read` is required; default `seek`/`tell` return `ENOTSUP`. |
+| `Writer` | `write(data)`, `flush()`, `write_all(data)` | `write_all` is provided. |
+| `AsyncReader` | `read_async(max_bytes, token)` | Same EOF and size rules as `Reader`. |
+| `AsyncWriter` | `write_async(data, token)`, `flush_async(token)` | Writes may accept fewer bytes than given. |
+
+`Reader.read_exact` reports `EEOF` if the stream ends early. `Writer.write_all`
 retries short writes and reports an error if the writer makes no progress.
-`Streams.copy_async` accepts asynchronous stream implementations and a cancellation
-token. Interface implementations must return no more bytes than requested.
+Interface implementations must return no more bytes than requested.
 
 ## Buffered and memory streams
 
@@ -96,6 +167,18 @@ fun main(): Result<bool, IoError> {
 }
 ```
 
+| Member | Returns | Effect |
+|---|---|---|
+| `BufferedReader(source, buffer_size)` | `BufferedReader` | Wraps a `Reader`; `buffer_size` defaults to 8192. |
+| `BufferedReader.read(max_bytes)` | `Result<byte[], IoError>` | Reads from the buffer, refilling as needed. |
+| `BufferedReader.read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
+| `BufferedReader.seek(position)` / `tell()` | `Result<bool, IoError>` / `Result<long, IoError>` | Repositions the source / reports the logical position. |
+| `BufferedReader.take_buffered()` | `byte[]` | Removes and returns unread buffered bytes. |
+| `BufferedWriter(destination, buffer_size)` | `BufferedWriter` | Wraps a `Writer`; `buffer_size` defaults to 8192. |
+| `BufferedWriter.write(data)` | `Result<int, IoError>` | Buffers bytes; may accept only part. |
+| `BufferedWriter.flush()` | `Result<bool, IoError>` | Writes pending bytes and flushes the destination. |
+| `BufferedWriter.finish()` | `Result<bool, IoError>` | Flushes and rejects later writes with `ECLOSED`. |
+
 Buffer wrappers retain their underlying streams without closing them. Finish a
 buffered writer explicitly so failures are visible; dropping it does not flush.
 After a partial flush failure, the unwritten bytes remain available for retry.
@@ -114,6 +197,41 @@ that exceeded the limit. Buffer sizes must be positive; invalid sizes return
 Memory streams support seeking, overwriting, and zero-filled gaps. Their
 `to_bytes()` method returns an independent copy. Memory stream async methods are
 immediately ready and do not block on host I/O.
+
+| `MemoryStream` member | Returns | Effect |
+|---|---|---|
+| `MemoryStream()` | `MemoryStream` | Creates an empty stream. |
+| `MemoryStream(bytes)` | `MemoryStream` | Copies `bytes` and starts at byte zero. |
+| `read(max_bytes)` | `Result<byte[], IoError>` | Reads and advances the cursor. |
+| `write(bytes)` | `Result<int, IoError>` | Overwrites or appends at the cursor. |
+| `seek(position)` | `Result<bool, IoError>` | Moves the cursor, including past the end. |
+| `tell()` | `Result<long, IoError>` | Current position; fails after closure. |
+| `position` / `length` | `long` | Cursor and stored size; readable after closure. |
+| `to_bytes()` | `Result<byte[], IoError>` | Copy of all stored bytes. |
+| `flush()` | `Result<bool, IoError>` | Checks the stream is open. |
+| `close()` | `Result<bool, IoError>` | Closes idempotently; data is retained. |
+
+`MemoryStream` also implements `read_async`, `write_async`, and `flush_async`.
+Positions are limited to the `int` range.
+
+## Error codes
+
+Stream operations fail with `IoError`, which has `code()`, `message()`, and a
+`path` field that is empty when no file is involved.
+
+| Code | Meaning |
+|---|---|
+| `ENOENT` | The file does not exist. |
+| `EACCES` | Permission was denied. |
+| `EEXIST` | The path already exists. |
+| `EINVAL` | Invalid argument, such as a negative size or nonpositive buffer size. |
+| `ECLOSED` | The stream was already closed or finished. |
+| `EBUSY` | Another operation is pending on the handle, or the file executor is saturated. |
+| `ECANCELLED` | A cancellation token fired. |
+| `ENOTSUP` | The stream does not support seeking or positions. |
+| `EEOF` | `read_exact` reached the end early. |
+| `ELIMIT` | A line exceeded the `read_line` byte limit. |
+| `EIO` | Any other I/O failure. |
 
 ## Asynchronous file copies
 

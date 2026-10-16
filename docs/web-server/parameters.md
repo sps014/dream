@@ -48,12 +48,44 @@ async fun main(): void {
 }
 ```
 
-`@path`, `@query`, `@header`, and `@cookie` accept a positional name override, such as `@query("page_size")`. A parameter matching a `{path}` segment can bind without an explicit `@path`. A parameter without a matching segment or an extractor produces a compile-time diagnostic.
+## Input attributes
 
-`@body` accepts an `@json` model, `JsonValue`, `string`, or `byte[]`. Models use strict validation. `JsonValue` parses JSON without a declared model. Text and bytes preserve the body for custom processing.
+| Attribute | Reads from | Accepted parameter types | Name override |
+| --- | --- | --- | --- |
+| `@path` | A `{name}` segment of the route path | Scalars: `string`, `bool`, numbers | `@path("id")` |
+| `@query` | The first query-string value with that name | Scalars, or `Option<T>` of a scalar | `@query("page_size")` |
+| `@header` | The first request header with that name | Scalars, or `Option<T>` of a scalar | `@header("X-Request-ID")` |
+| `@cookie` | A cookie with that name, not URL-decoded | Scalars, or `Option<T>` of a scalar | `@cookie("session")` |
+| `@body` | The whole request body | An `@json` model, `JsonValue`, `string`, or `byte[]` | — |
+| `@form` | A field of a `multipart/form-data` body | Scalars, or `Option<T>` of a scalar | `@form("title")` |
+| `@file` | A file part of a `multipart/form-data` body | `UploadedFile` or `Option<UploadedFile>` | `@file("attachment")` |
+| `@dep(provider)` | The value returned by a provider function | The provider's value type | — |
 
-Use `@default_json("10")` on a scalar parameter to supply an absent value. Validation attributes such as `@minimum(1.0)` and `@max_length(100)` apply to extracted values. Missing or malformed values return HTTP 422 with structured locations and error codes. Missing authentication headers in provider functions return 401. Body transport failures return 400; host body limits remain 16 MiB and return 413 when exceeded.
+Without an override, the parameter name is the input name. A parameter matching a `{path}` segment can bind without an explicit `@path`. A parameter that has no matching segment and no input attribute is a compile-time error. A handler can also take `RequestContext` to read the raw request, or `ServerWebSocket` on a `@websocket` route.
+
+Scalar values are parsed with the declared type's `parse`, so `@query limit: int` rejects `?limit=ten`.
+
+For `@body`, a model uses strict [validation](validation.md). `JsonValue` parses any JSON without a model. `string` and `byte[]` give you the raw body for your own processing. A route cannot combine `@body` with `@form` or `@file`.
+
+## Defaults and constraints
+
+Use `@default_json("10")` on a scalar parameter to supply a value when it is absent. The constraint attributes `@minimum`, `@maximum`, `@min_length`, `@max_length`, and `@pattern` also work on scalar parameters; the [validation guide](validation.md#constraint-attributes) lists what each one checks.
 
 Attribute arguments are positional. Ordinary function and constructor calls support named arguments.
+
+## Input errors
+
+| Situation | Status | Error `type` |
+| --- | --- | --- |
+| A required parameter is missing | 422 | `missing` |
+| A scalar value cannot be parsed as its type | 422 | `type` |
+| A value fails a constraint attribute | 422 | `minimum`, `max_length`, and so on |
+| A `@body` model fails validation | 422 | The [validation code](validation.md#error-codes) |
+| A body is not valid JSON | 422 | `json` |
+| A required header is missing inside a dependency provider | 401 | — |
+| The request body cannot be read | 400 | — |
+| The request body exceeds the 16 MiB host limit | 413 | — |
+
+The 422 responses use the same `{"detail": [{"loc", "type", "msg"}]}` shape as model validation.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

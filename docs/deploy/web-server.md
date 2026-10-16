@@ -32,6 +32,16 @@ async fun main(): void {
 }
 ```
 
+These `WebAppOptions` settings matter when deploying:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `tls_cert_path` | `""` | Server certificate (PEM); empty serves plain HTTP |
+| `tls_key_path` | `""` | Private key (PEM) for the certificate |
+| `docs_url` | `"/docs"` | Swagger UI path; empty disables it |
+| `openapi_url` | `"/openapi.json"` | OpenAPI document path; empty disables it |
+| `redoc_url` | `"/redoc"` | ReDoc path; empty disables it |
+
 Supplying only one TLS path, invalid credentials, or a bind failure returns `IoError`. Certificate/key files are deployment inputs. Run the service with access to the required native capability libraries, or use Dream's relocatable build packaging.
 
 For a reverse proxy, bind to a private address, configure TLS and request limits at the proxy, and register externally visible OIDC callback URLs. The service does not infer trust from arbitrary forwarded headers. Browser authentication cookies require HTTPS.

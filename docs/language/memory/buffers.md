@@ -44,6 +44,24 @@ Two opt-ins exist for people writing performance-sensitive containers:
 
 The genuinely unsafe tier stays behind [`@unsafe`](buffers.md#unsafe-manual-memory-management): `RawPtr<T>` and `Arena` manage unmanaged raw storage; `Buffer.realloc` and `Buffer.free` manually control array lifetime.
 
+## `Buffer` operations
+
+`Buffer` is available without an import. Operations marked `@unsafe` skip a check the compiler cannot prove, so the caller must uphold the stated condition.
+
+| Operation | Needs `@unsafe` | Effect |
+|-----------|-----------------|--------|
+| `Buffer.alloc<T>(len)` | No | A new zero-initialized `T[]` of length `len` |
+| `Buffer.clear<T>(arr)` | No | Resets every slot to its zero value, releasing what the slots held; the length is unchanged |
+| `Buffer.truncate<T>(arr, n)` | No | Resets only the slots from index `n` to the end |
+| `Buffer.get_unchecked<T>(arr, i)` | Yes | Reads `arr[i]` without a bounds check |
+| `Buffer.set_unchecked<T>(arr, i, value)` | Yes | Writes `arr[i]` without a bounds check |
+| `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` | Yes | Copies `count` unmanaged elements; overlapping ranges are allowed |
+| `Buffer.elems_fill<T>(dst, dst_off, count)` | Yes | Zeroes `count` unmanaged elements starting at `dst_off` |
+| `Buffer.realloc<T>(arr, new_len)` | Yes | Resizes a singly-owned array, keeping the common prefix and zero-filling new slots; use only the returned array afterward |
+| `Buffer.free<T>(arr)` | Yes | Releases a singly-owned array immediately; neither it nor any alias may be used afterward |
+
+`elems_copy` and `elems_fill` accept only unmanaged element types (types that hold no references, such as numbers or structs of numbers), and neither checks that the ranges fit inside the arrays.
+
 
 ## `@unsafe`: manual memory management
 

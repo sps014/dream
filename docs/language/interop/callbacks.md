@@ -21,6 +21,19 @@ Functions cross the Dream/JavaScript boundary in both directions: hand a Dream f
 // el.addEventListener("click", (ev) => { System.println(name); }); // error: capturing callback rejected
 ```
 
+## Callback forms
+
+| Form | Direction | Result |
+|------|-----------|--------|
+| Named `fun` or captureless lambda passed to a function-typed `extern` parameter | Dream to JS | JS receives an ordinary callable function |
+| Named `fun` passed to a dynamic `js` call | Dream to JS | Wrapped automatically, with the same wrapper each time for the same function |
+| `js.func(handler)` | Dream to JS | An explicit `js` callable for a `fun(js): void` |
+| `js.func0(handler)` | Dream to JS | An explicit `js` callable for a `fun(): void` |
+| Capturing lambda | Dream to JS | Compile error |
+| JavaScript function received as a `js` value | JS to Dream | Called with ordinary call syntax |
+
+Handlers with two or more `js` parameters, such as `fun(js, js): void`, are also wrapped automatically when passed to a dynamic `js` call.
+
 ## Dream to JS
 
 Declare an `extern` parameter with a function type, then pass a Dream function where it is expected:

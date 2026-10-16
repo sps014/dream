@@ -68,6 +68,30 @@ fun main(): void {
 }
 ```
 
+### Overloadable operators
+
+| Operator | Declare | Parameters | Notes |
+|----------|---------|------------|-------|
+| `a + b` | `fun operator +(other: R): T` | 1 | Strings keep built-in concatenation |
+| `a - b` | `fun operator -(other: R): T` | 1 | |
+| `-a` | `fun operator -(): T` | 0 | Same symbol as subtraction; arity decides |
+| `a * b` | `fun operator *(other: R): T` | 1 | |
+| `a / b` | `fun operator /(other: R): T` | 1 | |
+| `a % b` | `fun operator %(other: R): T` | 1 | |
+| `a & b` | `fun operator &(other: R): T` | 1 | |
+| `a | b` | `fun operator |(other: R): T` | 1 | |
+| `a ^ b` | `fun operator ^(other: R): T` | 1 | |
+| `a << b` | `fun operator <<(other: R): T` | 1 | |
+| `a >> b` | `fun operator >>(other: R): T` | 1 | |
+| `a == b` | `fun operator ==(other: R): bool` | 1 | Must return `bool` |
+| `a != b` | — | — | Uses `operator ==`, negated |
+| `!a` | `fun operator !(): T` | 0 | |
+| `~a` | `fun operator ~(): T` | 0 | |
+| `<`, `<=`, `>`, `>=` | `fun compare(other: T): int` | 1 | Implement `Comparable<T>` instead of an operator |
+| `+=`, `-=`, `*=`, `/=`, `%=` | — | — | Expand to `a = a + b` and so on, using the binary overload |
+| `(U)a` | `fun explicit(): U` | 0 | Explicit cast only |
+| `(U)a`, or `let x: U = a` | `fun implicit(): U` | 0 | Also usable as an explicit cast |
+
 Rules:
 
 - A tagged method's own parameter list fixes the operator's arity: one parameter is a binary

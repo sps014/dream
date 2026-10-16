@@ -21,6 +21,15 @@ Split a program into `.dream` files as it grows. An `import` makes another file'
     - Each `.dream` file is a module; `import` brings in another module's public declarations.
     - Built-in library packages are imported the same way.
 
+## Import and module forms
+
+| Form | Example | Effect |
+|------|---------|--------|
+| `import system;` / `import system.<package>;` | `import system.io;` | Loads a built-in library package and its dependencies |
+| `import <path>;` | `import utils.math_lib;` | Loads `utils/math_lib.dream` relative to this file, falling back to installed `dream_packages/` dependencies |
+| `import <module>.<item> as <alias>;` | `import utils.math.add as add_int;` | Makes one `public` or `internal` item of a declared module available under a new name |
+| `module <path>;` | `module utils.math;` | Puts this file's declarations in a named module; must come before every `import` and declaration |
+
 ## Standard library packages
 
 Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
@@ -137,6 +146,12 @@ There is no wildcard `import pkg.*;` in this version — only single-item aliase
 ## Visibility
 
 Dream has three visibility levels — `private` (the default, no keyword), `internal`, and `public` — applied consistently across two independent axes.
+
+| Keyword | Top-level declaration is visible in | Class member is reachable from |
+|---------|-------------------------------------|--------------------------------|
+| (none) | Its own file only | The type's own methods only |
+| `internal` | Every file in the same module | Anywhere in the declaring type's module |
+| `public` | Every file that can reach it | Anywhere the type is reachable |
 
 ### File / module visibility
 

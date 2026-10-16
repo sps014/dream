@@ -99,6 +99,17 @@ Only requested elements are produced. Ordinary async functions still return `Fut
 `Future<Option<T>>`. Both cursors have `close(): void`, which ends iteration and releases suspended
 producer state. Repeated close is harmless; advancing a closed cursor returns `None`.
 
+| Type | Member | Returns |
+|------|--------|---------|
+| `Iterable<T>` | `iterator()` | A fresh `Iterator<T>` |
+| `Iterator<T>` | `next()` | `Option<T>`; `None` when the sequence has ended |
+| `Iterator<T>` | `close()` | — |
+| `AsyncIterable<T>` | `iterator()` | A fresh `AsyncIterator<T>` |
+| `AsyncIterator<T>` | `next()` | `Future<Option<T>>`; `None` when the sequence has ended |
+| `AsyncIterator<T>` | `close()` | — |
+
+All four types are available without an import.
+
 ```dream
 let cursor = numbers(3).iterator();
 let first = cursor.next(); // Some(0)
@@ -109,6 +120,16 @@ Loops close their cursors when exhausted or exited early, including `return`. Ma
 consumers should close cursors when finished. Cancelled consumers close their active cursor when
 the Future frame is released. An async cursor permits one pending advancement
 at a time. Closing it cancels its producer and wakes pending advancement with `None`.
+
+## Statements at a glance
+
+| Statement | Where | Effect |
+|-----------|-------|--------|
+| `yield value;` | Yield function | Produces one element and pauses until the next is requested |
+| `yield break;` | Yield function | Ends the sequence |
+| `continue;` | Loop in a yield function | Skips to the next loop iteration without producing a value |
+| `for (let x in seq) { … }` | Anywhere | Consumes an `Iterable<T>` and closes its cursor when the loop exits |
+| `await for (let x in seq) { … }` | `async` function | Consumes an `AsyncIterable<T>` and closes its cursor when the loop exits |
 
 ## Rules
 

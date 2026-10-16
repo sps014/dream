@@ -31,16 +31,71 @@ async fun main(): Result<bool, HttpError> {
 ```
 
 Reuse a client for multiple requests. It snapshots each request's URL, headers,
-options, and byte body when sending begins. `get`, `post`, `put`, `patch`, and
-`delete` create requests; the constructor also accepts `HEAD` and `OPTIONS`.
-`set_text` encodes UTF-8 without choosing a content type. Set that header explicitly
-when required. GET and HEAD bodies and URLs containing credentials are rejected.
-HTTP 4xx/5xx statuses are successful transport responses; inspect `status` yourself.
+options, and byte body when sending begins. HTTP 4xx/5xx statuses are successful
+transport responses; inspect `status` yourself.
 
-Headers use case-insensitive names with `append`, `set`, `get`, `get_all`, and
-`remove`. Native response headers preserve repeated values. Fetch can combine
+## Client
+
+| Member | Returns | Effect |
+|---|---|---|
+| `HttpClient()` | `HttpClient` | Creates a client; allocation failures surface from `send`. |
+| `send(request, token)` | `async Result<HttpResponse, HttpError>` | Sends with default `HttpOptions()`. |
+| `send(request, options, token)` | `async Result<HttpResponse, HttpError>` | Sends with explicit options; completes when headers arrive. |
+| `close()` | `Result<bool, HttpError>` | Cancels pending sends and releases pools; idempotent. |
+
+`token` is an optional `Option<CancellationToken>` and defaults to `None`.
+
+## Requests
+
+| Member | Kind | Effect |
+|---|---|---|
+| `HttpRequest(method, url)` | constructor | Creates a request with empty headers and body. |
+| `HttpRequest.get(url)` | static | Creates a `GET` request. |
+| `HttpRequest.post(url)` | static | Creates a `POST` request. |
+| `HttpRequest.put(url)` | static | Creates a `PUT` request. |
+| `HttpRequest.patch(url)` | static | Creates a `PATCH` request. |
+| `HttpRequest.delete(url)` | static | Creates a `DELETE` request. |
+| `method` | `string` field | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, or `OPTIONS`. |
+| `url` | `Url` field | Absolute `http`/`https` destination. |
+| `headers` | `HttpHeaders` field | Request headers. |
+| `body` | `byte[]` field | Body bytes, copied on each send. |
+| `set_text(text)` | method | Replaces the body with UTF-8 bytes. |
+
+`set_text` does not choose a content type; set that header explicitly when
+required. GET and HEAD bodies and URLs containing credentials are rejected.
+
+## Headers
+
+Header names are case-insensitive and repeated values keep their order.
+
+| Member | Returns | Effect |
+|---|---|---|
+| `HttpHeaders()` | `HttpHeaders` | Creates an empty collection. |
+| `length` | `int` | Number of stored pairs, counting repeated names. |
+| `append(name, value)` | `void` | Adds a value without replacing existing ones. |
+| `set(name, value)` | `void` | Replaces every value for `name` with one value. |
+| `get(name)` | `Option<string>` | First matching value, or `None`. |
+| `get_all(name)` | `string[]` | Copy of every matching value in order. |
+| `remove(name)` | `void` | Removes every value for `name`. |
+| `to_json()` | `JsonValue` | Ordered array of `[name, value]` pairs. |
+
+Native response headers preserve repeated values. Fetch can combine
 repeated values and browser CORS rules can hide response headers. Node preserves
 separate `Set-Cookie` values where its Fetch API exposes them.
+
+## Responses
+
+| Member | Returns | Effect |
+|---|---|---|
+| `status` | `int` | Numeric HTTP status. |
+| `url` | `Url` | Final URL after redirects visible to the host. |
+| `headers` | `HttpHeaders` | Response headers visible to the host. |
+| `body` | `HttpBody` | Streamed body; implements `AsyncReader`. |
+| `read_text(max_bytes, token)` | `async Result<string, HttpError>` | Reads the rest of the body as UTF-8; `max_bytes` defaults to 1048576. |
+| `close()` | `Result<bool, HttpError>` | Closes the body; idempotent. |
+
+`HttpBody` has `read_async(max_bytes, token)`, returning
+`Result<byte[], IoError>`, and an idempotent `close()`.
 
 ## Streaming and cleanup
 
@@ -67,9 +122,16 @@ reports `EBUSY` or `ELIMIT`.
 
 ## Deadlines, redirects, and cancellation
 
-`HttpOptions` defaults to a 30-second total deadline, no separate connection
-timeout, and the host redirect policy (`max_redirects: -1`). Zero deadline means
-no configured deadline. The deadline includes streamed-body consumption.
+`HttpOptions(timeout_ms, max_redirects, connect_timeout_ms)` accepts named
+arguments for each field:
+
+| Field | Default | Effect |
+|---|---|---|
+| `timeout_ms` | `30000` | Total deadline, including body consumption; `0` disables it. |
+| `max_redirects` | `-1` | `-1` uses the host policy; `0` exposes redirect responses. |
+| `connect_timeout_ms` | `0` | Connection timeout; `0` uses the host default. |
+
+Negative deadlines and redirect limits below `-1` return `EINVAL` from `send`.
 Native and Node host-default redirect policy follows at most ten redirects.
 Explicit zero redirects exposes the redirect response; positive values enforce
 a limit and return `EREDIRECT` when exceeded.
@@ -80,16 +142,36 @@ request side effects or consumed input. Overlapping body reads report `EBUSY`.
 HTTP completion and cancellation wake the scheduler through notifications. No
 periodic timer checks are needed while a request or body read is pending.
 
-`HttpError.code()` distinguishes validation (`EINVAL`), deadline (`ETIMEOUT`),
-redirect (`EREDIRECT`), transport/TLS (`ETRANSPORT`), cancellation (`ECANCELLED`),
-closure (`ECLOSED`), unsupported controls (`ENOTSUP`), limits (`ELIMIT`), and UTF-8
-(`EENCODING`). Body reads expose corresponding `IoError` codes to compose with
+## Error codes
+
+`HttpError` has `code()` for the stable category and `message()` for details.
+
+| Code | Meaning |
+|---|---|
+| `EINVAL` | Invalid request, options, or argument. |
+| `ETIMEOUT` | The deadline expired. |
+| `EREDIRECT` | An explicit redirect limit was exceeded. |
+| `ETRANSPORT` | Network or TLS failure. |
+| `ECANCELLED` | A cancellation token fired. |
+| `ECLOSED` | The client or body was already closed. |
+| `ENOTSUP` | The host does not support a requested control or header. |
+| `ELIMIT` | A body exceeded the `read_text` limit, or a host resource limit was reached. |
+| `EBUSY` | Overlapping body read, or host capacity exhausted. |
+| `EENCODING` | The body was not valid UTF-8. |
+| `EIO` | The host returned malformed response data. |
+
+Body reads expose corresponding `IoError` codes to compose with
 other streams. Transport errors omit request URLs from their messages.
 
 ## Browser capabilities
 
-Use `HttpCapabilities.connection_timeouts`, `.redirect_limits`, and
-`.unrestricted_headers` to inspect these controls before sending.
+Inspect `HttpCapabilities` before sending to see which controls the host enforces:
+
+| Property | `true` when |
+|---|---|
+| `connection_timeouts` | A nonzero `connect_timeout_ms` is supported (native). |
+| `redirect_limits` | Explicit redirect limits and redirect responses are observable (native, Node). |
+| `unrestricted_headers` | Browser forbidden-header rules do not apply. |
 
 Fetch hosts reject nonzero `connect_timeout_ms`, since Fetch exposes no separate
 connection timeout. Browser hosts also require `max_redirects: -1`; the browser

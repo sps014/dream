@@ -43,6 +43,57 @@ start = "dreamer run"
 default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 ```
 
+## Sections
+
+A manifest needs `[package]`, `[workspace]`, or both.
+
+| Section | Purpose |
+|---|---|
+| `[package]` | Name, version, kind and metadata of this package |
+| `[dependencies]` | Packages your code imports |
+| `[dev-dependencies]` | Extra packages installed for tests and local work, never published as requirements |
+| `[registries]` | Registry aliases mapped to base URLs |
+| `[scripts]` | Named commands kept as project notes; `dreamer` does not run them |
+| `[test]` | Hosts a test package runs on (`type = "test"` only) |
+| `[lib]` | Native library kind, `output-type = "staticlib"` or `"cdylib"` (`type = "lib"` only); see [Native libraries](../deploy/native-libraries.md) |
+| `[workspace]` | Member package folders; see [Workspaces](workspaces.md) |
+| `[native.<set>]` | C/C++ sources and build flags; see [C interop](../language/interop/c.md) |
+| `[[generators]]` | Compile-time source generators; see [Generators](../language/metaprogramming/generators.md) |
+
+## `[package]` keys
+
+| Key | Required | Default | Meaning |
+|---|---|---|---|
+| `name` | yes | — | Package name: starts with a letter; ASCII letters, digits, `-`, `_`, `.` |
+| `version` | yes | — | Semantic version, such as `1.2.3` |
+| `type` | no | `bin` | `bin`, `lib` or `test` |
+| `entry` | `bin` only | — | Source file to compile; not allowed on `lib` or `test` |
+| `edition` | no | none | Language edition, such as `2026` |
+| `authors` | no | `[]` | Author strings, published to the registry |
+| `description` | no | none | One-line summary, published and searched |
+| `license` | no | none | License identifier, published to the registry |
+| `keywords` | no | `[]` | Search words for `dreamer search` and the registry site |
+| `targets` | no | `[]` | Hosts: `native`, `web`, `node`; not allowed on `test` |
+| `icon` | no | none | PNG app icon path; not allowed on `test` |
+| `assets` | no | `[]` | Files and folders copied next to the output; not allowed on `lib` |
+| `links` | no | none | Name of the native library this package provides; see [C interop](../language/interop/c.md) |
+
+## Dependency keys
+
+A dependency is a bare version requirement string, or a table with these keys:
+
+| Key | Meaning |
+|---|---|
+| `version` | Semver requirement resolved from a registry |
+| `registry` | Registry alias from `[registries]` (default: `default`) |
+| `path` | Local folder; may be combined with `version` so the package can still be published |
+| `git` | Git repository URL |
+| `tag`, `branch`, `rev` | Which Git revision to use; at most one, and only with `git` |
+
+`path` cannot be combined with `git` or `registry`, and `git` cannot be combined with `registry`.
+
+## Details
+
 - `[package].type` is `bin` (default), `lib` or `test`.
   - Libraries omit `entry`, are not runnable (`dreamer run` / `dreamer pack` error), and are
     typechecked via the conventional `src/<import_segment>.dream` root
@@ -61,7 +112,8 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 - `[package].assets` lists files and folders, relative to the `dream.toml` directory, that the
   program reads at run time. Allowed on `bin` and `test` packages (an error on `lib`).
   - They are copied into the output folder: `target/debug` or `target/release` for native,
-    `target/web` and `target/node` for wasm, `target/test/<profile>` for test runners, and next
+    `target/web` and `target/node` for wasm, `target/test/debug`, `target/test/release` or
+    `target/test/node` for test runners, and next
     to the executable in `dreamer pack` output.
   - A program with assets runs with its output folder as the working directory, so it opens them
     with the same relative paths it uses in the project (`File.open("data/words.txt")`).
@@ -90,8 +142,8 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
     smaller than 256x256.
   - See [CLI packaging](../deploy/desktop.md) for native output layouts.
   - Web builds use it as the favicon that `dreamer run --target web` serves.
-- A dependency is either a bare semver requirement string, or a table with exactly one of
-  `path`, `git`, or `version` (+ optional `registry`).
+- A dependency is either a bare semver requirement string, or a table using the
+  [dependency keys](#dependency-keys) above.
 - Package names must start with a letter and may contain ASCII letters, digits, `-`, `_`, and `.`.
   - The registry identity is always the full name string as written in `dream.toml` / `dream.lock`
     (e.g. `json-tools`, `foo.bar`).

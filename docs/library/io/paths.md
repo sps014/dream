@@ -32,26 +32,51 @@ txt
 notes
 ```
 
+All helpers are static members of `Path`. Both `/` and `\` are recognized as
+separators when splitting or inspecting a path.
+
 ## Build and change paths
 
-`Path.join(a, b, ...more)` joins segments with the platform separator, skipping empty
-segments. `Path.of(parts)` accepts an array of segments. `with_extension` replaces a
-filename's extension; `with_file_name` replaces the final component.
+| Function | Returns | Effect |
+|---|---|---|
+| `join(a, b, ...more)` | `string` | Joins segments, skipping empty ones and avoiding doubled separators. |
+| `of(parts)` | `string` | Joins an array of segments with the same rules. |
+| `with_extension(path, ext)` | `string` | Replaces the last extension, or adds one; `ext` may start with `.`. |
+| `with_file_name(path, name)` | `string` | Replaces the final component. |
+| `separator` | `string` | Separator used when joining; always `/`. |
+
+Pass extra segments to `join` as trailing arguments, for example
+`Path.join("a", "b", "c")`. Native hosts accept `/` on Windows too.
 
 ## Inspect a path
 
-`file_name`, `extension`, and `parent` return `Option<string>`. A path without
-the requested component returns `None`, so handle that case with a switch or a default.
-`stem` returns the filename without its last extension, or an empty string when there is no filename.
-`is_absolute`, `is_relative`, and `has_extension` return booleans.
-`components` returns the nonempty components as an array.
+| Function | Returns | Effect |
+|---|---|---|
+| `file_name(path)` | `Option<string>` | Final component; `None` for empty input or a trailing separator. |
+| `extension(path)` | `Option<string>` | Text after the last `.` in the file name. |
+| `parent(path)` | `Option<string>` | Everything before the last separator. |
+| `stem(path)` | `string` | File name without its last extension. |
+| `is_absolute(path)` | `bool` | Starts with `/`, `\`, or a drive such as `C:`. |
+| `is_relative(path)` | `bool` | Opposite of `is_absolute`. |
+| `has_extension(path, ext)` | `bool` | Last extension equals `ext`, with or without a leading `.`. |
+| `components(path)` | `string[]` | Nonempty components split on `/` and `\`. |
+
+A path without the requested component returns `None`, so handle that case with
+a switch or a default. `stem` returns an empty string when there is no filename,
+and keeps earlier extensions: the stem of `a.tar.gz` is `a.tar`.
 
 ## Normalize and resolve
 
-`normalize` simplifies `.` and `..` components without consulting the filesystem.
-`absolute` combines a relative path with the process working directory and normalizes it.
-`relative_to(path, base)` returns a relative suffix when the normalized path is under
-`base`, otherwise `None`. It does not resolve symlinks.
+| Function | Returns | Effect |
+|---|---|---|
+| `normalize(path)` | `string` | Removes `.` and resolves `..` where possible. |
+| `absolute(path)` | `string` | Joins a relative path onto the working directory, then normalizes. |
+| `relative_to(path, base)` | `Option<string>` | Suffix of `path` under `base`, or `None`. |
+
+None of these consult the filesystem or resolve symbolic links. `normalize`
+returns `.` when a relative path simplifies to nothing, and drops `..` that would
+climb above the root of an absolute path. `relative_to` compares normalized text
+and returns `.` when both paths are equal.
 
 Use the [file API](file.md) when you need existence checks, file contents, or filesystem
 errors. The [Path reference](../../reference/api/io-path.md) lists every signature.

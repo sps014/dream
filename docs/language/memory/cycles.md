@@ -66,6 +66,14 @@ postpones cleanup; deferred work drains before leak reporting.
 
 ## Weak and unowned references
 
+| Field kind | Declared type | Keeps the target alive | Reading after the target is freed |
+|------------|---------------|------------------------|-----------------------------------|
+| Strong (default) | Any type | Yes | Not possible while the field holds it |
+| `weak` | `Option<T>` for a class `T` | No | Gives `None` |
+| `unowned` | A class type `T` | No | Traps |
+
+`weak` and `unowned` can each be combined with `public`, but not with each other.
+
 A `weak` field has type `Option<T>` for a class `T` and becomes `None` when the target dies.
 An `unowned` field has class type and traps when read after invalidation. Reads acquire a
 temporary strong reference that survives the consuming expression's cleanup boundary.

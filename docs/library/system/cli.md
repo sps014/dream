@@ -38,6 +38,25 @@ is a property containing arguments after the executable/runner, so no executable
 name belongs in the array. Browsers support explicit argument arrays through the
 same API.
 
+## Command methods
+
+Every builder method returns the same `Command`, so calls chain. Definition
+mistakes are reported by `parse`, not by the builder call.
+
+| Method | Parameters (defaults) | Effect |
+| --- | --- | --- |
+| `Command(name)` | `name: string` | Creates a command named `name`. |
+| `version(value)` | `value: string` | Sets version text and enables `--version`/`-V` here and in subcommands. |
+| `description(value)` | `value: string` | Adds text to the generated help. |
+| `positional(name, ...)` | `required = false`, `multiple = false`, `description = ""` | Adds an ordered string argument. |
+| `string_option(name, ...)` | `short = ""`, `default_value = ""`, `required = false`, `description = ""` | Adds `--name <text>`. |
+| `int_option(name, ...)` | `short = ""`, `default_value = 0`, `required = false`, `description = ""` | Adds `--name <integer>` (signed 32-bit). |
+| `flag(name, ...)` | `short = ""`, `description = ""` | Adds a boolean `--name` that defaults to false. |
+| `choices(name, values)` | `values: string[]` | Restricts an already declared positional, string, or integer argument. |
+| `subcommand(command)` | `command: Command` | Attaches a snapshot of a child command. |
+| `require_subcommand(required)` | `required = true` | Makes invoking one of the subcommands mandatory. |
+| `parse(arguments)` | `arguments: string[]` | Returns `Result<ParsedArguments, CliError>`. |
+
 ## Options and validation
 
 `string_option` defaults to an empty string and `int_option` to zero unless you
@@ -62,6 +81,28 @@ argument names start with an ASCII letter and contain ASCII letters, digits, `_`
 or `-`, with a maximum of 128 characters. Short options are one ASCII letter. Duplicate names/short options,
 reserved `help`/`version` names, and invalid positional ordering return `EINVAL`.
 Required positionals precede optional ones; only the last can have `multiple: true`.
+
+## Reading parsed values
+
+`ParsedArguments` describes one command scope. Getters return `Result<..., CliError>`
+so a misspelled name or a getter of the wrong type is reported instead of guessed.
+
+| Member | Returns | Effect |
+| --- | --- | --- |
+| `is_help` | `bool` | True when `--help` or `-h` was requested. |
+| `help_text` | `string` | Generated help when `is_help` is true; otherwise empty. |
+| `is_version` | `bool` | True when `--version` or `-V` was requested. |
+| `version_text` | `string` | Version output when `is_version` is true; otherwise empty. |
+| `command_name` | `string` | Name of the parsed command; empty for help and version outcomes. |
+| `subcommand` | `Option<ParsedArguments>` | The selected child command, or `None`. |
+| `is_present(name)` | `bool` | True only when the argument was given on the command line. |
+| `get_string(name)` | `Result<string, CliError>` | Last value of a string option or positional. |
+| `get_strings(name)` | `Result<string[], CliError>` | All string values in order, including a default. |
+| `get_int(name)` | `Result<int, CliError>` | Last value of an integer option. |
+| `get_ints(name)` | `Result<int[], CliError>` | All integer values in order. |
+| `get_bool(name)` | `Result<bool, CliError>` | Value of a flag; false when omitted. |
+| `config_keys()` | `string[]` | Declared argument names, for [configuration merging](application-utilities.md#typed-configuration). |
+| `config_value(name)` | `Result<string, CliError>` | Last value of any argument as text. |
 
 ## Subcommands and help
 
@@ -93,10 +134,21 @@ After `.version(...)`, `--version`/`-V` return `is_version` with `version_text`;
 versions propagate to subcommands. These requests bypass required argument checks.
 Help and error behavior is consistent across native, Node, and browser applications.
 
-`CliError.code()` reports `EINVAL` for definitions, `EARGS` for invalid invocations,
-`ENOENT` for unknown/missing values, `ETYPE` for incorrect getters, and `EIO` for
-adapter failures. Definition limits are 16 nested levels, 256 arguments per
-command, and 64 children per command.
+## Error codes
+
+`CliError.code()` returns one of these stable codes; `message()` returns readable
+text, and invocation errors include usage guidance.
+
+| Code | Meaning |
+| --- | --- |
+| `EINVAL` | The command definition is invalid, such as a bad name, duplicate, or misordered positional. |
+| `EARGS` | The command line does not match the definition, such as a missing required value or invalid integer. |
+| `ENOENT` | A getter named an unknown argument, or the argument has no value. |
+| `ETYPE` | The getter does not match the argument's declared type. |
+| `EIO` | The argument parser returned an unreadable result. |
+
+Definition limits are 16 nested levels, 256 arguments per command, and 64 children
+per command.
 
 ## Handle help and errors
 

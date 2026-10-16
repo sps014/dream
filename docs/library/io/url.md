@@ -31,16 +31,35 @@ hostnames, and path encoding. Relative resolution follows URL Standard rules:
 `/v1/` is a directory base, while `/v1` has a final component replaced by a
 relative reference. An absolute reference replaces the entire base.
 
-`scheme` excludes its colon. `host` contains the canonical hostname, including
-IPv6 brackets and excluding the port; URLs without a host return an empty string.
-`path` remains percent encoded. Serialization preserves present but empty query
-and fragment delimiters.
+## Url members
 
-`query` is a mutable ordered collection attached to the URL. `get` returns the
-first decoded value, `get_all` copies every value for that key, and `length`
-counts pairs, including duplicates. `set` replaces the first occurrence and
-removes later duplicates. `remove` removes every matching pair; `clear` removes
-all parameters and the query delimiter.
+| Member | Returns | Effect |
+|---|---|---|
+| `Url.parse(input)` | `Result<Url, ParseError>` | Parses and normalizes an absolute URL. |
+| `resolve(reference)` | `Result<Url, ParseError>` | Resolves a reference against this URL. |
+| `scheme` | `string` | Lowercase scheme without the colon. |
+| `host` | `string` | Canonical hostname without the port. |
+| `path` | `string` | Percent-encoded path. |
+| `query` | `UrlQuery` | Mutable query parameters attached to this URL. |
+| `to_string()` | `string` | Serialized URL, including query edits and fragment. |
+
+`host` includes IPv6 brackets; URLs without a host return an empty string.
+Serialization preserves present but empty query and fragment delimiters.
+
+## Query parameters
+
+`query` is a mutable ordered collection attached to the URL. Keys and values are
+decoded, and repeated keys stay distinct.
+
+| Member | Returns | Effect |
+|---|---|---|
+| `length` | `int` | Number of pairs, including duplicates. |
+| `append(key, value)` | `void` | Adds a pair after existing ones. |
+| `get(key)` | `Option<string>` | First value for `key`, or `None`. |
+| `get_all(key)` | `string[]` | Copy of every value for `key` in order. |
+| `set(key, value)` | `void` | Replaces the first occurrence and removes later duplicates; appends if absent. |
+| `remove(key)` | `void` | Removes every pair with `key`. |
+| `clear()` | `void` | Removes all pairs and the `?` delimiter. |
 
 Existing query encoding is preserved until mutation. Mutations serialize decoded
 pairs using form encoding: spaces become `+`, literal plus signs become `%2b`,

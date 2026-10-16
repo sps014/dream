@@ -56,11 +56,48 @@ async fun main(): void {
 
 Set `API_JWT_KEY` to an explicit secret containing at least 32 bytes and `DEMO_PASSWORD` to a chosen demonstration password. Do not use this in-memory repository for production accounts.
 
-POST JSON `{"username":"demo","password":"..."}` to `/auth/login`. The response contains `access_token`, `refresh_token`, `token_type`, `expires_in`, and `csrf_token`. Access tokens default to 900 seconds and refresh sessions to 604800 seconds. Send an access token as `Authorization: Bearer <token>`.
+## Endpoints
 
-POST `{"refresh_token":"..."}` to `/auth/refresh` to rotate the refresh token. Each token can be consumed once. Replay revokes the entire session family, including already-issued access tokens, because verification checks the backing session's active state. POST a refresh token to `/auth/logout` to revoke its family.
+`auth.router()` adds these routes under the service prefix, `/auth` by default.
 
-`JwtOptions` defaults to RS256 with separate signing/private and verification/public PEM keys. HS256 is an explicit option. Issuer, audience, algorithm, signature, expiry, and session activity are verified. Configuration requires explicit keys; the framework never creates an application signing key.
+| Route | Request body | Effect |
+| --- | --- | --- |
+| `POST /auth/login` | `{"username": "...", "password": "..."}` | Checks the password and returns new tokens. |
+| `POST /auth/refresh` | `{"refresh_token": "..."}` | Consumes the refresh token and returns a new pair. |
+| `POST /auth/logout` | `{"refresh_token": "..."}` | Revokes the token's whole session family. |
+
+Login and refresh return `access_token`, `refresh_token`, `token_type`, `expires_in` (seconds), and `csrf_token`. Send the access token as `Authorization: Bearer <token>`.
+
+Each refresh token can be consumed once. Replay revokes the entire session family, including already-issued access tokens, because verification checks the backing session's active state.
+
+## Service options
+
+`AuthService(jwt, accounts, store, ...)` takes three required values, then these optional ones in order.
+
+| Argument | Default | Effect |
+| --- | --- | --- |
+| `prefix` | `"/auth"` | Path prefix for the routes above. |
+| `access_seconds` | `900` | Access token lifetime. |
+| `refresh_seconds` | `604800` | Refresh session lifetime (7 days). |
+| `browser_sessions` | `false` | Also issue a session cookie on login. |
+| `browser_origin` | `""` | The exact Origin that browser logins must send; required with `browser_sessions`. |
+
+| `JwtOptions` argument | Default | Meaning |
+| --- | --- | --- |
+| `issuer` | Required | The `iss` claim written and checked. |
+| `audience` | Required | The `aud` claim written and checked. |
+| `signing_key` | Required | Private PEM key for RS256, or the shared secret for HS256. |
+| `verification_key` | Required | Public PEM key for RS256, or the same shared secret for HS256. |
+| `algorithm` | `"RS256"` | `RS256` or `HS256`. |
+
+Issuer, audience, algorithm, signature, expiry, and session activity are verified. Configuration requires explicit keys; the framework never creates an application signing key.
+
+## Interfaces you implement
+
+| Interface | Methods | Purpose |
+| --- | --- | --- |
+| `AuthAccounts` | `find_login(login)`, `link_identity(issuer, subject, email, email_verified)` | Look up local accounts and decide how external logins map to them. Return an `AuthAccount(subject, password_hash, scopes)`. |
+| `AuthSessionStore` | Session and login-transaction storage | Persist refresh sessions. `MemoryAuthStore` implements it for tests. |
 
 `MemoryAuthStore` is for tests and single-process examples. Implement `AuthSessionStore` for production persistence. `rotate` must atomically consume the old digest, insert its replacement, and revoke the family if the old digest was consumed. A read followed by a separate write is insufficient under concurrency. Store refresh digests rather than bearer secrets.
 

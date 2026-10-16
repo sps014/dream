@@ -28,6 +28,17 @@ dreamer test --node
 
 `--filter` keeps tests whose `<file>::<name>` label contains that text. Test runs also install development dependencies.
 
+## `dreamer test` options
+
+| Flag | Effect |
+|---|---|
+| `--filter <text>` | Run only tests whose `<file>::<name>` label contains the text |
+| `--release` | Build the runner with the release profile |
+| `-O <level>` / `--optimize <level>` | Optimization level (`0`–`4`, `s`, `z`); overrides `--release` |
+| `--native` | Run on the native host instead of `[test].targets` |
+| `--node` | Run under Node instead of `[test].targets`; with `--native`, run on both |
+| `-p <name>` / `--package <name>` | Run one test project of a workspace |
+
 ## Test projects
 
 A test project is a package with `type = "test"`. It has no entry and no `main`; every `.dream` file under it (except `target/`, `dream_packages/` and dot folders) is part of the suite.
@@ -90,7 +101,15 @@ Test runners are built with leak checks on, on both hosts. When a test leaves mo
 
 ## Assets
 
-Files listed in `[package].assets` are copied next to the runner (`target/test/debug`, `target/test/release` or `target/test/node`), and the runner starts in that folder. Read them with relative paths:
+Files listed in `[package].assets` are copied next to the runner, and the runner starts in that folder:
+
+| Run | Runner folder |
+|---|---|
+| Native, debug | `target/test/debug` |
+| Native, `--release` | `target/test/release` |
+| Node | `target/test/node` |
+
+Read them with relative paths:
 
 ```dream
 @test
@@ -118,5 +137,14 @@ Use `-p name` to run one of them.
 ## The compiler command
 
 `dream test [path]` runs one test project without installing dependencies. The path can be a test package, a folder of `.dream` files, or one file. Without a path it uses the current test package, else `./tests`.
+
+| Path | Tests that run |
+|---|---|
+| A `type = "test"` package folder | Every `.dream` file in it |
+| Another package folder | The files in its `tests/` folder |
+| A folder without `dream.toml` | Every `.dream` file in it |
+| One `.dream` file | That file only |
+
+`dream test` accepts `--filter`, `--native`, `--node` and `--release` with the same meaning as `dreamer test`.
 
 See [Testing APIs](../library/system/testing.md) for assertion methods, [Project settings](project-settings.md) for `assets`, and [Workspaces](workspaces.md) for package selection. `sample/monorepo/` has two test projects, one of which reads assets.

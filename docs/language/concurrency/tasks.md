@@ -43,6 +43,41 @@ async fun main(): void {
 
 For CPU parallelism, `scope.spawn_parallel(body)` uses the shared runtime workers. A fixed `TaskPool` bounds concurrency, and `scope.spawn_on(pool, body)` retains structured ownership of its CPU jobs. Worker captures must satisfy Dream's [shared/move constraints](sharing.md); local async children do not cross that boundary.
 
+## `Task` functions
+
+| Function | Returns | Runs |
+|----------|---------|------|
+| `Task.scope(body, timeout_ms, token)` | `Result<T, TaskFailure<E>>` | `body` with a new `TaskScope`, then joins every child; `timeout_ms` of `0` means no deadline |
+| `Task.map(items, body, concurrency, token)` | `Result<U[], TaskFailure<E>>` | An async `body` per item, at most `concurrency` at once, with results in input order |
+| `Task.for_each(items, body, concurrency, token)` | `Result<bool, TaskFailure<E>>` | Like `map`, but discards the successful values |
+| `Task.spawn(body, token)` | `T` | A synchronous `body` on its own worker, as a lazy future |
+| `Task.spawn_async(body, token)` | `T` | An async `body` on its own worker, as a lazy future |
+
+All of these are `async`, so you `await` their result. `timeout_ms` and `token` are optional.
+
+## `TaskScope` methods
+
+| Member | Returns | Effect |
+|--------|---------|--------|
+| `scope.spawn(body)` | `TaskHandle<T, E>` | Starts a local async child; `body` returns `Future<Result<T, E>>` |
+| `scope.spawn_parallel(body)` | `TaskHandle<T, E>` | Runs synchronous CPU work on the shared runtime workers |
+| `scope.spawn_on(pool, body)` | `TaskHandle<T, E>` | Runs synchronous CPU work on a `TaskPool` |
+| `scope.cancel()` | — | Requests cooperative cancellation of the scope and its children |
+| `scope.token` | `CancellationToken` | The token the scope's children inherit |
+| `handle.join()` | `Future<Result<T, TaskFailure<E>>>` | Waits for that child without cancelling it |
+
+Spawning on a scope that is already cancelled or finished returns a handle whose result is `Err(TaskFailure.Cancelled)`.
+
+## `TaskFailure` choices
+
+| Choice | Meaning |
+|--------|---------|
+| `Failed(E)` | A child or the scope body returned an application error |
+| `Cancelled` | The parent or caller requested cancellation |
+| `TimedOut` | The scope deadline expired before all work completed |
+| `WorkerFailed(TaskPoolError)` | A worker pool rejected a submitted job |
+| `InvalidOperation` | An invalid limit, such as a `concurrency` of `0` or less or a negative `timeout_ms` |
+
 ## Low-level workers
 
 `Task.spawn` and `Task.spawn_async` run one function on a worker and return lazy futures. Start them with `Promise.start`, await them, or pass them to a combinator. Merely constructing several futures does not start their work.

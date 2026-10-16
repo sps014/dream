@@ -47,6 +47,29 @@ The first registered layer is outermost. Requests pass through app layers, route
 
 A layer may return early, for example to reject a request or answer a preflight, without calling `next`. Call `next.call().await` once to continue. App middleware also surrounds documentation and unmatched-route responses.
 
-`CorsOptions` controls allowed origins, methods, request headers, exposed headers, credential handling, and preflight cache duration. The current API uses comma-separated strings. With credentials enabled, the response echoes an allowed origin rather than combining credentials with a wildcard origin. Include custom response headers in `expose_headers` when browser code must read them.
+## Middleware building blocks
+
+| Name | What it is |
+| --- | --- |
+| `Middleware(handler)` | Wraps an `async fun(ctx: RequestContext, next: Next): HttpOutgoing` so `app.use` can install it. |
+| `next.call()` | Runs the rest of the pipeline and returns its `Future<HttpOutgoing>`. |
+| `@use(handler)` | Applies a middleware function to one router class or one route. Repeatable. |
+| `app.use(middleware)` | Applies middleware to every request the app handles, including documentation pages and 404s. |
+| `CORS(options)` | Built-in middleware for cross-origin requests. |
+
+## CORS options
+
+List values are comma-separated strings, such as `"GET,POST"`.
+
+| `CorsOptions` field | Default | Effect |
+| --- | --- | --- |
+| `allow_origins` | `"*"` | Origins allowed to call the API, or `*` for any. |
+| `allow_methods` | `"*"` | Methods allowed in preflight responses. `*` lists all standard methods. |
+| `allow_headers` | `"*"` | Request headers allowed in preflight responses. `*` echoes the headers the browser asks for. |
+| `expose_headers` | `""` | Response headers that browser code may read. |
+| `allow_credentials` | `false` | Allow cookies and `Authorization` on cross-origin requests. |
+| `max_age` | `600` | Seconds a browser may cache a preflight response. |
+
+With credentials enabled, the response echoes the allowed request origin instead of sending `*`, because browsers reject credentials with a wildcard origin. Include custom response headers in `expose_headers` when browser code must read them.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

@@ -428,7 +428,15 @@
 
 .md-typeset table:not([class]) td,
 .md-typeset table:not([class]) th {
+  padding: 0.55em 0.9em;
   border-top: 1px solid var(--dream-border);
+  vertical-align: top;
+}
+
+/* Identifiers in reference tables must not split mid-name; wide tables scroll instead. */
+.md-typeset table:not([class]) code {
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .md-typeset table:not([class]) tr:first-child th {

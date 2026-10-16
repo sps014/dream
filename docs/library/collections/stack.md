@@ -25,4 +25,16 @@ fun main() {
 
 This prints `second`. `push` adds an item. `pop` removes the newest item and returns `Option<T>`. `peek` reads it without removing it. An empty stack returns `None`.
 
-Use `.length`, `is_empty()`, and `clear()` to inspect or reset it. See [all Stack signatures](../../reference/api/collections-stack.md) and [Queue](queue.md) for arrival-order processing.
+| Member | Returns | Effect |
+| --- | --- | --- |
+| `Stack<T>()` | `Stack<T>` | Empty stack. |
+| `push(value)` | `void` | Adds an item on top. |
+| `pop()` | `Option<T>` | Removes and returns the top item. |
+| `peek()` | `Option<T>` | Top item, left on the stack. |
+| `clear()` | `void` | Removes every item. |
+| `.length` | `int` | Number of items. |
+| `is_empty()` | `bool` | `true` when the stack has no items. |
+
+A `for` loop visits items from the bottom (oldest) to the top (newest) without removing them. Stacks also have the [query helpers](seq.md) such as `filter` and `any`.
+
+See [all Stack signatures](../../reference/api/collections-stack.md) and [Queue](queue.md) for arrival-order processing.

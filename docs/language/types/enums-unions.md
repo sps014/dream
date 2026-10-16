@@ -23,6 +23,18 @@ Use an enum to name a fixed set of choices. A choice can also carry data, such a
     - An enum names a fixed set of choices; a choice can carry data.
     - Handle every choice explicitly with `switch`.
 
+## Enum forms
+
+| Form | When you get it | Stored as |
+|------|-----------------|-----------|
+| Simple enum | `enum` where no variant has a payload | An integer |
+| Discriminated union | `enum` where any variant has a `(...)` payload | A heap value |
+| Value union | A union whose payloads are all values, such as `Option<int>` | Inline; copied on assignment |
+| Niche union | Exactly two variants: one empty, one with a single reference payload, such as `Option<string>` | One reference slot; the empty variant uses no extra flag |
+| `enum struct` | Written explicitly; payloads may include references | Inline, or a compile error if that is impossible |
+
+The sections below explain each form.
+
 ## Enums
 
 A simple `enum` defines named integer constants. Members number from `0`; an explicit value shifts the ones that follow:
@@ -111,6 +123,19 @@ switch (s) {
     _ => System.println("Other"),
 }
 ```
+
+### Pattern forms
+
+| Pattern | Example | Matches |
+|---------|---------|---------|
+| Variant | `Circle(r)`, `Shape.Empty` | That variant; sub-patterns match its payload fields in order |
+| Binding | `x` | Anything, binding it to the name |
+| Wildcard | `_` | Anything, binding nothing |
+| Literal | `0`, `'a'`, `"yes"`, `true` | A subject equal to the literal |
+| Range | `90 .. 100` | An ordered scalar between the bounds, inclusive |
+| Or-pattern | `'a' | 'e'` | Any alternative; alternatives cannot bind names |
+| Tuple | `(a, 0)` | A tuple whose elements match each sub-pattern |
+| Guard | `Some(n) if n > 10` | The pattern, only when the condition is also `true` |
 
 ### Advanced patterns
 

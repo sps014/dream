@@ -83,3 +83,29 @@ async fun main(): void {
 
 `lock (obj) { ... }` is a reentrant mutual-exclusion block and requires a `shared class` (a lock word), not every `shared` type.
 A `shared class`'s fields must be `shared` or managed heap references whose graph joins the object's shared region — see the [closed-graph field rule](../types/classes-structs.md).
+
+## What a task can capture
+
+| Captured value | Allowed | What happens |
+|----------------|---------|--------------|
+| Number, `bool`, `char`, or other unmanaged value | Yes | Copied into the task |
+| `string` | Yes | Shared with the task |
+| Struct whose fields are all `shared` | Yes | Copied into the task |
+| `shared class` instance | Yes | Shared by reference; guard changes with `lock` |
+| Ordinary class instance, array, `List<T>`, or other heap value | Yes | Moved into the task; the original variable cannot be used afterwards |
+| Struct holding an ordinary class field | No | Compile error |
+
+## Locks and semaphores
+
+`Lock` and `Semaphore` are `shared` classes available without an import, for cases where a `lock` block does not fit, such as giving up after a timeout.
+
+| Member | Returns | Effect |
+|--------|---------|--------|
+| `Lock()` | `Lock` | A reentrant lock |
+| `Semaphore(initial)` | `Semaphore` | A counting semaphore with `initial` permits |
+| `.acquire()` | — | Waits until the lock or a permit is available, then takes it |
+| `.try_acquire()` | `bool` | Takes it only if it is available right now |
+| `.try_acquire_for(timeout_ms)` | `bool` | Waits up to `timeout_ms` milliseconds; `0` or less is a single try |
+| `.release()` | — | Releases the lock or returns one permit |
+
+A thread may acquire a `Lock` it already holds, and must call `release` once per `acquire`. Releasing a `Lock` the current thread does not hold panics.

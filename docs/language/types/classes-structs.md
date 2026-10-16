@@ -22,6 +22,39 @@ Classes and structs keep related fields and methods together. A class shares the
     - A class instance is shared when assigned; a struct is copied.
     - Both group fields and methods, and can implement interfaces.
 
+## Kinds of type declarations
+
+| Declaration | Assignment | Use it for |
+|-------------|------------|------------|
+| `class` | Shares the same object | Data with identity and a lifetime |
+| `struct` | Copies the value | Small, copyable bundles of fields |
+| `ref struct` | Copies the value | Views like `Span<T>` that must never leave the current stack frame |
+| `shared class` | Shares the same object | Objects used from more than one task, guarded with `lock` |
+| `static class` | Cannot be created | A namespace of static helpers |
+| `sealed class` / `sealed struct` / `sealed enum` | Same as without `sealed` | Types whose methods `extend` blocks must not add to |
+
+## Member modifiers
+
+| Modifier | Applies to | Effect |
+|----------|------------|--------|
+| (none) | Members | Private: reachable only from the type's own methods |
+| `internal` | Members, header parameters | Reachable anywhere in the same module |
+| `public` | Members | Reachable wherever the type is reachable |
+| `static` | Fields, methods, properties | Belongs to the type rather than to an instance |
+| `weak` / `unowned` | Fields | Does not keep the target alive (see [Reference cycles](../memory/cycles.md)) |
+| `override` | `to_string`, `hash_code` | Replaces the object-protocol method; must also be `public` (see [Objects](objects.md)) |
+
+## Special members
+
+| Member | Declared as | Used by |
+|--------|-------------|---------|
+| Constructor | `constructor(...)`, or header parameters | `Type(...)` |
+| Destructor | `del()` | Runs right before a class instance is destroyed |
+| Getter / setter | `get name(): T` / `set name(value: T)` | `obj.name` / `obj.name = v` |
+| Indexer | `fun this[index: int]: T` / `fun this[index: int] = value: T` | `obj[i]` / `obj[i] = v` |
+| Enumerator | `fun iterator()` returning an object with `fun next(): Option<T>` | `for (let x in obj)` |
+| Operators | `fun operator +(other: T): T` and friends | `a + b` (see [Operator overloading](../abstraction/operator-overloading.md)) |
+
 ## Classes are reference types
 
 A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](../memory/ownership.md) (parameters that take ownership, last-use move):

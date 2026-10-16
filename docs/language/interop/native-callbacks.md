@@ -26,6 +26,11 @@ Let a native library call a Dream function. Match the expected arguments and kee
 
 There are two ways to hand C a function.
 
+| Form | Can capture | C receives | Stays valid | Callable from |
+|------|-------------|------------|-------------|---------------|
+| Named `fun`, or a non-capturing lambda written at the call | No | A function pointer | For the whole program | Any thread; threads C started must call `dream_thread_attach()` first |
+| `NativeCallback<F>(f)` | Yes | A function pointer plus a `void* user_data` | While the `NativeCallback` object is alive | Only the Dream thread that created it |
+
 **A plain `fun`** becomes a C function pointer when it is statically known: a named function or a
 non-capturing lambda written at the call. When the C signature needs conversion (a `const char*`
 parameter arriving as `string`, or a pointer arriving as `CPtr`), the compiler emits a small C-ABI
@@ -100,6 +105,14 @@ static void* worker(void* arg) {
 
 `dream_embed.h` also declares `dream_retain`/`dream_release` (for C that stores a Dream reference
 past a call) and `dream_set_panic_hook` (see [Panics](../rules/panics.md#embedding-a-panic-hook)).
+
+| C function | Use it to |
+|------------|-----------|
+| `dream_thread_attach()` | Register a thread C started before it calls a Dream `fun` |
+| `dream_thread_detach()` | Unregister that thread before it exits |
+| `dream_retain(ref)` | Keep a Dream reference alive after the call that handed it to C returns |
+| `dream_release(ref)` | Drop a reference previously kept with `dream_retain` |
+| `dream_set_panic_hook(hook)` | Run your own handler when the Dream program panics |
 
 C++ adapters may release their retained callback from any thread. Such releases are queued
 without touching the object's non-atomic reference count; the owner drains them at scheduler

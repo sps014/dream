@@ -32,12 +32,63 @@ async fun main(): void {
 }
 ```
 
-Strings become text, byte arrays become binary responses, and `@json` models become JSON. `HttpOutgoing` factories include `text`, `html`, `json_text`, `bytes`, `empty`, `detail`, and `from_status`.
+## Return types
 
-`Result<T, HttpStatus>` returns the supplied failure status. `Result<T, string>` produces a 500 JSON detail response. Prefer intentional client-safe errors; do not put database credentials or internal exceptions into returned strings.
+| Handler returns | Response |
+| --- | --- |
+| `string` | 200, `text/plain` |
+| `byte[]` | 200, `application/octet-stream` |
+| An `@json` model | 200, `application/json` |
+| `void` | 204 with no body |
+| `HttpOutgoing` | Exactly the status, headers, and body you built |
+| `HttpStatus` | That status code and reason |
+| `Result<T, HttpStatus>` | `T` as above on `Ok`; the given status on `Err` |
+| `Result<T, E>` for another `E` | `T` on `Ok`; 500 with `{"detail": "..."}` on `Err` |
+| `Iterable<T>` or `AsyncIterable<T>` | A [streamed response](streaming.md) |
 
-Validation failures use HTTP 422 with a `detail` array. Each item has `loc`, `type`, and `msg`. Authentication is 401, authorization is 403, and an unmatched route is 404. A middleware layer may return a response without invoking the endpoint.
+`@operation` with a status, such as `@operation("Create item", "Creates one item", "items", 201)`, replaces the default 200 or 204. Return an explicit `HttpOutgoing` when the status depends on the request.
 
-Use operation metadata to describe a success response: `@operation("Create item", "Creates one item", "items", 201)` sets summary, description, comma-separated tags, and success status. Return an explicit `HttpOutgoing` for conditional status behavior.
+Prefer intentional client-safe errors. Do not put database credentials or internal exceptions into returned strings, because a `Result<T, string>` error message is sent to the client.
+
+## Building responses
+
+| `HttpOutgoing` factory | Response |
+| --- | --- |
+| `text(body, status = 200)` | Plain text |
+| `html(body, status = 200)` | HTML |
+| `json_text(body, status = 200)` | JSON text you already serialized |
+| `bytes(data, status = 200)` | Binary data |
+| `empty(status = 204)` | No body |
+| `detail(message, status = 500)` | `{"detail": message}` as JSON |
+| `from_status(status)` | The code and reason of an `HttpStatus` |
+| `not_found()` | 404 |
+
+Chain `set_header(name, value)` to add a header; it returns the same response.
+
+| `HttpStatus` factory | Code |
+| --- | --- |
+| `bad_request()` | 400 |
+| `unauthorized()` | 401 |
+| `forbidden()` | 403 |
+| `not_found()` | 404 |
+| `conflict()` | 409 |
+| `unprocessable()` | 422 |
+| `too_many()` | 429 |
+| `internal()` | 500 |
+
+For any other code, construct one directly: `HttpStatus(402, "Payment Required")`.
+
+## Status codes the framework sends
+
+| Status | When |
+| --- | --- |
+| 400 | The request body cannot be read. |
+| 401 | Authentication is missing or invalid. |
+| 403 | The user lacks a required scope. |
+| 404 | No route matches the path. |
+| 413 | The body exceeds the 16 MiB host limit. |
+| 422 | Input validation failed. The body is a `detail` array whose items have `loc`, `type`, and `msg`. |
+
+A middleware layer may return a response without invoking the endpoint.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

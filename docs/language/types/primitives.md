@@ -25,22 +25,49 @@ Primitive types hold simple values: whole numbers, decimal numbers, booleans, an
 
 Primitive types are the built-in scalars: integers, floats, booleans, and characters. Their methods ship in the built-in library, so you can call them anywhere without an import. For the full type list and literal suffixes, see [Types](index.md).
 
+## Primitive types
+
+| Type | Size | Range | Literal |
+|------|------|-------|---------|
+| `int` | 32-bit signed | −2,147,483,648 to 2,147,483,647 | `42` (default for integer literals) |
+| `uint` | 32-bit unsigned | 0 to 4,294,967,295 | `42u` |
+| `long` | 64-bit signed | −9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `42L` |
+| `ulong` | 64-bit unsigned | 0 to 18,446,744,073,709,551,615 | `42uL` |
+| `isize` | Pointer width, signed | Same as `int` on wasm32, same as `long` on 64-bit native | No suffix; `(isize)42` |
+| `usize` | Pointer width, unsigned | Same as `uint` on wasm32, same as `ulong` on 64-bit native | No suffix; `(usize)42` |
+| `byte` | 8-bit unsigned | 0 to 255 | `255b` |
+| `float` | 32-bit IEEE 754 | About ±3.4 × 10³⁸, ~7 significant digits | `3.14f`, or bare `3.14` |
+| `double` | 64-bit IEEE 754 | About ±1.8 × 10³⁰⁸, ~15 significant digits | `3.14d` |
+| `bool` | — | `true` or `false` | `true` |
+| `char` | 32 bits | One Unicode scalar value | `'A'`, `'\n'` |
+
+Suffixes are case-insensitive. Integer literals can also be written in hex (`0xFF`), octal (`0o77`), or binary (`0b101`); a hex literal accepts only the `u`, `L`, and `uL` suffixes, because `b`, `d`, and `f` are hex digits.
+
+## Methods by type
+
+| Method | Available on | Returns | Effect |
+|--------|--------------|---------|--------|
+| `.compare(other)` | Every numeric type, `char` | `int` | Negative, zero, or positive as this value is less than, equal to, or greater than `other` |
+| `.min(other)` / `.max(other)` | Every numeric type | Same type | The smaller / larger of the two values |
+| `.clamp(lo, hi)` | Every integer type | Same type | This value constrained to the inclusive range `[lo, hi]` |
+| `.abs()` | `int`, `long`, `float`, `double` | Same type | Absolute value |
+| `.signum()` | `int`, `long` | Same type | `-1`, `0`, or `1` by sign |
+| `.pow(exp)` | `int` | `int` | This value raised to `exp`; an exponent of `0` or less gives `1` |
+| `.to_int()` | `bool`, `char` | `int` | `1`/`0` for a `bool`; the code point for a `char` |
+| `.is_digit()` / `.is_alpha()` / `.is_whitespace()` | `char` | `bool` | ASCII classification |
+| `.to_lower()` / `.to_upper()` | `char` | `char` | ASCII case conversion; other characters are unchanged |
+| `.as_string()` | `char` | `string` | A new one-character string |
+| `Type.parse(text)` | Every primitive type | `Result<Type, ParseError>` | Static; parses decimal text, reporting bad or out-of-range input as `Err` |
+
+Because every numeric type and `char` implements `compare`, they all satisfy `Comparable`, so a `List` of them can be sorted directly.
+
 ## Integers
 
-Signed and unsigned, in several widths:
-
-- `int` — 32-bit signed (the default for integer literals: `42`).
-- `uint` — 32-bit unsigned (`42u`).
-- `long` — 64-bit signed (`42L`).
-- `ulong` — 64-bit unsigned (`42uL`).
-- `byte` — 8-bit unsigned (`255b`).
-
-Common methods:
+Integers come in signed and unsigned forms in several widths (see the table above). Common methods:
 
 - `.min(other)` / `.max(other)` — the smaller / larger of two values.
 - `.clamp(lo, hi)` — constrain to the inclusive range `[lo, hi]`.
-- `.abs()` — absolute value (signed types only).
-- `.signum()` — `-1`, `0`, or `1` by sign (signed types only).
+- `.abs()` and `.signum()` — available on `int` and `long`.
 - `Type.parse(str)` — static; parses a string into that integer type, returning `Result<Type, ParseError>`.
 
 ```dream
@@ -65,9 +92,12 @@ let j = i + 1; // -2147483648
 
 Wrap a `checked { }` block around code where an overflow is a bug you want to catch (sizes, offsets, money). Inside it, every integer op lexically in the block panics instead of wrapping:
 
-- `+`, `-`, `*`, and unary `-` panic when the result is outside the type.
-- `/` and `%` also panic on the minimum signed value divided by `-1`.
-- `<<` and `>>` panic when the shift count is negative or at least the type's bit width.
+| Operation | Default (wrapping) | Inside `checked { }` |
+|-----------|--------------------|----------------------|
+| `+`, `-`, `*`, unary `-` | Wraps around the type's bit width | Panics when the result is outside the type |
+| `/`, `%` by zero | Panics | Panics |
+| `/`, `%` of the minimum signed value by `-1` | Wraps (`/`) or gives `0` (`%`) | Panics |
+| `<<`, `>>` | Shift count is masked to the bit width | Panics when the count is negative or at least the bit width |
 
 `unchecked { }` restores wrapping inside a `checked` region:
 

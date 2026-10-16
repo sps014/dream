@@ -41,6 +41,22 @@ Each line of `<base>/index/<name>` is a JSON object:
 }
 ```
 
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | Full registry package name |
+| `vers` | yes | Published version |
+| `deps` | yes | Dependencies as `{ "name", "req" }` objects (`[dependencies]` entries with a version) |
+| `cksum` | yes | `sha256:<hex>` checksum of the tarball |
+| `tarball` | yes | Tarball location, relative to the registry base unless it is an `http(s)://` URL |
+| `description` | no | From `[package].description` |
+| `authors` | no | From `[package].authors` |
+| `license` | no | From `[package].license` |
+| `edition` | no | From `[package].edition` |
+| `type` | no | `bin` or `lib`, from `[package].type` |
+| `targets` | no | From `[package].targets` |
+| `readme` | no | README path inside the tarball |
+| `keywords` | no | From `[package].keywords` |
+
 Fields beyond `name` / `vers` / `deps` / `cksum` / `tarball` are optional metadata copied from
 `dream.toml` at publish time. `readme` is an **archive-relative path** (e.g. `README.md`) pointing at
 the README packed into the tarball — the index never embeds README body text.
@@ -49,17 +65,28 @@ the README packed into the tarball — the index never embeds README body text.
 
 Optional endpoints / files for `dreamer search` / `dreamer publish`:
 
-- `GET  <base>/search?q=<query>` → JSON array of index-entry objects (dynamic registries)
-- `GET  <base>/catalog.json` → compact search catalog used when `/search` is absent (static/GitHub registries)
-- `POST <base>/api/v1/publish` → JSON body `{ "entry": <index-entry>, "tarball_base64": "..." }` (non-GitHub HTTP registries)
+| Request | Returns or accepts | Used by |
+|---|---|---|
+| `GET <base>/search?q=<query>` | JSON array of index entries | Dynamic registries |
+| `GET <base>/catalog.json` | Compact search catalog, used when `/search` is absent | Static and GitHub registries |
+| `POST <base>/api/v1/publish` | JSON body `{ "entry": <index-entry>, "tarball_base64": "..." }` | HTTP registries not hosted on GitHub |
+
+### Registry URLs
+
+| URL form | Treated as |
+|---|---|
+| `https://raw.githubusercontent.com/<owner>/<repo>/<branch>` | GitHub registry; publishes through the GitHub Contents API |
+| `https://<owner>.github.io/<repo>` | GitHub registry on branch `main` |
+| Any other `http://` or `https://` URL | HTTP registry using the endpoints above |
+| `file://<path>` or a plain path | Local directory registry |
 
 The default public registry is the GitHub repo
 [`sps014/dream-registry`](https://github.com/sps014/dream-registry), served at
 `https://raw.githubusercontent.com/sps014/dream-registry/main`. Indexes live under `index/`,
 tarballs under `dl/` (separate trees). Max package tarball size is **10 MiB**.
 
-`dreamer publish` to that registry uses the GitHub Contents API (set `DREAM_REGISTRY_TOKEN` or
-`--token` with `contents:write`). Point `[registries] default` at any other `file://` or
+`dreamer publish` to that registry uses the GitHub Contents API (pass `--token`, or set
+`DREAM_REGISTRY_TOKEN` or `GITHUB_TOKEN`, with `contents:write`). Point `[registries] default` at any other `file://` or
 `http(s)://` location implementing the protocol above for private/offline use.
 
 ### Finding packages

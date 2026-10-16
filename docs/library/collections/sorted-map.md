@@ -40,4 +40,24 @@ Sam
 
 `keys()` and `values()` return arrays in key order. Iteration produces key-value pairs in that same order.
 
+| Member | Returns | Effect |
+| --- | --- | --- |
+| `SortedMap<K, V>(capacity = 8)` | `SortedMap<K, V>` | Empty map with room for `capacity` entries. |
+| `map[key] = value`, `set(key, value)` | `void` | Adds the key or replaces its value. |
+| `get(key)` | `Option<V>` | Value for `key`, or `None`. |
+| `map[key]` | `V` | Value for `key`; a missing key stops the program. |
+| `contains(key)` | `bool` | Whether `key` is present. |
+| `remove(key)` | `bool` | Deletes the entry; `false` when the key was missing. |
+| `clear()` | `void` | Deletes every entry and keeps capacity. |
+| `.length` | `int` | Number of entries. |
+| `is_empty()` | `bool` | `true` when there are no entries. |
+| `first_key()` | `Option<K>` | Smallest key. |
+| `last_key()` | `Option<K>` | Largest key. |
+| `ceiling_key(key)` | `Option<K>` | Smallest key greater than or equal to `key`. |
+| `floor_key(key)` | `Option<K>` | Largest key less than or equal to `key`. |
+| `keys()` | `K[]` | New array of keys, smallest first. |
+| `values()` | `V[]` | New array of values, in key order. |
+
+Lookups are fast, but adding or removing a key moves the entries after it. For large maps that change often and don't need ordering, a [Map](map.md) is faster. `SortedMap` is not a `Collection`, so the [query helpers](seq.md) are not available on it; copy `keys()` or `values()` into a list first if you need them.
+
 See [all SortedMap signatures](../../reference/api/collections-sorted-map.md) and [Map](map.md) for ordinary key lookup.

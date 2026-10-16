@@ -73,6 +73,12 @@ fun main() {
 
 ### Optional: how much to clean at `}`
 
+| Form | Cleanup at the closing `}` |
+|------|----------------------------|
+| `defer { … }` | A batch of 256 objects; the outermost `defer` then finishes the rest |
+| `defer(q) { … }` | `q` objects (`q` is a `uint`); the outermost `defer` then finishes the rest |
+| `defer(0) { … }` | None; the work waits for a later `defer`, with at most 16,384 objects left pending |
+
 - `defer { … }` — clean a batch at `}` (256 objects), then **finish the rest** if this is the outermost `defer`, so work does not sit until the program exits.
 - `defer(q) { … }` — `q` is a `uint` (plain `256` is fine). That many objects are cleaned at this `}`. `defer(0)` means “don’t clean on this `}`” — useful around a game loop so inner `defer(256)` slices can spread cleanup across frames.
 - Nested `defer` share one cleanup list. While you are still inside some `defer`, leftover work can wait for the next one, but the list is capped (16 384 objects) so memory cannot grow without bound.

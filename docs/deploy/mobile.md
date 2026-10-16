@@ -49,6 +49,26 @@ compiler-generated `libdemo.h` and `libdemo.abi.json` next to each final library
 must match across slices. The packager checks target identity and the exported signature inventory.
 A desktop library cannot serve as a mobile slice.
 
+## `dreamer pack` mobile options
+
+| Option | Effect |
+|---|---|
+| `--target ios` / `--target android` | Package a mobile library instead of a desktop executable |
+| `--slice <triple>=<library>` | One target-built library; repeat for every required slice |
+| `--ndk <path>` | Android NDK folder (falls back to `ANDROID_NDK_HOME`) |
+| `--android-api <level>` | Minimum Android API level (default `21`, minimum `21`) |
+| `--android-package <name>` | Java package for the bridge class (default `dream.generated.<name>`) |
+| `-p <name>` / `--package <name>` | Workspace member to package |
+
+Mobile packing requires a `type = "lib"` package whose name is a C identifier once hyphens become underscores. Compilation flags such as `--release` and `-O` are rejected, because the libraries are already built.
+
+| Platform | Required slices | Library file | Result |
+|---|---|---|---|
+| `ios` | `arm64-apple-ios`, `arm64-apple-ios-simulator` | `.a` | `target/pack/<name>.xcframework` |
+| `android` | `aarch64-linux-android`, `x86_64-linux-android` | `.so` | `target/pack/<name>.aar` |
+
+Each library's file name (without extension) must be a C identifier, and its `.h` and `.abi.json` must sit next to it.
+
 ## iOS
 
 Full Xcode, with the iPhoneOS and iPhoneSimulator SDKs, is required. The package contains

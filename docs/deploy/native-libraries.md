@@ -27,7 +27,13 @@ type = "lib"
 output-type = "staticlib"
 ```
 
+| `output-type` | Builds |
+|---|---|
+| `"staticlib"` | A static archive linked into the host program |
+| `"cdylib"` | A shared C ABI library loaded at run time |
+
 Use `output-type = "cdylib"` for a shared C ABI library. The value is a single string.
+`[lib]` is only allowed on `type = "lib"` packages with no `icon` and no `targets` other than `native`.
 The default source is `src/mylib.dream` (hyphens and dots in package names become underscores).
 Build with `dreamer build` or `dream build`; an explicit source path and `-o` may override
 input and output paths without changing the manifest's output kind.
@@ -47,12 +53,19 @@ Target builds require matching capability libraries and SDKs;
 Native library output selection belongs to `[lib].output-type`; `--crate-type` only selects
 validation for intermediate output or a different target.
 
-Outputs include `<stem>.h`, `<stem>.abi.json` and either an archive
-(`.a`, or `.lib` on Windows) or a shared library (`.dylib`, `.so`, or `.dll`). Windows shared
-libraries also produce an import `.lib`. Static libraries provide `<stem>.link.json`: append its
-`link_args` array when linking the archive into a C, Swift or Kotlin host. Required Dream host
-capability libraries remain dynamic dependencies and must be available to the host application.
-Request `<stem>.opt.ll` explicitly with `--emit-opt-ir` when inspecting optimized code.
+| File | Produced for | Contents |
+|---|---|---|
+| `<stem>.h` | Both kinds | C declarations for the exports and the embedding API |
+| `<stem>.abi.json` | Both kinds | Machine-readable export inventory |
+| `<stem>.a` (`.lib` with MSVC) | `staticlib` | The static archive |
+| `<stem>.link.json` | `staticlib` | `link_args` to append when linking the archive |
+| `<stem>.dylib` / `.so` / `.dll` | `cdylib` | The shared library (macOS / Linux / Windows) |
+| `<stem>.lib` | `cdylib` on Windows | Import library for the `.dll` |
+| `<stem>.opt.ll` | Either, with `--emit-opt-ir` | Optimized LLVM IR |
+
+When linking a static archive into a C, Swift or Kotlin host, append the `link_args` array from
+`<stem>.link.json`. Required Dream host capability libraries remain dynamic dependencies and must
+be available to the host application.
 
 The generated header contains both the exported declarations and the embedding API. For example:
 

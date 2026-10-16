@@ -44,6 +44,29 @@ nums[2] = 99; // [1, 2, 99, 4, 5]
 let count = nums.length; // 5
 ```
 
+## Array members
+
+Every `T[]` has these members without an import:
+
+| Member | Returns | Effect |
+|--------|---------|--------|
+| `arr[i]` / `arr.get(i)` | `T` | Element at index `i`; out of range panics |
+| `arr[i] = v` | — | Replaces the element at index `i`; out of range panics |
+| `.length` | `int` | Number of elements |
+| `.is_empty()` | `bool` | `true` when `length` is `0` |
+| `.first()` / `.last()` | `Option<T>` | First / last element, or `None` when empty |
+| `.contains(v)` | `bool` | Whether any element equals `v` |
+| `.index_of(v)` | `Option<int>` | Index of the first element equal to `v` |
+| `.find_where(pred)` | `Option<T>` | First element for which `pred` returns `true` |
+| `.find_index_where(pred)` | `Option<int>` | Index of the first element for which `pred` returns `true` |
+| `.all(pred)` / `.any(pred)` / `.none(pred)` | `bool` | Whether every / some / no element matches `pred` |
+| `.count_where(pred)` | `int` | Number of elements matching `pred` |
+| `.for_each(action)` | — | Calls `action` on each element in order |
+| `.slice(start, end)` | `T[]` | A new array copied from `start` (inclusive) to `end` (exclusive); bounds outside the array are clamped to it |
+| `.reverse()` | — | Reverses the elements in place |
+| `.concat(other)` | `T[]` | A new array with this array's elements followed by `other`'s |
+| `.iterator()` | `Iterator<T>` | An iterator over the elements |
+
 ## Passing to functions
 
 Because arrays are references, a function sees the caller's buffer directly:
@@ -97,6 +120,17 @@ System.println(grid[1][1]); // still 0
 ```
 
 A zero value (`0`, `0.0`, `false`) fills the array with zeros.
+
+## Ways to create an array
+
+| Form | Result |
+|------|--------|
+| `[a, b, c]` | An array holding the listed values |
+| `[value; len]` | `len` slots, all holding `value` (re-evaluated per slot only when `value` builds an array) |
+| `Array.alloc<T>(len)` | `len` zero-initialized slots |
+| `Array.repeat<T>(len, value)` | `len` slots sharing one `value`, evaluated once |
+| `Array.repeat_with<T>(len, fill)` | `len` slots, calling `fill()` once per slot |
+| `Buffer.alloc<T>(len)` | Same as `Array.alloc<T>(len)` |
 
 ## Fixed-size buffers
 
@@ -172,10 +206,41 @@ foreign pointers require their originating deallocator.
 `copy_to` requires non-overlapping ranges; `move_to` permits overlap. Both count elements.
 `fill_bytes` counts bytes. Copies never keep storage alive.
 
+| `RawPtr<T>` member | Needs `@unsafe` | Effect |
+|--------------------|-----------------|--------|
+| `RawPtr<T>.null()` | No | A pointer with address zero |
+| `.is_null()` | No | Whether the address is zero |
+| `.address()` | No | The numeric address as a `usize`, without reading memory |
+| `p == q` | No | Whether two pointers hold the same address |
+| `RawPtr<T>.from_address(addr)` | Yes | A pointer to a `usize` address you supply |
+| `RawPtr<T>.alloc(count)` | Yes | Uninitialized storage for `count` values |
+| `RawPtr<T>.alloc_zeroed(count)` | Yes | Zero-filled storage for `count` values |
+| `RawPtr<T>.alloc_aligned(count, alignment)` | Yes | Uninitialized storage with a power-of-two alignment |
+| `.realloc(new_count)` | Yes | Resizes the allocation and returns the new pointer |
+| `.free()` | Yes | Releases the allocation |
+| `.read()` / `.write(value)` | Yes | Reads / writes the value at the address |
+| `p[i]` / `p[i] = value` | Yes | Reads / writes the value `i` elements from the address |
+| `.offset(elements)` | Yes | A pointer moved by `elements` values of `T` |
+| `.byte_offset(bytes)` | Yes | A pointer moved by `bytes` bytes |
+| `.cast<U>()` | Yes | The same address viewed as `RawPtr<U>` |
+| `.copy_to(dst, count)` | Yes | Copies `count` values to `dst`; ranges must not overlap |
+| `.move_to(dst, count)` | Yes | Copies `count` values to `dst`; ranges may overlap |
+| `.fill_bytes(value, byte_count)` | Yes | Sets `byte_count` bytes to `value` |
+
 `Arena(initial_capacity)` owns manually freed blocks, measured in bytes. Its generic
 `alloc<T>(count)` methods support different unmanaged types in one arena. Growth adds blocks
 without moving existing allocations. Reset invalidates every allocation but keeps the blocks
 for reuse; free releases all blocks. Arena allocations cannot be individually freed or resized.
+
+| `Arena` member | Effect |
+|----------------|--------|
+| `Arena(initial_capacity)` | Creates an arena with an initial capacity in bytes (default `4096`) |
+| `.alloc<T>(count)` | Uninitialized storage for `count` values of `T`, as a `RawPtr<T>` |
+| `.alloc_zeroed<T>(count)` | Zero-filled storage for `count` values of `T` |
+| `.reset()` | Invalidates every allocation and keeps the blocks for reuse |
+| `.free()` | Releases every block |
+
+Every `Arena` member requires `@unsafe`.
 
 ```dream
 @unsafe

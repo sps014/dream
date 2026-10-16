@@ -38,14 +38,77 @@ fun main(): void {
 }
 ```
 
-`decode<T>` parses and checks the raw JSON tree before constructing a model. `validate<T>` checks an existing value. Both return `Result<T, ValidationErrors>`. `schema<T>()` returns the generated model rules.
+The first line prints `18`, because the absent `age` takes its default. The second prints the two failures found in `Person("x", -1)`: `name` is too short and `age` is below the minimum.
 
-JSON types are strict: `"12"` does not become an integer, and a fractional number cannot fill an integer field. Fields are required unless optional or annotated with `@default_json`. Defaults apply to absence, never to an explicitly invalid value. Unknown properties are rejected; `@allow_extra` on the model permits and ignores them. `@property_name("external_name")` controls the JSON name and error location.
+## Constraint attributes
 
-Rules recurse through model fields, arrays, lists, sets, and string-keyed maps. `@minimum`, `@maximum`, `@min_length`, `@max_length`, and `@pattern` express constraints. Validation accumulates independent failures in declaration order, with nested locations containing property names and decimal indices.
+Put these on fields of an `@json` model, or on handler parameters such as `@query` and `@header` values. Arguments are positional.
 
-For a field callback, use `@validate_with(check)` and define `fun check(value: FieldType): Option<string>`. Return `None` for success or `Some(message)` for failure. For cross-field rules, mark a static method `@model_validator`; it takes the model and returns `List<ValidationIssue>`. Cross-field callbacks run after field validation succeeds. Errors contain locations, codes, and messages, without copies of submitted input.
+| Attribute | Use on | Fails when | Error code |
+| --- | --- | --- | --- |
+| `@minimum(value)` | Numbers | The value is less than `value` (inclusive bound) | `minimum` |
+| `@maximum(value)` | Numbers | The value is greater than `value` (inclusive bound) | `maximum` |
+| `@min_length(n)` | Strings, arrays, `List`, `Set`, `Map` | The string length, element count, or entry count is below `n` | `min_length` |
+| `@max_length(n)` | Strings, arrays, `List`, `Set`, `Map` | The string length, element count, or entry count is above `n` | `max_length` |
+| `@pattern(regex)` | Strings | The string does not match the regular expression | `pattern` |
+| `@default_json(json)` | Any field or parameter | Never; supplies a value when the input is absent | — |
+| `@validate_with(check)` | Fields | `check(value)` returns `Some(message)` | `custom` |
 
-Use `Json.deserialize` for ordinary JSON decoding without these validation rules. `@default_json` is validation metadata; it does not change an ordinary constructor's defaults.
+`@minimum` and `@maximum` take a `double`, so write `@minimum(0.0)` even on an `int` field. `@default_json` takes JSON text: `@default_json("18")` for a number, `@default_json("\"guest\"")` for a string. Invalid JSON is a compile-time error.
+
+On an `Option<T>` field, constraints apply only when a value is present.
+
+## Model attributes
+
+| Attribute | Put on | Effect |
+| --- | --- | --- |
+| `@json` | Class or struct | Required. Generates decoding, encoding, and the validation schema. |
+| `@allow_extra` | Class or struct | Accept and ignore unknown properties instead of failing with `extra`. |
+| `@property_name("name")` | Field | Use `name` as the JSON property and in error locations. |
+| `@json_ignore` | Field | Leave the field out of JSON and skip its validation. |
+| `@model_validator` | Static method | Run a cross-field check after every field passes. |
+
+## Validation functions
+
+| Function | Returns | Use it to |
+| --- | --- | --- |
+| `Validation.decode<T>(text)` | `Result<T, ValidationErrors>` | Parse JSON text, apply defaults, check every rule, then construct `T`. |
+| `Validation.validate<T>(value)` | `Result<T, ValidationErrors>` | Check a value you already have. |
+| `Validation.schema<T>()` | `JsonValue` | Get the JSON Schema for `T`, including its constraints. |
+
+`ValidationErrors.issues` is a `List<ValidationIssue>`. Each issue has a `location` (property names and decimal indices from the outermost field inward), a `code`, and a `message`. `to_json()` produces the `{"detail": [{"loc", "type", "msg"}]}` shape that web handlers return.
+
+## Error codes
+
+| Code | Meaning |
+| --- | --- |
+| `json` | The text is not valid JSON. |
+| `type` | The JSON type does not match the field, such as a string for an `int`. |
+| `missing` | A required property is absent. |
+| `extra` | An unknown property is present and the model has no `@allow_extra`. |
+| `minimum`, `maximum` | A number is outside its bounds. |
+| `min_length`, `max_length` | A string, collection, or map is too short or too long. |
+| `pattern` | A string does not match its `@pattern`. |
+| `custom` | A `@validate_with` function returned a message. |
+
+A `@model_validator` returns `ValidationIssue` values with codes you choose.
+
+## Decoding rules
+
+JSON types are strict: `"12"` does not become an integer, and a fractional number cannot fill an integer field. Integer fields also check their range, so `3000000000` fails for an `int`. Fields are required unless they are `Option<T>` or have `@default_json`. Defaults apply only when a property is absent, never to an explicitly invalid value.
+
+Rules apply recursively through nested `@json` models, arrays, lists, sets, and string-keyed maps. Validation collects every independent failure in declaration order instead of stopping at the first one.
+
+## Custom checks
+
+For a field callback, write `@validate_with(check)` and define `fun check(value: FieldType): Option<string>`. Return `None` for success or `Some(message)` for failure.
+
+For cross-field rules, mark a static method `@model_validator`. It takes the model and returns `List<ValidationIssue>`. Custom checks run only after the built-in rules pass, so they can assume well-formed values. Errors contain locations, codes, and messages, never copies of the submitted input.
+
+## In web handlers
+
+A `@body` parameter whose type is an `@json` model is decoded with `Validation.decode`. A failure returns HTTP 422 with the `detail` array, and each `loc` starts with `body`. A constraint on a `@query`, `@path`, `@header`, or `@cookie` parameter also returns 422 with a location naming the parameter. See [Parameters and bodies](parameters.md).
+
+Use `Json.deserialize` for ordinary JSON decoding without these rules. `@default_json` is validation metadata; it does not change a constructor's default arguments.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

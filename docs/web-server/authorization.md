@@ -63,7 +63,15 @@ async fun main(): void {
 }
 ```
 
-`CurrentUser` reads identity installed by `AuthService.middleware()`. Missing identity returns 401. `@requires_scopes("read write")` requires all listed scopes and returns 403 if any is absent. Scope strings are assigned by the account repository and included in issued tokens.
+| Name | Kind | Effect |
+| --- | --- | --- |
+| `@dep(CurrentUser)` | Dependency | Injects the `AuthPrincipal` that `AuthService.middleware()` verified. Returns 401 when there is none. |
+| `@requires_scopes("read write")` | Route attribute | Requires every listed scope. Returns 403 if any is missing. Also listed in OpenAPI. |
+| `AuthPrincipal.subject` | Field | The account's stable identifier. |
+| `AuthPrincipal.scopes` | Field | The granted scopes, space-separated. |
+| `AuthPrincipal.has_scope(scope)` | Method | Whether one scope is granted. |
+
+Scope strings are assigned by the account repository (`AuthAccount.scopes`) and included in issued tokens.
 
 Keep authorization requirements on the route that injects `CurrentUser`. Merely adding a metadata attribute does not authenticate a request. The generated security scheme adds Swagger Authorize support; actual enforcement occurs in the middleware and dependency.
 

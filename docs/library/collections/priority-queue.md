@@ -37,7 +37,20 @@ let largest_first = PriorityQueue<int>((a, b) => b.compare(a));
 
 This is a setup snippet for use inside a function. Prefer `compare` over subtraction, which can overflow for distant integer values.
 
-Read `.length`, use `is_empty()`, or call `clear()` to reset the queue. Iteration shows its stored items; repeated `pop()` calls produce priority order. See [all PriorityQueue signatures](../../reference/api/collections-priority-queue.md).
+## Members
+
+| Member | Returns | Effect |
+| --- | --- | --- |
+| `PriorityQueue<T>()` | `PriorityQueue<T>` | Empty queue, smallest first; requires `T: Comparable<T>`. |
+| `PriorityQueue<T>(compare)` | `PriorityQueue<T>` | Empty queue ordered by your comparison function. |
+| `push(value)` | `void` | Adds an item. |
+| `pop()` | `Option<T>` | Removes and returns the item that comes out first. |
+| `peek()` | `Option<T>` | Item that would come out next, left in the queue. |
+| `clear()` | `void` | Removes every item. |
+| `.length` | `int` | Number of items. |
+| `is_empty()` | `bool` | `true` when the queue has no items. |
+
+A `for` loop visits a sorted copy of the items taken when the loop starts, in priority order. The loop does not remove anything, and pushing or popping during the loop does not change what it visits. Priority queues also have the [query helpers](seq.md) such as `filter` and `any`. See [all PriorityQueue signatures](../../reference/api/collections-priority-queue.md).
 
 The queue uses a four-child heap. Equal-priority elements have no guaranteed order.
 A comparator may read the queue and update unrelated state, but calling `push`, `pop`, or `clear` on the same queue from its comparator panics before mutation.

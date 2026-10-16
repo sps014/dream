@@ -79,18 +79,37 @@ targets = ["native", "node"]
 keep tests in a `tests/` folder — in parallel and prints one summary. `dreamer test -p
 greeter_tests` runs one; inside a member, `dreamer test` runs that member's tests.
 
+| Where you run `dreamer test` | What runs |
+|---|---|
+| Workspace root, no `-p` | Every test package and every member with a `tests/` folder, in parallel |
+| Anywhere, with `-p <name>` | That member's tests |
+| Inside a member folder | That member's tests |
+
 `dreamer init myapp --workspace` scaffolds this layout: a root `[workspace]`, an `app/` program
 and a `tests/` test project that depends on it.
 
-**Runtime host** vs **pack triple** (unchanged naming):
+**Runtime host** vs **pack triple** vs **compiler target**:
 
-- `package.targets` / `dreamer run --target native|web|node` — which host runs the app
-- `dreamer pack --target macos-arm64` — which OS/arch executable to build
+| Setting | Values | Chooses |
+|---|---|---|
+| `[package].targets`, `dreamer run --target` | `native`, `web`, `node` | Which host runs the app |
+| `dreamer pack --target` | `linux-x64`, `macos-arm64`, … or `all` | Which OS/arch executable to package; see [CLI packaging](../deploy/desktop.md) |
+| `dream --runtime-target` | `native`, `web`, `node` | Which runtime's API availability is checked |
+| `dream --target` | An LLVM target triple, such as `aarch64-unknown-linux-gnu` | What the compiler compiles and links for |
+| `dream --object` (with `--target`) | — | Stop at an unlinked object; no platform SDK needed |
 
-The compiler CLI uses separate flags: `dream --runtime-target native|web|node` selects
-runtime availability for checks before building. `dream --target <target-triple>` compiles and links
-for that target. Add `--object` to stop at an unlinked object and its build description,
-without a platform SDK. Foreign executables cannot be run by `dream run`, `test`, or the debug adapter.
+Foreign executables cannot be run by `dream run`, `test`, or the debug adapter.
+
+Cross builds read these environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `DREAM_CC` | C compiler driver for linking; checked before `CC` |
+| `CC` | C compiler driver when `DREAM_CC` is unset |
+| `DREAM_TARGETS` | Root of target-built capability libraries (default `~/.dream/targets`) |
+| `DREAM_SYSROOT` | Target SDK sysroot |
+| `SDKROOT` | Apple SDK path |
+| `DEVELOPER_DIR` | Xcode installation to use |
 
 Cross builds use the installed Zig unless `DREAM_CC` / `CC` names a target-capable compiler.
 Install Zig with `dreamer toolchain install cc`. Place target-built capability libraries in

@@ -25,4 +25,18 @@ fun main() {
 
 This prints `first`. `enqueue` adds an item. `dequeue` removes the oldest item and returns `Option<T>`. `peek` reads it without removing it, also returning `Option<T>`. An empty queue returns `None`.
 
-Use `.length`, `is_empty()`, and `clear()` to inspect or reset it. See [all Queue signatures](../../reference/api/collections-queue.md). Use [PriorityQueue](priority-queue.md) when priority should decide which item comes next.
+| Member | Returns | Effect |
+| --- | --- | --- |
+| `Queue<T>()` | `Queue<T>` | Empty queue. |
+| `enqueue(value)` | `void` | Adds an item at the back. |
+| `dequeue()` | `Option<T>` | Removes and returns the front item. |
+| `peek()` | `Option<T>` | Front item, left in the queue. |
+| `clear()` | `void` | Removes every item. |
+| `.length` | `int` | Number of items. |
+| `.capacity` | `int` | Items that fit before the queue must grow. |
+| `is_empty()` | `bool` | `true` when the queue has no items. |
+| `reserve(additional)` | `Result<bool, CapacityError>` | Makes room for `additional` more items; `Err` for a negative or unsupported count. |
+
+A `for` loop visits items from front to back without removing them. Queues also have the [query helpers](seq.md) such as `filter` and `any`.
+
+See [all Queue signatures](../../reference/api/collections-queue.md). Use [PriorityQueue](priority-queue.md) when priority should decide which item comes next.

@@ -17,10 +17,25 @@ dreamer test
 dreamer publish
 ```
 
-Publishing uploads your package; run it only when you intend to share that version. The source archive includes `dream.toml` and `src/`, and must be at most 10 MiB. Path-only dependencies cannot be published because another machine cannot resolve your local folders.
+Publishing uploads your package; run it only when you intend to share that version. The source archive must be at most 10 MiB. Path-only dependencies cannot be published because another machine cannot resolve your local folders; give them a `version` as well. Test packages (`type = "test"`) are never published.
+
+| Archive entry | Included when |
+|---|---|
+| `dream.toml` | Always |
+| `src/` | The folder exists |
+| `native/` | The folder exists |
+| README | The first of `README.md`, `README`, `Readme.md`, `readme.md` that exists |
+
+The registry entry records the name, version, `[dependencies]` version requirements and checksum, plus `description`, `authors`, `license`, `edition`, `type`, `targets` and `keywords` from `[package]`. See [Registries](registries.md#registry-protocol) for the entry format.
 
 ## Choose a registry
 
-Use `--registry <url>` to select a registry. Authentication can come from `DREAM_REGISTRY_TOKEN` or `--token`. Keep tokens out of source files and version control.
+| Option | Effect |
+|---|---|
+| `--registry <url>` | Registry base URL (default: `[registries] default`, then the public registry) |
+| `--token <token>` | Publish token for GitHub-hosted registries |
+| `-p <name>` / `--package <name>` | Workspace member to publish |
+
+Without `--token`, the token comes from `DREAM_REGISTRY_TOKEN`, then `GITHUB_TOKEN`. Keep tokens out of source files and version control.
 
 In a workspace, use `-p name` to choose the package. See [Workspaces](../tooling/workspaces.md) for publishing related packages and [Registries](registries.md) for private or local registries.

@@ -35,12 +35,52 @@ async fun main(): void {
 }
 ```
 
-The example prints the document without starting a listener. If you serve `/api-docs`, the asset URLs must be served by your deployment or by explicit routes. Default assets load from the configured CDNs. `persist_authorization` defaults to false, `deep_linking` to true, and `try_it_out_enabled` to false.
+The example prints the document without starting a listener. If you serve `/api-docs`, the asset URLs must be served by your deployment or by explicit routes.
 
 OpenAPI 3.0.3 contains mounted paths, parameter sources, shared model schemas, request bodies, content types, operation metadata, and validation responses. Mounted prefixes are reflected in paths. Unmounted routers are absent. WebSocket endpoints are not represented as ordinary OpenAPI operations.
 
-Security dependencies declare schemes with `@security_scheme`. Builtin Bearer, Basic, and API-key helpers supply metadata, and protected endpoints expose Swagger Authorize controls. Metadata describes a check; include the actual provider or authentication middleware to enforce it.
+## Operation attributes
 
-For OAuth-capable Swagger clients, configure `oauth_client_id`, `oauth_use_pkce`, and `oauth_redirect_url`. Client secrets belong on the server, never in Swagger UI configuration. Leave OpenAPI enabled when serving Swagger or ReDoc; disabling its endpoint leaves those viewers without a document to load.
+Arguments are positional, and trailing optional arguments can be left off.
+
+| Attribute | Arguments, in order | Effect |
+| --- | --- | --- |
+| `@operation(...)` | `summary`, `description`, `tags`, `status`, `deprecated` | Describes the route. `tags` is a comma-separated string. `status` also replaces the 200 (or 204 for `void`) the handler would otherwise send. All arguments are optional. |
+| `@response(...)` | `status`, `description`, `model`, `content_type` | Documents one more response, such as a 404, without changing behavior. `model` names an `@json` type for the body. Repeatable. |
+| `@security_scheme(...)` | `id`, `kind`, `scheme`, `name`, `location` | On a dependency provider: declares how clients authenticate. `kind` is `http`, `apiKey`, or `oauth2`; `location` is `header`, `query`, or `cookie`. |
+| `@oauth2_scheme(...)` | `id`, `authorization_url`, `token_url`, `scopes` | On a dependency provider: declares an OAuth2 authorization-code flow for Swagger's Authorize button. |
+| `@requires_scopes(scopes)` | Space-separated scope names | Lists required scopes on the operation; see [authorization](authorization.md). |
+
+Without `@operation`, a route documents status 200, or 204 when the handler returns `void`. Every operation also lists a 422 response for input validation failures.
+
+## Built-in security providers
+
+These providers in `system.webapi` already carry `@security_scheme`, so injecting one with `@dep` adds the matching Swagger Authorize control.
+
+| Provider | Reads | Returns | Scheme |
+| --- | --- | --- | --- |
+| `BearerToken` | `Authorization: Bearer <token>` | The token | `BearerAuth` (`http`, `bearer`) |
+| `BasicAuth` | `Authorization: Basic <value>` | The encoded value after `Basic ` | `BasicAuth` (`http`, `basic`) |
+| `ApiKeyHeader` | `X-Api-Key` header | The key | `ApiKeyAuth` (`apiKey` in a header) |
+
+Each returns 401 when the header is missing or malformed. They only extract credentials; your own dependency must check them. Metadata describes a check; include the actual provider or authentication middleware to enforce it.
+
+## Swagger options
+
+Set these on `options.swagger`, a `SwaggerOptions` value.
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `js_url` | unpkg `swagger-ui-dist@5` bundle | Swagger UI script. Point it at your own copy to self-host. |
+| `css_url` | unpkg `swagger-ui-dist@5` stylesheet | Swagger UI stylesheet. |
+| `redoc_js_url` | jsDelivr `redoc@2` bundle | ReDoc script. |
+| `deep_linking` | `true` | Give each operation its own URL fragment. |
+| `persist_authorization` | `false` | Keep entered credentials across page reloads. |
+| `try_it_out_enabled` | `false` | Open operations with "Try it out" already enabled. |
+| `oauth_client_id` | `""` | Client ID Swagger uses for OAuth login. |
+| `oauth_use_pkce` | `true` | Use PKCE in Swagger's OAuth login. |
+| `oauth_redirect_url` | `""` | Redirect URL after Swagger's OAuth login. |
+
+Client secrets belong on the server, never in Swagger UI configuration. Leave OpenAPI enabled when serving Swagger or ReDoc; disabling its endpoint leaves those viewers without a document to load. The documentation URLs themselves are set on [`WebAppOptions`](configuration.md#options).
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

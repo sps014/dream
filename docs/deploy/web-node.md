@@ -8,12 +8,25 @@ icon: material/web-box
 
 Use this guide after your app runs with `dreamer run --target web` or `dreamer run --target node`.
 
-Native `dreamer pack` creates native executables. For a browser or Node, build the corresponding output instead:
+Native `dreamer pack` creates native executables. For a browser or Node, list the hosts in `dream.toml`, then build:
+
+```toml
+[package]
+targets = ["web", "node"]
+```
 
 ```sh
-dreamer build --release --target web
-dreamer build --release --target node
+dreamer build --release
 ```
+
+`dreamer build` has no `--target` flag: it produces browser and Node output for whichever of `web` and `node` are listed in `[package].targets`. `dreamer run --target web` or `--target node` builds only the selected host before running it.
+
+| Folder | Files | Used by |
+|---|---|---|
+| `target/web/` | `<stem>.wasm`, `<stem>.wat`, `<stem>.abi.json`, `<stem>.web.runtime.js` | The browser page (`index.html`) |
+| `target/node/` | `<stem>.wasm`, `<stem>.abi.json`, `<stem>.node.runtime.js`, your assets | `run.mjs` under Node |
+
+`<stem>` is the entry file's name without `.dream`, such as `main`. Debug and release builds share these folders. Optimized builds also write `.gz` and `.br` copies of the `.wasm` and runtime files in `target/web/` for web servers that serve pre-compressed files.
 
 ## Browser
 

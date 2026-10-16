@@ -41,3 +41,25 @@ async fun main(): void {
 `close().await` stops accepting work, waits for active dispatches, and closes workers. Repeated closure succeeds. A nonpositive pool size creates no workers and dispatch returns `InvalidSize`; dispatch after closure returns `Closed`. A constructed dispatch future is lazy, so close before starting it rejects its later submission.
 
 Use `scope.spawn_on(pool, body)` when a region should own a CPU job alongside local async work. Native worker replies wake the owner scheduler instead of blocking it.
+
+## `TaskPool` members
+
+| Member | Returns | Effect |
+|--------|---------|--------|
+| `TaskPool(size)` | `TaskPool` | Starts `size` reusable workers |
+| `.size` | `int` | Number of workers in the pool |
+| `.dispatch(body, token)` | `Future<Result<T, TaskPoolError>>` | Runs a synchronous `body` on a worker |
+| `.dispatch_async(body, token)` | `Future<Result<T, TaskPoolError>>` | Runs an async `body` on a worker |
+| `.map(items, body, token)` | `Future<Result<U[], TaskFailure<TaskPoolError>>>` | Runs a synchronous `body` per item, at most `size` at once, in input order |
+| `.map_async(items, body, token)` | `Future<Result<U[], TaskFailure<TaskPoolError>>>` | Same as `map`, with an async `body` |
+| `.close()` | `Future<Result<bool, TaskPoolError>>` | Stops accepting work, waits for active jobs, and shuts the workers down |
+
+The `token` argument is optional; without it, the pool uses the token inherited from the enclosing task scope.
+
+## `TaskPoolError` choices
+
+| Choice | Returned when |
+|--------|---------------|
+| `InvalidSize` | The pool was created with a size of `0` or less |
+| `Closed` | Work was submitted after `close()` |
+| `Cancelled` | Cancellation was requested; any submitted work has settled first |

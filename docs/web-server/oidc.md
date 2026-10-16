@@ -64,6 +64,21 @@ async fun main(): void {
 
 Register the exact callback URI with the provider, then configure the issuer URL and client ID. Public clients omit the client secret; confidential clients supply it server-side. The demonstration `Accounts` class rejects linking until you implement your application's identity policy.
 
+| `OidcOptions` argument | Default | Meaning |
+| --- | --- | --- |
+| `name` | Required | Provider name used in the route paths, such as `company`. |
+| `issuer` | Required | The provider's issuer URL; its discovery document is loaded from here. |
+| `client_id` | Required | The client ID registered with the provider. |
+| `redirect_uri` | Required | The exact callback URL registered with the provider. |
+| `client_secret` | `""` | Only for confidential clients. Leave empty for public clients. |
+
+`auth.add_provider(options)` registers a provider and adds two routes for it:
+
+| Route | Effect |
+| --- | --- |
+| `GET /auth/oidc/{name}` | Starts login and redirects to the provider. |
+| `GET /auth/oidc/{name}/callback` | Completes login, links the identity, and returns tokens. |
+
 GET `/auth/oidc/company` starts login. The service discovers provider endpoints, generates state, nonce and an S256 PKCE challenge, stores an expiring transaction, sets a browser-binding cookie, and redirects to the provider. The callback verifies the cookie/state binding and atomically consumes the transaction before exchanging the code.
 
 The native OIDC library validates the issuer, audience, signature, expiry, nonce, and access-token hash when present. HTTP redirects during discovery and token exchange are disabled. HTTPS is required except for loopback development URLs.

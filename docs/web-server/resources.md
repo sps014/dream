@@ -44,6 +44,14 @@ async fun main(): void {
 }
 ```
 
+| Name | Use it to |
+| --- | --- |
+| `DependencyResource<T>(value, cleanup)` | Return `value` to the handler and run `async cleanup(token)` after the request finishes. |
+| `@dependency_override(original)` | Mark a static method as the replacement for the provider `original`. |
+| `ClassName.dependencies()` | Get the generated `DependencyOverrides` for every `@dependency_override` in that class. |
+| `app.override_dependencies(overrides)` | Install those replacements on one app before it starts. |
+| `ctx.add_cleanup(cleanup)` | Register cleanup by hand from code that has the `RequestContext`. |
+
 Without the override, `connection` registers a release operation immediately after acquisition. Cleanup runs once, in reverse acquisition order, after the response or stream finishes. It also runs when later dependency extraction fails or a client disconnect cancels the handler. A fresh cleanup token is separate from request cancellation. Pass that token to cleanup I/O rather than reusing the cancelled request token. Process aborts do not run asynchronous cleanup.
 
 `Overrides.dependencies()` is generated from static methods carrying `@dependency_override(original)`. Install it on an app before startup. A replacement may have its own extracted parameters and dependencies, and must produce the original provider's value type. It may add or remove resource acquisition while preserving that value type.

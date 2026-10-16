@@ -1,0 +1,44 @@
+import system.testing;
+import system;
+
+let cac_shared: Option<Future<bool>> = Option.None;
+
+async fun cac_wait_owned(signal: CancellationSource): bool {
+    return signal.token.wait_cancelled().await;
+}
+
+async fun cac_wait_shared(signal: CancellationSource): bool {
+    let child = signal.token.wait_cancelled();
+    cac_shared = Option.Some(child);
+    return child.await;
+}
+
+// The awaited registration is owned only by the cancelled frame, so cancelling the frame must
+// detach it; otherwise the signal that never fires keeps the child and the process alive.
+@noinline
+async fun cac_cancel_owned(): void {
+    let signal = CancellationSource();
+    let waiter = cac_wait_owned(signal);
+    Promise.start(waiter);
+    Time.sleep(1).await;
+    Promise.cancel(waiter);
+}
+
+@test
+@timeout(180000)
+async fun cancel_awaited_child(): void {
+    cac_cancel_owned().await;
+    let before = Debug.live_objects;
+    cac_cancel_owned().await;
+    cac_cancel_owned().await;
+    Assert.eq(Debug.live_objects - before, 0);
+
+    let signal = CancellationSource();
+    let waiter = cac_wait_shared(signal);
+    Promise.start(waiter);
+    Time.sleep(1).await;
+    Promise.cancel(waiter);
+    signal.cancel();
+    Assert.is_true(cac_shared.unwrap().await);
+    cac_shared = Option.None;
+}

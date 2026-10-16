@@ -133,6 +133,7 @@ System.println(tok.check().is_err()); // true → ECANCELLED
 Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites).
 `Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`.
 `Promise.cancel(future)` marks a future cancelled; pending sleeps are dropped when the token is cancelled.
+Cancellation follows ownership: the future being awaited by the cancelled one is cancelled as well, unless something else still holds it (a stored handle, a `Task.scope` job, another awaiter), in which case it keeps running.
 
 Cancelling a not-yet-started future means it never runs.
 Native in-flight host I/O remains best-effort.

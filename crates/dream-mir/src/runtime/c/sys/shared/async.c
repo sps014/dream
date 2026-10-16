@@ -252,6 +252,18 @@ void dream_async_complete(dream_ptr f, dream_result res) {
     scheduler_drop_start_retain(f);
 }
 
+/* A cancelled future takes the child it awaits down with it when nothing else can observe that
+ * child: the awaiting frame's slot is its only owner besides the scheduler's start retain.
+ * Children shared with another holder (a stored handle, a scope's job list, a guard) keep
+ * running, as do children mid-poll, which are cancelling their own awaiter. */
+static int awaited_child_unshared(dream_ptr child) {
+    if (child == poll_current || status_of(child)) {
+        return 0;
+    }
+    int32_t owners = 1 + (i32_at(child, F_NEXT)[0] == 1);
+    return dream_rc_count(child) == owners;
+}
+
 void dream_cancel(dream_ptr f) {
     Node **link;
     int in_flight = 0;
@@ -283,8 +295,10 @@ void dream_cancel(dream_ptr f) {
     async_host_cancel(f);
 #endif
     dream_ptr child = ptr_at(f, F_AWAITING)[0];
+    int cancel_child = 0;
     if (child && ptr_at(child, F_WAKER)[0] == f) {
         ptr_at(child, F_WAKER)[0] = 0;
+        cancel_child = awaited_child_unshared(child);
     }
     ptr_at(f, F_WAKER)[0] = 0;
     /* Queues borrow the scheduler token. Unlink before dropping it so cancelled
@@ -311,6 +325,9 @@ void dream_cancel(dream_ptr f) {
     }
     if (!in_flight) {
         scheduler_drop_start_retain(f);
+    }
+    if (cancel_child) {
+        dream_cancel(child);
     }
 }
 

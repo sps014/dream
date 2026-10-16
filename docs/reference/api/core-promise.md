@@ -62,7 +62,7 @@ public static async fun race<T>(borrow promises: Future<T>[], token: Option<Canc
 
 ## `cancel`
 
-Cancels a future (marks it cancelled and unlinks pending timers). Best-effort for in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic. Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
+Cancels a future (marks it cancelled and unlinks pending timers). The future it is awaiting is cancelled too when nothing else holds it. Best-effort for in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic. Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
 
 ```dream
 public static extern fun cancel(borrow future: object): void

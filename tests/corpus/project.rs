@@ -37,6 +37,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("async_lambda_basic", "async_tasks", true),
     Case::project("async_lambda_capture", "async_tasks", true),
     Case::project("task_context_release", "async_tasks", true),
+    Case::project("cancel_awaited_child", "async_tasks", true),
     Case::project("async_method", "async_tasks", true),
     Case::project("async_ready_overflow_cancel", "async_tasks", true),
     Case::project("async_ref_params", "async_tasks", true),

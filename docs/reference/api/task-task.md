@@ -2,7 +2,7 @@
 
 **Import:** `import system.task;`
 
-Read the [structured concurrency guide](../language/structured-concurrency.md) for lifetimes, cancellation, backpressure, and worker execution.
+Read the [structured concurrency guide](../../language/concurrency/structured.md) for lifetimes, cancellation, backpressure, and worker execution.
 
 ## `Task`
 

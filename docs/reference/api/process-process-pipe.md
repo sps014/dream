@@ -2,7 +2,7 @@
 
 **Import:** `import system.process;`
 
-Read the [process guide](../stdlib/process.md) for launch settings, cancellation, and streaming ownership.
+Read the [process guide](../../library/system/process.md) for launch settings, cancellation, and streaming ownership.
 
 ## `ProcessReader`
 

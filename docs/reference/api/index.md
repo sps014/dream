@@ -1,6 +1,12 @@
+---
+title: API reference
+summary: Exact public declarations for every standard-library package.
+icon: material/book-search-outline
+---
+
 # API catalog
 
-Use the [standard-library guides](../stdlib/index.md) when learning a feature. Use this catalog when you need to look up an exact public declaration, including an overload, property, or enum choice.
+Use the [standard-library guides](../../library/index.md) when learning a feature. Use this catalog when you need to look up an exact public declaration, including an overload, property, or enum choice.
 
 ## Reading a signature
 
@@ -11,9 +17,9 @@ Use the [standard-library guides](../stdlib/index.md) when learning a feature. U
 - `get` and `set` describe properties; use `value.length`, without parentheses.
 - `constructor` describes the arguments used when creating a value.
 - `async` means you wait for completion with `.await` inside an async function.
-- `Option<T>` means a value may be absent. [Check it before using it](../stdlib/option-result.md).
+- `Option<T>` means a value may be absent. [Check it before using it](../../library/core/option-result.md).
 - `Result<T, E>` means an operation may fail. Handle `Ok` and `Err`, or pass the failure to your caller with `?`.
-- `borrow` means the call uses a value without taking ownership. [Ownership](../language/ownership.md) explains when to use it.
+- `borrow` means the call uses a value without taking ownership. [Ownership](../../language/memory/ownership.md) explains when to use it.
 - `<T>` names a type parameter. A condition such as `T : Comparable<T>` limits the types accepted.
 
 These declaration snippets show the interface; they are not complete programs. The linked guides contain examples. Availability and integration requirements are explained in those guides; a declaration alone does not establish platform support.

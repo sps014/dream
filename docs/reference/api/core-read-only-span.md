@@ -2,11 +2,11 @@
 
 No import is needed.
 
-Read the [span guide](../language/spans.md) for usage and backing-storage semantics.
+Read the [span guide](../../language/types/spans.md) for usage and backing-storage semantics.
 
 ## `ReadOnlySpan`
 
-`ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or `copy_from`. Take one when a function borrows a run of elements and promises not to change them. The same `ref struct` escape rules as `Span<T>` apply (see `docs/reference/language/spans.md`).
+`ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or `copy_from`. Take one when a function borrows a run of elements and promises not to change them. The same `ref struct` escape rules as `Span<T>` apply (see `docs/language/types/spans.md`).
 
 ```dream
 public ref struct ReadOnlySpan<T>

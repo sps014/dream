@@ -1,9 +1,16 @@
+---
+title: Contributors
+summary: The compiler engineering handbook.
+icon: material/hammer-wrench
+card: false
+---
+
 # Contributing — Compiler handbook
 
 !!! warning "Contributors only"
     This section is the engineering handbook for people changing the Dream compiler.
     If you are learning the language, start at [Quickstart](../learn/quickstart.md) and the
-    [Learn](../learn/index.md) / [Reference](../reference/language/variables.md) guides instead.
+    [Learn](../learn/index.md) / [Reference](../language/basics/variables.md) guides instead.
 
 This handbook covers the middle and back end. It assumes you have never seen the codebase. By the end you should be able to add a language feature, write an optimization pass, extend the type system, or wire up a new backend without guessing.
 
@@ -12,24 +19,24 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | # | Chapter | Covers |
 |---|---------|--------|
 | — | This page | The big picture, repo layout, crate graph, glossary |
-| 01 | [Pipeline Overview](./01-pipeline-overview.md) | Every compilation stage and the data that flows between them |
-| 02 | [Type System](./02-type-system.md) | `TypeInterner`, `TypeId`, `TyKind`, `DefId`, compat rules; adding a type |
-| 03 | [HIR](./03-hir.md) | The typed, name-resolved High-level IR |
-| 04 | [MIR](./04-mir.md) | The CFG-based Mid-level IR and how HIR lowers into it |
-| 05 | [Writing Passes](./05-writing-passes.md) | The pass manager and a step-by-step tutorial |
-| 06 | [LLVM Backend](./06-llvm-backend.md) | MIR → textual LLVM IR, the pinned toolchain, runtime bitcode, DWARF, PGO, wasm32 |
-| 07 | [Adding a Feature](./07-adding-a-language-feature.md) | A worked example touching every stage |
-| 08 | [Testing & Determinism](./08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
-| 09 | [Nullable Purge Design Note](./09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
-| 10 | [Rejected: SSO / class `@stack` / size-class mono](./10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
-| 11 | [Ownership and memory performance](./11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
+| 01 | [Pipeline Overview](01-pipeline-overview.md) | Every compilation stage and the data that flows between them |
+| 02 | [Type System](02-type-system.md) | `TypeInterner`, `TypeId`, `TyKind`, `DefId`, compat rules; adding a type |
+| 03 | [HIR](03-hir.md) | The typed, name-resolved High-level IR |
+| 04 | [MIR](04-mir.md) | The CFG-based Mid-level IR and how HIR lowers into it |
+| 05 | [Writing Passes](05-writing-passes.md) | The pass manager and a step-by-step tutorial |
+| 06 | [LLVM Backend](06-llvm-backend.md) | MIR → textual LLVM IR, the pinned toolchain, runtime bitcode, DWARF, PGO, wasm32 |
+| 07 | [Adding a Feature](07-adding-a-language-feature.md) | A worked example touching every stage |
+| 08 | [Testing & Determinism](08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
+| 09 | [Nullable Purge Design Note](09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
+| 10 | [Rejected: SSO / class `@stack` / size-class mono](10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
+| 11 | [Ownership and memory performance](11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
 
 Additional engineering records:
 
-- [Native pointer migration](./12-native-pointer-migration.md): inventory and paired measurements.
-- [Build performance and minimal compiler plan](./14-build-performance-and-native-networking-plan.md): planned prerequisite to self-hosting.
-- [Stdlib v1 implementation status](./16-stdlib-v1-implementation.md): delivered foundations and remaining release phases.
-- [Self-hosting readiness](./13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
+- [Native pointer migration](12-native-pointer-migration.md): inventory and paired measurements.
+- [Build performance and minimal compiler plan](14-build-performance-and-native-networking-plan.md): planned prerequisite to self-hosting.
+- [Stdlib v1 implementation status](16-stdlib-v1-implementation.md): delivered foundations and remaining release phases.
+- [Self-hosting readiness](13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
 
 ## Why a multi-pass architecture
 

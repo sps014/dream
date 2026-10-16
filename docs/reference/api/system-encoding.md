@@ -1,5 +1,5 @@
 # system.encoding: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/encoding.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/text/encoding.md).
 
 - [Encoding](encoding.md)

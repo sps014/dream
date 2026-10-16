@@ -1,6 +1,6 @@
 # system: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/builtins.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/core/builtins.md).
 
 - [ArgError](arg-error.md)
 - [CPtr, OwnedCPtr, NativeCallback, Ffi](ffi.md)

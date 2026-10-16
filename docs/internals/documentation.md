@@ -44,6 +44,36 @@ Use `--dream <path>` to select a compiler. The check writes temporary programs a
 
 Integration examples require their documented environment. Record which environment was checked and report unavailable checks honestly. Signature fragments and deliberately invalid examples are not runnable programs.
 
+## Add a page or section
+
+The navigation, the card grids, and the previous/next links are generated from folders and front matter. You never edit a central page list.
+
+- **New page:** add a Markdown file to the folder for its topic. It appears at the end of that section until you place it in the folder's `.nav.yml`.
+- **New category or section:** add a folder with an `index.md` and a `.nav.yml` that sets its `title`. Its parent's card grid picks it up automatically.
+- **Order:** list file and folder names in the `nav:` of the folder's `.nav.yml`. Unlisted entries still appear after the listed ones.
+
+Every page shown as a card needs front matter:
+
+```yaml
+---
+title: Async / Await          # short name for cards and the sidebar
+summary: Write work that waits without blocking, using futures and `await`.
+icon: material/timer-sand     # any Material Design icon name
+status: stable                # language pages: stable, experimental, or planned
+targets: [native, web, node]  # language pages: where the feature works
+api: reference/api/system-task.md   # optional "API" link on the card
+related: [language/concurrency/tasks.md]  # optional related-guide strip
+---
+```
+
+`status` and `targets` are required for pages under `docs/language/`, and section index pages need `summary` and `icon`. `tooling/docs/site_hook.py` reports a missing or unknown value as a build warning, which `mkdocs build --strict` turns into a failure. Set `card: false` on an index page to keep its section off its parent's card grid.
+
+An index page renders its children as cards where it contains `<!-- cards -->`. `<!-- cards grouped -->` adds a heading for each child section, as on the Language and Standard library pages. Hub pages hide the sidebar and table of contents with `hide: [navigation, toc]`.
+
+Language feature pages follow the shape in `docs/language/_template.md`: front matter, a title and one-paragraph introduction, an **At a glance** block with the key syntax, then sections for usage, rules and edge cases, and examples. Keep the glance snippet short and copy it from code the page already explains. Write it as an indented fence inside the `!!! glance` block so `check_examples.py` block positions do not change.
+
+Use `template: tour.html` for a step-by-step walkthrough. Wrap each step in `<div class="tour-step" markdown>`; on wide screens its code fence stays beside the explanation.
+
 ## Check the site
 
 ```sh

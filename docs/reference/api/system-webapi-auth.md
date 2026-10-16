@@ -1,6 +1,6 @@
 # system.webapi.auth: Authentication services
 
-Read the [Web APIs guide](../../web-apis/index.md) for behavior and complete examples.
+Read the [Web APIs guide](../../web-server/index.md) for behavior and complete examples.
 
 - [Webapi Auth Auth Crypto](webapi-auth-auth-crypto.md)
 - [Webapi Auth Auth Service](webapi-auth-auth-service.md)

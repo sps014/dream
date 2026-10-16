@@ -1,6 +1,6 @@
 import system.testing;
 // Every integer primitive wraps on overflow (two's-complement modulo its bit width), as documented
-// in docs/reference/language/primitives.md.
+// in docs/language/types/primitives.md.
 import system;
 
 @test

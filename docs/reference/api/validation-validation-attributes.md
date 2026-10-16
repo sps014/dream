@@ -2,7 +2,7 @@
 
 **Import:** `import system.validation;`
 
-See [model validation](../../web-apis/validation.md) for strict decoding, constraints, defaults, and callbacks.
+See [model validation](../../web-server/validation.md) for strict decoding, constraints, defaults, and callbacks.
 
 ## `MinimumAttribute`
 

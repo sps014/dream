@@ -1,3 +1,9 @@
+---
+title: Greet by name
+summary: A function that builds a string from a parameter.
+icon: material/account-outline
+---
+
 # Greet by name
 
 Write a function that builds a greeting from a name. This example shows how a parameter enters a function and how a result comes back.

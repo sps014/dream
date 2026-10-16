@@ -1,3 +1,9 @@
+---
+title: Native JSON API
+summary: Serve a JSON greeting from a URL parameter.
+icon: material/api
+---
+
 # Serve a JSON API
 
 Save this as `app.dream`. It accepts a name from the URL and returns a JSON greeting.
@@ -40,6 +46,6 @@ Configuration and startup return `Result`; this small example uses `unwrap` to r
 failures immediately. An application that needs recovery should inspect those results
 and handle the errors before accepting requests.
 
-Continue with [validated models](../web-apis/validation.md),
-[dependencies](../web-apis/dependencies.md), or the
-[complete service example](../web-apis/example.md).
+Continue with [validated models](../web-server/validation.md),
+[dependencies](../web-server/dependencies.md), or the
+[complete service example](../web-server/example.md).

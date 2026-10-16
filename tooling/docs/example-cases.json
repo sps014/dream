@@ -1,21 +1,9 @@
 [
   {
-    "name": "readme-hello",
+    "name": "readme-json",
     "page": "README.md",
     "block": 0,
-    "stdout": "Hello, world!\n"
-  },
-  {
-    "name": "readme-total",
-    "page": "README.md",
-    "block": 1,
-    "stdout": "35\n"
-  },
-  {
-    "name": "readme-result",
-    "page": "README.md",
-    "block": 2,
-    "stdout": "42\n"
+    "stdout": "{\"name\":\"Ada\",\"languages\":[\"Dream\",\"TypeScript\"]}\n"
   },
   {
     "name": "shopping",
@@ -25,320 +13,320 @@
   },
   {
     "name": "collection-intro",
-    "page": "docs/reference/stdlib/collections.md",
+    "page": "docs/library/collections/index.md",
     "block": 0,
     "stdout": "Ada\nSam\nLee\n"
   },
   {
     "name": "list",
-    "page": "docs/reference/stdlib/collections/list.md",
+    "page": "docs/library/collections/list.md",
     "block": 0,
     "stdout": "1, 2, 3, 4\n"
   },
   {
     "name": "map",
-    "page": "docs/reference/stdlib/collections/map.md",
+    "page": "docs/library/collections/map.md",
     "block": 0,
     "stdout": "No score yet\n"
   },
   {
     "name": "sorted-map",
-    "page": "docs/reference/stdlib/collections/sorted-map.md",
+    "page": "docs/library/collections/sorted-map.md",
     "block": 0,
     "stdout": "Ada\nSam\n"
   },
   {
     "name": "set",
-    "page": "docs/reference/stdlib/collections/set.md",
+    "page": "docs/library/collections/set.md",
     "block": 0,
     "stdout": "2\ntrue\n"
   },
   {
     "name": "queue",
-    "page": "docs/reference/stdlib/collections/queue.md",
+    "page": "docs/library/collections/queue.md",
     "block": 0,
     "stdout": "first\n"
   },
   {
     "name": "stack",
-    "page": "docs/reference/stdlib/collections/stack.md",
+    "page": "docs/library/collections/stack.md",
     "block": 0,
     "stdout": "second\n"
   },
   {
     "name": "priority-queue",
-    "page": "docs/reference/stdlib/collections/priority-queue.md",
+    "page": "docs/library/collections/priority-queue.md",
     "block": 0,
     "stdout": "10\n20\n"
   },
   {
     "name": "sequence",
-    "page": "docs/reference/stdlib/collections/seq.md",
+    "page": "docs/library/collections/seq.md",
     "block": 0,
     "stdout": "3, 4\n"
   },
   {
     "name": "format",
-    "page": "docs/reference/stdlib/formatting.md",
+    "page": "docs/library/text/formatting.md",
     "block": 0,
     "stdout": "Hello Ada, you have 3 items.\n"
   },
   {
     "name": "nested-options",
-    "page": "docs/reference/stdlib/option-result.md",
+    "page": "docs/library/core/option-result.md",
     "block": 4,
     "stdout": "7\n"
   },
   {
     "name": "logging-handler",
-    "page": "docs/reference/stdlib/logging.md",
+    "page": "docs/library/system/logging.md",
     "block": 1,
     "stdout": "app: ready\n"
   },
   {
     "name": "project-hello",
-    "page": "docs/reference/tooling/create-project.md",
+    "page": "docs/tooling/create-project.md",
     "block": 0,
     "stdout": "Hello from my project!\n"
   },
   {
     "name": "buffered-memory-streams",
-    "page": "docs/reference/stdlib/file-streams.md",
+    "page": "docs/library/io/streams.md",
     "block": 2,
     "stdout": ""
   },
   {
     "name": "incremental-utf8",
-    "page": "docs/reference/stdlib/encoding.md",
+    "page": "docs/library/text/encoding.md",
     "block": 1,
     "stdout": ""
   },
   {
     "name": "urls",
-    "page": "docs/reference/stdlib/url.md",
+    "page": "docs/library/io/url.md",
     "block": 0,
     "stdout": "https://example.com/v1/users?role=admin&role=editor\n"
   },
   {
     "name": "async-file-copy",
-    "page": "docs/reference/stdlib/file-streams.md",
+    "page": "docs/library/io/streams.md",
     "block": 3,
     "stdout": ""
   },
   {
     "name": "http-cancellation",
-    "page": "docs/reference/stdlib/http.md",
+    "page": "docs/library/io/http.md",
     "block": 1,
     "stdout": "2\nECANCELLED\n"
   },
   {
     "name": "cancellation-events",
-    "page": "docs/reference/stdlib/builtins.md",
+    "page": "docs/library/core/builtins.md",
     "block": 1,
     "stdout": "ready\ntrue\n"
   },
   {
     "name": "cli-defaults",
-    "page": "docs/reference/stdlib/cli.md",
+    "page": "docs/library/system/cli.md",
     "block": 0,
     "stdout": "download.bin\n10000\nfalse\n"
   },
   {
     "name": "cli-subcommands",
-    "page": "docs/reference/stdlib/cli.md",
+    "page": "docs/library/system/cli.md",
     "block": 1,
     "stdout": "check\nslow\n"
   },
   {
     "name": "structured-scope",
-    "page": "docs/reference/language/structured-concurrency.md",
+    "page": "docs/language/concurrency/structured.md",
     "block": 0,
     "stdout": "42\n"
   },
   {
     "name": "bounded-async-map",
-    "page": "docs/reference/language/tasks.md",
+    "page": "docs/language/concurrency/tasks.md",
     "block": 0,
     "stdout": "1\n4\n9\n"
   },
   {
     "name": "worker-pool",
-    "page": "docs/reference/language/task-pool.md",
+    "page": "docs/language/concurrency/task-pool.md",
     "block": 0,
     "stdout": "9\n"
   },
   {
     "name": "uuid-values",
-    "page": "docs/reference/stdlib/application-utilities.md",
+    "page": "docs/library/system/application-utilities.md",
     "block": 0,
     "stdout": "16\ntrue\n550e8400-e29b-41d4-a716-446655440000\n"
   },
   {
     "name": "streaming-csv",
-    "page": "docs/reference/stdlib/application-utilities.md",
+    "page": "docs/library/system/application-utilities.md",
     "block": 1,
     "stdout": "Ada;Lovelace\nline\nnext\n"
   },
   {
     "name": "temporary-file",
-    "page": "docs/reference/stdlib/application-utilities.md",
+    "page": "docs/library/system/application-utilities.md",
     "block": 2,
     "stdout": "hello\n"
   },
   {
     "name": "typed-config",
-    "page": "docs/reference/stdlib/application-utilities.md",
+    "page": "docs/library/system/application-utilities.md",
     "block": 3,
     "stdout": "9000\nCLI\n"
   },
   {
     "name": "tcp-half-close",
-    "page": "docs/reference/stdlib/raw-sockets-compression.md",
+    "page": "docs/library/system/raw-sockets-compression.md",
     "block": 0,
     "stdout": "hello\n"
   },
   {
     "name": "streaming-compression",
-    "page": "docs/reference/stdlib/raw-sockets-compression.md",
+    "page": "docs/library/system/raw-sockets-compression.md",
     "block": 1,
     "stdout": "hello compression\n"
   },
   {
     "name": "web-authentication",
-    "page": "docs/web-apis/authentication.md",
+    "page": "docs/web-server/authentication.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-authorization",
-    "page": "docs/web-apis/authorization.md",
+    "page": "docs/web-server/authorization.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-configuration",
-    "page": "docs/web-apis/configuration.md",
+    "page": "docs/web-server/configuration.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-dependencies",
-    "page": "docs/web-apis/dependencies.md",
+    "page": "docs/web-server/dependencies.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-deployment",
-    "page": "docs/web-apis/deployment.md",
+    "page": "docs/deploy/web-server.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-first-application",
-    "page": "docs/web-apis/first-application.md",
+    "page": "docs/web-server/first-application.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-lifecycle",
-    "page": "docs/web-apis/lifecycle.md",
+    "page": "docs/web-server/lifecycle.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-middleware",
-    "page": "docs/web-apis/middleware.md",
+    "page": "docs/web-server/middleware.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-oidc",
-    "page": "docs/web-apis/oidc.md",
+    "page": "docs/web-server/oidc.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-openapi",
-    "page": "docs/web-apis/openapi.md",
+    "page": "docs/web-server/openapi.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-parameters",
-    "page": "docs/web-apis/parameters.md",
+    "page": "docs/web-server/parameters.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-resources",
-    "page": "docs/web-apis/resources.md",
+    "page": "docs/web-server/resources.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-responses",
-    "page": "docs/web-apis/responses.md",
+    "page": "docs/web-server/responses.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-routers",
-    "page": "docs/web-apis/routers.md",
+    "page": "docs/web-server/routers.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-streaming",
-    "page": "docs/web-apis/streaming.md",
+    "page": "docs/web-server/streaming.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-testing",
-    "page": "docs/web-apis/testing.md",
+    "page": "docs/web-server/testing.md",
     "block": 0,
     "mode": "test",
     "timeout": 300
   },
   {
     "name": "web-uploads",
-    "page": "docs/web-apis/uploads.md",
+    "page": "docs/web-server/uploads.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-validation",
-    "page": "docs/web-apis/validation.md",
+    "page": "docs/web-server/validation.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "web-websockets",
-    "page": "docs/web-apis/websockets.md",
+    "page": "docs/web-server/websockets.md",
     "block": 0,
     "mode": "compile",
     "timeout": 300
   },
   {
     "name": "paths-complete",
-    "page": "docs/reference/stdlib/paths.md",
+    "page": "docs/library/io/paths.md",
     "block": 0,
     "stdout": "notes.txt\ntxt\nnotes\n"
   },
@@ -362,14 +350,14 @@
   },
   {
     "name": "csv-pipeline-complete",
-    "page": "docs/reference/stdlib/application-utilities.md",
+    "page": "docs/library/system/application-utilities.md",
     "block": 4,
     "mode": "compile",
     "timeout": 240
   },
   {
     "name": "service-complete",
-    "page": "docs/web-apis/example.md",
+    "page": "docs/web-server/example.md",
     "block": 4,
     "entry": "app.dream",
     "mode": "compile",
@@ -395,13 +383,13 @@
   },
   {
     "name": "cli-errors-complete",
-    "page": "docs/reference/stdlib/cli.md",
+    "page": "docs/library/system/cli.md",
     "block": 2,
     "mode": "compile"
   },
   {
     "name": "simd-complete",
-    "page": "docs/reference/stdlib/simd.md",
+    "page": "docs/library/text/simd.md",
     "block": 0,
     "mode": "compile"
   }

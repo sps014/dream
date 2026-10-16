@@ -121,9 +121,9 @@ flowchart LR
 - `ExpandSimpleCtors` and `RcInsertion` run module-wide before inlining. Parameter ownership has already been recorded by sema in HIR and applied by lowering. Insertion assigns each owned RC local a compile-time ownership token and emits `Retain` only on a real share and `Release` when that token dies. It consults a type-level mod-ref table (`rc/modref.rs`) so snapshots and loop-carried traversal variables (`rc/cursor_family.rs`) stay cursors when no call can overwrite the slot they came from.
 - The inliner preserves each returned `+1` with an explicit `Move` and source nulling when splicing a return into a local or owning container slot. Borrowed returns have already acquired their ABI token during RC insertion; no post-inline repair sweep is required. Union, array and tuple construction borrows payloads and retains their references; a transfer elsewhere in the function cannot authorize skipping a retain for an earlier allocation generation. `rc-held-by-owner` (`rc/held.rs`) then drops retain/release pairs on snapshots whose owner provably outlives every read, now that the intervening calls are inlined or summarized.
 - Allocation placement is decided on the post-inline module from escape analysis (`analysis/escape.rs`) and a static per-object count (`analysis/object_life.rs`): `UniqueRegion` (bump region for unique `del`-free graphs), `SroaManaged` (objects with reference fields become per-field locals), and late `frame-alloc` (non-escaping instances built in the stack frame with an immortal count).
-- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Ownership and memory performance](./11-swift-like-arc-roadmap.md)).
+- `RcElision` (in the per-function pipeline) cancels redundant `Retain`/`Release` pairs along Goto chains, transparent diamonds, and transparent natural loops (see [Ownership and memory performance](11-swift-like-arc-roadmap.md)).
 
-See [05-writing-passes.md](./05-writing-passes.md) for the module-pass order.
+See [05-writing-passes.md](05-writing-passes.md) for the module-pass order.
 
 ## Building MIR by hand — `crates/dream-mir/src/build.rs`
 
@@ -179,7 +179,7 @@ inline structs, unions and tuples carry child origins without inventing a heap e
 primitive snapshots do not inherit pointer lifetime. Field/index effects are conservative for
 the whole reachable graph. This is not a proof of every optimizer rewrite or external body;
 field-sensitive precision and richer post-optimization ownership facts remain follow-up work.
-Managed-child publication barriers are described in [06-llvm-backend.md](./06-llvm-backend.md).
+Managed-child publication barriers are described in [06-llvm-backend.md](06-llvm-backend.md).
 
 The late escaped-region guard uses the same region proof as final verification, not a separate
 block-linear scanner. A detected escape is an ICE in debug builds. Release builds remove all

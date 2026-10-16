@@ -1,0 +1,130 @@
+---
+title: Spans
+summary: "Views into part of a string, array, or list without copying."
+icon: material/arrow-expand-horizontal
+status: stable
+targets: [native, web, node]
+---
+
+# Spans
+
+A span is a view of part of a string, array or list. It stores no copy of the data: just the source, an offset and a length. Spans are [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type)s, so they live on the stack. Making, slicing and comparing one never allocates.
+
+!!! glance "At a glance"
+
+    ```dream
+    let line = "name=Ada";
+    let key = line.span(0, 4); // no copy
+    let owned = key.to_string();
+    ```
+
+    - A span views part of a string, array, or list without copying it.
+    - Spans cannot outlive the data they point into.
+
+```dream
+import system;
+
+fun main() {
+    let line = "name=Ada; lang=Dream";
+    let key = line.span(0, 4); // "name", no allocation
+    System.println(key == "name"); // true
+    System.println(key.length); // 4
+    let owned = key.to_string(); // the explicit allocation point
+    System.println(owned);
+}
+```
+
+| View | Over | Get one with |
+| --- | --- | --- |
+| `ReadOnlySpan<char>` | `string` text | `s.span()`, `s.span(start, end)`, `builder.as_span()` |
+| `Span<T>` | `T[]` elements, writable | `Span.of(xs)`, `Span(xs, offset, length)`, `list.as_span()` |
+| `ReadOnlySpan<T>` | `T[]` elements, read-only | `ReadOnlySpan.of(xs)`, `span.as_read_only()`, `list.as_read_only_span()` |
+
+## Character views
+
+`Span<char>` permits writes to a `char[]` of 32-bit code points; strings are immutable and
+store 16-bit UTF-16 units, including surrogate pairs, and may use sliced storage.
+`ReadOnlySpan<char>` views either backing without copying: it keeps its source owner alive and
+reads UTF-16 units from strings or full 32-bit values from arrays. `ReadOnlySpan<char>.of(s)`
+and `s.span()` create string views; `Span<char>.of(chars).as_read_only()` creates an array view. Both views are stored inline. Release can hoist the string payload address
+out of read-only loops when the source lifetime and view fields are proven stable.
+
+`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. Once a view exists, `view.slice(start, count)` uses a checked start and element count, just like every other span. String-backed views have no setters; writes fail at compile time. It supports the read-only `string` surface:
+
+| Call | Meaning |
+| --- | --- |
+| `length` / `is_empty()` / `byte_size()` | element count / payload bytes (2 per string unit, 4 per array character) |
+| `char_at(i)` / `sp[i]` / `byte_at(i)` | one UTF-16 unit or array character / payload byte |
+| `==` / `equals(s)` / `compare` | equality with a `ReadOnlySpan<char>` or `string` / named string equality / ordering against either |
+| `starts_with` / `ends_with` / `contains` | tests |
+| `index_of` / `last_index_of` | `Option<int>`, by `char` or `string` |
+| `slice(start, count)` / `slice(start)` | a narrower view, checked |
+| `trim` / `trim_start` / `trim_end` | a view without surrounding whitespace |
+| `parse_int()` / `parse_double()` | `Result` like the `string` versions |
+| `split_iter(sep)` / `lines()` | allocation-free iterators of `ReadOnlySpan<char>` pieces |
+| `to_string()` | copy the view into an owned `string` |
+
+`==` and `!=` compare contents without allocating: `sp == "text"`, `"text" == sp`,
+and `sp == other_span` all work. `equals(string)` is also available.
+
+String-backed spans and arrays of matching UTF-16 elements hash like the equal `string`, so `Map<string, V>` and `Set<string>` look it up without building a key:
+
+```dream
+let ages = Map<string, int>();
+ages.set("ada", 36);
+let text = "ada,grace";
+System.println(ages.get_or(text.span(0, 3), 0)); // 36
+```
+
+`Map.get`, `Map.get_or`, `Map.contains` and `Set.contains` accept a `ReadOnlySpan<char>` when the key type is `string`.
+
+Split and line iterators are cursors: call `move_next()`, then read `current`.
+
+```dream
+let it = "a,b,,c".span().split_iter(',');
+while it.move_next() {
+    System.println(it.current.length); // 1, 1, 0, 1
+}
+```
+
+`StringBuilder.as_span()` views the text built so far. The view stays valid after more appends or a `clear()`: the builder moves to a new buffer instead of overwriting text a span still sees.
+
+## `Span<T>` and `ReadOnlySpan<T>`
+
+Both view `array[offset .. offset + length)`. Creating one with a range outside the array panics, so every later access only checks the span's own length.
+
+| Call | `Span<T>` | `ReadOnlySpan<T>` |
+| --- | --- | --- |
+| `length` / `is_empty()` | yes | yes |
+| `sp[i]` / `get(i)` | yes | yes |
+| `sp[i] = v` / `set(i, v)` / `fill(v)` / `copy_from(src)` | yes | no |
+| `slice(start, count)` / `slice(start)` | yes | yes |
+| `index_of(v)` / `contains(v)` / `sequence_equal(other)` | yes | yes |
+| `copy_to(dst)` / `to_array()` | yes | yes |
+| `as_read_only()` | yes | — |
+
+`for (let x in span)` walks either kind with an index loop; no iterator object is allocated. Copies of array-backed `unmanaged` elements use bulk memory operations. String-backed character copies widen UTF-16 units into 32-bit array elements. Comparisons use element equality.
+
+`list.as_span()` views the list's elements at the moment it is called. Like C#'s `CollectionsMarshal.AsSpan`, it keeps the backing array it saw alive: if the list later grows into a new array, the span still shows the old one.
+
+## Where a span can go
+
+A span may be a local, a parameter, a return value, or a field of another `ref struct`. The compiler rejects anything that could let it outlive its stack frame:
+
+- a field of a `class` or ordinary `struct`
+- a generic type or function argument (`List<ReadOnlySpan<char>>`, `identity(sp)`)
+- an array element
+- a lambda capture
+- an `async` parameter, or a local still in scope at an `await`
+
+The full list, with the reasoning, is under [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type).
+
+## When to use a span
+
+Use spans when parsing, searching, or processing a range without copying it. A span keeps
+its source alive and checks indexing against its own length. Creating a slice does not
+copy the elements; a writable span changes the original array.
+
+Call `to_string()` or `to_array()` when you need an independent copy, such as a string
+stored in an object or used as a map key. Keep spans within synchronous work; they
+cannot be stored in heap objects or kept across an `await`.

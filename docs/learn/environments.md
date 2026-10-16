@@ -1,3 +1,9 @@
+---
+title: Choose an environment
+summary: "Decide whether your program runs natively, in a browser, or in Node."
+icon: material/monitor-cellphone
+---
+
 # Choose where your program runs
 
 Dream programs can run on your computer, in a browser, or in Node. Choose an environment based on what the program needs to do.
@@ -30,4 +36,4 @@ Use `--runtime node` and `--target node` for Node. A project declaring several e
 
 Read the availability notes in the feature guide. Running in a browser does not grant access to the user's disk or let you launch desktop programs.
 
-See [Build and run](../reference/tooling/build-run.md) for environment selection and [Packaging](../reference/tooling/pack/index.md) for sharing the result.
+See [Build and run](../tooling/build-run.md) for environment selection and [Packaging](../deploy/index.md) for sharing the result.

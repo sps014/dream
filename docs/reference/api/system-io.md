@@ -1,6 +1,6 @@
 # system.io: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/file.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/io/file.md).
 
 - [File](io-file.md)
 - [FileHandle](io-file-handle.md)

@@ -1,0 +1,11 @@
+title: Collections
+nav:
+  - index.md
+  - list.md
+  - map.md
+  - sorted-map.md
+  - set.md
+  - queue.md
+  - stack.md
+  - priority-queue.md
+  - seq.md

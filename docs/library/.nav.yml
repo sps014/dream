@@ -1,0 +1,11 @@
+title: Standard library
+nav:
+  - index.md
+  - core
+  - text
+  - collections
+  - system
+  - io
+  - serialization
+  - security
+  - codegen

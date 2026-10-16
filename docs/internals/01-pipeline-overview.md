@@ -73,25 +73,25 @@ The `hir → mir → emit` pipeline is the **only** backend.
 
 ### 4. Type system — `crates/dream-types/src/` (cross-cutting)
 
-Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-system.md](./02-type-system.md). The `TypeCtx` (interner + def table + lowering) is threaded through analysis and lowering.
+Not a pipeline "stage" but the shared vocabulary of stages 3–7. See [02-type-system.md](02-type-system.md). The `TypeCtx` (interner + def table + lowering) is threaded through analysis and lowering.
 
 ### 5. HIR emission — `crates/dream-sema/src/analyzer/hir_emit/`
 
 - **In:** AST plus the facts the analyzer computed.
-- **Out:** `Hir` — typed and name-resolved (see [03-hir.md](./03-hir.md)).
+- **Out:** `Hir` — typed and name-resolved (see [03-hir.md](03-hir.md)).
 - **Why:** persist what `analyze_expression`/overload selection would otherwise discard, so the backend never re-derives types or resolutions.
 
 ### 6. MIR lowering & optimization — `crates/dream-mir/src/`
 
 - **In:** HIR.
 - **Out:** optimized MIR (a CFG per function).
-- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, then `RcInsertion` (parameter ownership modes are already HIR facts) make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` stack-allocates non-escaping objects (`frame-alloc`), and runs the MIR verifier in debug builds or with `DREAM_VERIFY_MIR=1`. `--emit-mir` snapshots any of these stages. See [04-mir.md](./04-mir.md) and [05-writing-passes.md](./05-writing-passes.md).
+- **Steps:** `mir::lower` desugars structured control flow into blocks; `ExpandSimpleCtors`, then `RcInsertion` (parameter ownership modes are already HIR facts) make ownership explicit (module-wide, before inlining); `optimize_module_opts` alternates `Devirt` with inliner rounds, then runs the post-inline RC and placement stages (`UniqueRegion`, `rc-held-by-owner`, `SroaManaged`); the per-function `PassManager` runs to a fixpoint (including bounds-check elimination and loop versioning in `Abc`); `run_late_module_passes` stack-allocates non-escaping objects (`frame-alloc`), and runs the MIR verifier in debug builds or with `DREAM_VERIFY_MIR=1`. `--emit-mir` snapshots any of these stages. See [04-mir.md](04-mir.md) and [05-writing-passes.md](05-writing-passes.md).
 
 ### 7. Backend — `crates/dream-mir/src/backend/llvm/` + `src/execution/llvm/`
 
 - **In:** optimized MIR.
 - **Out:** a textual LLVM IR module (`backend::llvm::emit_llvm_module`). The driver links it with the C runtime compiled to bitcode, runs the pinned `opt` + `llc`, then links with the host `cc` (native `.bin`, optionally PGO via `--profile` / `--use-profile`, `src/execution/native/pgo.rs`) or wasi-sdk `wasm-ld` (`.wasm`, pretty-printed to `.wat` via wasmprinter). The runtime bitcode is cached with a stamp listing every input's path, size, and mtime (`src/driver/rt_stamp.rs`), so switching between compiler checkouts rebuilds it instead of linking a stale one.
-- **How:** every MIR block becomes one LLVM block and every local an entry `alloca`; runtime calls are typed from the runtime bitcode's own signatures. The guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-llvm-backend.md](./06-llvm-backend.md).
+- **How:** every MIR block becomes one LLVM block and every local an entry `alloca`; runtime calls are typed from the runtime bitcode's own signatures. The guest runtime is C under `crates/dream-mir/src/runtime/c/`. See [06-llvm-backend.md](06-llvm-backend.md).
 
 ### 8. Artifact emission — `src/driver/compiler/pipeline.rs` / `src/driver/abi.rs`
 

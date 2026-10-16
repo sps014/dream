@@ -4,7 +4,7 @@ No import is needed.
 
 A manually freed value handle for mixed unmanaged allocations. Initial capacity counts bytes. Growth adds blocks without moving existing allocations. Reset invalidates all pointers and retains every block for reuse; free releases all blocks and state. Arena allocations cannot be individually freed or resized. Copies alias the same state, which must be freed once. Allocation, reset, free and construction require @unsafe.
 
-[Raw memory guide](../language/arrays.md#rawptrt-raw-memory-unsafe).
+[Raw memory guide](../../language/types/arrays.md#rawptrt-raw-memory-unsafe).
 
 ## `Arena`
 

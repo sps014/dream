@@ -1,0 +1,6 @@
+title: Language rules
+nav:
+  - index.md
+  - imports.md
+  - invariants.md
+  - panics.md

@@ -1,0 +1,9 @@
+{#- Landing page: the Markdown in docs/index.md supplies the hero, cards, and highlights, so the
+    copy stays editable without touching this template. -#}
+{% extends "main.html" %}
+
+{% block content %}
+  <div class="dream-home">
+    {{ page.content }}
+  </div>
+{% endblock %}

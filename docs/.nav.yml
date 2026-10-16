@@ -1,0 +1,14 @@
+append_unmatched: true
+nav:
+  - index.md
+  - learn
+  - language
+  - library
+  - web-server
+  - deploy
+  - tooling
+  - cookbook
+  - API reference: reference/api
+  - Contributors: internals
+ignore:
+  - reference

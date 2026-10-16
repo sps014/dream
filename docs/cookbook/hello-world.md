@@ -1,3 +1,9 @@
+---
+title: "Hello, World"
+summary: Print a line to check your installation.
+icon: material/hand-wave-outline
+---
+
 # Hello, World
 
 Print a line to check that Dream is installed and working. This is the smallest useful program to start with.

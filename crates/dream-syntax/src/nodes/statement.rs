@@ -90,7 +90,7 @@ pub enum StatementNode<'a> {
     /// `Lock`), reentrant per-thread. See `docs/language` tasks/concurrency notes.
     Lock(ExpressionNode<'a>, &'a [StatementNode<'a>]),
     /// `defer { body }` / `defer(q) { body }` — opt-in deferred last-ref destroy. `q` is a `uint`
-    /// drain budget (omitted: one chunk). See `docs/reference/language/memory.md`.
+    /// drain budget (omitted: one chunk). See `docs/language/memory/index.md`.
     Defer(Option<ExpressionNode<'a>>, &'a [StatementNode<'a>]),
     /// `checked { body }` / `unchecked { body }` — integer overflow behavior for arithmetic written
     /// lexically inside `body`. The token is the `checked`/`unchecked` keyword.

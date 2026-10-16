@@ -1,49 +1,78 @@
 site_name: Dream
+site_description: A statically typed language that compiles to native binaries and WebAssembly.
 site_url: https://sps014.github.io/dream/
 repo_url: https://github.com/sps014/dream
 repo_name: sps014/dream
 
 theme:
   name: material
+  custom_dir: docs/overrides
   font:
     text: Inter
     code: JetBrains Mono
   icon:
     repo: fontawesome/brands/github
+    logo: material/star-four-points
   palette:
-    scheme: slate
-    primary: black
-    accent: deep-purple
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
   features:
     - content.action.edit
     - content.action.view
     - content.code.annotate
     - content.code.copy
     - content.code.select
-    - content.tabs.link
     - content.tooltips
     - navigation.footer
     - navigation.indexes
     - navigation.instant
     - navigation.instant.progress
     - navigation.path
-    - navigation.sections
-    - navigation.tabs
+    - navigation.prune
     - navigation.top
     - navigation.tracking
-    - navigation.expand
+    - search.highlight
+    - search.suggest
     - toc.follow
 
 extra_css:
-  - stylesheets/extra.css
+  - stylesheets/tokens.css
+  - stylesheets/layout.css
+  - stylesheets/components.css
+  - stylesheets/home.css
+
+extra_javascript:
+  - javascripts/shortcuts.js
+  - javascripts/card-filter.js
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/sps014/dream
 
+plugins:
+  - search
+  - awesome-nav
+
 hooks:
   - tooling/docs/dream_lexer.py
+  - tooling/docs/site_hook.py
+
+exclude_docs: |
+  _template.md
+  overrides/
 
 markdown_extensions:
   - admonition
@@ -73,198 +102,3 @@ validation:
     not_found: warn
     anchors: warn
     unrecognized_links: warn
-
-nav:
-- Home: index.md
-- Learn:
-  - Overview: learn/index.md
-  - Quickstart: learn/quickstart.md
-  - Language tour: learn/tour.md
-  - Build a small project: learn/first-project.md
-  - Choose an environment: learn/environments.md
-  - Next steps: learn/next-steps.md
-  - Troubleshooting: learn/troubleshooting.md
-- Web APIs:
-  - Overview: web-apis/index.md
-  - First application: web-apis/first-application.md
-  - Configuration: web-apis/configuration.md
-  - Routers and multiple files: web-apis/routers.md
-  - Parameters and bodies: web-apis/parameters.md
-  - Models and validation: web-apis/validation.md
-  - Responses and errors: web-apis/responses.md
-  - Dependencies: web-apis/dependencies.md
-  - Resources and overrides: web-apis/resources.md
-  - Lifecycle and state: web-apis/lifecycle.md
-  - Middleware and CORS: web-apis/middleware.md
-  - Swagger and OpenAPI: web-apis/openapi.md
-  - Local authentication: web-apis/authentication.md
-  - OAuth2 and OIDC: web-apis/oidc.md
-  - Authorization and scopes: web-apis/authorization.md
-  - Uploads: web-apis/uploads.md
-  - Streaming and SSE: web-apis/streaming.md
-  - WebSockets: web-apis/websockets.md
-  - Testing: web-apis/testing.md
-  - TLS and deployment: web-apis/deployment.md
-  - Complete example: web-apis/example.md
-- Reference:
-  - Language:
-    - Basics:
-      - Variables: reference/language/variables.md
-      - Operators: reference/language/operators.md
-      - Custom operators: reference/language/operator-overloading.md
-      - Names, types, and sizes: reference/language/type-queries.md
-      - Control Flow: reference/language/control-flow.md
-      - Yield and iterators: reference/language/iterators.md
-      - Functions: reference/language/functions.md
-      - Function parameters: reference/language/function-parameters.md
-      - Function values: reference/language/function-values.md
-      - Ownership: reference/language/ownership.md
-      - Comments: reference/language/comments.md
-      - Panics: reference/language/panics.md
-    - Types:
-      - Overview: reference/language/types.md
-      - Primitives: reference/language/primitives.md
-      - Arrays: reference/language/arrays.md
-      - Spans: reference/language/spans.md
-      - Enums & Unions: reference/language/enums-unions.md
-      - Classes & Structs: reference/language/classes-structs.md
-      - The object Type: reference/language/objects.md
-    - Structure:
-      - Imports & Modules: reference/language/imports.md
-      - Language Rules: reference/language/invariants.md
-    - Features:
-      - Generics: reference/language/generics.md
-      - Interfaces: reference/language/interfaces.md
-      - Async/Await: reference/language/async.md
-      - Tasks: reference/language/tasks.md
-      - Structured concurrency: reference/language/structured-concurrency.md
-      - Memory Management: reference/language/memory.md
-      - Memory Safety Guide: reference/language/memory-safety.md
-      - Reference cycles: reference/language/memory-cycles.md
-      - Raw buffers: reference/language/memory-buffers.md
-      - Cleanup timing: reference/language/memory-cleanup.md
-      - Task sharing: reference/language/tasks-sharing.md
-      - Task cancellation: reference/language/tasks-cancellation.md
-      - Task pools: reference/language/task-pool.md
-    - Metaprogramming:
-      - Source Generators: reference/language/generators.md
-      - CodeBuilder: reference/stdlib/codegen.md
-  - Interop:
-    - JavaScript: reference/language/interop.md
-    - The js type: reference/language/js-type.md
-    - Callbacks: reference/language/callbacks.md
-    - C: reference/language/c-interop.md
-    - Native callbacks: reference/language/native-callbacks.md
-    - C++ libraries: reference/language/cpp-interop.md
-    - Native libraries: reference/language/library-outputs.md
-    - Mobile packaging: reference/language/mobile-packaging.md
-  - Standard library:
-    - Overview: reference/stdlib/index.md
-    - Core:
-      - Built-ins: reference/stdlib/builtins.md
-      - Option & Result: reference/stdlib/option-result.md
-      - Lock & Semaphore: reference/stdlib/sync.md
-      - API errors: reference/stdlib/errors.md
-    - Text & Data:
-      - Strings: reference/stdlib/string.md
-      - Formatting: reference/stdlib/formatting.md
-      - Regex: reference/stdlib/regex.md
-      - SIMD: reference/stdlib/simd.md
-      - Encoding: reference/stdlib/encoding.md
-    - Collections:
-      - Overview: reference/stdlib/collections.md
-      - List: reference/stdlib/collections/list.md
-      - Map: reference/stdlib/collections/map.md
-      - SortedMap: reference/stdlib/collections/sorted-map.md
-      - Set: reference/stdlib/collections/set.md
-      - Queue: reference/stdlib/collections/queue.md
-      - Stack: reference/stdlib/collections/stack.md
-      - PriorityQueue: reference/stdlib/collections/priority-queue.md
-      - Queries and Seq: reference/stdlib/collections/seq.md
-    - System:
-      - Random: reference/stdlib/random.md
-      - DateTime: reference/stdlib/datetime.md
-      - Logging: reference/stdlib/logging.md
-      - Testing: reference/stdlib/testing.md
-      - Debug: reference/stdlib/debug.md
-      - Process: reference/stdlib/process.md
-      - CLI arguments: reference/stdlib/cli.md
-      - Application utilities: reference/stdlib/application-utilities.md
-      - Raw sockets and compression: reference/stdlib/raw-sockets-compression.md
-    - I/O:
-      - File I/O: reference/stdlib/file.md
-      - Streams: reference/stdlib/file-streams.md
-      - URLs: reference/stdlib/url.md
-      - HTTP: reference/stdlib/http.md
-      - Paths: reference/stdlib/paths.md
-    - Serialization:
-      - JSON: reference/stdlib/json.md
-    - Security:
-      - Crypto: reference/stdlib/crypto.md
-  - Tooling:
-    - Dreamer overview: reference/tooling/dreamer.md
-    - Create a project: reference/tooling/create-project.md
-    - Project settings: reference/tooling/project-settings.md
-    - Dependencies: reference/tooling/dependencies.md
-    - Build and run: reference/tooling/build-run.md
-    - Single-file commands: reference/tooling/compiler.md
-    - Testing: reference/tooling/testing.md
-    - Workspaces: reference/tooling/workspaces.md
-    - Toolchain: reference/tooling/toolchain.md
-    - Editor setup: reference/tooling/editor.md
-    - Formatting: reference/tooling/formatting.md
-    - Publishing: reference/tooling/publishing.md
-    - Registries: reference/tooling/registries.md
-    - Command reference: reference/tooling/commands.md
-    - Packaging:
-      - Overview: reference/tooling/pack/index.md
-      - CLI packaging: reference/tooling/pack/desktop.md
-      - Browser and Node: reference/tooling/pack/web-node.md
-      - Mobile libraries: reference/tooling/pack/mobile.md
-      - Options and troubleshooting: reference/tooling/pack/options.md
-- API lookup:
-  - Overview: reference/api/index.md
-  - system.codegen: reference/api/system-codegen.md
-  - system.collections: reference/api/system-collections.md
-  - system.core: reference/api/system-core.md
-  - system.crypto: reference/api/system-crypto.md
-  - system.encoding: reference/api/system-encoding.md
-  - system.interop: reference/api/system-interop.md
-  - system.io: reference/api/system-io.md
-  - system.json: reference/api/system-json.md
-  - system.logging: reference/api/system-logging.md
-  - system.net: reference/api/system-net.md
-  - system.webapi: reference/api/system-webapi.md
-  - system.primitives: reference/api/system-primitives.md
-  - system.process: reference/api/system-process.md
-  - system.simd: reference/api/system-simd.md
-  - system.task: reference/api/system-task.md
-  - system.testing: reference/api/system-testing.md
-  - system.text: reference/api/system-text.md
-  - system: reference/api/package-system.md
-- Cookbook:
-  - Overview: cookbook/index.md
-  - Hello, World: cookbook/hello-world.md
-  - Greet by name: cookbook/greet.md
-  - Sum a list: cookbook/sum-a-list.md
-  - Quote generator: cookbook/quote-generator.md
-  - Download a file: cookbook/download-file.md
-  - Native JSON API: cookbook/webapi.md
-- Contributors:
-  - Overview: internals/README.md
-  - Pipeline: internals/01-pipeline-overview.md
-  - Type System: internals/02-type-system.md
-  - HIR: internals/03-hir.md
-  - MIR: internals/04-mir.md
-  - Writing Passes: internals/05-writing-passes.md
-  - LLVM Backend: internals/06-llvm-backend.md
-  - Adding a Feature: internals/07-adding-a-language-feature.md
-  - Testing & Determinism: internals/08-testing-and-determinism.md
-  - Design notes:
-    - Nullable purge: internals/09-nullable-purge-design-note.md
-    - Stack alloc & mono: internals/10-stack-alloc-and-mono-design-note.md
-    - Ownership and memory: internals/11-swift-like-arc-roadmap.md
-  - Native pointer migration: internals/12-native-pointer-migration.md
-  - Build performance and minimal compiler plan: internals/14-build-performance-and-native-networking-plan.md
-  - Self-hosting readiness: internals/13-self-hosting-readiness.md
-  - Documentation: internals/documentation.md

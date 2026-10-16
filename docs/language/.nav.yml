@@ -1,0 +1,12 @@
+title: Language
+nav:
+  - index.md
+  - basics
+  - functions
+  - types
+  - abstraction
+  - concurrency
+  - memory
+  - metaprogramming
+  - interop
+  - rules

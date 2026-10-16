@@ -1,3 +1,9 @@
+---
+title: Build a small project
+summary: "Combine variables, lists, loops, and functions into a shopping-total app."
+icon: material/cart-outline
+---
+
 # Build a shopping total
 
 You have run your first program. Now combine variables, lists, loops, and functions into a small project. This program adds item prices and reports whether they fit your budget.
@@ -67,6 +73,6 @@ fun four_prices(): void {
 }
 ```
 
-Run `dreamer test`. This first test checks the example's arithmetic. As your project grows, put reusable functions in their own [module](../reference/language/imports.md) and test those functions directly.
+Run `dreamer test`. This first test checks the example's arithmetic. As your project grows, put reusable functions in their own [module](../language/rules/imports.md) and test those functions directly.
 
-Continue with [Lists](../reference/stdlib/collections/list.md), [Functions](../reference/language/functions.md), or [project testing](../reference/tooling/testing.md).
+Continue with [Lists](../library/collections/list.md), [Functions](../language/functions/declaring.md), or [project testing](../tooling/testing.md).

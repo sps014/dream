@@ -1,6 +1,6 @@
 # system.webapi: API lookup
 
-Read the [Web APIs guide](../../web-apis/index.md) for complete examples and behavior. Applications own their routes, options, middleware, lifecycle, and dependency overrides.
+Read the [Web APIs guide](../../web-server/index.md) for complete examples and behavior. Applications own their routes, options, middleware, lifecycle, and dependency overrides.
 
 - [Application](webapi-web-app.md)
 - [Application options](webapi-web-app-options.md)

@@ -1,0 +1,22 @@
+title: Web server
+nav:
+  - index.md
+  - first-application.md
+  - configuration.md
+  - routers.md
+  - parameters.md
+  - validation.md
+  - responses.md
+  - dependencies.md
+  - resources.md
+  - lifecycle.md
+  - middleware.md
+  - openapi.md
+  - authentication.md
+  - oidc.md
+  - authorization.md
+  - uploads.md
+  - streaming.md
+  - websockets.md
+  - testing.md
+  - example.md

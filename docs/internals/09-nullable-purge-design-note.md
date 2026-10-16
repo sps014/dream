@@ -2,7 +2,7 @@
 
 This is a decision record, a record of the decision. It exists to answer three questions before changing
 the ~50-file blast radius of removing `TyKind::Nullable` (see
-[07 — Adding a Feature](./07-adding-a-language-feature.md) for the general shape of a
+[07 — Adding a Feature](07-adding-a-language-feature.md) for the general shape of a
 pipeline-wide change, and the redundancy-audit plan for the full file inventory). Once these three
 decisions are accepted, `removal-nullable-implementation` is mechanical: delete `TyKind::Nullable`
 and its ~5 core `TypeInterner` methods, then follow the compiler errors through every `strip_nullable`
@@ -75,7 +75,7 @@ codegen path — no `TyKind::Nullable`-shaped bifurcation was reintroduced, beca
 on payload-type shape (`is_value_type`), not on `Option` being a special case.
 
 Any number of non-self-referential reference-typed fields is also permitted inline when the union
-is declared `enum struct` (see [Enums & unions](../reference/language/enums-unions.md)):
+is declared `enum struct` (see [Enums & unions](../language/types/enums-unions.md)):
 this exists for payload shapes like a `Span<T>`/array-backed variant that need reference fields
 alongside value fields, without forcing a fully boxed union. `Option<T>` itself never needs this —
 `None` carries no payload and `Some(T)` carries exactly one value-typed field — so the ordinary

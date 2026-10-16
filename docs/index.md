@@ -1,33 +1,102 @@
-# Welcome to Dream
+---
+title: Dream
+summary: A statically typed language that compiles to fast native binaries and WebAssembly.
+template: home.html
+hide: [navigation, toc, path, footer]
+---
 
-Dream helps you build useful programs with clear types, automatic memory management, and an included library for everyday tasks. You can run programs on your computer, in a browser, or in Node, depending on the features they need.
+<div class="dream-hero" markdown>
+
+<div class="dream-hero__text" markdown>
+
+<p class="dream-hero__eyebrow">Native · WebAssembly · Node</p>
+
+# Fast programs, everywhere { .dream-hero__title }
+
+<p class="dream-hero__tagline">A typed language that compiles to native binaries and WebAssembly.</p>
+
+<div class="dream-hero__actions" markdown>
+
+[Install Dream](learn/quickstart.md){ .md-button .md-button--primary }
+[Take the tour](learn/tour.md){ .md-button }
+
+</div>
+
+</div>
+
+<div class="dream-hero__code" markdown>
 
 ```dream
 import system;
+import system.collections;
 
 fun main() {
-    System.println("Hello, world!");
+    let scores: Map<string, int> = {"Ada": 92, "Sam": 78};
+
+    for (let entry in scores) {
+        System.println($"{entry.key}: {entry.value}");
+    }
 }
 ```
 
-This program prints `Hello, world!`. You do not need to understand Dream's implementation to start using it.
+</div>
 
-## Find your starting point
+</div>
 
-| You want to… | Start here |
-| --- | --- |
-| Install Dream and run a program | [Quickstart](learn/quickstart.md) |
-| Learn the language step by step | [Learn Dream](learn/index.md) |
-| Build a small complete project | [Shopping total](learn/first-project.md) |
-| Solve a practical task | [Cookbook](cookbook/index.md) |
-| Find a library feature | [Standard library](reference/stdlib/index.md) |
-| Look up a precise API | [API catalog](reference/api/index.md) |
-| Manage or share a project | [Dreamer](reference/tooling/dreamer.md) |
-| Fix a setup problem | [Troubleshooting](learn/troubleshooting.md) |
-| Contribute to Dream itself | [Contributor handbook](internals/README.md) |
+## Explore the docs { .dream-home__heading }
 
-## Build on the basics
+<!-- cards -->
 
-Use lists and maps to store data, `Option` and `Result` to handle missing values and failures, and modules to organize your program. Add files, JSON, dates, or process execution when your project needs them.
+## Why Dream { .dream-home__heading }
 
-Read [Choosing an environment](learn/environments.md) before relying on a native or browser service. Each feature guide explains its requirements and gives examples.
+<div class="dream-why" markdown>
+
+<div markdown>
+
+### Native and WebAssembly
+
+One codebase builds a native executable, a browser module, or a Node module.
+
+</div>
+
+<div markdown>
+
+### ARC that compiles away
+
+Last-use moves, inferred borrows, and retain elision remove most reference counting at build time.
+
+</div>
+
+<div markdown>
+
+### Seamless interop
+
+Call C and C++ with `@c` and `@cpp`, and JavaScript with `extern` and the `js` type.
+
+</div>
+
+<div markdown>
+
+### Typed web APIs
+
+Compile-time routing, validation, authentication, OpenAPI, and WebSockets in the standard library.
+
+</div>
+
+<div markdown>
+
+### Zero-cost generics
+
+Generic code is specialized for each type you use, with no runtime dispatch.
+
+</div>
+
+<div markdown>
+
+### Async and parallel
+
+`async`/`await` for waiting work, `Task` for parallel CPU work, both owned by structured scopes.
+
+</div>
+
+</div>

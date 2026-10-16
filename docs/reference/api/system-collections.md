@@ -1,6 +1,6 @@
 # system.collections: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/collections.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/collections/index.md).
 
 - [Collection Query](collections-collection-query.md)
 - [KeyValuePair](collections-key-value-pair.md)

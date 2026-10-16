@@ -15,7 +15,7 @@ for developing a compiler that runs on the supported desktop host.
 
 ## Prerequisite work
 
-Complete the [build performance and minimal compiler plan](./14-build-performance-and-native-networking-plan.md)
+Complete the [build performance and minimal compiler plan](14-build-performance-and-native-networking-plan.md)
 before beginning the compiler bootstrap implementation. That work is planned, not
 implemented: it prioritizes faster development builds and removing deferred
 GPU, networking, WebView, and desktop features while preserving core behavior.

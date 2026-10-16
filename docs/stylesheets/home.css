@@ -1,0 +1,195 @@
+/* Landing page (overrides/home.html + docs/index.md). */
+
+.md-main__inner:has(.dream-home) {
+  margin-top: 0;
+}
+
+.md-content__inner:has(.dream-home) {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding-top: 0;
+}
+
+.md-content__inner:has(.dream-home)::before {
+  display: none;
+}
+
+.md-typeset .dream-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 2.4rem;
+  padding: 3.6rem 0 2.8rem;
+}
+
+.md-typeset .dream-hero::before {
+  content: "";
+  position: absolute;
+  inset: -4rem -20vw auto;
+  height: 34rem;
+  background:
+    radial-gradient(40rem 20rem at 20% 30%, var(--dream-glow), transparent 70%),
+    radial-gradient(30rem 18rem at 85% 40%, rgba(34, 211, 238, 0.14), transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.md-typeset .dream-hero__eyebrow {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--dream-border-strong);
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset h1.dream-hero__title {
+  margin: 0 0 0.9rem;
+  font-size: 2.7rem;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  background: var(--dream-headline);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.md-typeset h1.dream-hero__title .headerlink {
+  display: none;
+}
+
+.md-typeset .dream-hero__tagline {
+  margin: 0 0 1.4rem;
+  max-width: 32rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .dream-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.md-typeset .dream-hero__actions p {
+  display: contents;
+}
+
+.md-typeset .dream-hero__actions .md-button {
+  margin: 0;
+}
+
+.md-typeset .dream-hero__code {
+  position: relative;
+}
+
+.md-typeset .dream-hero__code::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--dream-radius) + 1px);
+  background: var(--dream-gradient);
+  opacity: 0.55;
+  filter: blur(18px);
+  z-index: -1;
+}
+
+[data-md-color-scheme="default"] .md-typeset .dream-hero__code::before {
+  opacity: 0.22;
+}
+
+.md-typeset .dream-hero__code .highlight {
+  margin: 0;
+  border-radius: var(--dream-radius);
+  box-shadow: var(--dream-shadow);
+}
+
+.md-typeset .dream-hero__code pre {
+  margin: 0;
+}
+
+.md-typeset .dream-hero__code pre > code {
+  padding: 1.1rem 1.2rem;
+  border-radius: var(--dream-radius);
+  font-size: 0.74rem;
+  line-height: 1.7;
+}
+
+.md-typeset h2.dream-home__heading {
+  margin: 2.2rem 0 0.2rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--lighter);
+}
+
+.md-typeset h2.dream-home__heading .headerlink {
+  display: none;
+}
+
+.md-typeset .dream-home .dream-cards {
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.9rem;
+}
+
+.md-typeset .dream-home .dream-card {
+  padding: 1.15rem 1.2rem 1.05rem;
+}
+
+.md-typeset .dream-home a.dream-card__title {
+  font-size: 0.95rem;
+}
+
+.md-typeset .dream-why {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0 3rem;
+}
+
+@media screen and (max-width: 60em) {
+  .md-typeset .dream-why {
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+}
+
+.md-typeset .dream-why > div {
+  padding: 1rem 1.1rem;
+  border-left: 2px solid transparent;
+  border-image: var(--dream-gradient) 1;
+}
+
+.md-typeset .dream-why h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.84rem;
+}
+
+.md-typeset .dream-why h3 .headerlink {
+  display: none;
+}
+
+.md-typeset .dream-why p {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+}
+
+@media screen and (max-width: 60em) {
+  .md-typeset .dream-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.8rem;
+    padding-top: 2rem;
+  }
+
+  .md-typeset h1.dream-hero__title {
+    font-size: 1.75rem;
+  }
+}

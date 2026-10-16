@@ -1,0 +1,7 @@
+title: Core
+nav:
+  - index.md
+  - builtins.md
+  - option-result.md
+  - sync.md
+  - errors.md

@@ -1,0 +1,9 @@
+title: Types
+nav:
+  - index.md
+  - primitives.md
+  - arrays.md
+  - spans.md
+  - enums-unions.md
+  - classes-structs.md
+  - objects.md

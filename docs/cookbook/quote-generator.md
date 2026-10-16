@@ -1,3 +1,9 @@
+---
+title: Quote generator
+summary: "A source generator that turns `quote { … }` into a string."
+icon: material/format-quote-open
+---
+
 # Source generator: `quote { … }`
 
 Make a small source generator that turns custom quote notation into a string while your program is built. Follow its registration steps before running the app.
@@ -57,4 +63,4 @@ dream run sample/generators/quote/app.dream
 - `@syntax_block` — Dream finds every `quote { … }` block; the introducer is the function name.
 - `ctx.replace` — swap that site for ordinary Dream source **before** the rest of the file is checked.
 
-Bigger samples: [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). Reference: [Source generators](../reference/language/generators.md), [CodeBuilder](../reference/stdlib/codegen.md).
+Bigger samples: [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). Reference: [Source generators](../language/metaprogramming/generators.md), [CodeBuilder](../library/codegen/codebuilder.md).

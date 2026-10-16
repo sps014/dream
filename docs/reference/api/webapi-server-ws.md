@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../../web-apis/index.md).
+For behavior and native target requirements, see [Native Web APIs](../../web-server/index.md).
 
 ## `ServerWebSocket`
 

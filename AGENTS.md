@@ -192,7 +192,7 @@ cargo test -p dream-sema
 cargo test -p dream-lsp
 ```
 
-JS interop details (full vs selective runtime): `docs/reference/language/interop.md`.
+JS interop details (full vs selective runtime): `docs/language/interop/index.md`.
 ### VS Code extension
 ```bash
 cd tooling/vscode

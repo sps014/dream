@@ -4,7 +4,7 @@ No import is needed.
 
 A non-owning address for unmanaged values. Copies never retain storage. Allocation is uninitialized unless alloc_zeroed is requested. Initialize values before reading. Raw operations require @unsafe and do not check bounds. Only base pointers returned by RawPtr allocation methods may be freed or resized. Foreign allocations require their original deallocator. Reallocation returns a new handle and invalidates every old alias. Null and zero-byte allocations carry address zero; freeing null is a no-op.
 
-[Raw memory guide](../language/arrays.md#rawptrt-raw-memory-unsafe).
+[Raw memory guide](../../language/types/arrays.md#rawptrt-raw-memory-unsafe).
 
 ## `RawPtr`
 

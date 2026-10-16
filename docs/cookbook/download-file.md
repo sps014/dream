@@ -1,3 +1,9 @@
+---
+title: Download a file
+summary: Stream an HTTP download to disk with a timeout.
+icon: material/download-outline
+---
+
 # Download a file from the command line
 
 This program accepts a URL, an output path, and a timeout. It rejects unsuccessful

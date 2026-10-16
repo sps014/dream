@@ -1,0 +1,12 @@
+<div class="md-copyright">
+  <nav class="dream-footer-links" aria-label="Project links">
+    <a href="{{ 'internals/' | url }}">Contributor handbook</a>
+    <a href="{{ 'reference/api/' | url }}">API reference</a>
+    <a href="{{ config.repo_url }}" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+  {% if config.copyright %}
+    <div class="md-copyright__highlight">
+      {{ config.copyright }}
+    </div>
+  {% endif %}
+</div>

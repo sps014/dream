@@ -1,3 +1,9 @@
+---
+title: Troubleshooting
+summary: "Fix common installation, build, and project problems."
+icon: material/lifebuoy
+---
+
 # Fix common setup and project problems
 
 Start with the exact error message and the command that produced it. Make one change at a time, then run the same command again.
@@ -6,17 +12,17 @@ Start with the exact error message and the command that produced it. Make one ch
 
 Open a new terminal after installing. Run `dream --help` and `dreamer --help`. If neither works, check that the installer finished and that your command search path includes the Dream installation's `bin` folder.
 
-If the terminal works but your editor does not, restart the editor and follow [Editor setup](../reference/tooling/editor.md).
+If the terminal works but your editor does not, restart the editor and follow [Editor setup](../tooling/editor.md).
 
 ## A build tool is missing
 
-Run `dreamer toolchain doctor`. Install the missing component using [Toolchain setup](../reference/tooling/toolchain.md), then repeat the build. For another platform, pass its target triple to `doctor`.
+Run `dreamer toolchain doctor`. Install the missing component using [Toolchain setup](../tooling/toolchain.md), then repeat the build. For another platform, pass its target triple to `doctor`.
 
 ## An import cannot be found
 
 Check the spelling and package name. Import a built-in package such as `system.collections` directly. For an external package, run `dreamer install` from the folder containing `dream.toml`.
 
-External package names containing hyphens or dots use underscores in their import names. See [Dependencies](../reference/tooling/dependencies.md) and [Imports](../reference/language/imports.md).
+External package names containing hyphens or dots use underscores in their import names. See [Dependencies](../tooling/dependencies.md) and [Imports](../language/rules/imports.md).
 
 ## Dreamer asks you to choose a target
 
@@ -28,7 +34,7 @@ Read the returned `Err` value's `message()` and `code()`. Check the path or addr
 
 ## Indexing stops the program
 
-Array and list positions must be within their length. A map key must exist when you use `map[key]`. When absence is normal, use `get` and handle its `Option` result. See [Collections](../reference/stdlib/collections.md).
+Array and list positions must be within their length. A map key must exist when you use `map[key]`. When absence is normal, use `get` and handle its `Option` result. See [Collections](../library/collections/index.md).
 
 ## A browser page does not load the program
 

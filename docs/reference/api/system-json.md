@@ -1,6 +1,6 @@
 # system.json: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/json.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/serialization/json.md).
 
 - [Json](json-json.md)
 - [JsonCollectionSpec](json-derive-gen-collection.md)

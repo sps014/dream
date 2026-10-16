@@ -1,3 +1,9 @@
+---
+title: Quickstart
+summary: "Install Dream, create a project, and run your first program."
+icon: material/rocket-launch-outline
+---
+
 # Install Dream and run your first program
 
 Follow these steps to install Dream, create a project, and run a small program. You can use the terminal on Windows, macOS, or Linux.
@@ -72,10 +78,10 @@ Use `dream hello.dream` to build without running. For a project with dependencie
 
 ## Next steps
 
-Continue with the [language tour](tour.md) and [your first small project](first-project.md). Choose the browser or Node later using [Environments](environments.md). Set up completion and error messages with [Editor support](../reference/tooling/editor.md).
+Continue with the [language tour](tour.md) and [your first small project](first-project.md). Choose the browser or Node later using [Environments](environments.md). Set up completion and error messages with [Editor support](../tooling/editor.md).
 
 ## Installation options
 
 Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download, and `DREAM_SKIP_CC=1` skips the native linker download; use these only when you already have suitable tools.
 
-Linux release downloads require glibc 2.36 or later. Read [Toolchain setup](../reference/tooling/toolchain.md) to inspect or change your tools, and [the compiler command guide](../reference/tooling/compiler.md) for advanced output and target options.
+Linux release downloads require glibc 2.36 or later. Read [Toolchain setup](../tooling/toolchain.md) to inspect or change your tools, and [the compiler command guide](../tooling/compiler.md) for advanced output and target options.

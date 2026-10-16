@@ -1,7 +1,7 @@
 # system.net: API lookup
 
-For usage and target behavior, read the [URL guide](../stdlib/url.md) and
-[HTTP guide](../stdlib/http.md).
+For usage and target behavior, read the [URL guide](../../library/io/url.md) and
+[HTTP guide](../../library/io/http.md).
 
 - [Url and UrlQuery](net-url.md)
 - [HTTP request types, options, headers, and errors](net-http-types-1.md)

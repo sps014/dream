@@ -1,6 +1,6 @@
 # system.logging: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/logging.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/system/logging.md).
 
 - [ConsoleHandler](logging-console-handler.md)
 - [FileHandler](logging-file-handler.md)

@@ -1,8 +1,18 @@
+---
+title: Language tour
+summary: "Values, decisions, loops, functions, and collections in four short programs."
+icon: material/map-marker-path
+template: tour.html
+hide: [toc]
+---
+
 # Language tour
 
 Learn the basics through four short programs. Run each one before moving on, then change a value or add a statement. The examples introduce one idea at a time.
 
-## 1. Variables
+<div class="tour-step" markdown>
+
+## Variables
 
 A **variable** is a named box that holds a value. `let` can be changed later. `const` cannot.
 
@@ -26,9 +36,13 @@ fun main() { // (1)
 
 You can write the type yourself when you want: `let score: int = 10;`.
 
-See [Variables](../reference/language/variables.md).
+See [Variables](../language/basics/variables.md).
 
-## 2. Control flow
+</div>
+
+<div class="tour-step" markdown>
+
+## Control flow
 
 **Control flow** chooses which lines run, and how often.
 
@@ -60,9 +74,13 @@ fun main() {
 
 `for (let i = 0; i < 3; i = i + 1)` is another way to count. `for (let x in list)` walks a collection.
 
-See [Control flow](../reference/language/control-flow.md).
+See [Control flow](../language/basics/control-flow.md).
 
-## 3. Functions
+</div>
+
+<div class="tour-step" markdown>
+
+## Functions
 
 A **function** is a named recipe. You pass values in; it can `return` a value out.
 
@@ -85,9 +103,13 @@ fun main() {
 
 `fun main()` has no return type — it returns nothing.
 
-See [Functions](../reference/language/functions.md).
+See [Functions](../language/functions/declaring.md).
 
-## 4. Lists
+</div>
+
+<div class="tour-step" markdown>
+
+## Lists
 
 A **list** grows as you add items. Import `system.collections` for `List`.
 
@@ -111,7 +133,9 @@ fun main() {
 3. `push` adds at the end.
 4. `for..in` sets `n` to each element.
 
-See [Arrays](../reference/language/arrays.md) and [Collections](../reference/stdlib/collections.md).
+See [Arrays](../language/types/arrays.md) and [Collections](../library/collections/index.md).
+
+</div>
 
 ## What next?
 

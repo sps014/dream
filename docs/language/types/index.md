@@ -1,0 +1,160 @@
+---
+title: Types
+summary: "Primitives, arrays, tuples, options, classes, structs, enums, and casts."
+icon: material/shape-outline
+---
+
+# Types
+
+A type describes the values a variable can hold and the operations it supports. Dream checks these rules before your program runs. This page helps you choose a type and find its detailed guide.
+
+## Guides in this section
+
+<!-- cards -->
+
+## Primitives
+
+| Type | Description | Example literal |
+|------|-------------|-----------------|
+| `int` | 32-bit signed integer | `42`, `-7` |
+| `uint` | 32-bit unsigned integer | `42u`, `42U` |
+| `long` | 64-bit signed integer | `42L` |
+| `ulong` | 64-bit unsigned integer | `42uL`, `42UL`, `42Lu` |
+| `isize` | Target-pointer-width signed integer | `let n: isize = 42;`, `(isize)42` |
+| `usize` | Target-pointer-width unsigned integer | `let n: usize = 42;`, `(usize)42` |
+| `byte` | 8-bit unsigned integer (0–255) | `255b`, `255B` |
+| `float` | 32-bit floating point | `3.14f`, `1.0` |
+| `double` | 64-bit floating point | `3.14d`, or bare `3.14` / `0` when the expected type is `double` |
+| `bool` | `true` or `false` | `true` |
+| `char` | A single character (code point), stored in 32 bits | `'A'`, `'\n'` |
+| `string` | UTF-16 text, heap allocated | `"hello"`, `$"hi {name}"` |
+| `void` | No value — only valid as a return type | — |
+
+See [Primitives](primitives.md) for the methods each one carries.
+
+### Numeric literal suffixes
+
+A plain integer literal is `int`. A literal with a decimal point is `float`. A case-insensitive suffix picks another numeric type:
+
+| Suffix | Type | Example |
+|--------|------|---------|
+| `L` | `long` | `9000000000L` |
+| `u` / `U` | `uint` | `4000000000u` |
+| `uL` / `UL` / `Lu` | `ulong` | `18000000000uL` |
+| `b` / `B` | `byte` | `255b` |
+| `f` / `F` | `float` | `3.14f` |
+| `d` / `D` | `double` | `3.0d` |
+
+Integer literals also accept:
+
+- `0x` / `0X` hex
+- `0b` / `0B` binary (needs at least one `0` / `1` digit, so `0b` alone stays byte `0`)
+- `0o` / `0O` octal
+
+Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` suffix.
+
+Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`. So `let x: double = 3.14` works without a `d` suffix.
+
+`byte`, `uint`, `ulong`, and `usize` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int`, `long`, and `isize` are signed. `isize`/`usize` are 32 bits on wasm32 and 64 bits on 64-bit native targets; their width comes from the selected target, not the compiler host. For storage sizes, use [`sizeof`](../basics/type-queries.md#sizeof-nameof-and-typeof).
+
+### Implicit widening
+
+A narrower numeric value promotes to a wider type automatically. Narrowing — and switching signedness at the same width (`int`↔`uint`, `long`↔`ulong`) — always needs an explicit cast.
+
+Target-sized integers keep distinct type identities. Portable implicit conversions include `int` → `isize`, `uint` → `usize`, `isize` → `long`, and `usize` → `ulong`. Converting a fixed 64-bit integer to a target-sized integer requires a cast and wraps at the target width. Their `parse` methods reject values outside that width.
+
+```mermaid
+flowchart LR
+  byte --> int --> long --> float --> double
+  byte --> uint --> ulong
+  uint --> long
+  long --> double
+  ulong --> float
+  ulong --> double
+  uint --> float
+  uint --> double
+```
+
+```dream
+let a: long = 5; // int -> long
+let b: ulong = 7u; // uint -> ulong
+let d: double = 9000000000L; // long -> double
+let n: int = (int)d; // narrowing: cast required
+```
+
+## Arrays
+
+Append `[]` to any type. Arrays are fixed-size, zero-indexed reference types:
+
+```dream
+let nums: int[] = [10, 20, 30];
+let first = nums[0]; // 10
+nums[1] = 99;
+```
+
+For a growable sequence, use [`List<T>`](../../library/collections/index.md). See [Arrays](arrays.md) for the full story.
+
+## Tuples
+
+Positional product types `(T, U, …)` (arity ≥ 2) are always-inline value types — no heap allocation for the tuple itself:
+
+```dream
+let t: (int, string) = (1, "hi");
+System.println(t.0);
+t.1 = "bye";
+let (a, b) = t; // destructure
+let (x, (y, z)) = (1, (2, 3));
+```
+
+Nested tuples are allowed. There are no named tuple elements. Access is via `.0`, `.1`, … (not `t[i]`).
+
+There is no for-in over a tuple and no `t.length` — use destructuring or fixed projections.
+
+## Optional values
+
+Absence is expressed with [`Option<T>`](../../library/core/option-result.md), not a nullable `T?` suffix. There is no `null` literal — use `None` / `Option.None`, and prefer `??` / `.unwrap_or(...)` for fallbacks (see [Operators](../basics/operators.md)).
+
+```dream
+let node: Option<Node> = Option.None;
+node = Option.Some(Node(5, Option.None));
+```
+
+Calling a method or reading a field through a value that might be absent is a type error until you unwrap or match on it. `.unwrap_or` / `??` supply a fallback without panicking on `None`.
+
+## User-defined types
+
+- **Classes** — reference types with methods. See [Classes & Structs](classes-structs.md).
+- **Value structs** — value types stored inline, copied on assignment, otherwise like classes. See [Classes & Structs](classes-structs.md).
+- **Enums and unions** — named integer constants, or discriminated unions when variants carry payloads. See [Enums & Unions](enums-unions.md).
+- **The `object` type** — a universal container that holds any value at runtime. See [The object type](objects.md).
+
+## Type aliases
+
+`type` names an existing type. Aliases resolve at compile time (fully interchangeable with the underlying type) and must be declared before use:
+
+```dream
+type Number = int;
+
+type Names = string[];
+
+fun add(a: Number, b: Number): Number {
+    return a + b;
+}
+```
+
+## Type casting
+
+A cast converts between numeric types or between a value and `object`:
+
+```dream
+let n = 7;
+let f = (float)n; // int -> float
+let back = (int)f; // float -> int
+
+let o: object = n; // boxing
+let unboxed = (int)o; // unboxing — traps if the runtime type is wrong
+```
+
+Supported: any numeric type ↔ any numeric type, `char ↔ int`, `char ↔ byte`, and any type ↔ `object`. Widening is implicit; narrowing and same-width sign changes need a cast. Casting into `byte` keeps only the low 8 bits.
+
+The cast target may be a generic type, including nested arguments — `(Container<int>)b` or `(Pair<Box<int>, int>)b`. This is how you upcast to a generic interface (see [Interfaces](../abstraction/interfaces.md#generic-interfaces)).

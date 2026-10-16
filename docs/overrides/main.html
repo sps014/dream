@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {{ super() }}
+  {% if dream_related %}
+    <aside class="dream-related" aria-label="Related guides">
+      <h2 class="dream-related__title">Related</h2>
+      <div class="dream-cards dream-cards--compact">
+        {% for entry in dream_related %}
+          <div class="dream-card dream-card--page">
+            <a class="dream-card__title" href="{{ entry.url }}">{{ entry.title }}</a>
+            {% if entry.summary %}
+              <p class="dream-card__summary">{{ entry.summary }}</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </aside>
+  {% endif %}
+{% endblock %}

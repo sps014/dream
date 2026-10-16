@@ -2,7 +2,7 @@
 
 No import is needed.
 
-Read [Yield and lazy sequences](../language/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. Yield sequences support lazy production and explicit cursor cleanup.
+Read [Yield and lazy sequences](../../language/functions/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. Yield sequences support lazy production and explicit cursor cleanup.
 
 [All sections](core-iterable.md)
 

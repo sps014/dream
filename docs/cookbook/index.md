@@ -1,50 +1,14 @@
+---
+title: Cookbook
+summary: "Small, complete programs you can run and change."
+icon: material/chef-hat
+hide: [navigation, toc]
+---
+
 # Cookbook
 
 Choose a small working example, run it, and change one part to see what happens. Start with console programs and the core standard library.
 
-<div class="dream-compact-cards" markdown>
-
-<div class="grid cards" markdown>
-
--   :material-hand-wave: **Hello, World**
-
-    ---
-
-    Print a line.
-
-    [:octicons-arrow-right-24: Recipe](hello-world.md)
-
--   :material-account: **Greet by name**
-
-    ---
-
-    A function that builds a string.
-
-    [:octicons-arrow-right-24: Recipe](greet.md)
-
--   :material-sigma: **Sum a list**
-
-    ---
-
-    Push numbers, loop, add them up.
-
-    [:octicons-arrow-right-24: Recipe](sum-a-list.md)
-
-
-
--   :material-auto-fix: **Quote generator**
-
-    ---
-
-    `quote { … }` becomes a string at compile time.
-
-    [:octicons-arrow-right-24: Recipe](quote-generator.md)
-
-
-</div>
-
-</div>
+<!-- cards -->
 
 New to Dream? [Quickstart](../learn/quickstart.md) · [Language tour](../learn/tour.md).
-
-[Serve a native JSON API](webapi.md) with routing, JSON extraction and API documentation.

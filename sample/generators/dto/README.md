@@ -51,4 +51,4 @@ dto
 | `gen.dream` | `@attribute(AttributeTarget.Class) struct` + `@on_attribute` `@generator` emit logic |
 | `dream.toml` | `[[generators]] path = "gen.dream"` |
 
-See [Source generators](../../../docs/reference/language/generators.md).
+See [Source generators](../../../docs/language/metaprogramming/generators.md).

@@ -1,0 +1,9 @@
+title: Learn
+nav:
+  - index.md
+  - quickstart.md
+  - tour.md
+  - first-project.md
+  - environments.md
+  - next-steps.md
+  - troubleshooting.md

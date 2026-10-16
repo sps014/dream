@@ -1,0 +1,8 @@
+title: Text and data
+nav:
+  - index.md
+  - string.md
+  - formatting.md
+  - regex.md
+  - encoding.md
+  - simd.md

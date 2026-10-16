@@ -13,7 +13,7 @@ Historically a type was identified by the string `Type::get_type()` produces:
 | `Pair<int,string>` | `"Pair_int_string"` | ambiguous if a base name contains `_` |
 | `fun(int):bool` | `"fun(int):bool"` | parsed by string surgery |
 
-Equality was a `String` compare, monomorphization was string mangling, and reference-ness was `ends_with("[]") || known_struct(name)`. The structured system turns all of this into integer operations. (A former `T?` / `TyKind::Nullable` layer was purged in favor of `Option<T>` — see [09](./09-nullable-purge-design-note.md).)
+Equality was a `String` compare, monomorphization was string mangling, and reference-ness was `ends_with("[]") || known_struct(name)`. The structured system turns all of this into integer operations. (A former `T?` / `TyKind::Nullable` layer was purged in favor of `Option<T>` — see [09](09-nullable-purge-design-note.md).)
 
 ## The pieces
 

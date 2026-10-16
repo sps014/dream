@@ -4,7 +4,7 @@ Decision record for ARC performance. **Sink-default ABI**, **cursor locals**, an
 **use-after-move** diagnostics are the active model (moves, copies, and cleanup are selected while compiling, above non-atomic reference counting).
 
 Sibling permanent non-goals remain in force:
-[`10-stack-alloc-and-mono-design-note.md`](./10-stack-alloc-and-mono-design-note.md) — no string
+[`10-stack-alloc-and-mono-design-note.md`](10-stack-alloc-and-mono-design-note.md) — no string
 SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged mono.
 
 ## Baseline
@@ -81,7 +81,7 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
 - Weak teardown header side-tables (the target-indexed registry plus the header tag bit suffice)
 
 Opt-in `defer { }` / `defer(q) { }` (native destroy queue, bounded drain) is shipped; see
-[`memory.md`](../reference/language/memory-cleanup.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
+[`memory.md`](../language/memory/cleanup.md#defer-wait-until-after-the-important-work-to-run-destructors). WASM last-ref
 stays immediate.
 
 ## Heap throughput (shipped levers)
@@ -100,7 +100,7 @@ levers (no SSO / `@stack` class / value collections):
 4. **Contiguous / SOA hot paths** — regex is PCRE2; keep other stdlib hot loops on dense arrays.
    thread queues, reused mark/caps buffers, and `Buffer.elems_copy` for capture clones.
 5. **Ownership discipline** — sink-default + `borrow` + field-store use-after-move (see
-   [`ownership.md`](../reference/language/ownership.md)).
+   [`ownership.md`](../language/memory/ownership.md)).
 6. **Inferred unique region** — a fresh, unobserved `x = f(); … Release x` graph whose callee
    only `New`s `del`-free classes is allocated from a TLS bump slab and rewound in O(1) (`dream_region_enter` /
    `leave`). Silent; not user `@stack`.

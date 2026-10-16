@@ -1,26 +1,33 @@
+<div align="center">
+
 # Dream
 
-Dream is a programming language for building command-line tools and programs that run in a browser. It checks your code before running it and manages memory for you.
+**Write expressive code. Ship native binaries and WebAssembly.**
 
-Start with a small program, then add the features you need. The included library gives you collections, files, JSON, dates, testing, and more.
+A statically typed, ahead-of-time compiled language with automatic memory management,
+specialized generics, and a standard library built for real applications.
 
-[Documentation](https://sps014.github.io/dream/) · [Quickstart](docs/learn/quickstart.md) · [Language tour](docs/learn/tour.md) · [Examples](docs/cookbook/index.md)
+**Optimized ARC** · **Typed web APIs** · **Seamless C, C++, and JavaScript interop** · **Native + WebAssembly**
 
-## Install and run
+[Get started](#get-started) · [Documentation](https://sps014.github.io/dream/) · [Language tour](docs/learn/tour.md) · [Examples](docs/cookbook/index.md)
 
-On Windows, open PowerShell:
+</div>
 
-```powershell
-irm https://sps014.github.io/dream/install.ps1 | iex
-```
+## Get started
 
-On macOS or Linux, open a terminal:
+On **macOS or Linux**:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sps014.github.io/dream/install.sh | sh
 ```
 
-Open a new terminal after installing, then create a project:
+On **Windows**, open PowerShell:
+
+```powershell
+irm https://sps014.github.io/dream/install.ps1 | iex
+```
+
+Open a new terminal, then create and run a project:
 
 ```sh
 dreamer init hello
@@ -28,105 +35,178 @@ cd hello
 dreamer run
 ```
 
-The project contains `dream.toml`, your project settings, and `src/main.dream`, your first program:
+Your program lives in `src/main.dream`; project settings live in `dream.toml`. The generated starter prints `Hello, world!`. Replace it with the JSON example below to try a little more of the language.
+
+Continue with the [quickstart](docs/learn/quickstart.md), [language tour](docs/learn/tour.md), or [first complete project](docs/learn/first-project.md).
+
+## A first taste
 
 ```dream
 import system;
+import system.json;
 
-fun main() {
-    System.println("Hello, world!");
-}
-```
+@json
+class Developer {
+    name: string;
+    languages: string[];
 
-Output:
-
-```text
-Hello, world!
-```
-
-`main` is where your program starts. `import system;` makes console helpers available. `System.println` writes a line of text.
-
-You can also save this program as `hello.dream` and run it with `dream run hello.dream`. See [Installation and your first run](docs/learn/quickstart.md) for setup details.
-
-## Write useful programs
-
-Variables hold values. Functions let you name a task and reuse it. Lists hold a changing number of items:
-
-```dream
-import system;
-import system.collections;
-
-fun total(borrow prices: List<int>): int {
-    let sum = 0;
-    for (let price in prices) {
-        sum = sum + price;
-    }
-    return sum;
-}
-
-fun main() {
-    let prices: List<int> = [12, 8, 5];
-    prices.push(10);
-    System.println(total(prices));
-}
-```
-
-This prints `35`. `let` creates a variable you can change; use `const` when it must keep its value. The `for` loop visits each price. The `borrow` parameter lets the function read the list without taking ownership of it.
-
-When an operation can fail, its result makes that explicit. You can handle both outcomes:
-
-```dream
-import system;
-
-fun main() {
-    switch (int.parse("42")) {
-        Ok(value) => System.println(value),
-        Err(error) => System.println(error.message()),
+    public constructor(name: string, languages: string[]) {
+        this.name = name;
+        this.languages = languages;
     }
 }
+
+fun main() {
+    let dev = Developer("Ada", ["Dream", "TypeScript"]);
+    System.println(Json.serialize(dev));
+}
 ```
 
-This prints `42`. [Option and Result](docs/reference/stdlib/option-result.md) explains missing values and failures.
+```json
+{"name":"Ada","languages":["Dream","TypeScript"]}
+```
 
-## What can you build?
+Typed data, automatic cleanup, and JSON serialization generated at build time. Paste it into `src/main.dream` and run `dreamer run`.
 
-| Task | Start here |
-| --- | --- |
-| Learn the basics | [Language tour](docs/learn/tour.md) |
-| Build a small complete project | [Shopping total](docs/learn/first-project.md) |
-| Store and search data | [Collections](docs/reference/stdlib/collections.md) |
-| Read and write files | [Files](docs/reference/stdlib/file.md) |
-| Work with structured data | [JSON](docs/reference/stdlib/json.md) |
-| Check your program | [Testing](docs/reference/tooling/testing.md) |
-| Find an exact API signature | [API catalog](docs/reference/api/index.md) |
+Dream is **pre-1.0 and actively evolving**. Expect breaking changes as the language develops.
 
-Native CLI, browser, and Node programs do not all have the same permissions or services. Each feature guide explains its availability. Start with [Choosing where your program runs](docs/learn/environments.md).
+## Why choose Dream?
 
-## Everyday commands
+Dream is for people who want familiar application code, ahead-of-time compilation, and control over where their program runs. If you know TypeScript, Rust, or C#, much of the syntax will feel familiar. The interesting part is how the pieces fit together.
 
-Run these from your project folder:
+### Compile to the machine. Bring the same language to the web.
 
-| Command | Purpose |
-| --- | --- |
-| `dreamer run` | Build and start your app |
-| `dreamer build --release` | Build an optimized version |
-| `dreamer test` | Run the test projects (`type = "test"` packages or `tests/`) |
-| `dreamer add <package>` | Install a reusable package |
-| `dreamer pack` | Prepare a CLI program for sharing |
-| `dreamer toolchain doctor` | Check required build tools |
+Build native executables for command-line tools and services, or compile to WebAssembly for the browser and Node. Share your core logic across targets, then use each environment's APIs where you need them. Code goes through LLVM's optimizer either way, and builds are deterministic: the same source produces byte-identical output. See [environments](docs/learn/environments.md).
 
-The [Dreamer overview](docs/reference/tooling/dreamer.md) links to focused guides. [Packaging](docs/reference/tooling/pack/index.md) explains sharing an app; [publishing](docs/reference/tooling/publishing.md) explains sharing its source.
+### Automatic memory that mostly compiles away.
 
-## Editor support and help
+Dream manages heap values with automatic reference counting (ARC). Objects are freed the moment their last owner lets go, with no garbage collector and no tracing pauses. Most of the counting is removed at compile time:
 
-Dream includes editor support for code completion, error messages, formatting, and navigation. Follow [Editor setup](docs/reference/tooling/editor.md). If a command or build fails, use [Troubleshooting](docs/learn/troubleshooting.md).
+- **Moves on last use.** Passing or storing a value for the last time hands it over instead of copying a reference. There is no `move` keyword to sprinkle through your code.
+- **Borrow inference.** Release builds work out which parameters only read their arguments and pass those without touching the count. Write `borrow` when you want the contract spelled out.
+- **Retain/release elision.** Pairs that cancel out are removed across branches, loops, and inlined calls.
+- **Retain-free traversal.** Walking a linked structure (`node = node.next`) or reading fields in a loop does no counting when the compiler can prove the source stays alive.
+- **Cheap counts where it matters.** Counts are plain, non-atomic integers unless a type is declared `shared` for tasks. Interned strings never change their count, and objects that never escape a function can be split into local values with no heap allocation.
+- **Zero-cost generics.** Generic code is specialized for each concrete type, so there is no runtime type dispatch.
 
-Report a reproducible problem through [GitHub Issues](https://github.com/sps014/dream/issues). Include a small example, the command you ran, and the error text.
+Classes share identity; structs copy as values and live inline. Ordinary code cannot read freed memory, out-of-bounds indexing stops with a clear error instead of reading past the end, and classes that can form reference cycles must be marked `@allow_cycle`, which makes leaks visible. Read about [ownership](docs/language/memory/ownership.md), [memory management](docs/language/memory/index.md), and [reference cycles](docs/language/memory/cycles.md).
 
-## Contribute
+### Call C, C++, and JavaScript directly.
 
-To work on Dream itself, read the [contributor handbook](docs/internals/README.md). It covers setup, the source layout, and the checks required before submitting changes. The [documentation maintenance guide](docs/internals/documentation.md) explains checking API coverage and examples.
+Declare a foreign function with the right attribute and call it like any Dream function. The compiler generates the glue and converts values at the boundary.
+
+```dream
+import system.interop;
+
+// C: a system library on native, or C sources shipped in a package's native/ folder.
+@c("m", "cbrt")
+extern fun cube_root(x: double): double;
+
+// C++: map a class from an ordinary header, with no extern "C" wrapper.
+@cpp("kv.hpp", "kv::Store")
+public class Store {
+    extern constructor(path: string);
+    extern fun get(key: string): Option<string>; // std::optional becomes Option
+    extern fun compact(): Result<bool, string>; // a thrown exception becomes Err
+}
+
+// JavaScript: binds to the global `alert` in the browser or Node.
+extern fun alert(msg: string): void;
+```
+
+| Interop | Runs on | What you get |
+| --- | --- | --- |
+| [C](docs/language/interop/c.md) | Native, browser, Node | `@c` externs. Package C sources are built with the pinned clang for native and WebAssembly; desktop builds can also link system libraries. [Native callbacks](docs/language/interop/native-callbacks.md) let C call back into Dream. |
+| [C++](docs/language/interop/cpp.md) | Same as C | `@cpp` maps classes, methods, constructors, and templates. `std::optional`, exceptions, and `std::function` map to `Option`, `Result`, and Dream closures. |
+| [JavaScript](docs/language/interop/index.md) | Browser, Node | `extern fun` for known signatures, the dynamic [`js` type](docs/language/interop/js-type.md) for DOM nodes and other live values, [callbacks](docs/language/interop/callbacks.md) in both directions, and `extern async fun` for Promises. An optional tree-shaken runtime ships only the host code your program uses. |
+
+### Serve typed web APIs.
+
+`system.webapi` builds native HTTP services. Routes are typed static methods, and the router is generated at compile time, so a handler cannot receive an argument of the wrong type.
+
+```dream
+import system;
+import system.json;
+import system.webapi;
+
+@json
+class Greeting {
+    public message: string;
+
+    public constructor(message: string) {
+        this.message = message;
+    }
+}
+
+@router("")
+class Routes {
+    @get("/hello/{name}")
+    public static fun hello(@path name: string): Greeting {
+        return Greeting("Hello, " + name);
+    }
+}
+
+async fun main(): void {
+    let app = WebApp();
+    app.include_router(Routes.router()).unwrap();
+    app.run("127.0.0.1", 8000).await.unwrap();
+}
+```
+
+Run it with `dream run app.dream` and open `http://127.0.0.1:8000/hello/Dream`. Interactive Swagger documentation is served at `/docs`.
+
+The framework also includes [validated request models](docs/web-server/validation.md), [dependency injection](docs/web-server/dependencies.md), [middleware and CORS](docs/web-server/middleware.md), [password and token authentication](docs/web-server/authentication.md), [OAuth2/OIDC login](docs/web-server/oidc.md), [scopes](docs/web-server/authorization.md), [uploads](docs/web-server/uploads.md), [server-sent events](docs/web-server/streaming.md), [WebSockets](docs/web-server/websockets.md), and [TLS](docs/deploy/web-server.md). Servers run on native targets. Start with the [web server guide](docs/web-server/index.md).
+
+### Keep abstractions in your source, specialize them at build time.
+
+Write reusable collections and algorithms with generics. Dream specializes generic code for the concrete types you use, avoiding runtime type dispatch for those generic operations.
+
+Use classes and interfaces for object-oriented designs, structs for value data, and enums and discriminated unions to model alternatives. `Option` and `Result` make missing values and recoverable failures part of a function's type. Explore the [type system](docs/language/types/index.md) and [error handling](docs/library/core/option-result.md).
+
+### Wait concurrently. Compute in parallel. Own the lifetime of both.
+
+Use `async`/`await` for work that waits and worker tasks for CPU parallelism. Structured task scopes join their children on success, failure, cancellation, and early error return, so concurrent work has a clear lifetime.
+
+Start with [structured concurrency](docs/language/concurrency/structured.md), then use [tasks](docs/language/concurrency/tasks.md) and pools when you need parallel execution.
+
+### Extend the language using the language.
+
+**Dream source generators are ordinary Dream functions.** They can inspect declarations, generate methods, and turn custom syntax blocks into checked Dream code during a build.
+
+The `@json` in the opening example uses this same mechanism. Your own packages can ship derives and small domain-specific notations, too. See [source generators](docs/language/metaprogramming/generators.md) for a complete example.
+
+## Build something useful
+
+The standard library covers collections, files, JSON, HTTP, regex, dates, crypto, processes, logging, and testing. Dream also includes a web API framework with typed routes, validation, and generated OpenAPI documentation.
+
+- **CLI tools and automation:** work with [files](docs/library/io/file.md), [processes](docs/library/system/process.md), and [command-line arguments](docs/library/system/cli.md).
+- **HTTP services:** build your [first web API](docs/web-server/first-application.md), then add validation, authentication, and streaming.
+- **Browser and Node modules:** compile to WebAssembly and connect to [JavaScript APIs](docs/language/interop/js-type.md).
+- **Reusable libraries:** combine [collections](docs/library/collections/index.md), generics, and source generators, then [publish a package](docs/deploy/publishing.md).
+
+Each feature guide explains which environments it supports.
+
+## A toolchain for everyday work
+
+Dreamer handles projects, dependencies, builds, tests, and packaging:
+
+```sh
+dreamer run                # Build and run your app
+dreamer build --release    # Build an optimized version
+dreamer test               # Run your project's tests
+dreamer add <package>      # Add a dependency
+dreamer pack               # Package a CLI app for sharing
+dreamer toolchain doctor   # Check required build tools
+```
+
+Dream includes editor completion, diagnostics, formatting, and navigation. Follow [editor setup](docs/tooling/editor.md), browse the [Dreamer guide](docs/tooling/index.md), or use [troubleshooting](docs/learn/troubleshooting.md) if you get stuck.
+
+## Help shape Dream
+
+Found a bug or have a language idea? Open a [GitHub issue](https://github.com/sps014/dream/issues). For bugs, include a small program, the command you ran, and the error text.
+
+To work on the compiler, runtime, or tools, start with the [contributor handbook](docs/internals/README.md). For documentation changes, read the [maintenance guide](docs/internals/documentation.md).
 
 ## License
 
-Dream is licensed under the MIT license.
+[MIT](LICENSE)

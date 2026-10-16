@@ -1,6 +1,6 @@
 # system.core: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/builtins.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/core/builtins.md).
 
 - [Array](core-array-collection.md)
 - [ArrayIterator](core-array-iterator.md)

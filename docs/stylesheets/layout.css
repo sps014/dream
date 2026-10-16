@@ -1,0 +1,376 @@
+/* Page shell: header, scoped sidebar, reading column, table of contents, and footer. */
+
+.md-grid {
+  max-width: 76rem;
+}
+
+/* Glass: a fixed tinted backdrop sits behind every page, and surfaces above it are translucent
+   and blurred. Surfaces must stay translucent for the effect, so they use --dream-surface. */
+body {
+  background-color: var(--md-default-bg-color);
+  background-image: var(--dream-backdrop);
+  background-attachment: fixed;
+}
+
+.md-container,
+.md-main {
+  background: transparent;
+}
+
+.md-typeset .dream-card,
+.md-typeset .admonition.glance,
+.md-typeset .highlight,
+.md-typeset table:not([class]),
+.md-footer__link {
+  -webkit-backdrop-filter: var(--dream-blur);
+  backdrop-filter: var(--dream-blur);
+}
+
+/* Header: translucent surface instead of a solid brand bar, in both schemes. */
+.md-header {
+  background-color: color-mix(in srgb, var(--md-default-bg-color) 55%, transparent);
+  color: var(--md-default-fg-color);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid var(--dream-border);
+  box-shadow: none;
+}
+
+.md-header--shadow {
+  box-shadow: none;
+}
+
+.md-header__button.md-logo svg,
+.md-nav__button.md-logo svg {
+  fill: var(--md-primary-fg-color);
+}
+
+.md-header__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.md-header__source {
+  color: var(--md-default-fg-color--light);
+}
+
+@media screen and (min-width: 60em) {
+  .md-search__form {
+    background-color: var(--dream-surface-raised);
+    border: 1px solid var(--dream-border);
+    border-radius: 0.5rem;
+    transition: border-color 150ms var(--dream-ease), background-color 150ms var(--dream-ease);
+  }
+
+  .md-search__form:hover {
+    background-color: var(--dream-surface-raised);
+    border-color: var(--dream-border-strong);
+  }
+
+  .md-search__input {
+    color: var(--md-default-fg-color);
+  }
+
+  .md-search__input::placeholder,
+  .md-search__icon[for="__search"] {
+    color: var(--md-default-fg-color--lighter);
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__form {
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+}
+
+.md-search__output {
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* Reading column. Hub pages hide both sidebars and use the full grid width for cards. */
+.md-content__inner {
+  max-width: var(--dream-reading-width);
+  margin-left: 1.6rem;
+  padding-top: 0.4rem;
+}
+
+.md-main__inner:has(.md-sidebar--primary[hidden]) .md-content__inner {
+  max-width: none;
+  margin-left: 1.2rem;
+  margin-right: 1.2rem;
+}
+
+@media screen and (max-width: 76.24em) {
+  .md-content__inner {
+    margin-left: 1.2rem;
+  }
+}
+
+.md-typeset h1 {
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  color: var(--md-default-fg-color);
+  margin-bottom: 0.6em;
+}
+
+.md-typeset h2 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin-top: 2em;
+}
+
+.md-typeset h3 {
+  font-weight: 650;
+}
+
+/* Breadcrumbs */
+.md-path {
+  margin-left: 1.6rem;
+  font-size: 0.68rem;
+}
+
+.md-path__link {
+  color: var(--md-default-fg-color--lighter);
+}
+
+.md-path__link:hover {
+  color: var(--md-primary-fg-color);
+}
+
+/* Sidebar: only the current section is rendered (see overrides/partials/nav.html). */
+.md-sidebar--primary .md-nav__title {
+  background: transparent;
+  box-shadow: none;
+}
+
+.dream-nav-home {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0.6rem 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--dream-radius-sm);
+  font-size: 0.68rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.dream-nav-home svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  fill: currentColor;
+}
+
+.dream-nav-home:hover {
+  background-color: var(--dream-tint);
+  color: var(--md-primary-fg-color);
+}
+
+.dream-nav-section {
+  display: block;
+  margin: 0.2rem 0.6rem 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--dream-radius-sm);
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: var(--md-default-fg-color);
+}
+
+a.dream-nav-section:hover {
+  color: var(--md-primary-fg-color);
+}
+
+.dream-nav-section--active {
+  background-color: var(--dream-tint);
+  color: var(--md-primary-fg-color);
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary > .md-nav__title {
+    display: none;
+  }
+
+  .md-sidebar--primary .md-nav__container > .md-nav__link {
+    padding: 0;
+  }
+
+  .md-sidebar--primary .md-nav__item {
+    padding: 0 0.6rem;
+  }
+
+  .md-sidebar--primary .md-nav__link {
+    margin-top: 0.1rem;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--dream-radius-sm);
+    transition: background-color 120ms var(--dream-ease), color 120ms var(--dream-ease);
+  }
+
+  .md-sidebar--primary .md-nav__link:hover,
+  .md-sidebar--primary .md-nav__container:hover {
+    background-color: var(--md-default-fg-color--lightest);
+  }
+
+  .md-sidebar--primary .md-nav__container > .md-nav__link {
+    margin-top: 0;
+  }
+
+  .md-sidebar--primary .md-nav__container > .md-nav__link:hover {
+    background-color: transparent;
+  }
+
+  .md-sidebar--primary .md-nav__link--active,
+  .md-sidebar--primary .md-nav__link--active:hover {
+    background-color: var(--dream-tint);
+    color: var(--md-primary-fg-color);
+    font-weight: 600;
+  }
+
+  .md-sidebar--primary .md-nav__container .md-nav__link--active {
+    background-color: transparent;
+  }
+
+  .md-sidebar--primary .md-nav__container:has(> .md-nav__link--active) {
+    background-color: var(--dream-tint);
+  }
+
+  .md-sidebar--primary .md-nav[data-md-level="1"] {
+    margin-left: 0.85rem;
+    padding-left: 0.4rem;
+    border-left: 1px solid var(--dream-border);
+  }
+}
+
+.md-sidebar--primary .md-nav__link > svg,
+.md-sidebar--primary .md-nav__link > a > svg {
+  flex-shrink: 0;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-right: 0.5rem;
+  fill: currentColor;
+  opacity: 0.75;
+}
+
+.md-sidebar--primary .md-nav[data-md-level] .md-nav__link > svg {
+  display: none;
+}
+
+.md-nav__link {
+  align-items: center;
+}
+
+/* Feature status markers in the sidebar. Stable is the default and stays unmarked. */
+.md-status--stable {
+  display: none;
+}
+
+.md-status--experimental::after,
+.md-status--planned::after {
+  -webkit-mask-image: none;
+  mask-image: none;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.md-status--experimental::after {
+  background-color: var(--dream-amber);
+}
+
+.md-status--planned::after {
+  background-color: var(--md-default-fg-color--lighter);
+}
+
+/* Table of contents */
+.md-nav--secondary .md-nav__title {
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--lighter);
+}
+
+@media screen and (min-width: 60em) {
+  .md-nav--secondary .md-nav__list {
+    border-left: 1px solid var(--dream-border);
+  }
+
+  .md-nav--secondary .md-nav__link {
+    margin-left: -1px;
+    padding-left: 0.6rem;
+    border-left: 2px solid transparent;
+  }
+
+  .md-nav--secondary .md-nav__link--active {
+    border-left-color: var(--md-primary-fg-color);
+    color: var(--md-primary-fg-color);
+  }
+}
+
+/* Footer: previous/next become cards; project links replace the generator credit. */
+.md-footer {
+  background-color: transparent;
+  color: var(--md-default-fg-color);
+  border-top: 1px solid var(--dream-border);
+}
+
+.md-footer__inner {
+  gap: 0.8rem;
+  padding: 1rem 0.8rem;
+}
+
+.md-footer__link {
+  flex: 1 1 0;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--dream-border);
+  border-radius: var(--dream-radius);
+  background-color: var(--dream-surface);
+  opacity: 1;
+  transition: border-color 150ms var(--dream-ease), transform 150ms var(--dream-ease);
+}
+
+.md-footer__link:hover {
+  border-color: var(--md-primary-fg-color);
+  transform: translateY(-1px);
+}
+
+.md-footer__link--next {
+  justify-content: flex-end;
+}
+
+.md-footer__title {
+  color: var(--md-default-fg-color);
+}
+
+.md-footer__direction {
+  color: var(--md-default-fg-color--lighter);
+}
+
+.md-footer-meta {
+  background-color: var(--md-footer-bg-color--dark);
+  border-top: 1px solid var(--dream-border);
+}
+
+.md-footer-meta,
+.md-copyright {
+  color: var(--md-default-fg-color--lighter);
+}
+
+.dream-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  padding: 0.2rem 0;
+}
+
+.dream-footer-links a {
+  color: var(--md-default-fg-color--light);
+}
+
+.dream-footer-links a:hover {
+  color: var(--md-primary-fg-color);
+}
+
+.md-social__link svg {
+  fill: var(--md-default-fg-color--light);
+}

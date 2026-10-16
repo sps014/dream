@@ -1,6 +1,6 @@
 # system.primitives: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../language/primitives.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../language/types/primitives.md).
 
 - [Bool](primitives-bool.md)
 - [Byte](primitives-byte.md)

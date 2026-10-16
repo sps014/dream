@@ -1,0 +1,51 @@
+{#- The sidebar shows only the top-level section that contains the current page. Other sections
+    are reached from the home page cards or the "All docs" link, so the tree stays short. -#}
+{% import "partials/nav-item.html" as item with context %}
+{% set ns = namespace(section=none, index=none) %}
+{% for nav_item in nav.items %}
+  {% if nav_item.active and nav_item.children %}
+    {% set ns.section = nav_item %}
+  {% endif %}
+{% endfor %}
+{% if ns.section %}
+  {% for child in ns.section.children %}
+    {% if child.is_index and ns.index is none %}
+      {% set ns.index = child %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% set items = ns.section.children | reject("equalto", ns.index) | list if ns.section else nav.items %}
+{% set class = "md-nav md-nav--primary" %}
+{% if "toc.integrate" in features %}
+  {% set class = class ~ " md-nav--integrated" %}
+{% endif %}
+<nav class="{{ class }}" aria-label="{{ lang.t('nav') }}" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}" title="{{ config.site_name | e }}" class="md-nav__button md-logo" aria-label="{{ config.site_name }}" data-md-component="logo">
+      {% include "partials/logo.html" %}
+    </a>
+    {{ ns.section.title if ns.section else config.site_name }}
+  </label>
+  {% if config.repo_url %}
+    <div class="md-nav__source">
+      {% include "partials/source.html" %}
+    </div>
+  {% endif %}
+  {% if ns.section %}
+    <a class="dream-nav-home" href="{{ nav.homepage.url | url }}">
+      {% include ".icons/material/view-grid-outline.svg" %}
+      <span>All docs</span>
+    </a>
+    {% if ns.index %}
+      <a class="dream-nav-section {{ 'dream-nav-section--active' if ns.index == page }}" href="{{ ns.index.url | url }}">{{ ns.section.title }}</a>
+    {% else %}
+      <div class="dream-nav-section">{{ ns.section.title }}</div>
+    {% endif %}
+  {% endif %}
+  <ul class="md-nav__list" data-md-scrollfix>
+    {% for nav_item in items %}
+      {% set path = "__nav_" ~ loop.index %}
+      {{ item.render(nav_item, path, 1) }}
+    {% endfor %}
+  </ul>
+</nav>

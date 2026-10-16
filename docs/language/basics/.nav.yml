@@ -1,0 +1,8 @@
+title: Basics
+nav:
+  - index.md
+  - variables.md
+  - operators.md
+  - control-flow.md
+  - type-queries.md
+  - comments.md

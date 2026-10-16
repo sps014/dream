@@ -1,6 +1,6 @@
 # Command
 
-Import `system.cli`. See the [CLI guide](../stdlib/cli.md) for examples.
+Import `system.cli`. See the [CLI guide](../../library/system/cli.md) for examples.
 
 ## `Command`
 

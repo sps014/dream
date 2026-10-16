@@ -2,7 +2,7 @@
 
 No import is needed.
 
-Read the [span guide](../language/spans.md) for usage and backing-storage semantics.
+Read the [span guide](../../language/types/spans.md) for usage and backing-storage semantics.
 
 ## `char_at`
 

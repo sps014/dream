@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
+See the [Web APIs guide](../../web-server/index.md) for runnable examples, lifecycle, and error behavior.
 
 ## `OidcTransport`
 

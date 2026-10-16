@@ -1,0 +1,14 @@
+title: Tooling
+nav:
+  - index.md
+  - create-project.md
+  - project-settings.md
+  - dependencies.md
+  - build-run.md
+  - compiler.md
+  - testing.md
+  - workspaces.md
+  - toolchain.md
+  - editor.md
+  - formatting.md
+  - commands.md

@@ -1,6 +1,6 @@
 # system.crypto: API lookup
 
-Choose the type or helper you need. For an introduction, read the [usage guide](../stdlib/crypto.md).
+Choose the type or helper you need. For an introduction, read the [usage guide](../../library/security/crypto.md).
 
 - [AesGcm](crypto-aes-gcm.md)
 - [AesGcmKey](crypto-aes-gcm-key.md)

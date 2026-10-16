@@ -55,7 +55,7 @@ Type-check it:
 
 ### 5. Type system — `crates/dream-types/src/`
 
-Nothing: `repeat` introduces no new type. (If your feature *did* — e.g. a tuple type — you would add a `TyKind` variant and a `lower` arm; see [02-type-system.md](./02-type-system.md).)
+Nothing: `repeat` introduces no new type. (If your feature *did* — e.g. a tuple type — you would add a `TyKind` variant and a `lower` arm; see [02-type-system.md](02-type-system.md).)
 
 ### 6. HIR — `crates/dream-hir/src/mod.rs`
 
@@ -103,6 +103,6 @@ Most "new syntax" is sugar. Reserve new IR nodes for new *semantics*. When you m
 ## Special cases worth knowing
 
 - **New binary/unary operator:** add to `hir::BinOp`/`UnOp` (`crates/dream-hir/src/ops.rs`), map the token in the analyzer, fold it in `ConstFold`, and emit it in `binop_instr` — those four spots.
-- **New type:** the dedicated checklist is in [02-type-system.md](./02-type-system.md#how-to-add-a-new-type-to-the-language).
-- **New heap-allocated value:** add the `Rvalue` (e.g. a `New`-like), wire its layout/alloc through the runtime layer in the backend (see [06](./06-llvm-backend.md)), and update `RcInsertion` so it is retained/released.
+- **New type:** the dedicated checklist is in [02-type-system.md](02-type-system.md#how-to-add-a-new-type-to-the-language).
+- **New heap-allocated value:** add the `Rvalue` (e.g. a `New`-like), wire its layout/alloc through the runtime layer in the backend (see [06](06-llvm-backend.md)), and update `RcInsertion` so it is retained/released.
 - **New control-flow construct that is *not* sugar:** add `HStmt` + a `lower` arm; ensure `Terminator::successors()` still describes all edges so passes and the backend stay correct.

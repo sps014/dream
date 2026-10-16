@@ -1,0 +1,99 @@
+---
+title: The object type
+summary: Hold a value of any type and check it before use.
+icon: material/package-variant
+status: stable
+targets: [native, web, node]
+---
+
+# The `object` Type
+
+Use `object` when a value may have different types, such as a number, text, or a class instance. Check the value's type before using operations that need a particular type.
+
+!!! glance "At a glance"
+
+    ```dream
+    let o: object = 42;
+    let n = (int)o;
+    ```
+
+    - `object` holds a value of any type.
+    - Cast back to the original type before using it; a wrong cast stops the program.
+
+## Storing and reading a value
+
+Assigning to an `object` variable automatically **boxes** the value. To read it back, cast with the concrete type; a mismatch [panics](../rules/panics.md) at runtime (the program prints a message and halts) rather than silently reinterpreting the wrong bytes:
+
+```dream
+let o: object = 42; // boxing an int
+let s: object = "hello"; // boxing a string
+
+let n = (int)o; // 42, if o holds an int
+```
+
+## The `is` operator
+
+Check the runtime type before casting:
+
+```dream
+fun describe(o: object): void {
+    if o is int {
+        System.print("int: ");
+        System.println((int)o);
+    } else if (o is string) {
+        System.print("string: ");
+        System.println((string)o);
+    } else {
+        System.println("something else");
+    }
+}
+```
+
+On a non-`object` variable, `is` is resolved at compile time — a matching branch is always taken, a non-matching one is eliminated as dead code. `is` also works on [interface](../abstraction/interfaces.md)-typed values, checking the concrete class at runtime.
+
+### `is` with binding
+
+`is` can narrow *and* bind in one step — `expr is Type name` introduces `name: Type` inside the branch, so no separate cast is needed:
+
+```dream
+fun describe(o: object): void {
+    if o is int n {
+        System.println(n + 1); // `n` is an int, unboxed from `o`
+    } else if (o is string s) {
+        System.println(s); // `s` is a string
+    }
+}
+```
+
+The bound name is visible only inside the taken branch, and works for any target type — primitives are unboxed, reference/interface types are aliased. See [Interfaces](../abstraction/interfaces.md#is-with-binding).
+
+## `to_string` and `hash_code`
+
+Every value responds to `to_string()` (returns `string`) and `hash_code()` (returns `int`), including values stored in an `object`:
+
+```dream
+let s = (42).to_string(); // "42"
+let h = "hello".hash_code(); // some stable integer
+```
+
+### Overriding them on a class
+
+A class customizes `to_string` and `hash_code` by declaring them `public override`:
+
+```dream
+class Color {
+    r: int;
+    g: int;
+    b: int;
+
+    public override fun to_string(): string {
+        return "rgb(" + this.r + ", " + this.g + ", " + this.b + ")";
+    }
+
+    public override fun hash_code(): int {
+        return this.r * 65536 + this.g * 256 + this.b;
+    }
+}
+```
+
+Requirements: both `public` and the `override` keyword are required; `to_string` returns `string` and `hash_code` returns `int`, and both take no parameters. Once overridden, `print` / `to_string` on a `Color` — even one stored in an `object` — uses your implementation.

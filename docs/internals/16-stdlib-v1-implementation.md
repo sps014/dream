@@ -29,8 +29,8 @@ positions; wrapper seeking invalidates buffers only after success.
 replacement policies, and validates finalization. URI-component and form codecs
 have separate `+` handling and validate decoded UTF-8.
 
-Usage and public declarations are documented in the [stream guide](../reference/stdlib/file-streams.md),
-[encoding guide](../reference/stdlib/encoding.md), and API lookup pages. Shared
+Usage and public declarations are documented in the [stream guide](../library/io/streams.md),
+[encoding guide](../library/text/encoding.md), and API lookup pages. Shared
 Dream suites exercise these foundations independently on native and Node. Direct
 JS adapter tests exercise Node files and the in-memory filesystem. These do not
 replace browser automation or qualification on Windows and Linux.

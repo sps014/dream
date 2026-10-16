@@ -27,6 +27,6 @@ dreamer toolchain install llvm
 dreamer toolchain install cc
 ```
 
-Every build needs the pinned LLVM tools. Native output also needs a suitable linker. WebAssembly output needs its target headers and libraries. See [Toolchain setup](../../../../docs/reference/tooling/toolchain.md).
+Every build needs the pinned LLVM tools. Native output also needs a suitable linker. WebAssembly output needs its target headers and libraries. See [Toolchain setup](../../../../docs/tooling/toolchain.md).
 
 Read [the core runtime guide](c/README.md) for the embedding table and freestanding checks.

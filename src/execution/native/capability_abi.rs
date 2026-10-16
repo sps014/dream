@@ -32,9 +32,9 @@ pub(crate) fn validate(
             ));
         }
         let marker = format!(
-            "{}dream_host_{}_abi_v2",
+            "{}{}",
             if spec.is_apple() { "_" } else { "" },
-            capability.name()
+            capability.abi_marker()
         );
         let exports = file.exports().map_err(|e| e.to_string())?;
         if !exports

@@ -1,0 +1,28 @@
+import system;
+import system.net;
+import system.testing;
+
+@test
+@timeout(15000)
+async fun websocket_client(): void {
+    let socket = WebSocket.connect("__URL__", 5000).await.unwrap();
+    socket.send_text("hello π").await.unwrap();
+    switch (socket.receive().await.unwrap()) { Text(text) => { Assert.eq_str(text, "hello π"); }, _ => { Assert.is_true(false); } }
+    socket.send_binary([(byte)0, (byte)127, (byte)255]).await.unwrap();
+    switch (socket.receive().await.unwrap()) { Binary(bytes) => { Assert.eq(bytes.length, 3); Assert.eq((int)bytes[2], 255); }, _ => { Assert.is_true(false); } }
+    socket.close_with(1000, "done").await.unwrap();
+    let closed = false;
+    await for (let message in socket.messages()) {
+        switch (message) { Close(code, reason) => { Assert.eq(code, 1000); Assert.eq_str(reason, "done"); closed = true; }, _ => { Assert.is_true(false); } }
+    }
+    if !closed { Assert.fail("messages must include the Close message"); }
+    let cancelled = CancellationSource();
+    let second = WebSocket.connect("__URL__", 5000).await.unwrap();
+    let pending = second.receive(Option.Some(cancelled.token)); Promise.start(pending);
+    Time.sleep(1).await;
+    cancelled.cancel();
+    Assert.eq_str(pending.await.unwrap_err().code(), "ECANCELLED");
+    let after_cancel = second.send_text("closed").await;
+    if after_cancel.is_ok() { Assert.fail("cancellation must close the socket"); }
+    Assert.eq_str(WebSocket.connect("http://invalid", 10).await.unwrap_err().code(), "EINVAL");
+}

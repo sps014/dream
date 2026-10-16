@@ -1411,8 +1411,95 @@ function makeHttpHost() {
   };
 }
 
+// ----- hosts/websocket.js -----
+function makeWebSocketService() {
+  const sockets = new Map();
+  const encoder = new TextEncoder();
+  let next = 0;
+  const fail = (code, message) => Object.assign(new Error(message), {code});
+  const encode = value => encoder.encode(JSON.stringify(value));
+  function close(id) {
+    const state = sockets.get(id);
+    if (!state) return;
+    sockets.delete(id);
+    state.closed = true;
+    state.socket.close();
+    state.wake?.();
+  }
+  function check(signal) { if (signal.aborted) throw signal.reason || fail("ECANCELLED", "WebSocket operation cancelled"); }
+  async function execute(request, bytes, signal) {
+    if (signal.aborted) close(request.id);
+    check(signal);
+    if (request.action === "connect") {
+      if (typeof globalThis.WebSocket !== "function") throw fail("EUNSUPPORTED", "WebSocket requires a browser or Node 22+");
+      let url;
+      try { url = new URL(request.url); } catch (_) { throw fail("EINVAL", "invalid WebSocket URL"); }
+      if (!["ws:", "wss:"].includes(url.protocol)) throw fail("EINVAL", "expected ws:// or wss:// URL");
+      if (sockets.size >= 1024 || next === 2147483647) throw fail("ELIMIT", "WebSocket capacity exhausted");
+      const socket = new WebSocket(url.href);
+      socket.binaryType = "arraybuffer";
+      const state = {id:++next, socket, queue:[], closed:false, reading:false, error:null, wake:null};
+      sockets.set(state.id, state);
+      socket.addEventListener("message", event => {
+        if (state.queue.length >= 1024) { state.error = fail("ELIMIT", "WebSocket message queue exceeded"); close(state.id); return; }
+        state.queue.push(typeof event.data === "string" ? {kind:"text",text:event.data} : {kind:"binary",bytes:Array.from(new Uint8Array(event.data))});
+        state.wake?.();
+      });
+      socket.addEventListener("close", event => { state.closed = true; state.queue.push({kind:"close",code:event.code,reason:event.reason}); state.wake?.(); });
+      socket.addEventListener("error", () => { state.error = fail("EIO", "WebSocket transport error"); state.wake?.(); });
+      const abort = () => close(state.id);
+      signal.addEventListener("abort", abort, {once:true});
+      try {
+        await new Promise((resolve, reject) => {
+          const cleanup = () => { socket.removeEventListener("open", opened); socket.removeEventListener("error", errored); socket.removeEventListener("close", errored); signal.removeEventListener("abort", aborted); };
+          const opened = () => { cleanup(); resolve(); };
+          const errored = () => { cleanup(); reject(state.error || fail("EIO", "WebSocket handshake failed")); };
+          const aborted = () => { cleanup(); reject(signal.reason || fail("ECANCELLED", "WebSocket connection cancelled")); };
+          socket.addEventListener("open", opened, {once:true}); socket.addEventListener("error", errored, {once:true}); socket.addEventListener("close", errored, {once:true}); signal.addEventListener("abort", aborted, {once:true});
+          if (signal.aborted) aborted();
+        });
+        check(signal);
+        return {bytes:encode({id:state.id}),owned:state.id};
+      } catch (error) { close(state.id); throw error; }
+      finally { signal.removeEventListener("abort", abort); }
+    }
+    const state = sockets.get(request.id);
+    if (!state) throw fail("ECLOSED", "WebSocket is closed");
+    const abort = () => close(state.id);
+    signal.addEventListener("abort", abort, {once:true});
+    try {
+      if (request.action === "receive") {
+        if (state.reading) throw fail("EBUSY", "WebSocket receive already pending");
+        state.reading = true;
+        try {
+          while (!state.queue.length) {
+            check(signal);
+            if (state.error) throw state.error;
+            if (state.closed) return {bytes:encode({kind:"close",code:1006,reason:""})};
+            await new Promise(resolve => { state.wake = resolve; if (signal.aborted || state.closed || state.error || state.queue.length) resolve(); });
+          }
+          check(signal);
+          return {bytes:encode(state.queue.shift())};
+        } finally { state.reading = false; state.wake = null; }
+      }
+      check(signal);
+      if (state.closed || state.socket.readyState !== WebSocket.OPEN) throw fail("ECLOSED", "WebSocket is closed");
+      if (request.action === "send_text") state.socket.send(new TextDecoder("utf-8", {fatal:true}).decode(bytes));
+      else if (request.action === "send_binary") state.socket.send(bytes);
+      else if (request.action === "close") {
+        const code = request.code, reason = request.reason;
+        if (!Number.isInteger(code) || (code !== 1000 && (code < 3000 || code > 4999)) || typeof reason !== "string" || encoder.encode(reason).length > 123) throw fail("EINVAL", "invalid WebSocket close frame");
+        state.socket.close(code, reason);
+      } else throw fail("EINVAL", "unknown WebSocket action");
+      return {bytes:[]};
+    } finally { signal.removeEventListener("abort", abort); }
+  }
+  return {execute, close};
+}
+
 // ----- hosts/sockets.js -----
 function makeSocketHost() {
+  const websocket = makeWebSocketService();
   const resources = new Map();
   const operations = new Map();
   let nextResource = 0, nextOperation = 0;
@@ -1564,12 +1651,11 @@ function makeSocketHost() {
     }
     throw fail("EINVAL","operation does not match socket kind");
   }
-  return {
-    netSocketStart: (text, input) => {
+  function start(text, input, run = execute, dispose = close) {
       if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
       const id = ++nextOperation, abort = new AbortController();
       let done;
-      const state = {abort,result:null,owned:0,released:false,done:new Promise(resolve=>{done=resolve;})};
+      const state = {abort,result:null,owned:0,dispose,released:false,done:new Promise(resolve=>{done=resolve;})};
       operations.set(id,state);
       Promise.resolve().then(async () => {
         let timer;
@@ -1577,7 +1663,7 @@ function makeSocketHost() {
           const request = JSON.parse(text);
           if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw fail("EINVAL","invalid socket timeout");
           if (request.timeout_ms) timer = setTimeout(()=>abort.abort(fail("ETIMEOUT","socket operation deadline exceeded")),request.timeout_ms);
-          const result = await execute(request,Uint8Array.from(input||[]),abort.signal);
+          const result = await run(request,Uint8Array.from(input||[]),abort.signal);
           state.owned = result.owned || 0;
           if (abort.signal.aborted) throw abort.signal.reason || cancelled();
           state.result = [1,...result.bytes];
@@ -1585,16 +1671,20 @@ function makeSocketHost() {
           state.result = [2,...encoder.encode(JSON.stringify({code:["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",message:error.message||"socket operation failed"}))];
         } finally {
           clearTimeout(timer);
-          if (state.released && state.owned) close(state.owned);
+          if (state.released && state.owned) dispose(state.owned);
           done();
         }
       });
       return id;
-    },
+  }
+  return {
+    netSocketStart: (text, input) => start(text, input),
+    netWsStart: (text, input) => start(text, input, websocket.execute, websocket.close),
+    netWsClose: id => websocket.close(id),
     async netSocketWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
     netSocketResult: id => operations.get(id)?.result || [0],
     netSocketCancel: id => operations.get(id)?.abort.abort(cancelled()),
-    netSocketRelease: id => { const state = operations.get(id); if (state) { state.released=true; state.abort.abort(cancelled()); if (state.owned) close(state.owned); operations.delete(id); } },
+    netSocketRelease: id => { const state = operations.get(id); if (state) { state.released=true; state.abort.abort(cancelled()); if (state.owned) state.dispose(state.owned); operations.delete(id); } },
     netSocketClaim: id => { const state = operations.get(id); if (state) state.owned=0; },
     netSocketClose: id => close(id),
     netSocketControl: (id,text) => {

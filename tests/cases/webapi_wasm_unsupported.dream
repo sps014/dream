@@ -1,0 +1,2 @@
+import system.webapi;
+async fun main(): void { WebApp.listen("127.0.0.1", 0).await; WebApp.shutdown(); }

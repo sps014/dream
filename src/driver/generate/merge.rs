@@ -11,8 +11,8 @@ use std::io::Error;
 use std::rc::Rc;
 
 /// Parses one generated file into `acc`. Its `extend` blocks may read private members of the
-/// types they extend, as if declared beside them; imports are limited to std packages the
-/// program already loads (generated code is merged after the prelude).
+/// types they extend, as if declared beside them. Imports may only reference already-loaded
+/// modules: generated output cannot add untracked source dependencies.
 pub fn merge_generated_file<'a>(
     arena: &'a Bump,
     acc: &mut ProgramAccumulator<'a>,
@@ -31,21 +31,8 @@ pub fn merge_generated_file<'a>(
     let ast = parsed?;
     let program = ast.get_root();
     super::collisions::check(acc, program, path, generator, diagnostics);
-    let loaded = dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages);
-    for import in &program.imports {
-        let name = import.module_name.text.as_str();
-        let ok = dream_stdlib::std_package_from_slash_path(name)
-            .is_some_and(|pkg| loaded.iter().any(|p| p.name == pkg.name));
-        if !ok {
-            diagnostics.report(dream_diagnostics::Diagnostic::new(
-                format!(
-                    "generated file imports '{name}'; generated code may only import std packages the program already imports"
-                ),
-                Some(import.module_name.position),
-                Some(path.to_string()),
-            ));
-        }
-    }
+    super::attribute_refs::merge_imports(acc, program, path, diagnostics);
+    acc.parsed_files.insert(path.to_string(), program.clone());
     if let Some(module_decl) = &program.module {
         acc.file_modules
             .insert(path.to_string(), Rc::from(module_decl.path.text.as_str()));

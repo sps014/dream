@@ -1,0 +1,4 @@
+import system.webapi;
+@post("/")
+fun route(@body body: string, @form name: string): string { return body + name; }
+fun main(): void {}

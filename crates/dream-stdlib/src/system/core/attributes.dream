@@ -24,7 +24,9 @@ public enum AttributeTarget {
 /// A declaration reference supplied as an attribute argument.
 public struct DeclarationPath {
     public text: string;
-    public constructor(text: string) { this.text = text; }
+    /// Canonical compiler identity; empty when the reference could not be resolved.
+    public symbol: string;
+    public constructor(text: string, symbol: string) { this.text = text; this.symbol = symbol; }
 }
 
 /// Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.

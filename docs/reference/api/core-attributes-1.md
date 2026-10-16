@@ -1,109 +1,157 @@
-# system.core: Attribute declarations
+# Attributes
 
-No import is needed.
+**Import:** `import system.core;`
+
+## `public enum AttributeTarget`
+
+Declaration kinds accepted by an attribute.
 
 ```dream
 public enum AttributeTarget
 ```
 
-Declaration kinds accepted by an attribute.
+## `Constructor`
 
 ```dream
 Constructor
 ```
 
+## `Destructor`
+
 ```dream
 Destructor
 ```
+
+## `Class`
 
 ```dream
 Class
 ```
 
+## `Struct`
+
 ```dream
 Struct
 ```
+
+## `Union`
 
 ```dream
 Union
 ```
 
+## `Enum`
+
 ```dream
 Enum
 ```
+
+## `Interface`
 
 ```dream
 Interface
 ```
 
+## `Type`
+
 ```dream
 Type
 ```
+
+## `Field`
 
 ```dream
 Field
 ```
 
+## `Function`
+
 ```dream
 Function
 ```
+
+## `Method`
 
 ```dream
 Method
 ```
 
+## `StaticMethod`
+
 ```dream
 StaticMethod
 ```
+
+## `ExternFunction`
 
 ```dream
 ExternFunction
 ```
 
+## `InterfaceMethod`
+
 ```dream
 InterfaceMethod
 ```
+
+## `Module`
 
 ```dream
 Module
 ```
 
+## `Parameter`
+
 ```dream
 Parameter
 ```
+
+## `public struct DeclarationPath`
+
+A declaration reference supplied as an attribute argument.
 
 ```dream
 public struct DeclarationPath
 ```
 
-A declaration reference supplied as an attribute argument.
+## `public text: string`
 
 ```dream
 public text: string
 ```
 
+## `public symbol: string`
+
+Canonical compiler identity; empty when the reference could not be resolved.
+
 ```dream
-public constructor(text: string)
+public symbol: string
 ```
+
+## `public constructor`
+
+```dream
+public constructor(text: string, symbol: string)
+```
+
+## `public struct AttributeAttribute`
+
+Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.
 
 ```dream
 public struct AttributeAttribute
 ```
 
-Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.
+## `public targets: AttributeTarget[]`
 
 ```dream
 public targets: AttributeTarget[]
 ```
 
-```dream
-public struct RepeatableAttribute
-```
+## `public struct RepeatableAttribute`
 
 Allows an `@attribute` type to appear more than once on the same declaration.
 
 ```dream
-public struct ExportAttribute
+public struct RepeatableAttribute
 ```
-
-Exports a non-generic synchronous function through a plain C ABI wrapper.

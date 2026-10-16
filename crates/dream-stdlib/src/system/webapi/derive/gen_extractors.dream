@@ -1,0 +1,91 @@
+module system.webapi.derive;
+import system;
+import system.codegen;
+import system.webapi;
+
+extend WebGenerator {
+    internal fun arguments(f: GenFunction, out: CodeBuilder, memo: Map<string, string>, route: WebRoute): string {
+        let args = "";
+        for (let p in f.params) {
+            let value = this.extract(p, out, memo, route, f.id != route.function.id);
+            if !args.is_empty() { args = args + ", "; }
+            args = args + value;
+        }
+        return args;
+    }
+    internal fun extract(p: GenParam, out: CodeBuilder, memo: Map<string, string>, route: WebRoute, dependency: bool): string {
+        if p.ty.name == nameof(HttpIncoming) { return "ctx.incoming"; }
+        if p.ty.name == nameof(RequestContext) { return "ctx"; }
+        if p.has<DepAttribute>() { return this.dependency(p, out, memo, route); }
+        let value = this.fresh();
+        if p.ty.name == nameof(ServerWebSocket) {
+            out.line("let " + value + "_upgrade = ServerWebSocket.upgrade(ctx.incoming, ctx.cancellation_token).await;");
+            out.line("if " + value + "_upgrade.is_err() { return HttpOutgoing.detail(\"websocket upgrade failed\", 400); }");
+            out.line("let " + value + " = " + value + "_upgrade.unwrap();");
+            return value;
+        }
+        if p.has<BodyAttribute>() {
+            let bytes = p.ty.display == "byte[]";
+            let read = "read_body_text"; if bytes { read = "read_body_bytes"; }
+            out.line("let " + value + "_body = ctx.incoming." + read + "(ctx.cancellation_token).await;");
+            out.line("if " + value + "_body.is_err() { return HttpOutgoing.detail(\"failed to read request body\", 400); }");
+            if p.ty.name == "string" || bytes { out.line("let " + value + " = " + value + "_body.unwrap();"); }
+            else {
+                out.line("let " + value + "_json = Json.deserialize<" + p.ty.display + ">(" + value + "_body.unwrap());");
+                out.line("if " + value + "_json.is_err() { return HttpOutgoing.detail(\"invalid JSON body\", 400); }");
+                out.line("let " + value + " = " + value + "_json.unwrap();");
+            }
+            return value;
+        }
+        if p.has<FileAttribute>() || p.has<FormAttribute>() {
+            let name = p.name;
+            if p.has<FileAttribute>() { name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name); }
+            else { name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name); }
+            out.line("let " + value + "_parts = ctx.incoming.multipart_parts(ctx.cancellation_token).await;");
+            out.line("if " + value + "_parts.is_err() { return HttpOutgoing.detail(\"expected multipart/form-data\", 400); }");
+            let kind = "string"; if p.has<FileAttribute>() { kind = "UploadedFile"; }
+            out.line("let " + value + "_option: Option<" + kind + "> = Option.None;");
+            out.line("for (let part in " + value + "_parts.unwrap().as_array().unwrap_or(List<JsonValue>())) {");
+            out.line("if part.at(\"name\").as_string().unwrap_or(\"\") == " + web_quote(name) + " {");
+            let content = "Encoding.hex_decode(part.at(\"bytes\").as_string().unwrap_or(\"\")).unwrap_or([])";
+            if p.has<FileAttribute>() {
+                out.line("if part.at(\"filename\").as_string().is_some() { " + value + "_option = Option.Some(UploadedFile(part.at(\"filename\").as_string().unwrap_or(\"\"), part.at(\"content_type\").as_string().unwrap_or(\"\"), " + content + ")); }");
+            } else { out.line(value + "_option = Option.Some(Encoding.utf8_decode(" + content + "));"); }
+            out.line("} }");
+            if p.has<FileAttribute>() {
+                if p.ty.is_option() { return value + "_option"; }
+                out.line("if " + value + "_option.is_none() { return HttpOutgoing.detail(" + web_quote("missing file " + name) + ", 400); }");
+                return value + "_option.unwrap()";
+            }
+            return this.scalar(p.ty, value + "_option", value, name, out);
+        }
+        let name = p.name; let option = "";
+        if p.has<QueryAttribute>() { name = p.attribute<QueryAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.query_param(" + web_quote(name) + ")"; }
+        else if p.has<HeaderAttribute>() { name = p.attribute<HeaderAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.header(" + web_quote(name) + ")"; }
+        else if p.has<CookieAttribute>() { name = p.attribute<CookieAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.cookie(" + web_quote(name) + ")"; }
+        else {
+            if p.has<PathAttribute>() { name = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name); }
+            option = "params.get(" + web_quote(name) + ")";
+        }
+        let missing_status = 400; if dependency && p.has<HeaderAttribute>() { missing_status = 401; }
+        return this.scalar(p.ty, option, value, name, out, missing_status);
+    }
+    internal fun scalar(ty: GenTypeRef, option: string, value: string, name: string, out: CodeBuilder, missing_status: int = 400): string {
+        let core = web_inner(ty);
+        out.line("let " + value + "_text = " + option + ";");
+        if ty.is_option() {
+            out.line("let " + value + ": " + ty.display + " = Option.None;");
+            out.line("if " + value + "_text.is_some() {");
+        } else { out.line("if " + value + "_text.is_none() { return HttpOutgoing.detail(" + web_quote("missing parameter " + name) + ", " + missing_status.to_string() + "); }"); }
+        let text = value + "_text.unwrap_or(\"\")";
+        let parsed = text;
+        if core.name != "string" {
+            out.line("let " + value + "_parsed = " + core.display + ".parse(" + text + ");");
+            out.line("if " + value + "_parsed.is_err() { return HttpOutgoing.detail(" + web_quote("invalid parameter " + name) + ", 400); }");
+            parsed = value + "_parsed.unwrap()";
+        }
+        if ty.is_option() { out.line(value + " = Option.Some(" + parsed + "); }"); }
+        else { out.line("let " + value + " = " + parsed + ";"); }
+        return value;
+    }
+}

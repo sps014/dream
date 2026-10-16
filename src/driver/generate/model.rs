@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The single protocol contract; compiler identity invalidates caches when its shape changes.
-pub const SNAPSHOT_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Snapshot {
@@ -127,6 +127,8 @@ pub struct AttrArg {
     pub kind: String,
     /// Unquoted string contents, literal text, or the dotted enum path.
     pub value: String,
+    /// Canonical declaration identity for DeclarationPath arguments; empty when unresolved.
+    pub symbol: String,
 }
 
 /// A resolved type reference. `kind` is `prim` | `named` | `param` | `array` | `tuple` |

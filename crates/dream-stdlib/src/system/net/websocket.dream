@@ -1,0 +1,86 @@
+module system.net;
+
+/// An owned RFC 6455 WebSocket, available on native, Node and browser hosts.
+public class WebSocket {
+    id: int;
+    internal constructor(id: int) { this.id = id; }
+    @runtime("netWsStart")
+    static extern fun start_host(request: string, bytes: byte[]): int;
+    @runtime("netWsClose")
+    static extern fun close_host(id: int): void;
+    del() { if this.id > 0 { WebSocket.close_host(this.id); } }
+
+    /// Opens ws:// or wss:// with an optional deadline and inherited cancellation.
+    public static async fun connect(url: string, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<WebSocket, IoError> {
+        let effective = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective, IoError.cancelled())?;
+        if timeout_ms < 0 { return Result.Err(IoError.invalid("", "invalid WebSocket timeout")); }
+        let request = SocketState.request("connect", 0, timeout_ms);
+        request.set("url", JsonValue.from_string(url));
+        let operation = SocketOperation(WebSocket.start_host(Json.serialize(request), []));
+        let metadata = SocketState.parse(operation.wait(effective).await?)?;
+        let id = metadata.at("id").as_int().unwrap_or(0);
+        if id <= 0 { return Result.Err(IoError.other("", "invalid WebSocket handle")); }
+        let socket = WebSocket(id); operation.claim(); operation.close();
+        return Result.Ok(socket);
+    }
+    /// Sends one UTF-8 text message.
+    public fun send_text(text: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>> {
+        return WebSocket.send_owned(this, "send_text", Encoding.utf8_encode(text), 1000, "", CancellationToken.resolve(token));
+    }
+    /// Sends one binary message.
+    public fun send_binary(bytes: byte[], token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>> {
+        return WebSocket.send_owned(this, "send_binary", bytes, 1000, "", CancellationToken.resolve(token));
+    }
+    /// Sends a normal closing handshake.
+    public fun close(token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>> { return this.close_with(1000, "", token); }
+    /// Sends a validated close code and UTF-8 reason.
+    public fun close_with(code: int, reason: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>> {
+        return WebSocket.send_owned(this, "close", [], code, reason, CancellationToken.resolve(token));
+    }
+    static async fun send_owned(socket: WebSocket, action: string, bytes: byte[], code: int, reason: string, token: Option<CancellationToken>): Result<bool, IoError> {
+        let request = SocketState.request(action, socket.id, 0);
+        request.set("code", JsonValue.from_int(code)); request.set("reason", JsonValue.from_string(reason));
+        WebSocket.submit(socket, request, bytes, token).await?;
+        return Result.Ok(true);
+    }
+    static async fun submit(socket: WebSocket, request: JsonValue, bytes: byte[], token: Option<CancellationToken>): Result<byte[], IoError> {
+        if CancellationToken.is_cancelled_opt(token) { WebSocket.close_host(socket.id); return Result.Err(IoError.cancelled()); }
+        if socket.id <= 0 { return Result.Err(IoError.closed("WebSocket")); }
+        let operation = SocketOperation(WebSocket.start_host(Json.serialize(request), bytes));
+        let result = operation.wait(token).await;
+        operation.close();
+        if result.is_err() && result.unwrap_err().code() == "ECANCELLED" { WebSocket.close_host(socket.id); }
+        return result;
+    }
+    /// Receives one complete message. Only one receive may be pending at a time.
+    public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<WebSocketMessage, IoError>> {
+        return WebSocket.receive_owned(this, CancellationToken.resolve(token));
+    }
+    static async fun receive_owned(socket: WebSocket, token: Option<CancellationToken>): Result<WebSocketMessage, IoError> {
+        let bytes = WebSocket.submit(socket, SocketState.request("receive", socket.id, 0), [], token).await?;
+        let message = SocketState.parse(bytes)?;
+        let kind = message.at("kind").as_string().unwrap_or("");
+        if kind == "text" { return Result.Ok(WebSocketMessage.Text(message.at("text").as_string().unwrap_or(""))); }
+        if kind == "binary" {
+            let items = message.at("bytes").as_array().unwrap_or(List<JsonValue>());
+            let output = Buffer.alloc<byte>(items.length);
+            for (let i = 0; i < output.length; i = i + 1) { output[i] = (byte)items.get(i).as_int().unwrap_or(0); }
+            return Result.Ok(WebSocketMessage.Binary(output));
+        }
+        if kind == "close" { return Result.Ok(WebSocketMessage.Close(message.at("code").as_int().unwrap_or(1006), message.at("reason").as_string().unwrap_or(""))); }
+        return Result.Err(IoError.other("", "invalid WebSocket message"));
+    }
+    /// Iterates until Close, including the final closing message. Transport errors end iteration.
+    public fun messages(token: Option<CancellationToken> = Option.None): AsyncIterable<WebSocketMessage> { return WebSocket.messages_owned(this, CancellationToken.resolve(token)); }
+    static async fun messages_owned(socket: WebSocket, token: Option<CancellationToken>): AsyncIterable<WebSocketMessage> {
+        let closing = false;
+        while !closing {
+            let result = socket.receive(token).await;
+            if result.is_err() { yield break; }
+            let message = result.unwrap();
+            closing = switch (message) { Close(_, _) => true, _ => false };
+            yield message;
+        }
+    }
+}

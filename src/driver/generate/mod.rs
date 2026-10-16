@@ -6,6 +6,7 @@
 mod apply;
 mod artifacts;
 mod assets;
+mod attribute_refs;
 mod body;
 mod call_sites;
 mod collisions;

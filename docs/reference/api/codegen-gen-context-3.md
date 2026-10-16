@@ -1,10 +1,8 @@
-# GenContext
+# Gen Context
 
 **Import:** `import system.codegen;`
 
-[All sections](codegen-gen-context.md)
-
-## `finish`
+## `public async fun finish`
 
 Writes the result for the compiler; the harness returns this as the exit code.
 

@@ -138,6 +138,14 @@ Removes all values with the given case-insensitive name.
 public fun remove(name: string): void
 ```
 
+## `public fun to_json`
+
+Serializes header pairs in order, preserving repeated names.
+
+```dream
+public fun to_json(): JsonValue
+```
+
 ## `public class HttpRequest`
 
 Mutable request description; sending snapshots URL, headers, options, and body bytes.
@@ -184,12 +192,4 @@ Creates a request with empty headers and body.
 
 ```dream
 public constructor(method: string, url: Url)
-```
-
-## `public static fun get`
-
-Creates a GET request.
-
-```dream
-public static fun get(url: Url): HttpRequest
 ```

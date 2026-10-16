@@ -10,9 +10,13 @@ public class GenAttrArg {
     public kind: string;
     public value: string;
 
+    /// Canonical compiler identity for a declaration reference, or empty.
+    public symbol: string;
+
     // Creates the snapshot model from the supplied values.
-    public constructor(kind: string, value: string) {
+    public constructor(kind: string, value: string, symbol: string) {
         this.kind = kind;
         this.value = value;
+        this.symbol = symbol;
     }
 }

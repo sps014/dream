@@ -1,0 +1,94 @@
+module system.webapi;
+
+internal class WebRouting {
+    internal static fun match_path(borrow pattern: string, borrow path: string): Option<Map<string, string>> {
+        let params = Map<string, string>();
+        let pi = WebRouting.skip_slash(pattern, 0);
+        let si = WebRouting.skip_slash(path, 0);
+        let pn = pattern.length;
+        let sn = path.length;
+        while pi < pn || si < sn {
+            if pi >= pn || si >= sn {
+                let none: Option<Map<string, string>> = Option.None;
+                return none;
+            }
+            let pe = WebRouting.find_slash(pattern, pi);
+            let se = WebRouting.find_slash(path, si);
+            if (pe - pi) >= 3 && pattern.char_at(pi) == '{' && pattern.char_at(pe - 1) == '}' {
+                params.set(pattern.substring(pi + 1, pe - 1), Encoding.uri_decode_component(path.substring(si, se)).unwrap_or(path.substring(si, se)));
+            } else if !WebRouting.region_eq(pattern, pi, pe, path, si, se) {
+                let none2: Option<Map<string, string>> = Option.None;
+                return none2;
+            }
+            pi = WebRouting.skip_slash(pattern, pe);
+            si = WebRouting.skip_slash(path, se);
+        }
+        return Option.Some(params);
+    }
+
+    internal static fun cookie_value(borrow header: string, borrow name: string): Option<string> {
+        let n = header.length;
+        let i = 0;
+        while i <= n {
+            let start = i;
+            while i < n && header.char_at(i) != ';' {
+                i = i + 1;
+            }
+            let end = i;
+            while start < end && (header.char_at(start) == ' ' || header.char_at(start) == '\t') {
+                start = start + 1;
+            }
+            while end > start && (header.char_at(end - 1) == ' ' || header.char_at(end - 1) == '\t') {
+                end = end - 1;
+            }
+            let eq = start;
+            let has_eq = false;
+            while eq < end {
+                if header.char_at(eq) == '=' {
+                    has_eq = true;
+                    break;
+                }
+                eq = eq + 1;
+            }
+            if has_eq && WebRouting.region_eq(header, start, eq, name, 0, name.length) {
+                return Option.Some(header.substring(eq + 1, end));
+            }
+            if i >= n {
+                break;
+            }
+            i = i + 1;
+        }
+        let none: Option<string> = Option.None;
+        return none;
+    }
+
+    static fun skip_slash(borrow s: string, i: int): int {
+        while i < s.length && s.char_at(i) == '/' {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static fun find_slash(borrow s: string, i: int): int {
+        while i < s.length && s.char_at(i) != '/' {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static fun region_eq(borrow a: string, a0: int, a1: int, borrow b: string, b0: int, b1: int): bool {
+        if (a1 - a0) != (b1 - b0) {
+            return false;
+        }
+        let k = 0;
+        let n = a1 - a0;
+        while k < n {
+            if a.char_at(a0 + k) != b.char_at(b0 + k) {
+                return false;
+            }
+            k = k + 1;
+        }
+        return true;
+    }
+
+}

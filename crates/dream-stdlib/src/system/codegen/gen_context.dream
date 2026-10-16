@@ -7,7 +7,7 @@ import system.json;
 
 // Snapshot format this package reads; the compiler writes the same number.
 fun gen_snapshot_version(): int {
-    return 1;
+    return 2;
 }
 
 // What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the
@@ -25,7 +25,7 @@ public class GenContext {
     outputs: JsonValue;
     diagnostics: JsonValue;
     logs: JsonValue;
-    extends: StringBuilder;
+    extends: Map<string, StringBuilder>;
     error_count: int;
 
     constructor(snapshot: GenSnapshot, result_path: string) {
@@ -37,7 +37,7 @@ public class GenContext {
         this.outputs = JsonValue.array();
         this.diagnostics = JsonValue.array();
         this.logs = JsonValue.array();
-        this.extends = StringBuilder();
+        this.extends = Map<string, StringBuilder>();
         this.error_count = 0;
     }
 
@@ -333,14 +333,14 @@ public class GenContext {
         this.error_count = this.error_count + 1;
     }
 
-    // Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.
+    // Extensions keep their declaring module, including its internal visibility and name scope.
     public fun emit_extend(borrow decl: GenDecl, body: string): void {
-        this.extends.append("extend " + decl.self_type() + " {\n");
-        this.extends.append(body);
-        if !body.ends_with("\n") {
-            this.extends.append("\n");
-        }
-        this.extends.append("}\n\n");
+        if !this.extends.contains(decl.module_name) { this.extends.set(decl.module_name, StringBuilder()); }
+        let source = this.extends.get(decl.module_name).unwrap();
+        source.append("extend " + decl.self_type() + " {\n");
+        source.append(body);
+        if !body.ends_with("\n") { source.append("\n"); }
+        source.append("}\n\n");
     }
 
     fun report(severity: string, borrow target: string, message: string): void {
@@ -407,9 +407,13 @@ public class GenContext {
 
     // Writes the result for the compiler; the harness returns this as the exit code.
     public async fun finish(): int {
-        let extends = this.extends.to_string();
-        if extends.length > 0 {
-            this.emit_file("extends.dream", extends);
+        let extensions = this.extends.entries();
+        extensions.sort_by((a, b) => { return a.key.compare(b.key); });
+        for (let entry in extensions) {
+            let path = "extends.dream";
+            let header = "";
+            if !entry.key.is_empty() { path = "extends/" + entry.key.replace(".", "/") + ".dream"; header = "module " + entry.key + ";\n\n"; }
+            this.emit_file(path, header + entry.value.to_string());
         }
         let root = JsonValue.dict();
         root.set("version", JsonValue.from_int(gen_snapshot_version()));

@@ -9,11 +9,35 @@ use tokio::{runtime::Runtime, sync::watch, task::AbortHandle};
 pub(crate) type Failure = (&'static str, String);
 pub(crate) struct Output {
     pub bytes: Vec<u8>,
-    pub child: Option<crate::sockets::OwnedSocket>,
+    pub child: Option<OwnedResource>,
 }
 impl Output {
     pub fn bytes(bytes: Vec<u8>) -> Self {
         Self { bytes, child: None }
+    }
+}
+pub(crate) struct OwnedResource {
+    id: i32,
+    close: fn(i32),
+    detached: bool,
+}
+impl OwnedResource {
+    pub fn new(id: i32, close: fn(i32)) -> Self {
+        Self {
+            id,
+            close,
+            detached: false,
+        }
+    }
+    pub fn detach(&mut self) {
+        self.detached = true;
+    }
+}
+impl Drop for OwnedResource {
+    fn drop(&mut self) {
+        if !self.detached {
+            (self.close)(self.id);
+        }
     }
 }
 struct Operation {
@@ -38,6 +62,8 @@ pub(crate) fn runtime() -> Result<&'static Runtime, Failure> {
     static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
     RUNTIME
         .get_or_init(|| {
+            // Transitive TLS clients enable both providers; rustls cannot infer a default.
+            let _ = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider().install_default();
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
                 .enable_all()

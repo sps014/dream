@@ -84,7 +84,7 @@ public class TcpListener {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         let lifetime = [this];
-        let operation = SocketOperation(SocketState.request("accept", lifetime[0].state.id, timeout_ms), []);
+        let operation = SocketOperation.start(SocketState.request("accept", lifetime[0].state.id, timeout_ms), []);
         if lifetime[0].state.id <= 0 { return Result.Err(IoError.closed("listener")); }
         let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
         let state = SocketState(metadata); operation.claim(); operation.close();

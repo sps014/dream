@@ -58,6 +58,11 @@ impl HostCapability {
         }
     }
 
+    pub fn abi_marker(self) -> String {
+        let version = if self == Self::Net { 3 } else { 2 };
+        format!("dream_host_{}_abi_v{version}", self.name())
+    }
+
     pub fn fields(self) -> &'static [&'static str] {
         fields::fields(self)
     }

@@ -77,7 +77,7 @@ impl Builder<'_, '_> {
         self.spans.insert(id, file, span);
     }
 
-    fn attr(&self, a: &AttributeNode) -> Attr {
+    fn attr(&self, a: &AttributeNode, file: Option<&str>) -> Attr {
         let id = a.resolved_id.get().cloned().unwrap_or_default();
         Attr {
             id,
@@ -85,7 +85,8 @@ impl Builder<'_, '_> {
             args: a
                 .args
                 .iter()
-                .map(|arg| AttrArg {
+                .enumerate()
+                .map(|(i, arg)| AttrArg {
                     kind: match arg {
                         AttributeArg::String(_) => "string",
                         AttributeArg::Int(_) => "int",
@@ -96,13 +97,29 @@ impl Builder<'_, '_> {
                     }
                     .to_string(),
                     value: arg.semantic_value(),
+                    symbol: self
+                        .facts
+                        .attributes
+                        .get(a.resolved_id.get().map(String::as_str).unwrap_or(""))
+                        .and_then(|attribute| {
+                            attribute
+                                .params
+                                .get(i.min(attribute.params.len().saturating_sub(1)))
+                        })
+                        .filter(|p| p.kind == dream_abi::attributes::ArgKind::Path)
+                        .and_then(|_| {
+                            self.facts
+                                .index
+                                .attribute_reference(&arg.semantic_value(), file)
+                        })
+                        .unwrap_or_default(),
                 })
                 .collect(),
         }
     }
 
-    fn attrs(&self, attrs: &[AttributeNode]) -> Vec<Attr> {
-        attrs.iter().map(|a| self.attr(a)).collect()
+    fn attrs(&self, attrs: &[AttributeNode], file: Option<&str>) -> Vec<Attr> {
+        attrs.iter().map(|a| self.attr(a, file)).collect()
     }
 
     fn field(
@@ -135,7 +152,7 @@ impl Builder<'_, '_> {
                 generics,
             ),
             visibility: visibility(f.visibility),
-            attributes: self.attrs(&f.attributes),
+            attributes: self.attrs(&f.attributes, file),
         }
     }
 
@@ -224,7 +241,7 @@ impl Builder<'_, '_> {
                         self.facts.index,
                         &scope,
                     ),
-                    attributes: self.attrs(&p.attributes),
+                    attributes: self.attrs(&p.attributes, file),
                 })
                 .collect(),
             ret: match declaration_fact
@@ -235,7 +252,7 @@ impl Builder<'_, '_> {
                 Some(t) => type_ref(t, self.facts.index, &scope),
                 None => type_ref(&dream_syntax::nodes::Type::Void, self.facts.index, &scope),
             },
-            attributes: self.attrs(&f.attributes),
+            attributes: self.attrs(&f.attributes, file),
         }
     }
 }
@@ -381,7 +398,7 @@ pub(super) fn build_selected(
                     .iter()
                     .map(|t| type_ref(t, facts.index, &generics))
                     .collect(),
-                attributes: b.attrs(&s.attributes),
+                attributes: b.attrs(&s.attributes, file),
                 generics,
                 fields,
                 methods,
@@ -435,7 +452,7 @@ pub(super) fn build_selected(
                 module,
                 visibility: "public".to_string(),
                 implements: Vec::new(),
-                attributes: b.attrs(&e.attributes),
+                attributes: b.attrs(&e.attributes, file),
                 generics,
                 fields: Vec::new(),
                 methods,
@@ -470,7 +487,7 @@ pub(super) fn build_selected(
                     .iter()
                     .map(|t| type_ref(t, facts.index, &generics))
                     .collect(),
-                attributes: b.attrs(&i.attributes),
+                attributes: b.attrs(&i.attributes, file),
                 generics,
                 fields: Vec::new(),
                 methods,

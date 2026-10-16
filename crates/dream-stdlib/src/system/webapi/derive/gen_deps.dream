@@ -1,0 +1,41 @@
+module system.webapi.derive;
+import system;
+import system.codegen;
+import system.webapi;
+
+extend WebGenerator {
+    internal fun validate_dependencies(): void {
+        for (let entry in this.functions.entries()) { this.visit_dependency(entry.value); }
+    }
+    internal fun visit_dependency(f: GenFunction): void {
+        let color = this.colors.get(f.id).unwrap_or(0);
+        if color == 2 { return; }
+        this.colors.set(f.id, 1);
+        for (let p in f.params) {
+            if !p.has<DepAttribute>() { continue; }
+            let path = p.attribute<DepAttribute>().unwrap().provider;
+            let dependency = this.functions.get(path.symbol);
+            if dependency.is_none() { this.ctx.error_at(f.id, "@dep(" + path.text + ") does not resolve to a function"); continue; }
+            if this.colors.get(path.symbol).unwrap_or(0) == 1 { this.ctx.error_at(f.id, "@dep(" + path.text + ") forms a cycle"); }
+            else { this.visit_dependency(dependency.unwrap()); }
+        }
+        this.colors.set(f.id, 2);
+    }
+    internal fun dependency(p: GenParam, out: CodeBuilder, memo: Map<string, string>, route: WebRoute): string {
+        let path = p.attribute<DepAttribute>().unwrap().provider;
+        if memo.contains(path.symbol) { return memo.get(path.symbol).unwrap(); }
+        let f = this.functions.get(path.symbol).unwrap();
+        let args = this.arguments(f, out, memo, route);
+        let call = this.calls.get(f.id).unwrap() + "(" + args + ")";
+        if f.is_async { call = call + ".await"; }
+        let value = this.fresh();
+        out.line("let " + value + " = " + call + ";");
+        let result = value;
+        if f.ret.name == "Result" {
+            if f.ret.arg(1).name == nameof(HttpStatus) { out.line("if " + value + ".is_err() { return HttpOutgoing.from_status(" + value + ".unwrap_err()); }"); }
+            else { out.line("if " + value + ".is_err() { return HttpOutgoing.detail(" + value + ".unwrap_err().to_string(), 500); }"); }
+            result = this.fresh(); out.line("let " + result + " = " + value + ".unwrap();");
+        }
+        memo.set(path.symbol, result); return result;
+    }
+}

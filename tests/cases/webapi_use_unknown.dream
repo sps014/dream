@@ -1,0 +1,5 @@
+import system.webapi;
+@use(missing)
+@get("/")
+fun route(): string { return "ok"; }
+fun main(): void {}

@@ -1,0 +1,54 @@
+module system.webapi;
+
+// Per-request bag shared by middleware and `@dep` functions.
+public class RequestContext {
+    public incoming: HttpIncoming;
+    public state: Map<string, string>;
+    public cancellation_token: Option<CancellationToken>;
+
+    public constructor(incoming: HttpIncoming) {
+        this.incoming = incoming;
+        this.state = Map<string, string>();
+        this.cancellation_token = Option.None;
+    }
+
+    public fun set(key: string, value: string): void {
+        this.state.set(key, value);
+    }
+
+    public fun get(key: string): Option<string> {
+        return this.state.get(key);
+    }
+}
+
+// Continues the middleware onion toward the route handler.
+@allow_cycle
+public class Next {
+    step: fun(): Future<HttpOutgoing>;
+
+    public constructor(step: fun(): Future<HttpOutgoing>) {
+        this.step = step;
+    }
+
+    public fun call(): Future<HttpOutgoing> { return Next.call_owned(this); }
+    static async fun call_owned(next: Next): HttpOutgoing {
+        let step = next.step;
+        return step().await;
+    }
+}
+
+// One onion layer: `invoke` may short-circuit or `next.call().await`.
+@allow_cycle
+public class Middleware {
+    handler: fun(RequestContext, Next): Future<HttpOutgoing>;
+
+    public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>) {
+        this.handler = handler;
+    }
+
+    public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing> { return Middleware.invoke_owned(this, ctx, next); }
+    static async fun invoke_owned(middleware: Middleware, ctx: RequestContext, next: Next): HttpOutgoing {
+        let handler = middleware.handler;
+        return handler(ctx, next).await;
+    }
+}

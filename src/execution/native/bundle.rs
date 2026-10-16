@@ -41,7 +41,7 @@ pub(crate) fn link_runtime(
 ) {
     // A stale capability library must fail at link time, before any mixed-ABI callback runs.
     for capability in capabilities {
-        let symbol = format!("dream_host_{}_abi_v2", capability.name());
+        let symbol = capability.abi_marker();
         if spec.is_windows() {
             command.arg(if spec.is_msvc() && !zig_driver {
                 format!("-Wl,/include:{symbol}")
@@ -102,8 +102,8 @@ mod tests {
             .get_args()
             .map(|arg| arg.to_string_lossy())
             .collect();
-        for name in ["core", "crypto"] {
-            let symbol = format!("dream_host_{name}_abi_v2");
+        for capability in [HostCapability::Core, HostCapability::Crypto] {
+            let symbol = capability.abi_marker();
             let required = if cfg!(windows) {
                 format!("-Wl,/include:{symbol}")
             } else if cfg!(target_os = "macos") {

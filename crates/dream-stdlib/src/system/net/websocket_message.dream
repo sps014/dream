@@ -1,0 +1,8 @@
+module system.net;
+
+/// A complete WebSocket data message or the peer's closing handshake.
+public enum WebSocketMessage {
+    Text(text: string),
+    Binary(bytes: byte[]),
+    Close(code: int, reason: string),
+}

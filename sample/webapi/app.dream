@@ -1,0 +1,23 @@
+import system;
+import system.webapi;
+import system.json;
+
+@json
+class Greeting { public message: string; public constructor(message: string) { this.message = message; } }
+
+@get("/hello/{name}")
+fun hello(@path name: string): Greeting { return Greeting("Hello, " + name + "!"); }
+
+@get("/events")
+async fun events(): AsyncIterable<SseEvent> {
+    yield SseEvent.data("connected");
+    Time.sleep(100).await;
+    yield SseEvent.data("ready");
+}
+
+async fun main(): void {
+    WebApp.use(CORS(CorsOptions()));
+    let port = WebApp.listen("127.0.0.1", 8000).await.unwrap();
+    System.println("Listening on http://127.0.0.1:" + port.to_string() + "/docs");
+    WebApp.wait().await;
+}

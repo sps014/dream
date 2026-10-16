@@ -1,4 +1,4 @@
-use super::model::{BodyNode, Decl, Function, Snapshot, TypeRef};
+use super::model::{Attr, BodyNode, Decl, Function, Snapshot, TypeRef};
 use indexmap::IndexSet;
 use std::collections::VecDeque;
 
@@ -35,8 +35,18 @@ fn node_refs(node: &BodyNode, out: &mut Vec<String>) {
     }
 }
 
+fn attribute_refs(attributes: &[Attr], out: &mut Vec<String>) {
+    for arg in attributes.iter().flat_map(|a| &a.args) {
+        if !arg.symbol.is_empty() {
+            out.push(arg.symbol.clone());
+        }
+    }
+}
+
 fn function_refs(f: &Function, out: &mut Vec<String>) {
+    attribute_refs(&f.attributes, out);
     for p in &f.params {
+        attribute_refs(&p.attributes, out);
         type_refs(&p.ty, out);
     }
     type_refs(&f.ret, out);
@@ -48,14 +58,17 @@ fn function_refs(f: &Function, out: &mut Vec<String>) {
 }
 
 fn decl_refs(d: &Decl, out: &mut Vec<String>) {
+    attribute_refs(&d.attributes, out);
     for ty in &d.implements {
         type_refs(ty, out);
     }
     for field in &d.fields {
+        attribute_refs(&field.attributes, out);
         type_refs(&field.ty, out);
     }
     for variant in &d.variants {
         for field in &variant.fields {
+            attribute_refs(&field.attributes, out);
             type_refs(&field.ty, out);
         }
     }

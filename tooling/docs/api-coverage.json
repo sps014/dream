@@ -437,9 +437,15 @@
         "page": "reference/api/codegen-gen-attr-arg.md"
       },
       {
-        "signature": "public constructor(kind: string, value: string)",
-        "description": "Creates the snapshot model from the supplied values.",
+        "signature": "public symbol: string",
+        "description": "Canonical compiler identity for a declaration reference, or empty.",
         "line": 14,
+        "page": "reference/api/codegen-gen-attr-arg.md"
+      },
+      {
+        "signature": "public constructor(kind: string, value: string, symbol: string)",
+        "description": "Creates the snapshot model from the supplied values.",
+        "line": 17,
         "page": "reference/api/codegen-gen-attr-arg.md"
       }
     ]
@@ -1298,7 +1304,7 @@
       },
       {
         "signature": "public fun emit_extend(borrow decl: GenDecl, body: string): void",
-        "description": "Adds `extend <decl> { <body> }` to this generator's `extends.dream` file.",
+        "description": "Extensions keep their declaring module, including its internal visibility and name scope.",
         "line": 337,
         "page": "reference/api/codegen-gen-context-2.md"
       },
@@ -4679,141 +4685,147 @@
         "page": "reference/api/core-attributes-1.md"
       },
       {
-        "signature": "public constructor(text: string)",
+        "signature": "public symbol: string",
+        "description": "Canonical compiler identity; empty when the reference could not be resolved.",
+        "line": 28,
+        "page": "reference/api/core-attributes-1.md"
+      },
+      {
+        "signature": "public constructor(text: string, symbol: string)",
         "description": "",
-        "line": 27,
+        "line": 29,
         "page": "reference/api/core-attributes-1.md"
       },
       {
         "signature": "public struct AttributeAttribute",
         "description": "Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.",
-        "line": 32,
+        "line": 34,
         "page": "reference/api/core-attributes-1.md"
       },
       {
         "signature": "public targets: AttributeTarget[]",
         "description": "",
-        "line": 33,
+        "line": 35,
         "page": "reference/api/core-attributes-1.md"
       },
       {
         "signature": "public struct RepeatableAttribute",
         "description": "Allows an `@attribute` type to appear more than once on the same declaration.",
-        "line": 38,
+        "line": 40,
         "page": "reference/api/core-attributes-1.md"
       },
       {
         "signature": "public struct ExportAttribute",
         "description": "Exports a non-generic synchronous function through a plain C ABI wrapper.",
-        "line": 42,
-        "page": "reference/api/core-attributes-1.md"
+        "line": 44,
+        "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct IntrinsicAttribute",
         "description": "Marks an extern function/method as a compiler intrinsic. The string argument is the intrinsic key (e.g. `\"print\"`).",
-        "line": 46,
+        "line": 48,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public operation: Intrinsic",
         "description": "",
-        "line": 47,
+        "line": 49,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct InlineAttribute",
         "description": "Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.",
-        "line": 52,
+        "line": 54,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct NoinlineAttribute",
         "description": "Never inline this function/method (neither the MIR inliner nor LLVM). Keeps benchmark sinks opaque.",
-        "line": 56,
+        "line": 58,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct UnsafeAttribute",
         "description": "Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.",
-        "line": 60,
+        "line": 62,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct AllowCycleAttribute",
         "description": "Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.",
-        "line": 64,
+        "line": 66,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct ConsumingAttribute",
         "description": "Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.",
-        "line": 68,
+        "line": 70,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct OwnedAttribute",
         "description": "The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned(\"free_fn\")` names the C function that frees the pointer when the last reference is released.",
-        "line": 72,
+        "line": 74,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public free_function: Option<string>",
         "description": "",
-        "line": 73,
+        "line": 75,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct JsAttribute",
         "description": "Binds an extern function to a JavaScript host import: `@js(\"module\", \"export\")`. JS-only (user interop, `js` type, WASM `env`/libm). Dream runtime hosts that exist on native and WASM use `@runtime` instead.",
-        "line": 78,
+        "line": 80,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public module_name: string",
         "description": "",
-        "line": 79,
+        "line": 81,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public export_name: string",
         "description": "",
-        "line": 80,
+        "line": 82,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct RuntimeAttribute",
         "description": "Binds an extern to the Dream runtime host on WASM and native: `@runtime(\"fileRead\")` imports `Dream.fileRead` and calls the C symbol `fileRead`.",
-        "line": 85,
+        "line": 87,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public export_name: string",
         "description": "",
-        "line": 86,
+        "line": 88,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct AsyncHostAttribute",
         "description": "Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes the future as its leading argument, performs the work off-thread, and completes it via the bound dream_complete_foreign. The run loop stays parked while the work is in flight.",
-        "line": 91,
+        "line": 93,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct NativeAttribute",
         "description": "Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
-        "line": 95,
+        "line": 97,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct NodeAttribute",
         "description": "Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.",
-        "line": 99,
+        "line": 101,
         "page": "reference/api/core-attributes-2.md"
       },
       {
         "signature": "public struct WebAttribute",
         "description": "Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.",
-        "line": 103,
+        "line": 105,
         "page": "reference/api/core-attributes-2.md"
       }
     ]
@@ -11420,99 +11432,105 @@
         "page": "reference/api/net-http-types-1.md"
       },
       {
+        "signature": "public fun to_json(): JsonValue",
+        "description": "Serializes header pairs in order, preserving repeated names.",
+        "line": 73,
+        "page": "reference/api/net-http-types-1.md"
+      },
+      {
         "signature": "public class HttpRequest",
         "description": "Mutable request description; sending snapshots URL, headers, options, and body bytes.",
-        "line": 93,
+        "line": 94,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public method: string",
         "description": "HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.",
-        "line": 95,
+        "line": 96,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public url: Url",
         "description": "Absolute http/https destination; credentials in URLs are rejected.",
-        "line": 97,
+        "line": 98,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public headers: HttpHeaders",
         "description": "Request headers; browsers reject forbidden names instead of silently ignoring them.",
-        "line": 99,
+        "line": 100,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public body: byte[]",
         "description": "Byte body copied for each send; GET and HEAD require an empty body.",
-        "line": 101,
+        "line": 102,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public constructor(method: string, url: Url)",
         "description": "Creates a request with empty headers and body.",
-        "line": 103,
+        "line": 104,
         "page": "reference/api/net-http-types-1.md"
       },
       {
         "signature": "public static fun get(url: Url): HttpRequest",
         "description": "Creates a GET request.",
-        "line": 105,
-        "page": "reference/api/net-http-types-1.md"
+        "line": 106,
+        "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static fun post(url: Url): HttpRequest",
         "description": "Creates a POST request.",
-        "line": 107,
+        "line": 108,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static fun put(url: Url): HttpRequest",
         "description": "Creates a PUT request.",
-        "line": 109,
+        "line": 110,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static fun patch(url: Url): HttpRequest",
         "description": "Creates a PATCH request.",
-        "line": 111,
+        "line": 112,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static fun delete(url: Url): HttpRequest",
         "description": "Creates a DELETE request.",
-        "line": 113,
+        "line": 114,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public fun set_text(text: string): void",
         "description": "Replaces the body with UTF-8 bytes; adds no content-type header implicitly.",
-        "line": 115,
+        "line": 116,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static class HttpCapabilities",
         "description": "Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.",
-        "line": 129,
+        "line": 130,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static get connection_timeouts(): bool",
         "description": "Whether a separate connection-establishment timeout can be configured (native hosts).",
-        "line": 133,
+        "line": 134,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static get redirect_limits(): bool",
         "description": "Whether explicit redirect limits and redirect responses are observable (native and Node).",
-        "line": 135,
+        "line": 136,
         "page": "reference/api/net-http-types-2.md"
       },
       {
         "signature": "public static get unrestricted_headers(): bool",
         "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
-        "line": 137,
+        "line": 138,
         "page": "reference/api/net-http-types-2.md"
       }
     ]
@@ -11847,6 +11865,92 @@
         "description": "Removes all parameters and the query delimiter from the URL.",
         "line": 131,
         "page": "reference/api/net-url.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/websocket.dream",
+    "package": "system.net",
+    "page": "reference/api/net-websocket.md",
+    "declarations": [
+      {
+        "signature": "public class WebSocket",
+        "description": "An owned RFC 6455 WebSocket, available on native, Node and browser hosts.",
+        "line": 4,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public static async fun connect(url: string, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<WebSocket, IoError>",
+        "description": "Opens ws:// or wss:// with an optional deadline and inherited cancellation.",
+        "line": 14,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun send_text(text: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends one UTF-8 text message.",
+        "line": 28,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun send_binary(bytes: byte[], token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends one binary message.",
+        "line": 32,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun close(token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends a normal closing handshake.",
+        "line": 36,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun close_with(code: int, reason: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends a validated close code and UTF-8 reason.",
+        "line": 38,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<WebSocketMessage, IoError>>",
+        "description": "Receives one complete message. Only one receive may be pending at a time.",
+        "line": 57,
+        "page": "reference/api/net-websocket.md"
+      },
+      {
+        "signature": "public fun messages(token: Option<CancellationToken> = Option.None): AsyncIterable<WebSocketMessage>",
+        "description": "Iterates until Close, including the final closing message. Transport errors end iteration.",
+        "line": 75,
+        "page": "reference/api/net-websocket.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/net/websocket_message.dream",
+    "package": "system.net",
+    "page": "reference/api/net-websocket-message.md",
+    "declarations": [
+      {
+        "signature": "public enum WebSocketMessage",
+        "description": "A complete WebSocket data message or the peer's closing handshake.",
+        "line": 4,
+        "page": "reference/api/net-websocket-message.md"
+      },
+      {
+        "signature": "Text(text: string)",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/net-websocket-message.md"
+      },
+      {
+        "signature": "Binary(bytes: byte[])",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/net-websocket-message.md"
+      },
+      {
+        "signature": "Close(code: int, reason: string)",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/net-websocket-message.md"
       }
     ]
   },
@@ -14509,6 +14613,823 @@
         "description": "Returns canonical lowercase text; formatting is the only string allocation.",
         "line": 72,
         "page": "reference/api/uuid-uuid.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/auth.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-auth.md",
+    "declarations": [
+      {
+        "signature": "public async fun BearerToken(@header(\"Authorization\") value: string): Result<string, HttpStatus>",
+        "description": "`Authorization: Bearer <token>` → the token, or 401.",
+        "line": 4,
+        "page": "reference/api/webapi-auth.md"
+      },
+      {
+        "signature": "public async fun ApiKeyHeader(@header(\"X-Api-Key\") value: string): Result<string, HttpStatus>",
+        "description": "Header named `X-Api-Key` (or pass `@header` yourself by wrapping).",
+        "line": 15,
+        "page": "reference/api/webapi-auth.md"
+      },
+      {
+        "signature": "public async fun BasicAuth(@header(\"Authorization\") value: string): Result<string, HttpStatus>",
+        "description": "`Authorization: Basic <base64>` → the raw header value after \"Basic \".",
+        "line": 23,
+        "page": "reference/api/webapi-auth.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/cors.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-cors.md",
+    "declarations": [
+      {
+        "signature": "public class CorsOptions",
+        "description": "FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are comma-separated (`\"*\"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is echoed instead, matching Starlette).",
+        "line": 6,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public allow_origins: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public allow_methods: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public allow_headers: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public expose_headers: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public allow_credentials: bool",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public max_age: int",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public constructor( allow_origins: string = \"*\", allow_methods: string = \"*\", allow_headers: string = \"*\", expose_headers: string = \"\", allow_credentials: bool = false, max_age: int = 600 )",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public class Cors",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public constructor(opts: CorsOptions)",
+        "description": "",
+        "line": 34,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/webapi-cors.md"
+      },
+      {
+        "signature": "public fun CORS(opts: CorsOptions): Middleware",
+        "description": "`WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.",
+        "line": 131,
+        "page": "reference/api/webapi-cors.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/derive/webapi_derive.dream",
+    "package": "system.webapi.derive",
+    "page": "reference/api/webapi-derive-webapi-derive.md",
+    "declarations": [
+      {
+        "signature": "public fun webapi_derive(ctx: GenContext): void",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/webapi-derive-webapi-derive.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/http_incoming.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-http-incoming.md",
+    "declarations": [
+      {
+        "signature": "public class HttpIncoming",
+        "description": "Headers and routing fields for one owned inbound HTTP request.",
+        "line": 4,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public req_id: int",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public method: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public path: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public query: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public headers: HttpHeaders",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun query_param(name: string): Option<string>",
+        "description": "Returns the first decoded query value with this name.",
+        "line": 27,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun header(name: string): Option<string>",
+        "description": "Returns the first matching request header.",
+        "line": 33,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun cookie(name: string): Option<string>",
+        "description": "Returns a named cookie, without decoding its value.",
+        "line": 35,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun read_body_bytes(token: Option<CancellationToken> = Option.None): Future<Result<byte[], IoError>>",
+        "description": "Reads the bounded request body as bytes, with inherited cancellation.",
+        "line": 43,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public async fun read_body_text(token: Option<CancellationToken> = Option.None): Result<string, IoError>",
+        "description": "Reads the bounded request body as UTF-8 text.",
+        "line": 49,
+        "page": "reference/api/webapi-http-incoming.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/http_outgoing.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-http-outgoing.md",
+    "declarations": [
+      {
+        "signature": "public class HttpOutgoing",
+        "description": "Outbound HTTP response built by handlers and middleware.",
+        "line": 4,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public status: int",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public headers: HttpHeaders",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public body: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public body_bytes: byte[]",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public constructor(status: int, body: string = \"\")",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public fun set_header(name: string, value: string): HttpOutgoing",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun text(body: string, status: int = 200): HttpOutgoing",
+        "description": "",
+        "line": 26,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun html(body: string, status: int = 200): HttpOutgoing",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun json_text(body: string, status: int = 200): HttpOutgoing",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun detail(message: string, status: int = 500): HttpOutgoing",
+        "description": "FastAPI-style `{\"detail\": \"...\"}` JSON error.",
+        "line": 45,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun already_sent(): HttpOutgoing",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun bytes(data: byte[], status: int = 200): HttpOutgoing",
+        "description": "",
+        "line": 55,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun from_status(st: HttpStatus): HttpOutgoing",
+        "description": "",
+        "line": 62,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun not_found(): HttpOutgoing",
+        "description": "",
+        "line": 70,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun empty(status: int = 204): HttpOutgoing",
+        "description": "",
+        "line": 74,
+        "page": "reference/api/webapi-http-outgoing.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/http_status.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-http-status.md",
+    "declarations": [
+      {
+        "signature": "public class HttpStatus",
+        "description": "HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).",
+        "line": 4,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public code: int",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public message: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public constructor(code: int, message: string = \"\")",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun bad_request(): HttpStatus",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun unauthorized(): HttpStatus",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun forbidden(): HttpStatus",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun not_found(): HttpStatus",
+        "description": "",
+        "line": 25,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun conflict(): HttpStatus",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun unprocessable(): HttpStatus",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun too_many(): HttpStatus",
+        "description": "",
+        "line": 37,
+        "page": "reference/api/webapi-http-status.md"
+      },
+      {
+        "signature": "public static fun internal(): HttpStatus",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/webapi-http-status.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/middleware.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-middleware.md",
+    "declarations": [
+      {
+        "signature": "public class RequestContext",
+        "description": "Per-request bag shared by middleware and `@dep` functions.",
+        "line": 4,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public incoming: HttpIncoming",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public state: Map<string, string>",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public cancellation_token: Option<CancellationToken>",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public constructor(incoming: HttpIncoming)",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public fun set(key: string, value: string): void",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public fun get(key: string): Option<string>",
+        "description": "",
+        "line": 19,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public class Next",
+        "description": "Continues the middleware onion toward the route handler.",
+        "line": 26,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public constructor(step: fun(): Future<HttpOutgoing>)",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public fun call(): Future<HttpOutgoing>",
+        "description": "",
+        "line": 33,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public class Middleware",
+        "description": "One onion layer: `invoke` may short-circuit or `next.call().await`.",
+        "line": 42,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>)",
+        "description": "",
+        "line": 45,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/webapi-middleware.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/server_ws.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-server-ws.md",
+    "declarations": [
+      {
+        "signature": "public class ServerWebSocket",
+        "description": "A WebSocket accepted by a native WebApp route.",
+        "line": 4,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun send_text(text: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends one text message.",
+        "line": 38,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun send_binary(bytes: byte[], token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends one binary message.",
+        "line": 41,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<WebSocketMessage, IoError>>",
+        "description": "Receives one complete message.",
+        "line": 44,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun messages(token: Option<CancellationToken> = Option.None): AsyncIterable<WebSocketMessage>",
+        "description": "Iterates messages through the final Close message.",
+        "line": 59,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun close(token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends a normal closing handshake.",
+        "line": 71,
+        "page": "reference/api/webapi-server-ws.md"
+      },
+      {
+        "signature": "public fun close_with(code: int, reason: string, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>",
+        "description": "Sends a closing handshake with a code and reason.",
+        "line": 74,
+        "page": "reference/api/webapi-server-ws.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/sse_event.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-sse-event.md",
+    "declarations": [
+      {
+        "signature": "public class SseEvent",
+        "description": "One server-sent event. Newlines in data are emitted as separate data lines.",
+        "line": 4,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public data: string",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public event: Option<string>",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public id: Option<string>",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public retry: Option<int>",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public constructor(data: string, event: Option<string> = Option.None, id: Option<string> = Option.None, retry: Option<int> = Option.None)",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-sse-event.md"
+      },
+      {
+        "signature": "public static fun data(text: string): SseEvent",
+        "description": "Creates an event with only a data payload.",
+        "line": 13,
+        "page": "reference/api/webapi-sse-event.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/uploaded_file.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-uploaded-file.md",
+    "declarations": [
+      {
+        "signature": "public class UploadedFile",
+        "description": "One `multipart/form-data` file part (`@file`).",
+        "line": 4,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public filename: string",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public content_type: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public bytes: byte[]",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public constructor(filename: string, content_type: string, bytes: byte[])",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-uploaded-file.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/web_app.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-web-app.md",
+    "declarations": [
+      {
+        "signature": "public class WebApp",
+        "description": "A native HTTP application whose routes and entry points are generated from attributes.",
+        "line": 15,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public static fun use(middleware: Middleware): void",
+        "description": "Appends a runtime onion middleware layer.",
+        "line": 23,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public static fun shutdown(): void",
+        "description": "Stops accepting connections and cancels pending request operations.",
+        "line": 26,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public static async fun wait(token: Option<CancellationToken> = Option.None): void",
+        "description": "Waits for the server loop, optionally shutting it down on cancellation.",
+        "line": 29,
+        "page": "reference/api/webapi-web-app.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/web_app_options.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-web-app-options.md",
+    "declarations": [
+      {
+        "signature": "public class WebAppOptions",
+        "description": "FastAPI-style listen options. Empty `docs_url` / `openapi_url` disables that route.",
+        "line": 4,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public title: string",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public version: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public docs_url: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public openapi_url: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public redoc_url: string",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public tls_cert_path: string",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public tls_key_path: string",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public constructor( title: string = \"Dream API\", version: string = \"0.1.0\", docs_url: string = \"/docs\", openapi_url: string = \"/openapi.json\", redoc_url: string = \"/redoc\", tls_cert_path: string = \"\", tls_key_path: string = \"\" )",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/webapi-web-app-options.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/webapi_attributes.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-webapi-attributes.md",
+    "declarations": [
+      {
+        "signature": "public struct GetAttribute",
+        "description": "Declares an HTTP GET route.",
+        "line": 5,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct PostAttribute",
+        "description": "Declares an HTTP POST route.",
+        "line": 9,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct PutAttribute",
+        "description": "Declares an HTTP PUT route.",
+        "line": 13,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct PatchAttribute",
+        "description": "Declares an HTTP PATCH route.",
+        "line": 17,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct DeleteAttribute",
+        "description": "Declares an HTTP DELETE route.",
+        "line": 21,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct HeadAttribute",
+        "description": "Declares an HTTP HEAD route.",
+        "line": 25,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct OptionsAttribute",
+        "description": "Declares an HTTP OPTIONS route.",
+        "line": 29,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct WebsocketAttribute",
+        "description": "Declares an HTTP WEBSOCKET route.",
+        "line": 33,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct HttpGroupAttribute",
+        "description": "Prefixes every route declared on a class.",
+        "line": 37,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct MiddlewareAttribute",
+        "description": "Installs a global onion layer; lower orders run first.",
+        "line": 41,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct UseAttribute",
+        "description": "Applies a middleware function to a route or group in source order.",
+        "line": 46,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct DepAttribute",
+        "description": "Injects and memoizes a dependency function once per request.",
+        "line": 50,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct ProducesAttribute",
+        "description": "Sets the content type of a yielded string or byte stream.",
+        "line": 54,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct BodyAttribute",
+        "description": "Extracts the request body as text, bytes or a JSON model.",
+        "line": 58,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct PathAttribute",
+        "description": "Binds a path value, with an optional name override.",
+        "line": 62,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct QueryAttribute",
+        "description": "Binds a query value, with an optional name override.",
+        "line": 66,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct HeaderAttribute",
+        "description": "Binds a header value, with an optional name override.",
+        "line": 70,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct CookieAttribute",
+        "description": "Binds a cookie value, with an optional name override.",
+        "line": 74,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct FormAttribute",
+        "description": "Binds a form value, with an optional name override.",
+        "line": 78,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct FileAttribute",
+        "description": "Binds a file value, with an optional name override.",
+        "line": 82,
+        "page": "reference/api/webapi-webapi-attributes.md"
+      },
+      {
+        "signature": "public struct WebApiAttribute",
+        "description": "Selects the WebApp declaration for its route generator.",
+        "line": 86,
+        "page": "reference/api/webapi-webapi-attributes.md"
       }
     ]
   }

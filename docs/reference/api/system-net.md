@@ -9,3 +9,6 @@ For usage and target behavior, read the [URL guide](../stdlib/url.md) and
 - [HTTP clients, responses, and body streams](net-http-client.md)
 - [Tcp](net-tcp.md)
 - [Udp](net-udp.md)
+
+- [WebSocket client](net-websocket.md)
+- [WebSocket messages](net-websocket-message.md)

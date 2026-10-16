@@ -2,7 +2,8 @@ module system.net;
 
 internal class SocketOperation {
     id: int;
-    internal constructor(request: JsonValue, bytes: byte[]) { this.id = SocketOperation.start_host(Json.serialize(request), bytes); }
+    internal static fun start(request: JsonValue, bytes: byte[]): SocketOperation { return SocketOperation(SocketOperation.start_host(Json.serialize(request), bytes)); }
+    internal constructor(id: int) { this.id = id; }
     @runtime("netSocketStart")
     static extern fun start_host(request: string, bytes: byte[]): int;
     @async_host @runtime("netSocketWait")
@@ -60,7 +61,7 @@ internal class SocketState {
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if port < 0 || port > 65535 || timeout < 0 { return Result.Err(IoError.invalid("", "invalid socket port or timeout")); }
         let request = SocketState.request(action, 0, timeout); request.set("host", JsonValue.from_string(host)); request.set("port", JsonValue.from_int(port));
-        let operation = SocketOperation(request, []);
+        let operation = SocketOperation.start(request, []);
         let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
         if metadata.at("id").as_int().unwrap_or(0) <= 0 { return Result.Err(IoError.other("", "invalid socket handle")); }
         let state = SocketState(metadata); operation.claim(); operation.close();
@@ -71,7 +72,7 @@ internal class SocketState {
         if state.id <= 0 { return Result.Err(IoError.closed("socket")); }
         CancellationToken.rejected(token, IoError.cancelled())?;
         request.set("id", JsonValue.from_int(state.id));
-        let operation = SocketOperation(request, bytes);
+        let operation = SocketOperation.start(request, bytes);
         let result = operation.wait(token).await;
         operation.close();
         return result;

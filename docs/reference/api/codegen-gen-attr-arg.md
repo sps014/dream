@@ -1,4 +1,4 @@
-# GenAttrArg
+# Gen Attr Arg
 
 **Import:** `import system.codegen;`
 
@@ -22,10 +22,18 @@ public kind: string
 public value: string
 ```
 
-## `public constructor(kind: string, value: string)`
+## `public symbol: string`
+
+Canonical compiler identity for a declaration reference, or empty.
+
+```dream
+public symbol: string
+```
+
+## `public constructor`
 
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(kind: string, value: string)
+public constructor(kind: string, value: string, symbol: string)
 ```

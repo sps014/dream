@@ -63,22 +63,6 @@ pub(crate) fn close(id: i32) {
         socket.closed.send_replace(true);
     }
 }
-pub(crate) struct OwnedSocket {
-    id: i32,
-    detached: bool,
-}
-impl OwnedSocket {
-    pub(crate) fn detach(&mut self) {
-        self.detached = true;
-    }
-}
-impl Drop for OwnedSocket {
-    fn drop(&mut self) {
-        if !self.detached {
-            close(self.id);
-        }
-    }
-}
 fn register(
     socket: Socket,
     local: SocketAddr,
@@ -97,10 +81,7 @@ fn register(
     let bytes = json!({"id":id,"local_host":local.ip().to_string(),"local_port":local.port(),"peer_host":peer.map(|p| p.ip().to_string()),"peer_port":peer.map(|p| p.port())}).to_string().into_bytes();
     Ok(Output {
         bytes,
-        child: Some(OwnedSocket {
-            id,
-            detached: false,
-        }),
+        child: Some(operations::OwnedResource::new(id, close)),
     })
 }
 fn register_tcp(socket: TcpStream) -> Result<Output, Failure> {

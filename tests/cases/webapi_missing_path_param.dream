@@ -1,0 +1,4 @@
+import system.webapi;
+@get("/users/{id}")
+fun route(): string { return "ok"; }
+fun main(): void {}

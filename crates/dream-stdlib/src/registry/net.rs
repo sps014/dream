@@ -14,6 +14,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/net/websocket.dream",
+            include_str!("../system/net/websocket.dream"),
+        ),
+        (
+            "<std>/system/net/websocket_message.dream",
+            include_str!("../system/net/websocket_message.dream"),
+        ),
+        (
             "<std>/system/net/socket_operation.dream",
             include_str!("../system/net/socket_operation.dream"),
         ),

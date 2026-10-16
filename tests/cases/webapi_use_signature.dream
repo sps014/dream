@@ -1,0 +1,6 @@
+import system.webapi;
+fun wrong(): int { return 1; }
+@use(wrong)
+@get("/")
+fun route(): string { return "ok"; }
+fun main(): void {}

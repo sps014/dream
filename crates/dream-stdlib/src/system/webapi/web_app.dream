@@ -1,0 +1,135 @@
+module system.webapi;
+
+import system.task;
+
+let webapi_middlewares: List<Middleware> = List<Middleware>();
+let webapi_generated_installed: bool = false;
+let webapi_server_handle: int = 0;
+// Completed handles are reclaimed by the accept loop after their final poll returns.
+let webapi_requests: Map<int, Future<void>> = Map<int, Future<void>>();
+let webapi_completed: Set<int> = Set<int>();
+let webapi_serve: Option<Future<void>> = Option.None;
+
+/// A native HTTP application whose routes and entry points are generated from attributes.
+@web_api
+public class WebApp {
+    @native @runtime("httpServerClose")
+    static extern fun close_host(id: int): void;
+    @native @runtime("httpServerShutdown")
+    static extern fun shutdown_host(id: int): void;
+
+    /// Appends a runtime onion middleware layer.
+    @native
+    public static fun use(middleware: Middleware): void { webapi_middlewares.push(middleware); }
+    /// Stops accepting connections and cancels pending request operations.
+    @native
+    public static fun shutdown(): void { if webapi_server_handle > 0 { WebApp.shutdown_host(webapi_server_handle); } }
+    /// Waits for the server loop, optionally shutting it down on cancellation.
+    @native
+    public static async fun wait(token: Option<CancellationToken> = Option.None): void {
+        let pending = webapi_serve;
+        if pending.is_none() { return; }
+        let effective = CancellationToken.resolve(token);
+        if effective.is_some() {
+            if effective.unwrap().wait_void(pending.unwrap()).await.is_err() { WebApp.shutdown(); }
+        } else { pending.unwrap().await; }
+        let id = webapi_server_handle;
+        if id > 0 {
+            let cleanup = CancellationSource();
+            WebOperation.submit(WebOperation.request("wait", id), [], Option.Some(cleanup.token)).await;
+            WebApp.close_host(id); webapi_server_handle = 0;
+        }
+        for (let request in webapi_requests.values()) { request.await; }
+        webapi_requests.clear(); webapi_completed.clear();
+        webapi_serve = Option.None;
+    }
+    internal static fun begin_generated_middleware(): bool { if webapi_generated_installed { return false; } webapi_generated_installed = true; return true; }
+    internal static fun json_escape(text: string): string { return Json.serialize(JsonValue.from_string(text)); }
+    internal static fun response_request(action: string, req_id: int, response: HttpOutgoing): JsonValue {
+        let request = WebOperation.request(action, req_id);
+        request.set("status", JsonValue.from_int(response.status));
+        let headers = response.headers.to_json();
+        request.set("headers", headers); return request;
+    }
+    internal static async fun run_middleware(ctx: RequestContext, chain: List<Middleware>, index: int, leaf: fun(): Future<HttpOutgoing>): HttpOutgoing {
+        if index >= chain.length { return leaf().await; }
+        let middleware = chain.get(index);
+        let next = Next(async () => { return WebApp.run_middleware(ctx, chain, index + 1, leaf).await; });
+        return middleware.invoke(ctx, next).await;
+    }
+    internal static async fun watch_disconnect(req: HttpIncoming, source: CancellationSource): void {
+        WebOperation.submit(WebOperation.request("disconnect", req.req_id), [], Option.None).await;
+        source.cancel();
+    }
+    static async fun respond(ctx: RequestContext, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string): void {
+        let leaf: fun(): Future<HttpOutgoing> = async () => {
+            let req = ctx.incoming;
+            if req.method == "GET" {
+                if !options.openapi_url.is_empty() && req.path == options.openapi_url {
+                    return HttpOutgoing.json_text(WebApp.openapi_document(options, paths()));
+                }
+                if !options.docs_url.is_empty() && req.path == options.docs_url { return HttpOutgoing.html(WebApp.swagger_html(options)); }
+                if !options.redoc_url.is_empty() && req.path == options.redoc_url { return HttpOutgoing.html(WebApp.redoc_html(options)); }
+            }
+            return dispatch(ctx).await;
+        };
+        let response = WebApp.run_middleware(ctx, webapi_middlewares, 0, leaf).await;
+        if !response.skip_send {
+            let bytes = response.body_bytes;
+            if !response.use_bytes { bytes = Encoding.utf8_encode(response.body); }
+            WebOperation.submit(WebApp.response_request("respond", ctx.incoming.req_id, response), bytes, ctx.cancellation_token).await;
+        }
+    }
+    static async fun handle(req: HttpIncoming, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string): void {
+        let source = CancellationSource();
+        let watcher = WebApp.watch_disconnect(req, source); Promise.start(watcher);
+        Task.scope<bool, string>(async (scope: TaskScope<string>) => {
+            let ctx = RequestContext(req); ctx.cancellation_token = Option.Some(scope.token); req.cancellation_token = ctx.cancellation_token;
+            WebApp.respond(ctx, options, dispatch, paths).await;
+            let result: Result<bool, TaskFailure<string>> = Result.Ok(true); return result;
+        }, token: Option.Some(source.token)).await;
+        Promise.cancel(watcher);
+        webapi_completed.add(req.req_id);
+    }
+    static async fun serve(id: int, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string, token: Option<CancellationToken>): void {
+        while true {
+            let operation = WebOperation.start(WebOperation.request("accept", id), []);
+            let result = operation.wait(token).await;
+            if result.is_err() { WebApp.shutdown(); return; }
+            let metadata = WebOperation.parse(result.unwrap());
+            if metadata.is_err() { WebApp.shutdown(); return; }
+            for (let completed_id in webapi_completed) { webapi_requests.remove(completed_id); }
+            webapi_completed.clear();
+            let req = HttpIncoming(metadata.unwrap()); operation.claim(); operation.close();
+            let handler = WebApp.handle(req, options, dispatch, paths);
+            webapi_requests.set(req.req_id, handler); Promise.start(handler);
+        }
+    }
+    internal static async fun listen_runtime(host: string, port: int, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string, token: Option<CancellationToken>): Result<int, IoError> {
+        let effective = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective, IoError.cancelled())?;
+        if webapi_server_handle > 0 { return Result.Err(IoError("", "EBUSY", "WebApp is already listening")); }
+        let request = WebOperation.request("listen", 0);
+        request.set("host", JsonValue.from_string(host)); request.set("port", JsonValue.from_int(port));
+        request.set("cert", JsonValue.from_string(options.tls_cert_path)); request.set("key", JsonValue.from_string(options.tls_key_path));
+        let operation = WebOperation.start(request, []);
+        let metadata = WebOperation.parse(operation.wait(effective).await?)?;
+        let id = metadata.at("id").as_int().unwrap_or(0);
+        if id <= 0 { return Result.Err(IoError.other("", "invalid HTTP server handle")); }
+        webapi_server_handle = id; operation.claim(); operation.close();
+        let serving = WebApp.serve(id, options, dispatch, paths, effective);
+        webapi_serve = Option.Some(serving); Promise.start(serving);
+        return Result.Ok(metadata.at("port").as_int().unwrap_or(0));
+    }
+    internal static fun openapi_document(options: WebAppOptions, paths: string): string {
+        return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":" + WebApp.json_escape(options.title) + ",\"version\":" + WebApp.json_escape(options.version) + "},\"paths\":" + paths + "}";
+    }
+    static fun html_escape(text: string): string { return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;"); }
+    static fun swagger_html(options: WebAppOptions): string {
+        let url = WebApp.json_escape(options.openapi_url).replace("<", "\\u003c");
+        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>SwaggerUIBundle({url:" + url + ",dom_id:'#swagger-ui'});</script></body></html>";
+    }
+    static fun redoc_html(options: WebAppOptions): string {
+        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title></head><body><redoc spec-url=\"" + WebApp.html_escape(options.openapi_url) + "\"></redoc><script src=\"https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js\"></script></body></html>";
+    }
+}

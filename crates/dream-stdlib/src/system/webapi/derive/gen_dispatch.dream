@@ -1,0 +1,89 @@
+module system.webapi.derive;
+import system;
+import system.codegen;
+import system.webapi;
+import system.json;
+
+extend WebGenerator {
+    internal fun emit_routes(): void {
+        this.source.line("import system.webapi;");
+        this.source.line("import system.net;");
+        this.source.line("import system.json;");
+        this.source.line("import system.encoding;");
+        this.source.line("import system.collections;");
+        for (let route in this.routes) {
+            let out = this.source;
+            out.line("@native");
+            out.line("async fun __web_route" + route.index.to_string() + "(ctx: RequestContext, params: Map<string, string>): HttpOutgoing {");
+            let args = this.arguments(route.function, out, Map<string, string>(), route);
+            let call = this.calls.get(route.function.id).unwrap() + "(" + args + ")";
+            let ty = web_return_type(route.function);
+            let stream = ty.name == "AsyncIterable" || ty.name == "Iterable";
+            if route.function.is_async && !stream { call = call + ".await"; }
+            if route.websocket {
+                out.line(call + ";"); out.line("return HttpOutgoing.already_sent();");
+            } else if stream { this.emit_stream(route, call, out); }
+            else if ty.kind == TypeRefKind.Void { out.line(call + ";"); out.line("return HttpOutgoing.empty();"); }
+            else {
+                out.line("let result = " + call + ";");
+                if ty.name == "Result" {
+                    if ty.arg(1).name == nameof(HttpStatus) { out.line("if result.is_err() { return HttpOutgoing.from_status(result.unwrap_err()); }"); }
+                    else { out.line("if result.is_err() { return HttpOutgoing.detail(result.unwrap_err().to_string(), 500); }"); }
+                    this.emit_value(ty.arg(0), "result.unwrap()", out);
+                } else { this.emit_value(ty, "result", out); }
+            }
+            out.line("}");
+        }
+    }
+    internal fun emit_value(ty: GenTypeRef, value: string, out: CodeBuilder): void {
+        if ty.name == nameof(HttpOutgoing) { out.line("return " + value + ";"); }
+        else if ty.name == nameof(HttpStatus) { out.line("return HttpOutgoing.from_status(" + value + ");"); }
+        else if ty.name == "string" { out.line("return HttpOutgoing.text(" + value + ");"); }
+        else if ty.display == "byte[]" { out.line("return HttpOutgoing.bytes(" + value + ");"); }
+        else { out.line("return HttpOutgoing.json_text(Json.serialize(" + value + "));"); }
+    }
+    internal fun emit_stream(route: WebRoute, call: string, out: CodeBuilder): void {
+        let ty = route.function.ret; let elem = ty.arg(0);
+        let content_type = "application/octet-stream";
+        if elem.name == "SseEvent" { content_type = "text/event-stream"; }
+        else if elem.name == "string" { content_type = "text/plain; charset=utf-8"; }
+        else if elem.display != "byte[]" { this.ctx.error_at(route.function.id, "streaming routes must yield SseEvent, string, or byte[]"); return; }
+        if route.function.has<ProducesAttribute>() && elem.name != "SseEvent" { content_type = route.function.attribute<ProducesAttribute>().unwrap().content_type; }
+        out.line("let stream_response = HttpOutgoing.empty(200).set_header(\"Content-Type\", " + web_quote(content_type) + ");");
+        out.line("let started = WebOperation.submit(WebApp.response_request(\"stream_begin\", ctx.incoming.req_id, stream_response), [], ctx.cancellation_token).await;");
+        out.line("if started.is_err() { return HttpOutgoing.already_sent(); }");
+        let prefix = "for"; if ty.name == "AsyncIterable" { prefix = "await for"; }
+        out.line(prefix + " (let item in " + call + ") {");
+        let chunk = "item";
+        if elem.name == "SseEvent" { chunk = "Encoding.utf8_encode(item.wire())"; }
+        else if elem.name == "string" { chunk = "Encoding.utf8_encode(item)"; }
+        out.line("let written = WebOperation.submit(WebOperation.request(\"stream_write\", ctx.incoming.req_id), " + chunk + ", ctx.cancellation_token).await;");
+        out.line("if written.is_err() { break; }"); out.line("}");
+        out.line("WebOperation.submit(WebOperation.request(\"stream_end\", ctx.incoming.req_id), [], ctx.cancellation_token).await;");
+        out.line("return HttpOutgoing.already_sent();");
+    }
+    internal fun emit_dispatch(out: CodeBuilder): void {
+        out.line("@native internal static async fun generated_dispatch(ctx: RequestContext): HttpOutgoing {");
+        for (let route in this.routes) {
+            let suffix = route.index.to_string();
+            out.line("if ctx.incoming.method == " + web_quote(route.method) + " {");
+            out.line("let matched = WebRouting.match_path(" + web_quote(route.path) + ", ctx.incoming.path);");
+            out.line("if matched.is_some() {");
+            if route.uses.is_empty() { out.line("return __web_route" + suffix + "(ctx, matched.unwrap()).await;"); }
+            else {
+                out.line("let chain = List<Middleware>();");
+                for (let use in route.uses) { out.line("chain.push(Middleware(" + this.calls.get(use.handler.symbol).unwrap() + "));"); }
+                out.line("let leaf: fun(): Future<HttpOutgoing> = async () => { return __web_route" + suffix + "(ctx, matched.unwrap()).await; };");
+                out.line("return WebApp.run_middleware(ctx, chain, 0, leaf).await;");
+            }
+            out.line("} }");
+        }
+        out.line("return HttpOutgoing.not_found(); }");
+    }
+    internal fun emit_entry_points(out: CodeBuilder): void {
+        out.line("@native public static async fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<int, IoError> { return WebApp.listen_with(host, port, WebAppOptions(), token).await; }");
+        out.line("@native public static async fun listen_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<int, IoError> { WebApp.generated_install_middleware(); return WebApp.listen_runtime(host, port, options, WebApp.generated_dispatch, WebApp.generated_openapi_paths, token).await; }");
+        out.line("@native public static async fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<bool, IoError> { WebApp.listen(host, port, token).await?; WebApp.wait(token).await; return Result.Ok(true); }");
+        out.line("@native public static async fun run_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<bool, IoError> { WebApp.listen_with(host, port, options, token).await?; WebApp.wait(token).await; return Result.Ok(true); }");
+    }
+}

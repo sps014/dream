@@ -12,5 +12,8 @@ crate-type = ["rlib", "cdylib"]
 dream-host-abi = { path = "../dream-host-abi" }
 
 [dev-dependencies]
+bumpalo = "3"
+dream-diagnostics = { path = "../dream-diagnostics" }
+dream-syntax = { path = "../dream-syntax" }
 dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }

@@ -2,6 +2,58 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::error(
+        "webapi_body_type",
+        "@body parameter 'value' must be @json, string, byte[], or JsonValue",
+        false,
+    ),
+    Case::error(
+        "webapi_no_extractor",
+        "parameter 'value' is not a path segment of '/' and has no extractor",
+        false,
+    ),
+    Case::error("webapi_dep_cycle", "forms a cycle", false),
+    Case::error(
+        "webapi_duplicate_route",
+        "duplicate GET route '/same'",
+        false,
+    ),
+    Case::error(
+        "webapi_missing_path_param",
+        "path placeholder '{id}' has no matching parameter",
+        false,
+    ),
+    Case::error(
+        "webapi_use_unknown",
+        "@use(missing) does not resolve to a function",
+        false,
+    ),
+    Case::error("webapi_use_signature", "@use(wrong) must be", false),
+    Case::error(
+        "webapi_nonstatic",
+        "HTTP route methods on a class must be static",
+        false,
+    ),
+    Case::error(
+        "webapi_body_form_mix",
+        "@body cannot be combined with @form/@file",
+        false,
+    ),
+    Case::error(
+        "webapi_file_type",
+        "@file parameter 'file' must be UploadedFile",
+        false,
+    ),
+    Case::error(
+        "webapi_websocket_parameter",
+        "@websocket handler must take a ServerWebSocket parameter",
+        false,
+    ),
+    Case::error_targets(
+        "webapi_wasm_unsupported",
+        None,
+        Some("not available on compile target"),
+    ),
+    Case::error(
         "string_unchecked_intrinsic_reserved",
         "reserved for internal stdlib storage",
         true,
@@ -540,8 +592,8 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error_targets(
         "runtime_attr_web_only",
-        "'f' is not available on compile target 'native' (available on: web)",
-        "'f' is not available on compile target 'node' (available on: web)",
+        Some("'f' is not available on compile target 'native' (available on: web)"),
+        Some("'f' is not available on compile target 'node' (available on: web)"),
     ),
     Case::error("sizeof_case_duplicates", "duplicate case label '8'", true),
     Case::error("sizeof_unknown", "sizeof: unknown type 'Banana'", true),

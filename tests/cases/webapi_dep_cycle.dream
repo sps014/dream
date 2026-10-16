@@ -1,0 +1,6 @@
+import system.webapi;
+fun a(@dep(b) value: int): int { return value; }
+fun b(@dep(a) value: int): int { return value; }
+@get("/")
+fun route(@dep(a) value: int): int { return value; }
+fun main(): void {}

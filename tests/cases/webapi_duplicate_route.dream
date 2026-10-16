@@ -1,0 +1,6 @@
+import system.webapi;
+@get("/same")
+fun first(): string { return "a"; }
+@get("/same")
+fun second(): string { return "b"; }
+fun main(): void {}

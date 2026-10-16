@@ -1,2 +1,2 @@
 [workspace]
-members = ["async_tasks", "collections", "core", "interop", "modules", "native", "native_services", "ownership", "serialization", "text", "types"]
+members = ["async_tasks", "collections", "core", "interop", "modules", "native", "native_services", "ownership", "serialization", "text", "types", "webapi", "webapi_import_only"]

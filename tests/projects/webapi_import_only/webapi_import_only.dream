@@ -1,0 +1,19 @@
+import system;
+import system.webapi;
+import system.net;
+import system.testing;
+
+@test
+@timeout(10000)
+async fun webapi_import_only(): void {
+    let port = WebApp.listen("127.0.0.1", 0).await.unwrap();
+    let client = HttpClient();
+    let base = "http://127.0.0.1:" + port.to_string();
+    let response = client.send(HttpRequest.get(Url.parse(base + "/openapi.json").unwrap())).await.unwrap();
+    Assert.eq(response.status, 200);
+    Assert.is_true(response.read_text().await.unwrap().contains("\"paths\":{}"));
+    response.close();
+    let missing = client.send(HttpRequest.get(Url.parse(base + "/missing").unwrap())).await.unwrap();
+    Assert.eq(missing.status, 404); missing.close();
+    WebApp.shutdown(); WebApp.wait().await; client.close().unwrap();
+}

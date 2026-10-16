@@ -1,6 +1,8 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::project("webapi_basic", "webapi", false),
+    Case::project("webapi_import_only", "webapi_import_only", false),
     Case::project("reserve_properties", "collections", true),
     Case::project("yield_iterators", "collections", true),
     Case::project("yield_async_iterators", "async_tasks", true),

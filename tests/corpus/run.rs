@@ -195,6 +195,15 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
         } else {
             node
         };
+        let Some(want) = want else {
+            assert!(
+                result.is_ok(),
+                "{} must compile on {host:?}: {result:?}",
+                case.stem
+            );
+            println!("PASS {} on {host:?} (compile)", case.stem);
+            return None;
+        };
         let error = result.expect_err("invalid corpus program compiled successfully");
         let text = error
             .diagnostic_text()

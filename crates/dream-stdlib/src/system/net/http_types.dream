@@ -69,7 +69,8 @@ public class HttpHeaders {
             else { i = i + 1; }
         }
     }
-    internal fun wire(): JsonValue {
+    /// Serializes header pairs in order, preserving repeated names.
+    public fun to_json(): JsonValue {
         let pairs = JsonValue.array();
         for (let i = 0; i < this.names.length; i = i + 1) {
             let pair = JsonValue.array();
@@ -117,7 +118,7 @@ public class HttpRequest {
         let json = JsonValue.dict();
         json.set("method", JsonValue.from_string(this.method));
         json.set("url", JsonValue.from_string(this.url.to_string()));
-        json.set("headers", this.headers.wire());
+        json.set("headers", this.headers.to_json());
         json.set("timeout_ms", JsonValue.from_int(options.timeout_ms));
         json.set("connect_timeout_ms", JsonValue.from_int(options.connect_timeout_ms));
         json.set("max_redirects", JsonValue.from_int(options.max_redirects));

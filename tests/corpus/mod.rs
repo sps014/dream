@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 pub enum Expectation {
     Project(&'static str),
     Error {
-        native: &'static str,
-        node: &'static str,
+        native: Option<&'static str>,
+        node: Option<&'static str>,
     },
     Trap(&'static str),
     Output(&'static str),
@@ -40,14 +40,19 @@ impl Case {
         Self {
             stem,
             expectation: Expectation::Error {
-                native: text,
-                node: text,
+                native: Some(text),
+                node: Some(text),
             },
             node,
             isolation: Some("invalid program"),
         }
     }
-    const fn error_targets(stem: &'static str, native: &'static str, node: &'static str) -> Self {
+    // None verifies successful compilation without executing the counterpart target.
+    const fn error_targets(
+        stem: &'static str,
+        native: Option<&'static str>,
+        node: Option<&'static str>,
+    ) -> Self {
         Self {
             stem,
             expectation: Expectation::Error { native, node },

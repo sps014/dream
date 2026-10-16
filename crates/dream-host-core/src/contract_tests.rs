@@ -14,47 +14,38 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-io/src/exports.rs"),
 ];
 
-fn names_after_module(src: &str, module: &str) -> Vec<String> {
-    let needle = format!("\"{}\"", module);
-    let mut out = Vec::new();
-    let mut rest = src;
-    while let Some(pos) = rest.find(&needle) {
-        let after = &rest[pos + needle.len()..];
-        let trimmed = after.trim_start_matches([' ', '\n', '\r', '\t', ',']);
-        if let Some(field) = trimmed.strip_prefix('"')
-            && let Some(end) = field.find('"')
-        {
-            out.push(field[..end].to_string());
-        }
-        rest = after;
-    }
-    out
-}
-
-fn runtime_attr_names(src: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut rest = src;
-    while let Some(pos) = rest.find("@runtime(") {
-        let after = &rest[pos + "@runtime(".len()..];
-        let trimmed = after.trim_start();
-        if let Some(field) = trimmed.strip_prefix('"')
-            && let Some(end) = field.find('"')
-        {
-            out.push(field[..end].to_string());
-        }
-        rest = after;
-    }
-    out
-}
-
-fn prelude_dream_host_names() -> HashSet<String> {
-    let mut declared: HashSet<String> = HashSet::new();
-    for (_, src) in dream_stdlib::all_prelude_files() {
-        for name in names_after_module(src, HOST_MODULE) {
-            declared.insert(name);
-        }
-        for name in runtime_attr_names(src) {
-            declared.insert(name);
+fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
+    use dream_abi::attributes::{RuntimeSupport, js_import_target, runtime_import_field};
+    use dream_syntax::{lexer::Lexer, parser::Parser};
+    let mut declared = HashSet::new();
+    for (path, source) in dream_stdlib::all_prelude_files() {
+        let arena = bumpalo::Bump::new();
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
+        let syntax = parser
+            .parse()
+            .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
+        let program = syntax.get_root();
+        dream_stdlib::attributes::resolve_source_attribute_ids(program);
+        let functions = program
+            .functions
+            .iter()
+            .chain(program.structs.iter().flat_map(|d| &d.methods))
+            .chain(program.enums.iter().flat_map(|d| &d.methods))
+            .chain(program.extends.iter().flat_map(|d| &d.methods));
+        for function in functions {
+            let support = RuntimeSupport::from_attributes(&function.attributes);
+            if !include_native_only && !support.node && !support.web {
+                continue;
+            }
+            if let Some(field) = runtime_import_field(&function.attributes) {
+                declared.insert(field);
+            }
+            if let Some((module, field)) = js_import_target(&function.attributes)
+                && module == HOST_MODULE
+            {
+                declared.insert(field);
+            }
         }
     }
     declared
@@ -81,7 +72,7 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
 
 #[test]
 fn every_native_dream_host_fn_is_declared_in_the_prelude() {
-    let declared = prelude_dream_host_names();
+    let declared = prelude_dream_host_names(true);
     let mut registered: HashSet<String> = HashSet::new();
     for src in HOST_SOURCES {
         registered.extend(c_abi_fn_names(src));
@@ -215,7 +206,7 @@ fn js_host_export_keys(src: &str) -> HashSet<String> {
 
 #[test]
 fn js_dream_host_keys_match_prelude_js_declarations() {
-    let declared = prelude_dream_host_names();
+    let declared = prelude_dream_host_names(false);
     let mut js_keys: HashSet<String> = HashSet::new();
     for src in JS_HOST_SOURCES {
         js_keys.extend(js_host_export_keys(src));

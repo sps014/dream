@@ -1,0 +1,4 @@
+import system.webapi;
+@get("/")
+fun route(value: int): int { return value; }
+fun main(): void {}

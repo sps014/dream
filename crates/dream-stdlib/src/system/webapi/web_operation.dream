@@ -1,0 +1,53 @@
+module system.webapi;
+
+internal class WebOperation {
+    id: int;
+    internal constructor(id: int) { this.id = id; }
+    internal static fun start(request: JsonValue, bytes: byte[]): WebOperation { return WebOperation(WebOperation.start_host(Json.serialize(request), bytes)); }
+    @native @runtime("httpServerStart")
+    static extern fun start_host(request: string, bytes: byte[]): int;
+    @native @async_host @runtime("httpServerWait")
+    static extern async fun wait_host(id: int): int;
+    @native @runtime("httpServerResult")
+    static extern fun result_host(id: int): byte[];
+    @native @runtime("httpServerCancel")
+    static extern fun cancel_host(id: int): void;
+    @native @runtime("httpServerRelease")
+    static extern fun release_host(id: int): void;
+    @native @runtime("httpServerClaim")
+    static extern fun claim_host(id: int): void;
+    internal fun claim(): void { WebOperation.claim_host(this.id); }
+    internal fun close(): void { if this.id > 0 { WebOperation.release_host(this.id); this.id = 0; } }
+    del() { this.close(); }
+    internal static fun request(action: string, id: int): JsonValue {
+        let request = JsonValue.dict(); request.set("action", JsonValue.from_string(action)); request.set("id", JsonValue.from_int(id)); request.set("timeout_ms", JsonValue.from_int(0)); return request;
+    }
+    internal static fun parse(bytes: byte[]): Result<JsonValue, IoError> {
+        let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
+        if parsed.is_err() { return Result.Err(IoError.other("", "invalid HTTP server metadata")); }
+        return Result.Ok(parsed.unwrap());
+    }
+    internal async fun wait(token: Option<CancellationToken>): Result<byte[], IoError> {
+        let lifetime = [this];
+        if lifetime[0].id <= 0 { return Result.Err(IoError("", "ELIMIT", "HTTP operation capacity exhausted")); }
+        let effective = CancellationToken.resolve(token);
+        let pending = WebOperation.wait_host(lifetime[0].id);
+        if effective.is_some() {
+            if effective.unwrap().wait(pending).await.is_err() { WebOperation.cancel_host(lifetime[0].id); WebOperation.wait_host(lifetime[0].id).await; }
+        } else { pending.await; }
+        let wire = WebOperation.result_host(lifetime[0].id);
+        if wire.length == 0 { return Result.Err(IoError.other("", "invalid HTTP server completion")); }
+        let payload = Buffer.alloc<byte>(wire.length - 1);
+        for (let i = 0; i < payload.length; i = i + 1) { payload[i] = wire[i + 1]; }
+        if wire[0] == (byte)1 { return Result.Ok(payload); }
+        let error = WebOperation.parse(payload)?;
+        return Result.Err(IoError("", error.at("code").as_string().unwrap_or("EIO"), error.at("message").as_string().unwrap_or("HTTP server operation failed")));
+    }
+    internal static async fun submit(request: JsonValue, bytes: byte[], token: Option<CancellationToken>): Result<byte[], IoError> {
+        let effective = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective, IoError.cancelled())?;
+        let operation = WebOperation.start(request, bytes);
+        let result = operation.wait(effective).await;
+        operation.close(); return result;
+    }
+}

@@ -1,0 +1,86 @@
+module system.webapi;
+
+/// Declares an HTTP GET route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct GetAttribute { public path: string; }
+
+/// Declares an HTTP POST route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct PostAttribute { public path: string; }
+
+/// Declares an HTTP PUT route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct PutAttribute { public path: string; }
+
+/// Declares an HTTP PATCH route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct PatchAttribute { public path: string; }
+
+/// Declares an HTTP DELETE route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct DeleteAttribute { public path: string; }
+
+/// Declares an HTTP HEAD route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct HeadAttribute { public path: string; }
+
+/// Declares an HTTP OPTIONS route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct OptionsAttribute { public path: string; }
+
+/// Declares an HTTP WEBSOCKET route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct WebsocketAttribute { public path: string; }
+
+/// Prefixes every route declared on a class.
+@attribute(AttributeTarget.Class)
+public struct HttpGroupAttribute { public prefix: string; }
+
+/// Installs a global onion layer; lower orders run first.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct MiddlewareAttribute { public order: Option<int>; }
+
+/// Applies a middleware function to a route or group in source order.
+@repeatable
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.Class)
+public struct UseAttribute { public handler: DeclarationPath; }
+
+/// Injects and memoizes a dependency function once per request.
+@attribute(AttributeTarget.Parameter)
+public struct DepAttribute { public provider: DeclarationPath; }
+
+/// Sets the content type of a yielded string or byte stream.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct ProducesAttribute { public content_type: string; }
+
+/// Extracts the request body as text, bytes or a JSON model.
+@attribute(AttributeTarget.Parameter)
+public struct BodyAttribute {}
+
+/// Binds a path value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct PathAttribute { public name: Option<string>; }
+
+/// Binds a query value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct QueryAttribute { public name: Option<string>; }
+
+/// Binds a header value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct HeaderAttribute { public name: Option<string>; }
+
+/// Binds a cookie value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct CookieAttribute { public name: Option<string>; }
+
+/// Binds a form value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct FormAttribute { public name: Option<string>; }
+
+/// Binds a file value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct FileAttribute { public name: Option<string>; }
+
+/// Selects the WebApp declaration for its route generator.
+@attribute(AttributeTarget.Class)
+public struct WebApiAttribute {}

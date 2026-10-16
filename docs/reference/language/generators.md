@@ -151,6 +151,9 @@ Inside a generator, read attributes as typed values: `decl.has<route>()`, `decl.
 ## Emit-style derives
 
 Emit generators read declarations from the context and queue new source with `ctx.emit_extend(decl, body)` (adds members to an existing type) or `ctx.emit_file(path, source)` (adds a whole file).
+Extensions retain the target declaration's module and internal visibility. Generated files
+may import already-loaded modules and bind their functions using explicit import aliases;
+they cannot load new source dependencies.
 
 ```dream
 module gen;
@@ -312,8 +315,12 @@ A trailing array is also variadic, allowing the bootstrap `attribute` declaratio
 `AttributeTarget[]` without depending on `system.collections`.
 
 Generator triggers use `DeclarationPath`, which stores the dotted declaration reference in
-its `text` field. For example, `@on_call(Json.serialize)` supplies a declaration path rather
-than an enum member. Unknown paths are diagnosed by the generator framework.
+its `text` field. Its `symbol` field carries the canonical compiler identity resolved in
+that source file, including imported function aliases; unresolved references have an empty
+identity. Attribute-only references participate in `referenced_functions()` and
+`referenced_decls()`, so `ctx.find_function(path.symbol)` can inspect dependency signatures.
+For example, `@on_call(Json.serialize)` supplies a declaration path rather than an enum member.
+Unknown trigger paths are diagnosed by the generator framework.
 
 An attribute type may use an `Attribute` suffix; its applied name removes the suffix and
 converts the remaining name to snake_case. For example, `JsAttribute` is applied as `@js` and remains

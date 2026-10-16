@@ -1,0 +1,7 @@
+[package]
+name = "corpus_webapi_import_only"
+version = "0.1.0"
+type = "test"
+
+[test]
+targets = ["native"]

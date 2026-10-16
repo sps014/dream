@@ -1,0 +1,3 @@
+import system.webapi;
+class Group { @get("/") public fun route(): string { return "ok"; } }
+fun main(): void {}

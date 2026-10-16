@@ -15,7 +15,7 @@ always abi.js platform.js urls.js core.js instance.js marshal.js hosts/env.js
 order js cancellation fs net cli data crypto console_process datetime_text workers
 chunk js hosts/js.js makeJsHost js
 chunk fs hosts/file_operations.js,hosts/fs.js makeFsHost file dir temp
-chunk net hosts/http.js,hosts/sockets.js,hosts/net.js makeNetHost net
+chunk net hosts/http.js,hosts/websocket.js,hosts/sockets.js,hosts/net.js makeNetHost net
 chunk crypto hosts/crypto.js makeCryptoHost crypto
 chunk console_process hosts/process_wire.js,hosts/process_service.js,hosts/console_process.js makeConsoleProcessHost console process
 chunk datetime_text hosts/datetime_text.js makeDatetimeTextHost unicode date time =delayMs

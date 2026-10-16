@@ -66,6 +66,7 @@ mod test_projects;
 mod wasm_interop;
 mod wasm_opt_test;
 mod weak_emission;
+mod websocket_client;
 
 #[test]
 fn every_test_file_is_a_module() {

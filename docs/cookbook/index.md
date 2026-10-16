@@ -46,3 +46,5 @@ Choose a small working example, run it, and change one part to see what happens.
 </div>
 
 New to Dream? [Quickstart](../learn/quickstart.md) · [Language tour](../learn/tour.md).
+
+[Serve a native JSON API](webapi.md) with routing, JSON extraction and API documentation.

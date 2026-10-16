@@ -2,6 +2,14 @@
 
 **Import:** `import system.net;`
 
+## `public static fun get`
+
+Creates a GET request.
+
+```dream
+public static fun get(url: Url): HttpRequest
+```
+
 ## `public static fun post`
 
 Creates a POST request.

@@ -21,6 +21,8 @@ mod task;
 mod testing;
 mod text;
 mod uuid;
+mod webapi;
+mod webapi_derive;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
 pub struct StdPackage {
@@ -63,4 +65,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     codegen::PACKAGE,
     json_derive::PACKAGE,
     logging::PACKAGE,
+    webapi::PACKAGE,
+    webapi_derive::PACKAGE,
 ];

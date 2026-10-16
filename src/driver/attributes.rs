@@ -108,7 +108,9 @@ fn reader(kind: ArgKind, ty: &str, index: &str) -> String {
         ArgKind::Int if ty == "long" => format!("a.long_arg({index})"),
         ArgKind::Int => format!("({ty})a.long_arg({index})"),
         ArgKind::Enum => format!("a.enum_member({index})"),
-        ArgKind::Path => format!("DeclarationPath(a.args.get({index}).value)"),
+        ArgKind::Path => {
+            format!("DeclarationPath(a.args.get({index}).value, a.args.get({index}).symbol)")
+        }
     }
 }
 

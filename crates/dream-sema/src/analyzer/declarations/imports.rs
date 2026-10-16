@@ -7,6 +7,7 @@ impl<'a> Analyzer<'a> {
         {
             let scope = self.graph.module_for_file(Some(&importing_file));
             self.type_ctx.set_scope(scope);
+            let generated = self.generated_files.contains(importing_file.as_str());
             diagnostics.file_path = Some(importing_file);
             let qualified = format!("{module_path}::{item}");
             let identities = self.function_candidates(&qualified);
@@ -17,12 +18,14 @@ impl<'a> Analyzer<'a> {
                 );
                 continue;
             }
-            if identities.iter().any(|key| {
-                self.function_table
-                    .functions
-                    .get(key)
-                    .is_some_and(|info| info.visibility == Visibility::Private)
-            }) {
+            if !generated
+                && identities.iter().any(|key| {
+                    self.function_table
+                        .functions
+                        .get(key)
+                        .is_some_and(|info| info.visibility == Visibility::Private)
+                })
+            {
                 diagnostics.report_error(
                     format!("'{item}' in module '{module_path}' is private; only 'public'/'internal' items can be imported with 'as'"),
                     Some(alias.position),

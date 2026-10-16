@@ -1,0 +1,21 @@
+module system.webapi;
+
+/// One server-sent event. Newlines in data are emitted as separate data lines.
+public class SseEvent {
+    public data: string;
+    public event: Option<string>;
+    public id: Option<string>;
+    public retry: Option<int>;
+    public constructor(data: string, event: Option<string> = Option.None, id: Option<string> = Option.None, retry: Option<int> = Option.None) {
+        this.data = data; this.event = event; this.id = id; this.retry = retry;
+    }
+    /// Creates an event with only a data payload.
+    public static fun data(text: string): SseEvent { return SseEvent(text); }
+    internal fun wire(): string {
+        let text = "";
+        if this.event.is_some() { text = text + "event: " + this.event.unwrap().replace("\r", "").replace("\n", "") + "\n"; }
+        if this.id.is_some() { text = text + "id: " + this.id.unwrap().replace("\r", "").replace("\n", "").replace("\0", "") + "\n"; }
+        if this.retry.is_some() && this.retry.unwrap() >= 0 { text = text + "retry: " + this.retry.unwrap().to_string() + "\n"; }
+        return text + "data: " + this.data.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\ndata: ") + "\n\n";
+    }
+}

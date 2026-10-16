@@ -63,7 +63,7 @@ fn capabilities_share_core_binding_and_allocation() {
             })
             .collect();
         for (capability, library) in HostCapability::ALL.iter().zip(&libraries) {
-            let marker = format!("dream_host_{}_abi_v2", capability.name());
+            let marker = capability.abi_marker();
             let marker: Symbol<unsafe extern "C" fn()> = library.get(marker.as_bytes()).unwrap();
             marker();
         }

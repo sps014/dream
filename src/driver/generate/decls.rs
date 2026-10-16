@@ -38,14 +38,16 @@ pub struct DeclEntry {
     pub file: Option<String>,
     /// Member names (fields, methods, variants) that `Type.member` paths may name.
     pub members: Vec<String>,
+    pub visibility: dream_syntax::nodes::Visibility,
 }
 
 /// Every top-level declaration, keyed by bare name (first declaration wins, matching the
 /// analyzer's global type namespace).
 #[derive(Debug, Default)]
 pub struct DeclIndex {
-    by_name: IndexMap<String, DeclEntry>,
-    functions: IndexMap<String, DeclEntry>,
+    pub(super) by_name: IndexMap<String, DeclEntry>,
+    pub(super) functions: IndexMap<String, DeclEntry>,
+    pub(super) scopes: IndexMap<String, super::attribute_refs::Scope>,
 }
 
 pub fn module_of(acc: &ProgramAccumulator<'_>, file: Option<&str>) -> String {
@@ -64,7 +66,7 @@ pub fn module_of_files(
 impl DeclIndex {
     pub fn build(acc: &ProgramAccumulator<'_>) -> Self {
         let mut index = DeclIndex::default();
-        let mut add = |name: &str, kind, file: Option<&str>, members: Vec<String>| {
+        let mut add = |name: &str, kind, file: Option<&str>, members: Vec<String>, visibility| {
             let module = module_of(acc, file);
             index
                 .by_name
@@ -76,6 +78,7 @@ impl DeclIndex {
                     kind,
                     file: file.map(str::to_string),
                     members,
+                    visibility,
                 });
         };
         for s in &acc.all_structs {
@@ -86,7 +89,13 @@ impl DeclIndex {
             } else {
                 DeclKind::Class
             };
-            add(&s.name.text, kind, s.file_path.as_deref(), members);
+            add(
+                &s.name.text,
+                kind,
+                s.file_path.as_deref(),
+                members,
+                s.visibility,
+            );
         }
         for e in &acc.all_enums {
             let mut members: Vec<String> = e.variants.iter().map(|v| v.name.text.clone()).collect();
@@ -96,7 +105,13 @@ impl DeclIndex {
             } else {
                 DeclKind::Enum
             };
-            add(&e.name.text, kind, e.file_path.as_deref(), members);
+            add(
+                &e.name.text,
+                kind,
+                e.file_path.as_deref(),
+                members,
+                e.visibility,
+            );
         }
         for i in &acc.all_interfaces {
             let members = i.methods.iter().map(|m| m.name.text.clone()).collect();
@@ -105,6 +120,7 @@ impl DeclIndex {
                 DeclKind::Interface,
                 i.file_path.as_deref(),
                 members,
+                i.visibility,
             );
         }
         for ext in &acc.all_extends {
@@ -130,8 +146,10 @@ impl DeclIndex {
                     kind: DeclKind::Function,
                     file: f.file_path.as_deref().map(str::to_string),
                     members: Vec::new(),
+                    visibility: f.visibility,
                 });
         }
+        index.scopes = super::attribute_refs::scopes(acc);
         index
     }
 

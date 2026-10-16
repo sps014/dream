@@ -106,7 +106,7 @@ fn generated_members_resolve_from_materialized_files() {
     fs::write(
         generated.join("outputs.json"),
         serde_json::to_vec(&serde_json::json!({
-            "version": 1,
+            "version": dream::driver::generate::SNAPSHOT_VERSION,
             "generator": "dto_derive",
             "outputs": [{"kind": "file", "path": "extends.dream", "source": source}]
         }))

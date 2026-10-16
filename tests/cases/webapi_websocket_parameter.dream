@@ -1,0 +1,4 @@
+import system.webapi;
+@websocket("/ws")
+fun route(): void {}
+fun main(): void {}

@@ -2,48 +2,109 @@ module system.webapi;
 
 import system.task;
 
-let webapi_middlewares: List<Middleware> = List<Middleware>();
-let webapi_generated_installed: bool = false;
-let webapi_server_handle: int = 0;
-// Completed handles are reclaimed by the accept loop after their final poll returns.
-let webapi_requests: Map<int, Future<void>> = Map<int, Future<void>>();
-let webapi_completed: Set<int> = Set<int>();
-let webapi_serve: Option<Future<void>> = Option.None;
-
-/// A native HTTP application whose routes and entry points are generated from attributes.
-@web_api
+/// An isolated native HTTP application with explicitly mounted routers.
+@allow_cycle
 public class WebApp {
+    options: WebAppOptions;
+    middlewares: List<Middleware>;
+    routes: List<WebEndpoint>;
+    server_handle: int;
+    frozen: bool;
+    requests: Map<int, Future<void>>;
+    completed: Set<int>;
+    serving: Option<Future<void>>;
+    overrides: Map<string, string>;
+    startup: List<fun(WebApp): Future<Result<bool, IoError>>>;
+    shutdown_hooks: List<fun(WebApp): Future<void>>;
+    started_hooks: int;
+    public state: Map<string, string>;
+
+    public constructor() {
+        this.options = WebAppOptions(); this.middlewares = List<Middleware>(); this.routes = List<WebEndpoint>();
+        this.overrides = Map<string, string>(); this.startup = List<fun(WebApp): Future<Result<bool, IoError>>>(); this.shutdown_hooks = List<fun(WebApp): Future<void>>(); this.started_hooks = 0;
+        this.server_handle = 0; this.frozen = false; this.requests = Map<int, Future<void>>();
+        this.completed = Set<int>(); this.serving = Option.None; this.state = Map<string, string>();
+    }
+    public constructor(options: WebAppOptions) {
+        this.options = options.copy(); this.middlewares = List<Middleware>(); this.routes = List<WebEndpoint>();
+        this.overrides = Map<string, string>(); this.startup = List<fun(WebApp): Future<Result<bool, IoError>>>(); this.shutdown_hooks = List<fun(WebApp): Future<void>>(); this.started_hooks = 0;
+        this.server_handle = 0; this.frozen = false; this.requests = Map<int, Future<void>>();
+        this.completed = Set<int>(); this.serving = Option.None; this.state = Map<string, string>();
+    }
     @native @runtime("httpServerClose")
     static extern fun close_host(id: int): void;
     @native @runtime("httpServerShutdown")
     static extern fun shutdown_host(id: int): void;
 
-    /// Appends a runtime onion middleware layer.
-    @native
-    public static fun use(middleware: Middleware): void { webapi_middlewares.push(middleware); }
-    /// Stops accepting connections and cancels pending request operations.
-    @native
-    public static fun shutdown(): void { if webapi_server_handle > 0 { WebApp.shutdown_host(webapi_server_handle); } }
-    /// Waits for the server loop, optionally shutting it down on cancellation.
-    @native
-    public static async fun wait(token: Option<CancellationToken> = Option.None): void {
-        let pending = webapi_serve;
+    /// Appends an outer-to-inner middleware layer before startup.
+    public fun use(middleware: Middleware): Result<bool, IoError> {
+        if this.frozen { return Result.Err(IoError.other("", "application configuration is frozen")); }
+        this.middlewares.push(middleware); return Result.Ok(true);
+    }
+    /// Mounts a router with an optional additional path prefix.
+    public fun include_router(router: WebRouter, prefix: string = ""): Result<bool, IoError> {
+        if this.frozen { return Result.Err(IoError.other("", "application configuration is frozen")); }
+        if !prefix.is_empty() && !prefix.starts_with("/") { return Result.Err(IoError.other("", "router prefix must be empty or start with '/'")); }
+        for (let route in router.routes) {
+            this.routes.push(WebEndpoint(route.method, WebApp.join_path(prefix, route.path), route.handler, route.paths, route.websocket, route.components));
+        }
+        return Result.Ok(true);
+    }
+    /// Installs generated dependency replacements before startup.
+    public fun override_dependencies(overrides: DependencyOverrides): Result<bool, IoError> {
+        if this.frozen { return Result.Err(IoError.other("", "application configuration is frozen")); }
+        for (let entry in overrides.providers.entries()) { this.overrides.set(entry.key, entry.value); } return Result.Ok(true);
+    }
+    /// Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.
+    public fun lifespan(start: fun(WebApp): Future<Result<bool, IoError>>, stop: fun(WebApp): Future<void>): Result<bool, IoError> {
+        if this.frozen { return Result.Err(IoError.other("", "application configuration is frozen")); }
+        this.startup.push(start); this.shutdown_hooks.push(stop); return Result.Ok(true);
+    }
+    static async fun finish_lifespan(app: WebApp): void {
+        while app.started_hooks > 0 { app.started_hooks--; let stop = app.shutdown_hooks.get(app.started_hooks); stop(app).await; }
+    }
+    internal static fun join_path(prefix: string, path: string): string {
+        while prefix.ends_with("/") { prefix = prefix.substring(0, prefix.length - 1); }
+        if !path.starts_with("/") { path = "/" + path; }
+        if path == "/" && !prefix.is_empty() { return prefix; }
+        return prefix + path;
+    }
+    fun validate_configuration(): Result<bool, IoError> {
+        let seen = Set<string>();
+        for (let path in [this.options.docs_url, this.options.openapi_url, this.options.redoc_url]) {
+            if path.is_empty() { continue; }
+            if !path.starts_with("/") || path.contains("?") || path.contains("#") || seen.contains(path) { return Result.Err(IoError.other("", "invalid or duplicate documentation URL: " + path)); }
+            seen.add(path);
+        }
+        let routes = Set<string>();
+        for (let route in this.routes) {
+            let key = route.method + " " + route.path;
+            if routes.contains(key) || seen.contains(route.path) { return Result.Err(IoError.other("", "duplicate or reserved route: " + key)); }
+            routes.add(key);
+        }
+        return Result.Ok(true);
+    }
+    /// Stops accepting traffic and cancels active transport operations on this app.
+    @native public fun shutdown(): void { if this.server_handle > 0 { WebApp.shutdown_host(this.server_handle); } }
+    /// Drains this application's requests and releases its listener.
+    @native public fun wait(token: Option<CancellationToken> = Option.None): Future<void> { return WebApp.wait_owned(this, token); }
+    static async fun wait_owned(app: WebApp, token: Option<CancellationToken>): void {
+        let pending = app.serving;
         if pending.is_none() { return; }
         let effective = CancellationToken.resolve(token);
         if effective.is_some() {
-            if effective.unwrap().wait_void(pending.unwrap()).await.is_err() { WebApp.shutdown(); }
+            if effective.unwrap().wait_void(pending.unwrap()).await.is_err() { app.shutdown(); }
         } else { pending.unwrap().await; }
-        let id = webapi_server_handle;
+        let id = app.server_handle;
         if id > 0 {
             let cleanup = CancellationSource();
             WebOperation.submit(WebOperation.request("wait", id), [], Option.Some(cleanup.token)).await;
-            WebApp.close_host(id); webapi_server_handle = 0;
+            WebApp.close_host(id); app.server_handle = 0;
         }
-        for (let request in webapi_requests.values()) { request.await; }
-        webapi_requests.clear(); webapi_completed.clear();
-        webapi_serve = Option.None;
+        for (let request in app.requests.values()) { request.await; }
+        app.requests.clear(); app.completed.clear(); app.serving = Option.None;
+        WebApp.finish_lifespan(app).await;
     }
-    internal static fun begin_generated_middleware(): bool { if webapi_generated_installed { return false; } webapi_generated_installed = true; return true; }
     internal static fun json_escape(text: string): string { return Json.serialize(JsonValue.from_string(text)); }
     internal static fun response_request(action: string, req_id: int, response: HttpOutgoing): JsonValue {
         let request = WebOperation.request(action, req_id);
@@ -61,75 +122,125 @@ public class WebApp {
         WebOperation.submit(WebOperation.request("disconnect", req.req_id), [], Option.None).await;
         source.cancel();
     }
-    static async fun respond(ctx: RequestContext, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string): void {
+    static async fun dispatch(app: WebApp, ctx: RequestContext): HttpOutgoing {
+        for (let route in app.routes) {
+            if route.method != ctx.incoming.method { continue; }
+            let matched = WebRouting.match_path(route.path, ctx.incoming.path);
+            if matched.is_some() { let handler = route.handler; return handler(ctx, matched.unwrap()).await; }
+        }
+        return HttpOutgoing.not_found();
+    }
+    static async fun respond(app: WebApp, ctx: RequestContext): void {
+        let options = app.options;
         let leaf: fun(): Future<HttpOutgoing> = async () => {
             let req = ctx.incoming;
             if req.method == "GET" {
-                if !options.openapi_url.is_empty() && req.path == options.openapi_url {
-                    return HttpOutgoing.json_text(WebApp.openapi_document(options, paths()));
-                }
+                if !options.openapi_url.is_empty() && req.path == options.openapi_url { return HttpOutgoing.json_text(app.openapi()); }
                 if !options.docs_url.is_empty() && req.path == options.docs_url { return HttpOutgoing.html(WebApp.swagger_html(options)); }
                 if !options.redoc_url.is_empty() && req.path == options.redoc_url { return HttpOutgoing.html(WebApp.redoc_html(options)); }
             }
-            return dispatch(ctx).await;
+            return WebApp.dispatch(app, ctx).await;
         };
-        let response = WebApp.run_middleware(ctx, webapi_middlewares, 0, leaf).await;
+        let response = WebApp.run_middleware(ctx, app.middlewares, 0, leaf).await;
         if !response.skip_send {
             let bytes = response.body_bytes;
             if !response.use_bytes { bytes = Encoding.utf8_encode(response.body); }
             WebOperation.submit(WebApp.response_request("respond", ctx.incoming.req_id, response), bytes, ctx.cancellation_token).await;
         }
     }
-    static async fun handle(req: HttpIncoming, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string): void {
+    static async fun handle(app: WebApp, req: HttpIncoming): void {
         let source = CancellationSource();
         let watcher = WebApp.watch_disconnect(req, source); Promise.start(watcher);
+        let ctx = RequestContext(req); ctx.app_state = app.state; ctx.overrides = app.overrides;
         Task.scope<bool, string>(async (scope: TaskScope<string>) => {
-            let ctx = RequestContext(req); ctx.cancellation_token = Option.Some(scope.token); req.cancellation_token = ctx.cancellation_token;
-            WebApp.respond(ctx, options, dispatch, paths).await;
+            ctx.cancellation_token = Option.Some(scope.token); req.cancellation_token = ctx.cancellation_token;
+            WebApp.respond(app, ctx).await;
             let result: Result<bool, TaskFailure<string>> = Result.Ok(true); return result;
         }, token: Option.Some(source.token)).await;
-        Promise.cancel(watcher);
-        webapi_completed.add(req.req_id);
+        RequestContext.finish(ctx).await;
+        Promise.cancel(watcher); app.completed.add(req.req_id);
     }
-    static async fun serve(id: int, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string, token: Option<CancellationToken>): void {
+    static async fun serve(app: WebApp, id: int, token: Option<CancellationToken>): void {
         while true {
             let operation = WebOperation.start(WebOperation.request("accept", id), []);
             let result = operation.wait(token).await;
-            if result.is_err() { WebApp.shutdown(); return; }
+            if result.is_err() { app.shutdown(); return; }
             let metadata = WebOperation.parse(result.unwrap());
-            if metadata.is_err() { WebApp.shutdown(); return; }
-            for (let completed_id in webapi_completed) { webapi_requests.remove(completed_id); }
-            webapi_completed.clear();
+            if metadata.is_err() { app.shutdown(); return; }
+            for (let completed_id in app.completed) { app.requests.remove(completed_id); }
+            app.completed.clear();
             let req = HttpIncoming(metadata.unwrap()); operation.claim(); operation.close();
-            let handler = WebApp.handle(req, options, dispatch, paths);
-            webapi_requests.set(req.req_id, handler); Promise.start(handler);
+            let handler = WebApp.handle(app, req); app.requests.set(req.req_id, handler); Promise.start(handler);
         }
     }
-    internal static async fun listen_runtime(host: string, port: int, options: WebAppOptions, dispatch: fun(RequestContext): Future<HttpOutgoing>, paths: fun(): string, token: Option<CancellationToken>): Result<int, IoError> {
+    /// Binds this app; port zero selects an ephemeral port.
+    @native public fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): Future<Result<int, IoError>> { return WebApp.listen_owned(this, host, port, token); }
+    static async fun listen_owned(app: WebApp, host: string, port: int, token: Option<CancellationToken>): Result<int, IoError> {
         let effective = CancellationToken.resolve(token);
         CancellationToken.rejected(effective, IoError.cancelled())?;
-        if webapi_server_handle > 0 { return Result.Err(IoError("", "EBUSY", "WebApp is already listening")); }
+        if app.frozen { return Result.Err(IoError("", "EBUSY", "application has already started")); }
+        app.validate_configuration()?; app.frozen = true;
+        for (let start in app.startup) {
+            let result = start(app).await;
+            if result.is_err() { WebApp.finish_lifespan(app).await; return Result.Err(result.unwrap_err()); }
+            app.started_hooks++;
+        }
         let request = WebOperation.request("listen", 0);
         request.set("host", JsonValue.from_string(host)); request.set("port", JsonValue.from_int(port));
-        request.set("cert", JsonValue.from_string(options.tls_cert_path)); request.set("key", JsonValue.from_string(options.tls_key_path));
+        request.set("cert", JsonValue.from_string(app.options.tls_cert_path)); request.set("key", JsonValue.from_string(app.options.tls_key_path));
         let operation = WebOperation.start(request, []);
-        let metadata = WebOperation.parse(operation.wait(effective).await?)?;
-        let id = metadata.at("id").as_int().unwrap_or(0);
+        let result = operation.wait(effective).await;
+        if result.is_err() { WebApp.finish_lifespan(app).await; return Result.Err(result.unwrap_err()); }
+        let parsed = WebOperation.parse(result.unwrap());
+        if parsed.is_err() { WebApp.finish_lifespan(app).await; return Result.Err(parsed.unwrap_err()); }
+        let metadata = parsed.unwrap();
+        let id = metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0);
         if id <= 0 { return Result.Err(IoError.other("", "invalid HTTP server handle")); }
-        webapi_server_handle = id; operation.claim(); operation.close();
-        let serving = WebApp.serve(id, options, dispatch, paths, effective);
-        webapi_serve = Option.Some(serving); Promise.start(serving);
-        return Result.Ok(metadata.at("port").as_int().unwrap_or(0));
+        app.server_handle = id; operation.claim(); operation.close();
+        let serving = WebApp.serve(app, id, effective); app.serving = Option.Some(serving); Promise.start(serving);
+        return Result.Ok(metadata.get_or("port", JsonValue.none()).as_int().unwrap_or(0));
+    }
+    /// Listens and waits until shutdown or cancellation.
+    @native public fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>> { return WebApp.run_owned(this, host, port, token); }
+    static async fun run_owned(app: WebApp, host: string, port: int, token: Option<CancellationToken>): Result<bool, IoError> {
+        app.listen(host, port, token).await?; app.wait(token).await; return Result.Ok(true);
+    }
+    /// Produces documentation for this application's mounted routes only.
+    public fun openapi(): string {
+        let paths = JsonValue.dict(); let schemas = JsonValue.dict(); let security = JsonValue.dict();
+        for (let route in this.routes) {
+            if route.websocket { continue; }
+            let all = Json.deserialize<JsonValue>(route.paths).unwrap_or(JsonValue.dict());
+            let components = Json.deserialize<JsonValue>(route.components).unwrap_or(JsonValue.dict());
+            for (let key in components.get_or("schemas", JsonValue.none()).keys()) { schemas.set(key, components.get_or("schemas", JsonValue.none()).get_or(key, JsonValue.none())); }
+            for (let key in components.get_or("securitySchemes", JsonValue.none()).keys()) { security.set(key, components.get_or("securitySchemes", JsonValue.none()).get_or(key, JsonValue.none())); }
+            let method = route.method.to_lower();
+            let mounted = paths.get(route.path).unwrap_or(JsonValue.dict());
+            mounted.set(method, all); paths.set(route.path, mounted);
+        }
+        let document = Json.deserialize<JsonValue>(WebApp.openapi_document(this.options, Json.serialize(paths))).unwrap();
+        let components = JsonValue.dict(); components.set("schemas", schemas); components.set("securitySchemes", security); document.set("components", components); return Json.serialize(document);
     }
     internal static fun openapi_document(options: WebAppOptions, paths: string): string {
-        return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":" + WebApp.json_escape(options.title) + ",\"version\":" + WebApp.json_escape(options.version) + "},\"paths\":" + paths + "}";
+        let info = JsonValue.dict(); info.set("title", JsonValue.from_string(options.title)); info.set("version", JsonValue.from_string(options.version));
+        info.set("description", JsonValue.from_string(options.description));
+        if !options.summary.is_empty() { info.set("x-summary", JsonValue.from_string(options.summary)); }
+        if !options.terms_of_service.is_empty() { info.set("termsOfService", JsonValue.from_string(options.terms_of_service)); }
+        let doc = JsonValue.dict(); doc.set("openapi", JsonValue.from_string("3.0.3")); doc.set("info", info);
+        doc.set("paths", Json.deserialize<JsonValue>(paths).unwrap_or(JsonValue.dict())); return Json.serialize(doc);
     }
     static fun html_escape(text: string): string { return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;"); }
+    static fun script_json(value: JsonValue): string { return Json.serialize(value).replace("<", "\\u003c").replace("&", "\\u0026"); }
     static fun swagger_html(options: WebAppOptions): string {
-        let url = WebApp.json_escape(options.openapi_url).replace("<", "\\u003c");
-        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title><link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\"></head><body><div id=\"swagger-ui\"></div><script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script><script>SwaggerUIBundle({url:" + url + ",dom_id:'#swagger-ui'});</script></body></html>";
+        let settings = JsonValue.dict(); settings.set("url", JsonValue.from_string(options.openapi_url)); settings.set("dom_id", JsonValue.from_string("#swagger-ui"));
+        settings.set("deepLinking", JsonValue.boolean(options.swagger.deep_linking));
+        settings.set("persistAuthorization", JsonValue.boolean(options.swagger.persist_authorization));
+        settings.set("tryItOutEnabled", JsonValue.boolean(options.swagger.try_it_out_enabled));
+        if !options.swagger.oauth_redirect_url.is_empty() { settings.set("oauth2RedirectUrl", JsonValue.from_string(options.swagger.oauth_redirect_url)); }
+        let oauth = JsonValue.dict(); oauth.set("clientId", JsonValue.from_string(options.swagger.oauth_client_id)); oauth.set("usePkceWithAuthorizationCodeGrant", JsonValue.boolean(options.swagger.oauth_use_pkce));
+        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title><link rel=\"stylesheet\" href=\"" + WebApp.html_escape(options.swagger.css_url) + "\"></head><body><div id=\"swagger-ui\"></div><script src=\"" + WebApp.html_escape(options.swagger.js_url) + "\"></script><script>const ui=SwaggerUIBundle(" + WebApp.script_json(settings) + ");ui.initOAuth(" + WebApp.script_json(oauth) + ");</script></body></html>";
     }
     static fun redoc_html(options: WebAppOptions): string {
-        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title></head><body><redoc spec-url=\"" + WebApp.html_escape(options.openapi_url) + "\"></redoc><script src=\"https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js\"></script></body></html>";
+        return "<!DOCTYPE html><html><head><title>" + WebApp.html_escape(options.title) + "</title></head><body><redoc spec-url=\"" + WebApp.html_escape(options.openapi_url) + "\"></redoc><script src=\"" + WebApp.html_escape(options.swagger.redoc_js_url) + "\"></script></body></html>";
     }
 }

@@ -1,0 +1,101 @@
+module system.webapi.auth;
+
+/// Authentication failures carry stable codes without credential values.
+public class AuthError {
+    public code: string;
+    public message: string;
+    public constructor(code: string, message: string) { this.code = code; this.message = message; }
+}
+
+/// Verified identity and application-defined space-separated permission scopes.
+@json
+public class AuthPrincipal {
+    public subject: string;
+    public scopes: string;
+    public constructor(subject: string, scopes: string) { this.subject = subject; this.scopes = scopes; }
+    public fun has_scope(scope: string): bool { for (let item in this.scopes.split(' ')) { if item == scope { return true; } } return false; }
+}
+
+/// Persisted account data supplied by an application repository.
+public class AuthAccount {
+    public subject: string;
+    public password_hash: string;
+    public scopes: string;
+    public constructor(subject: string, password_hash: string, scopes: string = "") { this.subject = subject; this.password_hash = password_hash; this.scopes = scopes; }
+}
+
+/// Local lookup and explicit external-identity linking are application policy.
+public interface AuthAccounts {
+    async unique fun find_login(login: string): Result<AuthAccount, AuthError>;
+    async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError>;
+}
+
+/// A refresh-token record. Stores contain only the digest of the bearer secret.
+public class AuthSession {
+    public hash: string;
+    public family: string;
+    public subject: string;
+    public scopes: string;
+    public expires: long;
+    public csrf: string;
+    public consumed: bool;
+    public constructor(hash: string, family: string, subject: string, scopes: string, expires: long, csrf: string) {
+        this.hash = hash; this.family = family; this.subject = subject; this.scopes = scopes; this.expires = expires; this.csrf = csrf; this.consumed = false;
+    }
+}
+
+/// An expiring, browser-bound OIDC authorization transaction.
+public class OidcTransaction {
+    public provider: string;
+    public nonce: string;
+    public verifier: string;
+    public expires: long;
+    public constructor(provider: string, nonce: string, verifier: string, expires: long) { this.provider = provider; this.nonce = nonce; this.verifier = verifier; this.expires = expires; }
+}
+
+/// Persistence operations must be atomic, including refresh replay detection and transaction consumption.
+public interface AuthSessionStore {
+    async unique fun create(session: AuthSession): Result<bool, AuthError>;
+    async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>;
+    async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError>;
+    async unique fun revoke(family: string): Result<bool, AuthError>;
+    async unique fun active(family: string, now: long): bool;
+    async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError>;
+    async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>;
+}
+
+/// Native JWT configuration; RS256 uses PEM keys, HS256 requires an explicit 32-byte minimum secret.
+public class JwtOptions {
+    public issuer: string;
+    public audience: string;
+    public signing_key: string;
+    public verification_key: string;
+    public algorithm: string;
+    public constructor(issuer: string, audience: string, signing_key: string, verification_key: string, algorithm: string = "RS256") {
+        this.issuer = issuer; this.audience = audience; this.signing_key = signing_key; this.verification_key = verification_key; this.algorithm = algorithm;
+    }
+}
+
+/// One external OIDC identity provider. Redirect URIs must match the registered callback exactly.
+public class OidcOptions {
+    public name: string;
+    public issuer: string;
+    public client_id: string;
+    public client_secret: string;
+    public redirect_uri: string;
+    public constructor(name: string, issuer: string, client_id: string, redirect_uri: string, client_secret: string = "") {
+        this.name = name; this.issuer = issuer; this.client_id = client_id; this.redirect_uri = redirect_uri; this.client_secret = client_secret;
+    }
+}
+
+@json
+public class AuthTokens {
+    public access_token: string;
+    public refresh_token: string;
+    public token_type: string;
+    public expires_in: int;
+    public csrf_token: string;
+    public constructor(access_token: string, refresh_token: string, token_type: string, expires_in: int, csrf_token: string) {
+        this.access_token = access_token; this.refresh_token = refresh_token; this.token_type = token_type; this.expires_in = expires_in; this.csrf_token = csrf_token;
+    }
+}

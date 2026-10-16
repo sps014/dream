@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../stdlib/webapi.md).
+See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
 ## `public class HttpOutgoing`
 
@@ -12,25 +12,25 @@ Outbound HTTP response built by handlers and middleware.
 public class HttpOutgoing
 ```
 
-## `public status: int`
+## `public status`
 
 ```dream
 public status: int
 ```
 
-## `public headers: HttpHeaders`
+## `public headers`
 
 ```dream
 public headers: HttpHeaders
 ```
 
-## `public body: string`
+## `public body`
 
 ```dream
 public body: string
 ```
 
-## `public body_bytes: byte[]`
+## `public body_bytes`
 
 ```dream
 public body_bytes: byte[]
@@ -72,6 +72,28 @@ FastAPI-style `{"detail": "..."}` JSON error.
 
 ```dream
 public static fun detail(message: string, status: int = 500): HttpOutgoing
+```
+
+## `public static fun from_body_error`
+
+Preserves body-limit failures as 413 while other read failures remain 400.
+
+```dream
+public static fun from_body_error(error: IoError): HttpOutgoing
+```
+
+## `public static fun from_validation`
+
+A structured validation response, prefixed with the input source.
+
+```dream
+public static fun from_validation(errors: ValidationErrors, source: string): HttpOutgoing
+```
+
+## `public static fun invalid_input`
+
+```dream
+public static fun invalid_input(source: string, name: string, code: string, message: string): HttpOutgoing
 ```
 
 ## `public static fun already_sent`

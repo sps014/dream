@@ -1,0 +1,104 @@
+module system.webapi.auth;
+
+/// Local and OIDC authentication with application-owned accounts and atomic session storage.
+@allow_cycle
+public class AuthService {
+    internal dummy_hash: string;
+    internal jwt: JwtOptions;
+    internal accounts: AuthAccounts;
+    internal store: AuthSessionStore;
+    internal providers: Map<string, OidcOptions>;
+    internal prefix: string;
+    internal access_seconds: int;
+    internal refresh_seconds: int;
+    internal browser_origin: string;
+    internal browser_sessions: bool;
+    internal frozen: bool;
+    public constructor(jwt: JwtOptions, accounts: AuthAccounts, store: AuthSessionStore, prefix: string = "/auth", access_seconds: int = 900, refresh_seconds: int = 604800, browser_sessions: bool = false, browser_origin: string = "") {
+        this.jwt = JwtOptions(jwt.issuer, jwt.audience, jwt.signing_key, jwt.verification_key, jwt.algorithm);
+        this.dummy_hash = "";
+        this.accounts = accounts; this.store = store; this.prefix = prefix; this.access_seconds = access_seconds;
+        this.refresh_seconds = refresh_seconds; this.browser_sessions = browser_sessions; this.browser_origin = browser_origin; this.frozen = false; this.providers = Map<string, OidcOptions>();
+    }
+    public fun add_provider(options: OidcOptions): Result<bool, AuthError> {
+        if this.frozen || this.providers.contains(options.name) || options.name.is_empty() || options.name.contains("/") { return Result.Err(AuthError("EINVAL", "invalid or duplicate OIDC provider")); }
+        this.providers.set(options.name, OidcOptions(options.name, options.issuer, options.client_id, options.redirect_uri, options.client_secret)); return Result.Ok(true);
+    }
+    @native public fun login(login: string, password: string): Future<Result<AuthTokens, AuthError>> { return AuthService.login_owned(this, login, password); }
+    @native static async fun login_owned(service: AuthService, login: string, password: string): Result<AuthTokens, AuthError> {
+        if service.dummy_hash.is_empty() { service.dummy_hash = Password.hash("unavailable-account")?; }
+        let account = service.accounts.find_login(login).await;
+        let hash = service.dummy_hash; if account.is_ok() { hash = account.unwrap().password_hash; }
+        let verified = Password.verify(password, hash);
+        if account.is_err() || verified.is_err() || !verified.unwrap() { return Result.Err(AuthError("EAUTH", "invalid credentials")); }
+        return AuthService.issue(service, account.unwrap()).await;
+    }
+    @native internal static async fun issue(service: AuthService, account: AuthAccount): Result<AuthTokens, AuthError> {
+        let token = AuthCrypto.random()?; let family = AuthCrypto.random()?; let csrf = AuthCrypto.random()?;
+        let session = AuthSession(AuthCrypto.digest(token), family, account.subject, account.scopes, AuthCrypto.now() + (long)service.refresh_seconds, csrf);
+        let result = AuthService.tokens(service, session, token)?; service.store.create(session).await?; return Result.Ok(result);
+    }
+    @native static fun tokens(service: AuthService, session: AuthSession, refresh: string): Result<AuthTokens, AuthError> {
+        let claims = JsonValue.dict(); claims.set("sub", JsonValue.from_string(session.subject)); claims.set("scope", JsonValue.from_string(session.scopes)); claims.set("sid", JsonValue.from_string(session.family));
+        claims.set("iat", JsonValue.number((double)AuthCrypto.now())); claims.set("exp", JsonValue.number((double)(AuthCrypto.now() + (long)service.access_seconds)));
+        let signed = AuthCrypto.jwt(service.jwt, "sign", claims)?;
+        return Result.Ok(AuthTokens(signed.as_string().unwrap_or(""), refresh, "bearer", service.access_seconds, session.csrf));
+    }
+    @native public fun refresh(token: string): Future<Result<AuthTokens, AuthError>> { return AuthService.refresh_owned(this, token); }
+    @native static async fun refresh_owned(service: AuthService, token: string): Result<AuthTokens, AuthError> {
+        let digest = AuthCrypto.digest(token); let original = service.store.find(digest, AuthCrypto.now()).await?;
+        if original.consumed { service.store.revoke(original.family).await?; return Result.Err(AuthError("EREPLAY", "refresh token replay")); }
+        let next = AuthCrypto.random()?; let csrf = AuthCrypto.random()?;
+        let replacement = AuthSession(AuthCrypto.digest(next), original.family, original.subject, original.scopes, original.expires, csrf);
+        let result = AuthService.tokens(service, replacement, next)?;
+        service.store.rotate(digest, replacement, AuthCrypto.now()).await?; return Result.Ok(result);
+    }
+    @native public fun logout(token: string): Future<Result<bool, AuthError>> { return AuthService.logout_owned(this, token); }
+    @native static async fun logout_owned(service: AuthService, token: string): Result<bool, AuthError> {
+        let session = service.store.find(AuthCrypto.digest(token), AuthCrypto.now()).await?;
+        return service.store.revoke(session.family).await;
+    }
+    @native public fun verify(token: string): Future<Result<AuthPrincipal, AuthError>> { return AuthService.verify_owned(this, token); }
+    @native static async fun verify_owned(service: AuthService, token: string): Result<AuthPrincipal, AuthError> {
+        let claims = AuthCrypto.jwt(service.jwt, "verify", JsonValue.from_string(token))?;
+        let family = claims.get_or("sid", JsonValue.none()).as_string().unwrap_or("");
+        if family.is_empty() || !service.store.active(family, AuthCrypto.now()).await { return Result.Err(AuthError("EAUTH", "revoked session")); }
+        return Result.Ok(AuthPrincipal(claims.get_or("sub", JsonValue.none()).as_string().unwrap_or(""), claims.get_or("scope", JsonValue.none()).as_string().unwrap_or("")));
+    }
+    /// Installs verified identity into request state. Invalid credentials always short-circuit.
+    @native public fun middleware(): Middleware {
+        let service = this;
+        return Middleware(async (ctx: RequestContext, next: Next) => {
+            let bearer = ctx.incoming.header("Authorization");
+            let session_cookie = ctx.incoming.cookie("__Host-dream_session");
+            let principal: Option<AuthPrincipal> = Option.None;
+            if bearer.is_some() {
+                let header = bearer.unwrap();
+                if !header.starts_with("Bearer ") { return HttpOutgoing.detail("invalid credentials", 401).set_header("WWW-Authenticate", "Bearer"); }
+                let verified = service.verify(header.substring(7, header.length)).await;
+                if verified.is_err() { return HttpOutgoing.detail("invalid credentials", 401).set_header("WWW-Authenticate", "Bearer"); }
+                principal = Option.Some(verified.unwrap());
+            } else if session_cookie.is_some() {
+                let session = service.store.find(AuthCrypto.digest(session_cookie.unwrap()), AuthCrypto.now()).await;
+                if session.is_err() || session.unwrap().consumed { return HttpOutgoing.detail("invalid session", 401); }
+                let method = ctx.incoming.method;
+                if method != "GET" && method != "HEAD" && method != "OPTIONS" && ctx.incoming.header("X-CSRF-Token").unwrap_or("") != session.unwrap().csrf { return HttpOutgoing.detail("CSRF verification failed", 403); }
+                principal = Option.Some(AuthPrincipal(session.unwrap().subject, session.unwrap().scopes));
+            }
+            if principal.is_some() { ctx.set("auth.subject", principal.unwrap().subject); ctx.set("auth.scopes", principal.unwrap().scopes); }
+            return next.call().await;
+        });
+    }
+}
+
+/// Injects identity previously verified by AuthService.middleware().
+@security_scheme("BearerAuth", "http", "bearer")
+public fun CurrentUser(ctx: RequestContext): Result<AuthPrincipal, HttpStatus> {
+    let subject = ctx.get("auth.subject");
+    if subject.is_none() { return Result.Err(HttpStatus.unauthorized()); }
+    let principal = AuthPrincipal(subject.unwrap(), ctx.get("auth.scopes").unwrap_or(""));
+    for (let scope in ctx.get("auth.required_scopes").unwrap_or("").split(' ')) {
+        if !scope.is_empty() && !principal.has_scope(scope) { return Result.Err(HttpStatus.forbidden()); }
+    }
+    return Result.Ok(principal);
+}

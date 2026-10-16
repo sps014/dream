@@ -9,11 +9,11 @@ extend WebGenerator {
         for (let f in this.ctx.referenced_functions()) { this.remember(f, ""); }
         for (let d in this.ctx.referenced_decls()) {
             this.declarations.set(d.id, d);
-            for (let f in d.methods) { this.remember(f, d.name); }
+            for (let f in d.methods) { this.remember(f, this.owner_name(d)); }
         }
         for (let d in this.ctx.decls()) {
             this.declarations.set(d.id, d);
-            for (let f in d.methods) { this.remember(f, d.name); }
+            for (let f in d.methods) { this.remember(f, this.owner_name(d)); }
         }
         // Imports are emitted before definitions, including attribute-only dependencies.
         for (let f in this.ctx.functions_with<GetAttribute>()) { this.remember(f, ""); }
@@ -24,21 +24,28 @@ extend WebGenerator {
         for (let f in this.ctx.functions_with<HeadAttribute>()) { this.remember(f, ""); }
         for (let f in this.ctx.functions_with<OptionsAttribute>()) { this.remember(f, ""); }
         for (let f in this.ctx.functions_with<WebsocketAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<MiddlewareAttribute>()) { this.remember(f, ""); }
         for (let f in this.ctx.functions_with<DepAttribute>()) { this.remember(f, ""); }
         for (let f in this.ctx.functions_with<UseAttribute>()) { this.remember(f, ""); }
         for (let d in this.ctx.decls()) {
             let prefix = "";
-            if d.has<HttpGroupAttribute>() { prefix = d.attribute<HttpGroupAttribute>().unwrap().prefix; }
+            if d.has<RouterAttribute>() { prefix = d.attribute<RouterAttribute>().unwrap().prefix; }
+            if !prefix.is_empty() && !prefix.starts_with("/") { this.ctx.error_at(d.id, "@router prefix must be empty or start with '/'"); }
             let uses = GenAttributes.decode_all<UseAttribute>(d.attributes);
-            for (let f in d.methods) { this.candidate(f, prefix, uses, true); }
+            for (let f in d.methods) {
+                let before = this.routes.length;
+                this.candidate(f, prefix, uses, true);
+                if this.routes.length > before {
+                    if !d.has<RouterAttribute>() { this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class"); }
+                    this.owners.set(before, d.id);
+                }
+            }
         }
         let methods = Map<string, bool>();
         for (let d in this.ctx.decls()) { for (let f in d.methods) { methods.set(f.id, true); } }
         for (let entry in this.functions.entries()) { if !methods.contains(entry.key) { this.candidate(entry.value, "", List<UseAttribute>(), false); } }
         let seen = Map<string, bool>();
         for (let route in this.routes) {
-            let key = route.method + " " + route.path;
+            let key = this.owners.get(route.index).unwrap_or("") + " " + route.method + " " + route.path;
             if seen.contains(key) { this.ctx.error_at(route.function.id, "duplicate " + route.method + " route '" + route.path + "'"); }
             seen.set(key, true);
         }
@@ -53,12 +60,9 @@ extend WebGenerator {
         if f.has<HeadAttribute>() { verb = "HEAD"; path = f.attribute<HeadAttribute>().unwrap().path; }
         if f.has<OptionsAttribute>() { verb = "OPTIONS"; path = f.attribute<OptionsAttribute>().unwrap().path; }
         if f.has<WebsocketAttribute>() { verb = "GET"; path = f.attribute<WebsocketAttribute>().unwrap().path; websocket = true; }
-        if f.has<MiddlewareAttribute>() {
-            if method && !f.is_static { this.ctx.error_at(f.id, "HTTP middleware methods on a class must be static"); }
-            this.middleware.push(f);
-        }
         if verb.is_empty() { return; }
-        if method && !f.is_static { this.ctx.error_at(f.id, "HTTP route methods on a class must be static"); return; }
+        if !method { this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class"); return; }
+        if !f.is_static { this.ctx.error_at(f.id, "HTTP route methods on a class must be static"); return; }
         let uses = List<UseAttribute>();
         for (let use in group) { uses.push(use); }
         for (let use in GenAttributes.decode_all<UseAttribute>(f.attributes)) { uses.push(use); }
@@ -85,6 +89,7 @@ extend WebGenerator {
             if p.has<DepAttribute>() {
                 let dependency = this.functions.get(p.attribute<DepAttribute>().unwrap().provider.symbol);
                 if dependency.is_some() { this.validate_parameters(dependency.unwrap(), route, placeholders, flags, visited); }
+                for (let replacement in this.replacements.get(p.attribute<DepAttribute>().unwrap().provider.symbol).unwrap_or(List<GenFunction>())) { this.validate_parameters(replacement, route, placeholders, flags, visited); }
                 continue;
             }
             let ty = p.ty; let name = p.name;

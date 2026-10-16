@@ -27,6 +27,10 @@ public enum Intrinsic {
     JsonSerialize,
     JsonDeserialize,
     JsonFromValue,
+    ValidationDecode,
+    ValidationValidate,
+    ValidationSchema,
+
     GenAttributeId,
     GenAttributeDecode,
     GenAttributeDecodeAll,

@@ -13,8 +13,11 @@ ROOT = Path(__file__).resolve().parents[2]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dream", type=Path, default=ROOT / "target/debug/dream.exe" if os.name == "nt" else ROOT / "target/debug/dream")
+    parser.add_argument("--filter", help="Only check examples whose names contain this text")
     args = parser.parse_args()
     cases = json.loads((ROOT / "tooling/docs/example-cases.json").read_text(encoding="utf-8"))
+    if args.filter:
+        cases = [case for case in cases if args.filter in case["name"]]
     output = ROOT / "target/docs-examples"
     output.mkdir(parents=True, exist_ok=True)
     failed = []
@@ -30,15 +33,19 @@ def main():
         directory.mkdir(exist_ok=True)
         path = directory / "main.dream"
         path.write_text(source, encoding="utf-8")
+        mode = case.get("mode", "run")
+        if mode not in {"run", "compile", "test"}:
+            raise ValueError(f"Unsupported example mode: {mode}")
+        command = [str(args.dream.resolve()), "--emit-llvm", str(path)] if mode == "compile" else [str(args.dream.resolve()), mode, str(path)]
         try:
-            result = subprocess.run([str(args.dream.resolve()), "run", str(path)], cwd=directory,
-                                    capture_output=True, text=True, timeout=120)
+            result = subprocess.run(command, cwd=directory,
+                                    capture_output=True, text=True, timeout=case.get("timeout", 120))
         except (OSError, subprocess.TimeoutExpired) as error:
             failed.append(case["name"])
             print(f"FAIL {case['name']}: {error}")
             continue
         stdout = result.stdout.replace("\r\n", "\n")
-        if result.returncode != 0 or stdout != case["stdout"]:
+        if result.returncode != 0 or (mode == "run" and stdout != case["stdout"]):
             failed.append(case["name"])
             print(f"FAIL {case['name']} ({case['page']}): exit {result.returncode}\n{result.stdout}\n{result.stderr}")
         else:

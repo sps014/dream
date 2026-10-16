@@ -44,6 +44,7 @@ mod bytes;
 mod gen_attribute;
 mod json;
 mod raw;
+mod validation;
 
 impl<'a> Analyzer<'a> {
     /// Resolves a `Type.method(args)` call whose `{Type}_{method}` names a generic static method
@@ -243,6 +244,22 @@ impl<'a> Analyzer<'a> {
         // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
         // HIR coverage regardless of which sub-branch handles the call.
         self.hir_none();
+        if let Some(
+            op @ (intrinsics::IntrinsicOp::ValidationDecode
+            | intrinsics::IntrinsicOp::ValidationValidate
+            | intrinsics::IntrinsicOp::ValidationSchema),
+        ) = intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+        {
+            return self.analyze_validation_intrinsic(
+                op,
+                method,
+                generic_args,
+                params_types,
+                arg_hirs,
+                diagnostics,
+            );
+        }
+
         if matches!(
             intrinsics::IntrinsicOp::from_attributes(&template.attributes),
             Some(intrinsics::IntrinsicOp::RawLoad | intrinsics::IntrinsicOp::RawStore)

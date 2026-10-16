@@ -193,6 +193,7 @@ Full sample: `[sample/generators/dto/](https://github.com/sps014/dream/tree/main
 The declaration model is typed:
 
 - `GenDecl` carries `kind` (`DeclKind.Class` / `Struct` / `Union` / …), `fields`, `variants`, `methods`, `constructors`, and `generics`.
+- `GenTypeRef.display` is a diagnostic spelling and can contain canonical module qualification. Use `source_name()` in a scope importing the declaration, or emit explicit type import aliases when generating a different module.
 - `GenField.ty` is a `GenTypeRef`. Use `primitive()` (`Primitive.Int`, …), `collection()` (`CollectionKind.List`, …), `is_option()`, and `arg(i)` instead of comparing type names as strings.
 - `ctx.type_index()` lists every type in the program by name and kind, and `ctx.find_type(name)` looks one up.
 - `ctx.options<T>()` decodes `dream.toml` `[[generators]].options` into an `@json` type, and `ctx.additional_files()` returns the files listed in `additional_files`.

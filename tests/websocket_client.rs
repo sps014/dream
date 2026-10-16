@@ -88,10 +88,11 @@ import system.testing;
 async fun tls_listen(): void {{
     let options = WebAppOptions();
     options.tls_cert_path = {cert}; options.tls_key_path = {key};
-    Assert.is_true(WebApp.listen_with("127.0.0.1", 0, options).await.unwrap() > 0);
-    WebApp.shutdown(); WebApp.wait().await;
+    let app = WebApp(options);
+    Assert.is_true(app.listen("127.0.0.1", 0).await.unwrap() > 0);
+    app.shutdown(); app.wait().await;
     options.tls_key_path = "";
-    Assert.is_true(WebApp.listen_with("127.0.0.1", 0, options).await.is_err());
+    Assert.is_true(WebApp(options).listen("127.0.0.1", 0).await.is_err());
 }}
 "#,
         cert = serde_json::to_string(&cert).unwrap(),

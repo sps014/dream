@@ -272,6 +272,10 @@ pub enum IntrinsicOp {
     JsonDeserialize,
     /// `Json.from_value<T>(v)` — already-parsed `JsonValue` to `T`.
     JsonFromValue,
+    ValidationDecode,
+    ValidationValidate,
+    ValidationSchema,
+
     /// `GenAttributes.id<A>()` — the `module::name` identity of attribute type `A`.
     GenAttributeId,
     /// `GenAttributes.decode<A>(attrs)` — the first `A` in a snapshotted attribute list.
@@ -410,6 +414,10 @@ impl IntrinsicOp {
             ATTR_JSON_SERIALIZE => IntrinsicOp::JsonSerialize,
             ATTR_JSON_DESERIALIZE => IntrinsicOp::JsonDeserialize,
             ATTR_JSON_FROM_VALUE => IntrinsicOp::JsonFromValue,
+            "validation_decode" => IntrinsicOp::ValidationDecode,
+            "validation_validate" => IntrinsicOp::ValidationValidate,
+            "validation_schema" => IntrinsicOp::ValidationSchema,
+
             ATTR_GEN_ATTRIBUTE_ID => IntrinsicOp::GenAttributeId,
             ATTR_GEN_ATTRIBUTE_DECODE => IntrinsicOp::GenAttributeDecode,
             ATTR_GEN_ATTRIBUTE_DECODE_ALL => IntrinsicOp::GenAttributeDecodeAll,

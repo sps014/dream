@@ -126,6 +126,7 @@ pub(super) fn merge_imports(
     diagnostics: &mut dream_diagnostics::DiagnosticBag,
 ) {
     let loaded = dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages);
+    let declarations = DeclIndex::build(acc);
     for import in &program.imports {
         let name = import.module_name.text.replace('/', ".");
         let (module, item) = if import.alias.is_some() {
@@ -147,6 +148,9 @@ pub(super) fn merge_imports(
             acc.all_functions
                 .iter()
                 .any(|f| f.name.text == item && module_of(acc, f.file_path.as_deref()) == module)
+                || declarations
+                    .type_decl(&format!("{module}::{item}"))
+                    .is_some()
         });
         if (!std_loaded && paths.is_empty()) || !target_exists {
             diagnostics.report(dream_diagnostics::Diagnostic::new(

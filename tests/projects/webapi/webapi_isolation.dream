@@ -1,0 +1,33 @@
+import system;
+import system.webapi;
+import system.net;
+import system.testing;
+import webapi_basic;
+
+@router("")
+class IsolatedRoutes {
+    @get("/state")
+    public static fun state(ctx: RequestContext): string { return ctx.app_state.get("name").unwrap_or(""); }
+}
+@router("")
+class HiddenRoutes { @get("/hidden") public static fun hidden(): string { return "hidden"; } }
+@test
+@timeout(10000)
+async fun webapi_isolation(): void {
+    let options = WebAppOptions(title: "First API"); options.swagger = SwaggerOptions(js_url: "/assets/swagger.js", css_url: "/assets/swagger.css", persist_authorization: true);
+    let first = WebApp(options); let second = WebApp(WebAppOptions(title: "Second API", docs_url: "/documentation"));
+    first.state.set("name", "first"); second.state.set("name", "second");
+    first.include_router(IsolatedRoutes.router()).unwrap(); second.include_router(IsolatedRoutes.router(), "/v2").unwrap();
+    let port1 = first.listen("127.0.0.1", 0).await.unwrap(); let port2 = second.listen("127.0.0.1", 0).await.unwrap();
+    let base1 = "http://127.0.0.1:" + port1.to_string(); let base2 = "http://127.0.0.1:" + port2.to_string(); let client = HttpClient();
+    Assert.eq_str(webapi_get(client, base1, "/state", 200).await, "first"); Assert.eq_str(webapi_get(client, base2, "/v2/state", 200).await, "second");
+    webapi_get(client, base1, "/hidden", 404).await; webapi_get(client, base2, "/state", 404).await;
+    Assert.is_true(!first.openapi().contains("/hidden")); Assert.is_true(second.openapi().contains("/v2/state"));
+    Assert.is_true(webapi_get(client, base1, "/docs", 200).await.contains("/assets/swagger.js"));
+    webapi_get(client, base2, "/docs", 404).await; webapi_get(client, base2, "/documentation", 200).await;
+    Assert.is_true(first.include_router(HiddenRoutes.router()).is_err()); Assert.is_true(first.use(Middleware(webapi_global)).is_err());
+    first.shutdown(); first.wait().await; Assert.eq_str(webapi_get(client, base2, "/v2/state", 200).await, "second"); second.shutdown(); second.wait().await;
+    let duplicate = WebApp(); duplicate.include_router(IsolatedRoutes.router()).unwrap(); duplicate.include_router(IsolatedRoutes.router()).unwrap(); Assert.is_true(duplicate.listen("127.0.0.1", 0).await.is_err());
+    let reserved = WebApp(WebAppOptions(docs_url: "/state")); reserved.include_router(IsolatedRoutes.router()).unwrap(); Assert.is_true(reserved.listen("127.0.0.1", 0).await.is_err());
+    client.close().unwrap();
+}

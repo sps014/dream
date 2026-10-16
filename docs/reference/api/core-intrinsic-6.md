@@ -2,7 +2,23 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
+## `DreamCancellationRegister`
+
+```dream
+DreamCancellationRegister
+```
+
+## `DreamCancellationSignal`
+
+```dream
+DreamCancellationSignal
+```
+
+## `DreamCancellationUnregister`
+
+```dream
+DreamCancellationUnregister
+```
 
 ## `DreamFfiFreeWith`
 
@@ -128,22 +144,4 @@ SharedSemaphoreRelease
 
 ```dream
 SharedSemaphoreTryAcquire
-```
-
-## `SharedSemaphoreTryAcquireFor`
-
-```dream
-SharedSemaphoreTryAcquireFor
-```
-
-## `DreamCancel`
-
-```dream
-DreamCancel
-```
-
-## `DreamStart`
-
-```dream
-DreamStart
 ```

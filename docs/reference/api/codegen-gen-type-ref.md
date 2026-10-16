@@ -1,4 +1,4 @@
-# GenTypeRef
+# Gen Type Ref
 
 **Import:** `import system.codegen;`
 
@@ -10,13 +10,13 @@ A resolved type with structured arguments and declaration identity.
 public class GenTypeRef
 ```
 
-## `public kind: TypeRefKind`
+## `public kind`
 
 ```dream
 public kind: TypeRefKind
 ```
 
-## `public name: string`
+## `public name`
 
 `int`, `List`, `T`, or empty for arrays/tuples/functions.
 
@@ -24,15 +24,15 @@ public kind: TypeRefKind
 public name: string
 ```
 
-## `public display: string`
+## `public display`
 
-Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.
+Display spelling, including canonical module qualification for resolved names.
 
 ```dream
 public display: string
 ```
 
-## `public mangled: string`
+## `public mangled`
 
 Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.
 
@@ -40,7 +40,7 @@ Compiler-mangled spelling (`List_int`), unique per instantiation; handy for help
 public mangled: string
 ```
 
-## `public decl: string`
+## `public decl`
 
 Identity of the named declaration (`::User`, `system.collections::List`), or empty.
 
@@ -48,7 +48,7 @@ Identity of the named declaration (`::User`, `system.collections::List`), or emp
 public decl: string
 ```
 
-## `public args: List<GenTypeRef>`
+## `public args`
 
 Type arguments; the element of an array; tuple members; function params then return.
 
@@ -56,7 +56,7 @@ Type arguments; the element of an array; tuple members; function params then ret
 public args: List<GenTypeRef>
 ```
 
-## `public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)`
+## `public constructor`
 
 Creates the snapshot model from the supplied values.
 
@@ -64,7 +64,7 @@ Creates the snapshot model from the supplied values.
 public constructor(kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef>)
 ```
 
-## `unknown`
+## `public static fun unknown`
 
 Returns the requested model information.
 
@@ -72,7 +72,7 @@ Returns the requested model information.
 public static fun unknown(): GenTypeRef
 ```
 
-## `primitive`
+## `public fun primitive`
 
 The scalar this type is, or `Primitive.NotPrimitive`.
 
@@ -80,7 +80,7 @@ The scalar this type is, or `Primitive.NotPrimitive`.
 public fun primitive(): Primitive
 ```
 
-## `is_primitive`
+## `public fun is_primitive`
 
 Returns the requested model information.
 
@@ -88,7 +88,7 @@ Returns the requested model information.
 public fun is_primitive(p: Primitive): bool
 ```
 
-## `collection`
+## `public fun collection`
 
 The standard collection this type is, or `CollectionKind.NotCollection`.
 
@@ -96,7 +96,7 @@ The standard collection this type is, or `CollectionKind.NotCollection`.
 public fun collection(): CollectionKind
 ```
 
-## `is_option`
+## `public fun is_option`
 
 Returns the requested model information.
 
@@ -104,7 +104,7 @@ Returns the requested model information.
 public fun is_option(): bool
 ```
 
-## `is_param`
+## `public fun is_param`
 
 Returns the requested model information.
 
@@ -112,7 +112,7 @@ Returns the requested model information.
 public fun is_param(): bool
 ```
 
-## `is_decl`
+## `public fun is_decl`
 
 True when this names the declaration `decl_id` (see `declof`).
 
@@ -120,7 +120,7 @@ True when this names the declaration `decl_id` (see `declof`).
 public fun is_decl(decl_id: string): bool
 ```
 
-## `arg`
+## `public fun arg`
 
 Type argument `i`, or an unknown type when there is none.
 
@@ -128,7 +128,15 @@ Type argument `i`, or an unknown type when there is none.
 public fun arg(i: int): GenTypeRef
 ```
 
-## `to_string`
+## `public fun source_name`
+
+Renders a type using local declaration names in a scope that imports those declarations.
+
+```dream
+public fun source_name(): string
+```
+
+## `public override fun to_string`
 
 Returns the requested model information.
 

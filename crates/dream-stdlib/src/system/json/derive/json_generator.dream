@@ -29,6 +29,12 @@ public static class JsonGenerator {
         return JsonGenOutput.success(cb.to_string());
     }
 
+    /// Emits only methods for GenContext.emit_extend, retaining the model's declaration scope.
+    public static fun members(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput {
+        if t.is_union { return JsonGenerator.expand_union(t, json_names, jsonable, false); }
+        return JsonGenerator.expand_class(t, json_names, jsonable, false);
+    }
+
     static fun name_in(borrow list: List<string>, name: string): bool {
         let i = 0;
         while i < list.length {
@@ -1048,7 +1054,7 @@ public static class JsonGenerator {
         return out.to_string();
     }
 
-    static fun expand_class(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput {
+    static fun expand_class(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>, wrap: bool = true): JsonGenOutput {
         let to_cb = CodeBuilder();
         let write_cb = CodeBuilder();
         let from_cb = CodeBuilder();
@@ -1523,8 +1529,7 @@ public static class JsonGenerator {
         from_cb.line("return " + t.construct(from_sb.build()) + ";");
 
         let cb = CodeBuilder();
-        cb.line("extend " + t.name + t.params_clause() + " {");
-        cb.indent();
+        if wrap { cb.line("extend " + t.name + t.params_clause() + " {"); cb.indent(); }
         cb.line("public fun to_json(): JsonValue {");
         cb.indent();
         JsonGenerator.append_block(cb, to_cb.to_string());
@@ -1544,8 +1549,7 @@ public static class JsonGenerator {
         if t.assign_fields {
             JsonGenerator.emit_field_constructor(cb, t);
         }
-        cb.dedent();
-        cb.line("}");
+        if wrap { cb.dedent(); cb.line("}"); }
         return JsonGenOutput.success(cb.to_string());
     }
 
@@ -1568,7 +1572,7 @@ public static class JsonGenerator {
         cb.line("}");
     }
 
-    static fun expand_union(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput {
+    static fun expand_union(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>, wrap: bool = true): JsonGenOutput {
         let to_cb = CodeBuilder();
         let write_cb = CodeBuilder();
         let from_cb = CodeBuilder();
@@ -1875,8 +1879,7 @@ public static class JsonGenerator {
 
         let self_ty = t.self_ty();
         let cb = CodeBuilder();
-        cb.line("extend " + t.name + t.params_clause() + " {");
-        cb.indent();
+        if wrap { cb.line("extend " + t.name + t.params_clause() + " {"); cb.indent(); }
         cb.line("public fun to_json(): JsonValue {");
         cb.indent();
         JsonGenerator.append_block(cb, to_cb.to_string());
@@ -1910,8 +1913,7 @@ public static class JsonGenerator {
         cb.line("return Result.Err(ParseError.invalid(\"unknown variant '\" + __t + \"' for union '" + t.name + "'\"));");
         cb.dedent();
         cb.line("}");
-        cb.dedent();
-        cb.line("}");
+        if wrap { cb.dedent(); cb.line("}"); }
         return JsonGenOutput.success(cb.to_string());
     }
 

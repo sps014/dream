@@ -2,8 +2,6 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
-
 ## `public enum Intrinsic`
 
 Compiler operations available to intrinsic declarations.

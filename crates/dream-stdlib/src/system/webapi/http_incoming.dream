@@ -10,12 +10,12 @@ public class HttpIncoming {
     multipart: Option<JsonValue>;
     internal cancellation_token: Option<CancellationToken>;
     internal constructor(metadata: JsonValue) {
-        this.req_id = metadata.at("id").as_int().unwrap_or(0);
-        this.method = metadata.at("method").as_string().unwrap_or("");
-        this.path = metadata.at("path").as_string().unwrap_or("");
-        this.query = metadata.at("query").as_string().unwrap_or("");
+        this.req_id = metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0);
+        this.method = metadata.get_or("method", JsonValue.none()).as_string().unwrap_or("");
+        this.path = metadata.get_or("path", JsonValue.none()).as_string().unwrap_or("");
+        this.query = metadata.get_or("query", JsonValue.none()).as_string().unwrap_or("");
         this.headers = HttpHeaders(); this.multipart = Option.None; this.cancellation_token = Option.None;
-        for (let pair in metadata.at("headers").as_array().unwrap_or(List<JsonValue>())) {
+        for (let pair in metadata.get_or("headers", JsonValue.none()).as_array().unwrap_or(List<JsonValue>())) {
             let values = pair.as_array().unwrap_or(List<JsonValue>());
             if values.length == 2 { this.headers.append(values.get(0).as_string().unwrap_or(""), values.get(1).as_string().unwrap_or("")); }
         }

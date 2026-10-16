@@ -2,7 +2,23 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
+## `StringViewEq`
+
+```dream
+StringViewEq
+```
+
+## `StringViewCompare`
+
+```dream
+StringViewCompare
+```
+
+## `StringViewHash`
+
+```dream
+StringViewHash
+```
 
 ## `StringViewFind`
 
@@ -128,22 +144,4 @@ ArraySetUnchecked
 
 ```dream
 WireEncode
-```
-
-## `WireDecode`
-
-```dream
-WireDecode
-```
-
-## `DreamPanic`
-
-```dream
-DreamPanic
-```
-
-## `RegexCompile`
-
-```dream
-RegexCompile
 ```

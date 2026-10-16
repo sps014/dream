@@ -4,6 +4,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.webapi",
     deps: &[
         "system",
+        "system.validation",
         "system.net",
         "system.task",
         "system.json",
@@ -13,6 +14,22 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     ],
     generators: &["system.webapi.derive"],
     files: &[
+        (
+            "<std>/system/webapi/oidc_transport.dream",
+            include_str!("../system/webapi/oidc_transport.dream"),
+        ),
+        (
+            "<std>/system/webapi/dependency_resource.dream",
+            include_str!("../system/webapi/dependency_resource.dream"),
+        ),
+        (
+            "<std>/system/webapi/swagger_options.dream",
+            include_str!("../system/webapi/swagger_options.dream"),
+        ),
+        (
+            "<std>/system/webapi/web_router.dream",
+            include_str!("../system/webapi/web_router.dream"),
+        ),
         (
             "<std>/system/webapi/auth.dream",
             include_str!("../system/webapi/auth.dream"),

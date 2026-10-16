@@ -127,7 +127,7 @@ public class Cors {
     }
 }
 
-// `WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
+// `app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
 public fun CORS(opts: CorsOptions): Middleware {
     return Middleware(async (borrow ctx: RequestContext, borrow next: Next) => {
         return Cors(opts).invoke(ctx, next).await;

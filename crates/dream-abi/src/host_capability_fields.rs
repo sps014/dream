@@ -15,6 +15,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "cryptoAesGcmEncrypt",
             "cryptoAesGcmDecrypt",
             "cryptoSha256",
+            "cryptoAuth",
             "cryptoSha512",
             "cryptoHmacSha256",
             "cryptoSecureRandomBytes",

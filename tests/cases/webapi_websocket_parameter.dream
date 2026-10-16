@@ -1,4 +1,9 @@
 import system.webapi;
-@websocket("/ws")
-fun route(): void {}
+
 fun main(): void {}
+
+@router("")
+class Routes {
+@websocket("/ws")
+public static fun route(): void {}
+}

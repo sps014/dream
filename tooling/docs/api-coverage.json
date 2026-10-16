@@ -2770,7 +2770,7 @@
       },
       {
         "signature": "public display: string",
-        "description": "Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.",
+        "description": "Display spelling, including canonical module qualification for resolved names.",
         "line": 14,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
@@ -2847,9 +2847,15 @@
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
+        "signature": "public fun source_name(): string",
+        "description": "Renders a type using local declaration names in a scope that imports those declarations.",
+        "line": 97,
+        "page": "reference/api/codegen-gen-type-ref.md"
+      },
+      {
         "signature": "public override fun to_string(): string",
         "description": "Returns the requested model information.",
-        "line": 97,
+        "line": 111,
         "page": "reference/api/codegen-gen-type-ref.md"
       }
     ]
@@ -5489,712 +5495,730 @@
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeId",
+        "signature": "ValidationDecode",
         "description": "",
         "line": 30,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeDecode",
+        "signature": "ValidationValidate",
         "description": "",
         "line": 31,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "GenAttributeDecodeAll",
+        "signature": "ValidationSchema",
         "description": "",
         "line": 32,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "ArrayNew",
-        "description": "",
-        "line": 33,
-        "page": "reference/api/core-intrinsic-2.md"
-      },
-      {
-        "signature": "BufferZero",
+        "signature": "GenAttributeId",
         "description": "",
         "line": 34,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "Sleep",
+        "signature": "GenAttributeDecode",
         "description": "",
         "line": 35,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringAlloc",
+        "signature": "GenAttributeDecodeAll",
         "description": "",
         "line": 36,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCharAtUnchecked",
+        "signature": "ArrayNew",
         "description": "",
         "line": 37,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringBuilderBuffer",
+        "signature": "BufferZero",
         "description": "",
         "line": 38,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringBuilderPushDouble",
+        "signature": "Sleep",
         "description": "",
         "line": 39,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCloneRange",
+        "signature": "StringAlloc",
         "description": "",
         "line": 40,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringJsonBoundary",
+        "signature": "StringCharAtUnchecked",
         "description": "",
         "line": 41,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringSet",
+        "signature": "StringBuilderBuffer",
         "description": "",
         "line": 42,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8",
+        "signature": "StringBuilderPushDouble",
         "description": "",
         "line": 43,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8Prefix",
+        "signature": "StringCloneRange",
         "description": "",
         "line": 44,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringFromUtf8PrefixN",
+        "signature": "StringJsonBoundary",
         "description": "",
         "line": 45,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringSubstringRaw",
+        "signature": "StringSet",
         "description": "",
         "line": 46,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCopyUtf8",
+        "signature": "StringFromUtf8",
         "description": "",
         "line": 47,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringCompare",
+        "signature": "StringFromUtf8Prefix",
         "description": "",
         "line": 48,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewEq",
+        "signature": "StringFromUtf8PrefixN",
         "description": "",
         "line": 49,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewCompare",
+        "signature": "StringSubstringRaw",
         "description": "",
         "line": 50,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewHash",
+        "signature": "StringCopyUtf8",
         "description": "",
         "line": 51,
         "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewFind",
+        "signature": "StringCompare",
         "description": "",
         "line": 52,
-        "page": "reference/api/core-intrinsic-3.md"
+        "page": "reference/api/core-intrinsic-2.md"
       },
       {
-        "signature": "StringViewRfind",
+        "signature": "StringViewEq",
         "description": "",
         "line": 53,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewFindChar",
+        "signature": "StringViewCompare",
         "description": "",
         "line": 54,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewRfindChar",
+        "signature": "StringViewHash",
         "description": "",
         "line": 55,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringViewCountChar",
+        "signature": "StringViewFind",
         "description": "",
         "line": 56,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "StringBuilderView",
+        "signature": "StringViewRfind",
         "description": "",
         "line": 57,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetFreeListHead",
+        "signature": "StringViewFindChar",
         "description": "",
         "line": 58,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetHeapPtr",
+        "signature": "StringViewRfindChar",
         "description": "",
         "line": 59,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetLiveObjects",
+        "signature": "StringViewCountChar",
         "description": "",
         "line": 60,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetTotalAllocations",
+        "signature": "StringBuilderView",
         "description": "",
         "line": 61,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetRefCount",
+        "signature": "DebugGetFreeListHead",
         "description": "",
         "line": 62,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DebugGetRuntimeCounter",
+        "signature": "DebugGetHeapPtr",
         "description": "",
         "line": 63,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ToBytes",
+        "signature": "DebugGetLiveObjects",
         "description": "",
         "line": 64,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "FromBytes",
+        "signature": "DebugGetTotalAllocations",
         "description": "",
         "line": 65,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayRealloc",
+        "signature": "DebugGetRefCount",
         "description": "",
         "line": 66,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayElemsCopy",
+        "signature": "DebugGetRuntimeCounter",
         "description": "",
         "line": 67,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayElemsFill",
+        "signature": "ToBytes",
         "description": "",
         "line": 68,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ForceFree",
+        "signature": "FromBytes",
         "description": "",
         "line": 69,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArrayGetUnchecked",
+        "signature": "ArrayRealloc",
         "description": "",
         "line": 70,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "ArraySetUnchecked",
+        "signature": "ArrayElemsCopy",
         "description": "",
         "line": 71,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "WireEncode",
+        "signature": "ArrayElemsFill",
         "description": "",
         "line": 72,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "WireDecode",
+        "signature": "ForceFree",
         "description": "",
         "line": 73,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "DreamPanic",
+        "signature": "ArrayGetUnchecked",
         "description": "",
         "line": 74,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexCompile",
+        "signature": "ArraySetUnchecked",
         "description": "",
         "line": 75,
         "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexFree",
+        "signature": "WireEncode",
         "description": "",
         "line": 76,
-        "page": "reference/api/core-intrinsic-4.md"
+        "page": "reference/api/core-intrinsic-3.md"
       },
       {
-        "signature": "RegexFind",
+        "signature": "WireDecode",
         "description": "",
         "line": 77,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexFindAll",
+        "signature": "DreamPanic",
         "description": "",
         "line": 78,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexGroupCount",
+        "signature": "RegexCompile",
         "description": "",
         "line": 79,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameCount",
+        "signature": "RegexFree",
         "description": "",
         "line": 80,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameAt",
+        "signature": "RegexFind",
         "description": "",
         "line": 81,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexNameNumber",
+        "signature": "RegexFindAll",
         "description": "",
         "line": 82,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdLaneCount",
+        "signature": "RegexGroupCount",
         "description": "",
         "line": 83,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Splat",
+        "signature": "RegexNameCount",
         "description": "",
         "line": 84,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Load",
+        "signature": "RegexNameAt",
         "description": "",
         "line": 85,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Store",
+        "signature": "RegexNameNumber",
         "description": "",
         "line": 86,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Add",
+        "signature": "SimdLaneCount",
         "description": "",
         "line": 87,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Sub",
+        "signature": "SimdV128Splat",
         "description": "",
         "line": 88,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Mul",
+        "signature": "SimdV128Load",
         "description": "",
         "line": 89,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Min",
+        "signature": "SimdV128Store",
         "description": "",
         "line": 90,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Max",
+        "signature": "SimdV128Add",
         "description": "",
         "line": 91,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "SimdV128Sum",
+        "signature": "SimdV128Sub",
         "description": "",
         "line": 92,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "DreamCallbackRegister",
+        "signature": "SimdV128Mul",
         "description": "",
         "line": 93,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "DreamCallbackUnregister",
+        "signature": "SimdV128Min",
         "description": "",
         "line": 94,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxNew",
+        "signature": "SimdV128Max",
         "description": "",
         "line": 95,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxFuncidx",
+        "signature": "SimdV128Sum",
         "description": "",
         "line": 96,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "FuncboxEnv",
+        "signature": "DreamCallbackRegister",
         "description": "",
         "line": 97,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "ArraySlotSwap",
+        "signature": "DreamCallbackUnregister",
         "description": "",
         "line": 98,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "BufferIsString",
+        "signature": "FuncboxNew",
         "description": "",
         "line": 99,
         "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "ArraySlotTake",
+        "signature": "FuncboxFuncidx",
         "description": "",
         "line": 100,
-        "page": "reference/api/core-intrinsic-5.md"
+        "page": "reference/api/core-intrinsic-4.md"
       },
       {
-        "signature": "RegexTest",
+        "signature": "FuncboxEnv",
         "description": "",
         "line": 101,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelNew",
+        "signature": "ArraySlotSwap",
         "description": "",
         "line": 102,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelFree",
+        "signature": "BufferIsString",
         "description": "",
         "line": 103,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelEndpoint",
+        "signature": "ArraySlotTake",
         "description": "",
         "line": 104,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelClose",
+        "signature": "RegexTest",
         "description": "",
         "line": 105,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelEndpointFree",
+        "signature": "DreamChannelNew",
         "description": "",
         "line": 106,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelSend",
+        "signature": "DreamChannelFree",
         "description": "",
         "line": 107,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelReceive",
+        "signature": "DreamChannelEndpoint",
         "description": "",
         "line": 108,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelStatus",
+        "signature": "DreamChannelClose",
         "description": "",
         "line": 109,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamChannelWait",
+        "signature": "DreamChannelEndpointFree",
         "description": "",
         "line": 110,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskKeepAlive",
+        "signature": "DreamChannelSend",
         "description": "",
         "line": 111,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskIsProtected",
+        "signature": "DreamChannelReceive",
         "description": "",
         "line": 112,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskHasContext",
+        "signature": "DreamChannelStatus",
         "description": "",
         "line": 113,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskContext",
+        "signature": "DreamChannelWait",
         "description": "",
         "line": 114,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskAttach",
+        "signature": "DreamTaskKeepAlive",
         "description": "",
         "line": 115,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamTaskProtect",
+        "signature": "DreamTaskIsProtected",
         "description": "",
         "line": 116,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationNew",
+        "signature": "DreamTaskHasContext",
         "description": "",
         "line": 117,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationRelease",
+        "signature": "DreamTaskContext",
         "description": "",
         "line": 118,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationIsCancelled",
+        "signature": "DreamTaskAttach",
         "description": "",
         "line": 119,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationCancel",
+        "signature": "DreamTaskProtect",
         "description": "",
         "line": 120,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationRegister",
+        "signature": "DreamCancellationNew",
         "description": "",
         "line": 121,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationSignal",
+        "signature": "DreamCancellationRelease",
         "description": "",
         "line": 122,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamCancellationUnregister",
+        "signature": "DreamCancellationIsCancelled",
         "description": "",
         "line": 123,
         "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamFfiFreeWith",
+        "signature": "DreamCancellationCancel",
         "description": "",
         "line": 124,
-        "page": "reference/api/core-intrinsic-6.md"
+        "page": "reference/api/core-intrinsic-5.md"
       },
       {
-        "signature": "DreamFfiReadPtr",
+        "signature": "DreamCancellationRegister",
         "description": "",
         "line": 125,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadCstring",
+        "signature": "DreamCancellationSignal",
         "description": "",
         "line": 126,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadI32",
+        "signature": "DreamCancellationUnregister",
         "description": "",
         "line": 127,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadI64",
+        "signature": "DreamFfiFreeWith",
         "description": "",
         "line": 128,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamFfiReadF64",
+        "signature": "DreamFfiReadPtr",
         "description": "",
         "line": 129,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockAcquire",
+        "signature": "DreamFfiReadCstring",
         "description": "",
         "line": 130,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockRelease",
+        "signature": "DreamFfiReadI32",
         "description": "",
         "line": 131,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockTryAcquire",
+        "signature": "DreamFfiReadI64",
         "description": "",
         "line": 132,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedLockTryAcquireFor",
+        "signature": "DreamFfiReadF64",
         "description": "",
         "line": 133,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "ArrayStore16",
+        "signature": "SharedLockAcquire",
         "description": "",
         "line": 134,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringFromBuilder",
+        "signature": "SharedLockRelease",
         "description": "",
         "line": 135,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringClone",
+        "signature": "SharedLockTryAcquire",
         "description": "",
         "line": 136,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "Utf8DecodeAt",
+        "signature": "SharedLockTryAcquireFor",
         "description": "",
         "line": 137,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "Utf8WidthAt",
+        "signature": "ArrayStore16",
         "description": "",
         "line": 138,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPush",
+        "signature": "StringFromBuilder",
         "description": "",
         "line": 139,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPushInt",
+        "signature": "StringClone",
         "description": "",
         "line": 140,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "StringBuilderPushLong",
+        "signature": "Utf8DecodeAt",
         "description": "",
         "line": 141,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreAcquire",
+        "signature": "Utf8WidthAt",
         "description": "",
         "line": 142,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreRelease",
+        "signature": "StringBuilderPush",
         "description": "",
         "line": 143,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreTryAcquire",
+        "signature": "StringBuilderPushInt",
         "description": "",
         "line": 144,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "SharedSemaphoreTryAcquireFor",
+        "signature": "StringBuilderPushLong",
         "description": "",
         "line": 145,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamCancel",
+        "signature": "SharedSemaphoreAcquire",
         "description": "",
         "line": 146,
         "page": "reference/api/core-intrinsic-6.md"
       },
       {
-        "signature": "DreamStart",
+        "signature": "SharedSemaphoreRelease",
         "description": "",
         "line": 147,
         "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreTryAcquire",
+        "description": "",
+        "line": 148,
+        "page": "reference/api/core-intrinsic-6.md"
+      },
+      {
+        "signature": "SharedSemaphoreTryAcquireFor",
+        "description": "",
+        "line": 149,
+        "page": "reference/api/core-intrinsic-7.md"
+      },
+      {
+        "signature": "DreamCancel",
+        "description": "",
+        "line": 150,
+        "page": "reference/api/core-intrinsic-7.md"
+      },
+      {
+        "signature": "DreamStart",
+        "description": "",
+        "line": 151,
+        "page": "reference/api/core-intrinsic-7.md"
       }
     ]
   },
@@ -10454,9 +10478,15 @@
         "page": "reference/api/json-derive-json-generator.md"
       },
       {
+        "signature": "public static fun members(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput",
+        "description": "Emits only methods for GenContext.emit_extend, retaining the model's declaration scope.",
+        "line": 33,
+        "page": "reference/api/json-derive-json-generator.md"
+      },
+      {
         "signature": "public static fun expand_collections( borrow specs: List<JsonCollectionSpec>, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
         "description": "Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).",
-        "line": 1920,
+        "line": 1922,
         "page": "reference/api/json-derive-json-generator.md"
       }
     ]
@@ -14617,6 +14647,227 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/validation/derive/validation_derive.dream",
+    "package": "system.validation.derive",
+    "page": "reference/api/validation-derive-validation-derive.md",
+    "declarations": [
+      {
+        "signature": "public fun validation_derive(ctx: GenContext): void",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/validation-derive-validation-derive.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/validation/derive/validation_schema.dream",
+    "package": "system.validation.derive",
+    "page": "reference/api/validation-derive-validation-schema.md",
+    "declarations": [
+      {
+        "signature": "public static class ValidationGenerator",
+        "description": "Schema generation shared by standalone validation and the web API generator.",
+        "line": 8,
+        "page": "reference/api/validation-derive-validation-schema.md"
+      },
+      {
+        "signature": "public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/validation-derive-validation-schema.md"
+      },
+      {
+        "signature": "public static fun model(d: GenDecl, ctx: GenContext, definitions: JsonValue): JsonValue",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/validation-derive-validation-schema.md"
+      },
+      {
+        "signature": "public static fun type_schema(ty: GenTypeRef, ctx: GenContext, definitions: JsonValue): JsonValue",
+        "description": "",
+        "line": 46,
+        "page": "reference/api/validation-derive-validation-schema.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/validation/validation.dream",
+    "package": "system.validation",
+    "page": "reference/api/validation-validation.md",
+    "declarations": [
+      {
+        "signature": "public static class Validation",
+        "description": "Strict decoding and validation derived for @json models.",
+        "line": 4,
+        "page": "reference/api/validation-validation.md"
+      },
+      {
+        "signature": "public static extern fun decode<T>(text: string): Result<T, ValidationErrors>",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/validation-validation.md"
+      },
+      {
+        "signature": "public static extern fun validate<T>(value: T): Result<T, ValidationErrors>",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/validation-validation.md"
+      },
+      {
+        "signature": "public static extern fun schema<T>(): JsonValue",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/validation-validation.md"
+      },
+      {
+        "signature": "public static fun child(location: List<string>, key: string): List<string>",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/validation-validation.md"
+      },
+      {
+        "signature": "public static fun check(value: JsonValue, schema: JsonValue): ValidationErrors",
+        "description": "Validates a JSON tree and applies declared defaults before model construction.",
+        "line": 16,
+        "page": "reference/api/validation-validation.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/validation/validation_attributes.dream",
+    "package": "system.validation",
+    "page": "reference/api/validation-validation-attributes.md",
+    "declarations": [
+      {
+        "signature": "public struct MinimumAttribute",
+        "description": "Inclusive lower numeric bound.",
+        "line": 5,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct MaximumAttribute",
+        "description": "Inclusive upper numeric bound.",
+        "line": 9,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct MinLengthAttribute",
+        "description": "Minimum string or collection length.",
+        "line": 13,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct MaxLengthAttribute",
+        "description": "Maximum string or collection length.",
+        "line": 17,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct PatternAttribute",
+        "description": "Regular expression required for a string.",
+        "line": 21,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct DefaultJsonAttribute",
+        "description": "JSON encoded field default, applied only when the property is absent.",
+        "line": 25,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct AllowExtraAttribute",
+        "description": "Permits additional input properties on a model; the default is to reject them.",
+        "line": 29,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct ValidateWithAttribute",
+        "description": "A synchronous field validator returning an optional error message.",
+        "line": 33,
+        "page": "reference/api/validation-validation-attributes.md"
+      },
+      {
+        "signature": "public struct ModelValidatorAttribute",
+        "description": "A static model validator returning structured issues after fields pass validation.",
+        "line": 37,
+        "page": "reference/api/validation-validation-attributes.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/validation/validation_errors.dream",
+    "package": "system.validation",
+    "page": "reference/api/validation-validation-errors.md",
+    "declarations": [
+      {
+        "signature": "public class ValidationIssue",
+        "description": "One input failure; locations use JSON property names and decimal collection indices.",
+        "line": 5,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public location: List<string>",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public code: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public message: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public constructor(location: List<string>, code: string, message: string)",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public class ValidationErrors",
+        "description": "Deterministically ordered input errors without echoing sensitive submitted values.",
+        "line": 13,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public issues: List<ValidationIssue>",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public fun add(location: List<string>, code: string, message: string): void",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public fun is_empty(): bool",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
+        "signature": "public fun to_json(): JsonValue",
+        "description": "",
+        "line": 18,
+        "page": "reference/api/validation-validation-errors.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/webapi/auth.dream",
     "package": "system.webapi",
     "page": "reference/api/webapi-auth.md",
@@ -14624,20 +14875,498 @@
       {
         "signature": "public async fun BearerToken(@header(\"Authorization\") value: string): Result<string, HttpStatus>",
         "description": "`Authorization: Bearer <token>` → the token, or 401.",
-        "line": 4,
+        "line": 5,
         "page": "reference/api/webapi-auth.md"
       },
       {
         "signature": "public async fun ApiKeyHeader(@header(\"X-Api-Key\") value: string): Result<string, HttpStatus>",
         "description": "Header named `X-Api-Key` (or pass `@header` yourself by wrapping).",
-        "line": 15,
+        "line": 17,
         "page": "reference/api/webapi-auth.md"
       },
       {
         "signature": "public async fun BasicAuth(@header(\"Authorization\") value: string): Result<string, HttpStatus>",
         "description": "`Authorization: Basic <base64>` → the raw header value after \"Basic \".",
-        "line": 23,
+        "line": 26,
         "page": "reference/api/webapi-auth.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/auth/auth_crypto.dream",
+    "package": "system.webapi.auth",
+    "page": "reference/api/webapi-auth-auth-crypto.md",
+    "declarations": [
+      {
+        "signature": "public static class Password",
+        "description": "Argon2id password hashes in the interoperable PHC format.",
+        "line": 29,
+        "page": "reference/api/webapi-auth-auth-crypto.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/auth/auth_service.dream",
+    "package": "system.webapi.auth",
+    "page": "reference/api/webapi-auth-auth-service.md",
+    "declarations": [
+      {
+        "signature": "public class AuthService",
+        "description": "Local and OIDC authentication with application-owned accounts and atomic session storage.",
+        "line": 5,
+        "page": "reference/api/webapi-auth-auth-service.md"
+      },
+      {
+        "signature": "public constructor(jwt: JwtOptions, accounts: AuthAccounts, store: AuthSessionStore, prefix: string = \"/auth\", access_seconds: int = 900, refresh_seconds: int = 604800, browser_sessions: bool = false, browser_origin: string = \"\")",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/webapi-auth-auth-service.md"
+      },
+      {
+        "signature": "public fun add_provider(options: OidcOptions): Result<bool, AuthError>",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/webapi-auth-auth-service.md"
+      },
+      {
+        "signature": "public fun CurrentUser(ctx: RequestContext): Result<AuthPrincipal, HttpStatus>",
+        "description": "Injects identity previously verified by AuthService.middleware().",
+        "line": 96,
+        "page": "reference/api/webapi-auth-auth-service.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/auth/auth_types.dream",
+    "package": "system.webapi.auth",
+    "page": "reference/api/webapi-auth-auth-types.md",
+    "declarations": [
+      {
+        "signature": "public class AuthError",
+        "description": "Authentication failures carry stable codes without credential values.",
+        "line": 4,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public code: string",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public message: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public constructor(code: string, message: string)",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public class AuthPrincipal",
+        "description": "Verified identity and application-defined space-separated permission scopes.",
+        "line": 12,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public subject: string",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public scopes: string",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public constructor(subject: string, scopes: string)",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public fun has_scope(scope: string): bool",
+        "description": "",
+        "line": 16,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public class AuthAccount",
+        "description": "Persisted account data supplied by an application repository.",
+        "line": 20,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public subject: string",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public password_hash: string",
+        "description": "",
+        "line": 22,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public scopes: string",
+        "description": "",
+        "line": 23,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public constructor(subject: string, password_hash: string, scopes: string = \"\")",
+        "description": "",
+        "line": 24,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public interface AuthAccounts",
+        "description": "Local lookup and explicit external-identity linking are application policy.",
+        "line": 28,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "async unique fun find_login(login: string): Result<AuthAccount, AuthError>",
+        "description": "",
+        "line": 29,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError>",
+        "description": "",
+        "line": 30,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public class AuthSession",
+        "description": "A refresh-token record. Stores contain only the digest of the bearer secret.",
+        "line": 34,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public hash: string",
+        "description": "",
+        "line": 35,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public family: string",
+        "description": "",
+        "line": 36,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public subject: string",
+        "description": "",
+        "line": 37,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public scopes: string",
+        "description": "",
+        "line": 38,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public expires: long",
+        "description": "",
+        "line": 39,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public csrf: string",
+        "description": "",
+        "line": 40,
+        "page": "reference/api/webapi-auth-auth-types-1.md"
+      },
+      {
+        "signature": "public consumed: bool",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public constructor(hash: string, family: string, subject: string, scopes: string, expires: long, csrf: string)",
+        "description": "",
+        "line": 42,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public class OidcTransaction",
+        "description": "An expiring, browser-bound OIDC authorization transaction.",
+        "line": 48,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public provider: string",
+        "description": "",
+        "line": 49,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public nonce: string",
+        "description": "",
+        "line": 50,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public verifier: string",
+        "description": "",
+        "line": 51,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public expires: long",
+        "description": "",
+        "line": 52,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public constructor(provider: string, nonce: string, verifier: string, expires: long)",
+        "description": "",
+        "line": 53,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public interface AuthSessionStore",
+        "description": "Persistence operations must be atomic, including refresh replay detection and transaction consumption.",
+        "line": 57,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun create(session: AuthSession): Result<bool, AuthError>",
+        "description": "",
+        "line": 58,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>",
+        "description": "",
+        "line": 59,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError>",
+        "description": "",
+        "line": 60,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun revoke(family: string): Result<bool, AuthError>",
+        "description": "",
+        "line": 61,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun active(family: string, now: long): bool",
+        "description": "",
+        "line": 62,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError>",
+        "description": "",
+        "line": 63,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>",
+        "description": "",
+        "line": 64,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public class JwtOptions",
+        "description": "Native JWT configuration; RS256 uses PEM keys, HS256 requires an explicit 32-byte minimum secret.",
+        "line": 68,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public issuer: string",
+        "description": "",
+        "line": 69,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public audience: string",
+        "description": "",
+        "line": 70,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public signing_key: string",
+        "description": "",
+        "line": 71,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public verification_key: string",
+        "description": "",
+        "line": 72,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public algorithm: string",
+        "description": "",
+        "line": 73,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public constructor(issuer: string, audience: string, signing_key: string, verification_key: string, algorithm: string = \"RS256\")",
+        "description": "",
+        "line": 74,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public class OidcOptions",
+        "description": "One external OIDC identity provider. Redirect URIs must match the registered callback exactly.",
+        "line": 80,
+        "page": "reference/api/webapi-auth-auth-types-2.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "",
+        "line": 81,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public issuer: string",
+        "description": "",
+        "line": 82,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public client_id: string",
+        "description": "",
+        "line": 83,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public client_secret: string",
+        "description": "",
+        "line": 84,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public redirect_uri: string",
+        "description": "",
+        "line": 85,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public constructor(name: string, issuer: string, client_id: string, redirect_uri: string, client_secret: string = \"\")",
+        "description": "",
+        "line": 86,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public class AuthTokens",
+        "description": "",
+        "line": 92,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public access_token: string",
+        "description": "",
+        "line": 93,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public refresh_token: string",
+        "description": "",
+        "line": 94,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public token_type: string",
+        "description": "",
+        "line": 95,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public expires_in: int",
+        "description": "",
+        "line": 96,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public csrf_token: string",
+        "description": "",
+        "line": 97,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      },
+      {
+        "signature": "public constructor(access_token: string, refresh_token: string, token_type: string, expires_in: int, csrf_token: string)",
+        "description": "",
+        "line": 98,
+        "page": "reference/api/webapi-auth-auth-types-3.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/auth/memory_auth_store.dream",
+    "package": "system.webapi.auth",
+    "page": "reference/api/webapi-auth-memory-auth-store.md",
+    "declarations": [
+      {
+        "signature": "public class MemoryAuthStore : AuthSessionStore",
+        "description": "Process-local storage for tests and single-process examples. Methods perform no suspension during mutations.",
+        "line": 4,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun create(session: AuthSession): Result<bool, AuthError>",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError>",
+        "description": "",
+        "line": 20,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun revoke(family: string): Result<bool, AuthError>",
+        "description": "",
+        "line": 31,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun active(family: string, now: long): bool",
+        "description": "",
+        "line": 32,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError>",
+        "description": "",
+        "line": 37,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
+      },
+      {
+        "signature": "public async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>",
+        "description": "",
+        "line": 41,
+        "page": "reference/api/webapi-auth-memory-auth-store.md"
       }
     ]
   },
@@ -14714,9 +15443,52 @@
       },
       {
         "signature": "public fun CORS(opts: CorsOptions): Middleware",
-        "description": "`WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.",
+        "description": "`app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.",
         "line": 131,
         "page": "reference/api/webapi-cors.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/dependency_resource.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-dependency-resource.md",
+    "declarations": [
+      {
+        "signature": "public class DependencyResource<T>",
+        "description": "A dependency value and its asynchronous release operation.",
+        "line": 5,
+        "page": "reference/api/webapi-dependency-resource.md"
+      },
+      {
+        "signature": "public value: T",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-dependency-resource.md"
+      },
+      {
+        "signature": "public cleanup: fun(CancellationToken): Future<void>",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-dependency-resource.md"
+      },
+      {
+        "signature": "public constructor(value: T, cleanup: fun(CancellationToken): Future<void>)",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-dependency-resource.md"
+      },
+      {
+        "signature": "public class DependencyOverrides",
+        "description": "Generated, type-checked dependency replacement selection for one application.",
+        "line": 12,
+        "page": "reference/api/webapi-dependency-resource.md"
+      },
+      {
+        "signature": "public constructor(providers: Map<string, string>)",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/webapi-dependency-resource.md"
       }
     ]
   },
@@ -14878,33 +15650,51 @@
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
+        "signature": "public static fun from_body_error(error: IoError): HttpOutgoing",
+        "description": "Preserves body-limit failures as 413 while other read failures remain 400.",
+        "line": 50,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun from_validation(errors: ValidationErrors, source: string): HttpOutgoing",
+        "description": "A structured validation response, prefixed with the input source.",
+        "line": 56,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun invalid_input(source: string, name: string, code: string, message: string): HttpOutgoing",
+        "description": "",
+        "line": 64,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
         "signature": "public static fun already_sent(): HttpOutgoing",
         "description": "",
-        "line": 49,
+        "line": 68,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun bytes(data: byte[], status: int = 200): HttpOutgoing",
         "description": "",
-        "line": 55,
+        "line": 74,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun from_status(st: HttpStatus): HttpOutgoing",
         "description": "",
-        "line": 62,
+        "line": 81,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun not_found(): HttpOutgoing",
         "description": "",
-        "line": 70,
+        "line": 89,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun empty(status: int = 204): HttpOutgoing",
         "description": "",
-        "line": 74,
+        "line": 93,
         "page": "reference/api/webapi-http-outgoing.md"
       }
     ]
@@ -14996,80 +15786,105 @@
       {
         "signature": "public class RequestContext",
         "description": "Per-request bag shared by middleware and `@dep` functions.",
-        "line": 4,
+        "line": 5,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public incoming: HttpIncoming",
         "description": "",
-        "line": 5,
+        "line": 9,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public app_state: Map<string, string>",
+        "description": "",
+        "line": 10,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public state: Map<string, string>",
         "description": "",
-        "line": 6,
+        "line": 11,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public cancellation_token: Option<CancellationToken>",
         "description": "",
-        "line": 7,
+        "line": 12,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public constructor(incoming: HttpIncoming)",
         "description": "",
-        "line": 9,
+        "line": 14,
+        "page": "reference/api/webapi-middleware.md"
+      },
+      {
+        "signature": "public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void",
+        "description": "Registers request cleanup, run once in reverse acquisition order outside request cancellation.",
+        "line": 23,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public fun set(key: string, value: string): void",
         "description": "",
-        "line": 15,
+        "line": 33,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public fun get(key: string): Option<string>",
         "description": "",
-        "line": 19,
+        "line": 37,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public class Next",
         "description": "Continues the middleware onion toward the route handler.",
-        "line": 26,
+        "line": 44,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public constructor(step: fun(): Future<HttpOutgoing>)",
         "description": "",
-        "line": 29,
+        "line": 47,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public fun call(): Future<HttpOutgoing>",
         "description": "",
-        "line": 33,
+        "line": 51,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public class Middleware",
         "description": "One onion layer: `invoke` may short-circuit or `next.call().await`.",
-        "line": 42,
+        "line": 60,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>)",
         "description": "",
-        "line": 45,
+        "line": 63,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>",
         "description": "",
-        "line": 49,
+        "line": 67,
         "page": "reference/api/webapi-middleware.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/oidc_transport.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-oidc-transport.md",
+    "declarations": [
+      {
+        "signature": "public static class OidcTransport",
+        "description": "Native OIDC exchange transport used by system.webapi.auth; completion obeys cancellation.",
+        "line": 4,
+        "page": "reference/api/webapi-oidc-transport.md"
       }
     ]
   },
@@ -15172,6 +15987,79 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/webapi/swagger_options.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-swagger-options.md",
+    "declarations": [
+      {
+        "signature": "public class SwaggerOptions",
+        "description": "Swagger UI assets and browser behavior. Asset URLs may point to self-hosted files.",
+        "line": 4,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public js_url: string",
+        "description": "",
+        "line": 5,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public css_url: string",
+        "description": "",
+        "line": 6,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public redoc_js_url: string",
+        "description": "",
+        "line": 7,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public oauth_redirect_url: string",
+        "description": "",
+        "line": 8,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public deep_linking: bool",
+        "description": "",
+        "line": 9,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public persist_authorization: bool",
+        "description": "",
+        "line": 10,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public try_it_out_enabled: bool",
+        "description": "",
+        "line": 11,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public oauth_client_id: string",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public oauth_use_pkce: bool",
+        "description": "",
+        "line": 13,
+        "page": "reference/api/webapi-swagger-options.md"
+      },
+      {
+        "signature": "public constructor( js_url: string = \"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\", css_url: string = \"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\", redoc_js_url: string = \"https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js\", oauth_redirect_url: string = \"\", deep_linking: bool = true, persist_authorization: bool = false, try_it_out_enabled: bool = false, oauth_client_id: string = \"\", oauth_use_pkce: bool = true )",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/webapi-swagger-options.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/webapi/uploaded_file.dream",
     "package": "system.webapi",
     "page": "reference/api/webapi-uploaded-file.md",
@@ -15215,26 +16103,56 @@
     "declarations": [
       {
         "signature": "public class WebApp",
-        "description": "A native HTTP application whose routes and entry points are generated from attributes.",
-        "line": 15,
+        "description": "An isolated native HTTP application with explicitly mounted routers.",
+        "line": 7,
         "page": "reference/api/webapi-web-app.md"
       },
       {
-        "signature": "public static fun use(middleware: Middleware): void",
-        "description": "Appends a runtime onion middleware layer.",
-        "line": 23,
+        "signature": "public state: Map<string, string>",
+        "description": "",
+        "line": 20,
         "page": "reference/api/webapi-web-app.md"
       },
       {
-        "signature": "public static fun shutdown(): void",
-        "description": "Stops accepting connections and cancels pending request operations.",
-        "line": 26,
+        "signature": "public constructor()",
+        "description": "",
+        "line": 22,
         "page": "reference/api/webapi-web-app.md"
       },
       {
-        "signature": "public static async fun wait(token: Option<CancellationToken> = Option.None): void",
-        "description": "Waits for the server loop, optionally shutting it down on cancellation.",
-        "line": 29,
+        "signature": "public constructor(options: WebAppOptions)",
+        "description": "",
+        "line": 28,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun use(middleware: Middleware): Result<bool, IoError>",
+        "description": "Appends an outer-to-inner middleware layer before startup.",
+        "line": 40,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun include_router(router: WebRouter, prefix: string = \"\"): Result<bool, IoError>",
+        "description": "Mounts a router with an optional additional path prefix.",
+        "line": 45,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun override_dependencies(overrides: DependencyOverrides): Result<bool, IoError>",
+        "description": "Installs generated dependency replacements before startup.",
+        "line": 54,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun lifespan(start: fun(WebApp): Future<Result<bool, IoError>>, stop: fun(WebApp): Future<void>): Result<bool, IoError>",
+        "description": "Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.",
+        "line": 59,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun openapi(): string",
+        "description": "Produces documentation for this application's mounted routes only.",
+        "line": 209,
         "page": "reference/api/webapi-web-app.md"
       }
     ]
@@ -15246,7 +16164,7 @@
     "declarations": [
       {
         "signature": "public class WebAppOptions",
-        "description": "FastAPI-style listen options. Empty `docs_url` / `openapi_url` disables that route.",
+        "description": "API metadata, documentation endpoints and native TLS settings. Empty URLs disable endpoints.",
         "line": 4,
         "page": "reference/api/webapi-web-app-options.md"
       },
@@ -15293,10 +16211,65 @@
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
-        "signature": "public constructor( title: string = \"Dream API\", version: string = \"0.1.0\", docs_url: string = \"/docs\", openapi_url: string = \"/openapi.json\", redoc_url: string = \"/redoc\", tls_cert_path: string = \"\", tls_key_path: string = \"\" )",
+        "signature": "public summary: string",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public description: string",
         "description": "",
         "line": 13,
         "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public terms_of_service: string",
+        "description": "",
+        "line": 14,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public swagger: SwaggerOptions",
+        "description": "",
+        "line": 15,
+        "page": "reference/api/webapi-web-app-options.md"
+      },
+      {
+        "signature": "public constructor( title: string = \"Dream API\", version: string = \"0.1.0\", docs_url: string = \"/docs\", openapi_url: string = \"/openapi.json\", redoc_url: string = \"/redoc\", tls_cert_path: string = \"\", tls_key_path: string = \"\", summary: string = \"\", description: string = \"\", terms_of_service: string = \"\" )",
+        "description": "",
+        "line": 17,
+        "page": "reference/api/webapi-web-app-options.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/web_router.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-web-router.md",
+    "declarations": [
+      {
+        "signature": "public class WebEndpoint",
+        "description": "A compiled handler, path and its generated documentation.",
+        "line": 5,
+        "page": "reference/api/webapi-web-router.md"
+      },
+      {
+        "signature": "public constructor(method: string, path: string, handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>, paths: string, websocket: bool = false, components: string = \"{}\")",
+        "description": "",
+        "line": 12,
+        "page": "reference/api/webapi-web-router.md"
+      },
+      {
+        "signature": "public class WebRouter",
+        "description": "Immutable generated route group; mount it explicitly on an application.",
+        "line": 19,
+        "page": "reference/api/webapi-web-router.md"
+      },
+      {
+        "signature": "public constructor(routes: List<WebEndpoint>)",
+        "description": "",
+        "line": 21,
+        "page": "reference/api/webapi-web-router.md"
       }
     ]
   },
@@ -15309,127 +16282,259 @@
         "signature": "public struct GetAttribute",
         "description": "Declares an HTTP GET route.",
         "line": 5,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct PostAttribute",
         "description": "Declares an HTTP POST route.",
         "line": 9,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct PutAttribute",
         "description": "Declares an HTTP PUT route.",
         "line": 13,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct PatchAttribute",
         "description": "Declares an HTTP PATCH route.",
         "line": 17,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct DeleteAttribute",
         "description": "Declares an HTTP DELETE route.",
         "line": 21,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct HeadAttribute",
         "description": "Declares an HTTP HEAD route.",
         "line": 25,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct OptionsAttribute",
         "description": "Declares an HTTP OPTIONS route.",
         "line": 29,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct WebsocketAttribute",
         "description": "Declares an HTTP WEBSOCKET route.",
         "line": 33,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
-        "signature": "public struct HttpGroupAttribute",
-        "description": "Prefixes every route declared on a class.",
+        "signature": "public struct RouterAttribute",
+        "description": "Declares an explicitly mounted group of static HTTP handlers.",
         "line": 37,
-        "page": "reference/api/webapi-webapi-attributes.md"
-      },
-      {
-        "signature": "public struct MiddlewareAttribute",
-        "description": "Installs a global onion layer; lower orders run first.",
-        "line": 41,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct UseAttribute",
         "description": "Applies a middleware function to a route or group in source order.",
-        "line": 46,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "line": 42,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct DepAttribute",
         "description": "Injects and memoizes a dependency function once per request.",
+        "line": 46,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
+      },
+      {
+        "signature": "public struct DependencyOverrideAttribute",
+        "description": "Replaces a provider for applications explicitly installing the containing class's dependencies().",
         "line": 50,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct ProducesAttribute",
         "description": "Sets the content type of a yielded string or byte stream.",
         "line": 54,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct BodyAttribute",
         "description": "Extracts the request body as text, bytes or a JSON model.",
         "line": 58,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct PathAttribute",
         "description": "Binds a path value, with an optional name override.",
         "line": 62,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct QueryAttribute",
         "description": "Binds a query value, with an optional name override.",
         "line": 66,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct HeaderAttribute",
         "description": "Binds a header value, with an optional name override.",
         "line": 70,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct CookieAttribute",
         "description": "Binds a cookie value, with an optional name override.",
         "line": 74,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct FormAttribute",
         "description": "Binds a form value, with an optional name override.",
         "line": 78,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
         "signature": "public struct FileAttribute",
         "description": "Binds a file value, with an optional name override.",
         "line": 82,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "page": "reference/api/webapi-webapi-attributes-1.md"
       },
       {
-        "signature": "public struct WebApiAttribute",
-        "description": "Selects the WebApp declaration for its route generator.",
-        "line": 86,
-        "page": "reference/api/webapi-webapi-attributes.md"
+        "signature": "public struct SecuritySchemeAttribute",
+        "description": "Declares a dependency's OpenAPI authentication scheme.",
+        "line": 87,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 88,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
+      },
+      {
+        "signature": "public kind: string",
+        "description": "",
+        "line": 89,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
+      },
+      {
+        "signature": "public scheme: string",
+        "description": "",
+        "line": 90,
+        "page": "reference/api/webapi-webapi-attributes-1.md"
+      },
+      {
+        "signature": "public name: Option<string>",
+        "description": "",
+        "line": 91,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public location: Option<string>",
+        "description": "",
+        "line": 92,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public struct RequiresScopesAttribute",
+        "description": "Requires space-separated permission scopes from a verified CurrentUser dependency.",
+        "line": 97,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public struct OperationAttribute",
+        "description": "Describes a route operation in OpenAPI.",
+        "line": 101,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public summary: Option<string>",
+        "description": "",
+        "line": 102,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public description: Option<string>",
+        "description": "",
+        "line": 103,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public tags: Option<string>",
+        "description": "",
+        "line": 104,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public status: Option<int>",
+        "description": "",
+        "line": 105,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public deprecated: Option<bool>",
+        "description": "",
+        "line": 106,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public struct ResponseAttribute",
+        "description": "Documents an additional explicit response without changing handler behavior.",
+        "line": 112,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public status: int",
+        "description": "",
+        "line": 113,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public description: string",
+        "description": "",
+        "line": 114,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public model: Option<DeclarationPath>",
+        "description": "",
+        "line": 115,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public content_type: Option<string>",
+        "description": "",
+        "line": 116,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public struct OAuth2SchemeAttribute",
+        "description": "Declares an OAuth2 authorization-code scheme for a security dependency.",
+        "line": 121,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "",
+        "line": 122,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public authorization_url: string",
+        "description": "",
+        "line": 123,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public token_url: string",
+        "description": "",
+        "line": 124,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
+      },
+      {
+        "signature": "public scopes: Option<string>",
+        "description": "",
+        "line": 125,
+        "page": "reference/api/webapi-webapi-attributes-2.md"
       }
     ]
   }

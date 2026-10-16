@@ -171,6 +171,8 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        self.register_type_import_aliases(diagnostics);
+
         // Stash generic `extend` templates before any type instantiation can occur (a concrete
         // union/struct field may instantiate a generic union during `register_enums`), so the
         // extension methods are always available to attach at the first instantiation.

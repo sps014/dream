@@ -96,7 +96,13 @@ pub(super) async fn body(id: i32) -> Result<Vec<u8>, Failure> {
                 .collect()
                 .await
                 .map(|b| b.to_bytes().to_vec())
-                .map_err(|e| error("ELIMIT", e))
+                .map_err(|e| {
+                    if e.is::<http_body_util::LengthLimitError>() {
+                        error("ELIMIT", e)
+                    } else {
+                        error("EIO", e)
+                    }
+                })
         })
         .await
         .clone()

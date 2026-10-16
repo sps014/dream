@@ -46,6 +46,25 @@ public class HttpOutgoing {
         return HttpOutgoing.json_text("{\"detail\":" + WebApp.json_escape(message) + "}", status);
     }
 
+    /// Preserves body-limit failures as 413 while other read failures remain 400.
+    public static fun from_body_error(error: IoError): HttpOutgoing {
+        if error.code() == "ELIMIT" { return HttpOutgoing.detail("request body too large", 413); }
+        return HttpOutgoing.detail("failed to read request body", 400);
+    }
+
+    /// A structured validation response, prefixed with the input source.
+    public static fun from_validation(errors: ValidationErrors, source: string): HttpOutgoing {
+        let prefixed = ValidationErrors();
+        for (let issue in errors.issues) {
+            let path = List<string>(); path.push(source); for (let segment in issue.location) { path.push(segment); }
+            prefixed.add(path, issue.code, issue.message);
+        }
+        return HttpOutgoing.json_text(Json.serialize(prefixed.to_json()), 422);
+    }
+    public static fun invalid_input(source: string, name: string, code: string, message: string): HttpOutgoing {
+        let errors = ValidationErrors(); errors.add(Validation.child(List<string>(), name), code, message); return HttpOutgoing.from_validation(errors, source);
+    }
+
     public static fun already_sent(): HttpOutgoing {
         let res = HttpOutgoing(200, "");
         res.skip_send = true;

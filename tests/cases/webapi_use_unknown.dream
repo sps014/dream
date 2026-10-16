@@ -1,5 +1,10 @@
 import system.webapi;
+
+fun main(): void {}
+
+@router("")
+class Routes {
 @use(missing)
 @get("/")
-fun route(): string { return "ok"; }
-fun main(): void {}
+public static fun route(): string { return "ok"; }
+}

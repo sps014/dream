@@ -1,6 +1,12 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::project("validation_models", "validation", true),
+    Case::project("webapi_isolation", "webapi", false),
+    Case::project("webapi_resources", "webapi", false),
+    Case::project("webapi_lifespan", "webapi", false),
+    Case::project("webapi_auth_http", "webapi_auth", false),
+    Case::project("webapi_auth_tokens", "webapi_auth", false),
     Case::project("webapi_basic", "webapi", false),
     Case::project("webapi_import_only", "webapi_import_only", false),
     Case::project("reserve_properties", "collections", true),

@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../stdlib/webapi.md).
+See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
 ## `public async fun BearerToken`
 

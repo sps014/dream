@@ -1,0 +1,16 @@
+module service.application;
+import system;
+import system.webapi;
+import system.webapi.auth;
+import accounts;
+import routes;
+
+public fun create_app(key: string, password: string): Result<WebApp, AuthError> {
+    let auth = AuthService(JwtOptions("dream-example", "messages-api", key, key, "HS256"), DemoAccounts(Password.hash(password)?), MemoryAuthStore());
+    let app = WebApp(WebAppOptions(title: "Messages API", description: "Validated messages with dependency-based authentication"));
+    let mounted = app.include_router(auth.router()?);
+    if mounted.is_err() { return Result.Err(AuthError("ECONFIG", mounted.unwrap_err().message())); }
+    app.include_router(Messages.router()).unwrap(); app.use(auth.middleware()).unwrap();
+    app.use(CORS(CorsOptions(allow_origins: "https://example.com", expose_headers: "X-Request-ID"))).unwrap();
+    return Result.Ok(app);
+}

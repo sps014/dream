@@ -14,3 +14,7 @@ sha2 = "0.10"
 hmac = "0.12"
 getrandom = "0.2"
 aes-gcm = "0.10"
+
+argon2 = "0.5"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+serde_json = "1"

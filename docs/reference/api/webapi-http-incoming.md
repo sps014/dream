@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../stdlib/webapi.md).
+For behavior and native target requirements, see [Native Web APIs](../../web-apis/index.md).
 
 ## `public class HttpIncoming`
 

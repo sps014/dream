@@ -1,10 +1,8 @@
-# JsonGenerator
+# Json Generator
 
 **Import:** `import system.json.derive;`
 
-Read the [usage guide](../stdlib/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-## `class JsonGenerator`
+## `public static class JsonGenerator`
 
 Builds `extend Type { to_json / write_json / from_json }` source from [`JsonTypeSpec`]s (see `json_derive`).
 
@@ -12,7 +10,7 @@ Builds `extend Type { to_json / write_json / from_json }` source from [`JsonType
 public static class JsonGenerator
 ```
 
-## `expand`
+## `public static fun expand`
 
 Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.
 
@@ -20,7 +18,15 @@ Emits `extend … { to_json / write_json / from_json }` source for each snapshot
 public static fun expand(borrow types: List<JsonTypeSpec>, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput
 ```
 
-## `expand_collections`
+## `public static fun members`
+
+Emits only methods for GenContext.emit_extend, retaining the model's declaration scope.
+
+```dream
+public static fun members(borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string>): JsonGenOutput
+```
+
+## `public static fun expand_collections`
 
 Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).
 

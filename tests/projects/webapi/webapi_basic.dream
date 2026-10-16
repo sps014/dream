@@ -8,19 +8,13 @@ import system.testing;
 class WebapiPayload { public name: string; public constructor(name: string) { this.name = name; } }
 let webapi_dep_calls: int = 0;
 fun webapi_dependency(@header("X-Key") key: string): string { webapi_dep_calls++; return key; }
-@get("/hello/{id}")
-fun webapi_hello(@path id: int, @query q: Option<int>, @cookie session: Option<string>, @dep(webapi_dependency) first: string, @dep(webapi_dependency) second: string): string {
-    return id.to_string() + ":" + q.unwrap_or(0).to_string() + ":" + session.unwrap_or("") + ":" + first + second;
-}
+
 fun webapi_path_dependency(@path id: int): int { return id; }
-@get("/dependency/{id}")
-fun webapi_dependency_path(@dep(webapi_path_dependency) value: int): string { return value.to_string(); }
-@post("/json")
-fun webapi_json(@body payload: WebapiPayload): WebapiPayload { return payload; }
-@get("/failure")
-fun webapi_failure(): Result<string, string> { return Result.Err("failed"); }
+
+
+
 @use(webapi_outer)
-@http_group("/group")
+@router("/group")
 class WebapiGroup {
     @get("/ok")
     public static fun ok(): string { return "group"; }
@@ -29,66 +23,35 @@ async fun webapi_guard(ctx: RequestContext, next: Next): HttpOutgoing {
     if ctx.incoming.path == "/short" { return HttpOutgoing.text("blocked", 403); }
     return next.call().await;
 }
-@use(webapi_guard)
-@get("/short")
-fun webapi_short(): string { return "unreachable"; }
+
 async fun webapi_outer(ctx: RequestContext, next: Next): HttpOutgoing {
     let response = next.call().await; response.body = response.body + "a"; return response;
 }
 async fun webapi_inner(ctx: RequestContext, next: Next): HttpOutgoing {
     let response = next.call().await; response.body = response.body + "b"; return response;
 }
-@use(webapi_outer)
-@use(webapi_inner)
-@get("/onion")
-fun webapi_onion(ctx: RequestContext): string { return ctx.get("order").unwrap_or(""); }
-@middleware(10)
+
 async fun webapi_later(ctx: RequestContext, next: Next): HttpOutgoing {
     ctx.set("order", ctx.get("order").unwrap_or("") + ",10"); return next.call().await;
 }
-@get("/auth")
-fun webapi_auth(@dep(BearerToken) token: string): string { return token; }
-@middleware(5)
-async fun webapi_global(ctx: RequestContext, next: Next): HttpOutgoing {
+
+public async fun webapi_global(ctx: RequestContext, next: Next): HttpOutgoing {
     ctx.set("order", "5");
     let response = next.call().await; response.set_header("X-Global", "yes"); return response;
 }
-@get("/events")
-async fun webapi_events(): AsyncIterable<SseEvent> {
-    yield SseEvent.data("first\nsecond");
-    Time.sleep(1).await;
-    yield SseEvent("last", Option.Some("update"), Option.Some("2"), Option.Some(100));
-}
+
 let webapi_stream_dropped: int = 0;
 class WebapiStreamGuard {
     public value: string;
     public constructor() { this.value = "later"; }
     del() { webapi_stream_dropped++; }
 }
-@get("/disconnect")
-async fun webapi_disconnecting(): AsyncIterable<string> {
-    let guard = WebapiStreamGuard(); yield "first";
-    Time.sleep(60000).await;
-    yield guard.value;
-}
-@get("/binary")
-fun webapi_binary(): Iterable<byte[]> { yield [(byte)1, (byte)255]; }
-@get("/chunks")
-@produces("text/custom")
-fun webapi_chunks(): Iterable<string> { yield "one"; yield "two"; }
-@post("/multipart")
-fun webapi_multipart(@form title: string, @file upload: UploadedFile): string { return title + ":" + upload.filename + ":" + Encoding.utf8_decode(upload.bytes); }
-@websocket("/ws")
-async fun webapi_ws(ws: ServerWebSocket): void {
-    await for (let message in ws.messages()) {
-        switch (message) {
-            Text(text) => { ws.send_text(text).await.unwrap(); },
-            Binary(bytes) => { ws.send_binary(bytes).await.unwrap(); },
-            Close(_, _) => {},
-        }
-    }
-}
-async fun webapi_get(client: HttpClient, base: string, path: string, expected: int): string {
+
+
+
+
+
+public async fun webapi_get(client: HttpClient, base: string, path: string, expected: int): string {
     let result = client.send(HttpRequest.get(Url.parse(base + path).unwrap())).await;
     if result.is_err() { Assert.fail(path + ": " + result.unwrap_err().code() + ": " + result.unwrap_err().message()); }
     let response = result.unwrap();
@@ -99,8 +62,13 @@ async fun webapi_get(client: HttpClient, base: string, path: string, expected: i
 @timeout(15000)
 async fun webapi_basic(): void {
     webapi_dep_calls = 0;
-    WebApp.use(CORS(CorsOptions()));
-    let port = WebApp.listen("127.0.0.1", 0).await.unwrap();
+    let app = WebApp();
+    app.include_router(WebapiRoutes.router()).unwrap();
+    app.include_router(WebapiGroup.router()).unwrap();
+    app.use(Middleware(webapi_global)).unwrap();
+    app.use(Middleware(webapi_later)).unwrap();
+    app.use(CORS(CorsOptions())).unwrap();
+    let port = app.listen("127.0.0.1", 0).await.unwrap();
     let base = "http://127.0.0.1:" + port.to_string(); let client = HttpClient();
     let request = HttpRequest.get(Url.parse(base + "/hello/12?q=4").unwrap());
     request.headers.set("X-Key", "k"); request.headers.set("Cookie", "session=abc");
@@ -141,12 +109,65 @@ async fun webapi_basic(): void {
     switch (socket.receive().await.unwrap()) { Text(text) => { Assert.eq_str(text, "echo"); }, _ => { Assert.is_true(false); } }
     socket.close().await.unwrap();
     let idle_socket = WebSocket.connect("ws://127.0.0.1:" + port.to_string() + "/ws", 5000).await.unwrap();
-    WebApp.shutdown(); WebApp.wait().await;
+    app.shutdown(); app.wait().await;
     let closed = idle_socket.receive().await;
     if closed.is_ok() { switch (closed.unwrap()) { Close(_, _) => {}, _ => { Assert.fail("shutdown must close active WebSockets"); } } }
     let options = WebAppOptions(docs_url: "", openapi_url: "", redoc_url: "");
-    port = WebApp.listen_with("127.0.0.1", 0, options).await.unwrap();
+    let second_app = WebApp(options);
+    port = second_app.listen("127.0.0.1", 0).await.unwrap();
     base = "http://127.0.0.1:" + port.to_string();
     webapi_get(client, base, "/docs", 404).await; webapi_get(client, base, "/openapi.json", 404).await; webapi_get(client, base, "/redoc", 404).await;
-    WebApp.shutdown(); WebApp.wait().await; client.close().unwrap();
+    second_app.shutdown(); second_app.wait().await; client.close().unwrap();
+}
+
+@router("")
+class WebapiRoutes {
+@get("/hello/{id}")
+public static fun webapi_hello(@path id: int, @query q: Option<int>, @cookie session: Option<string>, @dep(webapi_dependency) first: string, @dep(webapi_dependency) second: string): string {
+    return id.to_string() + ":" + q.unwrap_or(0).to_string() + ":" + session.unwrap_or("") + ":" + first + second;
+}
+@get("/dependency/{id}")
+public static fun webapi_dependency_path(@dep(webapi_path_dependency) value: int): string { return value.to_string(); }
+@post("/json")
+public static fun webapi_json(@body payload: WebapiPayload): WebapiPayload { return payload; }
+@get("/failure")
+public static fun webapi_failure(): Result<string, string> { return Result.Err("failed"); }
+@use(webapi_guard)
+@get("/short")
+public static fun webapi_short(): string { return "unreachable"; }
+@use(webapi_outer)
+@use(webapi_inner)
+@get("/onion")
+public static fun webapi_onion(ctx: RequestContext): string { return ctx.get("order").unwrap_or(""); }
+@get("/auth")
+public static fun webapi_auth(@dep(BearerToken) token: string): string { return token; }
+@get("/events")
+public static async fun webapi_events(): AsyncIterable<SseEvent> {
+    yield SseEvent.data("first\nsecond");
+    Time.sleep(1).await;
+    yield SseEvent("last", Option.Some("update"), Option.Some("2"), Option.Some(100));
+}
+@get("/disconnect")
+public static async fun webapi_disconnecting(): AsyncIterable<string> {
+    let guard = WebapiStreamGuard(); yield "first";
+    Time.sleep(60000).await;
+    yield guard.value;
+}
+@get("/binary")
+public static fun webapi_binary(): Iterable<byte[]> { yield [(byte)1, (byte)255]; }
+@get("/chunks")
+@produces("text/custom")
+public static fun webapi_chunks(): Iterable<string> { yield "one"; yield "two"; }
+@post("/multipart")
+public static fun webapi_multipart(@form title: string, @file upload: UploadedFile): string { return title + ":" + upload.filename + ":" + Encoding.utf8_decode(upload.bytes); }
+@websocket("/ws")
+public static async fun webapi_ws(ws: ServerWebSocket): void {
+    await for (let message in ws.messages()) {
+        switch (message) {
+            Text(text) => { ws.send_text(text).await.unwrap(); },
+            Binary(bytes) => { ws.send_binary(bytes).await.unwrap(); },
+            Close(_, _) => {},
+        }
+    }
+}
 }

@@ -1,0 +1,11 @@
+module system.webapi;
+
+/// Native OIDC exchange transport used by system.webapi.auth; completion obeys cancellation.
+public static class OidcTransport {
+    @native public static async fun exchange(request: JsonValue, token: Option<CancellationToken> = Option.None): Result<JsonValue, IoError> {
+        let action = request.get_str_or("action", "");
+        if action != "oidc_begin" && action != "oidc_complete" { return Result.Err(IoError.other("", "invalid OIDC operation")); }
+        request.set("id", JsonValue.from_int(0)); request.set("timeout_ms", JsonValue.from_int(30000));
+        return WebOperation.parse(WebOperation.submit(request, [], token).await?);
+    }
+}

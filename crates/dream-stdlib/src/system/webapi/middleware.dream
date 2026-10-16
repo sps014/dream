@@ -1,15 +1,33 @@
 module system.webapi;
 
 // Per-request bag shared by middleware and `@dep` functions.
+@allow_cycle
 public class RequestContext {
+    internal cleanups: List<fun(CancellationToken): Future<void>>;
+    internal dependencies: Map<string, object>;
+    internal overrides: Map<string, string>;
     public incoming: HttpIncoming;
+    public app_state: Map<string, string>;
     public state: Map<string, string>;
     public cancellation_token: Option<CancellationToken>;
 
     public constructor(incoming: HttpIncoming) {
+        this.cleanups = List<fun(CancellationToken): Future<void>>(); this.dependencies = Map<string, object>(); this.overrides = Map<string, string>();
         this.incoming = incoming;
+        this.app_state = Map<string, string>();
         this.state = Map<string, string>();
         this.cancellation_token = Option.None;
+    }
+
+    /// Registers request cleanup, run once in reverse acquisition order outside request cancellation.
+    public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void { this.cleanups.push(cleanup); }
+    internal static async fun finish(ctx: RequestContext): void {
+        let source = CancellationSource();
+        while !ctx.cleanups.is_empty() {
+            let cleanup = ctx.cleanups.get(ctx.cleanups.length - 1); ctx.cleanups.remove_at(ctx.cleanups.length - 1);
+            cleanup(source.token).await;
+        }
+        ctx.dependencies.clear();
     }
 
     public fun set(key: string, value: string): void {

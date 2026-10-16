@@ -32,13 +32,9 @@ public struct OptionsAttribute { public path: string; }
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
 public struct WebsocketAttribute { public path: string; }
 
-/// Prefixes every route declared on a class.
+/// Declares an explicitly mounted group of static HTTP handlers.
 @attribute(AttributeTarget.Class)
-public struct HttpGroupAttribute { public prefix: string; }
-
-/// Installs a global onion layer; lower orders run first.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct MiddlewareAttribute { public order: Option<int>; }
+public struct RouterAttribute { public prefix: string; }
 
 /// Applies a middleware function to a route or group in source order.
 @repeatable
@@ -47,7 +43,11 @@ public struct UseAttribute { public handler: DeclarationPath; }
 
 /// Injects and memoizes a dependency function once per request.
 @attribute(AttributeTarget.Parameter)
-public struct DepAttribute { public provider: DeclarationPath; }
+public struct DepAttribute { public provider: DeclarationPath; public cache: Option<bool>; }
+
+/// Replaces a provider for applications explicitly installing the containing class's dependencies().
+@attribute(AttributeTarget.StaticMethod)
+public struct DependencyOverrideAttribute { public provider: DeclarationPath; }
 
 /// Sets the content type of a yielded string or byte stream.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
@@ -81,6 +81,46 @@ public struct FormAttribute { public name: Option<string>; }
 @attribute(AttributeTarget.Parameter)
 public struct FileAttribute { public name: Option<string>; }
 
-/// Selects the WebApp declaration for its route generator.
-@attribute(AttributeTarget.Class)
-public struct WebApiAttribute {}
+
+/// Declares a dependency's OpenAPI authentication scheme.
+@attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
+public struct SecuritySchemeAttribute {
+    public id: string;
+    public kind: string;
+    public scheme: string;
+    public name: Option<string>;
+    public location: Option<string>;
+}
+
+/// Requires space-separated permission scopes from a verified CurrentUser dependency.
+@attribute(AttributeTarget.StaticMethod)
+public struct RequiresScopesAttribute { public scopes: string; }
+
+/// Describes a route operation in OpenAPI.
+@attribute(AttributeTarget.StaticMethod)
+public struct OperationAttribute {
+    public summary: Option<string>;
+    public description: Option<string>;
+    public tags: Option<string>;
+    public status: Option<int>;
+    public deprecated: Option<bool>;
+}
+
+/// Documents an additional explicit response without changing handler behavior.
+@repeatable
+@attribute(AttributeTarget.StaticMethod)
+public struct ResponseAttribute {
+    public status: int;
+    public description: string;
+    public model: Option<DeclarationPath>;
+    public content_type: Option<string>;
+}
+
+/// Declares an OAuth2 authorization-code scheme for a security dependency.
+@attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
+public struct OAuth2SchemeAttribute {
+    public id: string;
+    public authorization_url: string;
+    public token_url: string;
+    public scopes: Option<string>;
+}

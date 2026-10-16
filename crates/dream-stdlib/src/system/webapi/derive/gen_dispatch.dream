@@ -6,15 +6,17 @@ import system.json;
 
 extend WebGenerator {
     internal fun emit_routes(): void {
-        this.source.line("import system.webapi;");
-        this.source.line("import system.net;");
-        this.source.line("import system.json;");
-        this.source.line("import system.encoding;");
-        this.source.line("import system.collections;");
+        this.imports.line("import system.webapi;");
+        this.imports.line("import system.net;");
+        this.imports.line("import system.json;");
+        this.imports.line("import system.validation;");
+        this.imports.line("import system.encoding;");
+        this.imports.line("import system.collections;");
         for (let route in this.routes) {
             let out = this.source;
             out.line("@native");
-            out.line("async fun __web_route" + route.index.to_string() + "(ctx: RequestContext, params: Map<string, string>): HttpOutgoing {");
+            out.line("internal async fun __web_leaf" + route.index.to_string() + "(ctx: RequestContext, params: Map<string, string>): HttpOutgoing {");
+            if route.function.has<RequiresScopesAttribute>() { out.line("ctx.set(\"auth.required_scopes\", " + web_quote(route.function.attribute<RequiresScopesAttribute>().unwrap().scopes) + ");"); }
             let args = this.arguments(route.function, out, Map<string, string>(), route);
             let call = this.calls.get(route.function.id).unwrap() + "(" + args + ")";
             let ty = web_return_type(route.function);
@@ -23,7 +25,10 @@ extend WebGenerator {
             if route.websocket {
                 out.line(call + ";"); out.line("return HttpOutgoing.already_sent();");
             } else if stream { this.emit_stream(route, call, out); }
-            else if ty.kind == TypeRefKind.Void { out.line(call + ";"); out.line("return HttpOutgoing.empty();"); }
+            else if ty.kind == TypeRefKind.Void {
+                let status = 204; if route.function.has<OperationAttribute>() { status = route.function.attribute<OperationAttribute>().unwrap().status.unwrap_or(204); }
+                out.line(call + ";"); out.line("return HttpOutgoing.empty(" + status.to_string() + ");");
+            }
             else {
                 out.line("let result = " + call + ";");
                 if ty.name == "Result" {
@@ -33,6 +38,13 @@ extend WebGenerator {
                 } else { this.emit_value(ty, "result", out); }
             }
             out.line("}");
+            out.line("@native public async fun __web_route" + route.index.to_string() + "(ctx: RequestContext, params: Map<string, string>): HttpOutgoing {");
+            out.line("let chain = List<Middleware>();");
+            for (let use in route.uses) { out.line("chain.push(Middleware(" + this.calls.get(use.handler.symbol).unwrap() + "));"); }
+            out.line("let leaf: fun(): Future<HttpOutgoing> = async () => { return __web_leaf" + route.index.to_string() + "(ctx, params).await; };");
+            if route.function.has<OperationAttribute>() && route.function.attribute<OperationAttribute>().unwrap().status.is_some() {
+                out.line("let response = WebApp.run_middleware(ctx, chain, 0, leaf).await; if response.status == 200 { response.status = " + route.function.attribute<OperationAttribute>().unwrap().status.unwrap().to_string() + "; } return response; }");
+            } else { out.line("return WebApp.run_middleware(ctx, chain, 0, leaf).await; }"); }
         }
     }
     internal fun emit_value(ty: GenTypeRef, value: string, out: CodeBuilder): void {
@@ -62,28 +74,19 @@ extend WebGenerator {
         out.line("WebOperation.submit(WebOperation.request(\"stream_end\", ctx.incoming.req_id), [], ctx.cancellation_token).await;");
         out.line("return HttpOutgoing.already_sent();");
     }
-    internal fun emit_dispatch(out: CodeBuilder): void {
-        out.line("@native internal static async fun generated_dispatch(ctx: RequestContext): HttpOutgoing {");
-        for (let route in this.routes) {
-            let suffix = route.index.to_string();
-            out.line("if ctx.incoming.method == " + web_quote(route.method) + " {");
-            out.line("let matched = WebRouting.match_path(" + web_quote(route.path) + ", ctx.incoming.path);");
-            out.line("if matched.is_some() {");
-            if route.uses.is_empty() { out.line("return __web_route" + suffix + "(ctx, matched.unwrap()).await;"); }
-            else {
-                out.line("let chain = List<Middleware>();");
-                for (let use in route.uses) { out.line("chain.push(Middleware(" + this.calls.get(use.handler.symbol).unwrap() + "));"); }
-                out.line("let leaf: fun(): Future<HttpOutgoing> = async () => { return __web_route" + suffix + "(ctx, matched.unwrap()).await; };");
-                out.line("return WebApp.run_middleware(ctx, chain, 0, leaf).await;");
+    internal fun emit_routers(): void {
+        for (let d in this.ctx.decls()) {
+            if !d.has<RouterAttribute>() { continue; }
+            let out = CodeBuilder();
+            out.line("public static fun router(): WebRouter {");
+            out.line("let routes = List<WebEndpoint>();");
+            let paths = Json.deserialize<JsonValue>(this.openapi(d.id)).unwrap();
+            for (let route in this.routes) {
+                if this.owners.get(route.index).unwrap_or("") != d.id { continue; }
+                out.line("routes.push(WebEndpoint(" + web_quote(route.method) + ", " + web_quote(route.path) + ", __web_route" + route.index.to_string() + ", " + web_quote(Json.serialize(paths.get_or("paths", JsonValue.none()).get_or(route.path, JsonValue.none()).get_or(route.method.to_lower(), JsonValue.none()))) + ", " + route.websocket.to_string() + ", " + web_quote(Json.serialize(paths.get_or("components", JsonValue.none()))) + ")); ");
             }
-            out.line("} }");
+            out.line("return WebRouter(routes); }");
+            this.ctx.emit_extend(d, out.to_string());
         }
-        out.line("return HttpOutgoing.not_found(); }");
-    }
-    internal fun emit_entry_points(out: CodeBuilder): void {
-        out.line("@native public static async fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<int, IoError> { return WebApp.listen_with(host, port, WebAppOptions(), token).await; }");
-        out.line("@native public static async fun listen_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<int, IoError> { WebApp.generated_install_middleware(); return WebApp.listen_runtime(host, port, options, WebApp.generated_dispatch, WebApp.generated_openapi_paths, token).await; }");
-        out.line("@native public static async fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<bool, IoError> { WebApp.listen(host, port, token).await?; WebApp.wait(token).await; return Result.Ok(true); }");
-        out.line("@native public static async fun run_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<bool, IoError> { WebApp.listen_with(host, port, options, token).await?; WebApp.wait(token).await; return Result.Ok(true); }");
     }
 }

@@ -21,7 +21,10 @@ mod task;
 mod testing;
 mod text;
 mod uuid;
+mod validation;
+mod validation_derive;
 mod webapi;
+mod webapi_auth;
 mod webapi_derive;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
@@ -59,6 +62,8 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     compress::PACKAGE,
     crypto::PACKAGE,
     uuid::PACKAGE,
+    validation::PACKAGE,
+    validation_derive::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,
     testing::PACKAGE,
@@ -66,5 +71,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     json_derive::PACKAGE,
     logging::PACKAGE,
     webapi::PACKAGE,
+    webapi_auth::PACKAGE,
     webapi_derive::PACKAGE,
 ];

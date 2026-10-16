@@ -2,7 +2,7 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../stdlib/webapi.md).
+See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
 ## `public class CorsOptions`
 
@@ -12,37 +12,37 @@ FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are 
 public class CorsOptions
 ```
 
-## `public allow_origins: string`
+## `public allow_origins`
 
 ```dream
 public allow_origins: string
 ```
 
-## `public allow_methods: string`
+## `public allow_methods`
 
 ```dream
 public allow_methods: string
 ```
 
-## `public allow_headers: string`
+## `public allow_headers`
 
 ```dream
 public allow_headers: string
 ```
 
-## `public expose_headers: string`
+## `public expose_headers`
 
 ```dream
 public expose_headers: string
 ```
 
-## `public allow_credentials: bool`
+## `public allow_credentials`
 
 ```dream
 public allow_credentials: bool
 ```
 
-## `public max_age: int`
+## `public max_age`
 
 ```dream
 public max_age: int
@@ -74,7 +74,7 @@ public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOut
 
 ## `public fun CORS`
 
-`WebApp.use(CORS(CorsOptions()))` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
+`app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
 
 ```dream
 public fun CORS(opts: CorsOptions): Middleware

@@ -2,36 +2,70 @@
 
 **Import:** `import system.webapi;`
 
-For behavior and native target requirements, see [Native Web APIs](../stdlib/webapi.md).
+See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
 ## `public class WebApp`
 
-A native HTTP application whose routes and entry points are generated from attributes.
+An isolated native HTTP application with explicitly mounted routers.
 
 ```dream
 public class WebApp
 ```
 
-## `public static fun use`
-
-Appends a runtime onion middleware layer.
+## `public state`
 
 ```dream
-public static fun use(middleware: Middleware): void
+public state: Map<string, string>
 ```
 
-## `public static fun shutdown`
-
-Stops accepting connections and cancels pending request operations.
+## `public constructor`
 
 ```dream
-public static fun shutdown(): void
+public constructor()
 ```
 
-## `public static async fun wait`
-
-Waits for the server loop, optionally shutting it down on cancellation.
+## `public constructor`
 
 ```dream
-public static async fun wait(token: Option<CancellationToken> = Option.None): void
+public constructor(options: WebAppOptions)
+```
+
+## `public fun use`
+
+Appends an outer-to-inner middleware layer before startup.
+
+```dream
+public fun use(middleware: Middleware): Result<bool, IoError>
+```
+
+## `public fun include_router`
+
+Mounts a router with an optional additional path prefix.
+
+```dream
+public fun include_router(router: WebRouter, prefix: string = ""): Result<bool, IoError>
+```
+
+## `public fun override_dependencies`
+
+Installs generated dependency replacements before startup.
+
+```dream
+public fun override_dependencies(overrides: DependencyOverrides): Result<bool, IoError>
+```
+
+## `public fun lifespan`
+
+Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.
+
+```dream
+public fun lifespan(start: fun(WebApp): Future<Result<bool, IoError>>, stop: fun(WebApp): Future<void>): Result<bool, IoError>
+```
+
+## `public fun openapi`
+
+Produces documentation for this application's mounted routes only.
+
+```dream
+public fun openapi(): string
 ```

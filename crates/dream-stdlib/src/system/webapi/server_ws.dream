@@ -18,7 +18,7 @@ public class ServerWebSocket {
     internal static async fun upgrade(incoming: HttpIncoming, token: Option<CancellationToken>): Result<ServerWebSocket, IoError> {
         let operation = WebOperation.start(WebOperation.request("upgrade", incoming.req_id), []);
         let metadata = WebOperation.parse(operation.wait(token).await?)?;
-        let socket = ServerWebSocket(metadata.at("id").as_int().unwrap_or(0), token);
+        let socket = ServerWebSocket(metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0), token);
         operation.claim(); operation.close(); return Result.Ok(socket);
     }
     static async fun submit(socket: ServerWebSocket, request: JsonValue, bytes: byte[], token: Option<CancellationToken>): Result<byte[], IoError> {
@@ -44,14 +44,14 @@ public class ServerWebSocket {
     public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<WebSocketMessage, IoError>> { return ServerWebSocket.receive_owned(this, this.resolve_token(token)); }
     static async fun receive_owned(socket: ServerWebSocket, token: Option<CancellationToken>): Result<WebSocketMessage, IoError> {
         let bytes = ServerWebSocket.submit(socket, WebOperation.request("receive", socket.id), [], token).await?;
-        let message = WebOperation.parse(bytes)?; let kind = message.at("kind").as_string().unwrap_or("");
-        if kind == "text" { return Result.Ok(WebSocketMessage.Text(message.at("text").as_string().unwrap_or(""))); }
+        let message = WebOperation.parse(bytes)?; let kind = message.get_or("kind", JsonValue.none()).as_string().unwrap_or("");
+        if kind == "text" { return Result.Ok(WebSocketMessage.Text(message.get_or("text", JsonValue.none()).as_string().unwrap_or(""))); }
         if kind == "binary" {
-            let items = message.at("bytes").as_array().unwrap_or(List<JsonValue>()); let bytes = Buffer.alloc<byte>(items.length);
+            let items = message.get_or("bytes", JsonValue.none()).as_array().unwrap_or(List<JsonValue>()); let bytes = Buffer.alloc<byte>(items.length);
             for (let i = 0; i < bytes.length; i = i + 1) { bytes[i] = (byte)items.get(i).as_int().unwrap_or(0); }
             return Result.Ok(WebSocketMessage.Binary(bytes));
         }
-        if kind == "close" { return Result.Ok(WebSocketMessage.Close(message.at("code").as_int().unwrap_or(1006), message.at("reason").as_string().unwrap_or(""))); }
+        if kind == "close" { return Result.Ok(WebSocketMessage.Close(message.get_or("code", JsonValue.none()).as_int().unwrap_or(1006), message.get_or("reason", JsonValue.none()).as_string().unwrap_or(""))); }
         return Result.Err(IoError.other("", "invalid WebSocket message"));
     }
     /// Iterates messages through the final Close message.

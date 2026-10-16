@@ -3,6 +3,7 @@
 mod exports;
 mod http;
 mod http_server;
+mod oidc;
 mod socket_operations;
 mod sockets;
 mod urls;

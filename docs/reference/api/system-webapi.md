@@ -1,31 +1,23 @@
 # system.webapi: API lookup
 
-Native server APIs. Read the [Web API guide](../stdlib/webapi.md) for examples, generated routes, lifecycle methods, streaming and target availability.
+Read the [Web APIs guide](../../web-apis/index.md) for complete examples and behavior. Applications own their routes, options, middleware, lifecycle, and dependency overrides.
 
-- [Auth](webapi-auth.md)
-- [Cors](webapi-cors.md)
-- [Http Incoming](webapi-http-incoming.md)
-- [Http Outgoing](webapi-http-outgoing.md)
-- [Http Status](webapi-http-status.md)
-- [Middleware](webapi-middleware.md)
-- [Server Ws](webapi-server-ws.md)
-- [Sse Event](webapi-sse-event.md)
-- [Uploaded File](webapi-uploaded-file.md)
-- [Web App](webapi-web-app.md)
-- [Web App Options](webapi-web-app-options.md)
+- [Application](webapi-web-app.md)
+- [Application options](webapi-web-app-options.md)
+- [Swagger options](webapi-swagger-options.md)
+- [Routers and endpoints](webapi-web-router.md)
+- [Request context and middleware](webapi-middleware.md)
+- [Dependency resources and overrides](webapi-dependency-resource.md)
 - [Attributes](webapi-webapi-attributes.md)
+- [Incoming requests](webapi-http-incoming.md)
+- [Outgoing responses](webapi-http-outgoing.md)
+- [HTTP statuses](webapi-http-status.md)
+- [CORS](webapi-cors.md)
+- [Header authentication helpers](webapi-auth.md)
+- [Server WebSockets](webapi-server-ws.md)
+- [SSE events](webapi-sse-event.md)
+- [Uploaded files](webapi-uploaded-file.md)
+- [Standalone validation](system-validation.md)
+- [Authentication services](system-webapi-auth.md)
 
-## Generated WebApp entry points
-
-`system.webapi.derive` adds these methods after inspecting the routes:
-
-```dream
-public static async fun listen(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<int, IoError>
-public static async fun listen_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<int, IoError>
-public static async fun run(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
-public static async fun run_with(host: string, port: int, options: WebAppOptions, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
-```
-
-These methods are native only. Listen returns the bound port, including the selected ephemeral port when passed zero. Run listens and waits until shutdown or cancellation.
-
-[Generator entry point](webapi-derive-webapi-derive.md).
+`@router` generates a static `router(): WebRouter` method on its class. `@dependency_override` generates a static `dependencies(): DependencyOverrides` method on the containing replacement class. Install their results explicitly on an app before startup. Server entry points are instance methods and native only.

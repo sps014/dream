@@ -1,5 +1,6 @@
 //! Optional native crypto services. Guest state remains in the core cdylib.
 
+mod auth;
 mod crypto;
 mod exports;
 

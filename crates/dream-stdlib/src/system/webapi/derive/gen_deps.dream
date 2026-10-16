@@ -19,23 +19,71 @@ extend WebGenerator {
             if this.colors.get(path.symbol).unwrap_or(0) == 1 { this.ctx.error_at(f.id, "@dep(" + path.text + ") forms a cycle"); }
             else { this.visit_dependency(dependency.unwrap()); }
         }
+        for (let replacement in this.replacements.get(f.id).unwrap_or(List<GenFunction>())) {
+            if this.colors.get(replacement.id).unwrap_or(0) == 1 { this.ctx.error_at(replacement.id, "dependency override forms a cycle"); }
+            else { this.visit_dependency(replacement); }
+        }
         this.colors.set(f.id, 2);
     }
-    internal fun dependency(p: GenParam, out: CodeBuilder, memo: Map<string, string>, route: WebRoute): string {
-        let path = p.attribute<DepAttribute>().unwrap().provider;
-        if memo.contains(path.symbol) { return memo.get(path.symbol).unwrap(); }
-        let f = this.functions.get(path.symbol).unwrap();
-        let args = this.arguments(f, out, memo, route);
+    internal fun collect_overrides(): void {
+        for (let d in this.ctx.decls()) {
+            let out = CodeBuilder(); out.line("public static fun dependencies(): DependencyOverrides { let providers = Map<string, string>();");
+            let count = 0;
+            for (let f in d.methods) {
+                if !f.has<DependencyOverrideAttribute>() { continue; }
+                count++;
+                let original = f.attribute<DependencyOverrideAttribute>().unwrap().provider;
+                if !f.is_static { this.ctx.error_at(f.id, "dependency overrides must be static"); continue; }
+                if !this.functions.contains(original.symbol) { this.ctx.error_at(f.id, "dependency override does not resolve to a provider"); continue; }
+                let expected = web_dependency_type(this.functions.get(original.symbol).unwrap().ret);
+                let actual = web_dependency_type(f.ret);
+                if expected.decl != actual.decl || expected.display != actual.display { this.ctx.error_at(f.id, "dependency override must return the original provider's value type"); continue; }
+                let replacements = this.replacements.get(original.symbol).unwrap_or(List<GenFunction>()); replacements.push(f); this.replacements.set(original.symbol, replacements);
+                out.line("providers.set(" + web_quote(original.symbol) + ", " + web_quote(f.id) + ");");
+            }
+            out.line("return DependencyOverrides(providers); }");
+            if count > 0 { this.ctx.emit_extend(d, out.to_string()); }
+        }
+    }
+    internal fun provider_value(f: GenFunction, out: CodeBuilder, route: WebRoute): string {
+        let args = this.arguments(f, out, Map<string, string>(), route);
         let call = this.calls.get(f.id).unwrap() + "(" + args + ")";
         if f.is_async { call = call + ".await"; }
-        let value = this.fresh();
-        out.line("let " + value + " = " + call + ";");
-        let result = value;
-        if f.ret.name == "Result" {
-            if f.ret.arg(1).name == nameof(HttpStatus) { out.line("if " + value + ".is_err() { return HttpOutgoing.from_status(" + value + ".unwrap_err()); }"); }
+        let value = this.fresh(); out.line("let " + value + " = " + call + ";");
+        let result = value; let ty = f.ret;
+        if ty.name == "Result" {
+            if ty.arg(1).name == nameof(HttpStatus) { out.line("if " + value + ".is_err() { return HttpOutgoing.from_status(" + value + ".unwrap_err()); }"); }
             else { out.line("if " + value + ".is_err() { return HttpOutgoing.detail(" + value + ".unwrap_err().to_string(), 500); }"); }
-            result = this.fresh(); out.line("let " + result + " = " + value + ".unwrap();");
+            result = this.fresh(); out.line("let " + result + " = " + value + ".unwrap();"); ty = ty.arg(0);
         }
-        memo.set(path.symbol, result); return result;
+        if ty.name == nameof(DependencyResource) {
+            out.line("ctx.add_cleanup(" + result + ".cleanup);"); return result + ".value";
+        }
+        return result;
     }
+    internal fun dependency(p: GenParam, out: CodeBuilder, memo: Map<string, string>, route: WebRoute): string {
+        let attr = p.attribute<DepAttribute>().unwrap(); let path = attr.provider;
+        let f = this.functions.get(path.symbol).unwrap(); let ty = web_dependency_type(f.ret);
+        let value = this.fresh(); let cache = attr.cache.unwrap_or(true);
+        out.line("let " + value + ": Option<" + this.type_code(ty) + "> = Option.None;");
+        if cache {
+            out.line("if ctx.dependencies.contains(" + web_quote(path.symbol) + ") { " + value + " = Option.Some(((DependencyValue<" + this.type_code(ty) + ">)ctx.dependencies.get(" + web_quote(path.symbol) + ").unwrap()).value); } else {");
+        }
+        let candidates = this.replacements.get(path.symbol).unwrap_or(List<GenFunction>());
+        for (let replacement in candidates) {
+            out.line("if ctx.overrides.get(" + web_quote(path.symbol) + ").unwrap_or(\"\") == " + web_quote(replacement.id) + " {");
+            let replacement_value = this.provider_value(replacement, out, route);
+            out.line(value + " = Option.Some(" + replacement_value + "); } else {");
+        }
+        let original = this.provider_value(f, out, route); out.line(value + " = Option.Some(" + original + ");");
+        for (let replacement in candidates) { out.line("}"); }
+        if cache { out.line("ctx.dependencies.set(" + web_quote(path.symbol) + ", DependencyValue<" + this.type_code(ty) + ">(" + value + ".unwrap())); }"); }
+        return value + ".unwrap()";
+    }
+}
+
+internal fun web_dependency_type(ty: GenTypeRef): GenTypeRef {
+    if ty.name == "Result" { ty = ty.arg(0); }
+    if ty.name == nameof(DependencyResource) { ty = ty.arg(0); }
+    return ty;
 }

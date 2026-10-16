@@ -218,11 +218,13 @@ fn webapi_generated_native_ir_is_deterministic() {
         &source,
         r#"
 import system.webapi;
-@get("/hello/{id}")
-fun hello(@path id: int): string { return id.to_string(); }
+@router("")
+class Routes { @get("/hello/{id}") public static fun hello(@path id: int): string { return id.to_string(); } }
 async fun main(): void {
-    WebApp.listen("127.0.0.1", 0).await.unwrap();
-    WebApp.shutdown(); WebApp.wait().await;
+    let app = WebApp();
+    app.include_router(Routes.router()).unwrap();
+    app.listen("127.0.0.1", 0).await.unwrap();
+    app.shutdown(); app.wait().await;
 }
 "#,
     )
@@ -241,4 +243,56 @@ async fun main(): void {
         std::fs::read(&output).unwrap()
     };
     assert_eq!(compile(), compile());
+}
+
+#[test]
+fn webapi_router_imports_model_types_from_loaded_modules() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("models.dream"),
+        r#"
+module api.models;
+import system.json;
+@json
+public class Payload { public text: string; public constructor(text: string) { this.text = text; } }
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("routes.dream"),
+        r#"
+module api.routes;
+import system.webapi;
+import models;
+@router("/api")
+public class Routes {
+    @post("/echo")
+    public static fun echo(@body payload: Payload): Payload { return payload; }
+}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("main.dream"),
+        r#"
+import system;
+import system.webapi;
+import routes;
+fun main(): void {
+    let app = WebApp(); app.include_router(Routes.router()).unwrap();
+    System.println(app.openapi().contains("/api/echo"));
+}
+"#,
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+        .args(["run", root.path().join("main.dream").to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "true");
 }

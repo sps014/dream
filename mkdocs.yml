@@ -84,6 +84,28 @@ nav:
   - Choose an environment: learn/environments.md
   - Next steps: learn/next-steps.md
   - Troubleshooting: learn/troubleshooting.md
+- Web APIs:
+  - Overview: web-apis/index.md
+  - First application: web-apis/first-application.md
+  - Configuration: web-apis/configuration.md
+  - Routers and multiple files: web-apis/routers.md
+  - Parameters and bodies: web-apis/parameters.md
+  - Models and validation: web-apis/validation.md
+  - Responses and errors: web-apis/responses.md
+  - Dependencies: web-apis/dependencies.md
+  - Resources and overrides: web-apis/resources.md
+  - Lifecycle and state: web-apis/lifecycle.md
+  - Middleware and CORS: web-apis/middleware.md
+  - Swagger and OpenAPI: web-apis/openapi.md
+  - Local authentication: web-apis/authentication.md
+  - OAuth2 and OIDC: web-apis/oidc.md
+  - Authorization and scopes: web-apis/authorization.md
+  - Uploads: web-apis/uploads.md
+  - Streaming and SSE: web-apis/streaming.md
+  - WebSockets: web-apis/websockets.md
+  - Testing: web-apis/testing.md
+  - TLS and deployment: web-apis/deployment.md
+  - Complete example: web-apis/example.md
 - Reference:
   - Language:
     - Basics:
@@ -174,7 +196,6 @@ nav:
       - Streams: reference/stdlib/file-streams.md
       - URLs: reference/stdlib/url.md
       - HTTP: reference/stdlib/http.md
-      - Native Web APIs: reference/stdlib/webapi.md
       - Paths: reference/stdlib/paths.md
     - Serialization:
       - JSON: reference/stdlib/json.md

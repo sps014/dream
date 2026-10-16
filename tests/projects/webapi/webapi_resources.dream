@@ -1,0 +1,41 @@
+import system;
+import system.webapi;
+import system.net;
+import system.testing;
+import webapi_basic;
+
+let resource_order: string = "";
+fun resource_provider(): DependencyResource<string> { resource_order = resource_order + "acquire;"; return DependencyResource<string>("resource", async (token: CancellationToken) => { Time.sleep(1).await; resource_order = resource_order + "release;"; }); }
+@router("")
+class ResourceRoutes {
+    @get("/resource")
+    public static fun resource(@dep(resource_provider) first: string, @dep(resource_provider) second: string): string { return first + second; }
+    @get("/uncached")
+    public static fun uncached(@dep(resource_provider, false) first: string, @dep(resource_provider, false) second: string): string { return first + second; }
+    @get("/resource-stream")
+    public static async fun stream(@dep(resource_provider) resource: string): AsyncIterable<string> { yield resource; Time.sleep(60000).await; yield "later"; }
+    @get("/resource-wait")
+    public static async fun wait(@dep(resource_provider) resource: string): string { Time.sleep(60000).await; return resource; }
+    @get("/resource-fail")
+    public static fun fail(@dep(resource_provider) first: string, @query number: int): string { return first; }
+}
+class ResourceOverrides {
+    @dependency_override(resource_provider)
+    public static fun replacement(): string { return "override"; }
+}
+@test
+@timeout(10000)
+async fun webapi_resources(): void {
+    let app = WebApp(); app.include_router(ResourceRoutes.router()).unwrap();
+    let other = WebApp(); other.include_router(ResourceRoutes.router()).unwrap(); other.override_dependencies(ResourceOverrides.dependencies()).unwrap();
+    let port = app.listen("127.0.0.1", 0).await.unwrap(); let second = other.listen("127.0.0.1", 0).await.unwrap(); let client = HttpClient();
+    let base = "http://127.0.0.1:" + port.to_string(); let base2 = "http://127.0.0.1:" + second.to_string();
+    resource_order = ""; Assert.eq_str(webapi_get(client, base, "/resource", 200).await, "resourceresource"); Time.sleep(10).await; Assert.eq_str(resource_order, "acquire;release;");
+    resource_order = ""; webapi_get(client, base, "/uncached", 200).await; Time.sleep(10).await; Assert.eq_str(resource_order, "acquire;acquire;release;release;");
+    resource_order = ""; webapi_get(client, base, "/resource-fail", 422).await; Time.sleep(10).await; Assert.eq_str(resource_order, "acquire;release;");
+    resource_order = ""; Assert.eq_str(webapi_get(client, base2, "/resource", 200).await, "overrideoverride"); Assert.eq_str(resource_order, "");
+    resource_order = ""; let stream = client.send(HttpRequest.get(Url.parse(base + "/resource-stream").unwrap())).await.unwrap(); stream.body.read_async(32).await.unwrap(); stream.close(); Time.sleep(20).await; Assert.eq_str(resource_order, "acquire;release;");
+    resource_order = ""; let pending = client.send(HttpRequest.get(Url.parse(base + "/resource-wait").unwrap())); Promise.start(pending); Time.sleep(20).await;
+    app.shutdown(); app.wait().await; pending.await; Assert.eq_str(resource_order, "acquire;release;");
+    other.shutdown(); other.wait().await; client.close().unwrap(); resource_order = "";
+}

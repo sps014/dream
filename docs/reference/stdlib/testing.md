@@ -24,7 +24,7 @@ dreamer test
 dream test --filter addition tests/
 ```
 
-`@test` is only for a top-level `fun name(): void` (not `async`, not `main`). Test files must not declare `main`. Put tests in a test project (`type = "test"`) or a package's `tests/` folder; see [Test a project](../tooling/testing.md).
+`@test` is for a top-level `fun name(): void` or `async fun name(): void`, never `main`. Test files must not declare `main`. Put tests in a test project (`type = "test"`) or a package's `tests/` folder; see [Test a project](../tooling/testing.md).
 
 `@timeout(ms)` sets a limit for one test. There is no default limit.
 

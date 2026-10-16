@@ -2,8 +2,6 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
-
 ## `JsonDeserialize`
 
 ```dream
@@ -14,6 +12,24 @@ JsonDeserialize
 
 ```dream
 JsonFromValue
+```
+
+## `ValidationDecode`
+
+```dream
+ValidationDecode
+```
+
+## `ValidationValidate`
+
+```dream
+ValidationValidate
+```
+
+## `ValidationSchema`
+
+```dream
+ValidationSchema
 ```
 
 ## `GenAttributeId`
@@ -128,22 +144,4 @@ StringCopyUtf8
 
 ```dream
 StringCompare
-```
-
-## `StringViewEq`
-
-```dream
-StringViewEq
-```
-
-## `StringViewCompare`
-
-```dream
-StringViewCompare
-```
-
-## `StringViewHash`
-
-```dream
-StringViewHash
 ```

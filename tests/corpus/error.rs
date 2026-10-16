@@ -2,6 +2,17 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::error(
+        "validation_non_model",
+        "validation requires an @json model",
+        true,
+    ),
+    Case::error(
+        "webapi_override_type",
+        "dependency override must return the original provider's value type",
+        false,
+    ),
+    Case::error("webapi_override_cycle", "forms a cycle", false),
+    Case::error(
         "webapi_body_type",
         "@body parameter 'value' must be @json, string, byte[], or JsonValue",
         false,

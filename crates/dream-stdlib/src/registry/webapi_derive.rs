@@ -4,6 +4,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.webapi.derive",
     deps: &[
         "system.webapi",
+        "system.validation.derive",
         "system.codegen",
         "system.json",
         "system.collections",

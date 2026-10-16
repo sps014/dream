@@ -136,6 +136,9 @@ async fn listen(value: &Value) -> Result<Output, Failure> {
 }
 async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
     let action = value["action"].as_str().unwrap_or("");
+    if action == "oidc_begin" || action == "oidc_complete" {
+        return crate::oidc::execute(&value).await;
+    }
     if action == "listen" {
         return listen(&value).await;
     }

@@ -13,22 +13,4 @@ extend WebGenerator {
         if target.is_none() { this.ctx.error_at(route.id, "@use(" + name + ") does not resolve to a function"); }
         else if !this.middleware_shape(target.unwrap()) { this.ctx.error_at(route.id, "@use(" + name + ") must be `async fun " + name + "(ctx: RequestContext, next: Next): HttpOutgoing`"); }
     }
-    internal fun emit_middleware(out: CodeBuilder): void {
-        let sorted = List<GenFunction>();
-        for (let f in this.middleware) {
-            if !this.middleware_shape(f) { this.ctx.error_at(f.id, "@middleware must be `async fun (ctx: RequestContext, next: Next): HttpOutgoing`"); continue; }
-            sorted.push(f);
-        }
-        sorted.sort_by((a: GenFunction, b: GenFunction) => {
-            let left = a.attribute<MiddlewareAttribute>().unwrap().order.unwrap_or(0);
-            let right = b.attribute<MiddlewareAttribute>().unwrap().order.unwrap_or(0);
-            if left < right { return -1; }
-            if left > right { return 1; }
-            return 0;
-        });
-        out.line("internal static fun generated_install_middleware(): void {");
-        out.line("if !WebApp.begin_generated_middleware() { return; }");
-        for (let f in sorted) { out.line("WebApp.use(Middleware(" + this.calls.get(f.id).unwrap() + "));"); }
-        out.line("}");
-    }
 }

@@ -2,7 +2,23 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
+## `FuncboxEnv`
+
+```dream
+FuncboxEnv
+```
+
+## `ArraySlotSwap`
+
+```dream
+ArraySlotSwap
+```
+
+## `BufferIsString`
+
+```dream
+BufferIsString
+```
 
 ## `ArraySlotTake`
 
@@ -128,22 +144,4 @@ DreamCancellationIsCancelled
 
 ```dream
 DreamCancellationCancel
-```
-
-## `DreamCancellationRegister`
-
-```dream
-DreamCancellationRegister
-```
-
-## `DreamCancellationSignal`
-
-```dream
-DreamCancellationSignal
-```
-
-## `DreamCancellationUnregister`
-
-```dream
-DreamCancellationUnregister
 ```

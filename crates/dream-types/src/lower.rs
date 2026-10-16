@@ -91,6 +91,23 @@ impl TypeCtx {
         self.imports.insert(id, imports);
     }
 
+    /// Binds a source alias to an existing nominal definition without allocating a new type.
+    pub fn bind_type_alias(
+        &mut self,
+        scope: ModuleId,
+        alias: &str,
+        def: DefId,
+    ) -> Result<(), String> {
+        if self.declarations.keys().any(|(module, kind, name)| {
+            *module == scope && *kind != DefKind::Function && name == alias
+        }) {
+            return Err(format!("type name '{alias}' is already defined"));
+        }
+        self.declarations
+            .insert((scope, self.defs.get(def).kind, alias.to_owned()), def);
+        Ok(())
+    }
+
     pub fn set_scope(&mut self, scope: ModuleId) {
         self.scope = scope;
     }
@@ -443,5 +460,22 @@ mod tests {
         let second = ctx.register_method(string, "read", &[]);
         assert_ne!(first, second);
         assert_eq!(ctx.register_method(integer, "read", &[]), first);
+    }
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+    #[test]
+    fn nominal_alias_preserves_identity_and_rejects_collisions() {
+        let mut ctx = TypeCtx::new();
+        let original = ctx.register(DefKind::Struct, "Original", vec![]);
+        ctx.bind_type_alias(ModuleId::ROOT, "Alias", original)
+            .unwrap();
+        assert_eq!(ctx.resolved_type("Original"), ctx.resolved_type("Alias"));
+        assert!(
+            ctx.bind_type_alias(ModuleId::ROOT, "Alias", original)
+                .is_err()
+        );
     }
 }

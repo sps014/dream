@@ -202,5 +202,138 @@
     "page": "docs/reference/stdlib/raw-sockets-compression.md",
     "block": 1,
     "stdout": "hello compression\n"
+  },
+  {
+    "name": "web-authentication",
+    "page": "docs/web-apis/authentication.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-authorization",
+    "page": "docs/web-apis/authorization.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-configuration",
+    "page": "docs/web-apis/configuration.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-dependencies",
+    "page": "docs/web-apis/dependencies.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-deployment",
+    "page": "docs/web-apis/deployment.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-first-application",
+    "page": "docs/web-apis/first-application.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-lifecycle",
+    "page": "docs/web-apis/lifecycle.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-middleware",
+    "page": "docs/web-apis/middleware.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-oidc",
+    "page": "docs/web-apis/oidc.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-openapi",
+    "page": "docs/web-apis/openapi.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-parameters",
+    "page": "docs/web-apis/parameters.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-resources",
+    "page": "docs/web-apis/resources.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-responses",
+    "page": "docs/web-apis/responses.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-routers",
+    "page": "docs/web-apis/routers.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-streaming",
+    "page": "docs/web-apis/streaming.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-testing",
+    "page": "docs/web-apis/testing.md",
+    "block": 0,
+    "mode": "test",
+    "timeout": 300
+  },
+  {
+    "name": "web-uploads",
+    "page": "docs/web-apis/uploads.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-validation",
+    "page": "docs/web-apis/validation.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "web-websockets",
+    "page": "docs/web-apis/websockets.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
   }
 ]

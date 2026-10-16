@@ -21,11 +21,12 @@ public fun json_derive(ctx: GenContext): void {
     }
     let json_names = List<string>();
     let types = List<JsonTypeSpec>();
+    let declarations = List<GenDecl>();
     for (let d in ctx.types_with<JsonAttribute>()) {
         if !d.has<JsonAttribute>() {
             continue;
         }
-        json_names.push(d.name);
+        json_names.push(d.name); declarations.push(d);
         if d.kind == DeclKind.Union {
             let variants = List<JsonVariantSpec>();
             for (let v in d.variants) {
@@ -58,28 +59,16 @@ public fun json_derive(ctx: GenContext): void {
         }
     }
 
-    let type_result = JsonGenerator.expand(types, json_names, jsonable);
-    if !type_result.ok {
-        ctx.error_at(error_target(ctx, type_result), first_line(type_result.error));
-        return;
+    let i = 0;
+    while i < types.length {
+        let result = JsonGenerator.members(types.get(i), json_names, jsonable);
+        if !result.ok { ctx.error_at(error_target(ctx, result), first_line(result.error)); return; }
+        ctx.emit_extend(declarations.get(i), result.source); i++;
     }
-    let col_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
-    if !col_result.ok {
-        ctx.error(first_line(col_result.error));
-        return;
-    }
-    let cb = CodeBuilder();
-    cb.append(type_result.source);
-    if col_result.source.length > 0 {
-        if type_result.source.length > 0 {
-            cb.line("");
-        }
-        cb.append(col_result.source);
-    }
-    let source = cb.to_string();
-    if source.length > 0 {
-        ctx.emit_file("json.dream", source);
-    }
+    let collections_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
+    if !collections_result.ok { ctx.error(first_line(collections_result.error)); return; }
+    if !collections_result.source.is_empty() { ctx.emit_file("json.dream", collections_result.source); }
+
 }
 
 enum Construction {
@@ -137,19 +126,19 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
         }
         let option_inner = "";
         if ty.is_option() {
-            option_inner = ty.arg(0).mangled;
+            option_inner = ty.arg(0).source_name();
         }
         let map_value_inner = "";
         let map_ctor = "";
         let kind = ty.collection();
         if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap) && ty.arg(0).is_primitive(Primitive.String) {
-            map_value_inner = ty.arg(1).mangled;
+            map_value_inner = ty.arg(1).source_name();
             map_ctor = ty.name;
         }
         let seq_elem_inner = "";
         let seq_kind = CollectionKind.NotCollection;
         if kind == CollectionKind.List || kind == CollectionKind.Set {
-            seq_elem_inner = ty.arg(0).mangled;
+            seq_elem_inner = ty.arg(0).source_name();
             seq_kind = kind;
         }
         let is_type_param = false;
@@ -160,7 +149,7 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
         }
         out.push(JsonFieldSpec(
             f.name,
-            ty.display,
+            ty.source_name(),
             f.has<JsonIgnoreAttribute>(),
             property,
             option_inner,

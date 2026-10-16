@@ -10,7 +10,7 @@ public class GenTypeRef {
     public kind: TypeRefKind;
     // `int`, `List`, `T`, or empty for arrays/tuples/functions.
     public name: string;
-    // Dream spelling (`List<int>`, `User[]`), usable verbatim in generated code.
+    // Display spelling, including canonical module qualification for resolved names.
     public display: string;
     // Compiler-mangled spelling (`List_int`), unique per instantiation; handy for helper names.
     public mangled: string;
@@ -91,6 +91,20 @@ public class GenTypeRef {
             return GenTypeRef.unknown();
         }
         return this.args.get(i);
+    }
+
+    /// Renders a type using local declaration names in a scope that imports those declarations.
+    public fun source_name(): string {
+        if this.kind == TypeRefKind.Array { return this.arg(0).source_name() + "[]"; }
+        if this.kind == TypeRefKind.Tuple || this.kind == TypeRefKind.Function {
+            let result = "("; if this.kind == TypeRefKind.Function { result = "fun("; }
+            let end = this.args.length; if this.kind == TypeRefKind.Function { end--; }
+            let i = 0; while i < end { if i > 0 { result = result + ", "; } result = result + this.arg(i).source_name(); i++; }
+            result = result + ")"; if this.kind == TypeRefKind.Function { result = result + ": " + this.arg(end).source_name(); } return result;
+        }
+        let name = this.name; let parts = name.split(':'); if parts.length > 1 { name = parts[parts.length - 1]; }
+        if !this.args.is_empty() { name = name + "<"; let i = 0; for (let arg in this.args) { if i > 0 { name = name + ", "; } name = name + arg.source_name(); i++; } name = name + ">"; }
+        return name;
     }
 
     // Returns the requested model information.

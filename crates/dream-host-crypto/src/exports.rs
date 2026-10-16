@@ -100,3 +100,9 @@ pub unsafe extern "C" fn cryptoHmacSha256(key: DreamPtr, input: DreamPtr) -> Dre
 pub extern "C" fn cryptoSecureRandomBytes(len: i32) -> DreamPtr {
     alloc_bytes(&crate::crypto::secure_random(len))
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cryptoAuth(request: DreamPtr) -> DreamPtr {
+    let request = unsafe { read_string(request) };
+    alloc_string(&crate::auth::execute(&request))
+}

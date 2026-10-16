@@ -2,7 +2,23 @@
 
 **Import:** `import system.core;`
 
-[All sections](core-intrinsic.md)
+## `WireDecode`
+
+```dream
+WireDecode
+```
+
+## `DreamPanic`
+
+```dream
+DreamPanic
+```
+
+## `RegexCompile`
+
+```dream
+RegexCompile
+```
 
 ## `RegexFree`
 
@@ -128,22 +144,4 @@ FuncboxNew
 
 ```dream
 FuncboxFuncidx
-```
-
-## `FuncboxEnv`
-
-```dream
-FuncboxEnv
-```
-
-## `ArraySlotSwap`
-
-```dream
-ArraySlotSwap
-```
-
-## `BufferIsString`
-
-```dream
-BufferIsString
 ```

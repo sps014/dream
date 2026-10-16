@@ -1,37 +1,58 @@
 module system.core;
 
-
 /// Declaration kinds accepted by an attribute.
 public enum AttributeTarget {
+    /// Identifies constructor declarations.
     Constructor,
+    /// Identifies destructor declarations.
     Destructor,
+    /// Identifies class declarations.
     Class,
+    /// Identifies struct declarations.
     Struct,
+    /// Identifies union declarations.
     Union,
+    /// Identifies enum declarations.
     Enum,
+    /// Identifies interface declarations.
     Interface,
+    /// Identifies type declarations.
     Type,
+    /// Identifies field declarations.
     Field,
+    /// Identifies function declarations.
     Function,
+    /// Identifies method declarations.
     Method,
+    /// Identifies static method declarations.
     StaticMethod,
+    /// Identifies extern function declarations.
     ExternFunction,
+    /// Identifies interface method declarations.
     InterfaceMethod,
+    /// Identifies module declarations.
     Module,
+    /// Identifies parameter declarations.
     Parameter,
 }
 
 /// A declaration reference supplied as an attribute argument.
 public struct DeclarationPath {
+    /// Source text represented by this entry.
     public text: string;
-    /// Canonical compiler identity; empty when the reference could not be resolved.
+    /// Resolved declaration identifier, or an empty string when unresolved.
     public symbol: string;
-    public constructor(text: string, symbol: string) { this.text = text; this.symbol = symbol; }
+    /// Creates a `DeclarationPath` with `text`, `symbol`.
+    public constructor(text: string, symbol: string) {
+        this.text = text;
+        this.symbol = symbol;
+    }
 }
 
 /// Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.
 @attribute(AttributeTarget.Class, AttributeTarget.Struct)
 public struct AttributeAttribute {
+    /// Declaration kinds to which this attribute may be applied.
     public targets: AttributeTarget[];
 }
 
@@ -43,22 +64,42 @@ public struct RepeatableAttribute {}
 @attribute(AttributeTarget.Function)
 public struct ExportAttribute {}
 
-/// Marks an extern function/method as a compiler intrinsic. The string argument is the intrinsic key (e.g. `"print"`).
+/// Binds an external declaration to the specified built-in operation.
 @attribute(AttributeTarget.ExternFunction)
 public struct IntrinsicAttribute {
+    /// Operation associated with this intrinsic declaration.
     public operation: Intrinsic;
 }
 
-/// Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.Constructor, AttributeTarget.Destructor)
+/// Requests inlining of the annotated function or method; it is a hint rather than a guarantee.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Constructor,
+    AttributeTarget.Destructor
+)
 public struct InlineAttribute {}
 
-/// Never inline this function/method (neither the MIR inliner nor LLVM). Keeps benchmark sinks opaque.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.Constructor, AttributeTarget.Destructor)
+/// Prevents inlining of the annotated function or method.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Constructor,
+    AttributeTarget.Destructor
+)
 public struct NoinlineAttribute {}
 
 /// Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.ExternFunction, AttributeTarget.Constructor, AttributeTarget.Destructor)
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction,
+    AttributeTarget.Constructor,
+    AttributeTarget.Destructor
+)
 public struct UnsafeAttribute {}
 
 /// Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.
@@ -72,19 +113,24 @@ public struct ConsumingAttribute {}
 /// The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned("free_fn")` names the C function that frees the pointer when the last reference is released.
 @attribute(AttributeTarget.ExternFunction)
 public struct OwnedAttribute {
+    /// Optional function used to release foreign storage.
     public free_function: Option<string>;
 }
 
-/// Binds an extern function to a JavaScript host import: `@js("module", "export")`. JS-only (user interop, `js` type, WASM `env`/libm). Dream runtime hosts that exist on native and WASM use `@runtime` instead.
+/// Binds an external function to a JavaScript export using `@js("module", "export")`. Available
+/// only on JavaScript platforms.
 @attribute(AttributeTarget.ExternFunction)
 public struct JsAttribute {
+    /// Fully qualified module containing the declaration.
     public module_name: string;
+    /// Name exposed to callers of the foreign function.
     public export_name: string;
 }
 
-/// Binds an extern to the Dream runtime host on WASM and native: `@runtime("fileRead")` imports `Dream.fileRead` and calls the C symbol `fileRead`.
+/// Binds an external function to a named Dream host service on supported platforms.
 @attribute(AttributeTarget.ExternFunction)
 public struct RuntimeAttribute {
+    /// Name exposed to callers of the foreign function.
     public export_name: string;
 }
 
@@ -93,14 +139,28 @@ public struct RuntimeAttribute {
 public struct AsyncHostAttribute {}
 
 /// Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.ExternFunction)
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction
+)
 public struct NativeAttribute {}
 
 /// Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.ExternFunction)
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction
+)
 public struct NodeAttribute {}
 
 /// Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.ExternFunction)
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction
+)
 public struct WebAttribute {}
-

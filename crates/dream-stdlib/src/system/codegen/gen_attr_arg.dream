@@ -7,10 +7,12 @@ import system.json;
 // One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
 // `enum`; `value` is the unquoted string, literal text, or dotted enum path.
 public class GenAttrArg {
+    /// Category of this entry.
     public kind: string;
+    /// Value carried by this entry.
     public value: string;
 
-    /// Canonical compiler identity for a declaration reference, or empty.
+    /// Resolved identifier of a declaration argument, or an empty string when unresolved.
     public symbol: string;
 
     // Creates the snapshot model from the supplied values.

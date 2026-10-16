@@ -12,7 +12,7 @@ These names cannot be reused for a variable, function, parameter, or global:
 - `__print`, `__println`, and any `$`-prefixed name — you cannot use these names.
 
 ```dream
-let int = 3;   // error: 'int' is a reserved word
+let int = 3; // error: 'int' is a reserved word
 ```
 
 ## Constructors and destructors
@@ -24,14 +24,15 @@ let int = 3;   // error: 'int' is a reserved word
 ```dream
 // good
 class Box {
-    public constructor() { }
-    del() { }
+    public constructor() {}
+    del() {}
 }
 
 // bad — del cannot be public; constructor cannot declare a return type
 class Bad {
-    public del() { }
-    public constructor(): void { }
+    public del() {}
+
+    public constructor(): void {}
 }
 ```
 
@@ -44,10 +45,14 @@ Call sites are `Type(...)`.
 
 ```dream
 // good
-public override fun to_string(): string { return "x"; }
+public override fun to_string(): string {
+    return "x";
+}
 
 // bad — missing override, or not public
-public fun to_string(): string { return "x"; }
+public fun to_string(): string {
+    return "x";
+}
 ```
 
 ## Operator overloading
@@ -66,10 +71,9 @@ public fun to_string(): string { return "x"; }
 
 `public` exposes a symbol to other modules (and, for functions, to the host that runs the program). A function therefore cannot be both `public` and `extern` — an `extern` is an imported host symbol, not an exported one.
 
-Compiler intrinsics are the exception: `@intrinsic` operations use ordinary member visibility.
+`@intrinsic` declarations are the exception: `@intrinsic` operations use ordinary member visibility.
 A `public static extern` intrinsic is callable from other types; an `internal` one requires the
-same module; a default-private one is callable only by its declaring type. Intrinsics are
-implemented by the compiler/runtime and are not host exports.
+same module; a default-private one is callable only by its declaring type. They bind built-in operations rather than importing host functions.
 
 ```dream
 // bad — public and extern are exclusive
@@ -79,7 +83,7 @@ public extern fun host_call(): void;
 `static` declares class members, never top-level variables; a top-level `let` is file-private unless marked `internal` / `public`:
 
 ```dream
-static let x = 1;   // error: 'static' cannot modify a top-level variable
+static let x = 1; // error: 'static' cannot modify a top-level variable
 ```
 
 ## Overloading
@@ -94,12 +98,13 @@ static let x = 1;   // error: 'static' cannot modify a top-level variable
 
 ```dream
 // good shapes (pick one)
-fun main(): void { }
+fun main(): void {}
+
 // or:
-fun main(args: string[]): void { }
+fun main(args: string[]): void {}
 
 // bad — wrong signature
-fun main(n: int): void { }
+fun main(n: int): void {}
 ```
 
 ## Control flow
@@ -109,7 +114,7 @@ fun main(n: int): void { }
 
 ```dream
 const n = 1;
-n = 2;   // error: cannot assign to const
+n = 2; // error: cannot assign to const
 ```
 
 ## Top-level globals
@@ -118,7 +123,7 @@ Globals initialize in declaration order. An initializer may reference earlier gl
 
 ```dream
 let a = 1;
-let b = a + 1;   // good
-let c = d + 1;   // error: forward reference
+let b = a + 1; // good
+let c = d + 1; // error: forward reference
 let d = 2;
 ```

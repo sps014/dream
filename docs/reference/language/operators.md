@@ -20,7 +20,7 @@ Operators calculate values, compare them, or update a variable. Start with the e
 Both operands must be the same type. Cast one if they differ:
 
 ```dream
-let x = 7 / (float)2;   // 3.5
+let x = 7 / (float)2; // 3.5
 ```
 
 Prefix `-` negates a number: `let neg = -x;`.
@@ -36,7 +36,7 @@ When either side of `+` is a `string`, the other side is converted through its [
 
 ```dream
 let msg = "Hello, " + name + "!";
-let line = "color = " + Color.Green;   // "color = Green"
+let line = "color = " + Color.Green; // "color = Green"
 ```
 
 ## String interpolation
@@ -46,7 +46,7 @@ Prefix a string with `$` and wrap expressions in `{ ... }`. Each hole is evaluat
 ```dream
 let name = "Ada";
 let count = 3;
-let msg = $"{name} has {count + 1} items";   // "Ada has 4 items"
+let msg = $"{name} has {count + 1} items"; // "Ada has 4 items"
 ```
 
 Interpolation expands to concatenation, so the above equals `"" + name + " has " + (count + 1) + " items"`.
@@ -55,7 +55,7 @@ Double a brace to write it literally — `{{` produces `{`, `}}` produces `}`:
 
 ```dream
 let x = 5;
-let s = $"{{literal}} and {x}";   // "{literal} and 5"
+let s = $"{{literal}} and {x}"; // "{literal} and 5"
 ```
 
 A hole may contain a string literal (`$"x is {"hi"}"`). Escape a quote in the outer interpolation with `\"`.
@@ -77,8 +77,8 @@ String `==` and `!=` compare **contents**, not addresses.
 `&&` (and), `||` (or), and `!` (not) operate on `bool`. `&&` and `||` **short-circuit**: the right operand runs only when it can still change the result.
 
 ```dream
-false && boom();   // boom() never runs
-true || boom();    // boom() never runs
+false && boom(); // boom() never runs
+true || boom(); // boom() never runs
 ```
 
 ## Bitwise
@@ -92,11 +92,11 @@ signed types (`int`, `long`) and a *logical* (zero-filling) shift on the unsigne
 `ulong`, `byte`).
 
 ```dream
-let flags: uint = 6u;           // 0b0110
-let masked = flags & 4u;        // 4u   (0b0100)
+let flags: uint = 6u; // 0b0110
+let masked = flags & 4u; // 4u   (0b0100)
 let shifted: byte = 200b >> 2b; // 50b, zero-filled
-let inverted = ~5;              // -6 (two's complement)
-let inverted_b: byte = ~5b;     // 250b (wraps within byte's 0..255 range)
+let inverted = ~5; // -6 (two's complement)
+let inverted_b: byte = ~5b; // 250b (wraps within byte's 0..255 range)
 ```
 
 Like arithmetic, `~` and the binary bitwise ops on `byte` wrap their result into `byte`'s `0..255`
@@ -148,12 +148,12 @@ Compound forms update in place, and `++`/`--` step by one (prefix or postfix; as
 expressions). Postfix yields the old value; prefix yields the new:
 
 ```dream
-total += 5;   // total = total + 5
+total += 5; // total = total + 5
 count++;
 ++i;
 let prev = j++;
-let next = ++j;
-for (let k = 0; k < n; k++) { }
+let next =++j;
+for (let k = 0; k < n; k++) {}
 ```
 
 Discard a value without binding a name using `_` (like a pattern wildcard):

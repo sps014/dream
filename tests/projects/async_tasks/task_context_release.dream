@@ -4,17 +4,21 @@ import system.task;
 
 let tcr_parked: Option<Future<int>> = Option.None;
 
-async fun tcr_later(): int { return 1; }
+async fun tcr_later(): int {
+    return 1;
+}
 
 // The parked future inherits the scope's token as its task context and outlives the scope, so
 // freeing it drops the token's last reference.
 @noinline
 async fun tcr_scope_with_parked_child(): void {
-    Task.scope<bool, string>(async (scope: TaskScope<string>) => {
-        tcr_parked = Option.Some(tcr_later());
-        let result: Result<bool, TaskFailure<string>> = Result.Ok(true);
-        return result;
-    }).await;
+    Task.scope<bool, string>(
+        async (scope: TaskScope<string>) => {
+            tcr_parked = Option.Some(tcr_later());
+            let result: Result<bool, TaskFailure<string>> = Result.Ok(true);
+            return result;
+        }
+    ).await;
     tcr_parked = Option.None;
 }
 

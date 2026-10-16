@@ -12,11 +12,13 @@ async fun load(value: int): Result<int, string> {
 }
 
 async fun main(): void {
-    let result = Task.scope<int, string>(async (scope) => {
-        let first = scope.spawn<int>(async () => load(20).await);
-        let second = scope.spawn<int>(async () => load(22).await);
-        return Result.Ok(first.join().await? + second.join().await?);
-    }).await;
+    let result = Task.scope<int, string>(
+        async (scope) => {
+            let first = scope.spawn<int>(async () => load(20).await);
+            let second = scope.spawn<int>(async () => load(22).await);
+            return Result.Ok(first.join().await? +second.join().await?);
+        }
+    ).await;
     System.println(result.unwrap());
 }
 ```
@@ -30,10 +32,14 @@ A child returning an application error cancels its siblings immediately. An earl
 `TaskFailure<E>` preserves the original application error as `Failed(E)`. Other outcomes are `Cancelled`, `TimedOut`, `WorkerFailed(TaskPoolError)`, and `InvalidOperation`. The first application or worker failure that requests cancellation is retained. A body error is returned after cleanup when no child initiated failure first. Deadlines and parent cancellation never forcibly interrupt a CPU loop.
 
 ```dream
-let result = Task.scope<int, string>(async (scope) => {
-    let child = scope.spawn<int>(async () => load(42).await);
-    return child.join().await;
-}, timeout_ms: 5000, token: Option.Some(cancellation.token)).await;
+let result = Task.scope<int, string>(
+    async (scope) => {
+        let child = scope.spawn<int>(async () => load(42).await);
+        return child.join().await;
+    },
+    timeout_ms: 5000,
+    token: Option.Some(cancellation.token)
+).await;
 ```
 
 Children inherit the scope's token, available as `scope.token` or `CancellationToken.current`. Async file, HTTP, timer, process, channel, scoped task, and pool operations resolve an omitted token, or `Option.None`, to that context. An explicit token overrides it. To finish cleanup despite parent cancellation, pass a token from a separate, uncancelled source.
@@ -61,10 +67,12 @@ The input array remains held during execution. Bounds on active operations do no
 CPU work uses the runtime's shared workers by default:
 
 ```dream
-let result = Task.scope<int, string>(async (scope) => {
-    let first = scope.spawn_parallel<int>(() => 6 * 7);
-    return Result.Ok(first.join().await?);
-}).await;
+let result = Task.scope<int, string>(
+    async (scope) => {
+        let first = scope.spawn_parallel<int>(() => 6 * 7);
+        return Result.Ok(first.join().await?);
+    }
+).await;
 ```
 
 `spawn_parallel` starts immediately and retains the job until the scope drains, even
@@ -100,10 +108,12 @@ Local channels accept ordinary values. Use `Channel.shared_bounded<T>` to transf
 
 Channel capacity bounds item count, not item size. A queue of large buffers can still use substantial memory.
 
-## Allocation model
+## Control memory use
 
-Async functions use compiler-generated heap frames sized for their saved state, not a fixed per-child stack. A structured child also owns its callback, result handle, completion state, and monitoring frame. Nested futures and captured buffers add memory. The runtime header is 104 bytes on 64-bit native and 72 bytes on wasm32; those figures exclude allocator headers, saved locals, and scope bookkeeping.
+Limit both the number of active children and the amount of data each child retains.
+Suspended work still keeps its captured values and unfinished results alive. Channel
+capacity bounds the number of queued items, so also bound the size of each item.
 
-Uncontended local channel operations use the queue directly. Wait registrations are allocated only when an operation blocks. Shared sends allocate a typed carrier for transferred values. Use the concurrency benchmark to measure the full workload rather than treating frame-header size as total task memory.
-
-Run `dream run --release tests/bench/concurrency.dream -- 2000` for suspended-child and local channel measurements, or use `python scripts/bench.py --suite concurrency`. The benchmark reports elapsed time, guest allocation counts, live guest objects while children are suspended, and the observed process RSS increase. RSS includes allocator and platform effects; it is not a guaranteed byte cost per task or a comparison with another language.
+Use a bounded channel when producers may outrun consumers. Close unused endpoints and
+finish or cancel scopes promptly to release work that is no longer needed. Measure
+memory and latency with realistic payloads before choosing task counts and queue sizes.

@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `struct CPtr`
+## `CPtr`
 
 An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param and `Option<CPtr>` a nullable pointer.
 
@@ -13,6 +13,8 @@ public struct CPtr
 ```
 
 ## `constructor`
+
+Creates a `CPtr` with `raw`.
 
 ```dream
 public constructor(raw: usize)
@@ -50,7 +52,7 @@ The pointer `bytes` bytes past this one.
 public fun offset(bytes: isize): CPtr
 ```
 
-## `class OwnedCPtr`
+## `OwnedCPtr`
 
 A C pointer returned by an `@owned("free_fn")` `@c` extern: Dream owns it, and the destructor calls `free_fn(ptr)` unless `take()` handed ownership back first.
 
@@ -60,7 +62,7 @@ public class OwnedCPtr
 
 ## `free_with`
 
-Calls the supplied C deallocator address with the pointer address. `OwnedCPtr` uses this during destruction.
+Releases `ptr` by calling the foreign function at address `free`.
 
 ```dream
 public static extern fun free_with(free: usize, ptr: usize): void
@@ -82,7 +84,7 @@ Gives up ownership: the caller now frees the returned pointer, and this object h
 public fun take(): CPtr
 ```
 
-## `class NativeCallback<F>`
+## `NativeCallback`
 
 A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may call it for as long as this object is alive: keep it in a field while C holds the pointer. Calls from threads Dream did not start trap.
 
@@ -92,7 +94,7 @@ public class NativeCallback<F>
 
 ## `register`
 
-Registers a native callback with its owning Dream thread. Prefer constructing `NativeCallback`.
+Keeps a callback available to foreign code until `unregister` is called.
 
 ```dream
 public static extern fun register(borrow callback: object): void
@@ -100,7 +102,7 @@ public static extern fun register(borrow callback: object): void
 
 ## `unregister`
 
-Unregisters a native callback. The callback owner manages registration lifetime.
+Releases a previously registered callback after foreign code has stopped using it.
 
 ```dream
 public static extern fun unregister(borrow callback: object): void
@@ -108,11 +110,13 @@ public static extern fun unregister(borrow callback: object): void
 
 ## `constructor`
 
+Creates a `NativeCallback` with `f`.
+
 ```dream
 public constructor(f: F)
 ```
 
-## `static class Ffi`
+## `Ffi`
 
 Reads through C pointers from `@c` callbacks (`char**`, `char*`).
 
@@ -122,7 +126,7 @@ public static class Ffi
 
 ## `host_read_ptr`
 
-Reads a pointer-sized value from foreign memory at the element index. The caller must provide valid readable memory.
+Reads the pointer at `index` from a valid foreign pointer array.
 
 ```dream
 public static extern fun host_read_ptr(base: usize, index: int): usize
@@ -130,7 +134,7 @@ public static extern fun host_read_ptr(base: usize, index: int): usize
 
 ## `host_read_cstring`
 
-Copies a NUL-terminated C string into a Dream string. The pointer must remain readable through the terminator.
+Copies a valid null-terminated foreign string into a Dream string.
 
 ```dream
 public static extern fun host_read_cstring(ptr: usize): string
@@ -138,7 +142,7 @@ public static extern fun host_read_cstring(ptr: usize): string
 
 ## `host_read_i32`
 
-Reads a 32-bit integer from foreign memory at the element index.
+Reads the 32-bit integer at `index` from valid foreign storage.
 
 ```dream
 public static extern fun host_read_i32(base: usize, index: int): int
@@ -146,7 +150,7 @@ public static extern fun host_read_i32(base: usize, index: int): int
 
 ## `host_read_i64`
 
-Reads a 64-bit integer from foreign memory at the element index.
+Reads the 64-bit integer at `index` from valid foreign storage.
 
 ```dream
 public static extern fun host_read_i64(base: usize, index: int): long
@@ -154,7 +158,7 @@ public static extern fun host_read_i64(base: usize, index: int): long
 
 ## `host_read_f64`
 
-Reads a double from foreign memory at the element index.
+Reads the double at `index` from valid foreign storage.
 
 ```dream
 public static extern fun host_read_f64(base: usize, index: int): double

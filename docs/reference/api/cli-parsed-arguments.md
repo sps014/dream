@@ -7,7 +7,7 @@
 Invalid invocation, command definition, or typed lookup; help and version are successful outcomes.
 
 ```dream
-public class CliError : Error
+public class CliError: Error
 ```
 
 ## `constructor`

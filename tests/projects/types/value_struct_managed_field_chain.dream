@@ -4,7 +4,10 @@ import system;
 // A value struct whose managed field is carried through a chain of returning factories. Each
 // return is a move, so exactly one owner may release the field no matter how deep the inliner
 // fuses the chain — an extra drop here is a double free, a missing one is a leak.
-enum c294_Slot { First = 0, Second = 1 }
+enum c294_Slot {
+    First = 0,
+    Second = 1
+}
 
 struct c294_Desc {
     public n: int;

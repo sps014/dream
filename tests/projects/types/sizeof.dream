@@ -33,8 +33,10 @@ fun c1f7_body(): void {
     c1f7_verify_observation((sizeof(List<int>)).to_string());
     c1f7_verify_observation((sizeof(c1f7_Outer)).to_string());
     switch (sizeof(c1f7_Outer)) {
-        case sizeof(c1f7_Outer): c1f7_verify_observation((true).to_string());
-        default: c1f7_verify_observation((false).to_string());
+        case sizeof(c1f7_Outer):
+            c1f7_verify_observation((true).to_string());
+        default:
+            c1f7_verify_observation((false).to_string());
     }
 }
 
@@ -42,7 +44,10 @@ let c1f7_cursor: int = 0;
 
 fun c1f7_verify_observation(borrow value: string): void {
     let actual = value + "\n";
-    let wanted = (sizeof(string) == 8 ? "4\n8\n1\n1\n8\n8\n8\n8\n8\n32\ntrue\n" : "4\n8\n1\n1\n4\n4\n8\n4\n4\n24\ntrue\n");
+    let wanted = (
+        sizeof(string)
+            == 8 ? "4\n8\n1\n1\n8\n8\n8\n8\n8\n32\ntrue\n" : "4\n8\n1\n1\n4\n4\n8\n4\n4\n24\ntrue\n"
+    );
     let end = c1f7_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
     Assert.eq_str(actual, wanted.substring(c1f7_cursor, end));
@@ -55,5 +60,14 @@ fun c1f7_verify_observation(borrow value: string): void {
 fun sizeof(): void {
     c1f7_cursor = 0;
     c1f7_body();
-    Assert.eq(c1f7_cursor, ((sizeof(string) == 8 ? "4\n8\n1\n1\n8\n8\n8\n8\n8\n32\ntrue\n" : "4\n8\n1\n1\n4\n4\n8\n4\n4\n24\ntrue\n")).length);
+    Assert.eq(
+        c1f7_cursor,
+        (
+            (
+                sizeof(string)
+                    == 8
+                    ? "4\n8\n1\n1\n8\n8\n8\n8\n8\n32\ntrue\n" : "4\n8\n1\n1\n4\n4\n8\n4\n4\n24\ntrue\n"
+            )
+        ).length
+    );
 }

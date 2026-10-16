@@ -2,71 +2,91 @@
 
 No import is needed.
 
-Read [Yield and lazy sequences](../language/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. The yield channel, cursor, signal, and lease classes support compiler-generated yield functions.
+Read [Yield and lazy sequences](../language/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. Yield sequences support lazy production and explicit cursor cleanup.
 
 [All sections](core-iterable.md)
 
-## `class YieldIterable<T> : Iterable<T>`
+## `YieldIterable`
+
+A repeatable synchronous sequence backed by a producer factory.
 
 ```dream
-public class YieldIterable<T> : Iterable<T>
+public class YieldIterable<T>: Iterable<T>
 ```
 
-## `constructor(factory: fun(YieldChannel<T>): Future<void>)`
+## `constructor`
+
+Creates a `YieldIterable` with `factory`.
 
 ```dream
 public constructor(factory: fun(YieldChannel<T>): Future<void>)
 ```
 
-## `fun iterator(): Iterator<T>`
+## `iterator`
+
+Creates a cursor over the sequence. Close it when iteration ends early.
 
 ```dream
 public fun iterator(): Iterator<T>
 ```
 
-## `class YieldAsyncCursor<T> : AsyncIterator<T>`
+## `YieldAsyncCursor`
+
+An asynchronous cursor over values from a yielding producer.
 
 ```dream
-public class YieldAsyncCursor<T> : AsyncIterator<T>
+public class YieldAsyncCursor<T>: AsyncIterator<T>
 ```
 
-## `constructor(channel: YieldChannel<T>, producer: Future<void>)`
+## `constructor`
+
+Creates a `YieldAsyncCursor` with `channel`, `producer`.
 
 ```dream
 public constructor(channel: YieldChannel<T>, producer: Future<void>)
 ```
 
-## `async fun next(): Option<T>`
+## `next`
+
+Returns the next value, or `None` when the sequence has ended.
 
 ```dream
 public async fun next(): Option<T>
 ```
 
-## `fun close(): void`
+## `close`
+
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 public fun close(): void
 ```
 
-## `class YieldAsyncIterable<T> : AsyncIterable<T>`
+## `YieldAsyncIterable`
+
+A repeatable asynchronous sequence backed by a producer factory.
 
 ```dream
-public class YieldAsyncIterable<T> : AsyncIterable<T>
+public class YieldAsyncIterable<T>: AsyncIterable<T>
 ```
 
-## `constructor(factory: fun(YieldChannel<T>): Future<void>)`
+## `constructor`
+
+Creates a `YieldAsyncIterable` with `factory`.
 
 ```dream
 public constructor(factory: fun(YieldChannel<T>): Future<void>)
 ```
 
-## `fun iterator(): AsyncIterator<T>`
+## `iterator`
+
+Creates a cursor over the sequence. Close it when iteration ends early.
 
 ```dream
 public fun iterator(): AsyncIterator<T>
 ```
 
-## `class IteratorLease<T>`
+## `IteratorLease`
 
 A loop owns a lease even when the caller retains the cursor. Dropping a cancelled coroutine therefore closes the active cursor independently of its other aliases.
 
@@ -74,49 +94,65 @@ A loop owns a lease even when the caller retains the cursor. Dropping a cancelle
 public class IteratorLease<T>
 ```
 
-## `constructor(cursor: Iterator<T>)`
+## `constructor`
+
+Creates a `IteratorLease` with `cursor`.
 
 ```dream
 public constructor(cursor: Iterator<T>)
 ```
 
-## `fun close(): void`
+## `close`
+
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 public fun close(): void
 ```
 
-## `class AsyncIteratorLease<T>`
+## `AsyncIteratorLease`
+
+Closes an asynchronous cursor when its iteration scope ends.
 
 ```dream
 public class AsyncIteratorLease<T>
 ```
 
-## `constructor(cursor: AsyncIterator<T>)`
+## `constructor`
+
+Creates a `AsyncIteratorLease` with `cursor`.
 
 ```dream
 public constructor(cursor: AsyncIterator<T>)
 ```
 
-## `fun close(): void`
+## `close`
+
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 public fun close(): void
 ```
 
-## `class YieldAdvanceLease<T>`
+## `YieldAdvanceLease`
+
+Releases a producer's pending advancement when the consumer's scope ends.
 
 ```dream
 public class YieldAdvanceLease<T>
 ```
 
-## `constructor(cursor: YieldAsyncCursor<T>)`
+## `constructor`
+
+Creates a `YieldAdvanceLease` with `cursor`.
 
 ```dream
 public constructor(cursor: YieldAsyncCursor<T>)
 ```
 
-## `fun complete(): void`
+## `complete`
+
+Completes the pending signal or advancement operation.
 
 ```dream
 public fun complete(): void

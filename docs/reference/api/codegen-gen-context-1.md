@@ -2,15 +2,15 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenContext`
+## `GenContext`
 
-What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the harness loads the context from the snapshot, calls the generator, and `finish()` writes the result the compiler validates and merges.
+Input and output of a source generator. Inspect selected declarations, request tools, report diagnostics, and add or replace generated source through this context.
 
 ```dream
 public class GenContext
 ```
 
-## `public generator_name: string`
+## `generator_name`
 
 The running generator's name and `module::name` identity.
 
@@ -18,13 +18,15 @@ The running generator's name and `module::name` identity.
 public generator_name: string
 ```
 
-## `public generator_id: string`
+## `generator_id`
+
+Stable identifier of the generator being executed.
 
 ```dream
 public generator_id: string
 ```
 
-## `public target: string`
+## `target`
 
 Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
 
@@ -32,7 +34,7 @@ Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...
 public target: string
 ```
 
-## `public static async fun load`
+## `load`
 
 Reads `--snapshot` / `--result` from the program arguments.
 
@@ -40,7 +42,7 @@ Reads `--snapshot` / `--result` from the program arguments.
 public static async fun load(args: string[]): Result<GenContext, string>
 ```
 
-## `public fun types_with<A>`
+## `types_with`
 
 Declarations carrying `@A` (on the declaration or on one of its members).
 
@@ -48,7 +50,7 @@ Declarations carrying `@A` (on the declaration or on one of its members).
 public fun types_with<A>(): List<GenDecl>
 ```
 
-## `public fun functions_with<A>`
+## `functions_with`
 
 Top-level functions carrying `@A` (on the function or a parameter).
 
@@ -56,7 +58,7 @@ Top-level functions carrying `@A` (on the function or a parameter).
 public fun functions_with<A>(): List<GenFunction>
 ```
 
-## `public fun decls`
+## `decls`
 
 Every declaration selected by this generator's `@on_attribute` triggers.
 
@@ -64,15 +66,15 @@ Every declaration selected by this generator's `@on_attribute` triggers.
 public fun decls(): List<GenDecl>
 ```
 
-## `public fun phase`
+## `phase`
 
-The compiler-tool feedback round, starting at zero.
+Current generation round, starting at zero and increasing after tool requests.
 
 ```dream
 public fun phase(): int
 ```
 
-## `public fun referenced_decls`
+## `referenced_decls`
 
 Transitive dependencies of the declarations selected by this generator.
 
@@ -80,7 +82,7 @@ Transitive dependencies of the declarations selected by this generator.
 public fun referenced_decls(): List<GenDecl>
 ```
 
-## `public fun referenced_functions`
+## `referenced_functions`
 
 Top-level functions referenced by selected declarations or their dependencies.
 
@@ -88,15 +90,15 @@ Top-level functions referenced by selected declarations or their dependencies.
 public fun referenced_functions(): List<GenFunction>
 ```
 
-## `public fun find_decl`
+## `find_decl`
 
-Looks up a selected or referenced declaration by its compiler identity.
+Looks up a selected or referenced declaration by its stable identifier.
 
 ```dream
 public fun find_decl(borrow id: string): Option<GenDecl>
 ```
 
-## `public fun find_function`
+## `find_function`
 
 Looks up a selected or referenced function, including methods.
 
@@ -104,7 +106,7 @@ Looks up a selected or referenced function, including methods.
 public fun find_function(borrow id: string): Option<GenFunction>
 ```
 
-## `public fun type_of`
+## `type_of`
 
 The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
 
@@ -112,7 +114,7 @@ The inferred type, or an explicit Unknown when pre-analysis could not resolve it
 public fun type_of(borrow expr: GenExpr): GenTypeRef
 ```
 
-## `public fun type_of`
+## `type_of`
 
 The inferred type attached to a statement, or Unknown when it has no value type.
 
@@ -120,7 +122,7 @@ The inferred type attached to a statement, or Unknown when it has no value type.
 public fun type_of(borrow stmt: GenStmt): GenTypeRef
 ```
 
-## `public fun symbol_of`
+## `symbol_of`
 
 The resolved symbol identity, or an empty string for an unresolved expression.
 
@@ -128,7 +130,7 @@ The resolved symbol identity, or an empty string for an unresolved expression.
 public fun symbol_of(borrow expr: GenExpr): string
 ```
 
-## `public fun find_symbol`
+## `find_symbol`
 
 Looks up a signature view anywhere in the pre-generation compilation.
 
@@ -136,7 +138,7 @@ Looks up a signature view anywhere in the pre-generation compilation.
 public fun find_symbol(borrow id: string): Option<GenSymbol>
 ```
 
-## `public fun compilation_errors`
+## `compilation_errors`
 
 Errors found before generation within declarations selected by this generator's triggers.
 
@@ -144,7 +146,7 @@ Errors found before generation within declarations selected by this generator's 
 public fun compilation_errors(): List<GenCompilationError>
 ```
 
-## `public fun implementations_of`
+## `implementations_of`
 
 Classes and structs implementing an interface, including inherited interface relations.
 
@@ -152,7 +154,7 @@ Classes and structs implementing an interface, including inherited interface rel
 public fun implementations_of(borrow id: string): List<GenSymbol>
 ```
 
-## `public fun subtypes_of`
+## `subtypes_of`
 
 Signature views whose declared interface ancestry includes the given identity.
 
@@ -160,7 +162,7 @@ Signature views whose declared interface ancestry includes the given identity.
 public fun subtypes_of(borrow id: string): List<GenSymbol>
 ```
 
-## `public fun type_index`
+## `type_index`
 
 Every type in the program, by name and kind.
 
@@ -168,7 +170,7 @@ Every type in the program, by name and kind.
 public fun type_index(): List<GenIndexEntry>
 ```
 
-## `public fun find_type`
+## `find_type`
 
 The index entry named `name`, if the program declares such a type.
 
@@ -176,7 +178,7 @@ The index entry named `name`, if the program declares such a type.
 public fun find_type(borrow name: string): Option<GenIndexEntry>
 ```
 
-## `public fun syntax_blocks`
+## `syntax_blocks`
 
 `name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
 
@@ -184,7 +186,7 @@ public fun find_type(borrow name: string): Option<GenIndexEntry>
 public fun syntax_blocks(): List<GenSyntaxBlock>
 ```
 
-## `public fun call_sites`
+## `call_sites`
 
 Calls of the functions named in this generator's `@on_call(...)`.
 

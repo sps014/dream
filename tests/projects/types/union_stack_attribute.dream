@@ -4,8 +4,8 @@ import system.testing;
 // reference-typed payloads). When every payload is already value/primitive, `enum struct` has no
 // representational effect beyond the contract. With a reference payload (as below), `enum struct`
 // is what opts the union into the inline representation.
-
 import system;
+
 enum struct c27e_Outcome {
     Success(int),
     Failure(code: int, reason: string),
@@ -13,7 +13,7 @@ enum struct c27e_Outcome {
 
 fun c27e_describe(o: c27e_Outcome): string {
     return switch (o) {
-        Success(c)    => "ok:" + c.to_string(),
+        Success(c) => "ok:" + c.to_string(),
         Failure(c, r) => "fail:" + c.to_string() + ":" + r,
     };
 }
@@ -21,8 +21,8 @@ fun c27e_describe(o: c27e_Outcome): string {
 fun c27e_body(): void {
     let s: c27e_Outcome = c27e_Outcome.Success(0);
     let f: c27e_Outcome = c27e_Outcome.Failure(1, "disk full");
-    c27e_verify_observation((c27e_describe(s)).to_string());   // ok:0
-    c27e_verify_observation((c27e_describe(f)).to_string());   // fail:1:disk full
+    c27e_verify_observation((c27e_describe(s)).to_string()); // ok:0
+    c27e_verify_observation((c27e_describe(f)).to_string()); // fail:1:disk full
 }
 
 let c27e_cursor: int = 0;

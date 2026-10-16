@@ -20,9 +20,13 @@ fun c203_body(): void {
     c203_verify_observation((s.contains(9)).to_string());
     let dst = Span<int>.of([0, 0, 0, 0, 0, 0]);
     s.copy_to(dst);
-    c203_verify_observation((dst.to_array().length.to_string() + " " + dst[4].to_string()).to_string());
+    c203_verify_observation(
+        (dst.to_array().length.to_string() + " " + dst[4].to_string()).to_string()
+    );
     c203_verify_observation((s.sequence_equal(dst.slice(0, 5))).to_string());
-    c203_verify_observation((s.as_read_only().sequence_equal(dst.slice(1, 5).as_read_only())).to_string());
+    c203_verify_observation(
+        (s.as_read_only().sequence_equal(dst.slice(1, 5).as_read_only())).to_string()
+    );
     for (let x in s.slice(3)) {
         c203_verify_observation((x).to_string());
     }

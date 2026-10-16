@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class AuthError`
+## `AuthError`
 
 Authentication failures carry stable codes without credential values.
 
@@ -12,25 +12,31 @@ Authentication failures carry stable codes without credential values.
 public class AuthError
 ```
 
-## `public code`
+## `code`
+
+Error code identifying the failure.
 
 ```dream
 public code: string
 ```
 
-## `public message`
+## `message`
+
+Human-readable explanation of the result or failure.
 
 ```dream
 public message: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `AuthError` with `code`, `message`.
 
 ```dream
 public constructor(code: string, message: string)
 ```
 
-## `public class AuthPrincipal`
+## `AuthPrincipal`
 
 Verified identity and application-defined space-separated permission scopes.
 
@@ -38,31 +44,39 @@ Verified identity and application-defined space-separated permission scopes.
 public class AuthPrincipal
 ```
 
-## `public subject`
+## `subject`
+
+Stable identifier of the authenticated account.
 
 ```dream
 public subject: string
 ```
 
-## `public scopes`
+## `scopes`
+
+Space-separated permissions granted to this account or token.
 
 ```dream
 public scopes: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `AuthPrincipal` with `subject`, `scopes`.
 
 ```dream
 public constructor(subject: string, scopes: string)
 ```
 
-## `public fun has_scope`
+## `has_scope`
+
+Returns whether the space-separated scope list includes `scope`.
 
 ```dream
 public fun has_scope(scope: string): bool
 ```
 
-## `public class AuthAccount`
+## `AuthAccount`
 
 Persisted account data supplied by an application repository.
 
@@ -70,31 +84,39 @@ Persisted account data supplied by an application repository.
 public class AuthAccount
 ```
 
-## `public subject`
+## `subject`
+
+Stable identifier of the authenticated account.
 
 ```dream
 public subject: string
 ```
 
-## `public password_hash`
+## `password_hash`
+
+Encoded password hash; never a plain-text password.
 
 ```dream
 public password_hash: string
 ```
 
-## `public scopes`
+## `scopes`
+
+Space-separated permissions granted to this account or token.
 
 ```dream
 public scopes: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `AuthAccount` with `subject`, `password_hash`, `scopes`.
 
 ```dream
 public constructor(subject: string, password_hash: string, scopes: string = "")
 ```
 
-## `public interface AuthAccounts`
+## `AuthAccounts`
 
 Local lookup and explicit external-identity linking are application policy.
 
@@ -102,19 +124,28 @@ Local lookup and explicit external-identity linking are application policy.
 public interface AuthAccounts
 ```
 
-## `async unique fun find_login`
+## `find_login`
+
+Looks up an account by login name; returns `AuthError` if authentication cannot proceed.
 
 ```dream
 async unique fun find_login(login: string): Result<AuthAccount, AuthError>
 ```
 
-## `async unique fun link_identity`
+## `link_identity`
+
+Resolves an external identity to a local account, returning an authentication error on failure.
 
 ```dream
-async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError>
+async unique fun link_identity(
+    issuer: string,
+    subject: string,
+    email: string,
+    email_verified: bool
+): Result<AuthAccount, AuthError>
 ```
 
-## `public class AuthSession`
+## `AuthSession`
 
 A refresh-token record. Stores contain only the digest of the bearer secret.
 
@@ -122,37 +153,49 @@ A refresh-token record. Stores contain only the digest of the bearer secret.
 public class AuthSession
 ```
 
-## `public hash`
+## `hash`
+
+Hash of the refresh token; the raw refresh token is not stored.
 
 ```dream
 public hash: string
 ```
 
-## `public family`
+## `family`
+
+Identifier shared by successive refresh tokens for the same session.
 
 ```dream
 public family: string
 ```
 
-## `public subject`
+## `subject`
+
+Stable identifier of the authenticated account.
 
 ```dream
 public subject: string
 ```
 
-## `public scopes`
+## `scopes`
+
+Space-separated permissions granted to this account or token.
 
 ```dream
 public scopes: string
 ```
 
-## `public expires`
+## `expires`
+
+Expiry time in Unix epoch seconds.
 
 ```dream
 public expires: long
 ```
 
-## `public csrf`
+## `csrf`
+
+Secret used to validate requests made with session cookies.
 
 ```dream
 public csrf: string

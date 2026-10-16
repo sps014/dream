@@ -1,6 +1,5 @@
 import system.testing;
 // The span's uses live in a synchronous helper, so no span is in scope at the `await`.
-
 import system;
 
 fun c224_head_length(s: string): int {

@@ -2,7 +2,7 @@ module system.webapi;
 
 // `Authorization: Bearer <token>` → the token, or 401.
 @security_scheme("BearerAuth", "http", "bearer")
-public async fun BearerToken(@header("Authorization") value: string): Result<string, HttpStatus> {
+public async fun BearerToken(@header("Authorization")value: string): Result<string, HttpStatus> {
     if !value.starts_with("Bearer ") {
         return Result.Err(HttpStatus.unauthorized());
     }
@@ -14,7 +14,7 @@ public async fun BearerToken(@header("Authorization") value: string): Result<str
 
 // Header named `X-Api-Key` (or pass `@header` yourself by wrapping).
 @security_scheme("ApiKeyAuth", "apiKey", "", "X-Api-Key", "header")
-public async fun ApiKeyHeader(@header("X-Api-Key") value: string): Result<string, HttpStatus> {
+public async fun ApiKeyHeader(@header("X-Api-Key")value: string): Result<string, HttpStatus> {
     if value.is_empty() {
         return Result.Err(HttpStatus(401, "missing API key"));
     }
@@ -23,7 +23,7 @@ public async fun ApiKeyHeader(@header("X-Api-Key") value: string): Result<string
 
 // `Authorization: Basic <base64>` → the raw header value after "Basic ".
 @security_scheme("BasicAuth", "http", "basic")
-public async fun BasicAuth(@header("Authorization") value: string): Result<string, HttpStatus> {
+public async fun BasicAuth(@header("Authorization")value: string): Result<string, HttpStatus> {
     if !value.starts_with("Basic ") {
         return Result.Err(HttpStatus.unauthorized());
     }

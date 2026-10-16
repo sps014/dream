@@ -13,54 +13,100 @@ public class ChildProcess {
         this.closed = Option.None;
         this.completed = CancellationSource();
     }
-    internal get handle(): int { return this.id; }
+
+    internal get handle(): int {
+        return this.id;
+    }
 
     // Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
-    public get stdout(): ProcessReader { return ProcessReader(this, 0); }
+    public get stdout(): ProcessReader {
+        return ProcessReader(this, 0);
+    }
+
     // Borrows stderr through an AsyncReader; drain it concurrently with stdout.
-    public get stderr(): ProcessReader { return ProcessReader(this, 1); }
+    public get stderr(): ProcessReader {
+        return ProcessReader(this, 1);
+    }
+
     // Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
-    public get stdin(): ProcessWriter { return ProcessWriter(this); }
+    public get stdin(): ProcessWriter {
+        return ProcessWriter(this);
+    }
 
     // Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
-    public fun close_stdin(token: Option<CancellationToken> = Option.None): Future<Result<bool, ProcessError>> {
+    public fun close_stdin(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<bool, ProcessError>> {
         return ChildProcess.close_stdin_owned(this, CancellationToken.resolve(token));
     }
-    static async fun close_stdin_owned(child: ChildProcess, token: Option<CancellationToken>): Result<bool, ProcessError> {
+
+    static async fun close_stdin_owned(
+        child: ChildProcess,
+        token: Option<CancellationToken>
+    ): Result<bool, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(ProcessOperation.request("close_stdin", child.id), Buffer.alloc<byte>(0));
+        let operation = ProcessOperation(
+            ProcessOperation.request("close_stdin", child.id),
+            Buffer.alloc<byte>(0)
+        );
         let result = operation.wait(token).await;
         operation.close();
-        if result.is_err() { return Result.Err(result.unwrap_err()); }
+        if result.is_err() {
+            return Result.Err(result.unwrap_err());
+        }
         return Result.Ok(true);
     }
 
     // Waits for process exit without discarding unread output or closing the child handle.
-    public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<int, ProcessError>> {
+    public fun wait(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<int, ProcessError>> {
         return ChildProcess.wait_owned(this, CancellationToken.resolve(token));
     }
-    static async fun wait_owned(child: ChildProcess, token: Option<CancellationToken>): Result<int, ProcessError> {
+
+    static async fun wait_owned(
+        child: ChildProcess,
+        token: Option<CancellationToken>
+    ): Result<int, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(ProcessOperation.request("wait", child.id), Buffer.alloc<byte>(0));
+        let operation = ProcessOperation(
+            ProcessOperation.request("wait", child.id),
+            Buffer.alloc<byte>(0)
+        );
         let result = operation.wait(token).await;
         operation.close();
-        if result.is_err() { return Result.Err(result.unwrap_err()); }
+        if result.is_err() {
+            return Result.Err(result.unwrap_err());
+        }
         return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(-2));
     }
 
     // Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
-    public fun close(): Future<Result<bool, ProcessError>> { return ChildProcess.close_owned(this); }
+    public fun close(): Future<Result<bool, ProcessError>> {
+        return ChildProcess.close_owned(this);
+    }
+
     static async fun close_owned(child: ChildProcess): Result<bool, ProcessError> {
-        if child.closed.is_some() { return child.closed.unwrap(); }
-        if child.closing { child.completed.token.wait_cancelled().await; return child.closed.unwrap(); }
+        if child.closed.is_some() {
+            return child.closed.unwrap();
+        }
+        if child.closing {
+            child.completed.token.wait_cancelled().await;
+            return child.closed.unwrap();
+        }
         child.closing = true;
         let shield = CancellationSource();
         ChildProcess.protect_host(shield);
-        let operation = ProcessOperation(ProcessOperation.request("close", child.id), Buffer.alloc<byte>(0));
+        let operation = ProcessOperation(
+            ProcessOperation.request("close", child.id),
+            Buffer.alloc<byte>(0)
+        );
         let result = operation.wait(Option.Some(shield.token)).await;
         operation.close();
         let outcome: Result<bool, ProcessError> = Result.Ok(true);
-        if result.is_err() { outcome = Result.Err(result.unwrap_err()); }
+        if result.is_err() {
+            outcome = Result.Err(result.unwrap_err());
+        }
         child.closed = Option.Some(outcome);
         // Submission failure must still release the child registry entry and request reaping.
         ChildProcess.close_host(child.id);
@@ -68,7 +114,12 @@ public class ChildProcess {
         child.completed.cancel();
         return outcome;
     }
-    del() { if this.id > 0 { ChildProcess.close_host(this.id); } }
+    del() {
+        if this.id > 0 {
+            ChildProcess.close_host(this.id);
+        }
+    }
+
     @runtime("processClose")
     static extern fun close_host(id: int): void;
     @intrinsic(Intrinsic.DreamTaskProtect)

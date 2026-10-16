@@ -5,8 +5,13 @@ let yi_dropped: int = 0;
 
 class YiResource {
     public value: int;
-    public constructor() { this.value = 1; }
-    fun del() { yi_dropped++; }
+    public constructor() {
+        this.value = 1;
+    }
+
+    fun del() {
+        yi_dropped++;
+    }
 }
 
 fun yi_numbers(count: int): Iterable<int> {
@@ -28,33 +33,49 @@ fun yi_generic<T>(value: T): Iterable<T> {
     yield value;
 }
 
-fun yi_empty(): Iterable<int> { yield break; }
+fun yi_empty(): Iterable<int> {
+    yield break;
+}
 
 fun yi_nested(): Iterable<int> {
     outer: for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
-            if j == 1 { continue outer; }
+            if j == 1 {
+                continue outer;
+            }
             yield i * 10 + j;
         }
     }
     yield break;
 }
 
-fun yi_forward(xs: Iterable<int>): Iterable<int> { return xs; }
+fun yi_forward(xs: Iterable<int>): Iterable<int> {
+    return xs;
+}
 
 class YiValues<T> {
     value: T;
-    public constructor(value: T) { this.value = value; }
-    public fun values(): Iterable<T> { yield this.value; }
+    public constructor(value: T) {
+        this.value = value;
+    }
+
+    public fun values(): Iterable<T> {
+        yield this.value;
+    }
 }
 
 class YiStatics {
-    public static fun single<T>(value: T): Iterable<T> { yield value; }
+    public static fun single<T>(value: T): Iterable<T> {
+        yield value;
+    }
 }
 
 struct YiCounter {
     public value: int;
-    public constructor(value: int) { this.value = value; }
+    public constructor(value: int) {
+        this.value = value;
+    }
+
     public fun values(): Iterable<int> {
         yield this.value;
         this.value++;
@@ -62,10 +83,15 @@ struct YiCounter {
     }
 }
 
-fun yi_shadow(count: int): Iterable<int> { let count = 5; yield count; }
+fun yi_shadow(count: int): Iterable<int> {
+    let count = 5;
+    yield count;
+}
 
 fun yi_return_early(cursor: Iterator<int>): int {
-    for (let value in cursor) { return value; }
+    for (let value in cursor) {
+        return value;
+    }
     return 0;
 }
 
@@ -86,29 +112,51 @@ fun yield_iterators(): void {
     Assert.is_true(a.next().is_none());
     b.close();
     let total = 0;
-    for (let value in yi_forward(values)) { total += value; }
-    for (let value in values) { total += value; }
+    for (let value in yi_forward(values)) {
+        total += value;
+    }
+    for (let value in values) {
+        total += value;
+    }
     Assert.eq(total, 12);
     let text = "";
-    for (let value in yi_generic<string>("hi")) { text = text + value; }
+    for (let value in yi_generic<string>("hi")) {
+        text = text + value;
+    }
     Assert.eq_str(text, "hihi");
-    for (let value in yi_empty()) { Assert.is_true(false); }
+    for (let value in yi_empty()) {
+        Assert.is_true(false);
+    }
     total = 0;
-    for (let value in yi_nested()) { total += value; }
+    for (let value in yi_nested()) {
+        total += value;
+    }
     Assert.eq(total, 30);
-    for (let value in YiValues<int>(7).values()) { Assert.eq(value, 7); }
-    for (let value in YiStatics.single<string>("ok")) { Assert.eq_str(value, "ok"); }
+    for (let value in YiValues<int>(7).values()) {
+        Assert.eq(value, 7);
+    }
+    for (let value in YiStatics.single<string>("ok")) {
+        Assert.eq_str(value, "ok");
+    }
     let counter = YiCounter(3);
     let snapshots = counter.values();
     let sum = 0;
-    for (let value in snapshots) { sum += value; }
-    for (let value in snapshots) { sum += value; }
+    for (let value in snapshots) {
+        sum += value;
+    }
+    for (let value in snapshots) {
+        sum += value;
+    }
     Assert.eq(sum, 14);
     Assert.eq(counter.value, 3);
-    for (let value in yi_shadow(2)) { Assert.eq(value, 5); }
+    for (let value in yi_shadow(2)) {
+        Assert.eq(value, 5);
+    }
     yi_dropped = 0;
     let cursor = yi_resources().iterator();
-    for (let value in cursor) { break; }
+    for (let value in cursor) {
+        break;
+    }
     Assert.eq(yi_dropped, 1);
     Assert.is_true(cursor.next().is_none());
     let cursor2 = yi_resources().iterator();

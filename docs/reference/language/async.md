@@ -21,12 +21,12 @@ Its declared return type `T` becomes `Future<T>` at the call site.
 import system;
 
 async fun fetchData(): string {
-    Time.sleep(100).await;   // suspends this task; other work can keep running
+    Time.sleep(100).await; // suspends this task; other work can keep running
     return "data";
 }
 
 async fun main(): void {
-    let x = fetchData().await;   // x : string
+    let x = fetchData().await; // x : string
     System.println(x);
 }
 ```
@@ -39,14 +39,19 @@ The only rule is that `.await` outside an `async` function is an error.
 `.await` may appear in any expression or statement position inside an `async` function — including conditionally evaluated ones:
 
 ```dream
-let x = e.await;                  // bind the result
-let y = f().await + 1;            // in an operand
-process(a().await, b().await);    // several awaits in call arguments
+let x = e.await; // bind the result
+let y = f().await + 1; // in an operand
+process(a().await, b().await); // several awaits in call arguments
 
-if retry { data = fetch(url).await; }           // in a branch
-while i < n { sum += g(i).await; i += 1; }      // suspends each iteration
-let y = cond ? a().await : b().await;           // in a ternary arm
-let z = flag && ready().await;                  // right side of && / || / ??
+if retry {
+    data = fetch(url).await;
+} // in a branch
+while i < n {
+    sum += g(i).await;
+    i += 1;
+} // suspends each iteration
+let y = cond ? a().await : b().await; // in a ternary arm
+let z = flag && ready().await; // right side of && / || / ??
 ```
 
 ### Awaiting a `Result`
@@ -55,7 +60,7 @@ Because `.await` is a postfix step, a trailing `?` applies to the awaited value 
 
 ```dream
 async fun load(url: string): Result<string, string> {
-    let body = fetch(url).await?;   // await the future, then propagate its Err
+    let body = fetch(url).await?; // await the future, then propagate its Err
     return Result.Ok(body.trim());
 }
 ```
@@ -78,8 +83,8 @@ async fun work(id: int): int {
 }
 
 async fun main(): void {
-    let a = work(2);                         // constructed, not yet running
-    let b = work(3);                         // constructed, not yet running
+    let a = work(2); // constructed, not yet running
+    let b = work(3); // constructed, not yet running
     let results = Promise.all([a, b]).await; // starts both -> they run concurrently -> [4, 9]
     System.println(results[0] + ", " + results[1]);
 }
@@ -91,9 +96,9 @@ async fun main(): void {
 The runtime keeps that future until it settles, so you do not need to keep a local after `start`:
 
 ```dream
-let f = logLater();     // nothing runs yet
-Promise.start(f);       // launches it; result is discarded
-Time.sleep(10).await;   // give it a chance to run
+let f = logLater(); // nothing runs yet
+Promise.start(f); // launches it; result is discarded
+Time.sleep(10).await; // give it a chance to run
 ```
 
 A future that is neither started nor awaited never executes — dropping it just releases its captured state.
@@ -168,7 +173,7 @@ class Reader {
 
 async fun main(): void {
     let d = Reader("example.txt");
-    let body = d.fetch().await;   // d.fetch() : Future<string>
+    let body = d.fetch().await; // d.fetch() : Future<string>
     System.println(body);
 }
 ```

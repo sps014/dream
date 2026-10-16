@@ -2,72 +2,196 @@ module system.validation;
 
 /// Strict decoding and validation derived for @json models.
 public static class Validation {
+    /// Decodes and validates JSON as `T`, returning the collected validation issues on failure.
     @intrinsic(Intrinsic.ValidationDecode)
     public static extern fun decode<T>(text: string): Result<T, ValidationErrors>;
+    /// Checks `value` against its validation attributes; returns the value or collected issues.
     @intrinsic(Intrinsic.ValidationValidate)
     public static extern fun validate<T>(value: T): Result<T, ValidationErrors>;
+    /// Returns the JSON Schema describing `T` and its validation constraints.
     @intrinsic(Intrinsic.ValidationSchema)
     public static extern fun schema<T>(): JsonValue;
 
+    /// Returns a new validation location with `key` appended.
     public static fun child(location: List<string>, key: string): List<string> {
-        let path = List<string>(); for (let item in location) { path.push(item); } path.push(key); return path;
+        let path = List<string>();
+        for (let item in location) {
+            path.push(item);
+        }
+        path.push(key);
+        return path;
     }
+
     /// Validates a JSON tree and applies declared defaults before model construction.
     public static fun check(value: JsonValue, schema: JsonValue): ValidationErrors {
-        let errors = ValidationErrors(); Validation.walk(value, schema, schema.get_or("definitions", JsonValue.none()), List<string>(), errors); return errors;
+        let errors = ValidationErrors();
+        Validation.walk(
+            value,
+            schema,
+            schema.get_or("definitions", JsonValue.none()),
+            List<string>(),
+            errors
+        );
+        return errors;
     }
-    static fun walk(value: JsonValue, schema: JsonValue, definitions: JsonValue, location: List<string>, errors: ValidationErrors): void {
-        if value.is_null() && schema.get_or("nullable", JsonValue.none()).as_bool().unwrap_or(false) { return; }
+
+    static fun walk(
+        value: JsonValue,
+        schema: JsonValue,
+        definitions: JsonValue,
+        location: List<string>,
+        errors: ValidationErrors
+    ): void {
+        if value.is_null() && schema.get_or("nullable", JsonValue.none()).as_bool().unwrap_or(
+            false
+        ) {
+            return;
+        }
         if schema.get("$ref").is_some() {
             let key = schema.get_or("$ref", JsonValue.none()).as_string().unwrap_or("");
-            Validation.walk(value, definitions.get_or(key, JsonValue.none()), definitions, location, errors); return;
+            Validation.walk(
+                value,
+                definitions.get_or(key, JsonValue.none()),
+                definitions,
+                location,
+                errors
+            );
+            return;
         }
         let kind = schema.get_or("type", JsonValue.none()).as_string().unwrap_or("");
         let valid = true;
-        if kind == "object" { valid = value.is_object(); }
-        else if kind == "array" { valid = value.is_array(); }
-        else if kind == "string" { valid = value.as_string().is_some(); }
-        else if kind == "boolean" { valid = value.as_bool().is_some(); }
-        else if kind == "number" || kind == "integer" { valid = value.as_double().is_some(); if valid && kind == "integer" { let number = value.as_double().unwrap(); valid = number % 1.0 == 0.0; } }
-        if !valid { errors.add(location, "type", "expected " + kind); return; }
+        if kind == "object" {
+            valid = value.is_object();
+        } else if kind == "array" {
+            valid = value.is_array();
+        } else if kind == "string" {
+            valid = value.as_string().is_some();
+        } else if kind == "boolean" {
+            valid = value.as_bool().is_some();
+        } else if kind == "number" || kind == "integer" {
+            valid = value.as_double().is_some();
+            if valid && kind == "integer" {
+                let number = value.as_double().unwrap();
+                valid = number % 1.0 == 0.0;
+            }
+        }
+        if !valid {
+            errors.add(location, "type", "expected " + kind);
+            return;
+        }
         if kind == "object" {
             let properties = schema.get_or("properties", JsonValue.none());
-            let required = schema.get_or("required", JsonValue.none()).as_array().unwrap_or(List<JsonValue>());
+            let required = schema.get_or("required", JsonValue.none())
+                .as_array()
+                .unwrap_or(List<JsonValue>());
             for (let key in properties.keys()) {
-                let rule = properties.get_or(key, JsonValue.none()); let item = value.get(key);
-                if item.is_none() && rule.get("default").is_some() { value.set(key, Json.deserialize<JsonValue>(Json.serialize(rule.get_or("default", JsonValue.none()))).unwrap()); item = value.get(key); }
-                if item.is_some() { Validation.walk(item.unwrap(), rule, definitions, Validation.child(location, key), errors); }
-                else {
-                    for (let name in required) { if name.as_string().unwrap_or("") == key { errors.add(Validation.child(location, key), "missing", "field is required"); } }
+                let rule = properties.get_or(key, JsonValue.none());
+                let item = value.get(key);
+                if item.is_none() && rule.get("default").is_some() {
+                    value.set(
+                        key,
+                        Json.deserialize<JsonValue>(
+                            Json.serialize(rule.get_or("default", JsonValue.none()))
+                        ).unwrap()
+                    );
+                    item = value.get(key);
+                }
+                if item.is_some() {
+                    Validation.walk(
+                        item.unwrap(),
+                        rule,
+                        definitions,
+                        Validation.child(location, key),
+                        errors
+                    );
+                } else {
+                    for (let name in required) {
+                        if name.as_string().unwrap_or("") == key {
+                            errors.add(
+                                Validation.child(location, key),
+                                "missing",
+                                "field is required"
+                            );
+                        }
+                    }
                 }
             }
             let extra = schema.get_or("additionalProperties", JsonValue.none());
             if extra.is_object() {
-                for (let key in value.keys()) { if properties.get(key).is_none() { Validation.walk(value.get_or(key, JsonValue.none()), extra, definitions, Validation.child(location, key), errors); } }
+                for (let key in value.keys()) {
+                    if properties.get(key).is_none() {
+                        Validation.walk(
+                            value.get_or(key, JsonValue.none()),
+                            extra,
+                            definitions,
+                            Validation.child(location, key),
+                            errors
+                        );
+                    }
+                }
             } else if !extra.as_bool().unwrap_or(false) {
-                for (let key in value.keys()) { if properties.get(key).is_none() { errors.add(Validation.child(location, key), "extra", "unknown field"); } }
+                for (let key in value.keys()) {
+                    if properties.get(key).is_none() {
+                        errors.add(Validation.child(location, key), "extra", "unknown field");
+                    }
+                }
             }
         }
         if kind == "array" {
-            let items = value.as_array().unwrap(); let i = 0;
-            for (let item in items) { Validation.walk(item, schema.get_or("items", JsonValue.none()), definitions, Validation.child(location, i.to_string()), errors); i++; }
+            let items = value.as_array().unwrap();
+            let i = 0;
+            for (let item in items) {
+                Validation.walk(
+                    item,
+                    schema.get_or("items", JsonValue.none()),
+                    definitions,
+                    Validation.child(location, i.to_string()),
+                    errors
+                );
+                i++;
+            }
         }
         if kind == "string" || kind == "array" || kind == "object" {
             let length = value.length;
-            if kind == "string" { length = value.as_string().unwrap().length; }
-            let min_key = "minLength"; let max_key = "maxLength";
-            if kind == "array" { min_key = "minItems"; max_key = "maxItems"; }
-            if kind == "object" { min_key = "minProperties"; max_key = "maxProperties"; }
-            let min = schema.get_or(min_key, JsonValue.none()).as_int(); let max = schema.get_or(max_key, JsonValue.none()).as_int();
-            if min.is_some() && length < min.unwrap() { errors.add(location, "min_length", "value is too short"); }
-            if max.is_some() && length > max.unwrap() { errors.add(location, "max_length", "value is too long"); }
+            if kind == "string" {
+                length = value.as_string().unwrap().length;
+            }
+            let min_key = "minLength";
+            let max_key = "maxLength";
+            if kind == "array" {
+                min_key = "minItems";
+                max_key = "maxItems";
+            }
+            if kind == "object" {
+                min_key = "minProperties";
+                max_key = "maxProperties";
+            }
+            let min = schema.get_or(min_key, JsonValue.none()).as_int();
+            let max = schema.get_or(max_key, JsonValue.none()).as_int();
+            if min.is_some() && length < min.unwrap() {
+                errors.add(location, "min_length", "value is too short");
+            }
+            if max.is_some() && length > max.unwrap() {
+                errors.add(location, "max_length", "value is too long");
+            }
             let pattern = schema.get_or("pattern", JsonValue.none()).as_string();
-            if kind == "string" && pattern.is_some() && !Regex(pattern.unwrap()).test(value.as_string().unwrap()) { errors.add(location, "pattern", "value does not match pattern"); }
+            if kind
+                == "string"
+                && pattern.is_some() && !Regex(pattern.unwrap())
+                .test(value.as_string().unwrap()) {
+                errors.add(location, "pattern", "value does not match pattern");
+            }
         }
         if kind == "number" || kind == "integer" {
-            let number = value.as_double().unwrap(); let min = schema.get_or("minimum", JsonValue.none()).as_double(); let max = schema.get_or("maximum", JsonValue.none()).as_double();
-            if min.is_some() && number < min.unwrap() { errors.add(location, "minimum", "value is below minimum"); }
-            if max.is_some() && number > max.unwrap() { errors.add(location, "maximum", "value is above maximum"); }
+            let number = value.as_double().unwrap();
+            let min = schema.get_or("minimum", JsonValue.none()).as_double();
+            let max = schema.get_or("maximum", JsonValue.none()).as_double();
+            if min.is_some() && number < min.unwrap() {
+                errors.add(location, "minimum", "value is below minimum");
+            }
+            if max.is_some() && number > max.unwrap() {
+                errors.add(location, "maximum", "value is above maximum");
+            }
         }
     }
 }

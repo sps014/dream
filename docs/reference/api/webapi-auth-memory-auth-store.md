@@ -4,58 +4,84 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class MemoryAuthStore `
+## `MemoryAuthStore`
 
 Process-local storage for tests and single-process examples. Methods perform no suspension during mutations.
 
 ```dream
-public class MemoryAuthStore : AuthSessionStore
+public class MemoryAuthStore: AuthSessionStore
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `MemoryAuthStore` with default settings.
 
 ```dream
 public constructor()
 ```
 
-## `public async unique fun create`
+## `create`
+
+Stores a new refresh session; returns an error if its token hash already exists.
 
 ```dream
 public async unique fun create(session: AuthSession): Result<bool, AuthError>
 ```
 
-## `public async unique fun find`
+## `find`
+
+Finds an unexpired session at epoch-second time `now`; rejects revoked or missing sessions.
 
 ```dream
 public async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>
 ```
 
-## `public async unique fun rotate`
+## `rotate`
+
+Consumes a refresh session and stores its replacement. Replay revokes the family; invalid replacements return an error.
 
 ```dream
-public async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError>
+public async unique fun rotate(
+    hash: string,
+    replacement: AuthSession,
+    now: long
+): Result<AuthSession, AuthError>
 ```
 
-## `public async unique fun revoke`
+## `revoke`
+
+Revokes all refresh sessions in `family`.
 
 ```dream
 public async unique fun revoke(family: string): Result<bool, AuthError>
 ```
 
-## `public async unique fun active`
+## `active`
+
+Returns whether `family` has an unexpired, unconsumed session at epoch-second time `now`.
 
 ```dream
 public async unique fun active(family: string, now: long): bool
 ```
 
-## `public async unique fun put_transaction`
+## `put_transaction`
+
+Stores a login transaction under `state`; duplicate state returns an error.
 
 ```dream
-public async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError>
+public async unique fun put_transaction(
+    state: string,
+    transaction: OidcTransaction
+): Result<bool, AuthError>
 ```
 
-## `public async unique fun take_transaction`
+## `take_transaction`
+
+Removes and returns the login transaction. Missing or expired state returns an error.
 
 ```dream
-public async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>
+public async unique fun take_transaction(
+    state: string,
+    now: long
+): Result<OidcTransaction, AuthError>
 ```

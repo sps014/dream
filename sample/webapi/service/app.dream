@@ -2,9 +2,16 @@ import system;
 import application;
 
 async fun main(): void {
-    let key = System.env("API_JWT_KEY"); let password = System.env("DEMO_PASSWORD");
-    if key.is_none() || password.is_none() { System.println("Set API_JWT_KEY (at least 32 bytes) and DEMO_PASSWORD"); return; }
+    let key = System.env("API_JWT_KEY");
+    let password = System.env("DEMO_PASSWORD");
+    if key.is_none() || password.is_none() {
+        System.println("Set API_JWT_KEY (at least 32 bytes) and DEMO_PASSWORD");
+        return;
+    }
     let configured = create_app(key.unwrap(), password.unwrap());
-    if configured.is_err() { System.println(configured.unwrap_err().message); return; }
+    if configured.is_err() {
+        System.println(configured.unwrap_err().message);
+        return;
+    }
     configured.unwrap().run("127.0.0.1", 8000).await.unwrap();
 }

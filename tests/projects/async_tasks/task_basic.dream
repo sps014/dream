@@ -1,8 +1,8 @@
 import system.testing;
 // Real parallel threads. Capture-only spawn; then `.await` the Future.
-
 import system;
 import system.task;
+
 fun c249_shout(msg: string): string {
     return msg + "!";
 }

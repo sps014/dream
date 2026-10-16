@@ -2,56 +2,102 @@ module system.webapi;
 
 /// Declares an HTTP GET route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct GetAttribute { public path: string; }
+public struct GetAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP POST route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct PostAttribute { public path: string; }
+public struct PostAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP PUT route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct PutAttribute { public path: string; }
+public struct PutAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP PATCH route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct PatchAttribute { public path: string; }
+public struct PatchAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP DELETE route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct DeleteAttribute { public path: string; }
+public struct DeleteAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP HEAD route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct HeadAttribute { public path: string; }
+public struct HeadAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP OPTIONS route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct OptionsAttribute { public path: string; }
+public struct OptionsAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an HTTP WEBSOCKET route.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct WebsocketAttribute { public path: string; }
+public struct WebsocketAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}
 
 /// Declares an explicitly mounted group of static HTTP handlers.
 @attribute(AttributeTarget.Class)
-public struct RouterAttribute { public prefix: string; }
+public struct RouterAttribute {
+    /// Path prefix applied to every route in the group.
+    public prefix: string;
+}
 
 /// Applies a middleware function to a route or group in source order.
 @repeatable
-@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod, AttributeTarget.Class)
-public struct UseAttribute { public handler: DeclarationPath; }
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Class
+)
+public struct UseAttribute {
+    /// Middleware function to run for the annotated route or group.
+    public handler: DeclarationPath;
+}
 
 /// Injects and memoizes a dependency function once per request.
 @attribute(AttributeTarget.Parameter)
-public struct DepAttribute { public provider: DeclarationPath; public cache: Option<bool>; }
+public struct DepAttribute {
+    /// Dependency function to evaluate for this parameter or replace for this application.
+    public provider: DeclarationPath;
+    /// Whether the dependency result is reused within this request; omitted means true.
+    public cache: Option<bool>;
+}
 
 /// Replaces a provider for applications explicitly installing the containing class's dependencies().
 @attribute(AttributeTarget.StaticMethod)
-public struct DependencyOverrideAttribute { public provider: DeclarationPath; }
+public struct DependencyOverrideAttribute {
+    /// Dependency function to evaluate for this parameter or replace for this application.
+    public provider: DeclarationPath;
+}
 
 /// Sets the content type of a yielded string or byte stream.
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct ProducesAttribute { public content_type: string; }
+public struct ProducesAttribute {
+    /// Media type sent with the streamed response, such as `text/event-stream`.
+    public content_type: string;
+}
 
 /// Extracts the request body as text, bytes or a JSON model.
 @attribute(AttributeTarget.Parameter)
@@ -59,50 +105,80 @@ public struct BodyAttribute {}
 
 /// Binds a path value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct PathAttribute { public name: Option<string>; }
+public struct PathAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Binds a query value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct QueryAttribute { public name: Option<string>; }
+public struct QueryAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Binds a header value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct HeaderAttribute { public name: Option<string>; }
+public struct HeaderAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Binds a cookie value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct CookieAttribute { public name: Option<string>; }
+public struct CookieAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Binds a form value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct FormAttribute { public name: Option<string>; }
+public struct FormAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Binds a file value, with an optional name override.
 @attribute(AttributeTarget.Parameter)
-public struct FileAttribute { public name: Option<string>; }
-
+public struct FileAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}
 
 /// Declares a dependency's OpenAPI authentication scheme.
 @attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
 public struct SecuritySchemeAttribute {
+    /// Identifier used to reference this security scheme in OpenAPI.
     public id: string;
+    /// OpenAPI scheme kind, such as `http`, `apiKey`, or `oauth2`.
     public kind: string;
+    /// HTTP authentication scheme, such as `bearer`.
     public scheme: string;
+    /// Name of the API-key header, query parameter, or cookie, when applicable.
     public name: Option<string>;
+    /// Where an API key is supplied: `header`, `query`, or `cookie`.
     public location: Option<string>;
 }
 
 /// Requires space-separated permission scopes from a verified CurrentUser dependency.
 @attribute(AttributeTarget.StaticMethod)
-public struct RequiresScopesAttribute { public scopes: string; }
+public struct RequiresScopesAttribute {
+    /// Space-separated permissions that the current user must have.
+    public scopes: string;
+}
 
 /// Describes a route operation in OpenAPI.
 @attribute(AttributeTarget.StaticMethod)
 public struct OperationAttribute {
+    /// Short summary displayed in the API documentation.
     public summary: Option<string>;
+    /// Description displayed in the API documentation.
     public description: Option<string>;
+    /// Optional tags grouping the operation in the API documentation.
     public tags: Option<string>;
+    /// HTTP response status code.
     public status: Option<int>;
+    /// Whether the operation is marked deprecated in the API description.
     public deprecated: Option<bool>;
 }
 
@@ -110,17 +186,25 @@ public struct OperationAttribute {
 @repeatable
 @attribute(AttributeTarget.StaticMethod)
 public struct ResponseAttribute {
+    /// HTTP response status code.
     public status: int;
+    /// Description displayed in the API documentation.
     public description: string;
+    /// Optional declaration describing the response body.
     public model: Option<DeclarationPath>;
+    /// Media type of the response body.
     public content_type: Option<string>;
 }
 
 /// Declares an OAuth2 authorization-code scheme for a security dependency.
 @attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
 public struct OAuth2SchemeAttribute {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Endpoint where the user authorizes this application.
     public authorization_url: string;
+    /// Provider endpoint used to exchange authorization codes for tokens.
     public token_url: string;
+    /// Space-separated permissions granted to this account or token.
     public scopes: Option<string>;
 }

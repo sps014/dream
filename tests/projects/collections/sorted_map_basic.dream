@@ -45,5 +45,10 @@ fun c1fa_verify_observation(borrow value: string): void {
 fun sorted_map_basic(): void {
     c1fa_cursor = 0;
     c1fa_body();
-    Assert.eq(c1fa_cursor, ("4\ntrue\nfalse\nthree\n1\n5\n5\n3\n-1\n-1\n1 -> one\n2 -> two\n3 -> three\n5 -> five\n3\nfalse\n").length);
+    Assert.eq(
+        c1fa_cursor,
+        (
+            "4\ntrue\nfalse\nthree\n1\n5\n5\n3\n-1\n-1\n1 -> one\n2 -> two\n3 -> three\n5 -> five\n3\nfalse\n"
+        ).length
+    );
 }

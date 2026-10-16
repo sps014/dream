@@ -18,9 +18,7 @@ public fun ready(): bool {
 }
 
 // This is NOT attached — a blank line sits above the declaration.
-
-
-public fun orphan(): void { }
+public fun orphan(): void {}
 ```
 
 The editor shows that block on hover. Private helpers and non-public `fun`s may omit comments.

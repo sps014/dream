@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 async fun c35_apply_async(f: fun(int): Future<int>, v: int): int {
     return f(v).await;
 }

@@ -1,7 +1,10 @@
 module system.webapi;
 
 internal class WebRouting {
-    internal static fun match_path(borrow pattern: string, borrow path: string): Option<Map<string, string>> {
+    internal static fun match_path(
+        borrow pattern: string,
+        borrow path: string
+    ): Option<Map<string, string>> {
         let params = Map<string, string>();
         let pi = WebRouting.skip_slash(pattern, 0);
         let si = WebRouting.skip_slash(path, 0);
@@ -15,7 +18,11 @@ internal class WebRouting {
             let pe = WebRouting.find_slash(pattern, pi);
             let se = WebRouting.find_slash(path, si);
             if (pe - pi) >= 3 && pattern.char_at(pi) == '{' && pattern.char_at(pe - 1) == '}' {
-                params.set(pattern.substring(pi + 1, pe - 1), Encoding.uri_decode_component(path.substring(si, se)).unwrap_or(path.substring(si, se)));
+                params.set(
+                    pattern.substring(pi + 1, pe - 1),
+                    Encoding.uri_decode_component(path.substring(si, se))
+                        .unwrap_or(path.substring(si, se))
+                );
             } else if !WebRouting.region_eq(pattern, pi, pe, path, si, se) {
                 let none2: Option<Map<string, string>> = Option.None;
                 return none2;
@@ -38,7 +45,9 @@ internal class WebRouting {
             while start < end && (header.char_at(start) == ' ' || header.char_at(start) == '\t') {
                 start = start + 1;
             }
-            while end > start && (header.char_at(end - 1) == ' ' || header.char_at(end - 1) == '\t') {
+            while end > start && (
+                header.char_at(end - 1) == ' ' || header.char_at(end - 1) == '\t'
+            ) {
                 end = end - 1;
             }
             let eq = start;
@@ -76,7 +85,14 @@ internal class WebRouting {
         return i;
     }
 
-    static fun region_eq(borrow a: string, a0: int, a1: int, borrow b: string, b0: int, b1: int): bool {
+    static fun region_eq(
+        borrow a: string,
+        a0: int,
+        a1: int,
+        borrow b: string,
+        b0: int,
+        b1: int
+    ): bool {
         if (a1 - a0) != (b1 - b0) {
             return false;
         }
@@ -90,5 +106,4 @@ internal class WebRouting {
         }
         return true;
     }
-
 }

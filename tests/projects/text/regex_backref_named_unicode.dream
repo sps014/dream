@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.text;
+
 fun c1dd_body(): void {
     let dup = Regex("(\\w+) \\1");
     c1dd_verify_observation((dup.test("hello hello")).to_string());
@@ -62,5 +63,10 @@ fun c1dd_verify_observation(borrow value: string): void {
 fun regex_backref_named_unicode(): void {
     c1dd_cursor = 0;
     c1dd_body();
-    Assert.eq(c1dd_cursor, ("true\nfalse\nthe the\n'hi'\n\"hi\"\n2026-08-09\n2026\n08\n09\nnone\nhost:user\nhéllo\nWörld\ntrue\n123\n123\ntrue\nfalse\n").length);
+    Assert.eq(
+        c1dd_cursor,
+        (
+            "true\nfalse\nthe the\n'hi'\n\"hi\"\n2026-08-09\n2026\n08\n09\nnone\nhost:user\nhéllo\nWörld\ntrue\n123\n123\ntrue\nfalse\n"
+        ).length
+    );
 }

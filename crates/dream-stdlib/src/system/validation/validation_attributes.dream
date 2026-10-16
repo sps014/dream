@@ -2,27 +2,45 @@ module system.validation;
 
 /// Inclusive lower numeric bound.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct MinimumAttribute { public value: double; }
+public struct MinimumAttribute {
+    /// Inclusive minimum numeric value.
+    public value: double;
+}
 
 /// Inclusive upper numeric bound.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct MaximumAttribute { public value: double; }
+public struct MaximumAttribute {
+    /// Inclusive maximum numeric value.
+    public value: double;
+}
 
 /// Minimum string or collection length.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct MinLengthAttribute { public value: int; }
+public struct MinLengthAttribute {
+    /// Minimum number of characters or collection elements.
+    public value: int;
+}
 
 /// Maximum string or collection length.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct MaxLengthAttribute { public value: int; }
+public struct MaxLengthAttribute {
+    /// Maximum number of characters or collection elements.
+    public value: int;
+}
 
 /// Regular expression required for a string.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct PatternAttribute { public value: string; }
+public struct PatternAttribute {
+    /// Regular expression that the input string must match.
+    public value: string;
+}
 
 /// JSON encoded field default, applied only when the property is absent.
 @attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct DefaultJsonAttribute { public value: string; }
+public struct DefaultJsonAttribute {
+    /// JSON text decoded as the field default when the property is absent.
+    public value: string;
+}
 
 /// Permits additional input properties on a model; the default is to reject them.
 @attribute(AttributeTarget.Class, AttributeTarget.Struct)
@@ -30,7 +48,11 @@ public struct AllowExtraAttribute {}
 
 /// A synchronous field validator returning an optional error message.
 @attribute(AttributeTarget.Field)
-public struct ValidateWithAttribute { public validator: DeclarationPath; }
+public struct ValidateWithAttribute {
+    /// Synchronous validation function; returns `None` on success or an error message on
+    /// failure.
+    public validator: DeclarationPath;
+}
 
 /// A static model validator returning structured issues after fields pass validation.
 @attribute(AttributeTarget.StaticMethod)

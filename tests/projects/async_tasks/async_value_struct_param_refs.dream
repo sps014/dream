@@ -2,8 +2,8 @@ import system.testing;
 // Regression: async value(`struct`) params that embed references must retain those fields when
 // copied into the Future frame. Otherwise the caller can drop the original before the first poll
 // and leave the frame holding dangling pointers.
-
 import system;
+
 struct c40_Named {
     public name: string;
     public n: int;

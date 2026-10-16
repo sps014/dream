@@ -2,31 +2,39 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenParam`
+## `GenParam`
+
+A function parameter and its type and attributes.
 
 ```dream
 public class GenParam
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public ty: GenTypeRef`
+## `ty`
+
+Type of this declaration or expression.
 
 ```dream
 public ty: GenTypeRef
 ```
 
-## `public attributes: List<GenAttribute>`
+## `attributes`
+
+Attributes attached to this declaration.
 
 ```dream
 public attributes: List<GenAttribute>
 ```
 
-## `public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

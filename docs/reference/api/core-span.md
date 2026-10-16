@@ -4,15 +4,17 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `ref struct Span<T>`
+## `Span`
 
-A Span views part of an existing array without copying its elements. Its positions are checked against that view's range. It keeps the array alive while in use. As a `ref struct`, it cannot be stored or passed in ways that let it outlive the current function. Read [array views](../language/arrays.md#spant-a-bounds-checked-view-without-copying) for examples and restrictions.
+A writable, bounds-checked view of a contiguous range in an array. Changes affect the original array. Spans keep their source alive, cannot be stored in heap objects, and cannot cross an `await`.
 
 ```dream
 public ref struct Span<T>
 ```
 
 ## `constructor`
+
+A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`; every later access relies on it.
 
 ```dream
 public constructor(borrow array: T[], offset: int, length: int)
@@ -52,7 +54,7 @@ public fun as_read_only(): ReadOnlySpan<T>
 
 ## `this`
 
-The element at `index` (relative to this span, not the backing array). Stops the program if out of range.
+The element at `index` (relative to this span, not the backing array). Traps if out of range.
 
 ```dream
 public fun this[index: int]: T
@@ -60,13 +62,15 @@ public fun this[index: int]: T
 
 ## `get`
 
+Returns the element at `index`; an out-of-range index panics.
+
 ```dream
 public fun get(index: int): T
 ```
 
 ## `this`
 
-Overwrites the element at `index` (relative to this span). Stops the program if out of range.
+Overwrites the element at `index` (relative to this span). Traps if out of range.
 
 ```dream
 public fun this[index: int] = value: T
@@ -74,13 +78,15 @@ public fun this[index: int] = value: T
 
 ## `set`
 
+Replaces the element at `index`; an out-of-range index panics.
+
 ```dream
 public fun set(index: int, value: T): void
 ```
 
 ## `slice`
 
-A sub-span covering `[start, start + count)` of this span's own range. Stops the program if the requested range doesn't fit within this span.
+A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested range doesn't fit within this span.
 
 ```dream
 public fun slice(start: int, count: int): Span<T>
@@ -120,13 +126,15 @@ public fun sequence_equal(other: ReadOnlySpan<T>): bool
 
 ## `sequence_equal`
 
+Returns whether both spans contain equal elements in the same order.
+
 ```dream
 public fun sequence_equal(other: Span<T>): bool
 ```
 
 ## `copy_from`
 
-Copies every element of `src` into this span starting at index 0. Stops the program if `src` is longer than this span. Reference elements go through ordinary assignment (retain/release); the unmanaged specialization below bulk-blits instead.
+Copies every element of `src` into the start of this span. The destination must be large enough. Overlapping ranges are supported.
 
 ```dream
 public fun copy_from(src: Span<T>): void
@@ -134,15 +142,15 @@ public fun copy_from(src: Span<T>): void
 
 ## `copy_from`
 
-Unmanaged fast path: one `memory.copy` of `src._length * sizeof(T)` bytes.
+Copies every element of `src` into the start of this span. The destination must be large enough. Overlapping ranges are supported.
 
 ```dream
-public fun copy_from(src: Span<T>): void where T : unmanaged
+public fun copy_from(src: Span<T>): void where T: unmanaged
 ```
 
 ## `copy_to`
 
-Copies every element of this span into `dst` starting at index 0. Traps if `dst` is shorter.
+Copies every element into the start of `dst`. Panics if the destination is shorter. Overlapping ranges are supported.
 
 ```dream
 public fun copy_to(dst: Span<T>): void
@@ -150,8 +158,10 @@ public fun copy_to(dst: Span<T>): void
 
 ## `copy_to`
 
+Copies every element into the start of `dst`. Panics if the destination is shorter. Overlapping ranges are supported.
+
 ```dream
-public fun copy_to(dst: Span<T>): void where T : unmanaged
+public fun copy_to(dst: Span<T>): void where T: unmanaged
 ```
 
 ## `fill`
@@ -172,8 +182,8 @@ public fun to_array(): T[]
 
 ## `to_array`
 
-Unmanaged fast path: allocate then bulk-blit.
+Copies the elements into a new array.
 
 ```dream
-public fun to_array(): T[] where T : unmanaged
+public fun to_array(): T[]where T: unmanaged
 ```

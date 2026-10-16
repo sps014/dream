@@ -26,9 +26,9 @@ Common methods:
 - `Type.parse(str)` — static; parses a string into that integer type, returning `Result<Type, ParseError>`.
 
 ```dream
-System.println(15.clamp(0, 10));              // 10
-System.println((-5).abs());                   // 5
-let n = int.parse("42").unwrap_or(0);  // 42
+System.println(15.clamp(0, 10)); // 10
+System.println((-5).abs()); // 5
+let n = int.parse("42").unwrap_or(0); // 42
 ```
 
 ### Integer overflow
@@ -41,8 +41,8 @@ Integer arithmetic **wraps** by default: an operation whose mathematical result 
 - Shift counts are masked to the type's bit width: `1 << 33` on an `int` is `1 << 1`. Bits shifted out of the value are discarded: `1 << 31` is `-2147483648`.
 
 ```dream
-let i: int = 2147483647;   // the largest int
-let j = i + 1;              // -2147483648
+let i: int = 2147483647; // the largest int
+let j = i + 1; // -2147483648
 ```
 
 Wrap a `checked { }` block around code where an overflow is a bug you want to catch (sizes, offsets, money). Inside it, every integer op lexically in the block panics instead of wrapping:
@@ -58,9 +58,9 @@ let count = 100000;
 let size = 100000;
 let h = 2166136261u;
 checked {
-    let total = count * size;        // panic: attempt to multiply with overflow
+    let total = count * size; // panic: attempt to multiply with overflow
     unchecked {
-        h = (h ^ 97u) * 16777619u;   // FNV-1a step: wraps at 32 bits
+        h = (h ^ 97u) * 16777619u; // FNV-1a step: wraps at 32 bits
     }
 }
 ```
@@ -85,8 +85,8 @@ Common methods:
 - `double.parse(str)` — static; parses a string into a `double`, returning `Result<double, ParseError>`.
 
 ```dream
-System.println((3.14f).abs());                    // 3.14
-System.println((1.5f).min(2.0f));                 // 1.5
+System.println((3.14f).abs()); // 3.14
+System.println((1.5f).min(2.0f)); // 1.5
 let d = double.parse("2.5").unwrap_or(0.0d);
 ```
 
@@ -98,8 +98,8 @@ let d = double.parse("2.5").unwrap_or(0.0d);
 - `bool.parse(str)` — static; accepts exactly `"true"` or `"false"` (case-sensitive), returning `Result<bool, ParseError>`.
 
 ```dream
-System.println(true.to_int());   // 1
-let b = bool.parse("true").unwrap_or(false);   // true
+System.println(true.to_int()); // 1
+let b = bool.parse("true").unwrap_or(false); // true
 let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 ```
 
@@ -114,8 +114,8 @@ let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 - `char.parse(str)` — static; requires exactly one Unicode scalar in `str`; returns `Result<char, ParseError>`.
 
 ```dream
-System.println('A'.is_alpha());   // true
-System.println('A'.to_lower());   // 'a'
-let s = 'H'.as_string();   // "H"
-let c = char.parse("é").unwrap_or('?');  // 'é'
+System.println('A'.is_alpha()); // true
+System.println('A'.to_lower()); // 'a'
+let s = 'H'.as_string(); // "H"
+let c = char.parse("é").unwrap_or('?'); // 'é'
 ```

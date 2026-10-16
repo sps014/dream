@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class RequestContext`
+## `RequestContext`
 
 Per-request bag shared by middleware and `@dep` functions.
 
@@ -12,37 +12,47 @@ Per-request bag shared by middleware and `@dep` functions.
 public class RequestContext
 ```
 
-## `public incoming`
+## `incoming`
+
+Request received from the client.
 
 ```dream
 public incoming: HttpIncoming
 ```
 
-## `public app_state`
+## `app_state`
+
+Application values shared by requests.
 
 ```dream
 public app_state: Map<string, string>
 ```
 
-## `public state`
+## `state`
+
+Values stored for this request by handlers and middleware.
 
 ```dream
 public state: Map<string, string>
 ```
 
-## `public cancellation_token`
+## `cancellation_token`
+
+Cancellation signal for the current request, when available.
 
 ```dream
 public cancellation_token: Option<CancellationToken>
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `RequestContext` with `incoming`.
 
 ```dream
 public constructor(incoming: HttpIncoming)
 ```
 
-## `public fun add_cleanup`
+## `add_cleanup`
 
 Registers request cleanup, run once in reverse acquisition order outside request cancellation.
 
@@ -50,19 +60,23 @@ Registers request cleanup, run once in reverse acquisition order outside request
 public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void
 ```
 
-## `public fun set`
+## `set`
+
+Replaces the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun set(key: string, value: string): void
 ```
 
-## `public fun get`
+## `get`
+
+Returns the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun get(key: string): Option<string>
 ```
 
-## `public class Next`
+## `Next`
 
 Continues the middleware onion toward the route handler.
 
@@ -70,19 +84,23 @@ Continues the middleware onion toward the route handler.
 public class Next
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `Next` with `step`.
 
 ```dream
 public constructor(step: fun(): Future<HttpOutgoing>)
 ```
 
-## `public fun call`
+## `call`
+
+Runs the next step in the middleware pipeline.
 
 ```dream
 public fun call(): Future<HttpOutgoing>
 ```
 
-## `public class Middleware`
+## `Middleware`
 
 One onion layer: `invoke` may short-circuit or `next.call().await`.
 
@@ -90,13 +108,17 @@ One onion layer: `invoke` may short-circuit or `next.call().await`.
 public class Middleware
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `Middleware` with `handler`.
 
 ```dream
 public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>)
 ```
 
-## `public fun invoke`
+## `invoke`
+
+Runs this middleware for `ctx`, using `next` to continue the request pipeline.
 
 ```dream
 public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>

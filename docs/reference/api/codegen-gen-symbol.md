@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSymbol`
+## `GenSymbol`
 
 Signature views allow program-wide queries without including unrelated function bodies.
 
@@ -10,37 +10,47 @@ Signature views allow program-wide queries without including unrelated function 
 public class GenSymbol
 ```
 
-## `public instances: List<GenSymbolInstance>`
+## `instances`
+
+Concrete uses of this generic symbol.
 
 ```dream
 public instances: List<GenSymbolInstance>
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public kind: string`
+## `kind`
+
+Category of this entry.
 
 ```dream
 public kind: string
 ```
 
-## `public declaration: Option<GenDecl>`
+## `declaration`
+
+Declaration associated with this entry.
 
 ```dream
 public declaration: Option<GenDecl>
 ```
 
-## `public function: Option<GenFunction>`
+## `function`
+
+Function declaration associated with this entry, when available.
 
 ```dream
 public function: Option<GenFunction>
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Decodes a declaration or function symbol from the compilation snapshot.
 

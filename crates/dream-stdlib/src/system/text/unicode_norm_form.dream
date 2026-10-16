@@ -1,10 +1,13 @@
 module system.text;
 
 // Unicode normalization forms for `Unicode.normalize`.
-
 public enum UnicodeNormForm {
+    /// Canonical composition normalization.
     Nfc,
+    /// Canonical decomposition normalization.
     Nfd,
+    /// Compatibility composition normalization.
     Nfkc,
+    /// Compatibility decomposition normalization.
     Nfkd,
 }

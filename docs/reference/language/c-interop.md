@@ -121,9 +121,14 @@ module ticker;
 
 import system;
 
-@c extern fun ticker_new(name: string): CPtr;
-@c extern fun ticker_run(t: CPtr, ticks: int): int;
-@c("m", "cbrt") extern fun cube_root(x: double): double;
+@c
+extern fun ticker_new(name: string): CPtr;
+
+@c
+extern fun ticker_run(t: CPtr, ticks: int): int;
+
+@c("m", "cbrt")
+extern fun cube_root(x: double): double;
 ```
 
 - **Bare `@c`** binds to the declaring package's own `native/` set. The Dream name is the C symbol.
@@ -171,7 +176,8 @@ Arrays pass only the pointer. When C needs the length, declare it as a separate 
 ```dream
 import system.interop;
 
-@c extern fun checksum(data: byte[], len: long): int;
+@c
+extern fun checksum(data: byte[], len: long): int;
 
 public fun fingerprint(data: byte[]): int {
     return checksum(data, data.length);
@@ -186,10 +192,13 @@ public fun fingerprint(data: byte[]): int {
 ```dream
 import system.interop;
 
-@c("sqlite3") extern fun sqlite3_open(path: string, ref db: CPtr): int;
+@c("sqlite3")
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
 
 let db = CPtr.null();
-if sqlite3_open("app.db", ref db) != 0 { ... }
+if sqlite3_open("app.db", ref db) != 0 {
+    ...
+}
 ```
 
 `Ffi.read_ptr`, `Ffi.read_int`, `Ffi.read_long`, `Ffi.read_double`, and `Ffi.read_cstring` read
@@ -205,8 +214,12 @@ you and leaves the object holding `NULL`.
 ```dream
 import system.interop;
 
-@c @owned("ticker_free") extern fun ticker_new(name: string): OwnedCPtr;
-@c extern fun ticker_run(t: CPtr, ticks: int): int;
+@c
+@owned("ticker_free")
+extern fun ticker_new(name: string): OwnedCPtr;
+
+@c
+extern fun ticker_run(t: CPtr, ticks: int): int;
 
 let t = ticker_new("demo");
 ticker_run(t.get(), 3); // ticker_free runs when `t` goes out of scope
@@ -230,9 +243,14 @@ public struct Vec2 {
     public y: double;
 }
 
-@c extern fun vec2_scale(v: Vec2, k: double): Vec2; // C: Vec2 vec2_scale(Vec2 v, double k)
-@c extern fun vec2_len(ref v: Vec2): double;        // C: double vec2_len(const Vec2* v)
-@c extern fun vec2_origin(ref out: Vec2): void;
+@c
+extern fun vec2_scale(v: Vec2, k: double): Vec2; // C: Vec2 vec2_scale(Vec2 v, double k)
+
+@c
+extern fun vec2_len(ref v: Vec2): double; // C: double vec2_len(const Vec2* v)
+
+@c
+extern fun vec2_origin(ref out: Vec2): void;
 ```
 
 ### Strings

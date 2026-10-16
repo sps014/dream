@@ -2,26 +2,27 @@ import system.testing;
 // Every integer primitive wraps on overflow (two's-complement modulo its bit width), as documented
 // in docs/reference/language/primitives.md.
 import system;
+
 @test
 @timeout(180000)
 fun integer_overflow_wraps(): void {
     let b: byte = 250b;
-    let b2: byte = b + 10b;        // 260 mod 256 = 4
+    let b2: byte = b + 10b; // 260 mod 256 = 4
     Assert.eq_str((b2).to_string(), "4");
 
     let b3: byte = 0b;
-    let b4: byte = b3 - 1b;        // -1 mod 256 = 255
+    let b4: byte = b3 - 1b; // -1 mod 256 = 255
     Assert.eq_str((b4).to_string(), "255");
 
-    let i: int = 2147483647;       // int max
-    let j: int = i + 1;            // wraps to int min
+    let i: int = 2147483647; // int max
+    let j: int = i + 1; // wraps to int min
     Assert.eq_str((j).to_string(), "-2147483648");
 
-    let u: uint = 4294967295u;     // uint max
-    let v: uint = u + 1u;          // wraps to 0
+    let u: uint = 4294967295u; // uint max
+    let v: uint = u + 1u; // wraps to 0
     Assert.eq_str((v).to_string(), "0");
 
-    let l: long = 9223372036854775807L;  // long max
-    let m: long = l + 1L;                // wraps to long min
+    let l: long = 9223372036854775807L; // long max
+    let m: long = l + 1L; // wraps to long min
     Assert.eq_str((m).to_string(), "-9223372036854775808");
 }

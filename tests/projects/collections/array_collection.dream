@@ -2,10 +2,21 @@ import system.testing;
 import system;
 import system.collections;
 
-fun c28_is_even(n: int): bool { return n % 2 == 0; }
-fun c28_times_two(n: int): int { return n * 2; }
-fun c28_add(a: int, b: int): int { return a + b; }
-fun c28_asc(a: int, b: int): int { return a.compare(b); }
+fun c28_is_even(n: int): bool {
+    return n % 2 == 0;
+}
+
+fun c28_times_two(n: int): int {
+    return n * 2;
+}
+
+fun c28_add(a: int, b: int): int {
+    return a + b;
+}
+
+fun c28_asc(a: int, b: int): int {
+    return a.compare(b);
+}
 
 fun c28_sum(xs: IndexedCollection<int>): int {
     let total = 0;

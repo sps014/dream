@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 async fun c2e_delayedDouble(n: int): int {
     Time.sleep(100).await;
     return n * 2;

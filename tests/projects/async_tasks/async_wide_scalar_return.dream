@@ -3,6 +3,7 @@ import system.testing;
 // scheduler's `Future.result` slot is a single `i32`. Wide scalars are boxed on completion and
 // unboxed at the `await` resume site so any return type flows through the same slot.
 import system;
+
 async fun c41_bigNumber(): long {
     Time.sleep(1).await;
     return 9000000000;

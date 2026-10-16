@@ -2,19 +2,23 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenBody`
+## `GenBody`
+
+Statements belonging to a function body, in source order.
 
 ```dream
 public class GenBody
 ```
 
-## `public statements: List<GenStmt>`
+## `statements`
+
+Statements in source order.
 
 ```dream
 public statements: List<GenStmt>
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Creates this model from snapshot JSON.
 

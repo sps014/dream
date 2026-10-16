@@ -4,10 +4,15 @@ import system;
 import system.collections;
 import system.json;
 
+/// A source range described by its starting location and length.
 public class GenSpan {
+    /// Source file path.
     public file: string;
+    /// One-based line number in the source file.
     public line: int;
+    /// One-based column number in the source file.
     public column: int;
+    /// Number of elements in this range.
     public length: int;
 
     // Creates this model from snapshot JSON.

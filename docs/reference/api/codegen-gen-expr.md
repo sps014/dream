@@ -2,103 +2,135 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenExpr`
+## `GenExpr`
+
+An expression that a source generator can inspect.
 
 ```dream
 public class GenExpr
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public kind: ExprKind`
+## `kind`
+
+Category of this entry.
 
 ```dream
 public kind: ExprKind
 ```
 
-## `public statement_kind: StmtKind`
+## `statement_kind`
+
+Category of the containing statement.
 
 ```dream
 public statement_kind: StmtKind
 ```
 
-## `public span: GenSpan`
+## `span`
+
+Source range occupied by this node.
 
 ```dream
 public span: GenSpan
 ```
 
-## `public constant: Option<GenConstant>`
+## `constant`
+
+Constant value of the expression, when known.
 
 ```dream
 public constant: Option<GenConstant>
 ```
 
-## `public text: string`
+## `text`
+
+Source text represented by this entry.
 
 ```dream
 public text: string
 ```
 
-## `public op: string`
+## `op`
+
+Operator spelling used by the expression.
 
 ```dream
 public op: string
 ```
 
-## `public literal: string`
+## `literal`
+
+Source spelling of the literal.
 
 ```dream
 public literal: string
 ```
 
-## `public literal_kind: string`
+## `literal_kind`
+
+Category of the literal, such as a number or string.
 
 ```dream
 public literal_kind: string
 ```
 
-## `public ty: GenTypeRef`
+## `ty`
+
+Type of this declaration or expression.
 
 ```dream
 public ty: GenTypeRef
 ```
 
-## `public symbol: string`
+## `symbol`
+
+Identifier of the referenced symbol.
 
 ```dream
 public symbol: string
 ```
 
-## `public symbol_kind: string`
+## `symbol_kind`
+
+Category of the referenced symbol.
 
 ```dream
 public symbol_kind: string
 ```
 
-## `public overload: string`
+## `overload`
+
+Identifier distinguishing this function's overload.
 
 ```dream
 public overload: string
 ```
 
-## `public type_args: List<GenTypeRef>`
+## `type_args`
+
+Concrete type arguments, in parameter order.
 
 ```dream
 public type_args: List<GenTypeRef>
 ```
 
-## `public types: List<GenTypeRef>`
+## `types`
+
+Type references associated with this expression.
 
 ```dream
 public types: List<GenTypeRef>
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Creates this model from snapshot JSON.
 

@@ -1,12 +1,12 @@
 module system;
 import system.interop;
 
-
 // An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param
 // and `Option<CPtr>` a nullable pointer.
 public struct CPtr {
     raw: usize;
 
+    /// Creates a `CPtr` with `raw`.
     public constructor(raw: usize) {
         this.raw = raw;
     }
@@ -42,6 +42,7 @@ public class OwnedCPtr {
     ptr: CPtr;
     free: usize;
 
+    /// Releases `ptr` by calling the foreign function at address `free`.
     @intrinsic(Intrinsic.DreamFfiFreeWith)
     public static extern fun free_with(free: usize, ptr: usize): void;
 
@@ -69,12 +70,15 @@ public class OwnedCPtr {
 public class NativeCallback<F> {
     f: F;
 
+    /// Keeps a callback available to foreign code until `unregister` is called.
     @intrinsic(Intrinsic.DreamCallbackRegister)
     public static extern fun register(borrow callback: object): void;
 
+    /// Releases a previously registered callback after foreign code has stopped using it.
     @intrinsic(Intrinsic.DreamCallbackUnregister)
     public static extern fun unregister(borrow callback: object): void;
 
+    /// Creates a `NativeCallback` with `f`.
     public constructor(f: F) {
         this.f = f;
         NativeCallback<F>.register(this);
@@ -87,18 +91,23 @@ public class NativeCallback<F> {
 
 // Reads through C pointers from `@c` callbacks (`char**`, `char*`).
 public static class Ffi {
+    /// Reads the pointer at `index` from a valid foreign pointer array.
     @intrinsic(Intrinsic.DreamFfiReadPtr)
     public static extern fun host_read_ptr(base: usize, index: int): usize;
 
+    /// Copies a valid null-terminated foreign string into a Dream string.
     @intrinsic(Intrinsic.DreamFfiReadCstring)
     public static extern fun host_read_cstring(ptr: usize): string;
 
+    /// Reads the 32-bit integer at `index` from valid foreign storage.
     @intrinsic(Intrinsic.DreamFfiReadI32)
     public static extern fun host_read_i32(base: usize, index: int): int;
 
+    /// Reads the 64-bit integer at `index` from valid foreign storage.
     @intrinsic(Intrinsic.DreamFfiReadI64)
     public static extern fun host_read_i64(base: usize, index: int): long;
 
+    /// Reads the double at `index` from valid foreign storage.
     @intrinsic(Intrinsic.DreamFfiReadF64)
     public static extern fun host_read_f64(base: usize, index: int): double;
 

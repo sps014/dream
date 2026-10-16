@@ -39,7 +39,11 @@ public static class Compression
 Creates an encoder; max_output_bytes bounds compressed output across every write and finish.
 
 ```dream
-public static fun writer(destination: Writer, format: CompressionFormat = CompressionFormat.Gzip, max_output_bytes: long = 67108864L): Result<CompressionWriter, IoError>
+public static fun writer(
+    destination: Writer,
+    format: CompressionFormat = CompressionFormat.Gzip,
+    max_output_bytes: long = 67108864L
+): Result<CompressionWriter, IoError>
 ```
 
 ## `reader`
@@ -47,7 +51,11 @@ public static fun writer(destination: Writer, format: CompressionFormat = Compre
 Creates a strict single-stream decoder; the output limit prevents unbounded expansion.
 
 ```dream
-public static fun reader(source: Reader, format: CompressionFormat = CompressionFormat.Gzip, max_output_bytes: long = 67108864L): Result<CompressionReader, IoError>
+public static fun reader(
+    source: Reader,
+    format: CompressionFormat = CompressionFormat.Gzip,
+    max_output_bytes: long = 67108864L
+): Result<CompressionReader, IoError>
 ```
 
 ## `CompressionWriter`
@@ -55,7 +63,7 @@ public static fun reader(source: Reader, format: CompressionFormat = Compression
 Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
 
 ```dream
-public class CompressionWriter : Writer
+public class CompressionWriter: Writer
 ```
 
 ## `write`
@@ -95,7 +103,7 @@ public fun close(): void
 Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
 
 ```dream
-public class CompressionReader : Reader
+public class CompressionReader: Reader
 ```
 
 ## `read`

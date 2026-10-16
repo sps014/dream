@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Path`
+## `Path`
 
 Path helpers for joining and inspecting filesystem paths.
 
@@ -14,7 +14,7 @@ public static class Path
 
 ## `join`
 
-Joins path segments left-to-right with the platform separator, avoiding double separators and skipping empty segments. Two-argument calls compile exactly as before; three or more trailing arguments pack into `more` automatically (no spread operator at the call site).
+Joins path segments with the platform separator, skipping empty segments and avoiding duplicate separators. Supply additional segments as trailing arguments.
 
 ```dream
 public static fun join(a: string, b: string, ...more: string[]): string

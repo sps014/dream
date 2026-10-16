@@ -4,7 +4,9 @@ import system;
 import system.collections;
 import system.json;
 
+/// Associates generated output with the source locations it came from.
 public class GenSourceMap {
+    /// Source locations associated with generated output.
     public mappings: JsonValue;
 
     // Creates an empty builder.

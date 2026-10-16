@@ -6,7 +6,10 @@ import system.json;
 class c126_Reply {
     public ok: bool;
     public tags: List<string>;
-    public constructor() { this.ok = false; this.tags = List<string>(); }
+    public constructor() {
+        this.ok = false;
+        this.tags = List<string>();
+    }
 }
 
 fun c126_body(): void {
@@ -15,7 +18,9 @@ fun c126_body(): void {
     r.tags.push("a");
     c126_verify_observation((Json.serialize(r)).to_string());
     switch (Json.deserialize<c126_Reply>("{\"ok\":true,\"tags\":[\"x\",\"y\"]}")) {
-        Ok(b) => c126_verify_observation((b.ok.to_string() + " " + b.tags.length.to_string()).to_string()),
+        Ok(b) => c126_verify_observation(
+            (b.ok.to_string() + " " + b.tags.length.to_string()).to_string()
+        ),
         Err(e) => c126_verify_observation(("err " + e.to_string()).to_string()),
     }
 }

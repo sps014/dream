@@ -2,12 +2,14 @@ module system.logging;
 
 // Named logger with a minimum level and zero or more handlers.
 
+/// A named logger with a minimum severity and configurable output handlers.
 @allow_cycle
 public class Logger {
     name: string;
     _level: LogLevel;
     handlers: List<LogHandler>;
 
+    /// Creates a `Logger` with `name`.
     public constructor(name: string) {
         this.name = name;
         this._level = LogLevel.Info;
@@ -25,10 +27,12 @@ public class Logger {
         return created;
     }
 
+    /// Minimum severity emitted by this logger.
     public get level(): LogLevel {
         return this._level;
     }
 
+    /// Minimum severity emitted by this logger.
     public set level(level: LogLevel) {
         this._level = level;
     }

@@ -2,15 +2,41 @@ import system.testing;
 import system;
 import system.collections;
 
-fun c8b_is_positive(n: int): bool { return n > 0; }
-fun c8b_is_three(n: int): bool { return n == 3; }
-fun c8b_gt_two(n: int): bool { return n > 2; }
-fun c8b_is_even(n: int): bool { return n % 2 == 0; }
-fun c8b_times_two(n: int): int { return n * 2; }
-fun c8b_add(a: int, b: int): int { return a + b; }
-fun c8b_gt_one(n: int): bool { return n > 1; }
-fun c8b_plus_ten(n: int): int { return n + 10; }
-fun c8b_asc(a: int, b: int): int { return a.compare(b); }
+fun c8b_is_positive(n: int): bool {
+    return n > 0;
+}
+
+fun c8b_is_three(n: int): bool {
+    return n == 3;
+}
+
+fun c8b_gt_two(n: int): bool {
+    return n > 2;
+}
+
+fun c8b_is_even(n: int): bool {
+    return n % 2 == 0;
+}
+
+fun c8b_times_two(n: int): int {
+    return n * 2;
+}
+
+fun c8b_add(a: int, b: int): int {
+    return a + b;
+}
+
+fun c8b_gt_one(n: int): bool {
+    return n > 1;
+}
+
+fun c8b_plus_ten(n: int): int {
+    return n + 10;
+}
+
+fun c8b_asc(a: int, b: int): int {
+    return a.compare(b);
+}
 
 fun c8b_sum_evens(xs: Collection<int>): int {
     let evens = xs.filter(c8b_is_even);

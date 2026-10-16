@@ -9,15 +9,28 @@ import system.net;
 import system.testing;
 
 @router("")
-class Routes { @get("/health") public static fun health(): string { return "ok"; } }
+class Routes {
+    @get("/health")
+    public static fun health(): string {
+        return "ok";
+    }
+}
+
 @test
 async fun health_test(): void {
-    let app = WebApp(); app.include_router(Routes.router()).unwrap();
+    let app = WebApp();
+    app.include_router(Routes.router()).unwrap();
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     let client = HttpClient();
-    let response = client.send(HttpRequest.get(Url.parse("http://127.0.0.1:" + port.to_string() + "/health").unwrap())).await.unwrap();
-    Assert.eq(response.status, 200); Assert.eq_str(response.read_text().await.unwrap(), "ok"); response.close();
-    app.shutdown(); app.wait().await; client.close().unwrap();
+    let response = client.send(
+        HttpRequest.get(Url.parse("http://127.0.0.1:" + port.to_string() + "/health").unwrap())
+    ).await.unwrap();
+    Assert.eq(response.status, 200);
+    Assert.eq_str(response.read_text().await.unwrap(), "ok");
+    response.close();
+    app.shutdown();
+    app.wait().await;
+    client.close().unwrap();
 }
 ```
 
@@ -27,6 +40,6 @@ Override external dependencies with a generated replacement class and `app.overr
 
 Cover missing and malformed inputs, validation paths, 401/403 behavior, middleware order, mounted OpenAPI paths, resource cleanup after disconnect, and startup rollback. For authentication stores, test concurrent refresh consumption and replay revocation, not only sequential success.
 
-The compiler repository runs native server assertions through `python3 scripts/test_corpus.py webapi`. Standalone validation is also exercised under Node. Native-only server suites must remain native-only.
+HTTP server tests require the native target. Choose an unused port by passing zero to `listen`, and use the returned port in the client URL. Close each response and stop the application before the test returns.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

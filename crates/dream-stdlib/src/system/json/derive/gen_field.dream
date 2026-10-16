@@ -4,11 +4,17 @@ module system.json.derive;
 
 // One serializable field on a class or union variant.
 public class JsonFieldSpec {
+    /// Name identifying this entry.
     public name: string;
+    /// Dream type name represented by this entry.
     public type_name: string;
+    /// Whether this field is omitted from JSON.
     public json_ignore: bool;
+    /// Name used for this property in serialized data.
     public property_name: string;
+    /// Dream type name wrapped by `Option`, when applicable.
     public option_inner: string;
+    /// Whether this reference names a type parameter.
     public is_type_param: bool;
     // Value type of a `Map<string, V>` / `SortedMap<string, V>` field (empty when not a map); the
     // key type is required to be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).

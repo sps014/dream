@@ -35,8 +35,13 @@ fun c1e_body(): void {
     let b = Buffer.alloc<int>(8);
     b[0] = 9;
     let c = Buffer.alloc<int>(16);
-    c1e_verify_observation(("after=" + a[0].to_string() + "," + b[0].to_string() + "," + c.length.to_string()).to_string());
-    c1e_verify_observation(("still=" + xs.length.to_string() + "," + ys.length.to_string()).to_string());
+    c1e_verify_observation(
+        ("after=" + a[0].to_string() + "," + b[0].to_string() + "," + c.length.to_string())
+            .to_string()
+    );
+    c1e_verify_observation(
+        ("still=" + xs.length.to_string() + "," + ys.length.to_string()).to_string()
+    );
 }
 
 let c1e_cursor: int = 0;

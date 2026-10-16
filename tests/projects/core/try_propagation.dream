@@ -2,8 +2,8 @@ import system.testing;
 // `expr?` propagates a `Result<T, E>`/`Option<T>` failure/absence immediately (an early `return`
 // of the same variant, re-boxed into the enclosing function's own `Result`/`Option` return type),
 // or yields the success payload as the expression's value.
-
 import system;
+
 fun c265_half(n: int): Result<int, string> {
     if n % 2 != 0 {
         return Result.Err("odd");
@@ -36,34 +36,34 @@ fun c265_describe_first_positive(xs: int[]): Option<string> {
 // `?` used directly inside a call argument (not just a `let` initializer), including before a
 // binary operator — try-propagation wins unless a matching ternary `:` follows.
 fun c265_quarter_plus_one(n: int): Result<int, string> {
-    return Result.Ok(c265_half(n)? + 1);
+    return Result.Ok(c265_half(n)? +1);
 }
 
 fun c265_body(): void {
     switch (c265_quarter(20)) {
-        Ok(v)  => c265_verify_observation((v).to_string()),
+        Ok(v) => c265_verify_observation((v).to_string()),
         Err(e) => c265_verify_observation(("err: " + e).to_string()),
     }
     switch (c265_quarter(21)) {
-        Ok(v)  => c265_verify_observation((v).to_string()),
+        Ok(v) => c265_verify_observation((v).to_string()),
         Err(e) => c265_verify_observation(("err: " + e).to_string()),
     }
     switch (c265_quarter(22)) {
-        Ok(v)  => c265_verify_observation((v).to_string()),
+        Ok(v) => c265_verify_observation((v).to_string()),
         Err(e) => c265_verify_observation(("err: " + e).to_string()),
     }
 
     switch (c265_describe_first_positive([-3, -1, 4, 5])) {
         Some(s) => c265_verify_observation((s).to_string()),
-        None    => c265_verify_observation(("none").to_string()),
+        None => c265_verify_observation(("none").to_string()),
     }
     switch (c265_describe_first_positive([-3, -1])) {
         Some(s) => c265_verify_observation((s).to_string()),
-        None    => c265_verify_observation(("none").to_string()),
+        None => c265_verify_observation(("none").to_string()),
     }
 
     switch (c265_quarter_plus_one(20)) {
-        Ok(v)  => c265_verify_observation((v).to_string()),
+        Ok(v) => c265_verify_observation((v).to_string()),
         Err(e) => c265_verify_observation(("err: " + e).to_string()),
     }
 }

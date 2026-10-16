@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun caa_compute(n: int): int {
     let total = 0;
     let i = 0;

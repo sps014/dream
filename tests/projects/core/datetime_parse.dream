@@ -4,12 +4,16 @@ import system.testing;
 // input (`Err`). Round-trips parsed values back through `to_iso8601()` to confirm both directions
 // agree.
 import system;
+
 @test
 @timeout(180000)
 fun datetime_parse(): void {
     let a = DateTime.parse("2026-07-02T10:35:00.250Z");
     Assert.eq_str((a.is_ok()).to_string(), "true");
-    Assert.eq_str((a.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601()).to_string(), "2026-07-02T10:35:00.250Z");
+    Assert.eq_str(
+        (a.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601()).to_string(),
+        "2026-07-02T10:35:00.250Z"
+    );
 
     let b = DateTime.parse("2026-07-02T16:05:00+05:30");
     let b_dt = b.unwrap_or(DateTime.from_epoch_millis(0L));
@@ -26,5 +30,8 @@ fun datetime_parse(): void {
     Assert.eq_str((f.is_err()).to_string(), "true");
 
     let g = DateTime.parse("2026-07-02T10:35:00");
-    Assert.eq_str((g.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601()).to_string(), "2026-07-02T10:35:00.000Z");
+    Assert.eq_str(
+        (g.unwrap_or(DateTime.from_epoch_millis(0L)).to_iso8601()).to_string(),
+        "2026-07-02T10:35:00.000Z"
+    );
 }

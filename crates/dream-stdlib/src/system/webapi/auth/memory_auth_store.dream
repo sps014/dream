@@ -1,46 +1,115 @@
 module system.webapi.auth;
 
 /// Process-local storage for tests and single-process examples. Methods perform no suspension during mutations.
-public class MemoryAuthStore : AuthSessionStore {
+public class MemoryAuthStore: AuthSessionStore {
     sessions: Map<string, AuthSession>;
     revoked: Set<string>;
     transactions: Map<string, OidcTransaction>;
-    public constructor() { this.sessions = Map<string, AuthSession>(); this.revoked = Set<string>(); this.transactions = Map<string, OidcTransaction>(); }
-    public async unique fun create(session: AuthSession): Result<bool, AuthError> {
-        if this.sessions.contains(session.hash) { return Result.Err(AuthError("EDUPLICATE", "session already exists")); }
-        this.sessions.set(session.hash, session); return Result.Ok(true);
+    /// Creates a `MemoryAuthStore` with default settings.
+    public constructor() {
+        this.sessions = Map<string, AuthSession>();
+        this.revoked = Set<string>();
+        this.transactions = Map<string, OidcTransaction>();
     }
+
+    /// Stores a new refresh session; returns an error if its token hash already exists.
+    public async unique fun create(session: AuthSession): Result<bool, AuthError> {
+        if this.sessions.contains(session.hash) {
+            return Result.Err(AuthError("EDUPLICATE", "session already exists"));
+        }
+        this.sessions.set(session.hash, session);
+        return Result.Ok(true);
+    }
+
+    /// Finds an unexpired session at epoch-second time `now`; rejects revoked or missing
+    /// sessions.
     public async unique fun find(hash: string, now: long): Result<AuthSession, AuthError> {
         let value = this.sessions.get(hash);
-        if value.is_none() { return Result.Err(AuthError("EAUTH", "invalid session")); }
+        if value.is_none() {
+            return Result.Err(AuthError("EAUTH", "invalid session"));
+        }
         let session = value.unwrap();
-        if this.revoked.contains(session.family) || session.expires <= now { return Result.Err(AuthError("EAUTH", "invalid session")); }
+        if this.revoked.contains(session.family) || session.expires <= now {
+            return Result.Err(AuthError("EAUTH", "invalid session"));
+        }
         return Result.Ok(session);
     }
-    public async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError> {
+
+    /// Consumes a refresh session and stores its replacement. Replay revokes the family;
+    /// invalid replacements return an error.
+    public async unique fun rotate(
+        hash: string,
+        replacement: AuthSession,
+        now: long
+    ): Result<AuthSession, AuthError> {
         let value = this.sessions.get(hash);
-        if value.is_none() { return Result.Err(AuthError("EAUTH", "invalid session")); }
+        if value.is_none() {
+            return Result.Err(AuthError("EAUTH", "invalid session"));
+        }
         let original = value.unwrap();
-        if this.revoked.contains(original.family) || original.expires <= now { return Result.Err(AuthError("EAUTH", "invalid session")); }
-        if original.consumed { this.revoked.add(original.family); return Result.Err(AuthError("EREPLAY", "refresh token replay")); }
-        if replacement.family != original.family || replacement.subject != original.subject || replacement.scopes != original.scopes || replacement.expires != original.expires || this.sessions.contains(replacement.hash) {
+        if this.revoked.contains(original.family) || original.expires <= now {
+            return Result.Err(AuthError("EAUTH", "invalid session"));
+        }
+        if original.consumed {
+            this.revoked.add(original.family);
+            return Result.Err(AuthError("EREPLAY", "refresh token replay"));
+        }
+        if replacement.family
+            != original.family
+            || replacement.subject
+            != original.subject
+            || replacement.scopes
+            != original.scopes
+            || replacement.expires != original.expires || this.sessions.contains(replacement.hash) {
             return Result.Err(AuthError("EINVAL", "invalid refresh replacement"));
         }
-        original.consumed = true; this.sessions.set(replacement.hash, replacement); return Result.Ok(replacement);
+        original.consumed = true;
+        this.sessions.set(replacement.hash, replacement);
+        return Result.Ok(replacement);
     }
-    public async unique fun revoke(family: string): Result<bool, AuthError> { this.revoked.add(family); return Result.Ok(true); }
+
+    /// Revokes all refresh sessions in `family`.
+    public async unique fun revoke(family: string): Result<bool, AuthError> {
+        this.revoked.add(family);
+        return Result.Ok(true);
+    }
+
+    /// Returns whether `family` has an unexpired, unconsumed session at epoch-second time
+    /// `now`.
     public async unique fun active(family: string, now: long): bool {
-        if this.revoked.contains(family) { return false; }
-        for (let session in this.sessions.values()) { if session.family == family && !session.consumed && session.expires > now { return true; } }
+        if this.revoked.contains(family) {
+            return false;
+        }
+        for (let session in this.sessions.values()) {
+            if session.family == family && !session.consumed && session.expires > now {
+                return true;
+            }
+        }
         return false;
     }
-    public async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError> {
-        if this.transactions.contains(state) { return Result.Err(AuthError("EDUPLICATE", "transaction already exists")); }
-        this.transactions.set(state, transaction); return Result.Ok(true);
+
+    /// Stores a login transaction under `state`; duplicate state returns an error.
+    public async unique fun put_transaction(
+        state: string,
+        transaction: OidcTransaction
+    ): Result<bool, AuthError> {
+        if this.transactions.contains(state) {
+            return Result.Err(AuthError("EDUPLICATE", "transaction already exists"));
+        }
+        this.transactions.set(state, transaction);
+        return Result.Ok(true);
     }
-    public async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError> {
-        let value = this.transactions.get(state); this.transactions.remove(state);
-        if value.is_none() || value.unwrap().expires <= now { return Result.Err(AuthError("EAUTH", "invalid login transaction")); }
+
+    /// Removes and returns the login transaction. Missing or expired state returns an error.
+    public async unique fun take_transaction(
+        state: string,
+        now: long
+    ): Result<OidcTransaction, AuthError> {
+        let value = this.transactions.get(state);
+        this.transactions.remove(state);
+        if value.is_none() || value.unwrap().expires <= now {
+            return Result.Err(AuthError("EAUTH", "invalid login transaction"));
+        }
         return Result.Ok(value.unwrap());
     }
 }

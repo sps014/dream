@@ -2,9 +2,9 @@ import system.testing;
 // A generic function constrained with `T : Comparable<T>` may call the interface's `compare` on its
 // type parameter. Because Dream monomorphizes generics, the constrained call binds to the concrete
 // type's method (static dispatch, no boxing).
-
 import system;
-class ce1_Money : Comparable<ce1_Money> {
+
+class ce1_Money: Comparable<ce1_Money> {
     public cents: int;
 
     public constructor(cents: int) {
@@ -16,7 +16,7 @@ class ce1_Money : Comparable<ce1_Money> {
     }
 }
 
-fun ce1_max_of<T : Comparable<T>>(a: T, b: T): T {
+fun ce1_max_of<T: Comparable<T>>(a: T, b: T): T {
     if a.compare(b) > 0 {
         return a;
     }
@@ -25,10 +25,10 @@ fun ce1_max_of<T : Comparable<T>>(a: T, b: T): T {
 
 fun ce1_body(): void {
     let bigger = ce1_max_of(ce1_Money(100), ce1_Money(250));
-    ce1_verify_observation((bigger.cents).to_string());          // 250
+    ce1_verify_observation((bigger.cents).to_string()); // 250
 
     let smaller = ce1_max_of(ce1_Money(40), ce1_Money(15));
-    ce1_verify_observation((smaller.cents).to_string());         // 40
+    ce1_verify_observation((smaller.cents).to_string()); // 40
 }
 
 let ce1_cursor: int = 0;

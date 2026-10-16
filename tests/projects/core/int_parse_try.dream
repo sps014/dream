@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun cfa_parse_or_propagate(s: string): Result<int, ParseError> {
     let n = int.parse(s)?;
     return Result.Ok(n);
@@ -7,11 +8,11 @@ fun cfa_parse_or_propagate(s: string): Result<int, ParseError> {
 
 fun cfa_body(): void {
     switch (cfa_parse_or_propagate("42")) {
-        Ok(n)  => cfa_verify_observation((n).to_string()),
+        Ok(n) => cfa_verify_observation((n).to_string()),
         Err(e) => cfa_verify_observation(("err: " + e.message()).to_string()),
     }
     switch (cfa_parse_or_propagate("nope")) {
-        Ok(n)  => cfa_verify_observation((n).to_string()),
+        Ok(n) => cfa_verify_observation((n).to_string()),
         Err(e) => cfa_verify_observation(("err: " + e.message()).to_string()),
     }
 }

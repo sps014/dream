@@ -13,7 +13,10 @@ struct c271_Point {
     }
 }
 
-enum c271_Color { Red, Green }
+enum c271_Color {
+    Red,
+    Green
+}
 
 @test
 @timeout(180000)
@@ -41,7 +44,9 @@ fun typeof_static() {
     Assert.eq_str((typeof(col)).to_string(), "c271_Color");
 
     // Generic instantiations report their source spelling, not the mangled symbol name.
-    let m: Map<string, object> = { "ok": "ko" };
+    let m: Map<string, object> = {
+        "ok": "ko"
+    };
     Assert.eq_str((typeof(m)).to_string(), "Map<string, object>");
 
     let list: List<int> = [1, 2];

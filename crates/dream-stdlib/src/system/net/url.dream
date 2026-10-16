@@ -33,16 +33,24 @@ public class Url {
     }
 
     // Lowercase scheme without the colon delimiter.
-    public get scheme(): string { return this.parts[1]; }
+    public get scheme(): string {
+        return this.parts[1];
+    }
 
     // Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.
-    public get host(): string { return this.parts[2]; }
+    public get host(): string {
+        return this.parts[2];
+    }
 
     // Encoded path component; percent escapes remain encoded.
-    public get path(): string { return this.parts[3]; }
+    public get path(): string {
+        return this.parts[3];
+    }
 
     // Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.
-    public get query(): UrlQuery { return this.parameters; }
+    public get query(): UrlQuery {
+        return this.parameters;
+    }
 
     // Serializes the normalized URL, including query edits and any fragment delimiter.
     public override fun to_string(): string {
@@ -69,7 +77,9 @@ public class UrlQuery {
     }
 
     // Number of key/value pairs, including repeated keys and empty values.
-    public get length(): int { return this.keys.length; }
+    public get length(): int {
+        return this.keys.length;
+    }
 
     // Appends a decoded key/value pair after existing parameters.
     public fun append(key: string, value: string): void {
@@ -81,7 +91,9 @@ public class UrlQuery {
     // Returns the first decoded value for `key`, or `None` if the key is absent.
     public fun get(key: string): Option<string> {
         for (let i = 0; i < this.keys.length; i = i + 1) {
-            if this.keys.get(i) == key { return Option.Some(this.values.get(i)); }
+            if this.keys.get(i) == key {
+                return Option.Some(this.values.get(i));
+            }
         }
         return Option.None;
     }
@@ -90,7 +102,9 @@ public class UrlQuery {
     public fun get_all(key: string): string[] {
         let matches = List<string>();
         for (let i = 0; i < this.keys.length; i = i + 1) {
-            if this.keys.get(i) == key { matches.push(this.values.get(i)); }
+            if this.keys.get(i) == key {
+                matches.push(this.values.get(i));
+            }
         }
         return matches.take_array();
     }
@@ -111,7 +125,9 @@ public class UrlQuery {
             }
             i = i + 1;
         }
-        if !found { this.append(key, value); }
+        if !found {
+            this.append(key, value);
+        }
         this.dirty = true;
     }
 
@@ -122,7 +138,9 @@ public class UrlQuery {
             if this.keys.get(i) == key {
                 this.keys.remove_at(i);
                 this.values.remove_at(i);
-            } else { i = i + 1; }
+            } else {
+                i = i + 1;
+            }
         }
         this.dirty = true;
     }
@@ -135,12 +153,18 @@ public class UrlQuery {
     }
 
     internal fun render(): string {
-        if !this.dirty { return this.original; }
-        if this.keys.length == 0 { return ""; }
+        if !this.dirty {
+            return this.original;
+        }
+        if this.keys.length == 0 {
+            return "";
+        }
         let output = StringBuilder();
         output.append("?");
         for (let i = 0; i < this.keys.length; i = i + 1) {
-            if i > 0 { output.append("&"); }
+            if i > 0 {
+                output.append("&");
+            }
             output.append(Encoding.form_encode_component(this.keys.get(i)));
             output.append("=");
             output.append(Encoding.form_encode_component(this.values.get(i)));

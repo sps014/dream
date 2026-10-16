@@ -3,7 +3,9 @@ import system;
 
 class c2a5_Session {
     public id: int;
-    public constructor(id: int) { this.id = id; }
+    public constructor(id: int) {
+        this.id = id;
+    }
 }
 
 fun c2a5_make_dead(): Weak<c2a5_Session> {

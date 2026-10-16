@@ -1,7 +1,8 @@
 module system.core;
 
 internal interface SpanCharacter {}
-extend char : SpanCharacter {}
+
+extend char: SpanCharacter {}
 
 // `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
 // `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
@@ -31,10 +32,15 @@ public ref struct ReadOnlySpan<T> {
         this._length = length;
     }
 
-    internal static fun from_text(borrow src: string, offset: int, length: int): ReadOnlySpan<T> where T: SpanCharacter {
+    internal static fun from_text(
+        borrow src: string,
+        offset: int,
+        length: int
+    ): ReadOnlySpan<T> where T: SpanCharacter {
         return ReadOnlySpan<T>(src, offset, length);
     }
 
+    /// Creates a read-only character view of `src` without copying its contents.
     public static fun of(borrow src: string): ReadOnlySpan<T> where T: SpanCharacter {
         return ReadOnlySpan<T>(src, 0, src.length);
     }
@@ -63,6 +69,7 @@ public ref struct ReadOnlySpan<T> {
         return this.array[this.offset + index];
     }
 
+    /// Accesses the element at `index`; an out-of-range index panics.
     public fun this[index: int]: char where T: SpanCharacter {
         if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
@@ -70,6 +77,7 @@ public ref struct ReadOnlySpan<T> {
         return this.at_unchecked(index);
     }
 
+    /// Returns the element at `index`; an out-of-range index panics.
     public fun get(index: int): T {
         return this[index];
     }
@@ -96,6 +104,7 @@ public ref struct ReadOnlySpan<T> {
         return ReadOnlySpan<T>(this.array, this.offset + start, count);
     }
 
+    /// Returns a view of `count` elements starting at `start`; invalid bounds panic.
     public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter {
         if (start < 0) || (count < 0) || (count > this._length - start) {
             System.panic("Span slice out of range");
@@ -123,13 +132,18 @@ public ref struct ReadOnlySpan<T> {
         return Option.None;
     }
 
+    /// Returns the first matching index, or `None` when no match exists.
     public fun index_of(borrow value: T): Option<int> where T: SpanCharacter {
         if this._text {
-            return span_found(string.view_find_char(this.src, this.offset, this._length, 0, (int)value));
+            return span_found(
+                string.view_find_char(this.src, this.offset, this._length, 0, (int)value)
+            );
         }
         let i = 0;
         while i < this._length {
-            if this.at_unchecked(i) == value { return Option.Some(i); }
+            if this.at_unchecked(i) == value {
+                return Option.Some(i);
+            }
             i = i + 1;
         }
         return Option.None;
@@ -146,7 +160,9 @@ public ref struct ReadOnlySpan<T> {
         if this._length != other._length {
             return false;
         }
-        if (this._text == other._text) && (this.array == other.array) && (this.src == other.src) && (this.offset == other.offset) {
+        if (this._text == other._text)
+            && (this.array == other.array)
+            && (this.src == other.src) && (this.offset == other.offset) {
             return true;
         }
         let i = 0;
@@ -182,7 +198,7 @@ public ref struct ReadOnlySpan<T> {
     }
 
     // Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
-    public fun copy_to(dst: Span<T>): void where T : unmanaged {
+    public fun copy_to(dst: Span<T>): void where T: unmanaged {
         if this._length > dst._length {
             System.panic("Span copy_to overflow");
         }
@@ -208,7 +224,8 @@ public ref struct ReadOnlySpan<T> {
         return result;
     }
 
-    public fun to_array(): T[] where T : unmanaged {
+    /// Copies the elements into a new array.
+    public fun to_array(): T[]where T: unmanaged {
         let result = Buffer.alloc<T>(this._length);
         if this._text {
             let i = 0;

@@ -20,7 +20,7 @@ fun on_tick(n: int): void {
 extern fun run_callback(cb: fun(int): void, times: int): void;
 
 fun main(): void {
-    run_callback(on_tick, 3);   // on_tick crosses as a JS-callable wrapper
+    run_callback(on_tick, 3); // on_tick crosses as a JS-callable wrapper
 }
 ```
 

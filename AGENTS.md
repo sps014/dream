@@ -223,6 +223,15 @@ python3 scripts/test_corpus.py            # when implementing or fixing: full as
 
 When iterating on a feature or bugfix, prefer `python3 scripts/test_corpus.py <case-name-substring>` first for a fast signal, then run the full corpus on both targets before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The corpus command is the full assertion run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
+### Documentation writing style
+
+- Write for someone learning to use Dream. Explain the task, the API's behavior, and the result in plain language. Keep compiler architecture, lowering, generated helper names, allocation layouts, and optimization notes in `docs/internals/` or separate implementation comments. Mention a platform or ownership constraint only when it changes how the API must be used.
+- Document every stdlib type, method, property, field, and enum choice at its declaration. Use `///` for the public contract: purpose, parameters and units, defaults, return values, failures, and important restrictions. Use ordinary `//` comments for implementation invariants. API documentation explains behavior; the no-narrating-comments rule still applies to implementation comments.
+- Make each user-facing page self-contained for its task. Include imports, setup, a readable example, expected behavior, and failure handling where relevant. Links to related guides are useful; sending readers to `sample/`, `examples/`, tests, or source code to learn the documented behavior is not a substitute for documentation.
+- Format Dream code with the shared `dream-format` formatter. Use four spaces, put nonempty bodies on multiple lines, wrap long signatures and argument lists, and separate declarations clearly. Never compress a function or several statements onto one line to save space in a guide. Add blank lines between logical phases. Break large workflows into explained steps instead of an uninterrupted code dump.
+- Keep API descriptions specific. Do not fill missing documentation with a restatement of the identifier, a signature, or “see examples.” Review the implementation before describing edge cases. Keep public source comments and the reference consistent.
+- When changing the formatter, verify token/comment preservation and idempotence across all tracked `.dream` files, including invalid-input fixtures without rewriting those fixtures. Check Dream code fences as well as standalone files.
+
 ### Documentation gate
 
 After changing documentation, docs tooling, `mkdocs.yml`, or embedded stdlib sources, run the same checks as `.github/workflows/docs.yml` before calling the work done:

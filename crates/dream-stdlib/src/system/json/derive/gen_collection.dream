@@ -1,14 +1,20 @@
 module system.json.derive;
 
 // Snapshot of a collection type that needs top-level `Json.serialize` / `deserialize` adapters.
-
 public class JsonCollectionSpec {
+    /// Category of this entry.
     public kind: CollectionKind;
+    /// Dream type name of each collection element.
     public elem_type: string;
+    /// Dream type name of values in this collection.
     public value_type: string;
+    /// Dream type name of the collection being described.
     public self_ty: string;
+    /// Suffix that distinguishes generated helper names.
     public fn_suffix: string;
 
+    /// Creates a `JsonCollectionSpec` with `kind`, `elem_type`, `value_type`, `self_ty`,
+    /// `fn_suffix`.
     public constructor(
         kind: CollectionKind,
         elem_type: string,
@@ -23,6 +29,8 @@ public class JsonCollectionSpec {
         this.fn_suffix = fn_suffix;
     }
 
+    /// Creates a collection description from its kind, element/value types, and generated-name
+    /// suffix.
     public static fun make(
         kind: CollectionKind,
         elem_type: string,

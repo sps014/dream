@@ -2,19 +2,23 @@
 
 **Import:** `import system.codegen;`
 
-## `public class ArtifactBuilder`
+## `ArtifactBuilder`
+
+Builds generated source text and records its source locations.
 
 ```dream
 public class ArtifactBuilder
 ```
 
-## `public source_map: GenSourceMap`
+## `source_map`
+
+Locations mapping generated text back to source declarations.
 
 ```dream
 public source_map: GenSourceMap
 ```
 
-## `public constructor()`
+## `constructor`
 
 Creates an empty builder.
 

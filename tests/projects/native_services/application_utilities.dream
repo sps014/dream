@@ -9,7 +9,9 @@ import system.testing;
 
 class FixtureCounter {
     public count: int;
-    public constructor() { this.count = 0; }
+    public constructor() {
+        this.count = 0;
+    }
 }
 
 @test
@@ -60,21 +62,50 @@ async fun application_utilities(): void {
     let temporary_path = temporary.path;
     temporary.file.write_all(Encoding.utf8_encode("{\"port\":9000,\"enabled\":true}")).unwrap();
     temporary.file.flush().unwrap();
-    let config = ConfigBuilder().default_value("port", "8080").json_file(temporary.path).require("enabled").build().unwrap();
+    let config = ConfigBuilder()
+        .default_value("port", "8080")
+        .json_file(temporary.path)
+        .require("enabled")
+        .build()
+        .unwrap();
     Assert.eq(config.get_int("port").unwrap(), 9000);
     Assert.is_true(config.get_bool("enabled").unwrap());
     Assert.eq_str(config.source("port").unwrap(), temporary.path);
     System.set_env("DREAM_TEST_CONFIG_PORT", "9100").unwrap();
     let command = Command("test").int_option("port", default_value: 1111);
     let parsed = command.parse(["--port", "9200"]).unwrap();
-    let overrides = ConfigBuilder().default_value("port", "8080").cli(parsed).environment("DREAM_TEST_CONFIG_").json_file(temporary.path).build().unwrap();
+    let overrides = ConfigBuilder()
+        .default_value("port", "8080")
+        .cli(parsed)
+        .environment("DREAM_TEST_CONFIG_")
+        .json_file(temporary.path)
+        .build()
+        .unwrap();
     Assert.eq(overrides.get_int("port").unwrap(), 9200);
     let no_args: string[] = [];
     let omitted = command.parse(no_args).unwrap();
-    Assert.eq(ConfigBuilder().default_value("port", "8080").cli(omitted).environment("DREAM_TEST_CONFIG_").build().unwrap().get_int("port").unwrap(), 9100);
+    Assert.eq(
+        ConfigBuilder()
+            .default_value("port", "8080")
+            .cli(omitted)
+            .environment("DREAM_TEST_CONFIG_")
+            .build()
+            .unwrap()
+            .get_int("port")
+            .unwrap(),
+        9100
+    );
     System.unset_env("DREAM_TEST_CONFIG_PORT").unwrap();
-    Assert.is_true(ConfigBuilder().default_value("port", "bad").build().unwrap().get_int("port").is_err());
-    Assert.is_true(ConfigBuilder().default_value("port", "bad").validate("port", (value) => value == "good").build().is_err());
+    Assert.is_true(
+        ConfigBuilder().default_value("port", "bad").build().unwrap().get_int("port").is_err()
+    );
+    Assert.is_true(
+        ConfigBuilder()
+            .default_value("port", "bad")
+            .validate("port", (value) => value == "good")
+            .build()
+            .is_err()
+    );
     Assert.is_true(temporary.persist_replace("missing-phase7-parent/file").is_err());
     Assert.is_true(File.exists(temporary_path));
     temporary.close().unwrap();
@@ -92,13 +123,27 @@ async fun application_utilities(): void {
     directory.close().unwrap();
 
     let counter = FixtureCounter();
-    let fixture = TestFixture<FixtureCounter, string>(counter, (resource) => { resource.count = resource.count + 1; return Result.Ok(true); });
-    let failed = Fixtures.run<FixtureCounter, string>(fixture, async (resource) => Result.Err("failure")).await;
+    let fixture = TestFixture<FixtureCounter, string>(
+        counter,
+        (resource) => {
+            resource.count = resource.count + 1;
+            return Result.Ok(true);
+        }
+    );
+    let failed = Fixtures.run<FixtureCounter, string>(
+        fixture,
+        async (resource) => Result.Err("failure")
+    ).await;
     Assert.is_true(failed.is_err());
     fixture.close().unwrap();
     Assert.eq(counter.count, 1);
     await_value_for_assertion().await;
 }
 
-async fun utility_value(): int { return 42; }
-async fun await_value_for_assertion(): void { Assert.eq_async(utility_value(), 42).await; }
+async fun utility_value(): int {
+    return 42;
+}
+
+async fun await_value_for_assertion(): void {
+    Assert.eq_async(utility_value(), 42).await;
+}

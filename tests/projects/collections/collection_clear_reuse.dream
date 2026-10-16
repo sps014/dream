@@ -61,5 +61,8 @@ fun c81_verify_observation(borrow value: string): void {
 fun collection_clear_reuse(): void {
     c81_cursor = 0;
     c81_body();
-    Assert.eq(c81_cursor, ("2\n0\n0\n8\n2\n1\n0\n8\n2\n2\n0\n8\n2\n0\n30\n2\n0\ntrue\n2\n0\nc\n").length);
+    Assert.eq(
+        c81_cursor,
+        ("2\n0\n0\n8\n2\n1\n0\n8\n2\n2\n0\n8\n2\n0\n30\n2\n0\ntrue\n2\n0\nc\n").length
+    );
 }

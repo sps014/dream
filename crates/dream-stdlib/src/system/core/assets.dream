@@ -1,5 +1,6 @@
 module system.core;
 
+/// Access to files embedded with the program.
 public static class Assets {
     /// Copies an embedded asset into a new owned byte array; name must be a string literal.
     @intrinsic(Intrinsic.AssetBytes)

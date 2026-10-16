@@ -4,7 +4,7 @@
 
 See [model validation](../../web-apis/validation.md) for strict decoding, constraints, defaults, and callbacks.
 
-## `public static class ValidationGenerator`
+## `ValidationGenerator`
 
 Schema generation shared by standalone validation and the web API generator.
 
@@ -12,19 +12,25 @@ Schema generation shared by standalone validation and the web API generator.
 public static class ValidationGenerator
 ```
 
-## `public static fun constraints`
+## `constraints`
+
+Adds the constraints described by `attributes` to the JSON schema.
 
 ```dream
 public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void
 ```
 
-## `public static fun model`
+## `model`
+
+Builds a JSON schema for declaration `d`, recording reusable definitions.
 
 ```dream
 public static fun model(d: GenDecl, ctx: GenContext, definitions: JsonValue): JsonValue
 ```
 
-## `public static fun type_schema`
+## `type_schema`
+
+Builds a JSON schema for `ty`, recording reusable definitions.
 
 ```dream
 public static fun type_schema(ty: GenTypeRef, ctx: GenContext, definitions: JsonValue): JsonValue

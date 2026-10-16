@@ -1,6 +1,7 @@
 import system.testing;
 // Lambda `ref` parameters: surface type `fun(ref T): R`, call with `f(ref x)`.
 import system;
+
 @test
 @timeout(180000)
 fun ref_lambda_param(): void {

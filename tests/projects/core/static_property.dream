@@ -2,6 +2,7 @@ import system.testing;
 // Static TypeScript-style property accessors: read/written through the type itself
 // (`Type.prop` / `Type.prop = v`) with no instance receiver. Distinct from instance accessors.
 import system;
+
 class c208_Settings {
     // A static getter computes a value on read of `Settings.version`.
     public static get version(): int {
@@ -15,9 +16,9 @@ class c208_Settings {
 }
 
 fun c208_body(): void {
-    c208_verify_observation((c208_Settings.version).to_string());   // 7
-    c208_Settings.level = 3;                 // 3
-    c208_Settings.level = c208_Settings.version;  // 7
+    c208_verify_observation((c208_Settings.version).to_string()); // 7
+    c208_Settings.level = 3; // 3
+    c208_Settings.level = c208_Settings.version; // 7
 }
 
 let c208_cursor: int = 0;

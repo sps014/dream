@@ -1,1 +1,13 @@
-import system; fun sum(n: int): long { let x: long = 0; for (let i = 0; i < n; i++) { x += i; } return x; } fun main(): void { System.println(sum(100000)); }
+import system;
+
+fun sum(n: int): long {
+    let x: long = 0;
+    for (let i = 0; i < n; i++) {
+        x += i;
+    }
+    return x;
+}
+
+fun main(): void {
+    System.println(sum(100000));
+}

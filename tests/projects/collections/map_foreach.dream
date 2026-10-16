@@ -3,9 +3,9 @@ import system.testing;
 // missing key; `get(k)` returns `Option<V>`), and `for (let pair in m)` yielding
 // `KeyValuePair<K, V>`. Map order is
 // unspecified, so this case only checks order-independent aggregates.
-
 import system;
 import system.collections;
+
 fun c14a_body() {
     let m = Map<string, int>();
     m["a"] = 1;
@@ -18,10 +18,10 @@ fun c14a_body() {
         vtotal = vtotal + pair.value;
         count = count + 1;
     }
-    c14a_verify_observation((vtotal).to_string());            // 1 + 2 + 3 = 6
-    c14a_verify_observation((count).to_string());             // 3
+    c14a_verify_observation((vtotal).to_string()); // 1 + 2 + 3 = 6
+    c14a_verify_observation((count).to_string()); // 3
 
-    c14a_verify_observation((m["b"]).to_string());            // 2 (panics if absent)
+    c14a_verify_observation((m["b"]).to_string()); // 2 (panics if absent)
     c14a_verify_observation((m.get("z").unwrap_or(-1)).to_string()); // -1
 }
 

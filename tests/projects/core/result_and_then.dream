@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun c1e7_parse_even(s: string): Result<int, ParseError> {
     let parsed = int.parse(s);
     if parsed.is_err() {
@@ -11,9 +12,11 @@ fun c1e7_parse_even(s: string): Result<int, ParseError> {
     }
     return Result.Ok(n);
 }
+
 fun c1e7_double_ok(n: int): Result<int, ParseError> {
     return Result.Ok(n * 2);
 }
+
 fun c1e7_body(): void {
     switch (c1e7_parse_even("10").and_then(c1e7_double_ok)) {
         Ok(v) => c1e7_verify_observation((v).to_string()),

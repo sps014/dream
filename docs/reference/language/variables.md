@@ -9,10 +9,10 @@ Console examples elsewhere use `System.println` after `import system;` — see [
 Use `let`. The type comes from the value on the right:
 
 ```dream
-let x = 42;          // int
-let name = "Alice";  // string
-let ratio = 3.14;    // float
-let done = false;    // bool
+let x = 42; // int
+let name = "Alice"; // string
+let ratio = 3.14; // float
+let done = false; // bool
 ```
 
 Write the type when the value alone is ambiguous, or when you want a different type than inference would pick:
@@ -50,10 +50,10 @@ A variable lives until the end of the block it was declared in. When a reference
 fun main(): void {
     let a = 10;
     {
-        let b = 20;    // only alive inside these braces
+        let b = 20; // only alive inside these braces
         System.println(a + b);
     }
-    // b is gone here; a is still fine
+// b is gone here; a is still fine
 }
 ```
 
@@ -69,8 +69,8 @@ Inference reads the initializer. A few defaults to keep in mind:
 If inference gives you the wrong type, add an annotation or a suffix:
 
 ```dream
-let pi: double = 3.14159;   // annotation
-let pi2 = 3.14159d;         // suffix
+let pi: double = 3.14159; // annotation
+let pi2 = 3.14159d; // suffix
 ```
 
 ## Top-level variables
@@ -80,10 +80,10 @@ let pi2 = 3.14159d;         // suffix
 ```dream
 let counter: int = 10;
 const FACTOR: int = 3;
-let derived: int = counter * FACTOR;   // may reference earlier globals
+let derived: int = counter * FACTOR; // may reference earlier globals
 
 fun main(): void {
-    counter = counter + 5;   // top-level `let` is still mutable
+    counter = counter + 5; // top-level `let` is still mutable
     System.println(derived);
 }
 ```
@@ -96,9 +96,10 @@ Top-level variables are **file-private by default**: readable anywhere in their 
 - `internal` — importable from any other file that declares the **same [`module`](imports.md) path**, but not exported to the host.
 
 ```dream
-public let version: int = 1;   // exported to the host
+public let version: int = 1; // exported to the host
+
 internal let budget: int = 64; // shared within `module app`, not exported
-let cache: int = 0;            // file-private (the default)
+let cache: int = 0; // file-private (the default)
 ```
 
 `internal` needs a declared module on **both** sides. A file with no `module` declaration has no module to share, so its `internal` globals stay file-private:
@@ -106,10 +107,11 @@ let cache: int = 0;            // file-private (the default)
 ```dream
 // lib.dream
 module app;
+
 internal let budget: int = 64;
 
 // main.dream
-module app;                    // same module, so `budget` resolves
+module app; // same module, so `budget` resolves
 import lib;
 ```
 

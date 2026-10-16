@@ -4,17 +4,17 @@
 
 Read the [usage guide](../stdlib/simd.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `struct Vector<T : unmanaged>`
+## `Vector`
 
 Portable 16-byte SIMD vector (`v128`). `T` must be `byte`, `int`, `long`, `float`, or `double`.
 
 ```dream
-public struct Vector<T : unmanaged>
+public struct Vector<T: unmanaged>
 ```
 
 ## `lane_count`
 
-Returns the number of elements of `T` in a 16-byte vector.
+Number of elements held by this vector type.
 
 ```dream
 public static extern fun lane_count(): int
@@ -38,7 +38,7 @@ public static fun splat(value: T): Vector<T>
 
 ## `splat_raw`
 
-Constructs a vector with every lane equal to `value`; used by `Vector.splat`.
+Creates a vector with every lane equal to `value`.
 
 ```dream
 public static extern fun splat_raw(value: T): Vector<T>
@@ -54,7 +54,7 @@ public static fun load(borrow src: T[], offset: int): Vector<T>
 
 ## `load_raw`
 
-Loads consecutive lanes from an array at `offset`; used by `Vector.load`.
+Loads a vector from `src` starting at `offset`; the range must contain enough elements.
 
 ```dream
 public static extern fun load_raw(borrow src: T[], offset: int): Vector<T>
@@ -70,7 +70,7 @@ public fun store(borrow dest: T[], offset: int): void
 
 ## `store_raw`
 
-Stores consecutive vector lanes into an array at `offset`; used by `Vector.store`.
+Stores all vector lanes into `dest` starting at `offset`; the range must contain enough elements.
 
 ```dream
 public static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void
@@ -94,7 +94,7 @@ public fun with_lane(i: int, value: T): Vector<T>
 
 ## `bin_add`
 
-Adds corresponding vector lanes.
+Adds corresponding lanes of the two vectors.
 
 ```dream
 public static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>
@@ -102,7 +102,7 @@ public static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>
 
 ## `bin_sub`
 
-Subtracts corresponding vector lanes.
+Subtracts corresponding lanes of the two vectors.
 
 ```dream
 public static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>
@@ -110,7 +110,7 @@ public static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>
 
 ## `bin_mul`
 
-Multiplies corresponding vector lanes.
+Multiplies corresponding lanes of the two vectors.
 
 ```dream
 public static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>
@@ -126,7 +126,7 @@ public static fun min(a: Vector<T>, b: Vector<T>): Vector<T>
 
 ## `bin_min`
 
-Takes the minimum of corresponding vector lanes.
+Selects the smaller value in each pair of lanes.
 
 ```dream
 public static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>
@@ -142,7 +142,7 @@ public static fun max(a: Vector<T>, b: Vector<T>): Vector<T>
 
 ## `bin_max`
 
-Takes the maximum of corresponding vector lanes.
+Selects the larger value in each pair of lanes.
 
 ```dream
 public static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>
@@ -158,7 +158,7 @@ public fun sum(): T
 
 ## `reduce_sum`
 
-Sums the vector lanes.
+Adds all vector lanes and returns the sum.
 
 ```dream
 public static extern fun reduce_sum(v: Vector<T>): T

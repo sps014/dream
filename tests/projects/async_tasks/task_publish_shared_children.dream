@@ -19,5 +19,8 @@ async fun task_publish_shared_children(): void {
     }
     Assert.eq_str((Task.spawn(() => n.label + "!").await).to_string(), "second child!");
     let labels = ["array" + " child", "closure" + " child"];
-    Assert.eq_str((Task.spawn(() => labels[0] + ", " + labels[1]).await).to_string(), "array child, closure child");
+    Assert.eq_str(
+        (Task.spawn(() => labels[0] + ", " + labels[1]).await).to_string(),
+        "array child, closure child"
+    );
 }

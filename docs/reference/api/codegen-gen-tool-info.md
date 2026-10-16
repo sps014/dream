@@ -2,33 +2,41 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenToolInfo`
+## `GenToolInfo`
+
+Identity and configuration of an available generation tool.
 
 ```dream
 public class GenToolInfo
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public version: string`
+## `version`
+
+Version identifying this API or snapshot format.
 
 ```dream
 public version: string
 ```
 
-## `public fingerprint: string`
+## `fingerprint`
+
+Content fingerprint identifying this version of the tool.
 
 ```dream
 public fingerprint: string
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
-Decodes compiler-collected tool metadata from a snapshot.
+Reads an available tool description from its JSON representation.
 
 ```dream
 public constructor(borrow v: JsonValue)

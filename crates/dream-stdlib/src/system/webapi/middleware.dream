@@ -6,13 +6,20 @@ public class RequestContext {
     internal cleanups: List<fun(CancellationToken): Future<void>>;
     internal dependencies: Map<string, object>;
     internal overrides: Map<string, string>;
+    /// Request received from the client.
     public incoming: HttpIncoming;
+    /// Application values shared by requests.
     public app_state: Map<string, string>;
+    /// Values stored for this request by handlers and middleware.
     public state: Map<string, string>;
+    /// Cancellation signal for the current request, when available.
     public cancellation_token: Option<CancellationToken>;
 
+    /// Creates a `RequestContext` with `incoming`.
     public constructor(incoming: HttpIncoming) {
-        this.cleanups = List<fun(CancellationToken): Future<void>>(); this.dependencies = Map<string, object>(); this.overrides = Map<string, string>();
+        this.cleanups = List<fun(CancellationToken): Future<void>>();
+        this.dependencies = Map<string, object>();
+        this.overrides = Map<string, string>();
         this.incoming = incoming;
         this.app_state = Map<string, string>();
         this.state = Map<string, string>();
@@ -20,20 +27,26 @@ public class RequestContext {
     }
 
     /// Registers request cleanup, run once in reverse acquisition order outside request cancellation.
-    public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void { this.cleanups.push(cleanup); }
+    public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void {
+        this.cleanups.push(cleanup);
+    }
+
     internal static async fun finish(ctx: RequestContext): void {
         let source = CancellationSource();
         while !ctx.cleanups.is_empty() {
-            let cleanup = ctx.cleanups.get(ctx.cleanups.length - 1); ctx.cleanups.remove_at(ctx.cleanups.length - 1);
+            let cleanup = ctx.cleanups.get(ctx.cleanups.length - 1);
+            ctx.cleanups.remove_at(ctx.cleanups.length - 1);
             cleanup(source.token).await;
         }
         ctx.dependencies.clear();
     }
 
+    /// Replaces the element at `index`; an out-of-range index panics.
     public fun set(key: string, value: string): void {
         this.state.set(key, value);
     }
 
+    /// Returns the element at `index`; an out-of-range index panics.
     public fun get(key: string): Option<string> {
         return this.state.get(key);
     }
@@ -44,11 +57,16 @@ public class RequestContext {
 public class Next {
     step: fun(): Future<HttpOutgoing>;
 
+    /// Creates a `Next` with `step`.
     public constructor(step: fun(): Future<HttpOutgoing>) {
         this.step = step;
     }
 
-    public fun call(): Future<HttpOutgoing> { return Next.call_owned(this); }
+    /// Runs the next step in the middleware pipeline.
+    public fun call(): Future<HttpOutgoing> {
+        return Next.call_owned(this);
+    }
+
     static async fun call_owned(next: Next): HttpOutgoing {
         let step = next.step;
         return step().await;
@@ -60,12 +78,21 @@ public class Next {
 public class Middleware {
     handler: fun(RequestContext, Next): Future<HttpOutgoing>;
 
+    /// Creates a `Middleware` with `handler`.
     public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>) {
         this.handler = handler;
     }
 
-    public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing> { return Middleware.invoke_owned(this, ctx, next); }
-    static async fun invoke_owned(middleware: Middleware, ctx: RequestContext, next: Next): HttpOutgoing {
+    /// Runs this middleware for `ctx`, using `next` to continue the request pipeline.
+    public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing> {
+        return Middleware.invoke_owned(this, ctx, next);
+    }
+
+    static async fun invoke_owned(
+        middleware: Middleware,
+        ctx: RequestContext,
+        next: Next
+    ): HttpOutgoing {
         let handler = middleware.handler;
         return handler(ctx, next).await;
     }

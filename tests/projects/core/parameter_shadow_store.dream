@@ -3,7 +3,9 @@ import system;
 
 class c1a7_Holder {
     public items: int[];
-    public constructor(items: int[]) { this.items = items; }
+    public constructor(items: int[]) {
+        this.items = items;
+    }
 }
 
 fun c1a7_store(items: int[]): int {

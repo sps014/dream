@@ -2,9 +2,9 @@
 
 **Import:** `import system.core;`
 
-## `public enum Intrinsic`
+## `Intrinsic`
 
-Compiler operations available to intrinsic declarations.
+Built-in operations available to declarations annotated with `@intrinsic`.
 
 ```dream
 public enum Intrinsic
@@ -12,11 +12,15 @@ public enum Intrinsic
 
 ## `AssetBytes`
 
+Identifies the asset bytes operation for an `@intrinsic` declaration.
+
 ```dream
 AssetBytes
 ```
 
 ## `RawLoad`
+
+Identifies the raw load operation for an `@intrinsic` declaration.
 
 ```dream
 RawLoad
@@ -24,11 +28,15 @@ RawLoad
 
 ## `RawStore`
 
+Identifies the raw store operation for an `@intrinsic` declaration.
+
 ```dream
 RawStore
 ```
 
 ## `DreamRawSize`
+
+Identifies the raw size operation for an `@intrinsic` declaration.
 
 ```dream
 DreamRawSize
@@ -36,11 +44,15 @@ DreamRawSize
 
 ## `DreamRawAlloc`
 
+Identifies the raw alloc operation for an `@intrinsic` declaration.
+
 ```dream
 DreamRawAlloc
 ```
 
 ## `DreamRawRealloc`
+
+Identifies the raw realloc operation for an `@intrinsic` declaration.
 
 ```dream
 DreamRawRealloc
@@ -48,11 +60,15 @@ DreamRawRealloc
 
 ## `DreamRawFree`
 
+Identifies the raw free operation for an `@intrinsic` declaration.
+
 ```dream
 DreamRawFree
 ```
 
 ## `DreamRawCopy`
+
+Identifies the raw copy operation for an `@intrinsic` declaration.
 
 ```dream
 DreamRawCopy
@@ -60,11 +76,15 @@ DreamRawCopy
 
 ## `DreamRawMove`
 
+Identifies the raw move operation for an `@intrinsic` declaration.
+
 ```dream
 DreamRawMove
 ```
 
 ## `DreamRawFill`
+
+Identifies the raw fill operation for an `@intrinsic` declaration.
 
 ```dream
 DreamRawFill
@@ -72,11 +92,15 @@ DreamRawFill
 
 ## `DreamArenaNew`
 
+Identifies the arena new operation for an `@intrinsic` declaration.
+
 ```dream
 DreamArenaNew
 ```
 
 ## `DreamArenaAlloc`
+
+Identifies the arena alloc operation for an `@intrinsic` declaration.
 
 ```dream
 DreamArenaAlloc
@@ -84,11 +108,15 @@ DreamArenaAlloc
 
 ## `DreamArenaReset`
 
+Identifies the arena reset operation for an `@intrinsic` declaration.
+
 ```dream
 DreamArenaReset
 ```
 
 ## `DreamArenaFree`
+
+Identifies the arena free operation for an `@intrinsic` declaration.
 
 ```dream
 DreamArenaFree
@@ -96,11 +124,15 @@ DreamArenaFree
 
 ## `DreamYieldSignal`
 
+Identifies the yield signal operation for an `@intrinsic` declaration.
+
 ```dream
 DreamYieldSignal
 ```
 
 ## `DreamYieldSignalComplete`
+
+Identifies the yield signal complete operation for an `@intrinsic` declaration.
 
 ```dream
 DreamYieldSignalComplete
@@ -108,11 +140,15 @@ DreamYieldSignalComplete
 
 ## `DreamYieldRun`
 
+Identifies the yield run operation for an `@intrinsic` declaration.
+
 ```dream
 DreamYieldRun
 ```
 
 ## `Print`
+
+Identifies the print operation for an `@intrinsic` declaration.
 
 ```dream
 Print
@@ -120,11 +156,15 @@ Print
 
 ## `Println`
 
+Identifies the println operation for an `@intrinsic` declaration.
+
 ```dream
 Println
 ```
 
 ## `PromiseAll`
+
+Identifies the promise all operation for an `@intrinsic` declaration.
 
 ```dream
 PromiseAll
@@ -132,17 +172,23 @@ PromiseAll
 
 ## `PromiseAny`
 
+Identifies the promise any operation for an `@intrinsic` declaration.
+
 ```dream
 PromiseAny
 ```
 
 ## `PromiseRace`
 
+Identifies the promise race operation for an `@intrinsic` declaration.
+
 ```dream
 PromiseRace
 ```
 
 ## `JsonSerialize`
+
+Identifies the json serialize operation for an `@intrinsic` declaration.
 
 ```dream
 JsonSerialize

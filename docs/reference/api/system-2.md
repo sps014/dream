@@ -2,7 +2,7 @@
 
 **Import:** `import system;`
 
-## `public static fun set_cwd`
+## `set_cwd`
 
 Sets the current working directory.
 
@@ -10,7 +10,7 @@ Sets the current working directory.
 public static fun set_cwd(borrow path: string): Result<bool, IoError>
 ```
 
-## `public static fun clear`
+## `clear`
 
 Clears the terminal screen.
 
@@ -18,7 +18,7 @@ Clears the terminal screen.
 public static fun clear(): void
 ```
 
-## `public static fun set_foreground`
+## `set_foreground`
 
 Sets the foreground color for subsequent output.
 
@@ -26,7 +26,7 @@ Sets the foreground color for subsequent output.
 public static fun set_foreground(color: ConsoleColor): void
 ```
 
-## `public static fun set_background`
+## `set_background`
 
 Sets the background color for subsequent output.
 
@@ -34,7 +34,7 @@ Sets the background color for subsequent output.
 public static fun set_background(color: ConsoleColor): void
 ```
 
-## `public static fun reset_color`
+## `reset_color`
 
 Resets console colors to the terminal default.
 
@@ -42,7 +42,7 @@ Resets console colors to the terminal default.
 public static fun reset_color(): void
 ```
 
-## `public static fun print_colored`
+## `print_colored`
 
 Prints a string in the specified color.
 

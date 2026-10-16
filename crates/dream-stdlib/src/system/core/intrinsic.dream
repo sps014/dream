@@ -1,152 +1,299 @@
 module system.core;
 
-/// Compiler operations available to intrinsic declarations.
+/// Built-in operations available to declarations annotated with `@intrinsic`.
 public enum Intrinsic {
+    /// Identifies the asset bytes operation for an `@intrinsic` declaration.
     AssetBytes,
+    /// Identifies the raw load operation for an `@intrinsic` declaration.
     RawLoad,
+    /// Identifies the raw store operation for an `@intrinsic` declaration.
     RawStore,
+    /// Identifies the raw size operation for an `@intrinsic` declaration.
     DreamRawSize,
+    /// Identifies the raw alloc operation for an `@intrinsic` declaration.
     DreamRawAlloc,
+    /// Identifies the raw realloc operation for an `@intrinsic` declaration.
     DreamRawRealloc,
+    /// Identifies the raw free operation for an `@intrinsic` declaration.
     DreamRawFree,
+    /// Identifies the raw copy operation for an `@intrinsic` declaration.
     DreamRawCopy,
+    /// Identifies the raw move operation for an `@intrinsic` declaration.
     DreamRawMove,
+    /// Identifies the raw fill operation for an `@intrinsic` declaration.
     DreamRawFill,
+    /// Identifies the arena new operation for an `@intrinsic` declaration.
     DreamArenaNew,
+    /// Identifies the arena alloc operation for an `@intrinsic` declaration.
     DreamArenaAlloc,
+    /// Identifies the arena reset operation for an `@intrinsic` declaration.
     DreamArenaReset,
+    /// Identifies the arena free operation for an `@intrinsic` declaration.
     DreamArenaFree,
+    /// Identifies the yield signal operation for an `@intrinsic` declaration.
     DreamYieldSignal,
+    /// Identifies the yield signal complete operation for an `@intrinsic` declaration.
     DreamYieldSignalComplete,
+    /// Identifies the yield run operation for an `@intrinsic` declaration.
     DreamYieldRun,
+    /// Identifies the print operation for an `@intrinsic` declaration.
     Print,
+    /// Identifies the println operation for an `@intrinsic` declaration.
     Println,
+    /// Identifies the promise all operation for an `@intrinsic` declaration.
     PromiseAll,
+    /// Identifies the promise any operation for an `@intrinsic` declaration.
     PromiseAny,
+    /// Identifies the promise race operation for an `@intrinsic` declaration.
     PromiseRace,
+    /// Identifies the json serialize operation for an `@intrinsic` declaration.
     JsonSerialize,
+    /// Identifies the json deserialize operation for an `@intrinsic` declaration.
     JsonDeserialize,
+    /// Identifies the json from value operation for an `@intrinsic` declaration.
     JsonFromValue,
+    /// Identifies the validation decode operation for an `@intrinsic` declaration.
     ValidationDecode,
+    /// Identifies the validation validate operation for an `@intrinsic` declaration.
     ValidationValidate,
+    /// Identifies the validation schema operation for an `@intrinsic` declaration.
     ValidationSchema,
 
+    /// Identifies the gen attribute id operation for an `@intrinsic` declaration.
     GenAttributeId,
+    /// Identifies the gen attribute decode operation for an `@intrinsic` declaration.
     GenAttributeDecode,
+    /// Identifies the gen attribute decode all operation for an `@intrinsic` declaration.
     GenAttributeDecodeAll,
+    /// Identifies the array new operation for an `@intrinsic` declaration.
     ArrayNew,
+    /// Identifies the buffer zero operation for an `@intrinsic` declaration.
     BufferZero,
+    /// Identifies the sleep operation for an `@intrinsic` declaration.
     Sleep,
+    /// Identifies the string alloc operation for an `@intrinsic` declaration.
     StringAlloc,
+    /// Identifies the string char at unchecked operation for an `@intrinsic` declaration.
     StringCharAtUnchecked,
+    /// Identifies the string builder buffer operation for an `@intrinsic` declaration.
     StringBuilderBuffer,
+    /// Identifies the string builder push double operation for an `@intrinsic` declaration.
     StringBuilderPushDouble,
+    /// Identifies the string clone range operation for an `@intrinsic` declaration.
     StringCloneRange,
+    /// Identifies the string json boundary operation for an `@intrinsic` declaration.
     StringJsonBoundary,
+    /// Identifies the string set operation for an `@intrinsic` declaration.
     StringSet,
+    /// Identifies the string from utf8 operation for an `@intrinsic` declaration.
     StringFromUtf8,
+    /// Identifies the string from utf8 prefix operation for an `@intrinsic` declaration.
     StringFromUtf8Prefix,
+    /// Identifies the string from utf8 prefix n operation for an `@intrinsic` declaration.
     StringFromUtf8PrefixN,
+    /// Identifies the string substring raw operation for an `@intrinsic` declaration.
     StringSubstringRaw,
+    /// Identifies the string copy utf8 operation for an `@intrinsic` declaration.
     StringCopyUtf8,
+    /// Identifies the string compare operation for an `@intrinsic` declaration.
     StringCompare,
+    /// Identifies the string view eq operation for an `@intrinsic` declaration.
     StringViewEq,
+    /// Identifies the string view compare operation for an `@intrinsic` declaration.
     StringViewCompare,
+    /// Identifies the string view hash operation for an `@intrinsic` declaration.
     StringViewHash,
+    /// Identifies the string view find operation for an `@intrinsic` declaration.
     StringViewFind,
+    /// Identifies the string view rfind operation for an `@intrinsic` declaration.
     StringViewRfind,
+    /// Identifies the string view find char operation for an `@intrinsic` declaration.
     StringViewFindChar,
+    /// Identifies the string view rfind char operation for an `@intrinsic` declaration.
     StringViewRfindChar,
+    /// Identifies the string view count char operation for an `@intrinsic` declaration.
     StringViewCountChar,
+    /// Identifies the string builder view operation for an `@intrinsic` declaration.
     StringBuilderView,
+    /// Identifies the debug get free list head operation for an `@intrinsic` declaration.
     DebugGetFreeListHead,
+    /// Identifies the debug get heap ptr operation for an `@intrinsic` declaration.
     DebugGetHeapPtr,
+    /// Identifies the debug get live objects operation for an `@intrinsic` declaration.
     DebugGetLiveObjects,
+    /// Identifies the debug get total allocations operation for an `@intrinsic` declaration.
     DebugGetTotalAllocations,
+    /// Identifies the debug get ref count operation for an `@intrinsic` declaration.
     DebugGetRefCount,
+    /// Identifies the debug get runtime counter operation for an `@intrinsic` declaration.
     DebugGetRuntimeCounter,
+    /// Identifies the to bytes operation for an `@intrinsic` declaration.
     ToBytes,
+    /// Identifies the from bytes operation for an `@intrinsic` declaration.
     FromBytes,
+    /// Identifies the array realloc operation for an `@intrinsic` declaration.
     ArrayRealloc,
+    /// Identifies the array elems copy operation for an `@intrinsic` declaration.
     ArrayElemsCopy,
+    /// Identifies the array elems fill operation for an `@intrinsic` declaration.
     ArrayElemsFill,
+    /// Identifies the force free operation for an `@intrinsic` declaration.
     ForceFree,
+    /// Identifies the array get unchecked operation for an `@intrinsic` declaration.
     ArrayGetUnchecked,
+    /// Identifies the array set unchecked operation for an `@intrinsic` declaration.
     ArraySetUnchecked,
+    /// Identifies the wire encode operation for an `@intrinsic` declaration.
     WireEncode,
+    /// Identifies the wire decode operation for an `@intrinsic` declaration.
     WireDecode,
+    /// Identifies the panic operation for an `@intrinsic` declaration.
     DreamPanic,
+    /// Identifies the regex compile operation for an `@intrinsic` declaration.
     RegexCompile,
+    /// Identifies the regex free operation for an `@intrinsic` declaration.
     RegexFree,
+    /// Identifies the regex find operation for an `@intrinsic` declaration.
     RegexFind,
+    /// Identifies the regex find all operation for an `@intrinsic` declaration.
     RegexFindAll,
+    /// Identifies the regex group count operation for an `@intrinsic` declaration.
     RegexGroupCount,
+    /// Identifies the regex name count operation for an `@intrinsic` declaration.
     RegexNameCount,
+    /// Identifies the regex name at operation for an `@intrinsic` declaration.
     RegexNameAt,
+    /// Identifies the regex name number operation for an `@intrinsic` declaration.
     RegexNameNumber,
+    /// Identifies the simd lane count operation for an `@intrinsic` declaration.
     SimdLaneCount,
+    /// Identifies the simd v128 splat operation for an `@intrinsic` declaration.
     SimdV128Splat,
+    /// Identifies the simd v128 load operation for an `@intrinsic` declaration.
     SimdV128Load,
+    /// Identifies the simd v128 store operation for an `@intrinsic` declaration.
     SimdV128Store,
+    /// Identifies the simd v128 add operation for an `@intrinsic` declaration.
     SimdV128Add,
+    /// Identifies the simd v128 sub operation for an `@intrinsic` declaration.
     SimdV128Sub,
+    /// Identifies the simd v128 mul operation for an `@intrinsic` declaration.
     SimdV128Mul,
+    /// Identifies the simd v128 min operation for an `@intrinsic` declaration.
     SimdV128Min,
+    /// Identifies the simd v128 max operation for an `@intrinsic` declaration.
     SimdV128Max,
+    /// Identifies the simd v128 sum operation for an `@intrinsic` declaration.
     SimdV128Sum,
+    /// Identifies the callback register operation for an `@intrinsic` declaration.
     DreamCallbackRegister,
+    /// Identifies the callback unregister operation for an `@intrinsic` declaration.
     DreamCallbackUnregister,
+    /// Identifies the funcbox new operation for an `@intrinsic` declaration.
     FuncboxNew,
+    /// Identifies the funcbox funcidx operation for an `@intrinsic` declaration.
     FuncboxFuncidx,
+    /// Identifies the funcbox env operation for an `@intrinsic` declaration.
     FuncboxEnv,
+    /// Identifies the array slot swap operation for an `@intrinsic` declaration.
     ArraySlotSwap,
+    /// Identifies the buffer is string operation for an `@intrinsic` declaration.
     BufferIsString,
+    /// Identifies the array slot take operation for an `@intrinsic` declaration.
     ArraySlotTake,
+    /// Identifies the regex test operation for an `@intrinsic` declaration.
     RegexTest,
+    /// Identifies the channel new operation for an `@intrinsic` declaration.
     DreamChannelNew,
+    /// Identifies the channel free operation for an `@intrinsic` declaration.
     DreamChannelFree,
+    /// Identifies the channel endpoint operation for an `@intrinsic` declaration.
     DreamChannelEndpoint,
+    /// Identifies the channel close operation for an `@intrinsic` declaration.
     DreamChannelClose,
+    /// Identifies the channel endpoint free operation for an `@intrinsic` declaration.
     DreamChannelEndpointFree,
+    /// Identifies the channel send operation for an `@intrinsic` declaration.
     DreamChannelSend,
+    /// Identifies the channel receive operation for an `@intrinsic` declaration.
     DreamChannelReceive,
+    /// Identifies the channel status operation for an `@intrinsic` declaration.
     DreamChannelStatus,
+    /// Identifies the channel wait operation for an `@intrinsic` declaration.
     DreamChannelWait,
+    /// Identifies the task keep alive operation for an `@intrinsic` declaration.
     DreamTaskKeepAlive,
+    /// Identifies the task is protected operation for an `@intrinsic` declaration.
     DreamTaskIsProtected,
+    /// Identifies the task has context operation for an `@intrinsic` declaration.
     DreamTaskHasContext,
+    /// Identifies the task context operation for an `@intrinsic` declaration.
     DreamTaskContext,
+    /// Identifies the task attach operation for an `@intrinsic` declaration.
     DreamTaskAttach,
+    /// Identifies the task protect operation for an `@intrinsic` declaration.
     DreamTaskProtect,
+    /// Identifies the cancellation new operation for an `@intrinsic` declaration.
     DreamCancellationNew,
+    /// Identifies the cancellation release operation for an `@intrinsic` declaration.
     DreamCancellationRelease,
+    /// Identifies the cancellation is cancelled operation for an `@intrinsic` declaration.
     DreamCancellationIsCancelled,
+    /// Identifies the cancellation cancel operation for an `@intrinsic` declaration.
     DreamCancellationCancel,
+    /// Identifies the cancellation register operation for an `@intrinsic` declaration.
     DreamCancellationRegister,
+    /// Identifies the cancellation signal operation for an `@intrinsic` declaration.
     DreamCancellationSignal,
+    /// Identifies the cancellation unregister operation for an `@intrinsic` declaration.
     DreamCancellationUnregister,
+    /// Identifies the ffi free with operation for an `@intrinsic` declaration.
     DreamFfiFreeWith,
+    /// Identifies the ffi read ptr operation for an `@intrinsic` declaration.
     DreamFfiReadPtr,
+    /// Identifies the ffi read cstring operation for an `@intrinsic` declaration.
     DreamFfiReadCstring,
+    /// Identifies the ffi read i32 operation for an `@intrinsic` declaration.
     DreamFfiReadI32,
+    /// Identifies the ffi read i64 operation for an `@intrinsic` declaration.
     DreamFfiReadI64,
+    /// Identifies the ffi read f64 operation for an `@intrinsic` declaration.
     DreamFfiReadF64,
+    /// Identifies the shared lock acquire operation for an `@intrinsic` declaration.
     SharedLockAcquire,
+    /// Identifies the shared lock release operation for an `@intrinsic` declaration.
     SharedLockRelease,
+    /// Identifies the shared lock try acquire operation for an `@intrinsic` declaration.
     SharedLockTryAcquire,
+    /// Identifies the shared lock try acquire for operation for an `@intrinsic` declaration.
     SharedLockTryAcquireFor,
+    /// Identifies the array store16 operation for an `@intrinsic` declaration.
     ArrayStore16,
+    /// Identifies the string from builder operation for an `@intrinsic` declaration.
     StringFromBuilder,
+    /// Identifies the string clone operation for an `@intrinsic` declaration.
     StringClone,
+    /// Identifies the utf8 decode at operation for an `@intrinsic` declaration.
     Utf8DecodeAt,
+    /// Identifies the utf8 width at operation for an `@intrinsic` declaration.
     Utf8WidthAt,
+    /// Identifies the string builder push operation for an `@intrinsic` declaration.
     StringBuilderPush,
+    /// Identifies the string builder push int operation for an `@intrinsic` declaration.
     StringBuilderPushInt,
+    /// Identifies the string builder push long operation for an `@intrinsic` declaration.
     StringBuilderPushLong,
+    /// Identifies the shared semaphore acquire operation for an `@intrinsic` declaration.
     SharedSemaphoreAcquire,
+    /// Identifies the shared semaphore release operation for an `@intrinsic` declaration.
     SharedSemaphoreRelease,
+    /// Identifies the shared semaphore try acquire operation for an `@intrinsic` declaration.
     SharedSemaphoreTryAcquire,
+    /// Identifies the shared semaphore try acquire for operation for an `@intrinsic`
+    /// declaration.
     SharedSemaphoreTryAcquireFor,
+    /// Identifies the cancel operation for an `@intrinsic` declaration.
     DreamCancel,
+    /// Identifies the start operation for an `@intrinsic` declaration.
     DreamStart,
 }

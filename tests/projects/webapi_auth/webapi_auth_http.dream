@@ -10,33 +10,88 @@ import webapi_auth_tokens;
 class PrivateRoutes {
     @get("/")
     @requires_scopes("read")
-    public static fun read(@dep(CurrentUser) user: AuthPrincipal): string { return user.subject; }
+    public static fun read(@dep(CurrentUser)user: AuthPrincipal): string {
+        return user.subject;
+    }
+
     @post("/")
     @requires_scopes("read")
-    public static fun write(@dep(CurrentUser) user: AuthPrincipal): string { return user.subject; }
+    public static fun write(@dep(CurrentUser)user: AuthPrincipal): string {
+        return user.subject;
+    }
 }
+
 @test
 @timeout(10000)
 async fun webapi_auth_http(): void {
     let key = "0123456789abcdef0123456789abcdef";
-    let auth = AuthService(JwtOptions("issuer", "api", key, key, "HS256"), TestAccounts(Password.hash("password").unwrap()), MemoryAuthStore(), browser_sessions: true, browser_origin: "https://example.com");
-    auth.add_provider(OidcOptions("company", "https://issuer.invalid", "client", "https://example.com/auth/oidc/company/callback")).unwrap();
-    let app = WebApp(); app.include_router(auth.router().unwrap()).unwrap(); app.include_router(PrivateRoutes.router()).unwrap(); app.use(auth.middleware()).unwrap();
-    let port = app.listen("127.0.0.1", 0).await.unwrap(); let base = "http://127.0.0.1:" + port.to_string(); let client = HttpClient();
-    let login = HttpRequest("POST", Url.parse(base + "/auth/login").unwrap()); login.headers.set("Content-Type", "application/json"); login.body = Encoding.utf8_encode("{\"username\":\"dream\",\"password\":\"password\"}");
-    login.headers.set("Origin", "https://wrong.example"); let denied = client.send(login).await.unwrap(); Assert.eq(denied.status, 403); denied.close();
-    login.headers.set("Origin", "https://example.com"); let response = client.send(login).await.unwrap(); Assert.eq(response.status, 200);
-    let cookies = response.headers.get("Set-Cookie").unwrap(); Assert.is_true(cookies.contains("Secure; HttpOnly; SameSite=Lax"));
-    let tokens = Json.deserialize<JsonValue>(response.read_text().await.unwrap()).unwrap(); response.close();
-    let secret = tokens.get_str("refresh_token").unwrap(); let csrf = tokens.get_str("csrf_token").unwrap();
-    let request = HttpRequest("POST", Url.parse(base + "/private").unwrap()); request.headers.set("Cookie", "__Host-dream_session=" + secret);
-    let blocked = client.send(request).await.unwrap(); Assert.eq(blocked.status, 403); blocked.close();
-    request.headers.set("X-CSRF-Token", csrf); let allowed = client.send(request).await.unwrap(); Assert.eq(allowed.status, 200); Assert.eq_str(allowed.read_text().await.unwrap(), "1"); allowed.close();
-    let bearer = HttpRequest.get(Url.parse(base + "/private").unwrap()); bearer.headers.set("Authorization", "Bearer " + tokens.get_str("access_token").unwrap());
-    let authorized = client.send(bearer).await.unwrap(); Assert.eq(authorized.status, 200); authorized.close();
-    bearer.headers.set("Authorization", "Bearer invalid"); let invalid = client.send(bearer).await.unwrap(); Assert.eq(invalid.status, 401); invalid.close();
-    let callback = HttpRequest.get(Url.parse(base + "/auth/oidc/company/callback?state=unknown&code=code").unwrap()); callback.headers.set("Cookie", "__Host-dream_oidc=unknown");
-    let transaction = client.send(callback).await.unwrap(); Assert.eq(transaction.status, 401); transaction.close();
-    Assert.is_true(app.openapi().contains("requestBody")); Assert.is_true(app.openapi().contains("BearerAuth"));
-    app.shutdown(); app.wait().await; client.close().unwrap();
+    let auth = AuthService(
+        JwtOptions("issuer", "api", key, key, "HS256"),
+        TestAccounts(Password.hash("password").unwrap()),
+        MemoryAuthStore(),
+        browser_sessions: true,
+        browser_origin: "https://example.com"
+    );
+    auth.add_provider(
+        OidcOptions(
+            "company",
+            "https://issuer.invalid",
+            "client",
+            "https://example.com/auth/oidc/company/callback"
+        )
+    ).unwrap();
+    let app = WebApp();
+    app.include_router(auth.router().unwrap()).unwrap();
+    app.include_router(PrivateRoutes.router()).unwrap();
+    app.use(auth.middleware()).unwrap();
+    let port = app.listen("127.0.0.1", 0).await.unwrap();
+    let base = "http://127.0.0.1:" + port.to_string();
+    let client = HttpClient();
+    let login = HttpRequest("POST", Url.parse(base + "/auth/login").unwrap());
+    login.headers.set("Content-Type", "application/json");
+    login.body = Encoding.utf8_encode("{\"username\":\"dream\",\"password\":\"password\"}");
+    login.headers.set("Origin", "https://wrong.example");
+    let denied = client.send(login).await.unwrap();
+    Assert.eq(denied.status, 403);
+    denied.close();
+    login.headers.set("Origin", "https://example.com");
+    let response = client.send(login).await.unwrap();
+    Assert.eq(response.status, 200);
+    let cookies = response.headers.get("Set-Cookie").unwrap();
+    Assert.is_true(cookies.contains("Secure; HttpOnly; SameSite=Lax"));
+    let tokens = Json.deserialize<JsonValue>(response.read_text().await.unwrap()).unwrap();
+    response.close();
+    let secret = tokens.get_str("refresh_token").unwrap();
+    let csrf = tokens.get_str("csrf_token").unwrap();
+    let request = HttpRequest("POST", Url.parse(base + "/private").unwrap());
+    request.headers.set("Cookie", "__Host-dream_session=" + secret);
+    let blocked = client.send(request).await.unwrap();
+    Assert.eq(blocked.status, 403);
+    blocked.close();
+    request.headers.set("X-CSRF-Token", csrf);
+    let allowed = client.send(request).await.unwrap();
+    Assert.eq(allowed.status, 200);
+    Assert.eq_str(allowed.read_text().await.unwrap(), "1");
+    allowed.close();
+    let bearer = HttpRequest.get(Url.parse(base + "/private").unwrap());
+    bearer.headers.set("Authorization", "Bearer " + tokens.get_str("access_token").unwrap());
+    let authorized = client.send(bearer).await.unwrap();
+    Assert.eq(authorized.status, 200);
+    authorized.close();
+    bearer.headers.set("Authorization", "Bearer invalid");
+    let invalid = client.send(bearer).await.unwrap();
+    Assert.eq(invalid.status, 401);
+    invalid.close();
+    let callback = HttpRequest.get(
+        Url.parse(base + "/auth/oidc/company/callback?state=unknown&code=code").unwrap()
+    );
+    callback.headers.set("Cookie", "__Host-dream_oidc=unknown");
+    let transaction = client.send(callback).await.unwrap();
+    Assert.eq(transaction.status, 401);
+    transaction.close();
+    Assert.is_true(app.openapi().contains("requestBody"));
+    Assert.is_true(app.openapi().contains("BearerAuth"));
+    app.shutdown();
+    app.wait().await;
+    client.close().unwrap();
 }

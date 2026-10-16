@@ -41,7 +41,9 @@ public get stdin(): ProcessWriter
 Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
 
 ```dream
-public fun close_stdin(token: Option<CancellationToken> = Option.None): Future<Result<bool, ProcessError>>
+public fun close_stdin(
+    token: Option<CancellationToken> = Option.None
+): Future<Result<bool, ProcessError>>
 ```
 
 ## `wait`

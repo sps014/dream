@@ -1,6 +1,7 @@
 import system.testing;
 // `Array.alloc<T>(n)` allocates a zero-initialized `T[]` of length `n`.
 import system;
+
 @test
 @timeout(180000)
 fun array_alloc(): void {

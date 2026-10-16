@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSnapshot`
+## `GenSnapshot`
 
 Decoded snapshot behind a `GenContext`.
 
@@ -10,115 +10,151 @@ Decoded snapshot behind a `GenContext`.
 public class GenSnapshot
 ```
 
-## `public version: int`
+## `version`
+
+Version identifying this API or snapshot format.
 
 ```dream
 public version: int
 ```
 
-## `public phase: int`
+## `phase`
+
+Current source-generation phase.
 
 ```dream
 public phase: int
 ```
 
-## `public symbols: List<GenSymbol>`
+## `symbols`
+
+Symbols available to the generator.
 
 ```dream
 public symbols: List<GenSymbol>
 ```
 
-## `public compilation_errors: List<GenCompilationError>`
+## `compilation_errors`
+
+Errors available for the generator to inspect.
 
 ```dream
 public compilation_errors: List<GenCompilationError>
 ```
 
-## `public tools: List<GenToolInfo>`
+## `tools`
+
+Tools available to the generator.
 
 ```dream
 public tools: List<GenToolInfo>
 ```
 
-## `public tool_results: List<GenToolResult>`
+## `tool_results`
+
+Results of tool requests made by the generator.
 
 ```dream
 public tool_results: List<GenToolResult>
 ```
 
-## `public referenced: List<GenDecl>`
+## `referenced`
+
+Referenced type declarations available to the generator.
 
 ```dream
 public referenced: List<GenDecl>
 ```
 
-## `public referenced_functions: List<GenFunction>`
+## `referenced_functions`
+
+Referenced function declarations available to the generator.
 
 ```dream
 public referenced_functions: List<GenFunction>
 ```
 
-## `public generator: string`
+## `generator`
+
+Name of the generator being executed.
 
 ```dream
 public generator: string
 ```
 
-## `public generator_id: string`
+## `generator_id`
+
+Stable identifier of the generator being executed.
 
 ```dream
 public generator_id: string
 ```
 
-## `public target: string`
+## `target`
+
+Target declaration or build target associated with this result.
 
 ```dream
 public target: string
 ```
 
-## `public options: JsonValue`
+## `options`
+
+Options supplied to this generator.
 
 ```dream
 public options: JsonValue
 ```
 
-## `public files: List<GenFile>`
+## `files`
+
+Files available to this operation.
 
 ```dream
 public files: List<GenFile>
 ```
 
-## `public index: List<GenIndexEntry>`
+## `index`
+
+Searchable declaration index available to the generator.
 
 ```dream
 public index: List<GenIndexEntry>
 ```
 
-## `public decls: List<GenDecl>`
+## `decls`
+
+Type declarations available to the generator.
 
 ```dream
 public decls: List<GenDecl>
 ```
 
-## `public functions: List<GenFunction>`
+## `functions`
+
+Function declarations available to the generator.
 
 ```dream
 public functions: List<GenFunction>
 ```
 
-## `public blocks: List<GenSyntaxBlock>`
+## `blocks`
+
+Syntax blocks available to the generator.
 
 ```dream
 public blocks: List<GenSyntaxBlock>
 ```
 
-## `public calls: List<GenCallSite>`
+## `calls`
+
+Function call sites available to the generator.
 
 ```dream
 public calls: List<GenCallSite>
 ```
 
-## `public constructor(root: JsonValue)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

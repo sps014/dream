@@ -24,8 +24,13 @@ let result = add(3, 4);
 The return type is optional for functions that return nothing, so these are equivalent:
 
 ```dream
-fun greet() { System.println("hi"); }
-fun greet(): void { System.println("hi"); }
+fun greet() {
+    System.println("hi");
+}
+
+fun greet(): void {
+    System.println("hi");
+}
 ```
 
 ## Returning a value
@@ -34,8 +39,12 @@ Use `return`. Dream checks that every path returns when the return type is not `
 
 ```dream
 fun clamp(value: int, lo: int, hi: int): int {
-    if value < lo { return lo; }
-    if value > hi { return hi; }
+    if value < lo {
+        return lo;
+    }
+    if value > hi {
+        return hi;
+    }
     return value;
 }
 ```
@@ -44,7 +53,9 @@ In a `void` function a bare `return;` exits early:
 
 ```dream
 fun log_positive(n: int): void {
-    if n < 0 { return; }
+    if n < 0 {
+        return;
+    }
     System.println(n);
 }
 ```
@@ -53,7 +64,9 @@ Functions can call themselves — recursion works as expected:
 
 ```dream
 fun fib(n: int): int {
-    if n <= 1 { return n; }
+    if n <= 1 {
+        return n;
+    }
     return fib(n - 1) + fib(n - 2);
 }
 ```

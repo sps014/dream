@@ -2,8 +2,8 @@ import system.testing;
 // Milestone B: a lambda may capture two or more variables (env is an `object[]` array of their
 // shared `CaptureCell<T>`s), and capture is transitive/multi-level — a doubly-nested lambda may reach
 // past its immediate parent to a grandparent's local, forwarded one hop at a time.
-
 import system;
+
 fun c7f_make(a: int, b: int): fun(): fun(): int {
     let c: int = 100;
     // The outer lambda doesn't reference `a`/`b`/`c` itself, but forwards all three to the inner
@@ -32,7 +32,7 @@ fun closure_multi_capture(): void {
         return x + y + z;
     };
     Assert.eq_str((g()).to_string(), "61"); // 61
-    Assert.eq_str((x).to_string(), "11");   // 11 (visible to the enclosing scope too)
+    Assert.eq_str((x).to_string(), "11"); // 11 (visible to the enclosing scope too)
 
     let l1: fun(): fun(): int = c7f_make(1, 2);
     let l2: fun(): int = l1();

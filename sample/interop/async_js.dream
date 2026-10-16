@@ -6,8 +6,8 @@
 // `js.global.fetchUser` binds `js.global` to `globalThis` and reads `fetchUser`; calling it yields a
 // `js` (the Promise handle). `await` on a `js` value desugars to the async `jsAwait` bridge,
 // suspending the task until the Promise settles and yielding the resolved value as another `js`.
-
 import system;
+
 async fun main(): void {
     System.println("fetching...");
 
@@ -18,7 +18,7 @@ async fun main(): void {
 
     switch (user) {
         Some(u) => {
-            let name: string = u.name;        // property read + unbox at the typed binding
+            let name: string = u.name; // property read + unbox at the typed binding
             System.println("user = " + name);
         }
         None => System.println("fetch failed"),

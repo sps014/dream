@@ -12,13 +12,18 @@ class Routes {
     public static async fun echo(ws: ServerWebSocket): void {
         await for (let message in ws.messages()) {
             switch (message) {
-                Text(text) => { ws.send_text(text).await.unwrap(); },
-                Binary(bytes) => { ws.send_binary(bytes).await.unwrap(); },
+                Text(text) => {
+                    ws.send_text(text).await.unwrap();
+                },
+                Binary(bytes) => {
+                    ws.send_binary(bytes).await.unwrap();
+                },
                 Close(_, _) => {},
             }
         }
     }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

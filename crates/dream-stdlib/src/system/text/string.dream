@@ -1,8 +1,7 @@
 module system.text;
 
 // The `string` primitive.
-
-extend string : Comparable<string>, Equatable<string> {
+extend string: Comparable<string>, Equatable<string> {
     // Orders this string against `other` lexicographically.
     public fun compare(borrow other: string): int {
         return string.compare_raw(this, other);
@@ -245,6 +244,8 @@ extend string : Comparable<string>, Equatable<string> {
         return out;
     }
 
+    /// Splits at the first occurrence of `sep`; returns a one-element array when no separator
+    /// is found.
     public fun split_once(borrow sep: string): string[] {
         if sep.is_empty() {
             let whole = Buffer.alloc<string>(1);

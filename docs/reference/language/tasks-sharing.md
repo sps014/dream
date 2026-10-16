@@ -19,16 +19,18 @@ What stays rejected: anything that would copy a non-shared *reference* across th
 ```dream
 async fun main(): void {
     let nums = [1, 2, 3];
-    let r = Task.spawn(() => nums.length);        // nums moves into the task
+    let r = Task.spawn(() => nums.length); // nums moves into the task
     // System.println(nums.length);               // error: use of 'nums' after move
-    System.println(r.await);                      // 3
+    System.println(r.await); // 3
 }
 ```
 
 ```dream
 shared class Counter {
     public value: int;
-    public constructor() { this.value = 0; }
+    public constructor() {
+        this.value = 0;
+    }
 
     public fun increment(): void {
         lock (this) {
@@ -40,13 +42,23 @@ shared class Counter {
 async fun main(): void {
     let counter = Counter();
 
-    let a = Task.spawn(() => { counter.increment(); return 0; });
-    let b = Task.spawn(() => { counter.increment(); return 0; });
+    let a = Task.spawn(
+        () => {
+            counter.increment();
+            return 0;
+        }
+    );
+    let b = Task.spawn(
+        () => {
+            counter.increment();
+            return 0;
+        }
+    );
 
     a.await;
     b.await;
 
-    System.println(counter.value);   // 2
+    System.println(counter.value); // 2
 }
 ```
 

@@ -2,9 +2,9 @@ import system.testing;
 // `StringBuilder`: incremental append, `append_char`/`append_line`, `clear`, `build`, growth past
 // the initial capacity, and the `override to_string()` that makes `print`/`+`/interpolation use
 // it automatically.
-
 import system;
 import system.text;
+
 fun c20f_body(): void {
     let sb = StringBuilder();
     c20f_verify_observation((sb.is_empty()).to_string());
@@ -52,5 +52,10 @@ fun c20f_verify_observation(borrow value: string): void {
 fun string_builder(): void {
     c20f_cursor = 0;
     c20f_body();
-    Assert.eq(c20f_cursor, ("true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n").length);
+    Assert.eq(
+        c20f_cursor,
+        (
+            "true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n"
+        ).length
+    );
 }

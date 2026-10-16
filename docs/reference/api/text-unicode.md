@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/string.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Unicode`
+## `Unicode`
 
 ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
 

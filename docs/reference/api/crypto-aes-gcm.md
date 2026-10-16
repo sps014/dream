@@ -39,7 +39,12 @@ public static fun generate_nonce(): Result<byte[], CryptoError>
 Encrypts `plaintext` under `key`/`nonce`, authenticating `aad` (additional authenticated data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte authentication tag appended. `nonce` must be exactly `nonce_size` bytes and must never be reused with the same key.
 
 ```dream
-public static fun encrypt(key: AesGcmKey, nonce: byte[], plaintext: byte[], aad: byte[]): Result<byte[], CryptoError>
+public static fun encrypt(
+    key: AesGcmKey,
+    nonce: byte[],
+    plaintext: byte[],
+    aad: byte[]
+): Result<byte[], CryptoError>
 ```
 
 ## `decrypt`
@@ -47,5 +52,10 @@ public static fun encrypt(key: AesGcmKey, nonce: byte[], plaintext: byte[], aad:
 Decrypts and authenticates `ciphertext` (as produced by `encrypt`, tag included) under `key`/`nonce`/`aad`. Returns an error if the nonce length is wrong or authentication fails (tampered ciphertext, wrong key/nonce/aad, or truncated input).
 
 ```dream
-public static fun decrypt(key: AesGcmKey, nonce: byte[], ciphertext: byte[], aad: byte[]): Result<byte[], CryptoError>
+public static fun decrypt(
+    key: AesGcmKey,
+    nonce: byte[],
+    ciphertext: byte[],
+    aad: byte[]
+): Result<byte[], CryptoError>
 ```

@@ -24,20 +24,37 @@ public static class Process {
     }
 
     // Runs a command, concurrently drains both outputs, and closes stdin after sending input.
-    public static fun run(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>> {
+    public static fun run(
+        cmd: string,
+        args: string[],
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ProcessOutput, ProcessError>> {
         return Process.run(cmd, args, ProcessOptions(), token);
     }
 
     // Runs with explicit environment, input, output limits, and an optional deadline.
-    public static fun run(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>> {
+    public static fun run(
+        cmd: string,
+        args: string[],
+        options: ProcessOptions,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ProcessOutput, ProcessError>> {
         let request = JsonValue.dict();
         request.set("action", JsonValue.from_string("run"));
         request.set("command", JsonValue.from_string(cmd));
         request.set("options", options.wire());
-        return Process.run_owned(request, Process.encode_args(args), CancellationToken.resolve(token));
+        return Process.run_owned(
+            request,
+            Process.encode_args(args),
+            CancellationToken.resolve(token)
+        );
     }
 
-    static async fun run_owned(request: JsonValue, args: byte[], token: Option<CancellationToken>): Result<ProcessOutput, ProcessError> {
+    static async fun run_owned(
+        request: JsonValue,
+        args: byte[],
+        token: Option<CancellationToken>
+    ): Result<ProcessOutput, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
         let operation = ProcessOperation(request, args);
         let completed = operation.wait(token).await;
@@ -52,32 +69,61 @@ public static class Process {
     }
 
     // Runs a command in a specific working directory with otherwise default options.
-    public static fun run_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ProcessOutput, ProcessError>> {
-        let options = ProcessOptions(); options.cwd = cwd;
+    public static fun run_in(
+        cmd: string,
+        args: string[],
+        cwd: string,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ProcessOutput, ProcessError>> {
+        let options = ProcessOptions();
+        options.cwd = cwd;
         return Process.run(cmd, args, options, token);
     }
 
     // Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
-    public static fun spawn(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>> {
+    public static fun spawn(
+        cmd: string,
+        args: string[],
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ChildProcess, ProcessError>> {
         return Process.spawn(cmd, args, ProcessOptions(), token);
     }
 
     // Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
-    public static fun spawn(cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>> {
+    public static fun spawn(
+        cmd: string,
+        args: string[],
+        options: ProcessOptions,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ChildProcess, ProcessError>> {
         let request = JsonValue.dict();
         request.set("action", JsonValue.from_string("spawn"));
         request.set("command", JsonValue.from_string(cmd));
         request.set("options", options.wire());
-        return Process.spawn_owned(request, Process.encode_args(args), CancellationToken.resolve(token));
+        return Process.spawn_owned(
+            request,
+            Process.encode_args(args),
+            CancellationToken.resolve(token)
+        );
     }
 
-    static async fun spawn_owned(request: JsonValue, args: byte[], token: Option<CancellationToken>): Result<ChildProcess, ProcessError> {
+    static async fun spawn_owned(
+        request: JsonValue,
+        args: byte[],
+        token: Option<CancellationToken>
+    ): Result<ChildProcess, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
         let operation = ProcessOperation(request, args);
         let result = operation.wait(token).await;
-        if result.is_err() { operation.close(); return Result.Err(result.unwrap_err()); }
+        if result.is_err() {
+            operation.close();
+            return Result.Err(result.unwrap_err());
+        }
         let id = int.parse(Encoding.utf8_decode(result.unwrap()));
-        if id.is_err() { operation.close(); return Result.Err(ProcessError.io("invalid child handle")); }
+        if id.is_err() {
+            operation.close();
+            return Result.Err(ProcessError.io("invalid child handle"));
+        }
         let child = ChildProcess(id.unwrap());
         operation.claim();
         operation.close();
@@ -85,21 +131,36 @@ public static class Process {
     }
 
     // Spawns a child in a specific directory with otherwise default options.
-    public static fun spawn_in(cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None): Future<Result<ChildProcess, ProcessError>> {
-        let options = ProcessOptions(); options.cwd = cwd;
+    public static fun spawn_in(
+        cmd: string,
+        args: string[],
+        cwd: string,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ChildProcess, ProcessError>> {
+        let options = ProcessOptions();
+        options.cwd = cwd;
         return Process.spawn(cmd, args, options, token);
     }
 
     // Captures output and additionally treats nonzero exit statuses as EEXIT errors.
-    public static async fun run_checked(cmd: string, args: string[], token: Option<CancellationToken> = Option.None): Result<ProcessOutput, ProcessError> {
+    public static async fun run_checked(
+        cmd: string,
+        args: string[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<ProcessOutput, ProcessError> {
         let output = Process.run(cmd, args, token).await?;
-        if !output.success { return Result.Err(ProcessError.failed("process exited with code " + output.exit_code.to_string())); }
+        if !output.success {
+            return Result.Err(
+                ProcessError.failed("process exited with code " + output.exit_code.to_string())
+            );
+        }
         return Result.Ok(output);
     }
 
     // Finds an existing nondirectory command path, directly or by searching `PATH`.
     // This does not validate execute permissions or expand platform-specific extensions.
-    @native @node
+    @native
+    @node
     public static fun which(cmd: string): Option<string> {
         if cmd.is_empty() {
             return Option.None;

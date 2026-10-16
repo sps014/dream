@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun c181_double_int(n: int): int {
     return n * 2;
 }

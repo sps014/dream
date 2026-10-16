@@ -9,5 +9,6 @@ name = "dream_format"
 path = "src/lib.rs"
 
 [dependencies]
+bumpalo = "3.20.3"
 dream-syntax = { path = "../dream-syntax" }
 dream-diagnostics = { path = "../dream-diagnostics" }

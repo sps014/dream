@@ -55,28 +55,39 @@ fun c13c_body(): void {
         c13c_fill(dst, lhs, rhs, n);
         i = 0;
         while i < n {
-            if dst[i] != 2147483647 + (i + 1) { System.panic("sum mismatch"); }
+            if dst[i] != 2147483647 + (i + 1) {
+                System.panic("sum mismatch");
+            }
             total = total + 1;
             i = i + 1;
         }
         c13c_fill(lhs, lhs, rhs, n);
         i = 0;
         while i < n {
-            if lhs[i] != dst[i] { System.panic("alias mismatch"); }
+            if lhs[i] != dst[i] {
+                System.panic("alias mismatch");
+            }
             i = i + 1;
         }
     }
     c13c_verify_observation((total).to_string());
     c13c_verify_observation(("hé🙂z".length).to_string());
     let values: double[] = [1e20, 1, -1e20, 3];
-    if c13c_fold(values) != 3 { System.panic("floating-point reassociation"); }
+    if c13c_fold(values) != 3 {
+        System.panic("floating-point reassociation");
+    }
     let overlap = Buffer.alloc<int>(34);
     let i = 0;
-    while i < overlap.length { overlap[i] = 1; i = i + 1; }
+    while i < overlap.length {
+        overlap[i] = 1;
+        i = i + 1;
+    }
     c13c_shift(Span<int>(overlap, 1, 33), Span<int>(overlap, 0, 33));
     i = 0;
     while i < overlap.length {
-        if overlap[i] != i + 1 { System.panic("overlapping loop dependence"); }
+        if overlap[i] != i + 1 {
+            System.panic("overlapping loop dependence");
+        }
         i = i + 1;
     }
     let a = Buffer.alloc<float>(17);
@@ -84,7 +95,11 @@ fun c13c_body(): void {
     let c = Buffer.alloc<float>(17);
     let infinity: float = (float)1 / (float)0;
     i = 0;
-    while i < a.length { a[i] = -(float)0; b[i] = -(float)0; i = i + 1; }
+    while i < a.length {
+        a[i] = -(float)0;
+        b[i] = -(float)0;
+        i = i + 1;
+    }
     a[0] = infinity;
     b[0] = -infinity;
     a[1] = infinity;
@@ -92,11 +107,17 @@ fun c13c_body(): void {
     a[2] = -infinity;
     b[2] = 1;
     c13c_fill_float(c, a, b);
-    if c[0] == c[0] { System.panic("NaN propagation"); }
-    if (c[1] != infinity) || (c[2] != -infinity) { System.panic("infinity propagation"); }
+    if c[0] == c[0] {
+        System.panic("NaN propagation");
+    }
+    if (c[1] != infinity) || (c[2] != -infinity) {
+        System.panic("infinity propagation");
+    }
     i = 3;
     while i < c.length {
-        if (float)1 / c[i] != -infinity { System.panic("signed zero propagation"); }
+        if (float)1 / c[i] != -infinity {
+            System.panic("signed zero propagation");
+        }
         i = i + 1;
     }
 }

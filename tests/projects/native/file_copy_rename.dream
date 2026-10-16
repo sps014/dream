@@ -7,13 +7,17 @@ async fun ccf_body(): void {
     File.create_dir(root).await;
     File.write(root + "/src.txt", "abc").await;
     switch (File.copy(root + "/src.txt", root + "/dst.txt").await) {
-        Ok(_) => ccf_verify_observation(((File.read(root + "/dst.txt").await).unwrap_or("")).to_string()),
+        Ok(_) => ccf_verify_observation(
+            ((File.read(root + "/dst.txt").await).unwrap_or("")).to_string()
+        ),
         Err(e) => ccf_verify_observation((e.message()).to_string()),
     }
     switch (File.rename(root + "/dst.txt", root + "/renamed.txt").await) {
         Ok(_) => {
             ccf_verify_observation((File.exists(root + "/dst.txt")).to_string());
-            ccf_verify_observation(((File.read(root + "/renamed.txt").await).unwrap_or("")).to_string());
+            ccf_verify_observation(
+                ((File.read(root + "/renamed.txt").await).unwrap_or("")).to_string()
+            );
         },
         Err(e) => ccf_verify_observation((e.message()).to_string()),
     }

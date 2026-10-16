@@ -4,7 +4,7 @@
 
 See [model validation](../../web-apis/validation.md) for strict decoding, constraints, defaults, and callbacks.
 
-## `public struct MinimumAttribute`
+## `MinimumAttribute`
 
 Inclusive lower numeric bound.
 
@@ -12,7 +12,15 @@ Inclusive lower numeric bound.
 public struct MinimumAttribute
 ```
 
-## `public struct MaximumAttribute`
+## `value`
+
+Inclusive minimum numeric value.
+
+```dream
+public value: double
+```
+
+## `MaximumAttribute`
 
 Inclusive upper numeric bound.
 
@@ -20,7 +28,15 @@ Inclusive upper numeric bound.
 public struct MaximumAttribute
 ```
 
-## `public struct MinLengthAttribute`
+## `value`
+
+Inclusive maximum numeric value.
+
+```dream
+public value: double
+```
+
+## `MinLengthAttribute`
 
 Minimum string or collection length.
 
@@ -28,7 +44,15 @@ Minimum string or collection length.
 public struct MinLengthAttribute
 ```
 
-## `public struct MaxLengthAttribute`
+## `value`
+
+Minimum number of characters or collection elements.
+
+```dream
+public value: int
+```
+
+## `MaxLengthAttribute`
 
 Maximum string or collection length.
 
@@ -36,7 +60,15 @@ Maximum string or collection length.
 public struct MaxLengthAttribute
 ```
 
-## `public struct PatternAttribute`
+## `value`
+
+Maximum number of characters or collection elements.
+
+```dream
+public value: int
+```
+
+## `PatternAttribute`
 
 Regular expression required for a string.
 
@@ -44,7 +76,15 @@ Regular expression required for a string.
 public struct PatternAttribute
 ```
 
-## `public struct DefaultJsonAttribute`
+## `value`
+
+Regular expression that the input string must match.
+
+```dream
+public value: string
+```
+
+## `DefaultJsonAttribute`
 
 JSON encoded field default, applied only when the property is absent.
 
@@ -52,7 +92,15 @@ JSON encoded field default, applied only when the property is absent.
 public struct DefaultJsonAttribute
 ```
 
-## `public struct AllowExtraAttribute`
+## `value`
+
+JSON text decoded as the field default when the property is absent.
+
+```dream
+public value: string
+```
+
+## `AllowExtraAttribute`
 
 Permits additional input properties on a model; the default is to reject them.
 
@@ -60,7 +108,7 @@ Permits additional input properties on a model; the default is to reject them.
 public struct AllowExtraAttribute
 ```
 
-## `public struct ValidateWithAttribute`
+## `ValidateWithAttribute`
 
 A synchronous field validator returning an optional error message.
 
@@ -68,7 +116,15 @@ A synchronous field validator returning an optional error message.
 public struct ValidateWithAttribute
 ```
 
-## `public struct ModelValidatorAttribute`
+## `validator`
+
+Synchronous validation function; returns `None` on success or an error message on failure.
+
+```dream
+public validator: DeclarationPath
+```
+
+## `ModelValidatorAttribute`
 
 A static model validator returning structured issues after fields pass validation.
 

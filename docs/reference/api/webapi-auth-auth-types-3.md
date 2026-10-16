@@ -4,80 +4,118 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public name`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public issuer`
+## `issuer`
+
+Identity of the token issuer.
 
 ```dream
 public issuer: string
 ```
 
-## `public client_id`
+## `client_id`
+
+Application identifier registered with the identity provider.
 
 ```dream
 public client_id: string
 ```
 
-## `public client_secret`
+## `client_secret`
+
+Confidential client credential; keep this value secret.
 
 ```dream
 public client_secret: string
 ```
 
-## `public redirect_uri`
+## `redirect_uri`
+
+Registered callback URL receiving the authorization response.
 
 ```dream
 public redirect_uri: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `OidcOptions` with `name`, `issuer`, `client_id`, `redirect_uri`, `client_secret`.
 
 ```dream
-public constructor(name: string, issuer: string, client_id: string, redirect_uri: string, client_secret: string = "")
+public constructor(
+    name: string,
+    issuer: string,
+    client_id: string,
+    redirect_uri: string,
+    client_secret: string = ""
+)
 ```
 
-## `public class AuthTokens`
+## `AuthTokens`
+
+Credentials returned after authentication or refresh. Keep refresh and CSRF tokens secret.
 
 ```dream
 public class AuthTokens
 ```
 
-## `public access_token`
+## `access_token`
+
+Signed token sent with authenticated requests.
 
 ```dream
 public access_token: string
 ```
 
-## `public refresh_token`
+## `refresh_token`
+
+Secret used to obtain a new access token.
 
 ```dream
 public refresh_token: string
 ```
 
-## `public token_type`
+## `token_type`
+
+Authorization scheme returned with the tokens, usually `Bearer`.
 
 ```dream
 public token_type: string
 ```
 
-## `public expires_in`
+## `expires_in`
+
+Access token lifetime in seconds.
 
 ```dream
 public expires_in: int
 ```
 
-## `public csrf_token`
+## `csrf_token`
+
+Token the browser must send to protect cookie-authenticated requests.
 
 ```dream
 public csrf_token: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `AuthTokens` with `access_token`, `refresh_token`, `token_type`, `expires_in`, `csrf_token`.
 
 ```dream
-public constructor(access_token: string, refresh_token: string, token_type: string, expires_in: int, csrf_token: string)
+public constructor(
+    access_token: string,
+    refresh_token: string,
+    token_type: string,
+    expires_in: int,
+    csrf_token: string
+)
 ```

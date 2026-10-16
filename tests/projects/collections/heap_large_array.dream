@@ -2,6 +2,7 @@ import system.testing;
 // Native bump used to mmap 4MiB chunks and still return a pointer for larger
 // payloads (HTTP bodies, `Buffer.alloc`), then memset walked off the mapping.
 import system;
+
 fun cf1_body(): void {
     let n = 5000000;
     let a = Buffer.alloc<byte>(n);

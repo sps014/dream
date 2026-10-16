@@ -3,16 +3,18 @@ import system.testing;
 // to a single bulk static factory call (`from_array`/`from_arrays`), not per-element `push`/`add`/
 // `set` calls. Covers `let` bindings, function arguments, return positions, nested literals, and
 // empty literals (whose element type is inferred entirely from the target/context type).
-
 import system;
 import system.collections;
 import system.text;
+
 fun c88_take_list(xs: List<int>): int {
     return xs.length;
 }
 
 fun c88_make_set(): Set<string> {
-    return {"x", "y", "x"};
+    return {
+        "x", "y", "x"
+    };
 }
 
 @test
@@ -28,12 +30,16 @@ fun collection_literals(): void {
     Assert.eq_str((raw.length).to_string(), "3");
     Assert.eq_str((raw[1]).to_string(), "5");
 
-    let ys: Set<string> = {"a", "b", "c", "a"};
+    let ys: Set<string> = {
+        "a", "b", "c", "a"
+    };
     Assert.eq_str((ys.length).to_string(), "3");
     Assert.eq_str((ys.contains("b")).to_string(), "true");
     Assert.eq_str((ys.contains("z")).to_string(), "false");
 
-    let m: Map<string, int> = {"a": 1, "b": 2};
+    let m: Map<string, int> = {
+        "a": 1, "b": 2
+    };
     Assert.eq_str((m.length).to_string(), "2");
     Assert.eq_str((m.get("a").unwrap_or(-1)).to_string(), "1");
     Assert.eq_str((m.get("b").unwrap_or(-1)).to_string(), "2");

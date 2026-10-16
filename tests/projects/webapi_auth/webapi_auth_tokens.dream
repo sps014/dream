@@ -5,26 +5,67 @@ import system.testing;
 import system.net;
 import system.json;
 
-public class TestAccounts : AuthAccounts {
+public class TestAccounts: AuthAccounts {
     hash: string;
-    public constructor(hash: string) { this.hash = hash; }
-    public async unique fun find_login(login: string): Result<AuthAccount, AuthError> { if login != "dream" { return Result.Err(AuthError("ENOUSER", "unknown account")); } return Result.Ok(AuthAccount("1", this.hash, "read")); }
-    public async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError> { return Result.Ok(AuthAccount(issuer + ":" + subject, "", "read")); }
+    public constructor(hash: string) {
+        this.hash = hash;
+    }
+
+    public async unique fun find_login(login: string): Result<AuthAccount, AuthError> {
+        if login != "dream" {
+            return Result.Err(AuthError("ENOUSER", "unknown account"));
+        }
+        return Result.Ok(AuthAccount("1", this.hash, "read"));
+    }
+
+    public async unique fun link_identity(
+        issuer: string,
+        subject: string,
+        email: string,
+        email_verified: bool
+    ): Result<AuthAccount, AuthError> {
+        return Result.Ok(AuthAccount(issuer + ":" + subject, "", "read"));
+    }
 }
+
 @test
 async fun webapi_auth_tokens(): void {
-    let hash = Password.hash("correct password").unwrap(); Assert.is_true(Password.verify("correct password", hash).unwrap()); Assert.is_true(!Password.verify("wrong", hash).unwrap());
+    let hash = Password.hash("correct password").unwrap();
+    Assert.is_true(Password.verify("correct password", hash).unwrap());
+    Assert.is_true(!Password.verify("wrong", hash).unwrap());
     let key = "0123456789abcdef0123456789abcdef";
-    let service = AuthService(JwtOptions("dream-test", "api", key, key, "HS256"), TestAccounts(hash), MemoryAuthStore());
+    let service = AuthService(
+        JwtOptions("dream-test", "api", key, key, "HS256"),
+        TestAccounts(hash),
+        MemoryAuthStore()
+    );
     Assert.is_true(service.login("dream", "wrong").await.is_err());
-    let tokens = service.login("dream", "correct password").await.unwrap(); Assert.eq(tokens.expires_in, 900);
-    let principal = service.verify(tokens.access_token).await.unwrap(); Assert.eq_str(principal.subject, "1"); Assert.is_true(principal.has_scope("read"));
-    let next = service.refresh(tokens.refresh_token).await.unwrap(); Assert.is_true(service.verify(next.access_token).await.is_ok());
-    Assert.is_true(service.refresh(tokens.refresh_token).await.is_err()); Assert.is_true(service.verify(next.access_token).await.is_err());
-    let other = service.login("dream", "correct password").await.unwrap(); service.logout(other.refresh_token).await.unwrap(); Assert.is_true(service.verify(other.access_token).await.is_err());
+    let tokens = service.login("dream", "correct password").await.unwrap();
+    Assert.eq(tokens.expires_in, 900);
+    let principal = service.verify(tokens.access_token).await.unwrap();
+    Assert.eq_str(principal.subject, "1");
+    Assert.is_true(principal.has_scope("read"));
+    let next = service.refresh(tokens.refresh_token).await.unwrap();
+    Assert.is_true(service.verify(next.access_token).await.is_ok());
+    Assert.is_true(service.refresh(tokens.refresh_token).await.is_err());
+    Assert.is_true(service.verify(next.access_token).await.is_err());
+    let other = service.login("dream", "correct password").await.unwrap();
+    service.logout(other.refresh_token).await.unwrap();
+    Assert.is_true(service.verify(other.access_token).await.is_err());
     Assert.is_true(service.verify("not-a-jwt").await.is_err());
-    let store = MemoryAuthStore(); let original = AuthSession("old", "family", "1", "read", 100L, "csrf"); store.create(original).await.unwrap();
+    let store = MemoryAuthStore();
+    let original = AuthSession("old", "family", "1", "read", 100L, "csrf");
+    store.create(original).await.unwrap();
     store.rotate("old", AuthSession("next", "family", "1", "read", 100L, "csrf"), 1L).await.unwrap();
-    Assert.is_true(store.rotate("old", AuthSession("other", "family", "1", "read", 100L, "csrf"), 1L).await.is_err()); Assert.is_true(!store.active("family", 1L).await);
-    store.put_transaction("state", OidcTransaction("provider", "nonce", "verifier", 100L)).await.unwrap(); store.take_transaction("state", 1L).await.unwrap(); Assert.is_true(store.take_transaction("state", 1L).await.is_err());
+    Assert.is_true(
+        store.rotate("old", AuthSession("other", "family", "1", "read", 100L, "csrf"), 1L)
+            .await
+            .is_err()
+    );
+    Assert.is_true(!store.active("family", 1L).await);
+    store.put_transaction("state", OidcTransaction("provider", "nonce", "verifier", 100L))
+        .await
+        .unwrap();
+    store.take_transaction("state", 1L).await.unwrap();
+    Assert.is_true(store.take_transaction("state", 1L).await.is_err());
 }

@@ -5,8 +5,13 @@ module system.net;
 public class HttpClient {
     id: int;
     // Creates a client; allocation failures are reported by `send`.
-    public constructor() { this.id = HttpClient.create_host(); }
-    del() { HttpClient.close_host(this.id); }
+    public constructor() {
+        this.id = HttpClient.create_host();
+    }
+    del() {
+        HttpClient.close_host(this.id);
+    }
+
     @runtime("netClientCreate")
     static extern fun create_host(): int;
     @runtime("netClientClose")
@@ -15,7 +20,10 @@ public class HttpClient {
     static extern fun send_host(id: int, borrow request: string, borrow bytes: byte[]): int;
 
     // Sends with default options: a 30-second total deadline and the host redirect policy.
-    public async fun send(request: HttpRequest, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+    public async fun send(
+        request: HttpRequest,
+        token: Option<CancellationToken> = Option.None
+    ): Result<HttpResponse, HttpError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
         return lifetime[0].send(request, HttpOptions(), effective_token).await;
@@ -23,44 +31,80 @@ public class HttpClient {
 
     // Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`.
     // Cancellation aborts pending transport work; response ownership transfers to the caller on success.
-    public async fun send(request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {
+    public async fun send(
+        request: HttpRequest,
+        options: HttpOptions,
+        token: Option<CancellationToken> = Option.None
+    ): Result<HttpResponse, HttpError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled")); }
-        if lifetime[0].id <= 0 { return Result.Err(HttpError("ECLOSED", "HTTP client is closed or unavailable")); }
-        if options.timeout_ms < 0 || options.connect_timeout_ms < 0 || options.max_redirects < (0 - 1) {
+        if CancellationToken.is_cancelled_opt(effective_token) {
+            return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled"));
+        }
+        if lifetime[0].id <= 0 {
+            return Result.Err(HttpError("ECLOSED", "HTTP client is closed or unavailable"));
+        }
+        if options.timeout_ms < 0
+            || options.connect_timeout_ms < 0 || options.max_redirects < (0 - 1) {
             return Result.Err(HttpError("EINVAL", "invalid HTTP options"));
         }
-        let operation = HttpOperation(HttpClient.send_host(lifetime[0].id, request.wire(options), request.body));
+        let operation = HttpOperation(
+            HttpClient.send_host(lifetime[0].id, request.wire(options), request.body)
+        );
         let completed = operation.wait(effective_token).await;
-        if completed.is_err() { operation.close(); return Result.Err(completed.unwrap_err()); }
+        if completed.is_err() {
+            operation.close();
+            return Result.Err(completed.unwrap_err());
+        }
         let bytes = completed.unwrap();
         let json = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
-        if json.is_err() { operation.close(); return Result.Err(HttpError("EIO", "invalid HTTP response metadata")); }
+        if json.is_err() {
+            operation.close();
+            return Result.Err(HttpError("EIO", "invalid HTTP response metadata"));
+        }
         let metadata = json.unwrap();
         let response = HttpResponse.from_wire(metadata);
-        if response.is_err() { operation.close(); return response; }
+        if response.is_err() {
+            operation.close();
+            return response;
+        }
         operation.claim();
         operation.close();
         return response;
     }
+
     // Closes idempotently, cancelling pending sends. Previously received bodies remain usable.
     public fun close(): Result<bool, HttpError> {
-        if this.id > 0 { HttpClient.close_host(this.id); this.id = 0; }
+        if this.id > 0 {
+            HttpClient.close_host(this.id);
+            this.id = 0;
+        }
         return Result.Ok(true);
     }
 }
 
 class HttpOperation {
     id: int;
-    internal constructor(id: int) { this.id = id; }
-    del() { this.close(); }
-    internal fun close(): void {
-        if this.id > 0 { HttpOperation.release_host(this.id); this.id = 0; }
+    internal constructor(id: int) {
+        this.id = id;
     }
+    del() {
+        this.close();
+    }
+
+    internal fun close(): void {
+        if this.id > 0 {
+            HttpOperation.release_host(this.id);
+            this.id = 0;
+        }
+    }
+
     @runtime("netOperationPoll")
     static extern fun poll_host(id: int): byte[];
-    internal fun claim(): void { HttpOperation.claim_host(this.id); }
+    internal fun claim(): void {
+        HttpOperation.claim_host(this.id);
+    }
+
     @runtime("netOperationClaim")
     static extern fun claim_host(id: int): void;
     @runtime("netOperationRelease")
@@ -71,26 +115,47 @@ class HttpOperation {
 
     static fun payload(wire: byte[]): byte[] {
         let bytes = Buffer.alloc<byte>(wire.length - 1);
-        for (let i = 0; i < bytes.length; i = i + 1) { bytes[i] = wire[i + 1]; }
+        for (let i = 0; i < bytes.length; i = i + 1) {
+            bytes[i] = wire[i + 1];
+        }
         return bytes;
     }
 
     internal async fun wait(token: Option<CancellationToken>): Result<byte[], HttpError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if lifetime[0].id <= 0 { return Result.Err(HttpError("EBUSY", "HTTP operation capacity exhausted")); }
+        if lifetime[0].id <= 0 {
+            return Result.Err(HttpError("EBUSY", "HTTP operation capacity exhausted"));
+        }
         let pending = HttpOperation.wait_host(lifetime[0].id);
         if effective_token.is_some() {
             let result = effective_token.unwrap().wait(pending).await;
-            if result.is_err() { return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled")); }
-        } else { pending.await; }
+            if result.is_err() {
+                return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled"));
+            }
+        } else {
+            pending.await;
+        }
         let wire = HttpOperation.poll_host(lifetime[0].id);
-        if wire.length == 0 { return Result.Err(HttpError("EIO", "invalid HTTP completion")); }
-        if wire[0] == (byte)1 { return Result.Ok(HttpOperation.payload(wire)); }
+        if wire.length == 0 {
+            return Result.Err(HttpError("EIO", "invalid HTTP completion"));
+        }
+        if wire[0] == (byte)1 {
+            return Result.Ok(HttpOperation.payload(wire));
+        }
         if wire[0] == (byte)2 {
-            let error = Json.deserialize<JsonValue>(Encoding.utf8_decode(HttpOperation.payload(wire)));
-            if error.is_err() { return Result.Err(HttpError("EIO", "invalid HTTP error completion")); }
-            return Result.Err(HttpError(error.unwrap().at("code").as_string().unwrap_or("EIO"), error.unwrap().at("message").as_string().unwrap_or("HTTP failed")));
+            let error = Json.deserialize<JsonValue>(
+                Encoding.utf8_decode(HttpOperation.payload(wire))
+            );
+            if error.is_err() {
+                return Result.Err(HttpError("EIO", "invalid HTTP error completion"));
+            }
+            return Result.Err(
+                HttpError(
+                    error.unwrap().at("code").as_string().unwrap_or("EIO"),
+                    error.unwrap().at("message").as_string().unwrap_or("HTTP failed")
+                )
+            );
         }
         return Result.Err(HttpError("EIO", "HTTP operation woke before completion"));
     }
@@ -103,80 +168,153 @@ public class HttpResponse {
     header_values: HttpHeaders;
     body_value: HttpBody;
     internal constructor(status: int, url: Url, headers: HttpHeaders, body: HttpBody) {
-        this.status_value = status; this.url_value = url; this.header_values = headers; this.body_value = body;
+        this.status_value = status;
+        this.url_value = url;
+        this.header_values = headers;
+        this.body_value = body;
     }
+
     internal static fun from_wire(value: JsonValue): Result<HttpResponse, HttpError> {
         let url = Url.parse(value.at("url").as_string().unwrap_or(""));
         let body = HttpBody(value.at("body").as_int().unwrap_or(0));
-        if url.is_err() { body.close()?; return Result.Err(HttpError("EIO", "invalid response URL")); }
-        return Result.Ok(HttpResponse(value.at("status").as_int().unwrap_or(0), url.unwrap(), HttpHeaders.from_wire(value.at("headers")), body));
+        if url.is_err() {
+            body.close()?;
+            return Result.Err(HttpError("EIO", "invalid response URL"));
+        }
+        return Result.Ok(
+            HttpResponse(
+                value.at("status").as_int().unwrap_or(0),
+                url.unwrap(),
+                HttpHeaders.from_wire(value.at("headers")),
+                body
+            )
+        );
     }
+
     // Numeric HTTP status; non-2xx responses are successful transport results.
-    public get status(): int { return this.status_value; }
+    public get status(): int {
+        return this.status_value;
+    }
+
     // Final URL after any redirects visible to the host.
-    public get url(): Url { return this.url_value; }
+    public get url(): Url {
+        return this.url_value;
+    }
+
     // Response headers visible to the host; browser CORS rules can hide some headers.
-    public get headers(): HttpHeaders { return this.header_values; }
+    public get headers(): HttpHeaders {
+        return this.header_values;
+    }
+
     // Byte stream owned by this response; a retained body can be read independently.
-    public get body(): HttpBody { return this.body_value; }
+    public get body(): HttpBody {
+        return this.body_value;
+    }
+
     // Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding.
     // Limit or decoding failures consume input already read; close the response after any failure.
-    public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError> {
+    public async fun read_text(
+        max_bytes: int = 1048576,
+        token: Option<CancellationToken> = Option.None
+    ): Result<string, HttpError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if max_bytes < 0 { return Result.Err(HttpError("EINVAL", "negative response limit")); }
+        if max_bytes < 0 {
+            return Result.Err(HttpError("EINVAL", "negative response limit"));
+        }
         let decoder = Utf8Decoder();
         let text = StringBuilder();
         let count = 0;
         while true {
             let size = max_bytes - count;
-            if size >= 8192 { size = 8192; } else { size = size + 1; }
+            if size >= 8192 {
+                size = 8192;
+            } else {
+                size = size + 1;
+            }
             let read = lifetime[0].body_value.read_async(size, effective_token).await;
-            if read.is_err() { return Result.Err(HttpError(read.unwrap_err().code(), read.unwrap_err().message())); }
+            if read.is_err() {
+                return Result.Err(HttpError(read.unwrap_err().code(), read.unwrap_err().message()));
+            }
             let bytes = read.unwrap();
-            if bytes.length == 0 { break; }
-            if bytes.length > max_bytes - count { return Result.Err(HttpError("ELIMIT", "response body exceeds text limit")); }
+            if bytes.length == 0 {
+                break;
+            }
+            if bytes.length > max_bytes - count {
+                return Result.Err(HttpError("ELIMIT", "response body exceeds text limit"));
+            }
             count = count + bytes.length;
             let decoded = decoder.decode_chunk(bytes);
-            if decoded.is_err() { return Result.Err(HttpError("EENCODING", decoded.unwrap_err().message())); }
+            if decoded.is_err() {
+                return Result.Err(HttpError("EENCODING", decoded.unwrap_err().message()));
+            }
             text.append(decoded.unwrap());
         }
         let trailing = decoder.finish();
-        if trailing.is_err() { return Result.Err(HttpError("EENCODING", trailing.unwrap_err().message())); }
+        if trailing.is_err() {
+            return Result.Err(HttpError("EENCODING", trailing.unwrap_err().message()));
+        }
         text.append(trailing.unwrap());
         return Result.Ok(text.to_string());
     }
+
     // Closes the body idempotently; subsequent reads return `ECLOSED`.
-    public fun close(): Result<bool, HttpError> { return this.body_value.close(); }
+    public fun close(): Result<bool, HttpError> {
+        return this.body_value.close();
+    }
 }
 
 // An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
-public class HttpBody : AsyncReader {
+public class HttpBody: AsyncReader {
     id: int;
-    internal constructor(id: int) { this.id = id; }
-    del() { HttpBody.close_host(this.id); }
+    internal constructor(id: int) {
+        this.id = id;
+    }
+    del() {
+        HttpBody.close_host(this.id);
+    }
+
     @runtime("netBodyRead")
     static extern fun read_host(id: int, count: int): int;
     @runtime("netBodyClose")
     static extern fun close_host(id: int): void;
     // Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
     // Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
-    public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+    public async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
-        if CancellationToken.is_cancelled_opt(effective_token) { return Result.Err(IoError.cancelled()); }
-        if lifetime[0].id <= 0 { return Result.Err(IoError.closed("")); }
-        if max_bytes < 0 { return Result.Err(IoError.invalid("", "negative read size")); }
-        if max_bytes == 0 { return Result.Ok(Buffer.alloc<byte>(0)); }
+        if CancellationToken.is_cancelled_opt(effective_token) {
+            return Result.Err(IoError.cancelled());
+        }
+        if lifetime[0].id <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if max_bytes == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
         let operation = HttpOperation(HttpBody.read_host(lifetime[0].id, max_bytes));
         let result = operation.wait(effective_token).await;
         operation.close();
-        if result.is_err() { return Result.Err(IoError("", result.unwrap_err().code(), result.unwrap_err().message())); }
+        if result.is_err() {
+            return Result.Err(
+                IoError("", result.unwrap_err().code(), result.unwrap_err().message())
+            );
+        }
         return Result.Ok(result.unwrap());
     }
+
     // Releases the response transport and cancels a pending read; safe to call repeatedly.
     public fun close(): Result<bool, HttpError> {
-        if this.id > 0 { HttpBody.close_host(this.id); this.id = 0; }
+        if this.id > 0 {
+            HttpBody.close_host(this.id);
+            this.id = 0;
+        }
         return Result.Ok(true);
     }
 }

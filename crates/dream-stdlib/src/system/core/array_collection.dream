@@ -2,7 +2,9 @@ module system.core;
 
 // `Array.alloc<T>(n)` — user-facing zero-initialized `T[]` allocation. Thin wrapper over the
 // lower-level `Buffer.alloc` intrinsic.
+/// Creates fixed-length arrays whose elements can be accessed with zero-based indices.
 public static class Array {
+    /// Creates an array of `len` default-initialized elements.
     public static fun alloc<T>(len: int): T[] {
         return Buffer.alloc<T>(len);
     }
@@ -34,8 +36,7 @@ public static class Array {
 // Every `T[]` implements `IndexedCollection<T>` (and thus `Collection<T>`). Instantiated on demand
 // for each concrete element type (`int[]`, `Point[]`, …).
 // `this.length` resolves to the builtin `ArrayLen` (checked before instance dispatch).
-
-extend T[] : IndexedCollection<T> {
+extend T[]: IndexedCollection<T> {
     // Builtin array length (resolved as `ArrayLen` before instance dispatch).
     public get length(): int {
         return this.length;
@@ -54,6 +55,7 @@ extend T[] : IndexedCollection<T> {
         return ArrayIterator<T>(this);
     }
 
+    /// Returns whether the collection contains the requested key or value.
     public fun contains(borrow value: T): bool {
         let i = 0;
         while i < this.length {
@@ -65,6 +67,7 @@ extend T[] : IndexedCollection<T> {
         return false;
     }
 
+    /// Returns the first matching index, or `None` when no match exists.
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while i < this.length {
@@ -76,6 +79,7 @@ extend T[] : IndexedCollection<T> {
         return Option.None;
     }
 
+    /// Copies the range from `start` (inclusive) to `end` (exclusive); invalid bounds panic.
     public fun slice(start: int, end: int): T[] {
         let lo = start;
         let hi = end;
@@ -98,6 +102,7 @@ extend T[] : IndexedCollection<T> {
         return out;
     }
 
+    /// Reverses the elements in place.
     public fun reverse(): void {
         let lo = 0;
         let hi = this.length - 1;
@@ -110,6 +115,7 @@ extend T[] : IndexedCollection<T> {
         }
     }
 
+    /// Returns a new array containing this array followed by `other`.
     public fun concat(borrow other: T[]): T[] {
         let n = this.length + other.length;
         let out = Buffer.alloc<T>(n);

@@ -7,10 +7,12 @@
 A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 
 ```dream
-public class Map<K, V> : Collection<KeyValuePair<K, V>>
+public class Map<K, V>: Collection<KeyValuePair<K, V>>
 ```
 
 ## `constructor`
+
+Creates an empty map, reserving space based on `capacity` (8 by default).
 
 ```dream
 public constructor(capacity: int = 8)
@@ -26,11 +28,15 @@ public fun reserve(additional: int): Result<bool, CapacityError>
 
 ## `length`
 
+Number of elements currently stored.
+
 ```dream
 public get length(): int
 ```
 
 ## `capacity`
+
+Number of elements that fit before storage must grow.
 
 ```dream
 public get capacity(): int
@@ -46,11 +52,15 @@ public fun this[key: K] = value: V
 
 ## `set`
 
+Inserts `key` and `value`, replacing the value if the key is already present.
+
 ```dream
 public fun set(key: K, value: V): void
 ```
 
 ## `contains`
+
+Returns whether `key` is present.
 
 ```dream
 public fun contains(borrow key: K): bool
@@ -58,11 +68,15 @@ public fun contains(borrow key: K): bool
 
 ## `set_all`
 
+Inserts corresponding entries from `keys` and `values`; the arrays must have equal lengths.
+
 ```dream
 public fun set_all(borrow keys: K[], borrow values: V[]): void
 ```
 
 ## `from_arrays`
+
+Creates a map from corresponding keys and values; the arrays must have equal lengths.
 
 ```dream
 public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>
@@ -81,19 +95,23 @@ public fun get(borrow key: K): Option<V>
 Value for the `string` key equal to `key`, without building a `string`.
 
 ```dream
-public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K : StringKey
+public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey
 ```
 
 ## `get_or`
 
+Returns the value for `key`, or `fallback` when absent.
+
 ```dream
-public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K : StringKey
+public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K: StringKey
 ```
 
 ## `contains`
 
+Returns whether `key` is present.
+
 ```dream
-public fun contains(borrow key: ReadOnlySpan<char>): bool where K : StringKey
+public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey
 ```
 
 ## `this`
@@ -106,11 +124,15 @@ public fun this[borrow key: K]: V
 
 ## `get_or`
 
+Returns the value for `key`, or `fallback` when absent.
+
 ```dream
 public fun get_or(borrow key: K, fallback: V): V
 ```
 
 ## `get_or_insert`
+
+Returns the existing value, or inserts and returns the result of `factory` when absent.
 
 ```dream
 public fun get_or_insert(key: K, borrow factory: fun(): V): V
@@ -118,11 +140,15 @@ public fun get_or_insert(key: K, borrow factory: fun(): V): V
 
 ## `merge`
 
+Copies entries from `other`, replacing values with matching keys.
+
 ```dream
 public fun merge(borrow other: Map<K, V>): void
 ```
 
 ## `entries`
+
+Returns a new list of key/value pairs.
 
 ```dream
 public fun entries(): List<KeyValuePair<K, V>>
@@ -130,11 +156,15 @@ public fun entries(): List<KeyValuePair<K, V>>
 
 ## `remove`
 
+Removes `key` and its value; returns whether the key was present.
+
 ```dream
 public fun remove(borrow key: K): bool
 ```
 
 ## `is_empty`
+
+Returns whether there are no elements.
 
 ```dream
 public fun is_empty(): bool
@@ -142,17 +172,23 @@ public fun is_empty(): bool
 
 ## `clear`
 
+Removes all entries while keeping storage for reuse.
+
 ```dream
 public fun clear(): void
 ```
 
 ## `clear`
 
+Removes all entries while keeping storage for reuse.
+
 ```dream
-public fun clear(): void where K : unmanaged, V : unmanaged
+public fun clear(): void where K: unmanaged, V: unmanaged
 ```
 
 ## `keys`
+
+Returns a new array containing the keys.
 
 ```dream
 public fun keys(): K[]

@@ -2,7 +2,9 @@
 
 **Import:** `import system.core;`
 
-## `public static class Assets`
+## `Assets`
+
+Access to files embedded with the program.
 
 ```dream
 public static class Assets

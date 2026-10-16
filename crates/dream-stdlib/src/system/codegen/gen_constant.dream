@@ -2,8 +2,11 @@ module system.codegen;
 
 import system.json;
 
+/// A constant value and its kind, as seen by a source generator.
 public class GenConstant {
+    /// Category of this entry.
     public kind: string;
+    /// Value carried by this entry.
     public value: string;
 
     // Decodes an exact compile-time scalar value; absence means no safe constant was inferred.

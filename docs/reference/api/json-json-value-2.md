@@ -8,11 +8,15 @@ Read the [usage guide](../stdlib/json.md) for examples and common tasks. This re
 
 ## `as_map`
 
+Returns the entries when this is an object, otherwise `None`.
+
 ```dream
 public fun as_map(): Option<Map<string, JsonValue>>
 ```
 
 ## `str_or`
+
+Returns the string value, or `fallback` for a different JSON kind.
 
 ```dream
 public fun str_or(fallback: string): string
@@ -20,11 +24,15 @@ public fun str_or(fallback: string): string
 
 ## `int_or`
 
+Returns the integer value, or `fallback` for a different JSON kind.
+
 ```dream
 public fun int_or(fallback: int): int
 ```
 
 ## `bool_or`
+
+Returns the boolean value, or `fallback` for a different JSON kind.
 
 ```dream
 public fun bool_or(fallback: bool): bool
@@ -32,11 +40,15 @@ public fun bool_or(fallback: bool): bool
 
 ## `double_or`
 
+Returns the numeric value, or `fallback` for a different JSON kind.
+
 ```dream
 public fun double_or(fallback: double): double
 ```
 
 ## `get_str`
+
+Returns the named string property, or `None` if missing or not a string.
 
 ```dream
 public fun get_str(borrow key: string): Option<string>
@@ -44,11 +56,15 @@ public fun get_str(borrow key: string): Option<string>
 
 ## `get_int`
 
+Returns the named integer property, or `None` if missing or not numeric.
+
 ```dream
 public fun get_int(borrow key: string): Option<int>
 ```
 
 ## `get_bool`
+
+Returns the named boolean property, or `None` if missing or not a boolean.
 
 ```dream
 public fun get_bool(borrow key: string): Option<bool>
@@ -56,11 +72,15 @@ public fun get_bool(borrow key: string): Option<bool>
 
 ## `get_str_or`
 
+Returns the named string property, or `fallback` if missing or not a string.
+
 ```dream
 public fun get_str_or(borrow key: string, fallback: string): string
 ```
 
 ## `get_int_or`
+
+Returns the named integer property, or `fallback` if missing or not numeric.
 
 ```dream
 public fun get_int_or(borrow key: string, fallback: int): int
@@ -68,11 +88,15 @@ public fun get_int_or(borrow key: string, fallback: int): int
 
 ## `get_or`
 
+Returns the named property, or `fallback` when absent or not an object.
+
 ```dream
 public fun get_or(borrow key: string, fallback: JsonValue): JsonValue
 ```
 
 ## `remove`
+
+Removes the named object property; returns whether it existed.
 
 ```dream
 public fun remove(borrow key: string): bool
@@ -96,6 +120,8 @@ public fun this[borrow key: string]: Option<JsonValue>
 
 ## `get`
 
+Returns the named object property, or `None` if absent or not an object.
+
 ```dream
 public fun get(borrow key: string): Option<JsonValue>
 ```
@@ -117,6 +143,8 @@ public fun this[key: string] = value: JsonValue
 ```
 
 ## `set`
+
+Sets the named property when this value is a JSON object.
 
 ```dream
 public fun set(key: string, value: JsonValue): void
@@ -162,7 +190,7 @@ Appends a value to the array.
 public fun push(value: JsonValue): void
 ```
 
-## `get`
+## `length`
 
 Element count for arrays/objects (0 for scalars).
 

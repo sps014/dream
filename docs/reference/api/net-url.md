@@ -2,7 +2,7 @@
 
 **Import:** `import system.net;`
 
-## `public class Url`
+## `Url`
 
 A normalized absolute URL parsed using the host URL Standard implementation. Query parameters preserve their original encoding until modified.
 
@@ -10,7 +10,7 @@ A normalized absolute URL parsed using the host URL Standard implementation. Que
 public class Url
 ```
 
-## `public static fun parse`
+## `parse`
 
 Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.
 
@@ -18,7 +18,7 @@ Parses and normalizes an absolute URL; relative or malformed input returns `Pars
 public static fun parse(input: string): Result<Url, ParseError>
 ```
 
-## `public fun resolve`
+## `resolve`
 
 Resolves a relative reference against this URL; an absolute reference replaces the base. A trailing slash in the base determines whether its last path component is a directory.
 
@@ -26,7 +26,7 @@ Resolves a relative reference against this URL; an absolute reference replaces t
 public fun resolve(reference: string): Result<Url, ParseError>
 ```
 
-## `public get scheme`
+## `scheme`
 
 Lowercase scheme without the colon delimiter.
 
@@ -34,7 +34,7 @@ Lowercase scheme without the colon delimiter.
 public get scheme(): string
 ```
 
-## `public get host`
+## `host`
 
 Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.
 
@@ -42,7 +42,7 @@ Canonical hostname, with IPv6 brackets when present; empty for URLs without a ho
 public get host(): string
 ```
 
-## `public get path`
+## `path`
 
 Encoded path component; percent escapes remain encoded.
 
@@ -50,7 +50,7 @@ Encoded path component; percent escapes remain encoded.
 public get path(): string
 ```
 
-## `public get query`
+## `query`
 
 Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.
 
@@ -58,7 +58,7 @@ Ordered, mutable query parameters shared with this URL; repeated keys remain dis
 public get query(): UrlQuery
 ```
 
-## `public override fun to_string`
+## `to_string`
 
 Serializes the normalized URL, including query edits and any fragment delimiter.
 
@@ -66,7 +66,7 @@ Serializes the normalized URL, including query edits and any fragment delimiter.
 public override fun to_string(): string
 ```
 
-## `public class UrlQuery`
+## `UrlQuery`
 
 Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).
 
@@ -74,7 +74,7 @@ Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for 
 public class UrlQuery
 ```
 
-## `public get length`
+## `length`
 
 Number of key/value pairs, including repeated keys and empty values.
 
@@ -82,7 +82,7 @@ Number of key/value pairs, including repeated keys and empty values.
 public get length(): int
 ```
 
-## `public fun append`
+## `append`
 
 Appends a decoded key/value pair after existing parameters.
 
@@ -90,7 +90,7 @@ Appends a decoded key/value pair after existing parameters.
 public fun append(key: string, value: string): void
 ```
 
-## `public fun get`
+## `get`
 
 Returns the first decoded value for `key`, or `None` if the key is absent.
 
@@ -98,7 +98,7 @@ Returns the first decoded value for `key`, or `None` if the key is absent.
 public fun get(key: string): Option<string>
 ```
 
-## `public fun get_all`
+## `get_all`
 
 Copies all decoded values for `key` in their original order.
 
@@ -106,7 +106,7 @@ Copies all decoded values for `key` in their original order.
 public fun get_all(key: string): string[]
 ```
 
-## `public fun set`
+## `set`
 
 Replaces the first occurrence in place and removes later duplicates; appends if absent.
 
@@ -114,7 +114,7 @@ Replaces the first occurrence in place and removes later duplicates; appends if 
 public fun set(key: string, value: string): void
 ```
 
-## `public fun remove`
+## `remove`
 
 Removes every occurrence of `key`, preserving the order of remaining pairs.
 
@@ -122,7 +122,7 @@ Removes every occurrence of `key`, preserving the order of remaining pairs.
 public fun remove(key: string): void
 ```
 
-## `public fun clear`
+## `clear`
 
 Removes all parameters and the query delimiter from the URL.
 

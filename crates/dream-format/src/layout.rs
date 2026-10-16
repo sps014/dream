@@ -20,11 +20,26 @@ impl Layout {
         self.cur.push_str(s);
     }
 
+    pub fn verbatim(&mut self, text: &str) {
+        for segment in text.split_inclusive('\n') {
+            if let Some(line) = segment.strip_suffix('\n') {
+                self.cur.push_str(line);
+                self.lines.push(std::mem::take(&mut self.cur));
+            } else {
+                self.cur.push_str(segment);
+            }
+        }
+    }
+
     /// Appends a single separating space unless the line is empty or already space-terminated.
     pub fn space(&mut self) {
         if !self.cur.is_empty() && !self.cur.ends_with(' ') {
             self.cur.push(' ');
         }
+    }
+
+    pub fn column(&self) -> usize {
+        self.cur.chars().count()
     }
 
     pub fn at_line_start(&self) -> bool {

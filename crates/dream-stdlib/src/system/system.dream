@@ -1,7 +1,6 @@
 module system;
 
 // System utilities for console I/O, process control, and terminal colors.
-
 extend System {
     // Prints a value to standard output.
     @intrinsic(Intrinsic.Print)
@@ -17,7 +16,8 @@ extend System {
     @runtime("consoleReadKey")
     static extern fun host_read_key(): char;
 
-    @native @node
+    @native
+    @node
     @runtime("consoleExit")
     static extern fun host_exit(code: int): void;
 
@@ -78,7 +78,8 @@ extend System {
     }
 
     // Terminates the process with the given exit code.
-    @native @node
+    @native
+    @node
     public static fun exit(code: int): void {
         System.host_exit(code);
     }
@@ -126,12 +127,16 @@ extend System {
     }
 
     static fun argument_length(bytes: byte[], cursor: int): int {
-        if bytes.length - cursor < 4 { System.panic("truncated host argument length"); }
+        if bytes.length - cursor < 4 {
+            System.panic("truncated host argument length");
+        }
         let value = 0u;
         for (let i = 0; i < 4; i = i + 1) {
             value = value | ((uint)bytes[cursor + i] << (uint)(i * 8));
         }
-        if value > 2147483647u { System.panic("host argument length exceeds guest limit"); }
+        if value > 2147483647u {
+            System.panic("host argument length exceeds guest limit");
+        }
         return (int)value;
     }
 
@@ -141,18 +146,26 @@ extend System {
         let cursor = 0;
         let count = System.argument_length(wire, cursor);
         cursor = cursor + 4;
-        if count > (wire.length - cursor) / 4 { System.panic("invalid host argument count"); }
+        if count >(wire.length - cursor) / 4 {
+            System.panic("invalid host argument count");
+        }
         let args = Buffer.alloc<string>(count);
         for (let i = 0; i < count; i = i + 1) {
             let size = System.argument_length(wire, cursor);
             cursor = cursor + 4;
-            if size > wire.length - cursor { System.panic("truncated host argument"); }
+            if size > wire.length - cursor {
+                System.panic("truncated host argument");
+            }
             let bytes = Buffer.alloc<byte>(size);
-            for (let j = 0; j < size; j = j + 1) { bytes[j] = wire[cursor + j]; }
+            for (let j = 0; j < size; j = j + 1) {
+                bytes[j] = wire[cursor + j];
+            }
             args[i] = Encoding.utf8_decode(bytes);
             cursor = cursor + size;
         }
-        if cursor != wire.length { System.panic("trailing host argument bytes"); }
+        if cursor != wire.length {
+            System.panic("trailing host argument bytes");
+        }
         return args;
     }
 

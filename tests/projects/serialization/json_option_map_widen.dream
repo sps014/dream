@@ -13,7 +13,12 @@ class c119_Widened {
     public c: Option<bool>;
     public scores: Map<string, int>;
 
-    public constructor(a: Option<int>, b: Option<double>, c: Option<bool>, scores: Map<string, int>) {
+    public constructor(
+        a: Option<int>,
+        b: Option<double>,
+        c: Option<bool>,
+        scores: Map<string, int>
+    ) {
         this.a = a;
         this.b = b;
         this.c = c;
@@ -60,5 +65,10 @@ fun c119_verify_observation(borrow value: string): void {
 fun json_option_map_widen(): void {
     c119_cursor = 0;
     c119_body();
-    Assert.eq(c119_cursor, ("{\"a\":5,\"b\":null,\"c\":true,\"scores\":{\"bob\":20,\"alice\":10}}\n5\ntrue\ntrue\n2\n10\n20\n").length);
+    Assert.eq(
+        c119_cursor,
+        (
+            "{\"a\":5,\"b\":null,\"c\":true,\"scores\":{\"bob\":20,\"alice\":10}}\n5\ntrue\ntrue\n2\n10\n20\n"
+        ).length
+    );
 }

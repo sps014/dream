@@ -3,8 +3,8 @@ import system.testing;
 // locals, parameters, and returns (inline storage, copy semantics, no heap allocation) - the only
 // difference is the compiler additionally rejects any use that would let it escape the current
 // stack frame (see `ref_struct_*_escape.dream`).
-
 import system;
+
 ref struct c1d5_Pair {
     public a: int;
     public b: int;
@@ -25,15 +25,15 @@ fun c1d5_swapped(p: c1d5_Pair): c1d5_Pair {
 
 fun c1d5_body(): void {
     let p = c1d5_Pair(3, 4);
-    c1d5_verify_observation((c1d5_sum(p)).to_string());        // 7
+    c1d5_verify_observation((c1d5_sum(p)).to_string()); // 7
 
     let s = c1d5_swapped(p);
-    c1d5_verify_observation((s.a).to_string());           // 4
-    c1d5_verify_observation((s.b).to_string());           // 3
+    c1d5_verify_observation((s.a).to_string()); // 4
+    c1d5_verify_observation((s.b).to_string()); // 3
 
     // Copying a `ref struct` copies its bytes inline, same as any other value struct.
     let copy = p;
-    c1d5_verify_observation((c1d5_sum(copy)).to_string());     // 7
+    c1d5_verify_observation((c1d5_sum(copy)).to_string()); // 7
 }
 
 let c1d5_cursor: int = 0;

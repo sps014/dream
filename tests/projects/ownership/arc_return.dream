@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 class c1d_Node {
     public val: int;
 

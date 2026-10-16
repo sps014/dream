@@ -1,7 +1,10 @@
 import system.testing;
 import system.codegen;
 
-public enum DecodeProbeMode { First, Second }
+public enum DecodeProbeMode {
+    First,
+    Second
+}
 
 @attribute(AttributeTarget.Function)
 public struct DecodeProbeAttribute {

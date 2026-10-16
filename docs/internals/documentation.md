@@ -2,6 +2,22 @@
 
 The user guides explain how to write Dream programs. The contributor handbook explains how Dream itself works. Keep implementation details in the handbook unless a user needs them to make a decision.
 
+## Write for the reader
+
+Keep each guide focused on a user task. Explain its inputs, setup, result, and failure
+handling on the page. Include imports in complete programs. Use related-guide links
+for optional detail; do not require a repository checkout or a trip to sample folders.
+
+Use the shared formatter for Dream fences. Never put a nonempty function body or
+several statements on one line. Separate logical phases with a blank line, and split
+large workflows into explained steps rather than an uninterrupted code dump.
+
+Every public stdlib declaration needs an attached contract. Use `///` for purpose,
+parameters and units, defaults, results, failures, and restrictions. Ordinary `//`
+comments can describe implementation invariants separately; these must not replace
+or leak into the user-facing contract. The inventory prefers doc comments over
+implementation comments and recognizes wrapped attributes and signatures.
+
 ## When an API changes
 
 Read its declaration and implementation before updating the reference. Check its parameters, defaults, result, failures, and platform restrictions. Update the relevant usage guide and API lookup page together.
@@ -13,11 +29,11 @@ python tooling/docs/api_inventory.py
 python -m unittest discover -s tooling/docs -p "test_*.py"
 ```
 
-If the source changed, update the documentation first. Then refresh the reviewed inventory with `python tooling/docs/api_inventory.py --write`. The check rejects a changed source inventory or a missing signature on its assigned page. It does not grade the quality of an explanation.
+If the source changed, update the documentation first. Then refresh the reviewed inventory with `python tooling/docs/api_inventory.py --write`. The check rejects a changed source inventory, an empty description, or a missing signature on its assigned page. It does not grade the quality of an explanation.
 
 ## Check complete examples
 
-`tooling/docs/example-cases.json` lists complete, self-contained examples and their expected output. Each entry identifies its page and Dream code-block position. Add examples to that list when they can run without external setup.
+`tooling/docs/example-cases.json` lists complete, self-contained examples and their expected output. Each entry identifies its page and Dream code-block position. A multi-file entry can list `files` with their code-block positions and select an `entry` filename. Add examples to that list when they can run without external setup.
 
 ```sh
 cargo build --workspace

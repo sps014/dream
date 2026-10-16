@@ -9,16 +9,23 @@ import system.webapi;
 @router("")
 class Routes {
     @get("/state")
-    public static fun state(ctx: RequestContext): string { return ctx.app_state.get("service").unwrap_or(""); }
+    public static fun state(ctx: RequestContext): string {
+        return ctx.app_state.get("service").unwrap_or("");
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();
-    app.lifespan(async (app: WebApp) => {
-        app.state.set("service", "ready"); return Result.Ok(true);
-    }, async (app: WebApp) => {
-        app.state.clear();
-    }).unwrap();
+    app.lifespan(
+        async (app: WebApp) => {
+            app.state.set("service", "ready");
+            return Result.Ok(true);
+        },
+        async (app: WebApp) => {
+            app.state.clear();
+        }
+    ).unwrap();
     app.run("127.0.0.1", 8000).await.unwrap();
 }
 ```

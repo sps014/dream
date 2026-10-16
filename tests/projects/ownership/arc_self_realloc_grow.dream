@@ -5,7 +5,9 @@ import system;
 
 class c1f_Bucket {
     public names: List<string>;
-    public constructor() { this.names = List<string>(); }
+    public constructor() {
+        this.names = List<string>();
+    }
 }
 
 fun c1f_body(): void {

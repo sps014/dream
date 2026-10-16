@@ -4,15 +4,17 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class CancelledError : Error`
+## `CancelledError`
 
 Error raised when a cooperative cancellation token is already cancelled.
 
 ```dream
-public class CancelledError : Error
+public class CancelledError: Error
 ```
 
 ## `constructor`
+
+Creates a `CancelledError` with `message`.
 
 ```dream
 public constructor(message: string)

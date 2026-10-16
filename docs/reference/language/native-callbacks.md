@@ -17,9 +17,15 @@ error that points at `NativeCallback`.
 ```dream
 import system.interop;
 
-@c("c") extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
+@c("c")
+extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
-qsort(xs, (usize)5, (usize)sizeof(int), (a: CPtr, b: CPtr) => Ffi.read_int(a, 0) - Ffi.read_int(b, 0));
+qsort(
+    xs,
+    (usize)5,
+    (usize)sizeof(int),
+    (a: CPtr, b: CPtr) => Ffi.read_int(a, 0) - Ffi.read_int(b, 0)
+);
 ```
 
 **`NativeCallback<F>`** (in `system`) wraps any `fun`, capturing or not. Use it for C APIs that
@@ -35,7 +41,8 @@ void ticker_on_tick(ticker* t, ticker_fn fn, void* user);
 ```dream
 import system.interop;
 
-@c extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
+@c
+extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
 
 public class Ticker {
     handle: CPtr;

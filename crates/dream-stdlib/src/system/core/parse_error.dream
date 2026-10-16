@@ -1,7 +1,7 @@
 module system.core;
 
 // Parse / format failure implementing `Error` (JSON, numbers, URLs, ISO-8601, …).
-public class ParseError : Error {
+public class ParseError: Error {
     _code: string;
     _message: string;
 

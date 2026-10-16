@@ -4,21 +4,25 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `interface IndexedCollection<T> : Collection<T>`
+## `IndexedCollection`
 
 Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable wherever a `Collection` is expected without re-listing `size` / `iterator`.
 
 ```dream
-public interface IndexedCollection<T> : Collection<T>
+public interface IndexedCollection<T>: Collection<T>
 ```
 
 ## `this`
+
+Accesses the element at `index`; an out-of-range index panics.
 
 ```dream
 fun this[index: int]: T
 ```
 
 ## `get`
+
+Returns the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun get(index: int): T

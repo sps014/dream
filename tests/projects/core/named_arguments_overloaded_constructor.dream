@@ -1,7 +1,7 @@
 import system.testing;
 // Named arguments work on overloaded constructors.
-
 import system;
+
 class c163_Point {
     public x: int;
     public y: int;

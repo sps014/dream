@@ -2,7 +2,7 @@
 
 **Import:** `import system;`
 
-## `public static extern fun print<T>`
+## `print`
 
 Prints a value to standard output.
 
@@ -10,7 +10,7 @@ Prints a value to standard output.
 public static extern fun print<T>(borrow value: T): void
 ```
 
-## `public static extern fun println<T>`
+## `println`
 
 Prints a value to standard output followed by a newline.
 
@@ -18,7 +18,7 @@ Prints a value to standard output followed by a newline.
 public static extern fun println<T>(borrow value: T): void
 ```
 
-## `public static fun read_line`
+## `read_line`
 
 Reads a line of input from stdin.
 
@@ -26,7 +26,7 @@ Reads a line of input from stdin.
 public static fun read_line(): string
 ```
 
-## `public static fun read_key`
+## `read_key`
 
 Reads a single keypress from stdin.
 
@@ -34,7 +34,7 @@ Reads a single keypress from stdin.
 public static fun read_key(): char
 ```
 
-## `public static fun read_int`
+## `read_int`
 
 Reads a line from stdin and parses it as an integer.
 
@@ -42,7 +42,7 @@ Reads a line from stdin and parses it as an integer.
 public static fun read_int(): Result<int, ParseError>
 ```
 
-## `public static fun read_double`
+## `read_double`
 
 Reads a line from stdin and parses it as a double.
 
@@ -50,7 +50,7 @@ Reads a line from stdin and parses it as a double.
 public static fun read_double(): Result<double, ParseError>
 ```
 
-## `public static fun read_bool`
+## `read_bool`
 
 Reads a line from stdin and parses it as a bool (`true`/`false`).
 
@@ -58,7 +58,7 @@ Reads a line from stdin and parses it as a bool (`true`/`false`).
 public static fun read_bool(): Result<bool, ParseError>
 ```
 
-## `public static fun exit`
+## `exit`
 
 Terminates the process with the given exit code.
 
@@ -66,7 +66,7 @@ Terminates the process with the given exit code.
 public static fun exit(code: int): void
 ```
 
-## `public static get platform`
+## `platform`
 
 The current host platform.
 
@@ -74,7 +74,7 @@ The current host platform.
 public static get platform(): Platform
 ```
 
-## `public static get os_family`
+## `os_family`
 
 The OS family on native hosts (Unknown elsewhere).
 
@@ -82,7 +82,7 @@ The OS family on native hosts (Unknown elsewhere).
 public static get os_family(): OsFamily
 ```
 
-## `public static get cpu_time_nanos`
+## `cpu_time_nanos`
 
 User+system CPU time of this process since it started, in nanoseconds (`0` if unknown).
 
@@ -90,7 +90,7 @@ User+system CPU time of this process since it started, in nanoseconds (`0` if un
 public static get cpu_time_nanos(): long
 ```
 
-## `public static get memory_bytes`
+## `memory_bytes`
 
 Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.
 
@@ -98,7 +98,7 @@ Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.
 public static get memory_bytes(): long
 ```
 
-## `public static get is_browser`
+## `is_browser`
 
 True when running under a browser JS host.
 
@@ -106,7 +106,7 @@ True when running under a browser JS host.
 public static get is_browser(): bool
 ```
 
-## `public static get args`
+## `args`
 
 Process arguments exclude the executable and preserve empty strings and embedded newlines.
 
@@ -114,7 +114,7 @@ Process arguments exclude the executable and preserve empty strings and embedded
 public static get args(): string[]
 ```
 
-## `public static get exe_path`
+## `exe_path`
 
 Absolute path of the running executable when known.
 
@@ -122,7 +122,7 @@ Absolute path of the running executable when known.
 public static get exe_path(): Option<string>
 ```
 
-## `public static fun env`
+## `env`
 
 Value of environment variable `name`, or `None` when unset.
 
@@ -130,7 +130,7 @@ Value of environment variable `name`, or `None` when unset.
 public static fun env(borrow name: string): Option<string>
 ```
 
-## `public static fun env_or`
+## `env_or`
 
 Value of environment variable `name`, or `fallback` when unset.
 
@@ -138,7 +138,7 @@ Value of environment variable `name`, or `fallback` when unset.
 public static fun env_or(borrow name: string, fallback: string): string
 ```
 
-## `public static fun set_env`
+## `set_env`
 
 Sets environment variable `name` to `value`.
 
@@ -146,7 +146,7 @@ Sets environment variable `name` to `value`.
 public static fun set_env(borrow name: string, borrow value: string): Result<bool, ArgError>
 ```
 
-## `public static fun has_env`
+## `has_env`
 
 True when environment variable `name` is set.
 
@@ -154,7 +154,7 @@ True when environment variable `name` is set.
 public static fun has_env(borrow name: string): bool
 ```
 
-## `public static fun unset_env`
+## `unset_env`
 
 Unsets environment variable `name`.
 
@@ -162,7 +162,7 @@ Unsets environment variable `name`.
 public static fun unset_env(borrow name: string): Result<bool, ArgError>
 ```
 
-## `public static get env_keys`
+## `env_keys`
 
 Names of all environment variables (empty on hosts without an env block).
 
@@ -170,7 +170,7 @@ Names of all environment variables (empty on hosts without an env block).
 public static get env_keys(): string[]
 ```
 
-## `public static get temp_dir`
+## `temp_dir`
 
 Process temp directory (`TMPDIR` / `GetTempPath` / `"/tmp"` in the browser).
 
@@ -178,7 +178,7 @@ Process temp directory (`TMPDIR` / `GetTempPath` / `"/tmp"` in the browser).
 public static get temp_dir(): string
 ```
 
-## `public static get home_dir`
+## `home_dir`
 
 User home directory when the host provides one.
 
@@ -186,7 +186,7 @@ User home directory when the host provides one.
 public static get home_dir(): Option<string>
 ```
 
-## `public static get cwd`
+## `cwd`
 
 Current working directory.
 

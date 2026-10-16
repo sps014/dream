@@ -2,12 +2,18 @@ module system.text;
 
 // Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).
 public enum RegexFlags {
+    /// No optional matching flags are enabled.
     None = 0,
+    /// Match every occurrence rather than only the first.
     Global = 1,
+    /// Ignore case when matching.
     IgnoreCase = 2,
+    /// Allow line anchors to match individual lines.
     Multiline = 4,
+    /// Allow a dot to match newline characters.
     DotAll = 8,
 
+    /// Returns whether this flag set contains `flag`.
     public fun has(flag: RegexFlags): bool {
         return (this & flag) != RegexFlags.None;
     }

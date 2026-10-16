@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 async fun c31_work(id: int): int {
     Time.sleep(50).await;
     return id * id;

@@ -2,9 +2,11 @@ module system.core;
 
 // Ordered, indexable sequences (`List`). Extends `Collection` so implementers are usable
 // wherever a `Collection` is expected without re-listing `size` / `iterator`.
-public interface IndexedCollection<T> : Collection<T> {
+public interface IndexedCollection<T>: Collection<T> {
+    /// Accesses the element at `index`; an out-of-range index panics.
     fun this[index: int]: T;
 
+    /// Returns the element at `index`; an out-of-range index panics.
     public fun get(index: int): T {
         return this[index];
     }

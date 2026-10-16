@@ -1,11 +1,22 @@
 import system.testing;
 import system;
 
-struct c1ae_WordPair { public signed: isize; public unsigned: usize; }
+struct c1ae_WordPair {
+    public signed: isize;
+    public unsigned: usize;
+}
 
-fun c1ae_signed_step(x: isize): isize { return x - (isize)1; }
-fun c1ae_unsigned_half(x: usize): usize { return x / (usize)2; }
-async fun c1ae_async_word(x: usize): usize { return x + (usize)1; }
+fun c1ae_signed_step(x: isize): isize {
+    return x - (isize)1;
+}
+
+fun c1ae_unsigned_half(x: usize): usize {
+    return x / (usize)2;
+}
+
+async fun c1ae_async_word(x: usize): usize {
+    return x + (usize)1;
+}
 
 @test
 @timeout(180000)
@@ -20,10 +31,10 @@ async fun pointer_integers(): void {
     let maximum: usize = ~(usize)0;
     Assert.eq_str((maximum > unsigned).to_string(), "true");
     Assert.eq_str(((maximum + (usize)1) == (usize)0).to_string(), "true");
-    Assert.eq_str(((maximum >> (usize)(sizeof(usize) * 8 - 1)) == (usize)1).to_string(), "true");
+    Assert.eq_str(((maximum >>(usize)(sizeof(usize) * 8 - 1)) == (usize)1).to_string(), "true");
     let negative: isize = (isize)0 - (isize)1;
     Assert.eq_str((negative < (isize)0).to_string(), "true");
-    Assert.eq_str(((negative >> (isize)1) == negative).to_string(), "true");
+    Assert.eq_str(((negative >>(isize)1) == negative).to_string(), "true");
     let words: usize[] = [unsigned, (usize)9];
     Assert.eq_str((words[1]).to_string(), "9");
     let box: object = unsigned;

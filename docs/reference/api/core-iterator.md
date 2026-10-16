@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `interface Iterator<T>`
+## `Iterator`
 
 Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this. `@next` lives on the implementing class (attributes are not required on the interface).
 
@@ -14,7 +14,7 @@ public interface Iterator<T>
 
 ## `next`
 
-Returns the next element, or `None` when exhausted.
+Returns the next value, or `None` when the sequence has ended.
 
 ```dream
 unique fun next(): Option<T>
@@ -22,7 +22,7 @@ unique fun next(): Option<T>
 
 ## `close`
 
-Ends iteration. The default implementation does nothing; yield cursors release suspended producer state.
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 unique fun close(): void

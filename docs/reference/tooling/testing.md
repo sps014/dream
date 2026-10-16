@@ -72,7 +72,7 @@ There is no default timeout. Give a test a limit in milliseconds with `@timeout`
 @test
 @timeout(2000)
 fun finishes_quickly() {
-    // ...
+// ...
 }
 ```
 

@@ -13,6 +13,7 @@ class Routes {
         return title + ": " + upload.filename + " (" + upload.bytes.length.to_string() + " bytes)";
     }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

@@ -80,7 +80,8 @@ fun main(): void {
         .default_value("port", "8080")
         .cli(parsed)
         .validate("port", (value) => int.parse(value).is_ok())
-        .build().unwrap();
+        .build()
+        .unwrap();
     System.println(config.get_int("port").unwrap());
     System.println(config.source("port").unwrap());
 }
@@ -94,4 +95,123 @@ Existing `@test async fun` tests can use `Assert.eq_async(future, expected)` and
 
 `Fixtures.temporary_file()` and `Fixtures.temporary_directory()` return the same owned temporary resource types used by applications. Explicit close reports failures; destructor cleanup is nonthrowing. Assertion failure exits the test process, so use fallible bodies when cleanup must run before a failure is reported.
 
-The runnable `sample/http_csv_pipeline` example downloads an HTTP response into a temporary file, reads bounded CSV records, prefixes them with UUIDs, and atomically replaces the output. Downloading to a temporary file permits a synchronous CSV reader to consume an async network body while keeping memory bounded.
+## Download and transform CSV
+
+Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUID column
+to each record, and replaces the destination only after writing succeeds. The temporary
+file keeps memory bounded while allowing the synchronous CSV reader to consume a
+network response.
+
+```dream
+import system;
+import system.cli;
+import system.config;
+import system.csv;
+import system.io;
+import system.net;
+import system.uuid;
+
+fun http_failure(error: HttpError): IoError {
+    return IoError.other("", error.message());
+}
+
+async fun convert(url: string, output: string): Result<long, IoError> {
+    let input = TempFile.create()?;
+    let client = HttpClient();
+    let parsed_url = Url.parse(url);
+    if parsed_url.is_err() {
+        return Result.Err(IoError.invalid(url, parsed_url.unwrap_err().message()));
+    }
+    let received = client.send(HttpRequest.get(parsed_url.unwrap())).await;
+    if received.is_err() {
+        client.close();
+        return Result.Err(IoError.other(url, received.unwrap_err().message()));
+    }
+    let response = received.unwrap();
+    if response.status < 200 || response.status >= 300 {
+        response.close();
+        client.close();
+        return Result.Err(IoError.other(url, "HTTP request returned an unsuccessful status"));
+    }
+    let downloaded = Streams.copy_async(response.body, input.file).await;
+    response.close().map_err<IoError>(http_failure)?;
+    client.close().map_err<IoError>(http_failure)?;
+    downloaded?;
+    input.file.seek(0L)?;
+    let output_file = TempFile.create_in(Path.parent(output).unwrap_or("."))?;
+    let destination = output_file.file;
+    let reader = CsvReader(input.file);
+    let writer = CsvWriter(destination);
+    let count = 0L;
+    while true {
+        let next = reader.read_record();
+        if next.is_err() {
+            destination.close();
+            return Result.Err(IoError.other(url, next.unwrap_err().message()));
+        }
+        if next.unwrap().is_none() {
+            break;
+        }
+        let fields = List<string>();
+        let id = Uuid.v4();
+        if id.is_err() {
+            destination.close();
+            return Result.Err(IoError.other(output, id.unwrap_err().message()));
+        }
+        fields.push(id.unwrap().to_string());
+        for (let field in next.unwrap().unwrap()) {
+            fields.push(field);
+        }
+        let written = writer.write_record(fields.take_array());
+        if written.is_err() {
+            destination.close();
+            return Result.Err(IoError.other(output, written.unwrap_err().message()));
+        }
+        count = count + 1L;
+    }
+    let flushed = writer.flush();
+    let closed = destination.close();
+    input.close()?;
+    if flushed.is_err() {
+        return Result.Err(IoError.other(output, flushed.unwrap_err().message()));
+    }
+    closed?;
+    output_file.persist_replace(output)?;
+    return Result.Ok(count);
+}
+
+async fun main(): int {
+    let command = Command("http-csv-pipeline")
+        .description("Download CSV and prefix each record with a UUID")
+        .positional("url", required: true)
+        .string_option("output", short: "o", default_value: "records.csv");
+    let parsed = command.parse(System.args);
+    if parsed.is_err() {
+        System.stderr.write_line(parsed.unwrap_err().message());
+        return 2;
+    }
+    if parsed.unwrap().is_help {
+        System.println(parsed.unwrap().help_text);
+        return 0;
+    }
+    let config = ConfigBuilder().default_value("output", "records.csv").cli(parsed.unwrap()).build();
+    if config.is_err() {
+        System.stderr.write_line(config.unwrap_err().message());
+        return 2;
+    }
+    let result = convert(
+        parsed.unwrap().get_string("url").unwrap(),
+        config.unwrap().get_string("output").unwrap()
+    ).await;
+    if result.is_err() {
+        System.stderr.write_line(result.unwrap_err().message());
+        return 1;
+    }
+    System.println("Wrote " + result.unwrap().to_string() + " records");
+    return 0;
+}
+```
+
+Run `dream run convert.dream -- https://example.com/input.csv -o records.csv`, replacing
+the URL with an accessible CSV resource. Success prints the number of written records.
+Invalid arguments return exit status 2; download, CSV, and filesystem failures return 1.

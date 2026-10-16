@@ -57,5 +57,10 @@ fun c279_verify_observation(borrow value: string): void {
 fun union_named_single_field(): void {
     c279_cursor = 0;
     c279_body();
-    Assert.eq(c279_cursor, ("7\n9\n{\"type\":\"Full\",\"value\":7}\n1\n2\n{\"type\":\"Pos\",\"_0\":3}\n{\"type\":\"Named\",\"x\":4}\n").length);
+    Assert.eq(
+        c279_cursor,
+        (
+            "7\n9\n{\"type\":\"Full\",\"value\":7}\n1\n2\n{\"type\":\"Pos\",\"_0\":3}\n{\"type\":\"Named\",\"x\":4}\n"
+        ).length
+    );
 }

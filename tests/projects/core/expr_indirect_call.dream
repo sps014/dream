@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun ccb_make_adder(n: int): fun(int): int {
     return (x: int) => x + n;
 }

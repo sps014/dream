@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum Option<T>`
+## `Option`
 
 `Option<T>` - a value that is either present (`Some`) or absent (`None`).
 
@@ -12,13 +12,17 @@ Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. Thi
 public enum Option<T>
 ```
 
-## `Some(T)`
+## `Some`
+
+Contains a value of type `T`.
 
 ```dream
 Some(T)
 ```
 
 ## `None`
+
+No value is present.
 
 ```dream
 None
@@ -89,8 +93,6 @@ public fun ok_or<E>(err: E): Result<T, E>
 ```
 
 ## `flatten`
-
-This helper is declared in the library, but calls are currently rejected. See [nested optional values](../stdlib/option-result.md#flatten-nested-optional-values) for a working example using `and_then`.
 
 Collapses `Option<Option<U>>`.
 

@@ -7,7 +7,9 @@ async fun event_value(ms: int): string {
     return "completed 日本語";
 }
 
-async fun event_void(): void { Time.delay(0).await; }
+async fun event_void(): void {
+    Time.delay(0).await;
+}
 
 fun detached_token_wait(): Future<Result<string, CancelledError>> {
     let source = CancellationSource();
@@ -53,7 +55,12 @@ async fun event_cancellation(): void {
     let waiting = worker_source.token.wait(never.token.wait_cancelled());
     Promise.start(waiting);
     Time.delay(1).await;
-    let worker = Task.spawn(() => { worker_source.cancel(); return 0; });
+    let worker = Task.spawn(
+        () => {
+            worker_source.cancel();
+            return 0;
+        }
+    );
     Promise.start(worker);
     Assert.eq_str("worker " + waiting.await.is_err(), "worker true");
     worker.await;

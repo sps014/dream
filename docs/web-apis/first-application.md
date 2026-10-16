@@ -9,8 +9,11 @@ import system.webapi;
 @router("")
 class Routes {
     @get("/hello/{name}")
-    public static fun hello(@path name: string): string { return "Hello, " + name; }
+    public static fun hello(@path name: string): string {
+        return "Hello, " + name;
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

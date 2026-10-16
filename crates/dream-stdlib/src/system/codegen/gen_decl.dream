@@ -6,21 +6,46 @@ import system.json;
 
 // A class, struct, union, enum or interface the generator's triggers selected.
 public class GenDecl {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Name identifying this entry.
     public name: string;
+    /// Category of this entry.
     public kind: DeclKind;
+    /// Fully qualified module containing the declaration.
     public module_name: string;
+    /// Declared access level of this symbol.
     public visibility: string;
+    /// Source location associated with this entry.
     public location: GenLocation;
+    /// Names of the declared type parameters, in order.
     public generics: List<string>;
+    /// Interfaces implemented by the declaration.
     public interfaces: List<GenTypeRef>;
+    /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
+    /// Fields of this type, in declaration order.
     public fields: List<GenField>;
+    /// Methods declared by this type.
     public methods: List<GenFunction>;
+    /// Choices declared by this union or enum, in declaration order.
     public variants: List<GenVariant>;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>) {
+    public constructor(
+        id: string,
+        name: string,
+        kind: DeclKind,
+        module_name: string,
+        visibility: string,
+        location: GenLocation,
+        generics: List<string>,
+        interfaces: List<GenTypeRef>,
+        attributes: List<GenAttribute>,
+        fields: List<GenField>,
+        methods: List<GenFunction>,
+        variants: List<GenVariant>
+    ) {
         this.id = id;
         this.name = name;
         this.kind = kind;

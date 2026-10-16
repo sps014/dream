@@ -9,6 +9,7 @@ class cc7_Note {
     public constructor(text: string) {
         this.text = text;
     }
+
     public fun shout(): string {
         return this.text + "!";
     }
@@ -64,7 +65,9 @@ fun cc7_countdown(n: int): cc7_Res {
 fun cc7_body(): void {
     let r = cc7_fail();
     switch (r) {
-        Ok(_) => { cc7_verify_observation(("unexpected").to_string()); }
+        Ok(_) => {
+            cc7_verify_observation(("unexpected").to_string());
+        }
         Err(n) => {
             let filler = cc7_Note("filler" + 2.to_string());
             cc7_verify_observation((n.shout()).to_string());

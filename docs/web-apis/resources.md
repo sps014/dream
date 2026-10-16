@@ -7,17 +7,29 @@ import system;
 import system.webapi;
 
 fun connection(): DependencyResource<string> {
-    return DependencyResource<string>("connection", async (token: CancellationToken) => { System.println("released"); });
+    return DependencyResource<string>(
+        "connection",
+        async (token: CancellationToken) => {
+            System.println("released");
+        }
+    );
 }
+
 class Overrides {
     @dependency_override(connection)
-    public static fun fake_connection(): string { return "test connection"; }
+    public static fun fake_connection(): string {
+        return "test connection";
+    }
 }
+
 @router("")
 class Routes {
     @get("/resource")
-    public static fun resource(@dep(connection) value: string): string { return value; }
+    public static fun resource(@dep(connection)value: string): string {
+        return value;
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

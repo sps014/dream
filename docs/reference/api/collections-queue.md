@@ -7,7 +7,7 @@
 FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
 
 ```dream
-public class Queue<T> : Collection<T>
+public class Queue<T>: Collection<T>
 ```
 
 ## `constructor`
@@ -79,7 +79,7 @@ public fun clear(): void
 Unmanaged: no RC to release — rewind only.
 
 ```dream
-public fun clear(): void where T : unmanaged
+public fun clear(): void where T: unmanaged
 ```
 
 ## `iterator`

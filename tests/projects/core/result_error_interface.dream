@@ -1,10 +1,9 @@
 import system.testing;
 // `Result<T, MyError>` is assignable to `Result<T, Error>` when `MyError : Error`.
 // `?` rebuilds `Err` at the function's Result type; interface dispatch on `E` still works.
-
 import system;
 
-class c1e8_MyError : Error {
+class c1e8_MyError: Error {
     _m: string;
 
     public constructor(m: string) {
@@ -40,7 +39,9 @@ fun c1e8_via_return(): Result<bool, Error> {
 fun c1e8_body() {
     let r: Result<bool, Error> = c1e8_via_return();
     switch (r) {
-        Ok(_) => { c1e8_verify_observation(("unexpected ok").to_string()); }
+        Ok(_) => {
+            c1e8_verify_observation(("unexpected ok").to_string());
+        }
         Err(e) => {
             c1e8_verify_observation((e.code()).to_string());
             c1e8_verify_observation((e.message()).to_string());
@@ -49,14 +50,22 @@ fun c1e8_body() {
 
     let t = c1e8_via_try();
     switch (t) {
-        Ok(_) => { c1e8_verify_observation(("unexpected try ok").to_string()); }
-        Err(e) => { c1e8_verify_observation((e.code()).to_string()); }
+        Ok(_) => {
+            c1e8_verify_observation(("unexpected try ok").to_string());
+        }
+        Err(e) => {
+            c1e8_verify_observation((e.code()).to_string());
+        }
     }
 
     let lifted: Result<bool, Error> = c1e8_ok();
     switch (lifted) {
-        Ok(v) => { c1e8_verify_observation((v).to_string()); }
-        Err(_) => { c1e8_verify_observation(("unexpected err").to_string()); }
+        Ok(v) => {
+            c1e8_verify_observation((v).to_string());
+        }
+        Err(_) => {
+            c1e8_verify_observation(("unexpected err").to_string());
+        }
     }
 }
 

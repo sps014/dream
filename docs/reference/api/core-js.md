@@ -6,11 +6,15 @@ Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. Thi
 
 ## `null`
 
+The JavaScript `null` value.
+
 ```dream
 public static get null(): js
 ```
 
 ## `undefined`
+
+The JavaScript `undefined` value.
 
 ```dream
 public static get undefined(): js
@@ -26,17 +30,23 @@ public fun to_int(): int
 
 ## `to_double`
 
+Converts this JavaScript value to a Dream double.
+
 ```dream
 public fun to_double(): double
 ```
 
 ## `to_bool`
 
+Converts this JavaScript value to a Dream boolean.
+
 ```dream
 public fun to_bool(): bool
 ```
 
 ## `to_str`
+
+Converts this JavaScript value to a Dream string.
 
 ```dream
 public fun to_str(): string

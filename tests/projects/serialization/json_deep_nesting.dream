@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+
 @json
 class c110_Geo {
     public lat: double;
@@ -65,16 +66,28 @@ class c110_Team {
 }
 
 fun c110_mk_user(name: string, age: int, city: string): c110_User {
-    return c110_User(name, age, c110_Company(city + " Corp", c110_Address(city, "00000", c110_Geo(1.5d, 2.5d))), [name, city]);
+    return c110_User(
+        name,
+        age,
+        c110_Company(city + " Corp", c110_Address(city, "00000", c110_Geo(1.5d, 2.5d))),
+        [name, city]
+    );
 }
 
 @test
 @timeout(180000)
 fun json_deep_nesting(): void {
-    let team = c110_Team("Core", c110_mk_user("Ada", 36, "London"), [c110_mk_user("Bob", 30, "Paris"), c110_mk_user("Cee", 41, "Berlin")]);
+    let team = c110_Team(
+        "Core",
+        c110_mk_user("Ada", 36, "London"),
+        [c110_mk_user("Bob", 30, "Paris"), c110_mk_user("Cee", 41, "Berlin")]
+    );
 
     let text = Json.serialize(team);
-    Assert.eq_str((text).to_string(), "{\"title\":\"Core\",\"lead\":{\"name\":\"Ada\",\"age\":36,\"company\":{\"name\":\"London Corp\",\"address\":{\"city\":\"London\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Ada\",\"London\"]},\"members\":[{\"name\":\"Bob\",\"age\":30,\"company\":{\"name\":\"Paris Corp\",\"address\":{\"city\":\"Paris\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Bob\",\"Paris\"]},{\"name\":\"Cee\",\"age\":41,\"company\":{\"name\":\"Berlin Corp\",\"address\":{\"city\":\"Berlin\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Cee\",\"Berlin\"]}]}");
+    Assert.eq_str(
+        (text).to_string(),
+        "{\"title\":\"Core\",\"lead\":{\"name\":\"Ada\",\"age\":36,\"company\":{\"name\":\"London Corp\",\"address\":{\"city\":\"London\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Ada\",\"London\"]},\"members\":[{\"name\":\"Bob\",\"age\":30,\"company\":{\"name\":\"Paris Corp\",\"address\":{\"city\":\"Paris\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Bob\",\"Paris\"]},{\"name\":\"Cee\",\"age\":41,\"company\":{\"name\":\"Berlin Corp\",\"address\":{\"city\":\"Berlin\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Cee\",\"Berlin\"]}]}"
+    );
 
     let back = Json.deserialize<c110_Team>(text).unwrap_or(team);
     Assert.eq_str((back.title).to_string(), "Core");

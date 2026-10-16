@@ -4,7 +4,9 @@ Mark functions with `@export`, then build either library kind:
 
 ```dream
 @export
-fun add(a: int, b: int): int { return a + b; }
+fun add(a: int, b: int): int {
+    return a + b;
+}
 ```
 
 Select one native library output in `dream.toml`:

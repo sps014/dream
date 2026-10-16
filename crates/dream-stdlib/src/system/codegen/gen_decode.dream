@@ -6,7 +6,6 @@ import system.json;
 
 // Snapshot JSON → model, written by hand: `@json` cannot derive inside the package the `@json`
 // generator itself is built from.
-
 internal fun gen_str(borrow v: JsonValue, borrow key: string): string {
     return v.get_str_or(key, "");
 }
@@ -36,21 +35,43 @@ internal fun gen_strings(borrow v: JsonValue, borrow key: string): List<string> 
 }
 
 internal fun gen_type_kind(borrow kind: string): TypeRefKind {
-    if kind == "prim" { return TypeRefKind.Primitive; }
-    if kind == "named" { return TypeRefKind.Named; }
-    if kind == "param" { return TypeRefKind.Param; }
-    if kind == "array" { return TypeRefKind.Array; }
-    if kind == "tuple" { return TypeRefKind.Tuple; }
-    if kind == "function" { return TypeRefKind.Function; }
-    if kind == "void" { return TypeRefKind.Void; }
+    if kind == "prim" {
+        return TypeRefKind.Primitive;
+    }
+    if kind == "named" {
+        return TypeRefKind.Named;
+    }
+    if kind == "param" {
+        return TypeRefKind.Param;
+    }
+    if kind == "array" {
+        return TypeRefKind.Array;
+    }
+    if kind == "tuple" {
+        return TypeRefKind.Tuple;
+    }
+    if kind == "function" {
+        return TypeRefKind.Function;
+    }
+    if kind == "void" {
+        return TypeRefKind.Void;
+    }
     return TypeRefKind.Unknown;
 }
 
 internal fun gen_decl_kind(borrow kind: string): DeclKind {
-    if kind == "struct" { return DeclKind.Struct; }
-    if kind == "union" { return DeclKind.Union; }
-    if kind == "enum" { return DeclKind.Enum; }
-    if kind == "interface" { return DeclKind.Interface; }
+    if kind == "struct" {
+        return DeclKind.Struct;
+    }
+    if kind == "union" {
+        return DeclKind.Union;
+    }
+    if kind == "enum" {
+        return DeclKind.Enum;
+    }
+    if kind == "interface" {
+        return DeclKind.Interface;
+    }
     return DeclKind.Class;
 }
 
@@ -87,7 +108,9 @@ internal fun gen_attributes(borrow v: JsonValue): List<GenAttribute> {
     for (let a in gen_items(v, "attributes")) {
         let args = List<GenAttrArg>();
         for (let arg in gen_items(a, "args")) {
-            args.push(GenAttrArg(gen_str(arg, "kind"), gen_str(arg, "value"), gen_str(arg, "symbol")));
+            args.push(
+                GenAttrArg(gen_str(arg, "kind"), gen_str(arg, "value"), gen_str(arg, "symbol"))
+            );
         }
         out.push(GenAttribute(gen_str(a, "id"), gen_str(a, "name"), args));
     }
@@ -97,14 +120,16 @@ internal fun gen_attributes(borrow v: JsonValue): List<GenAttribute> {
 internal fun gen_fields(borrow v: JsonValue): List<GenField> {
     let out = List<GenField>();
     for (let f in gen_items(v, "fields")) {
-        out.push(GenField(
-            gen_str(f, "id"),
-            gen_str(f, "name"),
-            gen_type_ref(gen_obj(f, "ty")),
-            gen_str(f, "visibility"),
-            gen_attributes(f),
-            gen_location(f)
-        ));
+        out.push(
+            GenField(
+                gen_str(f, "id"),
+                gen_str(f, "name"),
+                gen_type_ref(gen_obj(f, "ty")),
+                gen_str(f, "visibility"),
+                gen_attributes(f),
+                gen_location(f)
+            )
+        );
     }
     return out;
 }
@@ -112,7 +137,9 @@ internal fun gen_fields(borrow v: JsonValue): List<GenField> {
 internal fun gen_function(borrow f: JsonValue): GenFunction {
     let params = List<GenParam>();
     for (let p in gen_items(f, "params")) {
-        params.push(GenParam(gen_str(p, "name"), gen_type_ref(gen_obj(p, "ty")), gen_attributes(p)));
+        params.push(
+            GenParam(gen_str(p, "name"), gen_type_ref(gen_obj(p, "ty")), gen_attributes(p))
+        );
     }
     return GenFunction(
         gen_str(f, "id"),
@@ -141,7 +168,9 @@ internal fun gen_functions(borrow v: JsonValue, borrow key: string): List<GenFun
 internal fun gen_decl(borrow d: JsonValue): GenDecl {
     let variants = List<GenVariant>();
     for (let v in gen_items(d, "variants")) {
-        variants.push(GenVariant(gen_str(v, "id"), gen_str(v, "name"), gen_fields(v), gen_location(v)));
+        variants.push(
+            GenVariant(gen_str(v, "id"), gen_str(v, "name"), gen_fields(v), gen_location(v))
+        );
     }
     return GenDecl(
         gen_str(d, "id"),

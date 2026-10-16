@@ -9,11 +9,11 @@ A **variable** is a named box that holds a value. `let` can be changed later. `c
 ```dream
 import system;
 
-fun main() {                   // (1)
-    let name = "Ada";          // (2)
-    const n = 3;               // (3)
-    name = "Grace";            // (4)
-    System.println(name);      // (5)
+fun main() { // (1)
+    let name = "Ada"; // (2)
+    const n = 3; // (3)
+    name = "Grace"; // (4)
+    System.println(name); // (5)
     System.println(n);
 }
 ```
@@ -38,7 +38,7 @@ import system;
 fun main() {
     let score = 85;
 
-    if score >= 90 {           // (1)
+    if score >= 90 { // (1)
         System.println("A");
     } else if score >= 70 {
         System.println("B");
@@ -47,9 +47,9 @@ fun main() {
     }
 
     let i = 0;
-    while i < 3 {              // (2)
+    while i < 3 { // (2)
         System.println(i);
-        i = i + 1;             // (3)
+        i = i + 1; // (3)
     }
 }
 ```
@@ -69,12 +69,12 @@ A **function** is a named recipe. You pass values in; it can `return` a value ou
 ```dream
 import system;
 
-fun greet(name: string): string {   // (1)
-    return "Hello, " + name;        // (2)
+fun greet(name: string): string { // (1)
+    return "Hello, " + name; // (2)
 }
 
 fun main() {
-    let msg = greet("world");       // (3)
+    let msg = greet("world"); // (3)
     System.println(msg);
 }
 ```
@@ -93,14 +93,14 @@ A **list** grows as you add items. Import `system.collections` for `List`.
 
 ```dream
 import system;
-import system.collections;     // (1)
+import system.collections; // (1)
 
 fun main() {
-    let xs = List<int>();      // (2)
-    xs.push(10);               // (3)
+    let xs = List<int>(); // (2)
+    xs.push(10); // (3)
     xs.push(20);
 
-    for (let n in xs) {        // (4)
+    for (let n in xs) { // (4)
         System.println(n);
     }
 }

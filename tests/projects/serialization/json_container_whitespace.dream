@@ -48,5 +48,8 @@ fun c10f_verify_observation(borrow value: string): void {
 fun json_container_whitespace(): void {
     c10f_cursor = 0;
     c10f_body();
-    Assert.eq(c10f_cursor, ("2\n2\n0\n0\ninvalid JSON input\ninvalid JSON input\ninvalid JSON input\n").length);
+    Assert.eq(
+        c10f_cursor,
+        ("2\n2\n0\n0\ninvalid JSON input\ninvalid JSON input\ninvalid JSON input\n").length
+    );
 }

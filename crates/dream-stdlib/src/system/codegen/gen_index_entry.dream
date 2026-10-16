@@ -6,8 +6,11 @@ import system.json;
 
 // Every type in the program (user and stdlib), names and kinds only.
 public class GenIndexEntry {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Name identifying this entry.
     public name: string;
+    /// Category of this entry.
     public kind: DeclKind;
 
     // Creates the snapshot model from the supplied values.

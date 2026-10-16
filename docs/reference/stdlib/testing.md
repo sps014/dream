@@ -40,9 +40,12 @@ fun parses_quickly(): void {
 
 ```dream
 fun main() {
-    Test.run("addition works", () => {
-        Assert.eq(2 + 2, 4);
-    });
+    Test.run(
+        "addition works",
+        () => {
+            Assert.eq(2 + 2, 4);
+        }
+    );
 }
 ```
 

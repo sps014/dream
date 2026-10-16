@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.encoding;
+
 fun cc4_body(): void {
     let bytes = Encoding.utf8_encode("hi");
     cc4_verify_observation((Encoding.hex_encode(bytes)).to_string());

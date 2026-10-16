@@ -1,27 +1,44 @@
 module system.interop;
 
 /// Calling convention for C imports.
-public enum CCallConv { Cdecl, Stdcall }
+public enum CCallConv {
+    /// The platform default C calling convention.
+    Cdecl,
+    /// The stdcall convention on 32-bit Windows; equivalent to the default convention on other
+    /// targets.
+    Stdcall
+}
 
 /// C string encoding or callback context placement.
-public enum MarshalKind { LpStr, LpWStr, UserDataLast }
+public enum MarshalKind {
+    /// Marshal text as a null-terminated narrow C string.
+    LpStr,
+    /// Marshal text as a null-terminated wide C string.
+    LpWStr,
+    /// Pass the callback context after the callback arguments.
+    UserDataLast
+}
 
 /// Binds an extern function to a C ABI library/symbol: `@c("lib", "symbol")`. `@c("lib")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native and portable WASM builds are supported; runtime annotations restrict availability.
 @attribute(AttributeTarget.ExternFunction)
 public struct CAttribute {
+    /// Optional native library containing the foreign symbol.
     public library: Option<string>;
+    /// Identifier of the referenced symbol.
     public symbol: Option<string>;
 }
 
 /// C calling convention for `@c` externs: `@c_call(CCallConv.Cdecl)` (the platform default) or `@c_call(CCallConv.Stdcall)` (Win32 APIs; identical to cdecl on every target but 32-bit x86 Windows).
 @attribute(AttributeTarget.ExternFunction)
 public struct CCallAttribute {
+    /// Calling convention used by the foreign function.
     public convention: CCallConv;
 }
 
 /// `@c` marshaling: on the extern, string encoding (`@marshal(MarshalKind.LpStr)` / `@marshal(MarshalKind.LpWStr)`); on a `NativeCallback` parameter, `@marshal(MarshalKind.UserDataLast)` passes `user_data` after the callback's own arguments.
 @attribute(AttributeTarget.ExternFunction, AttributeTarget.Parameter)
 public struct MarshalAttribute {
+    /// Category of this entry.
     public kind: MarshalKind;
 }
 
@@ -29,16 +46,19 @@ public struct MarshalAttribute {
 @attribute(AttributeTarget.Struct)
 public struct PackedAttribute {}
 
-/// Binds a class, `@unmanaged` struct, or free extern function to C++: `@cpp("header.hpp", "ns::Name")`. The header resolves against the declaring package's `native/include/`; the name defaults to the Dream name. The compiler generates the `extern "C"` shim for native or portable WASM builds.
+/// Binds a class, unmanaged struct, or external function to a C++ declaration. Supply a header
+/// relative to the package’s `native/include/` and an optional qualified C++ name.
 @attribute(AttributeTarget.Class, AttributeTarget.Struct, AttributeTarget.ExternFunction)
 public struct CppAttribute {
+    /// Header file declaring the foreign symbol.
     public header: string;
+    /// Name identifying this entry.
     public name: Option<string>;
 }
 
 /// The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name("get_as<int>")`.
 @attribute(AttributeTarget.ExternFunction)
 public struct CppNameAttribute {
+    /// Name identifying this entry.
     public name: string;
 }
-

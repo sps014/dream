@@ -6,9 +6,11 @@ import system.json;
 
 // Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the
 // statics these forward to.
+/// Typed access to custom attributes declared with `@attribute`.
 public static class GenAttributes {
     @intrinsic(Intrinsic.GenAttributeId)
     // Returns the compiler identity of an attribute type.
+    /// Returns the stable identifier of attribute type `A`.
     public static extern fun id<A>(): string;
 
     @intrinsic(Intrinsic.GenAttributeDecode)
@@ -20,6 +22,7 @@ public static class GenAttributes {
     public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
 
     // Tests whether an attribute with the given compiler identity is present.
+    /// Returns whether an attribute with identifier `id` is present.
     public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool {
         for (let a in attrs) {
             if a.id == id {

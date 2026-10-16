@@ -63,5 +63,8 @@ public static fun temporary_directory(): Result<TempDirectory, IoError>
 Runs an async body and cleanup, preserving a body error and otherwise reporting cleanup errors.
 
 ```dream
-public static async fun run<T, E>(fixture: TestFixture<T, E>, body: fun(T): Future<Result<bool, E>>): Result<bool, E>
+public static async fun run<T, E>(
+    fixture: TestFixture<T, E>,
+    body: fun(T): Future<Result<bool, E>>
+): Result<bool, E>
 ```

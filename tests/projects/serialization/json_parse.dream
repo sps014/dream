@@ -1,12 +1,27 @@
 import system.testing;
 import system;
 import system.json;
+
 @test
 @timeout(180000)
 fun json_parse(): void {
-    let v = Json.deserialize<JsonValue>("{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}").unwrap_or(JsonValue.none());
+    let v = Json.deserialize<JsonValue>(
+        "{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}"
+    ).unwrap_or(JsonValue.none());
     let none = JsonValue.none();
-    Assert.eq_str((v.get("a").unwrap_or(none).get("b").unwrap_or(none).at(2).unwrap_or(none).as_int().unwrap_or(0)).to_string(), "3");
+    Assert.eq_str(
+        (
+            v.get("a")
+                .unwrap_or(none)
+                .get("b")
+                .unwrap_or(none)
+                .at(2)
+                .unwrap_or(none)
+                .as_int()
+                .unwrap_or(0)
+        ).to_string(),
+        "3"
+    );
     Assert.eq_str((v.get("a").unwrap_or(none).get("b").unwrap_or(none).length).to_string(), "3");
     Assert.eq_str((v.get("n").unwrap_or(none).as_double().unwrap_or(0.0d)).to_string(), "-2.5");
     Assert.eq_str((v.get("ok").unwrap_or(none).as_bool().unwrap_or(false)).to_string(), "false");

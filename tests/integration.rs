@@ -3,6 +3,7 @@
 mod common;
 mod corpus;
 mod dap;
+mod format_cli;
 
 mod attribute_resolution;
 mod build_cache;

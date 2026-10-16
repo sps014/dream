@@ -7,32 +7,55 @@ public class TestFixture<T, E> {
     cleanup: fun(T): Result<bool, E>;
     outcome: Option<Result<bool, E>>;
     // Registers deterministic cleanup before the fixture is exposed to test code.
-    public constructor(value: T, cleanup: fun(T): Result<bool, E>) { this.value = value; this.cleanup = cleanup; this.outcome = Option.None; }
+    public constructor(value: T, cleanup: fun(T): Result<bool, E>) {
+        this.value = value;
+        this.cleanup = cleanup;
+        this.outcome = Option.None;
+    }
+
     // Borrows the fixture value while this owner remains alive.
-    public get resource(): T { return this.value; }
+    public get resource(): T {
+        return this.value;
+    }
+
     // Executes cleanup once and returns the same outcome to repeated callers.
     public fun close(): Result<bool, E> {
-        if this.outcome.is_some() { return this.outcome.unwrap(); }
+        if this.outcome.is_some() {
+            return this.outcome.unwrap();
+        }
         let pending: Result<bool, E> = Result.Ok(false);
         this.outcome = Option.Some(pending);
         let cleanup = this.cleanup;
         this.outcome = Option.Some(cleanup(this.value));
         return this.outcome.unwrap();
     }
-    del() { this.close(); }
+    del() {
+        this.close();
+    }
 }
 
 // Helpers for async test bodies that need deterministic temporary-resource ownership.
 public static class Fixtures {
     // Creates an owned temporary file whose destructor cleans up after a failed or cancelled body.
-    public static fun temporary_file(): Result<TempFile, IoError> { return TempFile.create(); }
+    public static fun temporary_file(): Result<TempFile, IoError> {
+        return TempFile.create();
+    }
+
     // Creates an owned private directory for a test's temporary resources.
-    public static fun temporary_directory(): Result<TempDirectory, IoError> { return TempDirectory.create(); }
+    public static fun temporary_directory(): Result<TempDirectory, IoError> {
+        return TempDirectory.create();
+    }
+
     // Runs an async body and cleanup, preserving a body error and otherwise reporting cleanup errors.
-    public static async fun run<T, E>(fixture: TestFixture<T, E>, body: fun(T): Future<Result<bool, E>>): Result<bool, E> {
+    public static async fun run<T, E>(
+        fixture: TestFixture<T, E>,
+        body: fun(T): Future<Result<bool, E>>
+    ): Result<bool, E> {
         let result = body(fixture.resource).await;
         let cleaned = fixture.close();
-        if result.is_err() { return result; }
+        if result.is_err() {
+            return result;
+        }
         cleaned?;
         return result;
     }

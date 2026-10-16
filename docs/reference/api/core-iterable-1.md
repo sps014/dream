@@ -2,149 +2,197 @@
 
 No import is needed.
 
-Read [Yield and lazy sequences](../language/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. The yield channel, cursor, signal, and lease classes support compiler-generated yield functions.
+Read [Yield and lazy sequences](../language/iterators.md) for sequence creation, cursor access, and cleanup. `Iterable<T>` creates synchronous cursors; `AsyncIterable<T>` creates cursors whose advancement may await. Yield sequences support lazy production and explicit cursor cleanup.
 
 [All sections](core-iterable.md)
 
-## `interface Iterable<T>`
+## `Iterable`
+
+A sequence that creates a fresh synchronous cursor for each traversal.
 
 ```dream
 public interface Iterable<T>
 ```
 
-## `borrow fun iterator(): Iterator<T>`
+## `iterator`
+
+Creates a cursor over the sequence. Close it when iteration ends early.
 
 ```dream
 borrow fun iterator(): Iterator<T>
 ```
 
-## `interface AsyncIterator<T>`
+## `AsyncIterator`
+
+A cursor whose next value may require asynchronous work. Close it when finished.
 
 ```dream
 public interface AsyncIterator<T>
 ```
 
-## `async unique fun next(): Option<T>`
+## `next`
+
+Returns the next value, or `None` when the sequence has ended.
 
 ```dream
 async unique fun next(): Option<T>
 ```
 
-## `unique fun close(): void`
+## `close`
+
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 unique fun close(): void
 ```
 
-## `interface AsyncIterable<T>`
+## `AsyncIterable`
+
+A sequence that creates a fresh asynchronous cursor for each traversal.
 
 ```dream
 public interface AsyncIterable<T>
 ```
 
-## `borrow fun iterator(): AsyncIterator<T>`
+## `iterator`
+
+Creates a cursor over the sequence. Close it when iteration ends early.
 
 ```dream
 borrow fun iterator(): AsyncIterator<T>
 ```
 
-## `static class YieldSignals`
+## `YieldSignals`
+
+Signals coordinating a yielding producer and its consumer.
 
 ```dream
 public static class YieldSignals
 ```
 
-## `static extern fun pending(): Future<void>`
+## `pending`
+
+Creates a signal that stays pending until explicitly completed.
 
 ```dream
 public static extern fun pending(): Future<void>
 ```
 
-## `static extern fun complete(borrow signal: Future<void>): void`
+## `complete`
+
+Completes the pending signal or advancement operation.
 
 ```dream
 public static extern fun complete(borrow signal: Future<void>): void
 ```
 
-## `static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void`
+## `run`
+
+Runs the producer until a value is ready or the producer finishes.
 
 ```dream
 public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void
 ```
 
-## `class YieldChannel<T>`
+## `YieldChannel`
+
+A single-value channel coordinating a yielding producer and consumer.
 
 ```dream
 public class YieldChannel<T>
 ```
 
-## `value: Option<T>`
+## `value`
+
+Next value waiting for the consumer, or `None` when no value is ready.
 
 ```dream
 public value: Option<T>
 ```
 
-## `ended: bool`
+## `ended`
+
+Whether the producer has finished yielding values.
 
 ```dream
 public ended: bool
 ```
 
-## `ready: Future<void>`
+## `ready`
+
+Signal completed when the next yielded value is available.
 
 ```dream
 public ready: Future<void>
 ```
 
-## `resume: Future<void>`
+## `resume`
+
+Signal allowing the producer to continue after a value is consumed.
 
 ```dream
 public resume: Future<void>
 ```
 
-## `constructor()`
+## `constructor`
+
+Creates a `YieldChannel` with default settings.
 
 ```dream
 public constructor()
 ```
 
-## `fun emit(value: T): Future<void>`
+## `emit`
+
+Publishes a value and waits until the consumer allows the producer to continue.
 
 ```dream
 public fun emit(value: T): Future<void>
 ```
 
-## `fun finish(): void`
+## `finish`
+
+Marks the producer complete and wakes a waiting consumer.
 
 ```dream
 public fun finish(): void
 ```
 
-## `fun advance(): void`
+## `advance`
+
+Allows the producer to continue after the current value has been consumed.
 
 ```dream
 public fun advance(): void
 ```
 
-## `class YieldCursor<T> : Iterator<T>`
+## `YieldCursor`
+
+A synchronous cursor over values from a yielding producer.
 
 ```dream
-public class YieldCursor<T> : Iterator<T>
+public class YieldCursor<T>: Iterator<T>
 ```
 
-## `constructor(channel: YieldChannel<T>, producer: Future<void>)`
+## `constructor`
+
+Creates a `YieldCursor` with `channel`, `producer`.
 
 ```dream
 public constructor(channel: YieldChannel<T>, producer: Future<void>)
 ```
 
-## `fun next(): Option<T>`
+## `next`
+
+Returns the next value, or `None` when the sequence has ended.
 
 ```dream
 public fun next(): Option<T>
 ```
 
-## `fun close(): void`
+## `close`
+
+Ends iteration and releases resources held by the cursor.
 
 ```dream
 public fun close(): void

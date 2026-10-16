@@ -12,7 +12,6 @@ async fun c66_body(): void {
         Ok(t) => c66_verify_observation((t).to_string()),
         Err(e) => c66_verify_observation((e.code()).to_string()),
     }
-
 }
 
 let c66_cursor: int = 0;

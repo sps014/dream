@@ -2,12 +2,16 @@ import system.testing;
 // Control flow (branches, loops, early returns) that runs *before* an `await` must not prematurely
 // complete the async task: each poll segment's natural fall-through hands control to the suspend,
 // while an explicit `return` still completes. Regression for segments whose plain code has an `if`.
-
 import system;
-async fun c2f_g(n: int): int { return n; }
+
+async fun c2f_g(n: int): int {
+    return n;
+}
 
 async fun c2f_pick(early: bool): int {
-    if early { return 99; }          // explicit return in a branch before the suspend
+    if early {
+        return 99;
+    } // explicit return in a branch before the suspend
     let y = c2f_g(5).await;
     return y + 1;
 }
@@ -15,17 +19,22 @@ async fun c2f_pick(early: bool): int {
 async fun c2f_run(): int {
     let sum = 0;
     let i = 0;
-    while i < 4 { sum = sum + i; i = i + 1; }   // loop before the suspend
+    while i < 4 {
+        sum = sum + i;
+        i = i + 1;
+    } // loop before the suspend
     let a = c2f_g(1).await;
-    if a == 1 { a = a + 10; }                   // branch between two awaits
+    if a == 1 {
+        a = a + 10;
+    } // branch between two awaits
     let b = c2f_g(2).await;
     return sum + a + b;
 }
 
 async fun c2f_body(): void {
-    c2f_verify_observation((c2f_pick(true).await).to_string());    // 99
-    c2f_verify_observation((c2f_pick(false).await).to_string());   // 6
-    c2f_verify_observation((c2f_run().await).to_string());         // 6 + 11 + 2 = 19
+    c2f_verify_observation((c2f_pick(true).await).to_string()); // 99
+    c2f_verify_observation((c2f_pick(false).await).to_string()); // 6
+    c2f_verify_observation((c2f_run().await).to_string()); // 6 + 11 + 2 = 19
 }
 
 let c2f_cursor: int = 0;

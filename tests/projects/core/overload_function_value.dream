@@ -1,11 +1,21 @@
 import system.testing;
 import system;
 
-fun c194_add(a: int, b: int): int { return a + b; }
-fun c194_add(a: double, b: double): double { return a + b + 0.5d; }
-fun c194_add(a: string, b: string): string { return a + b; }
+fun c194_add(a: int, b: int): int {
+    return a + b;
+}
 
-fun c194_apply(f: fun(int, int): int, x: int, y: int): int { return f(x, y); }
+fun c194_add(a: double, b: double): double {
+    return a + b + 0.5d;
+}
+
+fun c194_add(a: string, b: string): string {
+    return a + b;
+}
+
+fun c194_apply(f: fun(int, int): int, x: int, y: int): int {
+    return f(x, y);
+}
 
 @test
 @timeout(180000)

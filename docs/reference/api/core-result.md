@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum Result<T, E>`
+## `Result`
 
 `Result<T, E>` - the outcome of an operation that may fail.
 
@@ -12,13 +12,17 @@ Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. Thi
 public enum Result<T, E>
 ```
 
-## `Ok(T)`
+## `Ok`
+
+Contains the successful result.
 
 ```dream
 Ok(T)
 ```
 
-## `Err(E)`
+## `Err`
+
+Contains the error result.
 
 ```dream
 Err(E)

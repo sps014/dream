@@ -1,7 +1,7 @@
 module system.process;
 
 // Failure launching or communicating with a child process, implementing `Error`.
-public class ProcessError : Error {
+public class ProcessError: Error {
     _code: string;
     _message: string;
 

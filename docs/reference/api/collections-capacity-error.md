@@ -7,7 +7,7 @@
 Invalid reserve request; existing contents and capacity are preserved.
 
 ```dream
-public class CapacityError : Error
+public class CapacityError: Error
 ```
 
 ## `constructor`

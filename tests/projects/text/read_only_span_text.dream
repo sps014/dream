@@ -38,7 +38,9 @@ fun c1c2_body(): void {
     c1c2_verify_observation((empty.to_array().length).to_string());
     c1c2_verify_observation((empty.slice(0, 0).equals("")).to_string());
     let split = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
-    while split.move_next() { c1c2_verify_observation((split.current.to_string()).to_string()); }
+    while split.move_next() {
+        c1c2_verify_observation((split.current.to_string()).to_string());
+    }
     let retained = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
     retained.move_next();
     let first = retained.current;
@@ -46,8 +48,13 @@ fun c1c2_body(): void {
     c1c2_verify_observation((first.to_string()).to_string());
     c1c2_verify_observation((retained.current.to_string()).to_string());
     let lines = ReadOnlySpan<char>.of(['x', '\n', 'y']).lines();
-    while lines.move_next() { c1c2_verify_observation((lines.current.to_string()).to_string()); }
-    c1c2_verify_observation((ReadOnlySpan<char>.of([' ', '-', '4', '2', ' ']).trim().parse_int().unwrap_or(0)).to_string());
+    while lines.move_next() {
+        c1c2_verify_observation((lines.current.to_string()).to_string());
+    }
+    c1c2_verify_observation(
+        (ReadOnlySpan<char>.of([' ', '-', '4', '2', ' ']).trim().parse_int().unwrap_or(0))
+            .to_string()
+    );
     let temporary = ("Ω" + System.env_or("DREAM_SPAN_TEXT_SUFFIX", "界")).span();
     c1c2_verify_observation((temporary.to_string()).to_string());
     let offsets = "012345".span(1, 5).slice(1, 2);
@@ -76,5 +83,10 @@ fun c1c2_verify_observation(borrow value: string): void {
 fun read_only_span_text(): void {
     c1c2_cursor = 0;
     c1c2_body();
-    Assert.eq(c1c2_cursor, ("Ω界\n2\ntrue\nΩ界\n2\ntrue\ntrue\ntrue\ntrue\n0\n3\n16\n8\ntrue\n30028\nΩ界Ω界\n42\n42\n0\ntrue\na\nb\na\nb\nx\ny\n-42\nΩ界\n23\n2\n55357\n56832\n128512\n").length);
+    Assert.eq(
+        c1c2_cursor,
+        (
+            "Ω界\n2\ntrue\nΩ界\n2\ntrue\ntrue\ntrue\ntrue\n0\n3\n16\n8\ntrue\n30028\nΩ界Ω界\n42\n42\n0\ntrue\na\nb\na\nb\nx\ny\n-42\nΩ界\n23\n2\n55357\n56832\n128512\n"
+        ).length
+    );
 }

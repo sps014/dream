@@ -1,15 +1,20 @@
 import system.testing;
 import system;
+
 interface c108_Animal {
     fun speak(): int;
 }
 
-class c108_Cat : c108_Animal {
-    public fun speak(): int { return 3; }
+class c108_Cat: c108_Animal {
+    public fun speak(): int {
+        return 3;
+    }
 }
 
-class c108_Dog : c108_Animal {
-    public fun speak(): int { return 0; }
+class c108_Dog: c108_Animal {
+    public fun speak(): int {
+        return 0;
+    }
 }
 
 // Exercises `is`-binding used inside a *later* conjunct of the same `&&` chain, both directly

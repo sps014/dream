@@ -41,5 +41,8 @@ fun c213_verify_observation(borrow value: string): void {
 fun string_builder_span(): void {
     c213_cursor = 0;
     c213_body();
-    Assert.eq(c213_cursor, ("hello\nhello world|hello world|XXXXXXXXXXX\ntrue\n51 11\ntrue\n").length);
+    Assert.eq(
+        c213_cursor,
+        ("hello\nhello world|hello world|XXXXXXXXXXX\ntrue\n51 11\ntrue\n").length
+    );
 }

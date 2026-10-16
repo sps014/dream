@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 async fun c248_fetchLike(url: string): string {
     Time.sleep(1).await;
     return "resp:" + url;

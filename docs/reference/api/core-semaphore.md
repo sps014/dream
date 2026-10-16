@@ -20,11 +20,15 @@ public constructor(initial: int)
 
 ## `host_acquire`
 
+Waits until the synchronization object can be acquired.
+
 ```dream
 public static extern fun host_acquire(borrow target: Semaphore): void
 ```
 
 ## `host_release`
+
+Releases the synchronization object after acquisition.
 
 ```dream
 public static extern fun host_release(borrow target: Semaphore): void
@@ -32,11 +36,15 @@ public static extern fun host_release(borrow target: Semaphore): void
 
 ## `host_try_acquire`
 
+Attempts acquisition without waiting; returns whether it succeeded.
+
 ```dream
 public static extern fun host_try_acquire(borrow target: Semaphore): bool
 ```
 
 ## `host_try_acquire_for`
+
+Attempts acquisition for up to `timeout_ms` milliseconds.
 
 ```dream
 public static extern fun host_try_acquire_for(borrow target: Semaphore, timeout_ms: int): bool

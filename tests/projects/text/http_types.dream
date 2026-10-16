@@ -17,8 +17,14 @@ async fun http_types(): void {
     let client = HttpClient();
     let cancelled = CancellationSource();
     cancelled.cancel();
-    Assert.eq_str(client.send(request, token: Option.Some(cancelled.token)).await.unwrap_err().code(), "ECANCELLED");
-    Assert.eq_str(client.send(request, options: HttpOptions(timeout_ms: 0 - 1)).await.unwrap_err().code(), "EINVAL");
+    Assert.eq_str(
+        client.send(request, token: Option.Some(cancelled.token)).await.unwrap_err().code(),
+        "ECANCELLED"
+    );
+    Assert.eq_str(
+        client.send(request, options: HttpOptions(timeout_ms: 0 - 1)).await.unwrap_err().code(),
+        "EINVAL"
+    );
     let invalid = HttpRequest.get(Url.parse("file:///tmp/input").unwrap());
     Assert.eq_str(client.send(invalid).await.unwrap_err().code(), "EINVAL");
     request.set_text("not valid for GET");

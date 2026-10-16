@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenFile`
+## `GenFile`
 
 A `dream.toml` `additional_files` entry.
 
@@ -10,19 +10,23 @@ A `dream.toml` `additional_files` entry.
 public class GenFile
 ```
 
-## `public path: string`
+## `path`
+
+Request or resource path.
 
 ```dream
 public path: string
 ```
 
-## `public contents: string`
+## `contents`
+
+Text contents of the file.
 
 ```dream
 public contents: string
 ```
 
-## `public constructor(path: string, contents: string)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

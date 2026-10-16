@@ -9,10 +9,16 @@ import system.webapi;
 @router("")
 class Routes {
     @get("/hello")
-    public static fun hello(): HttpOutgoing { return HttpOutgoing.text("hello").set_header("X-Service", "dream"); }
+    public static fun hello(): HttpOutgoing {
+        return HttpOutgoing.text("hello").set_header("X-Service", "dream");
+    }
+
     @get("/private")
-    public static fun private_page(): Result<string, HttpStatus> { return Result.Err(HttpStatus.unauthorized()); }
+    public static fun private_page(): Result<string, HttpStatus> {
+        return Result.Err(HttpStatus.unauthorized());
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

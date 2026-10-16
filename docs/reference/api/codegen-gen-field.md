@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenField`
+## `GenField`
 
 A field of a class, struct or union variant.
 
@@ -10,48 +10,67 @@ A field of a class, struct or union variant.
 public class GenField
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public ty: GenTypeRef`
+## `ty`
+
+Type of this declaration or expression.
 
 ```dream
 public ty: GenTypeRef
 ```
 
-## `public visibility: string`
+## `visibility`
+
+Declared access level of this symbol.
 
 ```dream
 public visibility: string
 ```
 
-## `public attributes: List<GenAttribute>`
+## `attributes`
+
+Attributes attached to this declaration.
 
 ```dream
 public attributes: List<GenAttribute>
 ```
 
-## `public location: GenLocation`
+## `location`
+
+Source location associated with this entry.
 
 ```dream
 public location: GenLocation
 ```
 
-## `public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(id: string, name: string, ty: GenTypeRef, visibility: string, attributes: List<GenAttribute>, location: GenLocation)
+public constructor(
+    id: string,
+    name: string,
+    ty: GenTypeRef,
+    visibility: string,
+    attributes: List<GenAttribute>,
+    location: GenLocation
+)
 ```
 
 ## `attribute`

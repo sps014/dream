@@ -4,12 +4,12 @@
 
 Read the [usage guide](../stdlib/collections/priority-queue.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class PriorityQueue<T> : Collection<T>`
+## `PriorityQueue`
 
 Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
 
 ```dream
-public class PriorityQueue<T> : Collection<T>
+public class PriorityQueue<T>: Collection<T>
 ```
 
 ## `constructor`
@@ -17,7 +17,7 @@ public class PriorityQueue<T> : Collection<T>
 Empty queue ordered by `T`'s natural `Comparable` order.
 
 ```dream
-public constructor() where T : Comparable<T>
+public constructor()where T: Comparable<T>
 ```
 
 ## `constructor`
@@ -54,13 +54,15 @@ public fun clear(): void
 
 ## `clear`
 
+Unmanaged: no RC to release — rewind only.
+
 ```dream
-public fun clear(): void where T : unmanaged
+public fun clear(): void where T: unmanaged
 ```
 
 ## `push`
 
-Inserts `value`, restoring the heap invariant. O(log n).
+Adds a value to the priority queue.
 
 ```dream
 public fun push(value: T): void
@@ -68,7 +70,7 @@ public fun push(value: T): void
 
 ## `pop`
 
-Removes and returns the smallest element, or `None` when empty. O(log n).
+Removes the highest-priority value, or returns `None` when empty.
 
 ```dream
 public fun pop(): Option<T>

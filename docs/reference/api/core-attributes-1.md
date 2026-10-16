@@ -2,7 +2,7 @@
 
 **Import:** `import system.core;`
 
-## `public enum AttributeTarget`
+## `AttributeTarget`
 
 Declaration kinds accepted by an attribute.
 
@@ -12,11 +12,15 @@ public enum AttributeTarget
 
 ## `Constructor`
 
+Identifies constructor declarations.
+
 ```dream
 Constructor
 ```
 
 ## `Destructor`
+
+Identifies destructor declarations.
 
 ```dream
 Destructor
@@ -24,11 +28,15 @@ Destructor
 
 ## `Class`
 
+Identifies class declarations.
+
 ```dream
 Class
 ```
 
 ## `Struct`
+
+Identifies struct declarations.
 
 ```dream
 Struct
@@ -36,11 +44,15 @@ Struct
 
 ## `Union`
 
+Identifies union declarations.
+
 ```dream
 Union
 ```
 
 ## `Enum`
+
+Identifies enum declarations.
 
 ```dream
 Enum
@@ -48,11 +60,15 @@ Enum
 
 ## `Interface`
 
+Identifies interface declarations.
+
 ```dream
 Interface
 ```
 
 ## `Type`
+
+Identifies type declarations.
 
 ```dream
 Type
@@ -60,11 +76,15 @@ Type
 
 ## `Field`
 
+Identifies field declarations.
+
 ```dream
 Field
 ```
 
 ## `Function`
+
+Identifies function declarations.
 
 ```dream
 Function
@@ -72,11 +92,15 @@ Function
 
 ## `Method`
 
+Identifies method declarations.
+
 ```dream
 Method
 ```
 
 ## `StaticMethod`
+
+Identifies static method declarations.
 
 ```dream
 StaticMethod
@@ -84,11 +108,15 @@ StaticMethod
 
 ## `ExternFunction`
 
+Identifies extern function declarations.
+
 ```dream
 ExternFunction
 ```
 
 ## `InterfaceMethod`
+
+Identifies interface method declarations.
 
 ```dream
 InterfaceMethod
@@ -96,17 +124,21 @@ InterfaceMethod
 
 ## `Module`
 
+Identifies module declarations.
+
 ```dream
 Module
 ```
 
 ## `Parameter`
 
+Identifies parameter declarations.
+
 ```dream
 Parameter
 ```
 
-## `public struct DeclarationPath`
+## `DeclarationPath`
 
 A declaration reference supplied as an attribute argument.
 
@@ -114,27 +146,31 @@ A declaration reference supplied as an attribute argument.
 public struct DeclarationPath
 ```
 
-## `public text: string`
+## `text`
+
+Source text represented by this entry.
 
 ```dream
 public text: string
 ```
 
-## `public symbol: string`
+## `symbol`
 
-Canonical compiler identity; empty when the reference could not be resolved.
+Resolved declaration identifier, or an empty string when unresolved.
 
 ```dream
 public symbol: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `DeclarationPath` with `text`, `symbol`.
 
 ```dream
 public constructor(text: string, symbol: string)
 ```
 
-## `public struct AttributeAttribute`
+## `AttributeAttribute`
 
 Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.
 
@@ -142,13 +178,15 @@ Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placem
 public struct AttributeAttribute
 ```
 
-## `public targets: AttributeTarget[]`
+## `targets`
+
+Declaration kinds to which this attribute may be applied.
 
 ```dream
 public targets: AttributeTarget[]
 ```
 
-## `public struct RepeatableAttribute`
+## `RepeatableAttribute`
 
 Allows an `@attribute` type to appear more than once on the same declaration.
 

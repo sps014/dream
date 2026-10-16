@@ -4,9 +4,9 @@
 
 Read the [usage guide](../stdlib/collections/seq.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class Seq<T>`
+## `Seq`
 
-Lazy query view over a list. Stages (`filter`/`take`/`skip`) build a chain without copying or scanning; evaluation happens once, at the terminal step (`to_list`/`count`/`map`/...). `to_list()` always copies — a `Seq` never aliases the list it was built from. Type-changing steps (`map`, `flat_map`) must allocate a new element stream, so they materialize immediately and are documented as terminal. Stages are a parent-linked chain of the same element type `T` (Dream cannot yet put function types in generic containers, so predicates hang off nodes instead of a list).
+A lazy sequence of values that can be transformed and iterated.
 
 ```dream
 public class Seq<T>

@@ -4,6 +4,7 @@ import system.testing;
 @async_host
 @runtime("delayMs")
 extern async fun first_delay(ms: int): void;
+
 @async_host
 @runtime("delayMs")
 extern async fun second_delay(ms: int): void;

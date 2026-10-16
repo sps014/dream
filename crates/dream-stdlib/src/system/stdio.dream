@@ -8,10 +8,12 @@ public class Stdin {
         return Stdin();
     }
 
+    /// Reads a line from standard input.
     public fun read_line(): string {
         return System.read_line();
     }
 
+    /// Reads one character from standard input.
     public fun read_key(): char {
         return System.read_key();
     }
@@ -25,10 +27,12 @@ public class Stdout {
         return Stdout();
     }
 
+    /// Writes text without adding a newline.
     public fun write_text(borrow text: string): void {
         System.print(text);
     }
 
+    /// Writes text followed by a newline.
     public fun write_line(borrow text: string): void {
         System.println(text);
     }
@@ -45,10 +49,12 @@ public class Stderr {
         return Stderr();
     }
 
+    /// Writes text without adding a newline.
     public fun write_text(borrow text: string): void {
         Stderr.host_write(text);
     }
 
+    /// Writes text followed by a newline.
     public fun write_line(borrow text: string): void {
         Stderr.host_write(text);
         Stderr.host_write("\n");
@@ -56,14 +62,17 @@ public class Stderr {
 }
 
 extend System {
+    /// Standard input stream.
     public static get stdin(): Stdin {
         return Stdin.instance();
     }
 
+    /// Standard output stream.
     public static get stdout(): Stdout {
         return Stdout.instance();
     }
 
+    /// Standard error stream.
     public static get stderr(): Stderr {
         return Stderr.instance();
     }

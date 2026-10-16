@@ -32,6 +32,8 @@ public fun split_once(sep: char): string[]
 
 ## `split_once`
 
+Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.
+
 ```dream
 public fun split_once(borrow sep: string): string[]
 ```

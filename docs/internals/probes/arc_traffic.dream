@@ -1,27 +1,55 @@
 import system;
 import system.collections;
 
-@export fun audit_map_span(borrow map: Map<string, int>, borrow text: string, start: int): int {
+@export
+fun audit_map_span(borrow map: Map<string, int>, borrow text: string, start: int): int {
     return map.get_or(text.span(start, start + 2), 0);
 }
-@export fun audit_map_owned(borrow map: Map<string, int>, borrow key: string): int {
+
+@export
+fun audit_map_owned(borrow map: Map<string, int>, borrow key: string): int {
     return map.get_or(key, 0);
 }
-@export fun audit_set_span(borrow set: Set<string>, borrow text: string, start: int): bool {
+
+@export
+fun audit_set_span(borrow set: Set<string>, borrow text: string, start: int): bool {
     return set.contains(text.span(start, start + 2));
 }
-@export fun audit_queue_peek(borrow queue: Queue<string>): int {
-    return switch (queue.peek()) { Some(x) => x.length, None => 0 };
+
+@export
+fun audit_queue_peek(borrow queue: Queue<string>): int {
+    return switch (queue.peek()) {
+        Some(x) => x.length,
+        None => 0
+    };
 }
-@export fun audit_list_pop(borrow list: List<string>): string {
+
+@export
+fun audit_list_pop(borrow list: List<string>): string {
     return list.pop().unwrap_or("");
 }
-@export fun audit_queue_dequeue(borrow queue: Queue<string>): string {
+
+@export
+fun audit_queue_dequeue(borrow queue: Queue<string>): string {
     return queue.dequeue().unwrap_or("");
 }
-@noinline fun read_length(text: string): int { return text.length; }
-@export fun audit_sink_helper(borrow text: string): int { return read_length(text); }
-@export fun audit_list_sort(borrow list: List<string>): void { list.sort(); }
-@export fun audit_priority_push(borrow queue: PriorityQueue<string>, value: string): void {
+
+@noinline
+fun read_length(text: string): int {
+    return text.length;
+}
+
+@export
+fun audit_sink_helper(borrow text: string): int {
+    return read_length(text);
+}
+
+@export
+fun audit_list_sort(borrow list: List<string>): void {
+    list.sort();
+}
+
+@export
+fun audit_priority_push(borrow queue: PriorityQueue<string>, value: string): void {
     queue.push(value);
 }

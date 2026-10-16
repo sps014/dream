@@ -124,6 +124,9 @@ pub(super) fn is_keyword_needing_space(kind: TokenKind) -> bool {
             | TokenKind::FunToken
             | TokenKind::AsyncToken
             | TokenKind::StaticToken
+            | TokenKind::SharedToken
+            | TokenKind::OverrideToken
+            | TokenKind::OperatorToken
             | TokenKind::ImportToken
             | TokenKind::AsToken
             | TokenKind::ModuleToken
@@ -164,7 +167,7 @@ fn is_word_like(kind: TokenKind) -> bool {
 
 /// A token that can end an operand — when one precedes `-`/`+`, those are binary operators;
 /// otherwise (`(`, `,`, `=`, `return`, …) they are signed-literal prefixes.
-fn ends_operand(kind: TokenKind) -> bool {
+pub(super) fn ends_operand(kind: TokenKind) -> bool {
     matches!(
         kind,
         TokenKind::IdentifierToken
@@ -193,6 +196,16 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
         prev
     };
 
+    // Adjacent unary signs must not turn into an increment or decrement token.
+    if matches!(
+        (prev, cur),
+        (TokenKind::PlusToken, TokenKind::PlusToken)
+            | (TokenKind::MinusToken, TokenKind::MinusToken)
+            | (TokenKind::GreaterThanToken, TokenKind::GreaterThanToken)
+    ) {
+        return true;
+    }
+
     // Never space before closers / separators / postfix.
     if matches!(
         cur,
@@ -217,6 +230,10 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
             | TokenKind::DotDotDotToken
             | TokenKind::AtToken
     ) {
+        return false;
+    }
+
+    if prev == TokenKind::FunToken && cur == TokenKind::OpenParenthesisToken {
         return false;
     }
 

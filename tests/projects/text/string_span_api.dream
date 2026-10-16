@@ -52,5 +52,10 @@ fun c222_verify_observation(borrow value: string): void {
 fun string_span_api(): void {
     c222_cursor = 0;
     c222_body();
-    Assert.eq(c222_cursor, ("22\nhello, world ,a,,b|\ntrue\ntrue\n5\n7\n16\ntrue\ntrue\n22\n[hello]\n[world]\n[a]\n[]\n[b]\na\nb\nc\n<one>\n<two>\n<three>\n-42\n12\ntrue\ntrue\ntrue\n").length);
+    Assert.eq(
+        c222_cursor,
+        (
+            "22\nhello, world ,a,,b|\ntrue\ntrue\n5\n7\n16\ntrue\ntrue\n22\n[hello]\n[world]\n[a]\n[]\n[b]\na\nb\nc\n<one>\n<two>\n<three>\n-42\n12\ntrue\ntrue\ntrue\n"
+        ).length
+    );
 }

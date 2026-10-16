@@ -40,10 +40,15 @@ By default it binds to a JS global of the same name (`alert`). Three things coop
 `@js(module, name)` controls which JS object and property the extern binds to:
 
 ```dream
-@js("dom", "setText")            // binds to importObject["dom"]["setText"]
+@js(
+    "dom",
+    "setText"
+) // binds to importObject["dom"]["setText"]
 extern fun set_text(value: string): void;
 
-@js("console")                   // module only -> field defaults to the function name
+@js(
+    "console"
+) // module only -> field defaults to the function name
 extern fun log(msg: string): void;
 ```
 

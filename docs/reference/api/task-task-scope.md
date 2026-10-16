@@ -57,7 +57,7 @@ public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>
 Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
 
 ```dream
-public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E>
+public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E>
 ```
 
 ## `spawn_on`
@@ -65,5 +65,5 @@ public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E>
 Schedules CPU work on an explicit reusable pool while retaining structured ownership.
 
 ```dream
-public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>
+public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>
 ```

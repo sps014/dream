@@ -6,7 +6,9 @@ import system.testing;
 @test
 fun compression_streams(): void {
     let input = Buffer.alloc<byte>(100000);
-    for (let i = 0; i < input.length; i = i + 1) { input[i] = (byte)(i % 251); }
+    for (let i = 0; i < input.length; i = i + 1) {
+        input[i] = (byte)(i % 251);
+    }
     for (let format in [CompressionFormat.Gzip, CompressionFormat.Zlib]) {
         let encoded = MemoryStream();
         let writer = Compression.writer(encoded, format).unwrap();
@@ -21,7 +23,9 @@ fun compression_streams(): void {
         Assert.eq(Streams.copy(reader, decoded).unwrap(), 100000L);
         decoded.seek(0L).unwrap();
         let actual = decoded.read_exact(input.length).unwrap();
-        for (let i = 0; i < input.length; i = i + 1) { Assert.eq(actual[i], input[i]); }
+        for (let i = 0; i < input.length; i = i + 1) {
+            Assert.eq(actual[i], input[i]);
+        }
         reader.close();
         Assert.is_true(reader.read(1).is_err());
 
@@ -32,7 +36,10 @@ fun compression_streams(): void {
 
         encoded.seek(0L).unwrap();
         let compressed = encoded.read(100000).unwrap();
-        let truncated = Compression.reader(MemoryStream(Span<byte>(compressed, 0, compressed.length - 1).to_array()), format).unwrap();
+        let truncated = Compression.reader(
+            MemoryStream(Span<byte>(compressed, 0, compressed.length - 1).to_array()),
+            format
+        ).unwrap();
         Assert.is_true(Streams.copy(truncated, MemoryStream()).is_err());
         truncated.close();
         let trailing = MemoryStream(compressed);

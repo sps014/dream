@@ -11,24 +11,47 @@ import system.webapi.auth;
 class Routes {
     @requires_scopes("read")
     @get("/")
-    public static fun reports(@dep(CurrentUser) user: AuthPrincipal): string { return "Reports for " + user.subject; }
+    public static fun reports(@dep(CurrentUser)user: AuthPrincipal): string {
+        return "Reports for " + user.subject;
+    }
 }
-class Accounts : AuthAccounts {
+
+class Accounts: AuthAccounts {
     hash: string;
-    public constructor(hash: string) { this.hash = hash; }
+    public constructor(hash: string) {
+        this.hash = hash;
+    }
+
     public async unique fun find_login(login: string): Result<AuthAccount, AuthError> {
-        if login != "demo" { return Result.Err(AuthError("EAUTH", "unknown account")); }
+        if login != "demo" {
+            return Result.Err(AuthError("EAUTH", "unknown account"));
+        }
         return Result.Ok(AuthAccount("demo-user", this.hash, "read"));
     }
-    public async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError> {
-        return Result.Err(AuthError("EAUTH", "external account linking requires application policy"));
+
+    public async unique fun link_identity(
+        issuer: string,
+        subject: string,
+        email: string,
+        email_verified: bool
+    ): Result<AuthAccount, AuthError> {
+        return Result.Err(
+            AuthError("EAUTH", "external account linking requires application policy")
+        );
     }
 }
 
 async fun main(): void {
     let key = System.env("API_JWT_KEY").unwrap();
-    let auth = AuthService(JwtOptions("issuer", "reports", key, key, "HS256"), Accounts(Password.hash(System.env("DEMO_PASSWORD").unwrap()).unwrap()), MemoryAuthStore());
-    let app = WebApp(); app.include_router(auth.router().unwrap()).unwrap(); app.include_router(Routes.router()).unwrap(); app.use(auth.middleware()).unwrap();
+    let auth = AuthService(
+        JwtOptions("issuer", "reports", key, key, "HS256"),
+        Accounts(Password.hash(System.env("DEMO_PASSWORD").unwrap()).unwrap()),
+        MemoryAuthStore()
+    );
+    let app = WebApp();
+    app.include_router(auth.router().unwrap()).unwrap();
+    app.include_router(Routes.router()).unwrap();
+    app.use(auth.middleware()).unwrap();
     app.run("127.0.0.1", 8000).await.unwrap();
 }
 ```

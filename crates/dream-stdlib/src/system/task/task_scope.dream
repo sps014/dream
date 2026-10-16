@@ -19,17 +19,26 @@ public class TaskHandle<T, E> {
     static async fun join_owned(handle: TaskHandle<T, E>): Result<T, TaskFailure<E>> {
         if handle.value.is_none() {
             // Completion runs on this scheduler; installing the first waiter cannot race a poll.
-            if handle.completed.is_none() { handle.completed = Option.Some(CancellationSource()); }
+            if handle.completed.is_none() {
+                handle.completed = Option.Some(CancellationSource());
+            }
             handle.completed.unwrap().token.wait_cancelled().await;
         }
         return handle.value.unwrap();
     }
 
-    internal fun execute_parallel(body: fun(): T, scope: TaskScope<E>): Future<bool> where T : shared {
+    internal fun execute_parallel(
+        body: fun(): T,
+        scope: TaskScope<E>
+    ): Future<bool> where T: shared {
         return TaskHandle<T, E>.parallel_owned(this, body, scope);
     }
 
-    static async fun parallel_owned(handle: TaskHandle<T, E>, body: fun(): T, scope: TaskScope<E>): bool where T : shared {
+    static async fun parallel_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): T,
+        scope: TaskScope<E>
+    ): bool where T: shared {
         // The scope owns this wait: cancellation must settle the worker before exposing results.
         let session = Task.start<T>(body);
         let wire = session.receive().await;
@@ -41,27 +50,47 @@ public class TaskHandle<T, E> {
             outcome = Result.Err(failure);
         }
         handle.value = Option.Some(outcome);
-        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
         return true;
     }
 
-    internal fun execute_pool(body: fun(): T, pool: TaskPool, scope: TaskScope<E>): Future<bool> where T : shared {
+    internal fun execute_pool(
+        body: fun(): T,
+        pool: TaskPool,
+        scope: TaskScope<E>
+    ): Future<bool> where T: shared {
         return TaskHandle<T, E>.pool_owned(this, body, pool, scope);
     }
 
-    static async fun pool_owned(handle: TaskHandle<T, E>, body: fun(): T, pool: TaskPool, scope: TaskScope<E>): bool where T : shared {
+    static async fun pool_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): T,
+        pool: TaskPool,
+        scope: TaskScope<E>
+    ): bool where T: shared {
         let result = pool.dispatch<T>(body, Option.Some(scope.token)).await;
         let initial: TaskFailure<E> = TaskFailure.Cancelled;
         let outcome: Result<T, TaskFailure<E>> = Result.Err(initial);
         if result.is_err() {
             let error = result.unwrap_err();
-            if !scope.token.is_cancelled { scope.worker_failure = Option.Some(error); scope.cancel(); }
+            if !scope.token.is_cancelled {
+                scope.worker_failure = Option.Some(error);
+                scope.cancel();
+            }
             let failure: TaskFailure<E> = TaskFailure.WorkerFailed(error);
-            if error == TaskPoolError.Cancelled && scope.token.is_cancelled { failure = TaskFailure.Cancelled; }
+            if error == TaskPoolError.Cancelled && scope.token.is_cancelled {
+                failure = TaskFailure.Cancelled;
+            }
             outcome = Result.Err(failure);
-        } else { outcome = Result.Ok(result.unwrap()); }
+        } else {
+            outcome = Result.Ok(result.unwrap());
+        }
         handle.value = Option.Some(outcome);
-        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
         return true;
     }
 
@@ -69,7 +98,11 @@ public class TaskHandle<T, E> {
         return TaskHandle<T, E>.execute_owned(this, body, scope);
     }
 
-    static async fun execute_owned(handle: TaskHandle<T, E>, body: fun(): Future<Result<T, E>>, scope: TaskScope<E>): bool {
+    static async fun execute_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): Future<Result<T, E>>,
+        scope: TaskScope<E>
+    ): bool {
         let pending = body();
         TaskScope<E>.attach_host(pending, scope.token);
         let result = pending.await;
@@ -78,14 +111,18 @@ public class TaskHandle<T, E> {
             let cancelled = scope.token.is_cancelled;
             scope.fail(error);
             let failure: TaskFailure<E> = TaskFailure.Failed(error);
-            if cancelled { failure = TaskFailure.Cancelled; }
+            if cancelled {
+                failure = TaskFailure.Cancelled;
+            }
             let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
             handle.value = Option.Some(outcome);
         } else {
             let outcome: Result<T, TaskFailure<E>> = Result.Ok(result.unwrap());
             handle.value = Option.Some(outcome);
         }
-        if handle.completed.is_some() { handle.completed.unwrap().cancel(); }
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
         return true;
     }
 }
@@ -112,10 +149,14 @@ public class TaskScope<E> {
     }
 
     // The inherited cancellation token for this scope and its children.
-    public get token(): CancellationToken { return this.context; }
+    public get token(): CancellationToken {
+        return this.context;
+    }
 
     // Requests cooperative cancellation; completion still waits for child cleanup.
-    public fun cancel(): void { this.source.cancel(); }
+    public fun cancel(): void {
+        this.source.cancel();
+    }
 
     // Schedules a child immediately and retains it even if its result handle is discarded.
     public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E> {
@@ -133,7 +174,7 @@ public class TaskScope<E> {
     }
 
     // Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
-    public fun spawn_parallel<T : shared>(body: fun(): T): TaskHandle<T, E> {
+    public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
@@ -148,7 +189,7 @@ public class TaskScope<E> {
     }
 
     // Schedules CPU work on an explicit reusable pool while retaining structured ownership.
-    public fun spawn_on<T : shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E> {
+    public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
             let failure: TaskFailure<E> = TaskFailure.Cancelled;
@@ -163,7 +204,9 @@ public class TaskScope<E> {
     }
 
     internal fun fail(error: E): void {
-        if !this.source.is_cancelled && this.failure.is_none() { this.failure = Option.Some(error); }
+        if !this.source.is_cancelled && this.failure.is_none() {
+            this.failure = Option.Some(error);
+        }
         this.cancel();
     }
 
@@ -178,12 +221,17 @@ public class TaskScope<E> {
     }
 
     @intrinsic(Intrinsic.DreamTaskAttach)
-    internal static extern fun attach_host(borrow pending: object, borrow token: CancellationToken): void;
+    internal static extern fun attach_host(
+        borrow pending: object,
+        borrow token: CancellationToken
+    ): void;
 
     @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
 
-    internal fun protect(): void { TaskScope<E>.protect_host(this.source); }
+    internal fun protect(): void {
+        TaskScope<E>.protect_host(this.source);
+    }
 
     internal async fun follow(parent: CancellationToken): bool {
         let pending = parent.wait_cancelled();
@@ -211,7 +259,14 @@ public class TaskScope<E> {
 @allow_cycle
 class TaskWaitGuard<T> {
     pending: Future<T>;
-    internal constructor(pending: Future<T>) { this.pending = pending; }
-    internal fun close(): void { Promise.cancel(this.pending); }
-    del() { this.close(); }
+    internal constructor(pending: Future<T>) {
+        this.pending = pending;
+    }
+
+    internal fun close(): void {
+        Promise.cancel(this.pending);
+    }
+    del() {
+        this.close();
+    }
 }

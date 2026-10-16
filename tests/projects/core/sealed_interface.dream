@@ -2,8 +2,8 @@ import system.testing;
 // A `sealed` type rejects user `extend` blocks, but compiler-synthesized extends are exempt: a
 // sealed class may still implement an interface and inherit its default methods (which are injected
 // as a synthesized `extend`). This compiles and runs only if that exemption holds.
-
 import system;
+
 interface c1f0_Greeter {
     fun name(): string;
     public fun greet(): string {
@@ -11,7 +11,7 @@ interface c1f0_Greeter {
     }
 }
 
-sealed class c1f0_Robot : c1f0_Greeter {
+sealed class c1f0_Robot: c1f0_Greeter {
     public fun name(): string {
         return "beep";
     }

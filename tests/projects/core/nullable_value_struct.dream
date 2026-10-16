@@ -2,12 +2,15 @@ import system.testing;
 // An optional value struct (`Option<Point>`) replaces the old nullable-value-struct feature:
 // `Some`/`None` make the "no value" case explicit, and `unwrap_or` (the `??` sugar) hands back an
 // inline `Point` either way.
-
 import system;
+
 struct c16f_Point {
     public x: int;
     public y: int;
-    public constructor(x: int, y: int) { this.x = x; this.y = y; }
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
 }
 
 fun c16f_show(p: Option<c16f_Point>): void {

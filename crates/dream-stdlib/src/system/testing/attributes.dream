@@ -7,6 +7,6 @@ public struct TestAttribute {}
 /// Fails a `@test` function that runs longer than this many milliseconds. Tests have no timeout unless they declare one.
 @attribute(AttributeTarget.Function)
 public struct TimeoutAttribute {
+    /// Timeout or interval in milliseconds.
     public milliseconds: int;
 }
-

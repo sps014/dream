@@ -9,6 +9,9 @@ module system.core;
 // Unlike a raw pointer, a `Span<T>` keeps its backing array field (`array`) strongly referenced, so
 // the memory it views can never be freed out from under it — slicing/indexing only needs its own
 // logical-range check, never an "is this memory still alive" check.
+/// A writable, bounds-checked view of a contiguous range in an array. Changes affect the
+/// original array. Spans keep their source alive, cannot be stored in heap objects, and cannot
+/// cross an `await`.
 public ref struct Span<T> {
     internal array: T[];
     // Index into `array` of this span's first element.
@@ -56,6 +59,7 @@ public ref struct Span<T> {
         return this.array[this.offset + index];
     }
 
+    /// Returns the element at `index`; an out-of-range index panics.
     public fun get(index: int): T {
         return this[index];
     }
@@ -75,6 +79,7 @@ public ref struct Span<T> {
         this.array[this.offset + index] = value;
     }
 
+    /// Replaces the element at `index`; an out-of-range index panics.
     public fun set(index: int, value: T): void {
         this[index] = value;
     }
@@ -108,6 +113,7 @@ public ref struct Span<T> {
         return this.as_read_only().sequence_equal(other);
     }
 
+    /// Returns whether both spans contain equal elements in the same order.
     public fun sequence_equal(other: Span<T>): bool {
         return this.as_read_only().sequence_equal(other.as_read_only());
     }
@@ -116,6 +122,8 @@ public ref struct Span<T> {
     // than this span. Reference elements go through ordinary assignment (retain/release); the
     // unmanaged specialization below bulk-blits instead.
     // Same-array rightward shifts copy high-to-low so overlapping regions stay correct (memmove).
+    /// Copies every element of `src` into the start of this span. The destination must be large
+    /// enough. Overlapping ranges are supported.
     public fun copy_from(src: Span<T>): void {
         if src._length > this._length {
             System.panic("Span copy_from overflow");
@@ -136,7 +144,9 @@ public ref struct Span<T> {
     }
 
     // Unmanaged fast path: one `memory.copy` of `src._length * sizeof(T)` bytes.
-    public fun copy_from(src: Span<T>): void where T : unmanaged {
+    /// Copies every element of `src` into the start of this span. The destination must be large
+    /// enough. Overlapping ranges are supported.
+    public fun copy_from(src: Span<T>): void where T: unmanaged {
         if src._length > this._length {
             System.panic("Span copy_from overflow");
         }
@@ -144,11 +154,15 @@ public ref struct Span<T> {
     }
 
     // Copies every element of this span into `dst` starting at index 0. Traps if `dst` is shorter.
+    /// Copies every element into the start of `dst`. Panics if the destination is shorter.
+    /// Overlapping ranges are supported.
     public fun copy_to(dst: Span<T>): void {
         this.as_read_only().copy_to(dst);
     }
 
-    public fun copy_to(dst: Span<T>): void where T : unmanaged {
+    /// Copies every element into the start of `dst`. Panics if the destination is shorter.
+    /// Overlapping ranges are supported.
+    public fun copy_to(dst: Span<T>): void where T: unmanaged {
         if this._length > dst._length {
             System.panic("Span copy_to overflow");
         }
@@ -169,7 +183,8 @@ public ref struct Span<T> {
         return this.as_read_only().to_array();
     }
 
-    public fun to_array(): T[] where T : unmanaged {
+    /// Copies the elements into a new array.
+    public fun to_array(): T[]where T: unmanaged {
         let result = Buffer.alloc<T>(this._length);
         Buffer.elems_copy<T>(result, 0, this.array, this.offset, this._length);
         return result;

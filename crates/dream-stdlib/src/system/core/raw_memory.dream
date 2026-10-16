@@ -11,7 +11,12 @@ internal static class RawMemory {
     internal static extern fun size(count: usize, element_size: usize): usize;
     @intrinsic(Intrinsic.DreamRawAlloc)
     @unsafe
-    internal static extern fun alloc(size: usize, alignment: usize, minimum: usize, zeroed: int): usize;
+    internal static extern fun alloc(
+        size: usize,
+        alignment: usize,
+        minimum: usize,
+        zeroed: int
+    ): usize;
     @intrinsic(Intrinsic.DreamRawRealloc)
     @unsafe
     internal static extern fun realloc(address: usize, size: usize, minimum: usize): usize;
@@ -32,7 +37,12 @@ internal static class RawMemory {
     internal static extern fun arena_new(initial: usize): usize;
     @intrinsic(Intrinsic.DreamArenaAlloc)
     @unsafe
-    internal static extern fun arena_alloc(state: usize, size: usize, alignment: usize, zeroed: int): usize;
+    internal static extern fun arena_alloc(
+        state: usize,
+        size: usize,
+        alignment: usize,
+        zeroed: int
+    ): usize;
     @intrinsic(Intrinsic.DreamArenaReset)
     @unsafe
     internal static extern fun arena_reset(state: usize): void;

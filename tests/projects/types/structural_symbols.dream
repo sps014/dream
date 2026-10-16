@@ -1,10 +1,21 @@
 import system.testing;
 import system;
 
-fun c238_foo<T>(value: T): T { return value; }
-fun c238_foo__0(): int { return 20; }
-fun c238_foo__12(): int { return 30; }
-fun c238__Dg0_3_foo_6_p3_int(): int { return 40; }
+fun c238_foo<T>(value: T): T {
+    return value;
+}
+
+fun c238_foo__0(): int {
+    return 20;
+}
+
+fun c238_foo__12(): int {
+    return 30;
+}
+
+fun c238__Dg0_3_foo_6_p3_int(): int {
+    return 40;
+}
 
 @test
 @timeout(180000)

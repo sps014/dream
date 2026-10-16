@@ -3,8 +3,7 @@ module system.primitives;
 // The `int` primitive as an extensible class. `int` keeps its runtime representation (a stack
 // `i32`); these are ordinary methods dispatched on the receiver via `this`, plus a `static`
 // factory that parses text. Auto-imported into every program.
-
-extend int : Comparable<int> {
+extend int: Comparable<int> {
     // Orders this value against `other`: negative when less, zero when equal, positive when greater.
     // Implementing `Comparable<int>` lets `List<int>.sort()` / `binary_search` work out of the box.
     public fun compare(other: int): int {

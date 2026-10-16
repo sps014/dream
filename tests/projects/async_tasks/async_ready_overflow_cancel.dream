@@ -1,7 +1,9 @@
 import system.testing;
 import system;
 
-async fun c3c_value(n: int): int { return n; }
+async fun c3c_value(n: int): int {
+    return n;
+}
 
 async fun c3c_body(): void {
     let pending = Buffer.alloc<Future<int>>(512);
@@ -9,10 +11,14 @@ async fun c3c_body(): void {
         pending[i] = c3c_value(i);
         Promise.start(pending[i]);
     }
-    for (let i = 0; i < pending.length; i = i + 2) { Promise.cancel(pending[i]); }
+    for (let i = 0; i < pending.length; i = i + 2) {
+        Promise.cancel(pending[i]);
+    }
     let results = Promise.all(pending).await;
     let sum = 0;
-    for (let i = 0; i < results.length; i = i + 1) { sum = sum + results[i]; }
+    for (let i = 0; i < results.length; i = i + 1) {
+        sum = sum + results[i];
+    }
     c3c_verify_observation((sum).to_string());
 }
 

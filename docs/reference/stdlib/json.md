@@ -77,21 +77,21 @@ if v.has("error") {
 switch (v.kind()) {
     case JsonKind.Object:
         let i = 0;
-        while i < v.length {                 // insertion order
-            let key = v.key_at(i).unwrap_or("");
-            let child = v.value_at(i).unwrap_or(JsonValue.none());
-            System.println(key + " = " + Json.serialize(child));
-            i = i + 1;
-        }
+        while i < v.length { // insertion order
+        let key = v.key_at(i).unwrap_or("");
+        let child = v.value_at(i).unwrap_or(JsonValue.none());
+        System.println(key + " = " + Json.serialize(child));
+        i = i + 1;
+    }
     case JsonKind.Array:
         switch (v.as_array()) {
-            Some(items) => {
-                for (let item in items) {
-                    System.println(Json.serialize(item));
-                }
-            },
-            None => {}
-        }
+        Some(items) => {
+            for (let item in items) {
+                System.println(Json.serialize(item));
+            }
+        },
+        None => {}
+    }
     default:
 }
 
@@ -117,14 +117,13 @@ switch (v.get("meta")) {
 @json
 class Envelope {
     public id: int;
-    public payload: JsonValue;   // kept verbatim through serialize/deserialize
+    public payload: JsonValue; // kept verbatim through serialize/deserialize
 }
 
 let mixed: Map<string, JsonValue> = {
-    "n": JsonValue.from_int(42),
-    "s": JsonValue.from_string("text"),
+    "n": JsonValue.from_int(42), "s": JsonValue.from_string("text"),
 };
-System.println(Json.serialize(mixed));   // {"n":42,"s":"text"}
+System.println(Json.serialize(mixed)); // {"n":42,"s":"text"}
 ```
 
 ### Accessors

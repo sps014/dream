@@ -10,17 +10,30 @@ import system.json;
 @json
 class Message {
     public text: string;
-    public constructor(text: string) { this.text = text; }
+    public constructor(text: string) {
+        this.text = text;
+    }
 }
+
 @router("")
 class Routes {
     @get("/items/{id}")
-    public static fun item(@path id: int, @query limit: Option<int>, @header("X-Request-ID") request_id: Option<string>): string {
-        return id.to_string() + ":" + limit.unwrap_or(10).to_string() + ":" + request_id.unwrap_or("");
+    public static fun item(
+        @path id: int,
+        @query limit: Option<int>,
+        @header("X-Request-ID")request_id: Option<string>
+    ): string {
+        return id.to_string()
+            + ":" + limit.unwrap_or(10)
+            .to_string() + ":" + request_id.unwrap_or("");
     }
+
     @post("/messages")
-    public static fun message(@body body: Message): Message { return body; }
+    public static fun message(@body body: Message): Message {
+        return body;
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

@@ -11,7 +11,9 @@ A mobile package uses `type = "lib"` in `dream.toml` and `@export` functions. Fo
 
 ```dream
 @export
-fun add(a: int, b: int): int { return a + b; }
+fun add(a: int, b: int): int {
+    return a + b;
+}
 ```
 
 ```toml

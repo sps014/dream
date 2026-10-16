@@ -3,21 +3,37 @@ import system;
 
 struct c28c_Payload {
     public data: string;
-    public constructor(borrow data: string) { this.data = data; }
+    public constructor(borrow data: string) {
+        this.data = data;
+    }
 }
 
-interface c28c_Reader { fun read(value: c28c_Payload): string; }
-class c28c_Echo : c28c_Reader {
-    public fun read(value: c28c_Payload): string { return value.data; }
-fun identity(value: c28c_Payload): c28c_Payload { return value; }
+interface c28c_Reader {
+    fun read(value: c28c_Payload): string;
+}
+
+class c28c_Echo: c28c_Reader {
+    public fun read(value: c28c_Payload): string {
+        return value.data;
+    }
+
+    fun identity(value: c28c_Payload): c28c_Payload {
+        return value;
+    }
 }
 
 @noinline
 fun c28c_call_reader(reader: c28c_Reader, value: c28c_Payload): string {
     return reader.read(value);
 }
-fun c28c_read(value: c28c_Payload): string { return value.data; }
-fun c28c_identity(value: c28c_Payload): c28c_Payload { return value; }
+
+fun c28c_read(value: c28c_Payload): string {
+    return value.data;
+}
+
+fun c28c_identity(value: c28c_Payload): c28c_Payload {
+    return value;
+}
 
 @test
 @timeout(180000)

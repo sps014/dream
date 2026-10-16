@@ -13,10 +13,13 @@ Two layers:
 ```dream
 let src = CancellationSource();
 let tok = src.token;
-let w = Task.spawn(() => {
-    while !tok.is_cancelled { /* work */ }
-    return 0;
-});
+let w = Task.spawn(
+    () => {
+        while !tok.is_cancelled { /* work */
+        }
+        return 0;
+    }
+);
 src.cancel();
 let _ = w.await;
 ```
@@ -33,10 +36,12 @@ A task body may `await` via `spawn_async` (named `async fun` or `async` lambda):
 ```dream
 async fun main(): void {
     let n = 6;
-    let squarer = Task.spawn_async(async () => {
-        Time.sleep(1).await;
-        return n * n;
-    });
+    let squarer = Task.spawn_async(
+        async () => {
+            Time.sleep(1).await;
+            return n * n;
+        }
+    );
     System.println((squarer.await).to_string()); // 36
 }
 ```

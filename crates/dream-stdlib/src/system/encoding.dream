@@ -391,14 +391,18 @@ public static class Encoding {
                 i = i + 3;
             } else {
                 let value = bytes[i];
-                if form && value == (byte)43 { value = (byte)32; }
+                if form && value == (byte)43 {
+                    value = (byte)32;
+                }
                 out[count] = value;
                 i = i + 1;
             }
             count = count + 1;
         }
         let exact = Buffer.alloc<byte>(count);
-        for (let j = 0; j < count; j = j + 1) { exact[j] = out[j]; }
+        for (let j = 0; j < count; j = j + 1) {
+            exact[j] = out[j];
+        }
         let decoder = Utf8Decoder();
         let decoded = decoder.decode_chunk(exact)?;
         return Result.Ok(decoded + decoder.finish()?);

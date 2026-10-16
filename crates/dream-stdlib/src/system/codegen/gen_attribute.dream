@@ -9,7 +9,9 @@ import system.json;
 public class GenAttribute {
     // `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
     public id: string;
+    /// Name identifying this entry.
     public name: string;
+    /// Arguments supplied to the attribute, in declaration order.
     public args: List<GenAttrArg>;
 
     // Creates the snapshot model from the supplied values.

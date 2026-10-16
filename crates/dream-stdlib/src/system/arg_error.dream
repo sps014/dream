@@ -1,7 +1,7 @@
 module system;
 
 // Invalid CLI / environment usage implementing `Error`.
-public class ArgError : Error {
+public class ArgError: Error {
     _code: string;
     _message: string;
 

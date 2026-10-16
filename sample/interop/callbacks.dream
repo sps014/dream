@@ -6,6 +6,7 @@
 // Dream -> JS: a Dream function is passed to a JS host, which calls it back N times. The runtime
 // wraps the function index (into the exported funcref table) as a JS callable automatically.
 import system;
+
 fun on_tick(n: int): void {
     System.println("tick " + n);
 }
@@ -14,7 +15,6 @@ extern fun run_callback(cb: fun(int): void, times: int): void;
 
 // JS -> Dream: a JS function handed to Dream is just a `js` value; call it directly with native
 // syntax. Arguments auto-marshal into JS, so no manual boxing is needed.
-
 fun main(): void {
     run_callback(on_tick, 3);
 

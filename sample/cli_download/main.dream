@@ -5,10 +5,18 @@ import system.net;
 
 async fun download(url: string, path: string, timeout: int): Result<long, string> {
     let parsed = Url.parse(url);
-    if parsed.is_err() { return Result.Err(parsed.unwrap_err().message()); }
+    if parsed.is_err() {
+        return Result.Err(parsed.unwrap_err().message());
+    }
     let client = HttpClient();
-    let sent = client.send(HttpRequest.get(parsed.unwrap()), options: HttpOptions(timeout_ms: timeout, max_redirects: 5)).await;
-    if sent.is_err() { client.close(); return Result.Err(sent.unwrap_err().message()); }
+    let sent = client.send(
+        HttpRequest.get(parsed.unwrap()),
+        options: HttpOptions(timeout_ms: timeout, max_redirects: 5)
+    ).await;
+    if sent.is_err() {
+        client.close();
+        return Result.Err(sent.unwrap_err().message());
+    }
     let response = sent.unwrap();
     if response.status < 200 || response.status >= 300 {
         response.close();
@@ -27,10 +35,18 @@ async fun download(url: string, path: string, timeout: int): Result<long, string
     let response_closed = response.close();
     let client_closed = client.close();
     // Preserve the transfer failure while still closing every owned resource.
-    if copied.is_err() { return Result.Err(copied.unwrap_err().message()); }
-    if file_closed.is_err() { return Result.Err(file_closed.unwrap_err().message()); }
-    if response_closed.is_err() { return Result.Err(response_closed.unwrap_err().message()); }
-    if client_closed.is_err() { return Result.Err(client_closed.unwrap_err().message()); }
+    if copied.is_err() {
+        return Result.Err(copied.unwrap_err().message());
+    }
+    if file_closed.is_err() {
+        return Result.Err(file_closed.unwrap_err().message());
+    }
+    if response_closed.is_err() {
+        return Result.Err(response_closed.unwrap_err().message());
+    }
+    if client_closed.is_err() {
+        return Result.Err(client_closed.unwrap_err().message());
+    }
     return Result.Ok(copied.unwrap());
 }
 
@@ -43,15 +59,32 @@ async fun main(): int {
         .int_option("timeout", default_value: 10000)
         .flag("verbose", short: "v");
     let result = command.parse(System.args);
-    if result.is_err() { System.stderr.write_line(result.unwrap_err().message()); return 2; }
+    if result.is_err() {
+        System.stderr.write_line(result.unwrap_err().message());
+        return 2;
+    }
     let parsed = result.unwrap();
-    if parsed.is_help { System.print(parsed.help_text); return 0; }
-    if parsed.is_version { System.print(parsed.version_text); return 0; }
+    if parsed.is_help {
+        System.print(parsed.help_text);
+        return 0;
+    }
+    if parsed.is_version {
+        System.print(parsed.version_text);
+        return 0;
+    }
     let timeout = parsed.get_int("timeout").unwrap();
-    if timeout < 0 { System.stderr.write_line("timeout must be nonnegative"); return 2; }
+    if timeout < 0 {
+        System.stderr.write_line("timeout must be nonnegative");
+        return 2;
+    }
     let output = parsed.get_string("output").unwrap();
     let copied = download(parsed.get_string("url").unwrap(), output, timeout).await;
-    if copied.is_err() { System.stderr.write_line(copied.unwrap_err()); return 1; }
-    if parsed.get_bool("verbose").unwrap() { System.println("Wrote " + copied.unwrap() + " bytes to " + output); }
+    if copied.is_err() {
+        System.stderr.write_line(copied.unwrap_err());
+        return 1;
+    }
+    if parsed.get_bool("verbose").unwrap() {
+        System.println("Wrote " + copied.unwrap() + " bytes to " + output);
+    }
     return 0;
 }

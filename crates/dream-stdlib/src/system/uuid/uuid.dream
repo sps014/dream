@@ -1,76 +1,134 @@
 module system.uuid;
 
 // Invalid UUID text or an unavailable secure entropy source.
-public class UuidError : Error {
+public class UuidError: Error {
     detail: string;
     // Creates a UUID error without including secret input.
-    public constructor(message: string) { this.detail = message; }
+    public constructor(message: string) {
+        this.detail = message;
+    }
+
     // Stable UUID error code.
-    public fun code(): string { return "EUUID"; }
+    public fun code(): string {
+        return "EUUID";
+    }
+
     // Human-readable validation or entropy failure.
-    public fun message(): string { return this.detail; }
+    public fun message(): string {
+        return this.detail;
+    }
 }
 
 // A 16-byte UUID value; assignment copies bits without allocation or reference counting.
-public struct Uuid : Equatable<Uuid>, Comparable<Uuid> {
+public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
     high: ulong;
     low: ulong;
-    internal constructor(high: ulong, low: ulong) { this.high = high; this.low = low; }
+    internal constructor(high: ulong, low: ulong) {
+        this.high = high;
+        this.low = low;
+    }
+
     // Generates a version-4 UUID from the secure random source, preserving entropy failures.
     public static fun v4(): Result<Uuid, UuidError> {
         let random = SecureRandom.bytes(16);
-        if random.is_err() { return Result.Err(UuidError(random.unwrap_err().message())); }
+        if random.is_err() {
+            return Result.Err(UuidError(random.unwrap_err().message()));
+        }
         let bytes = random.unwrap();
         bytes[6] = (byte)((int)bytes[6] % 16 + 64);
         bytes[8] = (byte)((int)bytes[8] % 64 + 128);
         return Uuid.from_bytes(bytes);
     }
+
     // Copies exactly 16 bytes in network order into a UUID value.
     public static fun from_bytes(bytes: byte[]): Result<Uuid, UuidError> {
-        if bytes.length != 16 { return Result.Err(UuidError("UUID requires exactly 16 bytes")); }
+        if bytes.length != 16 {
+            return Result.Err(UuidError("UUID requires exactly 16 bytes"));
+        }
         let high = 0uL;
         let low = 0uL;
-        for (let i = 0; i < 8; i = i + 1) { high = (high << 8) | (ulong)bytes[i]; low = (low << 8) | (ulong)bytes[i + 8]; }
+        for (let i = 0; i < 8; i = i + 1) {
+            high = (high << 8) | (ulong)bytes[i];
+            low = (low << 8) | (ulong)bytes[i + 8];
+        }
         return Result.Ok(Uuid(high, low));
     }
+
     // Returns an independent 16-byte array in network order.
     public fun to_bytes(): byte[] {
         let bytes = Buffer.alloc<byte>(16);
-        for (let i = 0; i < 8; i = i + 1) { bytes[i] = (byte)(this.high >> (ulong)((7 - i) * 8)); bytes[i + 8] = (byte)(this.low >> (ulong)((7 - i) * 8)); }
+        for (let i = 0; i < 8; i = i + 1) {
+            bytes[i] = (byte)(this.high >>(ulong)((7 - i) * 8));
+            bytes[i + 8] = (byte)(this.low >>(ulong)((7 - i) * 8));
+        }
         return bytes;
     }
+
     // Accepts exactly 36 ASCII hexadecimal characters with canonical hyphen positions.
     public static fun parse(text: string): Result<Uuid, UuidError> {
-        if text.length != 36 { return Result.Err(UuidError("expected a canonical UUID")); }
+        if text.length != 36 {
+            return Result.Err(UuidError("expected a canonical UUID"));
+        }
         let hex = "";
         for (let i = 0; i < text.length; i = i + 1) {
             let ch = text.char_at(i);
             if i == 8 || i == 13 || i == 18 || i == 23 {
-                if ch != '-' { return Result.Err(UuidError("invalid UUID separator")); }
+                if ch != '-' {
+                    return Result.Err(UuidError("invalid UUID separator"));
+                }
             } else {
-                if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) { return Result.Err(UuidError("invalid UUID hexadecimal digit")); }
+                if !(
+                    (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (
+                        ch >= 'A' && ch <= 'F'
+                    )
+                ) {
+                    return Result.Err(UuidError("invalid UUID hexadecimal digit"));
+                }
                 hex = hex + ch.to_string();
             }
         }
         return Uuid.from_bytes(Encoding.hex_decode(hex).unwrap());
     }
+
     // Tests canonical UUID syntax without generating entropy.
-    public static fun is_valid(text: string): bool { return Uuid.parse(text).is_ok(); }
+    public static fun is_valid(text: string): bool {
+        return Uuid.parse(text).is_ok();
+    }
+
     // Compares all 128 bits, independent of storage identity.
-    public fun equals(borrow other: Uuid): bool { return this.high == other.high && this.low == other.low; }
+    public fun equals(borrow other: Uuid): bool {
+        return this.high == other.high && this.low == other.low;
+    }
+
     // Orders UUIDs lexicographically by their unsigned network-order bytes.
     public fun compare(other: Uuid): int {
-        if this.high < other.high { return 0 - 1; }
-        if this.high > other.high { return 1; }
-        if this.low < other.low { return 0 - 1; }
-        if this.low > other.low { return 1; }
+        if this.high < other.high {
+            return 0 - 1;
+        }
+        if this.high > other.high {
+            return 1;
+        }
+        if this.low < other.low {
+            return 0 - 1;
+        }
+        if this.low > other.low {
+            return 1;
+        }
         return 0;
     }
+
     // Folds all bits into a stable hash for maps and sets without formatting text.
-    public override fun hash_code(): int { return (int)(this.high ^ (this.high >> 32) ^ this.low ^ (this.low >> 32)); }
+    public override fun hash_code(): int {
+        return (int)(this.high ^ (this.high >> 32) ^ this.low ^ (this.low >> 32));
+    }
+
     // Returns canonical lowercase text; formatting is the only string allocation.
     public override fun to_string(): string {
         let hex = Encoding.hex_encode(this.to_bytes());
-        return hex.substring(0, 8) + "-" + hex.substring(8, 12) + "-" + hex.substring(12, 16) + "-" + hex.substring(16, 20) + "-" + hex.substring(20, 32);
+        return hex.substring(0, 8)
+            + "-"
+            + hex.substring(8, 12)
+            + "-"
+            + hex.substring(12, 16) + "-" + hex.substring(16, 20) + "-" + hex.substring(20, 32);
     }
 }

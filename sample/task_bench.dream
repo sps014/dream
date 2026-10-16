@@ -1,9 +1,9 @@
 // Benchmark: parallel tasks vs. sequential (single-threaded) calls.
 //
 //   dream run sample/task_bench.dream
-
 import system;
 import system.task;
+
 fun heavy(input: string): string {
     let seed = input.length;
     let acc = 0;

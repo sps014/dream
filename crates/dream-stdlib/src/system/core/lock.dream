@@ -2,15 +2,19 @@ module system.core;
 
 // Reentrant mutual-exclusion lock for `@shared` critical sections.
 shared public class Lock {
+    /// Waits until the synchronization object can be acquired.
     @intrinsic(Intrinsic.SharedLockAcquire)
     public static extern fun host_acquire(borrow target: Lock): void;
 
+    /// Releases the synchronization object after acquisition.
     @intrinsic(Intrinsic.SharedLockRelease)
     public static extern fun host_release(borrow target: Lock): void;
 
+    /// Attempts acquisition without waiting; returns whether it succeeded.
     @intrinsic(Intrinsic.SharedLockTryAcquire)
     public static extern fun host_try_acquire(borrow target: Lock): bool;
 
+    /// Attempts acquisition for up to `timeout_ms` milliseconds.
     @intrinsic(Intrinsic.SharedLockTryAcquireFor)
     public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool;
 

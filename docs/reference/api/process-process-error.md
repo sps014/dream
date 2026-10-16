@@ -9,7 +9,7 @@ Read the [process guide](../stdlib/process.md) for launch settings, cancellation
 Failure launching or communicating with a child process, implementing `Error`.
 
 ```dream
-public class ProcessError : Error
+public class ProcessError: Error
 ```
 
 ## `constructor`

@@ -2,6 +2,7 @@ module system;
 
 // Timing utilities.
 public static class Time {
+    /// Suspends for at least `ms` milliseconds.
     @intrinsic(Intrinsic.Sleep)
     public static extern async fun sleep_host(ms: int): void;
 
@@ -10,19 +11,33 @@ public static class Time {
     static extern async fun delay_host(ms: int): void;
 
     // Suspends on the scheduler timer and returns cancellation instead of panicking.
-    public static fun sleep(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>> {
+    public static fun sleep(
+        ms: int,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<bool, CancelledError>> {
         return Time.wait_ms(ms, CancellationToken.resolve(token), true);
     }
 
     // Suspends until the wall-clock timer expires or inherited cancellation is requested.
-    public static fun delay(ms: int, token: Option<CancellationToken> = Option.None): Future<Result<bool, CancelledError>> {
+    public static fun delay(
+        ms: int,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<bool, CancelledError>> {
         return Time.wait_ms(ms, CancellationToken.resolve(token), false);
     }
 
-    static async fun wait_ms(ms: int, token: Option<CancellationToken>, virtual_clock: bool): Result<bool, CancelledError> {
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(CancelledError.cancelled()); }
+    static async fun wait_ms(
+        ms: int,
+        token: Option<CancellationToken>,
+        virtual_clock: bool
+    ): Result<bool, CancelledError> {
+        if CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(CancelledError.cancelled());
+        }
         let pending = Time.delay_host(ms);
-        if virtual_clock { pending = Time.sleep_host(ms); }
+        if virtual_clock {
+            pending = Time.sleep_host(ms);
+        }
         let guard = TimerGuard(pending);
         if token.is_some() {
             let result = token.unwrap().wait_void(pending).await;
@@ -45,7 +60,14 @@ public static class Time {
 @allow_cycle
 class TimerGuard {
     pending: Future<void>;
-    internal constructor(pending: Future<void>) { this.pending = pending; }
-    internal fun close(): void { Promise.cancel(this.pending); }
-    del() { this.close(); }
+    internal constructor(pending: Future<void>) {
+        this.pending = pending;
+    }
+
+    internal fun close(): void {
+        Promise.cancel(this.pending);
+    }
+    del() {
+        this.close();
+    }
 }

@@ -3,6 +3,8 @@ module system.core;
 // Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this.
 // `@next` lives on the implementing class (attributes are not required on the interface).
 public interface Iterator<T> {
+    /// Returns the next value, or `None` when the sequence has ended.
     unique fun next(): Option<T>;
+    /// Ends iteration and releases resources held by the cursor.
     unique fun close(): void {}
 }

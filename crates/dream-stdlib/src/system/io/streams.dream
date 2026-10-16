@@ -20,10 +20,14 @@ public interface Reader {
     // Collects exactly `count` bytes, retrying short reads; premature EOF returns `EEOF`.
     // Errors may occur after input has already been consumed; negative counts are invalid.
     public fun read_exact(count: int): Result<byte[], IoError> {
-        if count < 0 { return Result.Err(IoError.invalid("", "negative read size")); }
+        if count < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
         if count == 0 {
             let bytes = this.read(0)?;
-            if bytes.length != 0 { return Result.Err(IoError.other("", "reader exceeded requested size")); }
+            if bytes.length != 0 {
+                return Result.Err(IoError.other("", "reader exceeded requested size"));
+            }
             return Result.Ok(bytes);
         }
         let output = Buffer.alloc<byte>(count);
@@ -59,7 +63,9 @@ public interface Writer {
     public fun write_all(data: byte[]): Result<bool, IoError> {
         if data.length == 0 {
             let count = this.write(data)?;
-            if count != 0 { return Result.Err(IoError.other("", "writer made invalid progress")); }
+            if count != 0 {
+                return Result.Err(IoError.other("", "writer made invalid progress"));
+            }
             return Result.Ok(true);
         }
         let offset = 0;
@@ -79,35 +85,53 @@ public interface Writer {
 public interface AsyncReader {
     // Reads up to `max_bytes` with cooperative cancellation.
     // Cancellation does not restore bytes already consumed by the underlying operation.
-    async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>;
+    async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError>;
 }
 
 // Awaitable byte output with explicit flushing and cooperative cancellation.
 public interface AsyncWriter {
     // Returns the number of bytes accepted, which may be less than the input length.
     // Cancellation or failure does not roll back completed writes.
-    async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>;
+    async unique fun write_async(
+        data: byte[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<int, IoError>;
     // Flushes pending output with cancellation; does not close the destination
     // or guarantee durable storage.
-    async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>;
+    async unique fun flush_async(
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError>;
 }
 
 // Copy helpers that leave ownership and closure of both streams with the caller.
 public static class Streams {
     internal static fun slice(data: byte[], start: int, count: int): byte[] {
         let output = Buffer.alloc<byte>(count);
-        for (let i = 0; i < count; i = i + 1) { output[i] = data[start + i]; }
+        for (let i = 0; i < count; i = i + 1) {
+            output[i] = data[start + i];
+        }
         return output;
     }
 
     // Copies to EOF using chunks bounded by positive `buffer_size` (default 8 KiB),
     // then flushes the destination and returns the byte count; neither stream is closed.
-    public static fun copy(source: Reader, destination: Writer, buffer_size: int = 8192): Result<long, IoError> {
-        if buffer_size <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
+    public static fun copy(
+        source: Reader,
+        destination: Writer,
+        buffer_size: int = 8192
+    ): Result<long, IoError> {
+        if buffer_size <= 0 {
+            return Result.Err(IoError.invalid("", "buffer size must be positive"));
+        }
         let total = 0L;
         while true {
             let bytes = source.read(buffer_size)?;
-            if bytes.length == 0 { break; }
+            if bytes.length == 0 {
+                break;
+            }
             if bytes.length > buffer_size {
                 return Result.Err(IoError.other("", "reader exceeded requested size"));
             }
@@ -120,14 +144,23 @@ public static class Streams {
 
     // Copies to EOF with bounded chunks, partial-write retries, and cancellation checks,
     // then flushes and returns the byte count. Neither stream is closed; completed writes persist.
-    public static async fun copy_async(source: AsyncReader, destination: AsyncWriter, buffer_size: int = 8192, token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+    public static async fun copy_async(
+        source: AsyncReader,
+        destination: AsyncWriter,
+        buffer_size: int = 8192,
+        token: Option<CancellationToken> = Option.None
+    ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
-        if buffer_size <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
+        if buffer_size <= 0 {
+            return Result.Err(IoError.invalid("", "buffer size must be positive"));
+        }
         let total = 0L;
         while true {
             CancellationToken.rejected(effective_token, IoError.cancelled())?;
             let bytes = source.read_async(buffer_size, effective_token).await?;
-            if bytes.length == 0 { break; }
+            if bytes.length == 0 {
+                break;
+            }
             if bytes.length > buffer_size {
                 return Result.Err(IoError.other("", "reader exceeded requested size"));
             }

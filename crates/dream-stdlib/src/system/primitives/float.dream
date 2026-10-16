@@ -1,8 +1,7 @@
 module system.primitives;
 
 // The `float` primitive as an extensible class.
-
-extend float : Comparable<float> {
+extend float: Comparable<float> {
     // Orders this value against `other` (negative/zero/positive).
     public fun compare(other: float): int {
         if this < other {

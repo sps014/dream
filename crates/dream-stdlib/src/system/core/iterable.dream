@@ -1,34 +1,51 @@
 module system.core;
 
+/// A sequence that creates a fresh synchronous cursor for each traversal.
 public interface Iterable<T> {
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
     borrow fun iterator(): Iterator<T>;
 }
 
+/// A cursor whose next value may require asynchronous work. Close it when finished.
 public interface AsyncIterator<T> {
+    /// Returns the next value, or `None` when the sequence has ended.
     async unique fun next(): Option<T>;
+    /// Ends iteration and releases resources held by the cursor.
     unique fun close(): void;
 }
 
+/// A sequence that creates a fresh asynchronous cursor for each traversal.
 public interface AsyncIterable<T> {
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
     borrow fun iterator(): AsyncIterator<T>;
 }
 
+/// Signals coordinating a yielding producer and its consumer.
 public static class YieldSignals {
+    /// Creates a signal that stays pending until explicitly completed.
     @intrinsic(Intrinsic.DreamYieldSignal)
     public static extern fun pending(): Future<void>;
+    /// Completes the pending signal or advancement operation.
     @intrinsic(Intrinsic.DreamYieldSignalComplete)
     public static extern fun complete(borrow signal: Future<void>): void;
+    /// Runs the producer until a value is ready or the producer finishes.
     @intrinsic(Intrinsic.DreamYieldRun)
     public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void;
 }
 
+/// A single-value channel coordinating a yielding producer and consumer.
 @allow_cycle
 public class YieldChannel<T> {
+    /// Next value waiting for the consumer, or `None` when no value is ready.
     public value: Option<T>;
+    /// Whether the producer has finished yielding values.
     public ended: bool;
+    /// Signal completed when the next yielded value is available.
     public ready: Future<void>;
+    /// Signal allowing the producer to continue after a value is consumed.
     public resume: Future<void>;
 
+    /// Creates a `YieldChannel` with default settings.
     public constructor() {
         this.value = Option.None;
         this.ended = false;
@@ -36,17 +53,20 @@ public class YieldChannel<T> {
         this.resume = YieldSignals.pending();
     }
 
+    /// Publishes a value and waits until the consumer allows the producer to continue.
     public fun emit(value: T): Future<void> {
         this.value = Option.Some(value);
         YieldSignals.complete(this.ready);
         return this.resume;
     }
 
+    /// Marks the producer complete and wakes a waiting consumer.
     public fun finish(): void {
         this.ended = true;
         YieldSignals.complete(this.ready);
     }
 
+    /// Allows the producer to continue after the current value has been consumed.
     public fun advance(): void {
         this.value = Option.None;
         this.ready = YieldSignals.pending();
@@ -56,58 +76,75 @@ public class YieldChannel<T> {
     }
 }
 
+/// A synchronous cursor over values from a yielding producer.
 @allow_cycle
-public class YieldCursor<T> : Iterator<T> {
+public class YieldCursor<T>: Iterator<T> {
     channel: YieldChannel<T>;
     producer: Option<Future<void>>;
     started: bool;
 
+    /// Creates a `YieldCursor` with `channel`, `producer`.
     public constructor(channel: YieldChannel<T>, producer: Future<void>) {
         this.channel = channel;
         this.producer = Option.Some(producer);
         this.started = false;
     }
 
+    /// Returns the next value, or `None` when the sequence has ended.
     public fun next(): Option<T> {
-        if this.channel.ended { return Option.None; }
-        if this.started { this.channel.advance(); }
+        if this.channel.ended {
+            return Option.None;
+        }
+        if this.started {
+            this.channel.advance();
+        }
         this.started = true;
         YieldSignals.run(this.producer.unwrap(), this.channel.ready);
         return this.channel.value;
     }
 
+    /// Ends iteration and releases resources held by the cursor.
     public fun close(): void {
         this.channel.finish();
-        if this.producer.is_some() { Promise.cancel(this.producer.unwrap()); }
+        if this.producer.is_some() {
+            Promise.cancel(this.producer.unwrap());
+        }
         YieldSignals.complete(this.channel.resume);
         this.producer = Option.None;
         this.channel.value = Option.None;
     }
 
-    fun del() { this.close(); }
+    fun del() {
+        this.close();
+    }
 }
 
+/// A repeatable synchronous sequence backed by a producer factory.
 @allow_cycle
-public class YieldIterable<T> : Iterable<T> {
+public class YieldIterable<T>: Iterable<T> {
     factory: fun(YieldChannel<T>): Future<void>;
 
+    /// Creates a `YieldIterable` with `factory`.
     public constructor(factory: fun(YieldChannel<T>): Future<void>) {
         this.factory = factory;
     }
 
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
     public fun iterator(): Iterator<T> {
         let channel = YieldChannel<T>();
         return YieldCursor<T>(channel, (this.factory)(channel));
     }
 }
 
+/// An asynchronous cursor over values from a yielding producer.
 @allow_cycle
-public class YieldAsyncCursor<T> : AsyncIterator<T> {
+public class YieldAsyncCursor<T>: AsyncIterator<T> {
     channel: YieldChannel<T>;
     producer: Option<Future<void>>;
     started: bool;
     busy: bool;
 
+    /// Creates a `YieldAsyncCursor` with `channel`, `producer`.
     public constructor(channel: YieldChannel<T>, producer: Future<void>) {
         this.channel = channel;
         this.producer = Option.Some(producer);
@@ -115,12 +152,19 @@ public class YieldAsyncCursor<T> : AsyncIterator<T> {
         this.busy = false;
     }
 
+    /// Returns the next value, or `None` when the sequence has ended.
     public async fun next(): Option<T> {
-        if this.channel.ended { return Option.None; }
-        if this.busy { System.panic("async iterator advancement is already pending"); }
+        if this.channel.ended {
+            return Option.None;
+        }
+        if this.busy {
+            System.panic("async iterator advancement is already pending");
+        }
         this.busy = true;
         let advancement = YieldAdvanceLease<T>(this);
-        if this.started { this.channel.advance(); }
+        if this.started {
+            this.channel.advance();
+        }
         this.started = true;
         Promise.start(this.producer.unwrap());
         this.channel.ready.await;
@@ -129,59 +173,97 @@ public class YieldAsyncCursor<T> : AsyncIterator<T> {
         return this.channel.value;
     }
 
+    /// Ends iteration and releases resources held by the cursor.
     public fun close(): void {
         this.channel.finish();
-        if this.producer.is_some() { Promise.cancel(this.producer.unwrap()); }
+        if this.producer.is_some() {
+            Promise.cancel(this.producer.unwrap());
+        }
         YieldSignals.complete(this.channel.resume);
         this.producer = Option.None;
         this.channel.value = Option.None;
     }
 
-    fun del() { this.close(); }
+    fun del() {
+        this.close();
+    }
 }
 
+/// A repeatable asynchronous sequence backed by a producer factory.
 @allow_cycle
-public class YieldAsyncIterable<T> : AsyncIterable<T> {
+public class YieldAsyncIterable<T>: AsyncIterable<T> {
     factory: fun(YieldChannel<T>): Future<void>;
 
+    /// Creates a `YieldAsyncIterable` with `factory`.
     public constructor(factory: fun(YieldChannel<T>): Future<void>) {
         this.factory = factory;
     }
 
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
     public fun iterator(): AsyncIterator<T> {
         let channel = YieldChannel<T>();
         return YieldAsyncCursor<T>(channel, (this.factory)(channel));
     }
 }
 
-
 // A loop owns a lease even when the caller retains the cursor. Dropping a cancelled
 // coroutine therefore closes the active cursor independently of its other aliases.
 @allow_cycle
 public class IteratorLease<T> {
     cursor: Iterator<T>;
-    public constructor(cursor: Iterator<T>) { this.cursor = cursor; }
-    public fun close(): void { this.cursor.close(); }
-    fun del() { this.close(); }
+    /// Creates a `IteratorLease` with `cursor`.
+    public constructor(cursor: Iterator<T>) {
+        this.cursor = cursor;
+    }
+
+    /// Ends iteration and releases resources held by the cursor.
+    public fun close(): void {
+        this.cursor.close();
+    }
+
+    fun del() {
+        this.close();
+    }
 }
 
+/// Closes an asynchronous cursor when its iteration scope ends.
 @allow_cycle
 public class AsyncIteratorLease<T> {
     cursor: AsyncIterator<T>;
-    public constructor(cursor: AsyncIterator<T>) { this.cursor = cursor; }
-    public fun close(): void { this.cursor.close(); }
-    fun del() { this.close(); }
+    /// Creates a `AsyncIteratorLease` with `cursor`.
+    public constructor(cursor: AsyncIterator<T>) {
+        this.cursor = cursor;
+    }
+
+    /// Ends iteration and releases resources held by the cursor.
+    public fun close(): void {
+        this.cursor.close();
+    }
+
+    fun del() {
+        this.close();
+    }
 }
 
-
+/// Releases a producer's pending advancement when the consumer's scope ends.
 @allow_cycle
 public class YieldAdvanceLease<T> {
     cursor: YieldAsyncCursor<T>;
     complete_: bool;
+    /// Creates a `YieldAdvanceLease` with `cursor`.
     public constructor(cursor: YieldAsyncCursor<T>) {
         this.cursor = cursor;
         this.complete_ = false;
     }
-    public fun complete(): void { this.complete_ = true; }
-    fun del() { if !this.complete_ { this.cursor.close(); } }
+
+    /// Completes the pending signal or advancement operation.
+    public fun complete(): void {
+        this.complete_ = true;
+    }
+
+    fun del() {
+        if !this.complete_ {
+            this.cursor.close();
+        }
+    }
 }

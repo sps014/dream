@@ -5,12 +5,29 @@ import system.webapi;
 
 extend WebGenerator {
     internal fun middleware_shape(f: GenFunction): bool {
-        return f.is_async && f.ret.name == nameof(HttpOutgoing) && f.params.length == 2 && f.params.get(0).ty.name == nameof(RequestContext) && f.params.get(1).ty.name == nameof(Next);
+        return f.is_async
+            && f.ret.name
+            == nameof(HttpOutgoing)
+            && f.params.length
+            == 2
+            && f.params.get(0)
+            .ty.name == nameof(RequestContext) && f.params.get(1)
+            .ty.name == nameof(Next);
     }
+
     internal fun validate_use(route: GenFunction, use: UseAttribute): void {
         let name = use.handler.text;
         let target = this.functions.get(use.handler.symbol);
-        if target.is_none() { this.ctx.error_at(route.id, "@use(" + name + ") does not resolve to a function"); }
-        else if !this.middleware_shape(target.unwrap()) { this.ctx.error_at(route.id, "@use(" + name + ") must be `async fun " + name + "(ctx: RequestContext, next: Next): HttpOutgoing`"); }
+        if target.is_none() {
+            this.ctx.error_at(route.id, "@use(" + name + ") does not resolve to a function");
+        } else if !this.middleware_shape(target.unwrap()) {
+            this.ctx.error_at(
+                route.id,
+                "@use("
+                    + name
+                    + ") must be `async fun "
+                    + name + "(ctx: RequestContext, next: Next): HttpOutgoing`"
+            );
+        }
     }
 }

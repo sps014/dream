@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class JsonVariantSpec`
+## `JsonVariantSpec`
 
 One variant of a `@json` discriminated union.
 
@@ -12,13 +12,17 @@ One variant of a `@json` discriminated union.
 public class JsonVariantSpec
 ```
 
-## `name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `fields: List<JsonFieldSpec>`
+## `fields`
+
+Fields of this type, in declaration order.
 
 ```dream
 public fields: List<JsonFieldSpec>

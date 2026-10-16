@@ -8,34 +8,48 @@ async fun idle_child(release: CancellationSource): Result<bool, string> {
 
 async fun main(): void {
     let count = 2000;
-    if System.args.length > 0 { count = int.parse(System.args[0]).unwrap_or(2000); }
-    if count <= 0 { return; }
+    if System.args.length > 0 {
+        count = int.parse(System.args[0]).unwrap_or(2000);
+    }
+    if count <= 0 {
+        return;
+    }
     let started = Stopwatch();
     let before_allocations = Debug.total_allocations;
     let before_live = Debug.live_objects;
     let before_rss = System.memory_bytes;
     let peak_live = 0L;
     let peak_rss = 0L;
-    Task.scope<int, string>(async (scope) => {
-        let release = CancellationSource();
-        for (let i = 0; i < count; i = i + 1) {
-            scope.spawn<bool>(async () => idle_child(release).await);
+    Task.scope<int, string>(
+        async (scope) => {
+            let release = CancellationSource();
+            for (let i = 0; i < count; i = i + 1) {
+                scope.spawn<bool>(async () => idle_child(release).await);
+            }
+            Time.delay(1).await;
+            peak_live = Debug.live_objects - before_live;
+            peak_rss = System.memory_bytes - before_rss;
+            release.cancel();
+            return Result.Ok(count);
         }
-        Time.delay(1).await;
-        peak_live = Debug.live_objects - before_live;
-        peak_rss = System.memory_bytes - before_rss;
-        release.cancel();
-        return Result.Ok(count);
-    }).await.unwrap();
+    ).await.unwrap();
     started.stop();
     let allocations = Debug.total_allocations - before_allocations;
-    System.println("bench scope_idle ns_total=" + started.elapsed_nanos.to_string()
-        + " iters=" + count.to_string()
-        + " ns_per_op=" + (started.elapsed_nanos / (long)count).to_string()
-        + " checksum=" + count.to_string()
-        + " guest_allocations=" + allocations.to_string()
-        + " suspended_guest_objects=" + peak_live.to_string()
-        + " observed_rss_delta_bytes=" + peak_rss.to_string());
+    System.println(
+        "bench scope_idle ns_total="
+            + started.elapsed_nanos.to_string()
+            + " iters="
+            + count.to_string()
+            + " ns_per_op="
+            + (started.elapsed_nanos / (long)count)
+            .to_string()
+            + " checksum="
+            + count.to_string()
+            + " guest_allocations="
+            + allocations.to_string()
+            + " suspended_guest_objects="
+            + peak_live.to_string() + " observed_rss_delta_bytes=" + peak_rss.to_string()
+    );
 
     let channel = Channel.bounded<int>(256).unwrap();
     let sender = channel.sender;
@@ -48,9 +62,17 @@ async fun main(): void {
         checksum = checksum + (long)receiver.try_receive().unwrap().unwrap();
     }
     channel_time.stop();
-    System.println("bench channel_roundtrip ns_total=" + channel_time.elapsed_nanos.to_string()
-        + " iters=" + (count * 100).to_string()
-        + " ns_per_op=" + (channel_time.elapsed_nanos / (long)(count * 100)).to_string()
-        + " guest_allocations=" + (Debug.total_allocations - channel_allocations).to_string()
-        + " checksum=" + checksum.to_string());
+    System.println(
+        "bench channel_roundtrip ns_total="
+            + channel_time.elapsed_nanos.to_string()
+            + " iters="
+            + (count * 100)
+            .to_string()
+            + " ns_per_op="
+            + (channel_time.elapsed_nanos / (long)(count * 100))
+            .to_string()
+            + " guest_allocations="
+            + (Debug.total_allocations - channel_allocations)
+            .to_string() + " checksum=" + checksum.to_string()
+    );
 }

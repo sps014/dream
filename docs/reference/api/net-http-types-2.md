@@ -2,7 +2,7 @@
 
 **Import:** `import system.net;`
 
-## `public static fun get`
+## `get`
 
 Creates a GET request.
 
@@ -10,7 +10,7 @@ Creates a GET request.
 public static fun get(url: Url): HttpRequest
 ```
 
-## `public static fun post`
+## `post`
 
 Creates a POST request.
 
@@ -18,7 +18,7 @@ Creates a POST request.
 public static fun post(url: Url): HttpRequest
 ```
 
-## `public static fun put`
+## `put`
 
 Creates a PUT request.
 
@@ -26,7 +26,7 @@ Creates a PUT request.
 public static fun put(url: Url): HttpRequest
 ```
 
-## `public static fun patch`
+## `patch`
 
 Creates a PATCH request.
 
@@ -34,7 +34,7 @@ Creates a PATCH request.
 public static fun patch(url: Url): HttpRequest
 ```
 
-## `public static fun delete`
+## `delete`
 
 Creates a DELETE request.
 
@@ -42,7 +42,7 @@ Creates a DELETE request.
 public static fun delete(url: Url): HttpRequest
 ```
 
-## `public fun set_text`
+## `set_text`
 
 Replaces the body with UTF-8 bytes; adds no content-type header implicitly.
 
@@ -50,7 +50,7 @@ Replaces the body with UTF-8 bytes; adds no content-type header implicitly.
 public fun set_text(text: string): void
 ```
 
-## `public static class HttpCapabilities`
+## `HttpCapabilities`
 
 Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.
 
@@ -58,7 +58,7 @@ Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send 
 public static class HttpCapabilities
 ```
 
-## `public static get connection_timeouts`
+## `connection_timeouts`
 
 Whether a separate connection-establishment timeout can be configured (native hosts).
 
@@ -66,7 +66,7 @@ Whether a separate connection-establishment timeout can be configured (native ho
 public static get connection_timeouts(): bool
 ```
 
-## `public static get redirect_limits`
+## `redirect_limits`
 
 Whether explicit redirect limits and redirect responses are observable (native and Node).
 
@@ -74,7 +74,7 @@ Whether explicit redirect limits and redirect responses are observable (native a
 public static get redirect_limits(): bool
 ```
 
-## `public static get unrestricted_headers`
+## `unrestricted_headers`
 
 Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.
 

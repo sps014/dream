@@ -9,7 +9,14 @@ fun c26b_body() {
     };
     c26b_verify_observation((n).to_string());
     let q: (int, int) = (3, 4);
-    c26b_verify_observation((switch (q) { (0, x) => x, (_, y) => y }).to_string());
+    c26b_verify_observation(
+        (
+            switch (q) {
+                (0, x) => x,
+                (_, y) => y
+            }
+        ).to_string()
+    );
 }
 
 let c26b_cursor: int = 0;

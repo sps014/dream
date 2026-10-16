@@ -51,7 +51,7 @@ fun main() {
 ```dream
 let line = "port=8080";
 let value = line.span(5, line.length);
-System.println(value.parse_int().unwrap_or(0));   // 8080
+System.println(value.parse_int().unwrap_or(0)); // 8080
 ```
 
 Compare a span with a string using `sp == "text"` or `"text" == sp`; `!=` works in both orders too. These compare contents without allocating.

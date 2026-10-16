@@ -7,9 +7,20 @@ import application;
 @timeout(10000)
 async fun service_login(): void {
     let app = create_app("0123456789abcdef0123456789abcdef", "example-password").unwrap();
-    let port = app.listen("127.0.0.1", 0).await.unwrap(); let client = HttpClient();
-    let request = HttpRequest("POST", Url.parse("http://127.0.0.1:" + port.to_string() + "/auth/login").unwrap());
-    request.headers.set("Content-Type", "application/json"); request.body = Encoding.utf8_encode("{\"username\":\"demo\",\"password\":\"example-password\"}");
-    let response = client.send(request).await.unwrap(); Assert.eq(response.status, 200); response.close();
-    app.shutdown(); app.wait().await; client.close().unwrap();
+    let port = app.listen("127.0.0.1", 0).await.unwrap();
+    let client = HttpClient();
+    let request = HttpRequest(
+        "POST",
+        Url.parse("http://127.0.0.1:" + port.to_string() + "/auth/login").unwrap()
+    );
+    request.headers.set("Content-Type", "application/json");
+    request.body = Encoding.utf8_encode(
+        "{\"username\":\"demo\",\"password\":\"example-password\"}"
+    );
+    let response = client.send(request).await.unwrap();
+    Assert.eq(response.status, 200);
+    response.close();
+    app.shutdown();
+    app.wait().await;
+    client.close().unwrap();
 }

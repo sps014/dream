@@ -1,11 +1,15 @@
 import system.testing;
 import system;
+
 fun c68_body() {
     let x = -1;
     switch (x) {
-        case -1: c68_verify_observation(("neg").to_string());
-        case 01: c68_verify_observation(("one").to_string());
-        default: c68_verify_observation(("def").to_string());
+        case -1:
+            c68_verify_observation(("neg").to_string());
+        case 01:
+            c68_verify_observation(("one").to_string());
+        default:
+            c68_verify_observation(("def").to_string());
     }
 }
 

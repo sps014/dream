@@ -4,6 +4,8 @@ module system.core;
 // raw primitive the higher-level `List`/`Map`/`Set` collections build on; user code should
 // normally prefer `List<T>` and only reach for `Buffer.alloc` for tight, manual storage control.
 
+/// Allocates and manages fixed-length arrays. Prefer `List<T>` when the number of elements
+/// needs to grow.
 public static class Buffer {
     // Storage initialization may contain internal null references; it is not a constructor API.
     @intrinsic(Intrinsic.BufferZero)
@@ -18,6 +20,9 @@ public static class Buffer {
     // never be read again (a surviving alias would observe a stale, possibly-freed block) — the
     // same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single
     // ownership; callers (e.g. `List<T>`) must uphold it themselves.
+    /// Resizes an array, preserving the common prefix and zero-initializing newly added
+    /// elements. The array must have a single owner. Use only the returned array afterward:
+    /// every old alias becomes invalid.
     @intrinsic(Intrinsic.ArrayRealloc)
     @unsafe
     @consuming
@@ -27,9 +32,12 @@ public static class Buffer {
     // emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only
     // for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does
     // not check that the ranges fit inside either array's allocated length.
+    /// Copies `count` unmanaged elements from `src` at `src_off` to `dst` at `dst_off`.
+    /// Overlapping ranges are supported. The caller must ensure both ranges fit in their
+    /// arrays.
     @intrinsic(Intrinsic.ArrayElemsCopy)
     @unsafe
-    public static extern fun elems_copy<T : unmanaged>(
+    public static extern fun elems_copy<T: unmanaged>(
         borrow dst: T[],
         dst_off: int,
         borrow src: T[],
@@ -39,9 +47,11 @@ public static class Buffer {
 
     // Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`.
     // `@unsafe` because the compiler does not check that the range fits in `dst`.
+    /// Zeroes `count` unmanaged elements of `dst` starting at `dst_off`. The caller must ensure
+    /// that the range fits in the array.
     @intrinsic(Intrinsic.ArrayElemsFill)
     @unsafe
-    public static extern fun elems_fill<T : unmanaged>(
+    public static extern fun elems_fill<T: unmanaged>(
         borrow dst: T[],
         dst_off: int,
         count: int
@@ -52,6 +62,8 @@ public static class Buffer {
     // is the sanctioned way to shrink a managed buffer: each store goes through normal ARC
     // assignment semantics (release old occupant), unlike bitwise fills which must never touch
     // reference-typed slots. O(length); unmanaged elements compile to plain stores.
+    /// Resets every array element to its zero value, releasing any references previously held
+    /// in those elements. The array length is unchanged.
     public static fun clear<T>(borrow arr: T[]): void {
         let z = Buffer.zero<T>();
         let i = 0;
@@ -87,6 +99,8 @@ public static class Buffer {
 
     // `arr[index] = value` without the bounds check (ordinary element-store ARC semantics).
     // `@unsafe` for the same reason as `get_unchecked`.
+    /// Replaces `arr[index]` without checking bounds. The caller must ensure the index is
+    /// valid.
     @intrinsic(Intrinsic.ArraySetUnchecked)
     @unsafe
     public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void;
@@ -99,6 +113,8 @@ public static class Buffer {
     // counting entirely. Any other live reference to the same block (including `arr` itself, if
     // read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot
     // verify `arr` has no other owners.
+    /// Immediately releases the array storage. The array must have a single owner, and neither
+    /// it nor any view or alias may be used afterward.
     @intrinsic(Intrinsic.ForceFree)
     @unsafe
     @consuming

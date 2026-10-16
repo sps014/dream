@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-from pygments.token import Comment, String
+from pygments.token import Comment, String, Whitespace
 
 from dream_lexer import DreamLexer
 
@@ -34,15 +34,27 @@ def comment_before(source, offset):
     if lines and not lines[-1].strip():
         lines.pop()
     comments = []
+    docs = []
+    attribute_depth = 0
     for line in reversed(lines):
         line = line.strip()
-        if line.startswith("@"):
+        if line.startswith("@") or attribute_depth or line == ")":
+            lexical = mask(line)
+            attribute_depth += lexical.count(")") - lexical.count("(")
             continue
         if line.startswith("//"):
             comments.append(line.lstrip("/").strip())
+            if line.startswith("///"):
+                docs.append(line[3:].strip())
         else:
             break
-    return " ".join(reversed(comments))
+    return " ".join(reversed(docs or comments))
+
+
+def signature_key(source):
+    """Ignore layout whitespace without changing spaces inside string defaults."""
+    return "".join(value for _, kind, value in DreamLexer().get_tokens_unprocessed(source)
+                   if kind not in Comment and kind not in Whitespace)
 
 
 def signature_end(masked, start):
@@ -135,10 +147,20 @@ def check(current):
     saved = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if current != saved:
         raise SystemExit("Public library declarations changed. Review the reference and refresh the API inventory.")
+    pages = {}
     for entry in saved:
         for declaration in entry["declarations"]:
-            text = (ROOT / "docs" / declaration["page"]).read_text(encoding="utf-8")
-            if declaration["signature"] not in text:
+            if not declaration["description"]:
+                raise SystemExit(f"Undocumented API in {entry['source']}:{declaration['line']}: {declaration['signature']}")
+            page = declaration["page"]
+            if page not in pages:
+                text = (ROOT / "docs" / page).read_text(encoding="utf-8")
+                fences = re.findall(r"```dream\n(.*?)```", text, re.S)
+                pages[page] = (" ".join(text.split()), [signature_key(code) for code in fences])
+            prose, signatures = pages[page]
+            if " ".join(declaration["description"].split()) not in prose:
+                raise SystemExit(f"Missing API description in {page}: {declaration['signature']}")
+            if not any(signature_key(declaration["signature"]) in code for code in signatures):
                 raise SystemExit(f"Missing declaration in {entry['page']}: {declaration['signature']}")
     total = sum(len(entry["declarations"]) for entry in saved)
     print(f"API inventory: {total} declarations in {len(saved)} source files checked.")

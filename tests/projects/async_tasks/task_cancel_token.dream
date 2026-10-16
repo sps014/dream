@@ -6,16 +6,18 @@ import system.task;
 async fun c24a_body(): void {
     let src = CancellationSource();
     let tok = src.token;
-    let w = Task.spawn(() => {
-        let n = 0;
-        while !tok.is_cancelled {
-            n = n + 1;
-            if n > 1000000 {
-                break;
+    let w = Task.spawn(
+        () => {
+            let n = 0;
+            while !tok.is_cancelled {
+                n = n + 1;
+                if n > 1000000 {
+                    break;
+                }
             }
+            return n;
         }
-        return n;
-    });
+    );
     src.cancel();
     let n = w.await;
     c24a_verify_observation((n > 0 || tok.is_cancelled).to_string());

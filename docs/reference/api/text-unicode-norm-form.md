@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/string.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum UnicodeNormForm`
+## `UnicodeNormForm`
 
 Unicode normalization forms for `Unicode.normalize`.
 
@@ -14,11 +14,15 @@ public enum UnicodeNormForm
 
 ## `Nfc`
 
+Canonical composition normalization.
+
 ```dream
 Nfc
 ```
 
 ## `Nfd`
+
+Canonical decomposition normalization.
 
 ```dream
 Nfd
@@ -26,11 +30,15 @@ Nfd
 
 ## `Nfkc`
 
+Compatibility composition normalization.
+
 ```dream
 Nfkc
 ```
 
 ## `Nfkd`
+
+Compatibility decomposition normalization.
 
 ```dream
 Nfkd

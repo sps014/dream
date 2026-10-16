@@ -38,8 +38,8 @@ fun grow(p: RawPtr<int>, new_count: usize): RawPtr<int> {
 
 fun caller(): void {
     let p = RawPtr<int>.alloc(4);
-    grow(p, 8);   // error: call to '@unsafe' function 'grow' is only allowed from
-               // another '@unsafe' function or method
+    grow(p, 8); // error: call to '@unsafe' function 'grow' is only allowed from
+// another '@unsafe' function or method
 }
 ```
 

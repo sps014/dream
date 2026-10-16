@@ -5,7 +5,9 @@ struct c28f_View {
     public source: string;
     public count: int;
     public constructor(borrow source: string, count: int) {
-        if count < 0 || count > source.length { System.panic("invalid view"); }
+        if count < 0 || count > source.length {
+            System.panic("invalid view");
+        }
         this.source = source;
         this.count = count;
     }
@@ -16,17 +18,22 @@ fun c28f_read(borrow view: c28f_View): string {
     let copy = view;
     return copy.source.substring(0, copy.count);
 }
+
 @noinline
 fun c28f_span_sum(borrow span: Span<int>): int {
     let sum = 0;
-    for (let x in span) { sum = sum + x; }
+    for (let x in span) {
+        sum = sum + x;
+    }
     return sum;
 }
+
 @noinline
 fun c28f_span_text(borrow span: ReadOnlySpan<char>): bool {
     let copy = span;
     return copy == "number=42";
 }
+
 fun c28f_body(): void {
     let source = "number=" + 42;
     let view = c28f_View(source, 6);

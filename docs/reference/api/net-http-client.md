@@ -2,7 +2,7 @@
 
 **Import:** `import system.net;`
 
-## `public class HttpClient`
+## `HttpClient`
 
 Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools. Received responses own their bodies independently and must also be closed.
 
@@ -10,7 +10,7 @@ Owns reusable HTTP connection pools. Close explicitly to cancel pending sends an
 public class HttpClient
 ```
 
-## `public constructor`
+## `constructor`
 
 Creates a client; allocation failures are reported by `send`.
 
@@ -18,23 +18,30 @@ Creates a client; allocation failures are reported by `send`.
 public constructor()
 ```
 
-## `public async fun send`
+## `send`
 
 Sends with default options: a 30-second total deadline and the host redirect policy.
 
 ```dream
-public async fun send(request: HttpRequest, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError>
+public async fun send(
+    request: HttpRequest,
+    token: Option<CancellationToken> = Option.None
+): Result<HttpResponse, HttpError>
 ```
 
-## `public async fun send`
+## `send`
 
 Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.
 
 ```dream
-public async fun send(request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError>
+public async fun send(
+    request: HttpRequest,
+    options: HttpOptions,
+    token: Option<CancellationToken> = Option.None
+): Result<HttpResponse, HttpError>
 ```
 
-## `public fun close`
+## `close`
 
 Closes idempotently, cancelling pending sends. Previously received bodies remain usable.
 
@@ -42,7 +49,7 @@ Closes idempotently, cancelling pending sends. Previously received bodies remain
 public fun close(): Result<bool, HttpError>
 ```
 
-## `public class HttpResponse`
+## `HttpResponse`
 
 Response metadata and a streamed body. Explicit closure releases unfinished bodies.
 
@@ -50,7 +57,7 @@ Response metadata and a streamed body. Explicit closure releases unfinished bodi
 public class HttpResponse
 ```
 
-## `public get status`
+## `status`
 
 Numeric HTTP status; non-2xx responses are successful transport results.
 
@@ -58,7 +65,7 @@ Numeric HTTP status; non-2xx responses are successful transport results.
 public get status(): int
 ```
 
-## `public get url`
+## `url`
 
 Final URL after any redirects visible to the host.
 
@@ -66,7 +73,7 @@ Final URL after any redirects visible to the host.
 public get url(): Url
 ```
 
-## `public get headers`
+## `headers`
 
 Response headers visible to the host; browser CORS rules can hide some headers.
 
@@ -74,7 +81,7 @@ Response headers visible to the host; browser CORS rules can hide some headers.
 public get headers(): HttpHeaders
 ```
 
-## `public get body`
+## `body`
 
 Byte stream owned by this response; a retained body can be read independently.
 
@@ -82,15 +89,18 @@ Byte stream owned by this response; a retained body can be read independently.
 public get body(): HttpBody
 ```
 
-## `public async fun read_text`
+## `read_text`
 
 Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.
 
 ```dream
-public async fun read_text(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Result<string, HttpError>
+public async fun read_text(
+    max_bytes: int = 1048576,
+    token: Option<CancellationToken> = Option.None
+): Result<string, HttpError>
 ```
 
-## `public fun close`
+## `close`
 
 Closes the body idempotently; subsequent reads return `ECLOSED`.
 
@@ -98,23 +108,26 @@ Closes the body idempotently; subsequent reads return `ECLOSED`.
 public fun close(): Result<bool, HttpError>
 ```
 
-## `public class HttpBody : AsyncReader`
+## `HttpBody`
 
 An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
 
 ```dream
-public class HttpBody : AsyncReader
+public class HttpBody: AsyncReader
 ```
 
-## `public async unique fun read_async`
+## `read_async`
 
 Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
 
 ```dream
-public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
+public async unique fun read_async(
+    max_bytes: int,
+    token: Option<CancellationToken> = Option.None
+): Result<byte[], IoError>
 ```
 
-## `public fun close`
+## `close`
 
 Releases the response transport and cancels a pending read; safe to call repeatedly.
 

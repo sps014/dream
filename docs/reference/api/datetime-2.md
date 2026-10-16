@@ -136,17 +136,23 @@ public fun add_days(amount: long): DateTime
 
 ## `add`
 
+Returns the instant `d` after this date/time, keeping its UTC offset.
+
 ```dream
 public fun add(d: Duration): DateTime
 ```
 
 ## `until`
 
+Returns the duration from this instant to `other`.
+
 ```dream
 public fun until(other: DateTime): Duration
 ```
 
 ## `start_of_day`
+
+Returns midnight on the same calendar date, keeping this UTC offset.
 
 ```dream
 public fun start_of_day(): DateTime

@@ -7,7 +7,7 @@
 Invalid UUID text or an unavailable secure entropy source.
 
 ```dream
-public class UuidError : Error
+public class UuidError: Error
 ```
 
 ## `constructor`
@@ -39,7 +39,7 @@ public fun message(): string
 A 16-byte UUID value; assignment copies bits without allocation or reference counting.
 
 ```dream
-public struct Uuid : Equatable<Uuid>, Comparable<Uuid>
+public struct Uuid: Equatable<Uuid>, Comparable<Uuid>
 ```
 
 ## `v4`

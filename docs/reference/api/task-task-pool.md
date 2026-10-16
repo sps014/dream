@@ -65,7 +65,10 @@ public get size(): int
 Dispatches a CPU job; capture and return values follow the shared/move worker rules.
 
 ```dream
-public fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>
+public fun dispatch<TOut: shared>(
+    body: fun(): TOut,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<TOut, TaskPoolError>>
 ```
 
 ## `dispatch_async`
@@ -73,7 +76,10 @@ public fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<Cancellation
 Dispatches an async job on a pool worker and waits for its operation to settle.
 
 ```dream
-public fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>>
+public fun dispatch_async<TOut: shared>(
+    body: fun(): Future<TOut>,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<TOut, TaskPoolError>>
 ```
 
 ## `map`
@@ -81,7 +87,11 @@ public fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Optio
 Maps CPU work with at most size active dispatches and preserves input order.
 
 ```dream
-public fun map<T : shared, U : shared>(items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>
+public fun map<T: shared, U: shared>(
+    items: T[],
+    body: fun(T): U,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<U[], TaskFailure<TaskPoolError>>>
 ```
 
 ## `map_async`
@@ -89,7 +99,11 @@ public fun map<T : shared, U : shared>(items: T[], body: fun(T): U, token: Optio
 Maps async worker jobs with bounded dispatch rather than creating one worker per input.
 
 ```dream
-public fun map_async<T : shared, U : shared>(items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>>
+public fun map_async<T: shared, U: shared>(
+    items: T[],
+    body: fun(T): Future<U>,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<U[], TaskFailure<TaskPoolError>>>
 ```
 
 ## `close`

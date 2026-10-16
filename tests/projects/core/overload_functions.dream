@@ -1,12 +1,18 @@
 import system.testing;
 // Overloaded free functions resolve by argument type.
 import system;
-fun c196_kind(x: int): int { return 1; }
-fun c196_kind(x: string): int { return 2; }
+
+fun c196_kind(x: int): int {
+    return 1;
+}
+
+fun c196_kind(x: string): int {
+    return 2;
+}
 
 @test
 @timeout(180000)
 fun overload_functions(): void {
-    Assert.eq_str((c196_kind(42)).to_string(), "1");     // 1  (int overload)
-    Assert.eq_str((c196_kind("hi")).to_string(), "2");   // 2  (string overload)
+    Assert.eq_str((c196_kind(42)).to_string(), "1"); // 1  (int overload)
+    Assert.eq_str((c196_kind("hi")).to_string(), "2"); // 2  (string overload)
 }

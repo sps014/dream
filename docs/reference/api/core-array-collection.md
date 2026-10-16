@@ -4,15 +4,17 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Array`
+## `Array`
 
-`Array.alloc<T>(n)` — user-facing zero-initialized `T[]` allocation.
+Creates fixed-length arrays whose elements can be accessed with zero-based indices.
 
 ```dream
 public static class Array
 ```
 
 ## `alloc`
+
+Creates an array of `len` default-initialized elements.
 
 ```dream
 public static fun alloc<T>(len: int): T[]
@@ -60,11 +62,15 @@ public fun iterator(): Iterator<T>
 
 ## `contains`
 
+Returns whether the collection contains the requested key or value.
+
 ```dream
 public fun contains(borrow value: T): bool
 ```
 
 ## `index_of`
+
+Returns the first matching index, or `None` when no match exists.
 
 ```dream
 public fun index_of(borrow value: T): Option<int>
@@ -72,17 +78,23 @@ public fun index_of(borrow value: T): Option<int>
 
 ## `slice`
 
+Copies the range from `start` (inclusive) to `end` (exclusive); invalid bounds panic.
+
 ```dream
 public fun slice(start: int, end: int): T[]
 ```
 
 ## `reverse`
 
+Reverses the elements in place.
+
 ```dream
 public fun reverse(): void
 ```
 
 ## `concat`
+
+Returns a new array containing this array followed by `other`.
 
 ```dream
 public fun concat(borrow other: T[]): T[]

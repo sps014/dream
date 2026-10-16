@@ -2,7 +2,6 @@ module system.core;
 
 // Read-only view of a `CancellationSource` for cooperative checks at await boundaries.
 // `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.
-
 shared public class CancellationToken {
     _source: CancellationSource;
 
@@ -19,13 +18,17 @@ shared public class CancellationToken {
 
     // Returns the cancellation token inherited from the current structured task.
     public static get current(): Option<CancellationToken> {
-        if !CancellationToken.has_context_host() { return Option.None; }
+        if !CancellationToken.has_context_host() {
+            return Option.None;
+        }
         return Option.Some(CancellationToken.context_host());
     }
 
     // Explicit tokens override the current structured task; None inherits its token.
     public static fun resolve(token: Option<CancellationToken>): Option<CancellationToken> {
-        if token.is_some() { return token; }
+        if token.is_some() {
+            return token;
+        }
         return CancellationToken.current;
     }
 
@@ -58,20 +61,32 @@ shared public class CancellationToken {
         return CancellationToken.wait_void_owned(this, future);
     }
 
-    static async fun wait_owned<T>(token: CancellationToken, future: Future<T>): Result<T, CancelledError> {
-        if !CancellationToken.wait_completion(token, future).await { return Result.Err(CancelledError.cancelled()); }
+    static async fun wait_owned<T>(
+        token: CancellationToken,
+        future: Future<T>
+    ): Result<T, CancelledError> {
+        if !CancellationToken.wait_completion(token, future).await {
+            return Result.Err(CancelledError.cancelled());
+        }
         return Result.Ok(future.await);
     }
 
-    static async fun wait_void_owned(token: CancellationToken, future: Future<void>): Result<bool, CancelledError> {
-        if !CancellationToken.wait_completion(token, future).await { return Result.Err(CancelledError.cancelled()); }
+    static async fun wait_void_owned(
+        token: CancellationToken,
+        future: Future<void>
+    ): Result<bool, CancelledError> {
+        if !CancellationToken.wait_completion(token, future).await {
+            return Result.Err(CancelledError.cancelled());
+        }
         return Result.Ok(true);
     }
 
     static async fun wait_completion<T>(token: CancellationToken, future: Future<T>): bool {
         if token.is_cancelled {
             Promise.cancel(future);
-            if CancellationToken.protected_host(future) { future.await; }
+            if CancellationToken.protected_host(future) {
+                future.await;
+            }
             return false;
         }
         let registration = CancellationRegistration(token._source.register());
@@ -84,7 +99,9 @@ shared public class CancellationToken {
         Promise.cancel(cancelled);
         if result != 0 {
             Promise.cancel(future);
-            if CancellationToken.protected_host(future) { future.await; }
+            if CancellationToken.protected_host(future) {
+                future.await;
+            }
         }
         return result == 0;
     }
@@ -126,8 +143,10 @@ shared public class CancellationToken {
     // Panics when `token` is `Some` and already cancelled.
     public static fun throw_if_opt(token: Option<CancellationToken>): void {
         switch (token) {
-            Some(t) => { t.throw_if_cancelled(); },
-            None => { },
+            Some(t) => {
+                t.throw_if_cancelled();
+            },
+            None => {},
         }
     }
 
@@ -145,13 +164,21 @@ shared public class CancellationToken {
 // the subscription and settles its signal even if its awaiting frame was cancelled.
 class CancellationRegistration {
     id: usize;
-    internal constructor(id: usize) { this.id = id; }
-    del() { this.close(); }
+    internal constructor(id: usize) {
+        this.id = id;
+    }
+    del() {
+        this.close();
+    }
+
     @intrinsic(Intrinsic.DreamCancellationSignal)
     static extern fun signal_host(id: usize): Future<int>;
     @intrinsic(Intrinsic.DreamCancellationUnregister)
     static extern fun release_host(id: usize): void;
-    internal fun signal(): Future<int> { return CancellationRegistration.signal_host(this.id); }
+    internal fun signal(): Future<int> {
+        return CancellationRegistration.signal_host(this.id);
+    }
+
     internal fun close(): void {
         if this.id != (usize)0 {
             CancellationRegistration.release_host(this.id);

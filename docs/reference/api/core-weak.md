@@ -4,15 +4,17 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class Weak<T : class>`
+## `Weak`
 
-A weak handle to a class instance: holding it does NOT keep the target alive. Use it to break reference cycles that static analysis cannot see — most commonly a callback stored on an object that must call back into that same object:  ```dream let wb = Weak<Engine>(engine); engine.on_tick = () => { switch (wb.get()) { Some(e) => e.tick(), None => {}, } }; ```  Capture the handle (`wb`) in closures, never the raw object — capturing the object directly recreates the cycle. When the target is freed, the slot is marked dead automatically: `is_dead()` flips to true and stays true. The registration is removed when either side dies (target free or handle drop), so nothing dangles.
+A weak handle to a class instance: holding it does NOT keep the target alive.  Use it to break reference cycles that static analysis cannot see — most commonly a callback stored on an object that must call back into that same object:  ```dream let wb = Weak<Engine>(engine); engine.on_tick = () => { switch (wb.get()) { Some(e) => e.tick(), None => {}, } }; ```  Capture the handle (`wb`) in closures, never the raw object — capturing the object directly recreates the cycle.  When the target is freed, the slot is marked dead automatically: `is_dead()` flips to true and stays true. The registration is removed when either side dies (target free or handle drop), so nothing dangles.
 
 ```dream
-public class Weak<T : class>
+public class Weak<T: class>
 ```
 
 ## `constructor`
+
+Creates a `Weak` with `target_obj`.
 
 ```dream
 public constructor(target_obj: T)

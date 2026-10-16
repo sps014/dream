@@ -7,10 +7,8 @@ Use a regular expression to find text matching a pattern. Create it once, then t
 
 Compile a pattern once, then test, replace, or extract matches. Patterns use familiar regex syntax (`\d`, groups, lookaround). An invalid pattern never matches.
 
-Native matching uses PCRE2 JIT; wasm32 uses its interpreter. Global `match` searches
-reuse PCRE2 match storage within that call and collect offsets before constructing the
-returned strings. Concurrent searches keep independent match storage. Empty matches
-advance past a whole UTF-16 character, including a surrogate pair.
+Match positions use UTF-16 code units. After an empty match, the next search advances
+past a complete character, including a surrogate pair, so a global search always progresses.
 
 ```dream
 import system;
@@ -57,7 +55,7 @@ let re = Regex("hello", RegexFlags.IgnoreCase | RegexFlags.Global);
 
 ```dream
 let digits = Regex("\\d+", RegexFlags.Global);
-let parts = digits.match("a1b2c3");   // ["1", "2", "3"]
+let parts = digits.match("a1b2c3"); // ["1", "2", "3"]
 ```
 
 ## Groups
@@ -68,11 +66,11 @@ let parts = digits.match("a1b2c3");   // ["1", "2", "3"]
 let re = Regex("(?<area>\\d{3})-(?<num>\\d{4})");
 switch (re.match_info("555-1234")) {
     Some(info) => {
-        System.println(info.full);                    // 555-1234
-        System.println(info.named("area").unwrap());  // 555
+        System.println(info.full); // 555-1234
+        System.println(info.named("area").unwrap()); // 555
     }
     None => System.println("no match"),
 }
 ```
 
-A full example: [`sample/interop/regex.dream`](https://github.com/sps014/dream/blob/main/sample/interop/regex.dream).
+Save the first example as `regex.dream` and run `dream run regex.dream`. It prints whether a match exists, then the text with every numeric group replaced by `#`.

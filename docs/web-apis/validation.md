@@ -16,8 +16,12 @@ class Person {
     @maximum(150.0)
     @default_json("18")
     public age: int;
-    public constructor(name: string, age: int) { this.name = name; this.age = age; }
+    public constructor(name: string, age: int) {
+        this.name = name;
+        this.age = age;
+    }
 }
+
 fun main(): void {
     let person = Validation.decode<Person>("{\"name\":\"Dream\"}").unwrap();
     System.println(person.age);

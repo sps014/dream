@@ -12,7 +12,7 @@ Process launch settings, snapshotted before the launch operation is submitted.
 public class ProcessOptions
 ```
 
-## `public cwd: string`
+## `cwd`
 
 Working directory; empty inherits the parent directory.
 
@@ -20,7 +20,7 @@ Working directory; empty inherits the parent directory.
 public cwd: string
 ```
 
-## `public env: Map<string, string>`
+## `env`
 
 Environment overrides applied after the inherited environment.
 
@@ -28,7 +28,7 @@ Environment overrides applied after the inherited environment.
 public env: Map<string, string>
 ```
 
-## `public clear_env: bool`
+## `clear_env`
 
 Starts with an empty environment when true.
 
@@ -36,7 +36,7 @@ Starts with an empty environment when true.
 public clear_env: bool
 ```
 
-## `public timeout_ms: int`
+## `timeout_ms`
 
 Wall-clock deadline in milliseconds; zero disables the deadline.
 
@@ -44,7 +44,7 @@ Wall-clock deadline in milliseconds; zero disables the deadline.
 public timeout_ms: int
 ```
 
-## `public max_output_bytes: int`
+## `max_output_bytes`
 
 Maximum captured bytes per output stream for run; defaults to 8 MiB.
 
@@ -52,7 +52,7 @@ Maximum captured bytes per output stream for run; defaults to 8 MiB.
 public max_output_bytes: int
 ```
 
-## `public input: byte[]`
+## `input`
 
 Bytes written to stdin by run before closing the input pipe.
 

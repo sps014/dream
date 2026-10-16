@@ -3,15 +3,23 @@ import system;
 
 class ca3_Box {
     public value: int;
-    public constructor(value: int) { this.value = value; }
+    public constructor(value: int) {
+        this.value = value;
+    }
 }
 
-fun ca3_identity<T>(value: T): T { return value; }
+fun ca3_identity<T>(value: T): T {
+    return value;
+}
 
 fun ca3_body(): void {
     let result = ca3_identity<int>(0);
     for (let i = 0; i < 0; i++) {
-        if (i % 2 == 0) { result += i; } else { result -= i; }
+        if (i % 2 == 0) {
+            result += i;
+        } else {
+            result -= i;
+        }
     }
     let box = ca3_Box(result);
     result = box.value;

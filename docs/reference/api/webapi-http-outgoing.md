@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class HttpOutgoing`
+## `HttpOutgoing`
 
 Outbound HTTP response built by handlers and middleware.
 
@@ -12,61 +12,79 @@ Outbound HTTP response built by handlers and middleware.
 public class HttpOutgoing
 ```
 
-## `public status`
+## `status`
+
+HTTP response status code.
 
 ```dream
 public status: int
 ```
 
-## `public headers`
+## `headers`
+
+HTTP headers associated with this message.
 
 ```dream
 public headers: HttpHeaders
 ```
 
-## `public body`
+## `body`
+
+Text response body.
 
 ```dream
 public body: string
 ```
 
-## `public body_bytes`
+## `body_bytes`
+
+Binary response body; use `bytes` to construct a binary response.
 
 ```dream
 public body_bytes: byte[]
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `HttpOutgoing` with `status`, `body`.
 
 ```dream
 public constructor(status: int, body: string = "")
 ```
 
-## `public fun set_header`
+## `set_header`
+
+Sets a response header and returns this response for chaining.
 
 ```dream
 public fun set_header(name: string, value: string): HttpOutgoing
 ```
 
-## `public static fun text`
+## `text`
+
+Creates a plain-text response with status 200 unless another status is supplied.
 
 ```dream
 public static fun text(body: string, status: int = 200): HttpOutgoing
 ```
 
-## `public static fun html`
+## `html`
+
+Creates an HTML response with status 200 unless another status is supplied.
 
 ```dream
 public static fun html(body: string, status: int = 200): HttpOutgoing
 ```
 
-## `public static fun json_text`
+## `json_text`
+
+Creates a JSON response from already encoded JSON text; does not serialize or validate the text.
 
 ```dream
 public static fun json_text(body: string, status: int = 200): HttpOutgoing
 ```
 
-## `public static fun detail`
+## `detail`
 
 FastAPI-style `{"detail": "..."}` JSON error.
 
@@ -74,7 +92,7 @@ FastAPI-style `{"detail": "..."}` JSON error.
 public static fun detail(message: string, status: int = 500): HttpOutgoing
 ```
 
-## `public static fun from_body_error`
+## `from_body_error`
 
 Preserves body-limit failures as 413 while other read failures remain 400.
 
@@ -82,7 +100,7 @@ Preserves body-limit failures as 413 while other read failures remain 400.
 public static fun from_body_error(error: IoError): HttpOutgoing
 ```
 
-## `public static fun from_validation`
+## `from_validation`
 
 A structured validation response, prefixed with the input source.
 
@@ -90,37 +108,54 @@ A structured validation response, prefixed with the input source.
 public static fun from_validation(errors: ValidationErrors, source: string): HttpOutgoing
 ```
 
-## `public static fun invalid_input`
+## `invalid_input`
+
+Creates a 422 validation-error response describing the invalid input and its location.
 
 ```dream
-public static fun invalid_input(source: string, name: string, code: string, message: string): HttpOutgoing
+public static fun invalid_input(
+    source: string,
+    name: string,
+    code: string,
+    message: string
+): HttpOutgoing
 ```
 
-## `public static fun already_sent`
+## `already_sent`
+
+Creates a marker indicating that the response has already been sent.
 
 ```dream
 public static fun already_sent(): HttpOutgoing
 ```
 
-## `public static fun bytes`
+## `bytes`
+
+Creates a binary response from `data`, with status 200 by default.
 
 ```dream
 public static fun bytes(data: byte[], status: int = 200): HttpOutgoing
 ```
 
-## `public static fun from_status`
+## `from_status`
+
+Creates a response using the supplied status code and message.
 
 ```dream
 public static fun from_status(st: HttpStatus): HttpOutgoing
 ```
 
-## `public static fun not_found`
+## `not_found`
+
+Creates a 404 Not Found response.
 
 ```dream
 public static fun not_found(): HttpOutgoing
 ```
 
-## `public static fun empty`
+## `empty`
+
+Creates a response without a body, with status 204 by default.
 
 ```dream
 public static fun empty(status: int = 204): HttpOutgoing

@@ -3,6 +3,7 @@ import system.testing;
 // the caller's binding. The callee now retains its parameter on entry so the matching
 // release at exit keeps the reference count balanced.
 import system;
+
 class c1a_Box {
     public value: int;
 

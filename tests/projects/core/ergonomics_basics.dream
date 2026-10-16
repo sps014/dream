@@ -3,16 +3,17 @@ import system;
 
 fun cc8_body(): void {
     let n = 3;
-    if (n > 0) cc8_verify_observation((1).to_string()); else cc8_verify_observation((0).to_string());
+    if (n > 0)cc8_verify_observation((1).to_string());
+    else cc8_verify_observation((0).to_string());
     let i = 0;
     while i < 2 {
         cc8_verify_observation((i).to_string());
         i++;
     }
-    for (let j = 0; j < 2; j++) cc8_verify_observation((j).to_string());
+    for (let j = 0; j < 2; j++)cc8_verify_observation((j).to_string());
     let k = 0;
     let a = k++;
-    let b = ++k;
+    let b =++k;
     cc8_verify_observation((a).to_string());
     cc8_verify_observation((b).to_string());
     cc8_side() + 1;

@@ -2,8 +2,8 @@ import system.testing;
 // Milestone B: capturing closures (v1 — a lambda captures at most one variable from its
 // immediately enclosing function). A captured name (parameter or `let`) is boxed into a shared
 // `CaptureCell<T>` so both the closure and the enclosing function see each other's writes.
-
 import system;
+
 fun c7b_make_adder(n: int): fun(int): int {
     return (x) => x + n; // captures parameter `n`
 }

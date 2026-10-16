@@ -2,8 +2,8 @@ import system.testing;
 // A closure-captured local passed by `ref` to a helper shares the exact same heap box the closure
 // itself reads/writes through (rather than getting its own separate stack slot) — no double
 // boxing, and mutations through either path stay visible to both.
-
 import system;
+
 fun c1cd_increment(ref x: int): void {
     x = x + 1;
 }

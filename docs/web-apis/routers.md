@@ -9,8 +9,11 @@ import system.webapi;
 @router("/users")
 class Routes {
     @get("/{id}")
-    public static fun user(@path id: int): string { return id.to_string(); }
+    public static fun user(@path id: int): string {
+        return id.to_string();
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router(), "/v1").unwrap();

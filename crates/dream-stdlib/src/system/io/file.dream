@@ -1,7 +1,6 @@
 module system.io;
 
 // `File` - a small cross-runtime filesystem API.
-
 public static class File {
     // --- host bridge: `@runtime` WASM imports + matching native C symbols -------------------
     @runtime("fileRead")
@@ -64,7 +63,10 @@ public static class File {
     static extern fun dir_create_all(borrow path: string): bool;
 
     // Reads the whole file at `path` as UTF-8 text.
-    public static async fun read(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string, IoError> {
+    public static async fun read(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<string, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -74,7 +76,11 @@ public static class File {
     }
 
     // Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
-    public static async fun write(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+    public static async fun write(
+        borrow path: string,
+        borrow content: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         let n = File.file_write(path, content);
@@ -85,7 +91,11 @@ public static class File {
     }
 
     // Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
-    public static async fun append(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+    public static async fun append(
+        borrow path: string,
+        borrow content: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         let n = File.file_append(path, content);
@@ -96,7 +106,10 @@ public static class File {
     }
 
     // Reads the whole file at `path` as raw bytes.
-    public static async fun read_bytes(borrow path: string, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+    public static async fun read_bytes(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -106,7 +119,11 @@ public static class File {
     }
 
     // Writes raw bytes to `path`, replacing any existing contents.
-    public static async fun write_bytes(borrow path: string, borrow data: byte[], token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+    public static async fun write_bytes(
+        borrow path: string,
+        borrow data: byte[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         let n = File.file_write_bytes(path, data);
@@ -117,7 +134,10 @@ public static class File {
     }
 
     // Deletes `path`; resolves `Ok(true)` on success.
-    public static async fun delete(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun delete(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.file_delete(path) == false {
@@ -130,7 +150,11 @@ public static class File {
     }
 
     // Copies a file from `from` to `to`, overwriting `to` when it already exists.
-    public static async fun copy(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun copy(
+        borrow from: string,
+        borrow to: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(from) == false {
@@ -146,7 +170,11 @@ public static class File {
     }
 
     // Renames or moves `from` to `to` (same-volume when the OS requires it).
-    public static async fun rename(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun rename(
+        borrow from: string,
+        borrow to: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(from) == false {
@@ -159,7 +187,10 @@ public static class File {
     }
 
     // Removes an empty directory at `path`.
-    public static async fun remove_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun remove_dir(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -175,7 +206,10 @@ public static class File {
     }
 
     // Recursively deletes `path` (file or directory tree).
-    public static async fun remove_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun remove_dir_all(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -188,7 +222,10 @@ public static class File {
     }
 
     // Creates a single directory at `path`; resolves `Ok(true)` on success.
-    public static async fun create_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun create_dir(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.dir_create(path) == false {
@@ -201,7 +238,10 @@ public static class File {
     }
 
     // Creates `path` and any missing parents; resolves `Ok(true)` on success.
-    public static async fun create_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public static async fun create_dir_all(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.dir_create_all(path) == false {
@@ -212,7 +252,10 @@ public static class File {
 
     // Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a
     // directory (an existing empty directory yields `Ok([])`).
-    public static async fun list(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError> {
+    public static async fun list(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<string[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.is_dir(path) == false {
@@ -226,7 +269,10 @@ public static class File {
     }
 
     // Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
-    public static async fun list_paths(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError> {
+    public static async fun list_paths(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<string[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         let got = File.list(path, effective_token).await;
         if got.is_err() {
@@ -243,7 +289,10 @@ public static class File {
     }
 
     // Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
-    public static async fun read_lines(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError> {
+    public static async fun read_lines(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<string[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         let got = File.read(path, effective_token).await;
         if got.is_err() {
@@ -268,7 +317,11 @@ public static class File {
     }
 
     // Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.
-    public static async fun write_lines(borrow path: string, borrow lines: string[], token: Option<CancellationToken> = Option.None): Result<long, IoError> {
+    public static async fun write_lines(
+        borrow path: string,
+        borrow lines: string[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
         let sb = StringBuilder();
         let i = 0;
@@ -284,6 +337,7 @@ public static class File {
     public static fun exists(borrow path: string): bool {
         return File.file_exists(path);
     }
+
     // Size of `path` in bytes, or `None` if it does not exist.
     public static fun size(borrow path: string): Option<long> {
         let s = File.file_size(path);
@@ -292,6 +346,8 @@ public static class File {
         }
         return Option.Some(s);
     }
+
+    /// Returns whether the path refers to a directory.
     public static fun is_dir(borrow path: string): bool {
         return File.file_is_dir(path);
     }
@@ -332,7 +388,10 @@ public static class File {
     }
 
     // Async wrapper around `open`.
-    public static async fun open_async(borrow path: string, token: Option<CancellationToken> = Option.None): Result<FileStream, IoError> {
+    public static async fun open_async(
+        borrow path: string,
+        token: Option<CancellationToken> = Option.None
+    ): Result<FileStream, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return File.open(path);

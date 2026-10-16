@@ -1,26 +1,40 @@
 module system.primitives;
 
-extend isize : Comparable<isize> {
+extend isize: Comparable<isize> {
+    /// Returns a negative number, zero, or a positive number for less than, equal to, or
+    /// greater than `other`.
     public fun compare(other: isize): int {
-        if this < other { return -1; }
-        if this > other { return 1; }
+        if this < other {
+            return -1;
+        }
+        if this > other {
+            return 1;
+        }
         return 0;
     }
 
+    /// Returns the smaller of this value and `other`.
     public fun min(other: isize): isize {
-        if this < other { return this; }
+        if this < other {
+            return this;
+        }
         return other;
     }
 
+    /// Returns the larger of this value and `other`.
     public fun max(other: isize): isize {
-        if this > other { return this; }
+        if this > other {
+            return this;
+        }
         return other;
     }
 
+    /// Returns the value limited to the inclusive range `lo` through `hi`.
     public fun clamp(lo: isize, hi: isize): isize {
         return this.max(lo).min(hi);
     }
 
+    /// Parses the text as this numeric type; returns `ParseError` if invalid or out of range.
     public static fun parse(borrow text: string): Result<isize, ParseError> {
         let parsed = long.parse(text)?;
         let narrowed = (isize)parsed;

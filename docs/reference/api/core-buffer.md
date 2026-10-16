@@ -4,9 +4,9 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Buffer`
+## `Buffer`
 
-This is the raw primitive the higher-level `List`/`Map`/`Set` collections build on; user code should normally prefer `List<T>` and only reach for `Buffer.alloc` for tight, manual storage control.
+Allocates and manages fixed-length arrays. Prefer `List<T>` when the number of elements needs to grow.
 
 ```dream
 public static class Buffer
@@ -22,7 +22,7 @@ public static extern fun alloc<T>(len: int): T[]
 
 ## `realloc`
 
-Resizes `arr`'s backing block via the allocator's `$realloc`, returning a `T[]` of `new_len` elements: the overlapping prefix is preserved and any newly grown tail is zero-initialized. `arr` must have exactly one owner: after this call the old value must never be read again (a surviving alias would observe a stale, possibly-freed block) — the same contract as C's `realloc`. `@unsafe` because the compiler cannot verify single ownership; callers (e.g. `List<T>`, `RawPtr<T>`) must uphold it themselves.
+Resizes an array, preserving the common prefix and zero-initializing newly added elements. The array must have a single owner. Use only the returned array afterward: every old alias becomes invalid.
 
 ```dream
 public static extern fun realloc<T>(arr: T[], new_len: int): T[]
@@ -30,23 +30,29 @@ public static extern fun realloc<T>(arr: T[], new_len: int): T[]
 
 ## `elems_copy`
 
-Bulk-copies `count` unmanaged elements from `src[src_off..]` into `dst[dst_off..]`. The emitter expands this to a single `memory.copy` of `count * sizeof(T)` bytes — correct only for blittable `T` (no ARC retain on the copied slots). `@unsafe` because the compiler does not check that the ranges fit inside either array's allocated length.
+Copies `count` unmanaged elements from `src` at `src_off` to `dst` at `dst_off`. Overlapping ranges are supported. The caller must ensure both ranges fit in their arrays.
 
 ```dream
-public static extern fun elems_copy<T : unmanaged>( borrow dst: T[], dst_off: int, borrow src: T[], src_off: int, count: int ): void
+public static extern fun elems_copy<T: unmanaged>(
+    borrow dst: T[],
+    dst_off: int,
+    borrow src: T[],
+    src_off: int,
+    count: int
+): void
 ```
 
 ## `elems_fill`
 
-Zeroes `count` unmanaged elements of `dst` starting at `dst_off` via `memory.fill`. `@unsafe` because the compiler does not check that the range fits in `dst`.
+Zeroes `count` unmanaged elements of `dst` starting at `dst_off`. The caller must ensure that the range fits in the array.
 
 ```dream
-public static extern fun elems_fill<T : unmanaged>( borrow dst: T[], dst_off: int, count: int ): void
+public static extern fun elems_fill<T: unmanaged>(borrow dst: T[], dst_off: int, count: int): void
 ```
 
 ## `clear`
 
-Releases the element in every slot of `arr` by overwriting it with a zero value, so a container can rewind its length without stranding retained elements in dead slots. This is the sanctioned way to shrink a managed buffer: each store goes through normal ARC assignment semantics (release old occupant), unlike bitwise fills which must never touch reference-typed slots. O(length); unmanaged elements compile to plain stores.
+Resets every array element to its zero value, releasing any references previously held in those elements. The array length is unchanged.
 
 ```dream
 public static fun clear<T>(borrow arr: T[]): void
@@ -70,7 +76,7 @@ public static extern fun get_unchecked<T>(borrow arr: T[], index: int): T
 
 ## `set_unchecked`
 
-`arr[index] = value` without the bounds check (ordinary element-store ARC semantics). `@unsafe` for the same reason as `get_unchecked`.
+Replaces `arr[index]` without checking bounds. The caller must ensure the index is valid.
 
 ```dream
 public static extern fun set_unchecked<T>(borrow arr: T[], index: int, value: T): void
@@ -86,7 +92,7 @@ public static extern fun store16(borrow arr: byte[], off: int, unit: int): void
 
 ## `free`
 
-Immediately returns `arr`'s backing block to the allocator via `$free`, bypassing reference counting entirely. Any other live reference to the same block (including `arr` itself, if read again) is left dangling. `@unsafe` for the same reason as `realloc`: the compiler cannot verify `arr` has no other owners.
+Immediately releases the array storage. The array must have a single owner, and neither it nor any view or alias may be used afterward.
 
 ```dream
 public static extern fun free<T>(arr: T[]): void

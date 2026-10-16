@@ -2,7 +2,6 @@ module system.core;
 
 // `StringBuilder` — growable UTF-16 string construction. Lives in the bootstrap core so every
 // package (collections included) can build strings in O(n); always available without imports.
-
 public class StringBuilder {
     bytes: byte[];
     // Payload bytes used in `bytes` (always even; two bytes per UTF-16 unit).
@@ -75,6 +74,7 @@ public class StringBuilder {
         this.write_unit(56320 + (x % 1024));
     }
 
+    /// Appends `text` to the builder.
     @intrinsic(Intrinsic.StringBuilderPush)
     public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
 
@@ -82,9 +82,11 @@ public class StringBuilder {
     // Only initialized bytes below `count` can become a built string.
     public static extern fun new_buffer(capacity: int): byte[];
 
+    /// Appends the decimal representation of `n`.
     @intrinsic(Intrinsic.StringBuilderPushInt)
     public static extern fun push_int(borrow sb: StringBuilder, n: int): void;
 
+    /// Appends the decimal representation of `n`.
     @intrinsic(Intrinsic.StringBuilderPushLong)
     public static extern fun push_long(borrow sb: StringBuilder, n: long): void;
 
@@ -143,6 +145,7 @@ public class StringBuilder {
     @intrinsic(Intrinsic.StringBuilderPushDouble)
     static extern fun push_double(borrow sb: StringBuilder, n: double): void;
 
+    /// Appends the decimal representation of `n`.
     public fun append_double(n: double): void {
         StringBuilder.push_double(this, n);
     }
@@ -163,6 +166,8 @@ public class StringBuilder {
         }
     }
 
+    /// Creates a string from the first `len` bytes in the builder buffer. The range must be
+    /// valid.
     @intrinsic(Intrinsic.StringBuilderView)
     public static extern fun view_raw(borrow bytes: byte[], len: int): string;
 
@@ -188,6 +193,7 @@ public class StringBuilder {
         return string.from_builder(this.bytes, n, -1);
     }
 
+    /// Returns a text representation of this value.
     public override fun to_string(): string {
         return this.build();
     }

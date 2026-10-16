@@ -23,7 +23,7 @@ The settings below come from the extension's configuration. Change them in your 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `dream.buildMode` | `"debug"` | Compile/run build mode. Release enables release memory settings + WebAssembly optimization (default -Os unless optimize level overrides). |
-| `dream.optimizeLevel` | `"default"` | WebAssembly optimization optimization level passed as -O<level>. Default leaves the level to the build mode. |
+| `dream.optimizeLevel` | `"default"` | WebAssembly optimization level passed as `-O<level>`. Use `default` to follow the build mode. |
 | `dream.runtimeTarget` | `"native"` | Execution/runtime target for Run and compile commands. |
-| `dream.home` | `""` | Directory containing the `dream` and `dream-lsp` binaries. Overrides DREAM_HOME when set. Required for Run/Debug/LSP unless those binaries are on PATH (e.g. after `source ./use-toolchain.sh`). |
+| `dream.home` | `""` | Directory containing the `dream` and `dream-lsp` binaries. Overrides DREAM_HOME when set. Required for Run/Debug/LSP unless those binaries are on PATH . |
 | `dreamer.home` | `""` | Directory containing the `dreamer` package-manager binary. Overrides DREAMER_HOME when set. |

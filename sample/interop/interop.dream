@@ -4,7 +4,6 @@
 // This produces interop.wat, interop.wasm and interop.abi.json next to this file.
 //
 // Most externs need no glue at all: the runtime auto-binds them to matching JS globals.
-
 import system;
 
 // Auto-binds to the global `alert` (env module -> bare global).

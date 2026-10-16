@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun c55_body(): void {
     let x = 10;
 
@@ -21,9 +22,9 @@ fun c55_body(): void {
     // Else if chains
     if x < 5 {
         c55_verify_observation((0).to_string());
-    } else if (x == 10 ) {
+    } else if (x == 10) {
         c55_verify_observation((2).to_string());
-    } else if (x > 10 ) {
+    } else if (x > 10) {
         c55_verify_observation((0).to_string());
     } else {
         c55_verify_observation((0).to_string());
@@ -40,7 +41,7 @@ fun c55_body(): void {
     }
 
     // For loop with continue
-    for (let j = 0; j < 5; j = j + 1 ) {
+    for (let j = 0; j < 5; j = j + 1) {
         if j == 1 {
             continue;
         }
@@ -51,8 +52,8 @@ fun c55_body(): void {
     }
 
     // Nested loops
-    for (let a = 0; a < 2; a = a + 1 ) {
-        for (let b = 0; b < 2; b = b + 1 ) {
+    for (let a = 0; a < 2; a = a + 1) {
+        for (let b = 0; b < 2; b = b + 1) {
             c55_verify_observation((a * 10 + b).to_string());
         }
     }

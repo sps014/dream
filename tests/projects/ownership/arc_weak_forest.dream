@@ -12,6 +12,7 @@ class c25_ForestNode {
         this.parent = Option.None;
     }
 }
+
 fun c25_forest(depth: int): c25_ForestNode {
     let node = c25_ForestNode();
     if depth > 1 {
@@ -24,20 +25,27 @@ fun c25_forest(depth: int): c25_ForestNode {
     }
     return node;
 }
+
 fun c25_body(): void {
     let root: Option<c25_ForestNode> = Option.Some(c25_forest(5));
     let kept: Option<c25_ForestNode> = Option.None;
     switch (root) {
-        Some(node) => { kept = node.left; }
+        Some(node) => {
+            kept = node.left;
+        }
         None => {}
     }
     switch (kept) {
-        Some(child) => { c25_verify_observation((child.parent.is_some()).to_string()); }
+        Some(child) => {
+            c25_verify_observation((child.parent.is_some()).to_string());
+        }
         None => {}
     }
     root = Option.None;
     switch (kept) {
-        Some(child) => { c25_verify_observation((child.parent.is_none()).to_string()); }
+        Some(child) => {
+            c25_verify_observation((child.parent.is_none()).to_string());
+        }
         None => {}
     }
     c25_verify_observation(("forest reclaimed").to_string());

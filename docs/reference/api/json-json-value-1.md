@@ -6,7 +6,7 @@ Read the [usage guide](../stdlib/json.md) for examples and common tasks. This re
 
 [All sections](json-json-value.md)
 
-## `enum JsonKind`
+## `JsonKind`
 
 Discriminant for `JsonValue.kind()`.
 
@@ -16,11 +16,15 @@ public enum JsonKind
 
 ## `Null`
 
+A JSON null value.
+
 ```dream
 Null
 ```
 
 ## `Bool`
+
+A JSON boolean value.
 
 ```dream
 Bool
@@ -28,11 +32,15 @@ Bool
 
 ## `Number`
 
+A JSON numeric value.
+
 ```dream
 Number
 ```
 
 ## `String`
+
+A JSON string value.
 
 ```dream
 String
@@ -40,19 +48,23 @@ String
 
 ## `Array`
 
+An ordered JSON array of values.
+
 ```dream
 Array
 ```
 
 ## `Object`
 
+A JSON object mapping property names to values.
+
 ```dream
 Object
 ```
 
-## `class JsonValue`
+## `JsonValue`
 
-Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; recursive trees use exact ownership metadata.  Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only; objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
+A JSON value: null, boolean, number, string, array, or object. Arrays and objects can contain nested values. Object properties retain insertion order when serialized.
 
 ```dream
 public class JsonValue
@@ -179,6 +191,8 @@ public fun as_string(): Option<string>
 ```
 
 ## `as_array`
+
+Returns the elements when this is an array, otherwise `None`.
 
 ```dream
 public fun as_array(): Option<List<JsonValue>>

@@ -4,13 +4,21 @@ module system.webapi;
 // (`"*"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is
 // echoed instead, matching Starlette).
 public class CorsOptions {
+    /// Allowed request origins, or `*` for any origin.
     public allow_origins: string;
+    /// Allowed HTTP methods, or `*` to allow all.
     public allow_methods: string;
+    /// Allowed request headers, or `*` to allow all.
     public allow_headers: string;
+    /// Response headers that browsers may expose to cross-origin callers.
     public expose_headers: string;
+    /// Whether cross-origin requests may include credentials.
     public allow_credentials: bool;
+    /// How long browsers may cache preflight results, in seconds.
     public max_age: int;
 
+    /// Creates a `CorsOptions` with `allow_origins`, `allow_methods`, `allow_headers`,
+    /// `expose_headers`, `allow_credentials`, `max_age`.
     public constructor(
         allow_origins: string = "*",
         allow_methods: string = "*",
@@ -28,14 +36,20 @@ public class CorsOptions {
     }
 }
 
+/// Middleware applying cross-origin access rules to requests and preflight responses.
 public class Cors {
     opts: CorsOptions;
 
+    /// Creates a `Cors` with `opts`.
     public constructor(opts: CorsOptions) {
         this.opts = opts;
     }
 
-    public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing> { return Cors.invoke_owned(this, ctx, next); }
+    /// Runs this middleware for `ctx`, using `next` to continue the request pipeline.
+    public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing> {
+        return Cors.invoke_owned(this, ctx, next);
+    }
+
     static async fun invoke_owned(cors: Cors, ctx: RequestContext, next: Next): HttpOutgoing {
         let origin = ctx.incoming.header("Origin").unwrap_or("");
         if origin.is_empty() {
@@ -129,7 +143,9 @@ public class Cors {
 
 // `app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
 public fun CORS(opts: CorsOptions): Middleware {
-    return Middleware(async (borrow ctx: RequestContext, borrow next: Next) => {
-        return Cors(opts).invoke(ctx, next).await;
-    });
+    return Middleware(
+        async (borrow ctx: RequestContext, borrow next: Next) => {
+            return Cors(opts).invoke(ctx, next).await;
+        }
+    );
 }

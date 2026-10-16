@@ -14,8 +14,12 @@ fun numbers(count: int): Iterable<int> {
 
 fun main(): void {
     let values = numbers(3);
-    for (let value in values) { System.println(value); } // 0, 1, 2
-    for (let value in values) { System.println(value); } // 0, 1, 2 again
+    for (let value in values) {
+        System.println(value);
+    } // 0, 1, 2
+    for (let value in values) {
+        System.println(value);
+    } // 0, 1, 2 again
 }
 ```
 
@@ -30,8 +34,12 @@ or `yield return` spelling.
 ```dream
 fun positives(values: int[]): Iterable<int> {
     for (let value in values) {
-        if value == 0 { yield break; }
-        if value < 0 { continue; }
+        if value == 0 {
+            yield break;
+        }
+        if value < 0 {
+            continue;
+        }
         yield value;
     }
 }

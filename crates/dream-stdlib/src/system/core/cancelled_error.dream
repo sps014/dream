@@ -1,10 +1,10 @@
 module system.core;
 
 // Error raised when a cooperative cancellation token is already cancelled.
-
-public class CancelledError : Error {
+public class CancelledError: Error {
     _message: string;
 
+    /// Creates a `CancelledError` with `message`.
     public constructor(message: string) {
         this._message = message;
     }

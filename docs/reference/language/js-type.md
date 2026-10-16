@@ -25,7 +25,7 @@ You leave the dynamic world at a **typed boundary** — assigning to a typed var
 argument, or returning a typed value — where Dream converts automatically:
 
 ```dream
-let count: int = config.count;   // js -> int here
+let count: int = config.count; // js -> int here
 ```
 
 A `js` value is not a Dream heap object, but its **handle is reference-counted** the same way heap values are: when the last Dream owner drops, the JS value can be collected. See [Memory Management](memory.md).
@@ -89,10 +89,13 @@ included). Fields that cannot cross (maps, interfaces, function values) are left
 class Point {
     public x: int;
     public y: int;
-    public constructor(x: int, y: int) { this.x = x; this.y = y; }
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
 }
 
-js.global.render(Point(3, 4));   // -> render({ x: 3, y: 4 })
+js.global.render(Point(3, 4)); // -> render({ x: 3, y: 4 })
 ```
 
 Assigning a `js` object to a `class`- or value-`struct`-typed variable rebuilds it by reading
@@ -103,7 +106,10 @@ structs fill the destination slot in place:
 class Point {
     public x: int;
     public y: int;
-    public constructor(x: int, y: int) { this.x = x; this.y = y; }
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
 }
 
 let p: Point = js.global.originPoint();

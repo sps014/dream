@@ -2,7 +2,9 @@ import system;
 import system.task;
 
 fun channel_message(error: ChannelError): string {
-    if error == ChannelError.Cancelled { return "pipeline cancelled"; }
+    if error == ChannelError.Cancelled {
+        return "pipeline cancelled";
+    }
     return "pipeline endpoint closed";
 }
 
@@ -19,20 +21,27 @@ async fun produce(sender: Sender<int>): Result<bool, string> {
 }
 
 async fun main(): int {
-    let result = Task.scope<int, string>(async (scope) => {
-        let queue = Channel.bounded<int>(capacity: 16).unwrap();
-        let sender = queue.sender;
-        let receiver = queue.receiver;
-        scope.spawn<bool>(async () => produce(sender).await);
-        let total = 0;
-        while true {
-            let value = receiver.receive().await.map_err<TaskFailure<string>>(channel_failure)?;
-            if value.is_none() { break; }
-            total = total + value.unwrap();
+    let result = Task.scope<int, string>(
+        async (scope) => {
+            let queue = Channel.bounded<int>(capacity: 16).unwrap();
+            let sender = queue.sender;
+            let receiver = queue.receiver;
+            scope.spawn<bool>(async () => produce(sender).await);
+            let total = 0;
+            while true {
+                let value = receiver.receive().await.map_err<TaskFailure<string>>(channel_failure)?;
+                if value.is_none() {
+                    break;
+                }
+                total = total + value.unwrap();
+            }
+            return Result.Ok(total);
         }
-        return Result.Ok(total);
-    }).await;
-    if result.is_err() { System.stderr.write_line("pipeline failed"); return 1; }
+    ).await;
+    if result.is_err() {
+        System.stderr.write_line("pipeline failed");
+        return 1;
+    }
     System.println(result.unwrap());
     return 0;
 }

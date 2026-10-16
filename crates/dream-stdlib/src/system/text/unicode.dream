@@ -1,7 +1,6 @@
 module system.text;
 
 // ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
-
 public static class Unicode {
     @runtime("unicodeNormalize")
     static extern fun normalize_host(borrow text: string, form: int): string;

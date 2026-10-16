@@ -1,9 +1,13 @@
 import system.testing;
 import system;
+
 class c18_Value {
     public n: int;
-    public constructor(n: int) { this.n = n; }
+    public constructor(n: int) {
+        this.n = n;
+    }
 }
+
 @test
 @timeout(180000)
 fun arc_object_local() {

@@ -4,6 +4,7 @@
 
 // `Option<T>` and `Result<T, E>` come from the standard library prelude.
 import system;
+
 enum Shape {
     Circle(int),
     Rect(width: int, height: int),
@@ -13,19 +14,19 @@ enum Shape {
 // `switch` as an expression: every arm yields an int.
 fun area(s: Shape): int {
     return switch (s) {
-        Circle(r)  => r * r * 3,
+        Circle(r) => r * r * 3,
         Rect(w, h) => w * h,
-        Empty      => 0,
+        Empty => 0,
     };
 }
 
 // Literal sub-patterns and a guard; a trailing binding keeps the switch exhaustive.
 fun describe(o: Option<int>): string {
     return switch (o) {
-        Some(0)           => "zero",
-        Some(n) if n > 10 => "big",
-        Some(n)           => "small",
-        None              => "nothing",
+        Some(0) => "zero",
+        Some(n)if n > 10 => "big",
+        Some(n) => "small",
+        None => "nothing",
     };
 }
 
@@ -37,24 +38,36 @@ fun safe_div(a: int, b: int): Result<int, string> {
 }
 
 fun main() {
-    System.println(area(Shape.Circle(2)));   // 12
-    System.println(area(Shape.Rect(3, 4)));  // 12
-    System.println(area(Shape.Empty));       // 0
+    System.println(area(Shape.Circle(2))); // 12
+    System.println(area(Shape.Rect(3, 4))); // 12
+    System.println(area(Shape.Empty)); // 0
 
     let a: Option<int> = Option.Some(0);
     let b: Option<int> = Option.Some(42);
     let n: Option<int> = Option.None;
-    System.println(describe(a));              // zero
-    System.println(describe(b));              // big
-    System.println(describe(n));              // nothing
+    System.println(describe(a)); // zero
+    System.println(describe(b)); // big
+    System.println(describe(n)); // nothing
 
     // `switch` as a statement with block arms.
     switch (safe_div(10, 2)) {
-        Ok(v)  => { System.print("ok "); System.println(v); }
-        Err(e) => { System.print("err "); System.println(e); }
+        Ok(v) => {
+            System.print("ok ");
+            System.println(v);
+        }
+        Err(e) => {
+            System.print("err ");
+            System.println(e);
+        }
     }
     switch (safe_div(1, 0)) {
-        Ok(v)  => { System.print("ok "); System.println(v); }
-        Err(e) => { System.print("err "); System.println(e); }
+        Ok(v) => {
+            System.print("ok ");
+            System.println(v);
+        }
+        Err(e) => {
+            System.print("err ");
+            System.println(e);
+        }
     }
 }

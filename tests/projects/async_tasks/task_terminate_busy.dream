@@ -4,11 +4,12 @@ import system;
 import system.task;
 
 async fun c25b_body(): void {
-    let f = Task.spawn(() => {
-        while true {
+    let f = Task.spawn(
+        () => {
+            while true {}
+            return 0;
         }
-        return 0;
-    });
+    );
     Promise.cancel(f);
     c25b_verify_observation(("done").to_string());
 }

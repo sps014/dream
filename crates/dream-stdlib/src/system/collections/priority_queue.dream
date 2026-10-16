@@ -3,7 +3,7 @@ module system.collections;
 // Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator
 // (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
 @allow_cycle
-public class PriorityQueue<T> : Collection<T> {
+public class PriorityQueue<T>: Collection<T> {
     items: T[];
     count: int;
     cmp_fn: fun(T, T): int;
@@ -11,7 +11,7 @@ public class PriorityQueue<T> : Collection<T> {
     comparing: bool;
 
     // Empty queue ordered by `T`'s natural `Comparable` order.
-    public constructor() where T : Comparable<T> {
+    public constructor()where T: Comparable<T> {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
         this.comparing = false;
@@ -54,7 +54,7 @@ public class PriorityQueue<T> : Collection<T> {
     }
 
     // Unmanaged: no RC to release — rewind only.
-    public fun clear(): void where T : unmanaged {
+    public fun clear(): void where T: unmanaged {
         this.check_mutation();
         this.count = 0;
     }
@@ -74,24 +74,32 @@ public class PriorityQueue<T> : Collection<T> {
         let cmp = this.cmp_fn;
         this.comparing = true;
         // Heap traversal supplies live indices; comparator mutation is rejected until it returns.
-        let result = cmp(Buffer.get_unchecked<T>(this.items, i), Buffer.get_unchecked<T>(this.items, j));
+        let result = cmp(
+            Buffer.get_unchecked<T>(this.items, i),
+            Buffer.get_unchecked<T>(this.items, j)
+        );
         this.comparing = false;
         return result < 0;
     }
 
-    fun less(i: int, j: int): bool where T : Comparable<T> {
+    fun less(i: int, j: int): bool where T: Comparable<T> {
         this.comparing = true;
         let result = 0;
         if this.natural {
-            result = Buffer.get_unchecked<T>(this.items, i).compare(Buffer.get_unchecked<T>(this.items, j));
+            result = Buffer.get_unchecked<T>(this.items, i)
+                .compare(Buffer.get_unchecked<T>(this.items, j));
         } else {
             let cmp = this.cmp_fn;
-            result = cmp(Buffer.get_unchecked<T>(this.items, i), Buffer.get_unchecked<T>(this.items, j));
+            result = cmp(
+                Buffer.get_unchecked<T>(this.items, i),
+                Buffer.get_unchecked<T>(this.items, j)
+            );
         }
         this.comparing = false;
         return result < 0;
     }
 
+    /// Adds a value to the priority queue.
     public fun push(value: T): void {
         this.check_mutation();
         if this.count == this.items.length {
@@ -125,6 +133,7 @@ public class PriorityQueue<T> : Collection<T> {
         }
     }
 
+    /// Removes the highest-priority value, or returns `None` when empty.
     public fun pop(): Option<T> {
         this.check_mutation();
         if this.count == 0 {
@@ -165,7 +174,7 @@ public class PriorityQueue<T> : Collection<T> {
         let hole = 0;
         while depth > 0 {
             depth = depth - 1;
-            let child = hole * 4 + 1 + ((path >> (depth * 2)) & 3);
+            let child = hole * 4 + 1 + ((path >>(depth * 2)) & 3);
             CollectionStorage.exchange<T>(this.items, hole, this.items, child);
             hole = child;
         }

@@ -19,7 +19,9 @@ async fun main(): void {
     let text = "";
     while true {
         let bytes = server.read_async(1024).await.unwrap();
-        if bytes.length == 0 { break; }
+        if bytes.length == 0 {
+            break;
+        }
         text = text + Encoding.utf8_decode(bytes);
     }
     System.println(text);

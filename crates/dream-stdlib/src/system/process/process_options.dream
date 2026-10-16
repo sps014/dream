@@ -32,10 +32,14 @@ public class ProcessOptions {
         value.set("max_output_bytes", JsonValue.number((double)this.max_output_bytes));
         value.set("clear_env", JsonValue.boolean(this.clear_env));
         let environment = JsonValue.dict();
-        for (let entry in this.env) { environment.set(entry.key, JsonValue.from_string(entry.value)); }
+        for (let entry in this.env) {
+            environment.set(entry.key, JsonValue.from_string(entry.value));
+        }
         value.set("env", environment);
         let input = JsonValue.array();
-        for (let i = 0; i < this.input.length; i = i + 1) { input.push(JsonValue.number((double)this.input[i])); }
+        for (let i = 0; i < this.input.length; i = i + 1) {
+            input.push(JsonValue.number((double)this.input[i]));
+        }
         value.set("input", input);
         return value;
     }

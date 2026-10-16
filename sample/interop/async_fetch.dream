@@ -6,8 +6,8 @@
 // `getUser` is an `extern async` import: the JS side returns a Promise (e.g. a `fetch`), and the
 // Dream runtime suspends the awaiting task until it resolves. The `.then` bridge lives entirely in
 // dream.js - Dream code only ever sees the resolved value.
-
 import system;
+
 @js("api", "getUser")
 extern async fun getUser(id: int): string;
 

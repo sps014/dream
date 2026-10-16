@@ -6,7 +6,10 @@ import system.json;
 class c112_Address {
     public city: string;
     public zip: string;
-    public constructor(city: string, zip: string) { this.city = city; this.zip = zip; }
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
 }
 
 @json
@@ -16,7 +19,10 @@ class c112_User {
     public address: c112_Address;
     public scores: int[];
     public constructor(name: string, age: int, address: c112_Address, scores: int[]) {
-        this.name = name; this.age = age; this.address = address; this.scores = scores;
+        this.name = name;
+        this.age = age;
+        this.address = address;
+        this.scores = scores;
     }
 }
 
@@ -54,7 +60,10 @@ fun c112_deserialize_loop(iters: int): int {
 }
 
 fun c112_body(): void {
-    c112_verify_observation((c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500)).to_string());
+    c112_verify_observation(
+        (c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500))
+            .to_string()
+    );
 }
 
 let c112_cursor: int = 0;
@@ -74,5 +83,10 @@ fun c112_verify_observation(borrow value: string): void {
 fun json_deserialize_borrow_loop(): void {
     c112_cursor = 0;
     c112_body();
-    Assert.eq(c112_cursor, ("{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}\n199000\n").length);
+    Assert.eq(
+        c112_cursor,
+        (
+            "{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}\n199000\n"
+        ).length
+    );
 }

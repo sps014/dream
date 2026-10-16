@@ -14,12 +14,15 @@ so you can still declare a variable or function called `typeof`. Written as a ca
 meta forms:
 
 ```dream
-struct Point { public x: int; public y: int; }
+struct Point {
+    public x: int;
+    public y: int;
+}
 
-let bytes: int = sizeof(Point);     // 8 — byte size of the struct
-let ptr_w: int = sizeof(string);    // 4 on wasm32, 8 on 64-bit native targets
+let bytes: int = sizeof(Point); // 8 — byte size of the struct
+let ptr_w: int = sizeof(string); // 4 on wasm32, 8 on 64-bit native targets
 let name: string = nameof(Point.x); // "x" — last path segment; operand is not evaluated
-let kind: string = typeof(bytes);   // "int"
+let kind: string = typeof(bytes); // "int"
 ```
 
 - **`sizeof(T)`** yields an `int`:
@@ -37,14 +40,16 @@ let kind: string = typeof(bytes);   // "int"
 `object` or to an interface:
 
 ```dream
-let d: Map<string, object> = { "ok": "ko" };
-System.println(typeof(d));        // "Map<string, object>" — the source spelling, not a mangled name
+let d: Map<string, object> = {
+    "ok": "ko"
+};
+System.println(typeof(d)); // "Map<string, object>" — the source spelling, not a mangled name
 
 let boxed: object = 5;
-System.println(typeof(boxed));    // "int" — the payload type, not "object"
+System.println(typeof(boxed)); // "int" — the payload type, not "object"
 
 let shape: Shape = Circle();
-System.println(typeof(shape));    // "Circle" — the implementing class
+System.println(typeof(shape)); // "Circle" — the implementing class
 ```
 
 There are two resolution paths, and which one applies is decided at compile time:

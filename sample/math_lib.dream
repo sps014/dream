@@ -1,12 +1,12 @@
 import system;
+
 /* add_numbers is a function that adds two numbers and returns the result */
 public fun add_numbers(a: int, b: int): int {
     return a + b;
 }
 
 // Test is a class that represents a test object
-public class Test
-{
+public class Test {
     /* name is a string field */
     public name: string;
     /* age is an integer field */

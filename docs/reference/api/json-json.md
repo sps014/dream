@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class Json`
+## `Json`
 
 The public JSON API: one pair of names for text <-> value.
 
@@ -14,7 +14,7 @@ public static class Json
 
 ## `serialize`
 
-Serializes a supported `@json` value to JSON text.
+Encodes `value` as JSON text. User-defined types need `@json`.
 
 ```dream
 public static extern fun serialize<T>(borrow value: T): string
@@ -22,7 +22,7 @@ public static extern fun serialize<T>(borrow value: T): string
 
 ## `deserialize`
 
-Parses JSON text and reconstructs a supported `@json` value, returning a parse error on failure.
+Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. User-defined types need `@json`.
 
 ```dream
 public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>
@@ -70,11 +70,15 @@ public static fun write_string(borrow sb: StringBuilder, borrow s: string): void
 
 ## `write_bool`
 
+Appends a JSON boolean to `sb`.
+
 ```dream
 public static fun write_bool(borrow sb: StringBuilder, b: bool): void
 ```
 
 ## `write_null`
+
+Appends JSON null to `sb`.
 
 ```dream
 public static fun write_null(borrow sb: StringBuilder): void
@@ -82,7 +86,7 @@ public static fun write_null(borrow sb: StringBuilder): void
 
 ## `write_value`
 
-Appends an already-built dynamic value as compact JSON text. Generated `write_json` methods use this for `JsonValue` fields and collection elements, which carry their own shape.
+Appends a dynamic JSON value to `sb` as compact JSON text.
 
 ```dream
 public static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): void
@@ -90,11 +94,15 @@ public static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): vo
 
 ## `write_int`
 
+Appends a JSON integer to `sb`.
+
 ```dream
 public static fun write_int(borrow sb: StringBuilder, n: int): void
 ```
 
 ## `write_number`
+
+Appends a JSON number to `sb`.
 
 ```dream
 public static fun write_number(borrow sb: StringBuilder, n: double): void

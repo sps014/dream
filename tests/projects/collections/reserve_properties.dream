@@ -22,7 +22,11 @@ fun reserve_properties(): void {
         let set_capacity = set.capacity;
         for (let i = 0; i < count; i = i + 1) {
             let value = round * 20 + i;
-            list.push(value); queue.enqueue(value); map.set(value, value); set.add(value); expected.push(value);
+            list.push(value);
+            queue.enqueue(value);
+            map.set(value, value);
+            set.add(value);
+            expected.push(value);
         }
         Assert.eq(list.capacity, list_capacity);
         Assert.eq(queue.capacity, queue_capacity);
@@ -40,7 +44,11 @@ fun reserve_properties(): void {
             Assert.is_true(set.remove(value));
         }
     }
-    for (let value in expected) { Assert.eq(queue.dequeue().unwrap(), value); Assert.eq(map.get(value).unwrap(), value); Assert.is_true(set.contains(value)); }
+    for (let value in expected) {
+        Assert.eq(queue.dequeue().unwrap(), value);
+        Assert.eq(map.get(value).unwrap(), value);
+        Assert.is_true(set.contains(value));
+    }
     Assert.is_true(list.reserve(0 - 1).is_err());
     Assert.is_true(queue.reserve(0 - 1).is_err());
     Assert.is_true(map.reserve(2147483647).is_err());

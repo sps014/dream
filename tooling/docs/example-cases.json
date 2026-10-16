@@ -335,5 +335,74 @@
     "block": 0,
     "mode": "compile",
     "timeout": 300
+  },
+  {
+    "name": "paths-complete",
+    "page": "docs/reference/stdlib/paths.md",
+    "block": 0,
+    "stdout": "notes.txt\ntxt\nnotes\n"
+  },
+  {
+    "name": "json-api-recipe",
+    "page": "docs/cookbook/webapi.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 240
+  },
+  {
+    "name": "download-complete",
+    "page": "docs/cookbook/download-file.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 240,
+    "append_blocks": [
+      1,
+      2
+    ]
+  },
+  {
+    "name": "csv-pipeline-complete",
+    "page": "docs/reference/stdlib/application-utilities.md",
+    "block": 4,
+    "mode": "compile",
+    "timeout": 240
+  },
+  {
+    "name": "service-complete",
+    "page": "docs/web-apis/example.md",
+    "block": 4,
+    "entry": "app.dream",
+    "mode": "compile",
+    "timeout": 300,
+    "files": [
+      {
+        "name": "models.dream",
+        "block": 0
+      },
+      {
+        "name": "accounts.dream",
+        "block": 1
+      },
+      {
+        "name": "routes.dream",
+        "block": 2
+      },
+      {
+        "name": "application.dream",
+        "block": 3
+      }
+    ]
+  },
+  {
+    "name": "cli-errors-complete",
+    "page": "docs/reference/stdlib/cli.md",
+    "block": 2,
+    "mode": "compile"
+  },
+  {
+    "name": "simd-complete",
+    "page": "docs/reference/stdlib/simd.md",
+    "block": 0,
+    "mode": "compile"
   }
 ]

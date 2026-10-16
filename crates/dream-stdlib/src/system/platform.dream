@@ -1,10 +1,13 @@
 module system;
 
 // Host runtime kind.
-
 public enum Platform {
+    /// A native executable.
     Native,
+    /// A program running under Node.js.
     Node,
+    /// A program running in a web browser.
     Browser,
+    /// An execution platform that is not recognized by this API.
     Unknown,
 }

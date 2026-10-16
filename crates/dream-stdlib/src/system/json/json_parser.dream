@@ -14,6 +14,7 @@ public class JsonParser {
     pos: int;
     invalid: bool;
 
+    /// Creates a `JsonParser` with `text`, `pos`.
     public constructor(text: string, pos: int) {
         this.text = text;
         this.pos = pos;
@@ -32,6 +33,7 @@ public class JsonParser {
         return this.text.char_at(i).to_int();
     }
 
+    /// Advances past JSON whitespace.
     public fun skip_ws(): void {
         let going = true;
         while going == true {
@@ -48,17 +50,26 @@ public class JsonParser {
         }
     }
 
+    /// Returns whether the cursor has reached the end of the input.
     public fun at_end(): bool {
         this.skip_ws();
         return this.pos >= this.len();
     }
 
-    public fun cursor(): int { return this.pos; }
+    /// Current zero-based character position in the input.
+    public fun cursor(): int {
+        return this.pos;
+    }
 
-    public fun failed(): bool { return this.invalid; }
+    /// Returns whether parsing has encountered an error.
+    public fun failed(): bool {
+        return this.invalid;
+    }
 
     // Generated loops must consume input or close their container; nested readers can
     // return without consuming a token when its shape does not match the field type.
+    /// Checks whether a JSON container has closed. Marks parsing as failed if a reader neither
+    /// consumed input nor reached the closing delimiter.
     public fun container_end(close: int, previous: int): bool {
         this.skip_ws();
         if this.pos >= this.len() || this.pos <= previous {
@@ -72,6 +83,7 @@ public class JsonParser {
         return false;
     }
 
+    /// Consumes a recognized keyword of `length` characters and returns its JSON value.
     public fun keyword(length: int, value: JsonValue): JsonValue {
         this.pos = this.pos + length;
         return value;
@@ -119,6 +131,7 @@ public class JsonParser {
         return r;
     }
 
+    /// Reads a JSON string and advances the cursor; malformed input marks parsing as failed.
     public fun parse_string(): string {
         this.pos = this.pos + 1; // opening quote
         // Parsed strings must own their payload; retaining a slice would expose input mutations.
@@ -178,7 +191,8 @@ public class JsonParser {
                             if cp < 0 {
                                 cp = 65533;
                             } else if ((cp >= 55296) && (cp <= 56319)) {
-                                if ((this.pos + 5) < this.len()) && (this.b() == 92) && (this.b_at(this.pos + 1) == 117) {
+                                if ((this.pos + 5) < this.len())
+                                    && (this.b() == 92) && (this.b_at(this.pos + 1) == 117) {
                                     let save = this.pos;
                                     this.pos = this.pos + 2;
                                     let lo = this.read_hex4();
@@ -206,6 +220,7 @@ public class JsonParser {
         return sb.build();
     }
 
+    /// Reads a JSON number and advances the cursor; malformed input marks parsing as failed.
     public fun parse_number(): JsonValue {
         let sign = 1.0d;
         if (this.pos < this.len()) && (this.b() == 45) {
@@ -282,6 +297,7 @@ public class JsonParser {
         return JsonValue.number(sign * value);
     }
 
+    /// Reads a JSON array and advances the cursor; malformed input marks parsing as failed.
     public fun parse_array(): JsonValue {
         let result = JsonValue.array();
         this.pos = this.pos + 1; // '['
@@ -311,6 +327,7 @@ public class JsonParser {
         return result;
     }
 
+    /// Reads a JSON object and advances the cursor; malformed input marks parsing as failed.
     public fun parse_object(): JsonValue {
         let result = JsonValue.dict();
         this.pos = this.pos + 1; // '{'
@@ -348,6 +365,8 @@ public class JsonParser {
         return result;
     }
 
+    /// Reads the next JSON value and advances the cursor; malformed input marks parsing as
+    /// failed.
     public fun parse_value(): JsonValue {
         this.skip_ws();
         if this.pos >= this.len() {
@@ -375,6 +394,7 @@ public class JsonParser {
         return this.parse_number();
     }
 
+    /// Consumes the next character if its code equals `code`, returning whether it matched.
     public fun try_consume(code: int): bool {
         this.skip_ws();
         if (this.pos < this.len()) && (this.b() == code) {
@@ -384,6 +404,7 @@ public class JsonParser {
         return false;
     }
 
+    /// Consumes a JSON null at the cursor, returning whether it matched.
     public fun try_null(): bool {
         this.skip_ws();
         if (this.pos < this.len()) && (this.b() == 110) {
@@ -393,6 +414,7 @@ public class JsonParser {
         return false;
     }
 
+    /// Reads a JSON boolean and advances the cursor; invalid input marks parsing as failed.
     public fun parse_bool(): bool {
         this.skip_ws();
         if this.pos >= this.len() {
@@ -448,6 +470,7 @@ public class JsonParser {
         }
     }
 
+    /// Parses a decimal integer, returning `ParseError` for invalid or out-of-range input.
     public fun parse_int(): int {
         this.skip_ws();
         let sign = 1;
@@ -471,6 +494,7 @@ public class JsonParser {
         return sign * value;
     }
 
+    /// Parses a floating-point number, returning `ParseError` for invalid input.
     public fun parse_double(): double {
         this.skip_ws();
         let sign = 1.0d;
@@ -553,7 +577,10 @@ public class JsonParser {
         }
         this.pos = this.pos + 1;
         let kn = key.length;
-        if (this.pos + kn > this.len()) || !this.text.span(this.pos, this.pos + kn).equals(key) || key.span().contains('\\') {
+        if (this.pos + kn > this.len())
+            || !this.text.span(this.pos, this.pos + kn)
+            .equals(key) || key.span()
+            .contains('\\') {
             this.pos = saved;
             return false;
         }
@@ -572,6 +599,7 @@ public class JsonParser {
         return false;
     }
 
+    /// Advances past the next JSON value without retaining it.
     public fun skip_value(): void {
         this.skip_ws();
         if this.pos >= this.len() {

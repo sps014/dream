@@ -17,7 +17,9 @@ fun main(): void {
         .string_option("output", short: "o", default_value: "download.bin")
         .int_option("timeout", default_value: 10000)
         .flag("verbose", short: "v");
+
     let parsed = command.parse(["https://example.com/file"]).unwrap();
+
     System.println(parsed.get_string("output").unwrap());
     System.println(parsed.get_int("timeout").unwrap());
     System.println(parsed.is_present("output"));
@@ -64,9 +66,12 @@ fun main(): void {
     let check = Command("check")
         .string_option("mode", default_value: "fast")
         .choices("mode", ["fast", "slow"]);
+
     let command = Command("tool").version("2.0").subcommand(check).require_subcommand();
+
     let parsed = command.parse(["check", "--mode", "slow"]).unwrap();
     let child = parsed.subcommand.unwrap();
+
     System.println(child.command_name);
     System.println(child.get_string("mode").unwrap());
 }
@@ -79,27 +84,51 @@ Each parsed command scope has its own values. A selected child is available thro
 `--help`/`-h` return `is_help` with generated `help_text`, including for children.
 After `.version(...)`, `--version`/`-V` return `is_version` with `version_text`;
 versions propagate to subcommands. These requests bypass required argument checks.
-Help text and error formatting use the same clap parser on native, Node, and browser.
+Help and error behavior is consistent across native, Node, and browser applications.
 
 `CliError.code()` reports `EINVAL` for definitions, `EARGS` for invalid invocations,
 `ENOENT` for unknown/missing values, `ETYPE` for incorrect getters, and `EIO` for
 adapter failures. Definition limits are 16 nested levels, 256 arguments per
-command, 64 children per command, and a 1 MiB serialized request.
+command, and 64 children per command.
 
-## Download application
+## Handle help and errors
 
-The complete `sample/cli_download/main.dream` example connects this parser to URL
-validation, HTTP streaming, and asynchronous file copying:
+Save this as `inspect.dream`. Handle the parse result before reading arguments, then
+check help and version before starting the program's work.
 
-```bash
-cargo run -- run sample/cli_download/main.dream -- --help
-cargo run -- run sample/cli_download/main.dream -- https://example.com/file -o download.bin -v
+```dream
+import system;
+import system.cli;
+
+fun main(): int {
+    let command = Command("inspect").version("1.0.0").positional("path", required: true);
+
+    let result = command.parse(System.args);
+    if result.is_err() {
+        System.stderr.write_line(result.unwrap_err().message());
+        return 2;
+    }
+
+    let parsed = result.unwrap();
+    if parsed.is_help {
+        System.print(parsed.help_text);
+        return 0;
+    }
+    if parsed.is_version {
+        System.print(parsed.version_text);
+        return 0;
+    }
+
+    System.println(parsed.get_string("path").unwrap());
+    return 0;
+}
 ```
 
-It uses exit status 2 for invalid arguments, 1 for transfer failures, and 0 for
-success/help/version. HTTP error statuses are rejected before creating a destination.
-Transfers use bounded buffers and explicitly close files, responses, and clients.
-A failed transfer can leave a partial destination; atomic replacement is a later
-stdlib phase.
+Run `dream run inspect.dream -- notes.txt` to print `notes.txt`.
+Use `--help` to print usage, or `--version` to print `1.0.0`. Missing the required
+path prints an error to standard error and returns exit status 2.
+
+The [download walkthrough](../../cookbook/download-file.md) applies this pattern to
+HTTP transfers, with each step and its cleanup explained on the page.
 
 [Command declarations](../api/cli-command.md) · [Parsed arguments and errors](../api/cli-parsed-arguments.md)

@@ -3,18 +3,28 @@ import system.testing;
 import system.collections;
 
 let arc_reader_drops = 0;
+
 class ArcReaderItem {
     public value: string;
-    public constructor(value: string) { this.value = value; }
-    del() { arc_reader_drops = arc_reader_drops + 1; }
+    public constructor(value: string) {
+        this.value = value;
+    }
+    del() {
+        arc_reader_drops = arc_reader_drops + 1;
+    }
 }
+
 struct ArcReaderRecord {
     public item: ArcReaderItem;
-    public constructor(item: ArcReaderItem) { this.item = item; }
+    public constructor(item: ArcReaderItem) {
+        this.item = item;
+    }
 }
 
 @noinline
-fun arc_record_length(value: ArcReaderRecord): int { return value.item.value.length; }
+fun arc_record_length(value: ArcReaderRecord): int {
+    return value.item.value.length;
+}
 
 @noinline
 fun arc_make_tail(): ArcReaderRecord[] {
@@ -68,7 +78,9 @@ fun arc_readers_and_storage(): void {
         i = i + 1;
     }
     let total = 0;
-    for (let pair in map) { total = total + pair.key.length; }
+    for (let pair in map) {
+        total = total + pair.key.length;
+    }
     Assert.is_true(total > 128);
     i = 0;
     while i < 128 {
@@ -83,7 +95,9 @@ fun arc_readers_and_storage(): void {
     Assert.eq(arc_reader_drops - before_drop, 2);
     Assert.eq_str(tail[0].item.value, "kept");
     let values = List<string>();
-    values.push("a"); values.push("c"); values.push("b");
+    values.push("a");
+    values.push("c");
+    values.push("b");
     let direction = -1;
     values.sort_by((a, b) => direction * a.compare(b));
     Assert.eq_str(values[0], "c");

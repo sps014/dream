@@ -49,5 +49,10 @@ fun c122_verify_observation(borrow value: string): void {
 fun json_union_strict_variant(): void {
     c122_cursor = 0;
     c122_body();
-    Assert.eq(c122_cursor, ("{\"type\":\"Circle\",\"_0\":7}\nok:Circle(7)\nerr:unknown variant 'Triangle' for union 'c122_Shape'\nerr:EPARSE:unknown variant '' for union 'c122_Shape'\n").length);
+    Assert.eq(
+        c122_cursor,
+        (
+            "{\"type\":\"Circle\",\"_0\":7}\nok:Circle(7)\nerr:unknown variant 'Triangle' for union 'c122_Shape'\nerr:EPARSE:unknown variant '' for union 'c122_Shape'\n"
+        ).length
+    );
 }

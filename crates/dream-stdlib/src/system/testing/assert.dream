@@ -15,14 +15,20 @@ public static class Assert {
     }
 
     // Awaits actual and compares its value using the normal assertion diagnostics.
-    @native @node
-    public static async fun eq_async<T>(actual: Future<T>, expected: T): void { Assert.eq(actual.await, expected); }
+    @native
+    @node
+    public static async fun eq_async<T>(actual: Future<T>, expected: T): void {
+        Assert.eq(actual.await, expected);
+    }
 
     // Awaits a fallible operation and returns its success value, reporting the error on failure.
-    @native @node
+    @native
+    @node
     public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T {
         let result = actual.await;
-        if result.is_err() { Assert.fail("expected async success: " + result.unwrap_err()); }
+        if result.is_err() {
+            Assert.fail("expected async success: " + result.unwrap_err());
+        }
         return result.unwrap();
     }
 
@@ -77,7 +83,9 @@ public static class Assert {
         if diff <= epsilon {
             return;
         }
-        Assert.fail("assert_approx failed: " + actual + " !~ " + expected + " (epsilon " + epsilon + ")");
+        Assert.fail(
+            "assert_approx failed: " + actual + " !~ " + expected + " (epsilon " + epsilon + ")"
+        );
     }
 
     // Asserts that two strings have identical contents.
@@ -87,6 +95,8 @@ public static class Assert {
         if actual == expected {
             return;
         }
-        Assert.fail("assert_eq_str failed: expected \"" + expected + "\" but got \"" + actual + "\"");
+        Assert.fail(
+            "assert_eq_str failed: expected \"" + expected + "\" but got \"" + actual + "\""
+        );
     }
 }

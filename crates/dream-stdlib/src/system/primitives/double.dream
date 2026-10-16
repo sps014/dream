@@ -1,8 +1,7 @@
 module system.primitives;
 
 // The `double` primitive as an extensible class.
-
-extend double : Comparable<double> {
+extend double: Comparable<double> {
     // Orders this value against `other`.
     public fun compare(other: double): int {
         if this < other {

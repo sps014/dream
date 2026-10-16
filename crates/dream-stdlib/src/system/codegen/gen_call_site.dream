@@ -6,16 +6,25 @@ import system.json;
 
 // A call of one of the generator's `@on_call` functions.
 public class GenCallSite {
+    /// Stable identifier of this entry.
     public id: string;
     // Identity of the callee (compare with `declof(Json.serialize)`).
     public callee: string;
+    /// Concrete type arguments, in parameter order.
     public type_args: List<GenTypeRef>;
     // Statically known argument types (`TypeRefKind.Unknown` when not inferable).
     public arg_types: List<GenTypeRef>;
+    /// Source location associated with this entry.
     public location: GenLocation;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation) {
+    public constructor(
+        id: string,
+        callee: string,
+        type_args: List<GenTypeRef>,
+        arg_types: List<GenTypeRef>,
+        location: GenLocation
+    ) {
         this.id = id;
         this.callee = callee;
         this.type_args = type_args;

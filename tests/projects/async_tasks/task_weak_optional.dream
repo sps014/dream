@@ -17,8 +17,12 @@ fun c25d_make_dead(): Weak<c25d_Session> {
 
 fun c25d_check(handle: Weak<c25d_Session>): bool {
     switch (handle.get()) {
-        Some(value) => { return value.id == 42 && value.label == "live child"; },
-        None => { return false; },
+        Some(value) => {
+            return value.id == 42 && value.label == "live child";
+        },
+        None => {
+            return false;
+        },
     }
 }
 

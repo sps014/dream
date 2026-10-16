@@ -6,75 +6,154 @@ import system.validation;
 
 /// Schema generation shared by standalone validation and the web API generator.
 public static class ValidationGenerator {
+    /// Adds the constraints described by `attributes` to the JSON schema.
     public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void {
         let minimum = GenAttributes.decode<MinimumAttribute>(attributes);
-        if minimum.is_some() { schema.set("minimum", JsonValue.number(minimum.unwrap().value)); }
+        if minimum.is_some() {
+            schema.set("minimum", JsonValue.number(minimum.unwrap().value));
+        }
         let maximum = GenAttributes.decode<MaximumAttribute>(attributes);
-        if maximum.is_some() { schema.set("maximum", JsonValue.number(maximum.unwrap().value)); }
-        let min_key = "minLength"; let max_key = "maxLength";
-        if schema.get_str_or("type", "") == "array" { min_key = "minItems"; max_key = "maxItems"; }
-        if schema.get_str_or("type", "") == "object" { min_key = "minProperties"; max_key = "maxProperties"; }
+        if maximum.is_some() {
+            schema.set("maximum", JsonValue.number(maximum.unwrap().value));
+        }
+        let min_key = "minLength";
+        let max_key = "maxLength";
+        if schema.get_str_or("type", "") == "array" {
+            min_key = "minItems";
+            max_key = "maxItems";
+        }
+        if schema.get_str_or("type", "") == "object" {
+            min_key = "minProperties";
+            max_key = "maxProperties";
+        }
         let min_length = GenAttributes.decode<MinLengthAttribute>(attributes);
-        if min_length.is_some() { schema.set(min_key, JsonValue.from_int(min_length.unwrap().value)); }
+        if min_length.is_some() {
+            schema.set(min_key, JsonValue.from_int(min_length.unwrap().value));
+        }
         let max_length = GenAttributes.decode<MaxLengthAttribute>(attributes);
-        if max_length.is_some() { schema.set(max_key, JsonValue.from_int(max_length.unwrap().value)); }
+        if max_length.is_some() {
+            schema.set(max_key, JsonValue.from_int(max_length.unwrap().value));
+        }
         let pattern = GenAttributes.decode<PatternAttribute>(attributes);
-        if pattern.is_some() { schema.set("pattern", JsonValue.from_string(pattern.unwrap().value)); }
+        if pattern.is_some() {
+            schema.set("pattern", JsonValue.from_string(pattern.unwrap().value));
+        }
         let fallback = GenAttributes.decode<DefaultJsonAttribute>(attributes);
         if fallback.is_some() {
             let parsed = Json.deserialize<JsonValue>(fallback.unwrap().value);
-            if parsed.is_ok() { schema.set("default", parsed.unwrap()); }
+            if parsed.is_ok() {
+                schema.set("default", parsed.unwrap());
+            }
         }
     }
+
+    /// Builds a JSON schema for declaration `d`, recording reusable definitions.
     public static fun model(d: GenDecl, ctx: GenContext, definitions: JsonValue): JsonValue {
-        let schema = JsonValue.dict(); schema.set("type", JsonValue.from_string("object"));
-        let properties = JsonValue.dict(); let required = JsonValue.array();
+        let schema = JsonValue.dict();
+        schema.set("type", JsonValue.from_string("object"));
+        let properties = JsonValue.dict();
+        let required = JsonValue.array();
         for (let field in d.fields) {
-            if field.has<JsonIgnoreAttribute>() { continue; }
+            if field.has<JsonIgnoreAttribute>() {
+                continue;
+            }
             let key = field.name;
-            if field.has<PropertyNameAttribute>() { key = field.attribute<PropertyNameAttribute>().unwrap().name; }
+            if field.has<PropertyNameAttribute>() {
+                key = field.attribute<PropertyNameAttribute>().unwrap().name;
+            }
             let rule = ValidationGenerator.type_schema(field.ty, ctx, definitions);
             ValidationGenerator.constraints(field.attributes, rule);
             let fallback = field.attribute<DefaultJsonAttribute>();
-            if fallback.is_some() && Json.deserialize<JsonValue>(fallback.unwrap().value).is_err() { ctx.error_at(field.id, "@default_json requires valid JSON"); }
+            if fallback.is_some() && Json.deserialize<JsonValue>(fallback.unwrap().value).is_err() {
+                ctx.error_at(field.id, "@default_json requires valid JSON");
+            }
             properties.set(key, rule);
-            if !field.ty.is_option() && fallback.is_none() { required.push(JsonValue.from_string(key)); }
+            if !field.ty.is_option() && fallback.is_none() {
+                required.push(JsonValue.from_string(key));
+            }
         }
-        schema.set("properties", properties); schema.set("required", required);
-        schema.set("additionalProperties", JsonValue.boolean(d.has<AllowExtraAttribute>())); return schema;
+        schema.set("properties", properties);
+        schema.set("required", required);
+        schema.set("additionalProperties", JsonValue.boolean(d.has<AllowExtraAttribute>()));
+        return schema;
     }
-    public static fun type_schema(ty: GenTypeRef, ctx: GenContext, definitions: JsonValue): JsonValue {
-        if ty.is_option() { let schema = ValidationGenerator.type_schema(ty.arg(0), ctx, definitions); schema.set("nullable", JsonValue.boolean(true)); return schema; }
-        let schema = JsonValue.dict();
-        let collection = ty.collection();
-        if ty.kind == TypeRefKind.Array || collection == CollectionKind.List || collection == CollectionKind.Set {
-            schema.set("type", JsonValue.from_string("array")); schema.set("items", ValidationGenerator.type_schema(ty.arg(0), ctx, definitions)); return schema;
-        }
-        if collection == CollectionKind.Map || collection == CollectionKind.SortedMap {
-            schema.set("type", JsonValue.from_string("object")); schema.set("additionalProperties", ValidationGenerator.type_schema(ty.arg(1), ctx, definitions)); return schema;
-        }
-        let kind = "";
-        if ty.is_primitive(Primitive.String) || ty.is_primitive(Primitive.Char) { kind = "string"; }
-        else if ty.is_primitive(Primitive.Bool) { kind = "boolean"; }
-        else if ty.is_primitive(Primitive.Float) || ty.is_primitive(Primitive.Double) { kind = "number"; }
-        else if ty.primitive() != Primitive.NotPrimitive { kind = "integer"; }
-        if !kind.is_empty() {
-            schema.set("type", JsonValue.from_string(kind));
-            if ty.is_primitive(Primitive.Char) { schema.set("minLength", JsonValue.from_int(1)); schema.set("maxLength", JsonValue.from_int(1)); }
-            if ty.is_primitive(Primitive.Int) { schema.set("minimum", JsonValue.number(-2147483648.0)); schema.set("maximum", JsonValue.number(2147483647.0)); }
-            if ty.is_primitive(Primitive.UInt) { schema.set("minimum", JsonValue.number(0.0)); schema.set("maximum", JsonValue.number(4294967295.0)); }
-            if ty.is_primitive(Primitive.Byte) { schema.set("minimum", JsonValue.number(0.0)); schema.set("maximum", JsonValue.number(255.0)); }
+
+    /// Builds a JSON schema for `ty`, recording reusable definitions.
+    public static fun type_schema(
+        ty: GenTypeRef,
+        ctx: GenContext,
+        definitions: JsonValue
+    ): JsonValue {
+        if ty.is_option() {
+            let schema = ValidationGenerator.type_schema(ty.arg(0), ctx, definitions);
+            schema.set("nullable", JsonValue.boolean(true));
             return schema;
         }
-        if ty.name == nameof(JsonValue) { return schema; }
+        let schema = JsonValue.dict();
+        let collection = ty.collection();
+        if ty.kind
+            == TypeRefKind.Array
+            || collection == CollectionKind.List || collection == CollectionKind.Set {
+            schema.set("type", JsonValue.from_string("array"));
+            schema.set("items", ValidationGenerator.type_schema(ty.arg(0), ctx, definitions));
+            return schema;
+        }
+        if collection == CollectionKind.Map || collection == CollectionKind.SortedMap {
+            schema.set("type", JsonValue.from_string("object"));
+            schema.set(
+                "additionalProperties",
+                ValidationGenerator.type_schema(ty.arg(1), ctx, definitions)
+            );
+            return schema;
+        }
+        let kind = "";
+        if ty.is_primitive(Primitive.String) || ty.is_primitive(Primitive.Char) {
+            kind = "string";
+        } else if ty.is_primitive(Primitive.Bool) {
+            kind = "boolean";
+        } else if ty.is_primitive(Primitive.Float) || ty.is_primitive(Primitive.Double) {
+            kind = "number";
+        } else if ty.primitive() != Primitive.NotPrimitive {
+            kind = "integer";
+        }
+        if !kind.is_empty() {
+            schema.set("type", JsonValue.from_string(kind));
+            if ty.is_primitive(Primitive.Char) {
+                schema.set("minLength", JsonValue.from_int(1));
+                schema.set("maxLength", JsonValue.from_int(1));
+            }
+            if ty.is_primitive(Primitive.Int) {
+                schema.set("minimum", JsonValue.number(-2147483648.0));
+                schema.set("maximum", JsonValue.number(2147483647.0));
+            }
+            if ty.is_primitive(Primitive.UInt) {
+                schema.set("minimum", JsonValue.number(0.0));
+                schema.set("maximum", JsonValue.number(4294967295.0));
+            }
+            if ty.is_primitive(Primitive.Byte) {
+                schema.set("minimum", JsonValue.number(0.0));
+                schema.set("maximum", JsonValue.number(255.0));
+            }
+            return schema;
+        }
+        if ty.name == nameof(JsonValue) {
+            return schema;
+        }
         let symbol = ctx.find_symbol(ty.decl);
-        if symbol.is_none() || symbol.unwrap().declaration.is_none() { ctx.error("cannot derive validation for " + ty.display); return schema; }
+        if symbol.is_none() || symbol.unwrap().declaration.is_none() {
+            ctx.error("cannot derive validation for " + ty.display);
+            return schema;
+        }
         let d = symbol.unwrap().declaration.unwrap();
-        if !d.has<JsonAttribute>() { ctx.error_at(d.id, "validated models must be @json"); return schema; }
+        if !d.has<JsonAttribute>() {
+            ctx.error_at(d.id, "validated models must be @json");
+            return schema;
+        }
         if !definitions.get(d.id).is_some() {
             definitions.set(d.id, JsonValue.dict());
             definitions.set(d.id, ValidationGenerator.model(d, ctx, definitions));
         }
-        schema.set("$ref", JsonValue.from_string(d.id)); return schema;
+        schema.set("$ref", JsonValue.from_string(d.id));
+        return schema;
     }
 }

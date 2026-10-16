@@ -97,7 +97,7 @@ public fun seq(): Seq<T>
 Smallest element by `compare`, or `None` when empty.
 
 ```dream
-public fun min(): Option<T> where T : Comparable<T>
+public fun min(): Option<T> where T: Comparable<T>
 ```
 
 ## `max`
@@ -105,5 +105,5 @@ public fun min(): Option<T> where T : Comparable<T>
 Largest element by `compare`, or `None` when empty.
 
 ```dream
-public fun max(): Option<T> where T : Comparable<T>
+public fun max(): Option<T> where T: Comparable<T>
 ```

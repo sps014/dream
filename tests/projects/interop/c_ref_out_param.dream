@@ -1,15 +1,20 @@
 import system.interop;
 import system.testing;
 import system;
-@c("m", "frexp") extern fun c61_frexp(x: double, ref e: int): double;
+
+@c("m", "frexp")
+extern fun c61_frexp(x: double, ref e: int): double;
+
 fun c61_direct(): void {
     let e: int = 0;
     let m = c61_frexp(8.0, ref e);
     c61_verify_observation((m.to_string() + " " + e.to_string()).to_string());
 }
+
 fun c61_via(ref e: int): double {
     return c61_frexp(8.0, ref e);
 }
+
 fun c61_body(): void {
     c61_direct();
     let e2: int = 0;

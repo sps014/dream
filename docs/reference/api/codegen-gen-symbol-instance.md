@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSymbolInstance`
+## `GenSymbolInstance`
 
 Concrete semantic members, including inherited defaults and substituted generic arguments.
 
@@ -10,37 +10,47 @@ Concrete semantic members, including inherited defaults and substituted generic 
 public class GenSymbolInstance
 ```
 
-## `public ty: GenTypeRef`
+## `ty`
+
+Type of this declaration or expression.
 
 ```dream
 public ty: GenTypeRef
 ```
 
-## `public bases: List<GenTypeRef>`
+## `bases`
+
+Base types declared by this type.
 
 ```dream
 public bases: List<GenTypeRef>
 ```
 
-## `public fields: List<GenField>`
+## `fields`
+
+Fields of this type, in declaration order.
 
 ```dream
 public fields: List<GenField>
 ```
 
-## `public methods: List<GenFunction>`
+## `methods`
+
+Methods declared by this type.
 
 ```dream
 public methods: List<GenFunction>
 ```
 
-## `public variants: List<GenVariant>`
+## `variants`
+
+Choices declared by this union or enum, in declaration order.
 
 ```dream
 public variants: List<GenVariant>
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Decodes an instantiated type view exported by semantic analysis.
 

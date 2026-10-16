@@ -2,7 +2,7 @@
 
 **Import:** `import system.io;`
 
-## `public class FileStream`
+## `FileStream`
 
 Text and byte access over a file handle, with propagated I/O errors and byte positions.
 
@@ -10,7 +10,7 @@ Text and byte access over a file handle, with propagated I/O errors and byte pos
 public class FileStream
 ```
 
-## `public fun read_bytes`
+## `read_bytes`
 
 Reads up to `n` bytes, advancing the file position; empty success indicates EOF for positive sizes, and negative sizes return an error.
 
@@ -18,7 +18,7 @@ Reads up to `n` bytes, advancing the file position; empty success indicates EOF 
 public fun read_bytes(n: int): Result<byte[], IoError>
 ```
 
-## `public fun read`
+## `read`
 
 Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-based. A read can split a UTF-8 sequence; use an incremental decoder for streamed text.
 
@@ -26,7 +26,7 @@ Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-b
 public fun read(n: int): Result<string, IoError>
 ```
 
-## `public fun read_all`
+## `read_all`
 
 Collects all remaining bytes through EOF and decodes them as UTF-8; propagates read errors. Memory use grows with the remaining file size.
 
@@ -34,7 +34,7 @@ Collects all remaining bytes through EOF and decodes them as UTF-8; propagates r
 public fun read_all(): Result<string, IoError>
 ```
 
-## `public fun read_line`
+## `read_line`
 
 Reads an LF or CRLF terminated line without its terminator, or a final unterminated line. Returns `None` at EOF; propagates I/O errors and the handle default line-size limit.
 
@@ -42,7 +42,7 @@ Reads an LF or CRLF terminated line without its terminator, or a final untermina
 public fun read_line(): Result<Option<string>, IoError>
 ```
 
-## `public fun write_text`
+## `write_text`
 
 Writes UTF-8 bytes at the current position and returns the byte count; may write partially.
 
@@ -50,7 +50,7 @@ Writes UTF-8 bytes at the current position and returns the byte count; may write
 public fun write_text(text: string): Result<int, IoError>
 ```
 
-## `public fun has_more`
+## `has_more`
 
 Compares the current position with the current file length, propagating errors. Concurrent file changes can invalidate the result before the next read.
 
@@ -58,7 +58,7 @@ Compares the current position with the current file length, propagating errors. 
 public fun has_more(): Result<bool, IoError>
 ```
 
-## `public get position`
+## `position`
 
 Returns the current byte offset, or an I/O or closed-resource error.
 
@@ -66,7 +66,7 @@ Returns the current byte offset, or an I/O or closed-resource error.
 public get position(): Result<long, IoError>
 ```
 
-## `public get length`
+## `length`
 
 Returns the current file length in bytes, or an I/O or closed-resource error.
 
@@ -74,7 +74,7 @@ Returns the current file length in bytes, or an I/O or closed-resource error.
 public get length(): Result<long, IoError>
 ```
 
-## `public fun seek`
+## `seek`
 
 Seeks to an absolute byte offset; failure preserves the previous logical position.
 
@@ -82,7 +82,7 @@ Seeks to an absolute byte offset; failure preserves the previous logical positio
 public fun seek(offset: long): Result<bool, IoError>
 ```
 
-## `public fun seek_end`
+## `seek_end`
 
 Moves to the current end of the file; propagates positioning errors.
 
@@ -90,7 +90,7 @@ Moves to the current end of the file; propagates positioning errors.
 public fun seek_end(): Result<bool, IoError>
 ```
 
-## `public fun tell`
+## `tell`
 
 Returns the current byte offset, accounting for buffered read-ahead.
 
@@ -98,7 +98,7 @@ Returns the current byte offset, accounting for buffered read-ahead.
 public fun tell(): Result<long, IoError>
 ```
 
-## `public fun reset`
+## `reset`
 
 Seeks to byte zero; propagates positioning errors without changing position on failure.
 
@@ -106,7 +106,7 @@ Seeks to byte zero; propagates positioning errors without changing position on f
 public fun reset(): Result<bool, IoError>
 ```
 
-## `public fun close`
+## `close`
 
 Closes the underlying handle idempotently and reports explicit closure failures.
 

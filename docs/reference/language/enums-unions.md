@@ -7,25 +7,38 @@ Use an enum to name a fixed set of choices. A choice can also carry data, such a
 A simple `enum` defines named integer constants. Members number from `0`; an explicit value shifts the ones that follow:
 
 ```dream
-enum Color { Red, Green, Blue }          // 0, 1, 2
-enum Status { Active = 10, Inactive }    // 10, 11
+enum Color {
+    Red,
+    Green,
+    Blue
+} // 0, 1, 2
+
+enum Status {
+    Active = 10,
+    Inactive
+} // 10, 11
 ```
 
 Access a member with `Enum.Member`. Enum values are integers at runtime, so they interoperate with `int` and work as `switch` subjects and labels:
 
 ```dream
 let c: Color = Color.Green;
-System.println(c);              // 1
-System.println(c.to_string());  // Green
+System.println(c); // 1
+System.println(c.to_string()); // Green
 ```
 
 Simple enums also take bitwise `&`, `|`, `^`, and prefix `~` (same as `int`). Combine flag variants with `|`; the result stays the enum type. Shifts (`<<` / `>>`) stay integer-only.
 
 ```dream
-enum Flags { None = 0, Read = 1, Write = 2, Exec = 4 }
+enum Flags {
+    None = 0,
+    Read = 1,
+    Write = 2,
+    Exec = 4
+}
 
 let rw: Flags = Flags.Read | Flags.Write;
-let can_read = (rw & Flags.Read) != Flags.None;  // true
+let can_read = (rw & Flags.Read) != Flags.None; // true
 ```
 
 Discriminated unions are heap values, not integers — bitwise operators do not apply to them.
@@ -36,9 +49,9 @@ When **any** variant carries a payload `(...)`, the whole `enum` becomes a discr
 
 ```dream
 enum Shape {
-    Circle(float),                   // positional payload
+    Circle(float), // positional payload
     Rect(width: float, height: float),
-    Empty,                           // a unit variant carries no data
+    Empty, // a unit variant carries no data
 }
 
 let s = Shape.Circle(2.0);
@@ -54,16 +67,18 @@ The pattern form of `switch` runs the first arm whose pattern fits and binds the
 ```dream
 // expression position: yields a value
 let area = switch (s) {
-    Circle(r)  => 3.14 * r * r,
+    Circle(r) => 3.14 * r * r,
     Rect(w, h) => w * h,
-    Empty      => 0.0,
+    Empty => 0.0,
 };
 
 // statement position: arms may be blocks
 switch (s) {
-    Circle(r)  => { System.println(r); }
+    Circle(r) => {
+        System.println(r);
+    }
     Rect(w, h) => System.println(w * h),
-    Empty      => System.println("empty"),
+    Empty => System.println("empty"),
 }
 ```
 
@@ -72,7 +87,7 @@ A pattern `switch` must be **exhaustive**. Cover every variant, or add a catch-a
 ```dream
 switch (s) {
     Circle(r) => System.println("Circle"),
-    _         => System.println("Other"),
+    _ => System.println("Other"),
 }
 ```
 
@@ -81,13 +96,20 @@ switch (s) {
 Patterns **nest** — a payload can be matched against a variant. Exhaustiveness is checked recursively, so covering every inner case covers the outer variant with no `_`:
 
 ```dream
-enum Inner { A(v: int), B }
-enum Outer { Wrap(inner: Inner), Bare }
+enum Inner {
+    A(v: int),
+    B
+}
+
+enum Outer {
+    Wrap(inner: Inner),
+    Bare
+}
 
 switch (o) {
     Wrap(A(n)) => n,
-    Wrap(B)    => -1,   // Wrap(A) + Wrap(B) together cover Wrap
-    Bare       => 0,
+    Wrap(B) => -1, // Wrap(A) + Wrap(B) together cover Wrap
+    Bare => 0,
 }
 ```
 
@@ -95,9 +117,9 @@ Guards (`if <bool>`) narrow an arm further:
 
 ```dream
 switch (opt) {
-    Some(n) if n > 10 => System.println("big"),
-    Some(n)           => System.println(n),
-    None              => System.println("none"),
+    Some(n)if n > 10 => System.println("big"),
+    Some(n) => System.println(n),
+    None => System.println("none"),
 }
 ```
 
@@ -108,12 +130,12 @@ An arm's pattern may be several alternatives separated by `|` — the arm runs i
 ```dream
 switch (c) {
     'a' | 'e' | 'i' | 'o' | 'u' => System.println("vowel"),
-    _                           => System.println("consonant"),
+    _ => System.println("consonant"),
 }
 
 switch (shape) {
     Square | Triangle | Empty => System.println("no curves"),
-    Circle(_)                 => System.println("curved"),
+    Circle(_) => System.println("curved"),
 }
 ```
 
@@ -122,10 +144,10 @@ A literal pattern over an ordered scalar subject (`int` / `long` / `uint` / `ulo
 ```dream
 fun grade(score: int): string {
     return switch (score) {
-        90..100 => "A",
-        80..89  => "B",
-        70..79  => "C",
-        _       => "F",
+        90 .. 100 => "A",
+        80 .. 89 => "B",
+        70 .. 79 => "C",
+        _ => "F",
     };
 }
 ```
@@ -137,10 +159,17 @@ Both compose with exhaustiveness checking the same way a single pattern does —
 Unions may be generic; the concrete type is inferred from constructor arguments, or supplied by annotation. Add methods with an `extend` block:
 
 ```dream
-enum Option<T> { Some(T), None }
-enum Result<T, E> { Ok(T), Err(E) }
+enum Option<T> {
+    Some(T),
+    None
+}
 
-let o  = Option.Some(42);         // inferred Option<int>
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+let o = Option.Some(42); // inferred Option<int>
 let n: Option<int> = Option.None; // annotation needed for the unit variant
 ```
 
@@ -197,9 +226,13 @@ Mark a union `@json` to derive `to_json` / `from_json`. Each value serializes to
 
 ```dream
 @json
-enum Shape { Circle(int), Rect(width: int, height: int), Empty }
+enum Shape {
+    Circle(int),
+    Rect(width: int, height: int),
+    Empty
+}
 
-let text = Json.serialize(Shape.Circle(7));   // {"type":"Circle","_0":7}
+let text = Json.serialize(Shape.Circle(7)); // {"type":"Circle","_0":7}
 ```
 
 Named payload fields serialize under their names (`Rect` gives `"width"` / `"height"`); positional ones use `_0`, `_1`, … in order.

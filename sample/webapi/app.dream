@@ -3,11 +3,12 @@ import system.webapi;
 import system.json;
 
 @json
-class Greeting { public message: string; public constructor(message: string) { this.message = message; } }
-
-
-
-
+class Greeting {
+    public message: string;
+    public constructor(message: string) {
+        this.message = message;
+    }
+}
 
 async fun main(): void {
     let app = WebApp();
@@ -20,12 +21,15 @@ async fun main(): void {
 
 @router("")
 class Routes {
-@get("/hello/{name}")
-public static fun hello(@path name: string): Greeting { return Greeting("Hello, " + name + "!"); }
-@get("/events")
-public static async fun events(): AsyncIterable<SseEvent> {
-    yield SseEvent.data("connected");
-    Time.sleep(100).await;
-    yield SseEvent.data("ready");
-}
+    @get("/hello/{name}")
+    public static fun hello(@path name: string): Greeting {
+        return Greeting("Hello, " + name + "!");
+    }
+
+    @get("/events")
+    public static async fun events(): AsyncIterable<SseEvent> {
+        yield SseEvent.data("connected");
+        Time.sleep(100).await;
+        yield SseEvent.data("ready");
+    }
 }

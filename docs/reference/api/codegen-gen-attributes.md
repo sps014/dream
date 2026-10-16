@@ -2,9 +2,9 @@
 
 **Import:** `import system.codegen;`
 
-## `public static class GenAttributes`
+## `GenAttributes`
 
-Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the statics these forward to.
+Typed access to custom attributes declared with `@attribute`.
 
 ```dream
 public static class GenAttributes
@@ -12,7 +12,7 @@ public static class GenAttributes
 
 ## `id`
 
-Returns the compiler identity of an attribute type.
+Returns the stable identifier of attribute type `A`.
 
 ```dream
 public static extern fun id<A>(): string
@@ -36,7 +36,7 @@ public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A
 
 ## `has`
 
-Tests whether an attribute with the given compiler identity is present.
+Returns whether an attribute with identifier `id` is present.
 
 ```dream
 public static fun has(borrow attrs: List<GenAttribute>, borrow id: string): bool

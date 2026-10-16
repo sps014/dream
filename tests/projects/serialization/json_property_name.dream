@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+
 @json
 class c11e_Product {
     @property_name("id")
@@ -28,7 +29,10 @@ fun json_property_name(): void {
     let p = c11e_Product(42, "Widget", 9.5, ["sale", "new"]);
 
     let serialized = Json.serialize(p);
-    Assert.eq_str((serialized).to_string(), "{\"id\":42,\"title\":\"Widget\",\"priceUsd\":9.5,\"tags\":[\"sale\",\"new\"]}");
+    Assert.eq_str(
+        (serialized).to_string(),
+        "{\"id\":42,\"title\":\"Widget\",\"priceUsd\":9.5,\"tags\":[\"sale\",\"new\"]}"
+    );
 
     let deserialized = Json.deserialize<c11e_Product>(serialized).unwrap_or(p);
     Assert.eq_str((deserialized.name).to_string(), "Widget");

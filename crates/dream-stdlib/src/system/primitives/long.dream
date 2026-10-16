@@ -1,7 +1,7 @@
 module system.primitives;
 
 // The `long` primitive.
-extend long : Comparable<long> {
+extend long: Comparable<long> {
     // Orders this value against `other`.
     public fun compare(other: long): int {
         if this < other {
@@ -85,7 +85,7 @@ extend long : Comparable<long> {
                 return Result.Err(ParseError.invalid("cannot parse long: invalid digit"));
             }
             let d = (ulong)((int)c - 48);
-            if result > (limit - d) / 10uL {
+            if result >(limit - d) / 10uL {
                 return Result.Err(ParseError.invalid("cannot parse long: value out of range"));
             }
             result = result * 10uL + d;

@@ -2,15 +2,27 @@ module system.webapi;
 
 /// Swagger UI assets and browser behavior. Asset URLs may point to self-hosted files.
 public class SwaggerOptions {
+    /// URL of the Swagger UI script.
     public js_url: string;
+    /// URL of the Swagger UI stylesheet.
     public css_url: string;
+    /// URL of the ReDoc script.
     public redoc_js_url: string;
+    /// Redirect URL used after authorization from Swagger UI.
     public oauth_redirect_url: string;
+    /// Whether Swagger UI gives operations their own URL fragments.
     public deep_linking: bool;
+    /// Whether Swagger UI retains authorization between reloads.
     public persist_authorization: bool;
+    /// Whether Swagger UI enables interactive requests by default.
     public try_it_out_enabled: bool;
+    /// Client identifier used by the API documentation's OAuth flow.
     public oauth_client_id: string;
+    /// Whether the documentation's OAuth flow uses PKCE.
     public oauth_use_pkce: bool;
+    /// Creates a `SwaggerOptions` with `js_url`, `https`, `css_url`, `https`, `redoc_js_url`,
+    /// `https`, `oauth_redirect_url`, `deep_linking`, `persist_authorization`,
+    /// `try_it_out_enabled`, `oauth_client_id`, `oauth_use_pkce`.
     public constructor(
         js_url: string = "https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js",
         css_url: string = "https://unpkg.com/swagger-ui-dist@5/swagger-ui.css",
@@ -32,5 +44,18 @@ public class SwaggerOptions {
         this.oauth_client_id = oauth_client_id;
         this.oauth_use_pkce = oauth_use_pkce;
     }
-    internal fun copy(): SwaggerOptions { return SwaggerOptions(this.js_url, this.css_url, this.redoc_js_url, this.oauth_redirect_url, this.deep_linking, this.persist_authorization, this.try_it_out_enabled, this.oauth_client_id, this.oauth_use_pkce); }
+
+    internal fun copy(): SwaggerOptions {
+        return SwaggerOptions(
+            this.js_url,
+            this.css_url,
+            this.redoc_js_url,
+            this.oauth_redirect_url,
+            this.deep_linking,
+            this.persist_authorization,
+            this.try_it_out_enabled,
+            this.oauth_client_id,
+            this.oauth_use_pkce
+        );
+    }
 }

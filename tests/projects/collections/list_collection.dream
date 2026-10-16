@@ -8,6 +8,7 @@ import system.testing;
 import system;
 import system.collections;
 import system.text;
+
 fun c132_sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;

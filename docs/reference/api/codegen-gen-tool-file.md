@@ -2,39 +2,49 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenToolFile`
+## `GenToolFile`
+
+A file produced by a tool requested during generation.
 
 ```dream
 public class GenToolFile
 ```
 
-## `public path: string`
+## `path`
+
+Request or resource path.
 
 ```dream
 public path: string
 ```
 
-## `public contents: string`
+## `contents`
+
+Text contents of the file.
 
 ```dream
 public contents: string
 ```
 
-## `public binary: bool`
+## `binary`
+
+Whether the message contains binary data.
 
 ```dream
 public binary: bool
 ```
 
-## `public hash: string`
+## `hash`
+
+Hash of the refresh token; the raw refresh token is not stored.
 
 ```dream
 public hash: string
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
-Decodes compiler-collected tool metadata from a snapshot.
+Reads a tool-output file description from its JSON representation.
 
 ```dream
 public constructor(borrow v: JsonValue)

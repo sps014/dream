@@ -21,11 +21,11 @@ module system.core;
 // When the target is freed, the slot is marked dead automatically: `is_dead()` flips to
 // true and stays true. The registration is removed when either side dies (target free or
 // handle drop), so nothing dangles.
-
-public class Weak<T : class> {
+public class Weak<T: class> {
     /// Registered slot-box pointer (raw; owned by the weak registry).
     slot: usize;
 
+    /// Creates a `Weak` with `target_obj`.
     public constructor(target_obj: T) {
         this.slot = Weak.bind(target_obj);
     }

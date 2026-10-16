@@ -2,9 +2,12 @@ import system.testing;
 // Async methods on a generic class: each monomorphization (`Cell<int>`, `Cell<string>`) regenerates
 // its own async state machine, so awaiting a generic method resolves with the concrete type.
 import system;
+
 class c33_Cell<T> {
     public value: T;
-    public constructor(value: T) { this.value = value; }
+    public constructor(value: T) {
+        this.value = value;
+    }
 
     public async fun get(): T {
         Time.sleep(10).await;

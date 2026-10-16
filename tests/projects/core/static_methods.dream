@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 class c207_Vec2 {
     public x: int;
     public y: int;

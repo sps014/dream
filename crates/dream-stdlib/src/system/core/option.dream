@@ -2,14 +2,16 @@ module system.core;
 
 // `Option<T>` - a value that is either present (`Some`) or absent (`None`).
 public enum Option<T> {
+    /// Contains a value of type `T`.
     Some(T),
+    /// No value is present.
     None,
 
     // True when this is `Some`.
     public fun is_some(): bool {
         return switch (this) {
             Some(v) => true,
-            None    => false,
+            None => false,
         };
     }
 
@@ -17,7 +19,7 @@ public enum Option<T> {
     public fun is_none(): bool {
         return switch (this) {
             Some(v) => false,
-            None    => true,
+            None => true,
         };
     }
 
@@ -25,7 +27,7 @@ public enum Option<T> {
     public fun unwrap_or(fallback: T): T {
         return switch (this) {
             Some(v) => v,
-            None    => fallback,
+            None => fallback,
         };
     }
 
@@ -49,7 +51,7 @@ public enum Option<T> {
     public fun unwrap_or_else(borrow f: fun(): T): T {
         return switch (this) {
             Some(v) => v,
-            None    => f(),
+            None => f(),
         };
     }
 
@@ -69,7 +71,7 @@ public enum Option<T> {
     public fun ok_or<E>(err: E): Result<T, E> {
         return switch (this) {
             Some(v) => Result.Ok(v),
-            None    => Result.Err(err),
+            None => Result.Err(err),
         };
     }
 
@@ -77,7 +79,7 @@ public enum Option<T> {
     public static fun flatten<U>(opt: Option<Option<U>>): Option<U> {
         return switch (opt) {
             Some(inner) => inner,
-            None        => Option.None,
+            None => Option.None,
         };
     }
 
@@ -85,7 +87,7 @@ public enum Option<T> {
     public fun map<U>(borrow f: fun(T): U): Option<U> {
         return switch (this) {
             Some(v) => Option.Some(f(v)),
-            None    => Option.None,
+            None => Option.None,
         };
     }
 
@@ -93,7 +95,7 @@ public enum Option<T> {
     public fun and_then<U>(borrow f: fun(T): Option<U>): Option<U> {
         return switch (this) {
             Some(v) => f(v),
-            None    => Option.None,
+            None => Option.None,
         };
     }
 
@@ -101,7 +103,7 @@ public enum Option<T> {
     public fun or(fallback: Option<T>): Option<T> {
         return switch (this) {
             Some(v) => Option.Some(v),
-            None    => fallback,
+            None => fallback,
         };
     }
 }

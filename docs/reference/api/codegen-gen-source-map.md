@@ -2,19 +2,23 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSourceMap`
+## `GenSourceMap`
+
+Associates generated output with the source locations it came from.
 
 ```dream
 public class GenSourceMap
 ```
 
-## `public mappings: JsonValue`
+## `mappings`
+
+Source locations associated with generated output.
 
 ```dream
 public mappings: JsonValue
 ```
 
-## `public constructor()`
+## `constructor`
 
 Creates an empty builder.
 

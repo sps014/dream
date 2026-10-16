@@ -10,12 +10,21 @@ import system.webapi;
 class Routes {
     @operation("Get item", "Returns one item", "items", 200)
     @get("/{id}")
-    public static fun item(@path id: int): string { return id.to_string(); }
+    public static fun item(@path id: int): string {
+        return id.to_string();
+    }
 }
+
 async fun main(): void {
     let options = WebAppOptions(title: "Inventory", version: "2.0.0", docs_url: "/api-docs");
-    options.swagger = SwaggerOptions(js_url: "/assets/swagger.js", css_url: "/assets/swagger.css", deep_linking: true, persist_authorization: false);
-    let app = WebApp(options); app.include_router(Routes.router()).unwrap();
+    options.swagger = SwaggerOptions(
+        js_url: "/assets/swagger.js",
+        css_url: "/assets/swagger.css",
+        deep_linking: true,
+        persist_authorization: false
+    );
+    let app = WebApp(options);
+    app.include_router(Routes.router()).unwrap();
     System.println(app.openapi());
 }
 ```

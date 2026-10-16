@@ -1,38 +1,92 @@
 module system.webapi.auth;
 
 internal static class AuthCrypto {
-    @native @runtime("cryptoAuth")
+    @native
+    @runtime("cryptoAuth")
     static extern fun host(request: string): string;
-    @native internal static fun call(request: JsonValue): Result<JsonValue, AuthError> {
+    @native
+    internal static fun call(request: JsonValue): Result<JsonValue, AuthError> {
         let result = Json.deserialize<JsonValue>(AuthCrypto.host(Json.serialize(request)));
-        if result.is_err() { return Result.Err(AuthError("ECRYPTO", "invalid crypto completion")); }
+        if result.is_err() {
+            return Result.Err(AuthError("ECRYPTO", "invalid crypto completion"));
+        }
         let value = result.unwrap();
-        if value.get("error").is_some() { return Result.Err(AuthError("ECRYPTO", value.get_or("error", JsonValue.none()).as_string().unwrap_or("cryptographic operation failed"))); }
+        if value.get("error").is_some() {
+            return Result.Err(
+                AuthError(
+                    "ECRYPTO",
+                    value.get_or("error", JsonValue.none())
+                        .as_string()
+                        .unwrap_or("cryptographic operation failed")
+                )
+            );
+        }
         return Result.Ok(value.get_or("ok", JsonValue.none()));
     }
-    internal static fun request(action: string): JsonValue { let value = JsonValue.dict(); value.set("action", JsonValue.from_string(action)); return value; }
-    @native internal static fun random(): Result<string, AuthError> {
-        let bytes = SecureRandom.bytes(32); if bytes.is_err() { return Result.Err(AuthError("EENTROPY", "secure random source failed")); }
+
+    internal static fun request(action: string): JsonValue {
+        let value = JsonValue.dict();
+        value.set("action", JsonValue.from_string(action));
+        return value;
+    }
+
+    @native
+    internal static fun random(): Result<string, AuthError> {
+        let bytes = SecureRandom.bytes(32);
+        if bytes.is_err() {
+            return Result.Err(AuthError("EENTROPY", "secure random source failed"));
+        }
         return Result.Ok(Encoding.hex_encode(bytes.unwrap()));
     }
-    internal static fun digest(token: string): string { return Encoding.hex_encode(Sha256.hash(Encoding.utf8_encode(token))); }
-    internal static fun now(): long { return DateTime.utc_now().epoch_millis / 1000L; }
-    @native internal static fun jwt(options: JwtOptions, action: string, payload: JsonValue): Result<JsonValue, AuthError> {
-        let request = AuthCrypto.request(action); request.set("issuer", JsonValue.from_string(options.issuer)); request.set("audience", JsonValue.from_string(options.audience));
+
+    internal static fun digest(token: string): string {
+        return Encoding.hex_encode(Sha256.hash(Encoding.utf8_encode(token)));
+    }
+
+    internal static fun now(): long {
+        return DateTime.utc_now().epoch_millis / 1000L;
+    }
+
+    @native
+    internal static fun jwt(
+        options: JwtOptions,
+        action: string,
+        payload: JsonValue
+    ): Result<JsonValue, AuthError> {
+        let request = AuthCrypto.request(action);
+        request.set("issuer", JsonValue.from_string(options.issuer));
+        request.set("audience", JsonValue.from_string(options.audience));
         request.set("algorithm", JsonValue.from_string(options.algorithm));
-        let key = options.verification_key; if action == "sign" { key = options.signing_key; request.set("claims", payload); } else { request.set("token", payload); }
-        request.set("key", JsonValue.from_string(key)); return AuthCrypto.call(request);
+        let key = options.verification_key;
+        if action == "sign" {
+            key = options.signing_key;
+            request.set("claims", payload);
+        } else {
+            request.set("token", payload);
+        }
+        request.set("key", JsonValue.from_string(key));
+        return AuthCrypto.call(request);
     }
 }
 
 /// Argon2id password hashes in the interoperable PHC format.
 public static class Password {
-    @native public static fun hash(password: string): Result<string, AuthError> {
-        let request = AuthCrypto.request("hash_password"); request.set("password", JsonValue.from_string(password));
+    /// Hashes `password` with Argon2id and returns a PHC-encoded hash, or an authentication
+    /// error.
+    @native
+    public static fun hash(password: string): Result<string, AuthError> {
+        let request = AuthCrypto.request("hash_password");
+        request.set("password", JsonValue.from_string(password));
         return Result.Ok(AuthCrypto.call(request)?.as_string().unwrap_or(""));
     }
-    @native public static fun verify(password: string, hash: string): Result<bool, AuthError> {
-        let request = AuthCrypto.request("verify_password"); request.set("password", JsonValue.from_string(password)); request.set("hash", JsonValue.from_string(hash));
+
+    /// Checks a password against its encoded hash, returning false on mismatch or an error if
+    /// verification fails.
+    @native
+    public static fun verify(password: string, hash: string): Result<bool, AuthError> {
+        let request = AuthCrypto.request("verify_password");
+        request.set("password", JsonValue.from_string(password));
+        request.set("hash", JsonValue.from_string(hash));
         return Result.Ok(AuthCrypto.call(request)?.as_bool().unwrap_or(false));
     }
 }

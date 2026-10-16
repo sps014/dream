@@ -4,10 +4,12 @@ import ticker;
 fun main(): void {
     let t = Ticker("demo");
     let calls = 0;
-    t.on_tick((tick: int) => {
-        calls = calls + 1;
-        return tick * 10;
-    });
+    t.on_tick(
+        (tick: int) => {
+            calls = calls + 1;
+            return tick * 10;
+        }
+    );
     System.println(t.name() + " total = " + t.run(3).to_string());
     System.println(t.name() + " total = " + t.run(2).to_string());
     System.println("callbacks = " + calls.to_string());

@@ -12,7 +12,9 @@ Small build-time `quote { … }` custom notation: opaque text in the braces beco
 import system;
 
 fun main() {
-    System.println(quote { Hello generators });
+    System.println(
+        quote { Hello generators }
+    );
 }
 ```
 

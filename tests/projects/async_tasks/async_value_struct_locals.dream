@@ -4,8 +4,8 @@ import system.testing;
 // assigned a real address, unlike a normal function's shadow-stack locals), so any two or more
 // value-struct temporaries in the same async body - including every element past the first in a
 // value-struct array literal - silently collapsed onto the last one written.
-
 import system;
+
 struct c3e_Point {
     public x: int;
     public y: int;

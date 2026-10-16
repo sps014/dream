@@ -19,7 +19,9 @@ fun c260_body(): void {
     c260_verify_observation((parsed).to_string());
     let empty = Json.deserialize<JsonValue>("\"\"").unwrap().as_string().unwrap();
     c260_verify_observation((empty.length).to_string());
-    c260_verify_observation((Json.deserialize<JsonValue>("\"line\\nnext\"").unwrap().as_string().unwrap()).to_string());
+    c260_verify_observation(
+        (Json.deserialize<JsonValue>("\"line\\nnext\"").unwrap().as_string().unwrap()).to_string()
+    );
     c260_format(2.5d);
     c260_format(1.0e100d);
     let infinity = (double)1 / (double)0;
@@ -49,5 +51,10 @@ fun c260_verify_observation(borrow value: string): void {
 fun text_perf_paths(): void {
     c260_cursor = 0;
     c260_body();
-    Assert.eq(c260_cursor, ("hello😀\n0\nline\nnext\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ninf\n-inf\nnan\n").length);
+    Assert.eq(
+        c260_cursor,
+        (
+            "hello😀\n0\nline\nnext\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ninf\n-inf\nnan\n"
+        ).length
+    );
 }

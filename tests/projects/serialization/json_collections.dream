@@ -103,7 +103,9 @@ fun c10d_body(): void {
     c10d_verify_observation((Json.serialize(top_set)).to_string());
     c10d_verify_observation((Json.serialize(top_map)).to_string());
 
-    let data: Map<string, string> = {"key": "value"};
+    let data: Map<string, string> = {
+        "key": "value"
+    };
     c10d_verify_observation((Json.serialize(data)).to_string());
 }
 
@@ -124,5 +126,10 @@ fun c10d_verify_observation(borrow value: string): void {
 fun json_collections(): void {
     c10d_cursor = 0;
     c10d_body();
-    Assert.eq(c10d_cursor, ("{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}\n2\n2\n10\n2\n9\n3\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n9\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n{\"key\":\"value\"}\n").length);
+    Assert.eq(
+        c10d_cursor,
+        (
+            "{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}\n2\n2\n10\n2\n9\n3\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n9\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n{\"key\":\"value\"}\n"
+        ).length
+    );
 }

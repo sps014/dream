@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/logging.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class LogRecord`
+## `LogRecord`
 
 One log event ready for handlers.
 
@@ -12,7 +12,7 @@ One log event ready for handlers.
 public class LogRecord
 ```
 
-## `level: LogLevel`
+## `level`
 
 Severity of this record.
 
@@ -20,7 +20,7 @@ Severity of this record.
 public level: LogLevel
 ```
 
-## `name: string`
+## `name`
 
 Logger name that produced this record.
 
@@ -28,7 +28,7 @@ Logger name that produced this record.
 public name: string
 ```
 
-## `message: string`
+## `message`
 
 Message text.
 
@@ -36,7 +36,7 @@ Message text.
 public message: string
 ```
 
-## `timestamp_ms: long`
+## `timestamp_ms`
 
 UTC epoch milliseconds when the record was created.
 

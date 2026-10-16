@@ -2,15 +2,15 @@
 
 **Import:** `import system.io;`
 
-## `public class BufferedWriter : Writer`
+## `BufferedWriter`
 
 Buffers output to a borrowed writer without closing it. Call `finish()` explicitly to report flush failures; destruction does not flush pending bytes.
 
 ```dream
-public class BufferedWriter : Writer
+public class BufferedWriter: Writer
 ```
 
-## `public constructor`
+## `constructor`
 
 Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
 
@@ -18,7 +18,7 @@ Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
 public constructor(destination: Writer, buffer_size: int = 8192)
 ```
 
-## `public fun write`
+## `write`
 
 Accepts as many bytes as fit, flushing a previously full buffer first. May return partial progress; operations after successful finish return `ECLOSED`.
 
@@ -26,7 +26,7 @@ Accepts as many bytes as fit, flushing a previously full buffer first. May retur
 public fun write(data: byte[]): Result<int, IoError>
 ```
 
-## `public fun flush`
+## `flush`
 
 Writes pending bytes and flushes the destination; retains any unwritten suffix on failure. Already completed writes persist, and a finished writer returns `ECLOSED`.
 
@@ -34,7 +34,7 @@ Writes pending bytes and flushes the destination; retains any unwritten suffix o
 public fun flush(): Result<bool, IoError>
 ```
 
-## `public fun finish`
+## `finish`
 
 Flushes and marks the wrapper finished only on success; repeated success is idempotent. Leaves the underlying writer open and permits retry after a flush failure.
 

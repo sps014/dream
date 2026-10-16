@@ -9,7 +9,9 @@ import system.net;
 
 async fun main(): Result<bool, HttpError> {
     let parsed = Url.parse("https://example.com/");
-    if parsed.is_err() { return Result.Err(HttpError("EINVAL", "invalid URL")); }
+    if parsed.is_err() {
+        return Result.Err(HttpError("EINVAL", "invalid URL"));
+    }
     let client = HttpClient();
     let request = HttpRequest.get(parsed.unwrap());
     request.headers.set("Accept", "text/html");

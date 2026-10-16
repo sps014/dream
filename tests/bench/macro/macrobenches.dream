@@ -9,7 +9,6 @@ import system.text;
 // Run: `scripts/bench.py --suite macro`; profile: `scripts/bench.py profile --suite macro`.
 // Output lines follow tests/bench/microbenches.dream: `bench <name> ns_total=… iters=… checksum=…`.
 // Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`), matched by the C# twin.
-
 let measuring: bool = true;
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
 let last_allocations: long = 0;
@@ -36,9 +35,13 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
         let allocations = Debug.total_allocations;
         let retains = Debug.runtime_counter(3);
         let releases = Debug.runtime_counter(4);
-        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
-            + ",retain:" + (retains - last_retains).to_string()
-            + ",release:" + (releases - last_releases).to_string();
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string() + ",release:" + (releases - last_releases)
+            .to_string();
         last_allocations = allocations;
         last_retains = retains;
         last_releases = releases;
@@ -48,11 +51,13 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
     }
     let per = nanos / (long)iters;
     System.println(
-        "bench " + name
-            + " ns_total=" + nanos.to_string()
-            + " iters=" + iters.to_string()
-            + " ns_per_op=" + per.to_string()
-            + " checksum=" + checksum.to_string() + counters
+        "bench "
+            + name
+            + " ns_total="
+            + nanos.to_string()
+            + " iters="
+            + iters.to_string()
+            + " ns_per_op=" + per.to_string() + " checksum=" + checksum.to_string() + counters
     );
 }
 
@@ -65,6 +70,7 @@ class Lcg {
     public constructor(seed: int) {
         this.s = seed;
     }
+
     public fun next(bound: int): int {
         this.s = this.s * 1103515245 + 12345;
         return ((this.s >> 8) & 16777215) % bound;
@@ -73,7 +79,6 @@ class Lcg {
 
 // ---------------------------------------------------------------------------------------------
 // json_service: decode an order, price it, attach a summary, encode the response.
-
 @json
 class LineItem {
     public sku: string;
@@ -127,7 +132,13 @@ fun make_order_text(rng: Lcg, id: int): string {
     let n = 8 + rng.next(24);
     let i = 0;
     while i < n {
-        items.push(LineItem("SKU-" + rng.next(5000).to_string(), 1 + rng.next(9), (double)(rng.next(100000)) / 100.0));
+        items.push(
+            LineItem(
+                "SKU-" + rng.next(5000).to_string(),
+                1 + rng.next(9),
+                (double)(rng.next(100000)) / 100.0
+            )
+        );
         i = i + 1;
     }
     return Json.serialize(Order(id, "customer-" + rng.next(100000).to_string(), tags, items));
@@ -172,7 +183,6 @@ fun bench_json_service(iters: int): void {
 
 // ---------------------------------------------------------------------------------------------
 // log_processor: split lines, classify with a regex, count by key in Map<string, int>.
-
 fun make_log(rng: Lcg, lines: int): string {
     let levels = "INFO,WARN,ERROR,DEBUG".split(',');
     let paths = "/api/users,/api/orders,/static/app.js,/health,/api/search,/login".split(',');
@@ -231,7 +241,6 @@ fun bench_log_processor(iters: int): void {
 
 // ---------------------------------------------------------------------------------------------
 // graph_paths: Dijkstra over class nodes with adjacency lists and a priority queue.
-
 class Edge {
     public to: int;
     public w: int;
@@ -250,13 +259,14 @@ class Vertex {
     }
 }
 
-class Visit : Comparable<Visit> {
+class Visit: Comparable<Visit> {
     public node: int;
     public dist: int;
     public constructor(node: int, dist: int) {
         this.node = node;
         this.dist = dist;
     }
+
     public fun compare(other: Visit): int {
         return this.dist - other.dist;
     }
@@ -282,13 +292,14 @@ fun make_graph(rng: Lcg, n: int, degree: int): List<Vertex> {
     return g;
 }
 
-struct ValueVisit : Comparable<ValueVisit> {
+struct ValueVisit: Comparable<ValueVisit> {
     public node: int;
     public dist: int;
     public constructor(node: int, dist: int) {
         this.node = node;
         this.dist = dist;
     }
+
     public fun compare(other: ValueVisit): int {
         return this.dist - other.dist;
     }
@@ -412,7 +423,6 @@ fun bench_graph_paths_value(iters: int): void {
 
 // ---------------------------------------------------------------------------------------------
 // async_fanout: a batch of 256 dependent futures with virtual-clock timers, joined with all/any.
-
 async fun leaf_job(i: int): int {
     if (i & 7) == 0 {
         Time.sleep(0).await;
@@ -421,7 +431,9 @@ async fun leaf_job(i: int): int {
 }
 
 async fun mid_job(base: int): int {
-    let parts = Promise.all([leaf_job(base), leaf_job(base + 1), leaf_job(base + 2), leaf_job(base + 3)]).await;
+    let parts = Promise.all(
+        [leaf_job(base), leaf_job(base + 1), leaf_job(base + 2), leaf_job(base + 3)]
+    ).await;
     return parts[0] + parts[1] + parts[2] + parts[3];
 }
 
@@ -453,7 +465,6 @@ async fun bench_async_fanout(iters: int): void {
 
 // ---------------------------------------------------------------------------------------------
 // task_parallel: CPU-bound chunks fanned out to worker tasks and reduced on the caller.
-
 fun chunk_work(seed: int): int {
     let h = seed;
     let acc = 0;
@@ -477,18 +488,20 @@ async fun bench_task_parallel(iters: int): void {
             seeds[k] = i * 16 + k + seed_bit();
             k = k + 1;
         }
-        let batch = Task.scope<int, string>(async (scope) => {
-            let jobs = List<TaskHandle<int, string>>(16);
-            for (let index = 0; index < seeds.length; index = index + 1) {
-                let seed = seeds[index];
-                jobs.push(scope.spawn_parallel<int>(() => chunk_work(seed)));
+        let batch = Task.scope<int, string>(
+            async (scope) => {
+                let jobs = List<TaskHandle<int, string>>(16);
+                for (let index = 0; index < seeds.length; index = index + 1) {
+                    let seed = seeds[index];
+                    jobs.push(scope.spawn_parallel<int>(() => chunk_work(seed)));
+                }
+                let sum = 0;
+                for (let index = 0; index < jobs.length; index = index + 1) {
+                    sum = sum + jobs[index].join().await?;
+                }
+                return Result.Ok(sum);
             }
-            let sum = 0;
-            for (let index = 0; index < jobs.length; index = index + 1) {
-                sum = sum + jobs[index].join().await?;
-            }
-            return Result.Ok(sum);
-        }).await.unwrap();
+        ).await.unwrap();
         acc = acc + batch;
         i = i + 1;
     }
@@ -498,19 +511,33 @@ async fun bench_task_parallel(iters: int): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-
 let selected_benches = System.env_or("DREAM_BENCH_ONLY", "");
+
 fun selected(borrow name: string): bool {
-    return selected_benches.length == 0 || ("," + selected_benches + ",").contains("," + name + ",");
+    return selected_benches.length == 0 || ("," + selected_benches + ",").contains(
+        "," + name + ","
+    );
 }
 
 async fun run_suite(scale: int): void {
-    if selected("json_service") { bench_json_service(scale * 20); }
-    if selected("log_processor") { bench_log_processor(scale / 10); }
-    if selected("graph_paths_class") { bench_graph_paths_class(scale / 4); }
-    if selected("graph_paths_value") { bench_graph_paths_value(scale / 4); }
-    if selected("async_fanout") { bench_async_fanout(scale * 2).await; }
-    if selected("task_parallel") { bench_task_parallel(scale / 2).await; }
+    if selected("json_service") {
+        bench_json_service(scale * 20);
+    }
+    if selected("log_processor") {
+        bench_log_processor(scale / 10);
+    }
+    if selected("graph_paths_class") {
+        bench_graph_paths_class(scale / 4);
+    }
+    if selected("graph_paths_value") {
+        bench_graph_paths_value(scale / 4);
+    }
+    if selected("async_fanout") {
+        bench_async_fanout(scale * 2).await;
+    }
+    if selected("task_parallel") {
+        bench_task_parallel(scale / 2).await;
+    }
 }
 
 fun bench_passes(): int {

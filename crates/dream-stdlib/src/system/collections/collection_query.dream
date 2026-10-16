@@ -2,7 +2,6 @@ module system.collections;
 
 // Package query helpers on `Collection<T>`: available after `import system.collections;`.
 // Attached via `extend Collection<T>` so bootstrap `system.core` never depends on `List`/`Set`.
-
 extend Collection<T> {
     // Copies every element into a new `List`.
     public fun to_list(): List<T> {
@@ -120,7 +119,7 @@ extend Collection<T> {
     }
 
     // Smallest element by `compare`, or `None` when empty.
-    public fun min(): Option<T> where T : Comparable<T> {
+    public fun min(): Option<T> where T: Comparable<T> {
         let seen = false;
         let best = CollectionStorage.zero<T>();
         for (let x in this) {
@@ -138,7 +137,7 @@ extend Collection<T> {
     }
 
     // Largest element by `compare`, or `None` when empty.
-    public fun max(): Option<T> where T : Comparable<T> {
+    public fun max(): Option<T> where T: Comparable<T> {
         let seen = false;
         let best = CollectionStorage.zero<T>();
         for (let x in this) {

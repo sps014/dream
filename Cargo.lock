@@ -1077,6 +1077,7 @@ dependencies = [
 name = "dream-format"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "dream-diagnostics",
  "dream-syntax",
 ]

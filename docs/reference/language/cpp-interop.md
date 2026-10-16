@@ -40,17 +40,20 @@ public class Store {
     extern constructor(path: string);
     extern fun put(key: string, value: string): void;
     extern fun get(key: string): Option<string>;
-    extern fun find(key: string): Option<Entry>;       // borrowed; keeps the Store alive
-    extern fun compact(): Result<bool, string>;        // Ok(true), or Err(e.what())
-    extern fun on_change(f: fun(string): void): void;  // capturing closures are fine
-    @cpp_name("get_as<int>") extern fun get_int(key: string): int;
-    extern fun scaled(): int;                          // C++ fills in `factor`
-    @owned static extern fun open_default(): Store;
+    extern fun find(key: string): Option<Entry>; // borrowed; keeps the Store alive
+    extern fun compact(): Result<bool, string>; // Ok(true), or Err(e.what())
+    extern fun on_change(f: fun(string): void): void; // capturing closures are fine
+    @cpp_name("get_as<int>")
+    extern fun get_int(key: string): int;
+    extern fun scaled(): int; // C++ fills in `factor`
+    @owned
+    static extern fun open_default(): Store;
 }
 
 @cpp("kv.hpp", "kv::Entry")
 public class Entry {
-    @cpp_name("name") extern fun key(): string;
+    @cpp_name("name")
+    extern fun key(): string;
 }
 
 @cpp("kv.hpp", "kv::greet")

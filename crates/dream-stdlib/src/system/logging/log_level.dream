@@ -1,12 +1,16 @@
 module system.logging;
 
 // Severity levels ordered from most to least verbose.
-
 public enum LogLevel {
+    /// Very detailed diagnostic messages.
     Trace,
+    /// Diagnostic messages useful during development.
     Debug,
+    /// Messages describing normal operation.
     Info,
+    /// Warnings about recoverable problems.
     Warn,
+    /// Messages reporting failures.
     Error,
 }
 

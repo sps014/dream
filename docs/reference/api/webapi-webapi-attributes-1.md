@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public struct GetAttribute`
+## `GetAttribute`
 
 Declares an HTTP GET route.
 
@@ -12,7 +12,15 @@ Declares an HTTP GET route.
 public struct GetAttribute
 ```
 
-## `public struct PostAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `PostAttribute`
 
 Declares an HTTP POST route.
 
@@ -20,7 +28,15 @@ Declares an HTTP POST route.
 public struct PostAttribute
 ```
 
-## `public struct PutAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `PutAttribute`
 
 Declares an HTTP PUT route.
 
@@ -28,7 +44,15 @@ Declares an HTTP PUT route.
 public struct PutAttribute
 ```
 
-## `public struct PatchAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `PatchAttribute`
 
 Declares an HTTP PATCH route.
 
@@ -36,7 +60,15 @@ Declares an HTTP PATCH route.
 public struct PatchAttribute
 ```
 
-## `public struct DeleteAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `DeleteAttribute`
 
 Declares an HTTP DELETE route.
 
@@ -44,7 +76,15 @@ Declares an HTTP DELETE route.
 public struct DeleteAttribute
 ```
 
-## `public struct HeadAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `HeadAttribute`
 
 Declares an HTTP HEAD route.
 
@@ -52,7 +92,15 @@ Declares an HTTP HEAD route.
 public struct HeadAttribute
 ```
 
-## `public struct OptionsAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `OptionsAttribute`
 
 Declares an HTTP OPTIONS route.
 
@@ -60,7 +108,15 @@ Declares an HTTP OPTIONS route.
 public struct OptionsAttribute
 ```
 
-## `public struct WebsocketAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `WebsocketAttribute`
 
 Declares an HTTP WEBSOCKET route.
 
@@ -68,7 +124,15 @@ Declares an HTTP WEBSOCKET route.
 public struct WebsocketAttribute
 ```
 
-## `public struct RouterAttribute`
+## `path`
+
+Route path relative to the router prefix; named segments use `{name}`.
+
+```dream
+public path: string
+```
+
+## `RouterAttribute`
 
 Declares an explicitly mounted group of static HTTP handlers.
 
@@ -76,7 +140,15 @@ Declares an explicitly mounted group of static HTTP handlers.
 public struct RouterAttribute
 ```
 
-## `public struct UseAttribute`
+## `prefix`
+
+Path prefix applied to every route in the group.
+
+```dream
+public prefix: string
+```
+
+## `UseAttribute`
 
 Applies a middleware function to a route or group in source order.
 
@@ -84,7 +156,15 @@ Applies a middleware function to a route or group in source order.
 public struct UseAttribute
 ```
 
-## `public struct DepAttribute`
+## `handler`
+
+Middleware function to run for the annotated route or group.
+
+```dream
+public handler: DeclarationPath
+```
+
+## `DepAttribute`
 
 Injects and memoizes a dependency function once per request.
 
@@ -92,100 +172,26 @@ Injects and memoizes a dependency function once per request.
 public struct DepAttribute
 ```
 
-## `public struct DependencyOverrideAttribute`
+## `provider`
+
+Dependency function to evaluate for this parameter or replace for this application.
+
+```dream
+public provider: DeclarationPath
+```
+
+## `cache`
+
+Whether the dependency result is reused within this request; omitted means true.
+
+```dream
+public cache: Option<bool>
+```
+
+## `DependencyOverrideAttribute`
 
 Replaces a provider for applications explicitly installing the containing class's dependencies().
 
 ```dream
 public struct DependencyOverrideAttribute
-```
-
-## `public struct ProducesAttribute`
-
-Sets the content type of a yielded string or byte stream.
-
-```dream
-public struct ProducesAttribute
-```
-
-## `public struct BodyAttribute`
-
-Extracts the request body as text, bytes or a JSON model.
-
-```dream
-public struct BodyAttribute
-```
-
-## `public struct PathAttribute`
-
-Binds a path value, with an optional name override.
-
-```dream
-public struct PathAttribute
-```
-
-## `public struct QueryAttribute`
-
-Binds a query value, with an optional name override.
-
-```dream
-public struct QueryAttribute
-```
-
-## `public struct HeaderAttribute`
-
-Binds a header value, with an optional name override.
-
-```dream
-public struct HeaderAttribute
-```
-
-## `public struct CookieAttribute`
-
-Binds a cookie value, with an optional name override.
-
-```dream
-public struct CookieAttribute
-```
-
-## `public struct FormAttribute`
-
-Binds a form value, with an optional name override.
-
-```dream
-public struct FormAttribute
-```
-
-## `public struct FileAttribute`
-
-Binds a file value, with an optional name override.
-
-```dream
-public struct FileAttribute
-```
-
-## `public struct SecuritySchemeAttribute`
-
-Declares a dependency's OpenAPI authentication scheme.
-
-```dream
-public struct SecuritySchemeAttribute
-```
-
-## `public id`
-
-```dream
-public id: string
-```
-
-## `public kind`
-
-```dream
-public kind: string
-```
-
-## `public scheme`
-
-```dream
-public scheme: string
 ```

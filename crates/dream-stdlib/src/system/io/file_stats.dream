@@ -3,6 +3,8 @@ module system.io;
 // Metadata from a single `stat` of a filesystem path. Times are UTC epoch milliseconds.
 // `mode` is Unix `st_mode` (0 on Windows and in the browser memfs). `kind` is 0 file, 1 directory,
 // 2 symlink, 3 other. `File.stat` follows symlinks, so `kind == 2` is uncommon.
+/// File size, timestamps, mode, and entry kind returned by `File.stat`. Timestamps use UTC
+/// epoch milliseconds. `File.stat` follows symbolic links.
 public class FileStats {
     _size: long;
     _mtime_millis: long;
@@ -27,38 +29,47 @@ public class FileStats {
         this._kind = kind;
     }
 
+    /// File size in bytes.
     public get size(): long {
         return this._size;
     }
 
+    /// Last modification time in UTC epoch milliseconds.
     public get mtime_millis(): long {
         return this._mtime_millis;
     }
 
+    /// Last metadata-change time in UTC epoch milliseconds.
     public get ctime_millis(): long {
         return this._ctime_millis;
     }
 
+    /// Last access time in UTC epoch milliseconds.
     public get atime_millis(): long {
         return this._atime_millis;
     }
 
+    /// Unix file mode, or zero on platforms without Unix modes.
     public get mode(): int {
         return this._mode;
     }
 
+    /// File kind: 0 for a file, 1 for a directory, 2 for a symlink, and 3 for other entries.
     public get kind(): int {
         return this._kind;
     }
 
+    /// Returns whether the entry is a regular file.
     public get is_file(): bool {
         return this._kind == 0;
     }
 
+    /// Returns whether the path refers to a directory.
     public get is_dir(): bool {
         return this._kind == 1;
     }
 
+    /// Returns whether the entry is a symbolic link.
     public get is_symlink(): bool {
         return this._kind == 2;
     }

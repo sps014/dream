@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 struct c25a_Point {
     public x: int;
     public y: int;

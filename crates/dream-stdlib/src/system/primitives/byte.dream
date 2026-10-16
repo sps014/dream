@@ -1,7 +1,7 @@
 module system.primitives;
 
 // The `byte` primitive.
-extend byte : Comparable<byte> {
+extend byte: Comparable<byte> {
     // Orders this value against `other`.
     public fun compare(other: byte): int {
         if this < other {

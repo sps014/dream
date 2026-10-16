@@ -7,5 +7,7 @@ public class CreateMessage {
     @min_length(1)
     @max_length(200)
     public text: string;
-    public constructor(text: string) { this.text = text; }
+    public constructor(text: string) {
+        this.text = text;
+    }
 }

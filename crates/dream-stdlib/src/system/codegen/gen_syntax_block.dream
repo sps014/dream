@@ -6,16 +6,25 @@ import system.json;
 
 // A `name { ... }` site of this generator (`@syntax_block` generators only).
 public class GenSyntaxBlock {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Name identifying this entry.
     public name: string;
     // Reconstructed body text; splices appear as `{expr}`.
     public body: string;
     // Dream source of each `{ ... }` splice, in order.
     public splices: List<string>;
+    /// Source location associated with this entry.
     public location: GenLocation;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation) {
+    public constructor(
+        id: string,
+        name: string,
+        body: string,
+        splices: List<string>,
+        location: GenLocation
+    ) {
         this.id = id;
         this.name = name;
         this.body = body;

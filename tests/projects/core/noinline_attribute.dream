@@ -2,12 +2,18 @@ import system.testing;
 import system;
 
 @noinline
-fun c16d_keep(x: int): int { return x + 1; }
+fun c16d_keep(x: int): int {
+    return x + 1;
+}
 
-fun c16d_kitchenSink(x: int): int { return x + 2; }
+fun c16d_kitchenSink(x: int): int {
+    return x + 2;
+}
 
 @noinline
-fun c16d_run(n: int): int { return c16d_keep(n) + c16d_kitchenSink(n); }
+fun c16d_run(n: int): int {
+    return c16d_keep(n) + c16d_kitchenSink(n);
+}
 
 @test
 @timeout(180000)

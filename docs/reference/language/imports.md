@@ -7,15 +7,15 @@ Split a program into `.dream` files as it grows. An `import` makes another file'
 Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
 
 ```dream
-import system;                 // System, DateTime, Stopwatch, Random, …
-import system.collections;     // List, Map, Set, Queue, Stack
-import system.text;            // string methods, StringBuilder, Regex
-import system.json;            // Json, JsonValue
-import system.io;              // File, FileStream, Path, IoError
-import system.encoding;        // Encoding (UTF-8 / hex / Base64)
-import system.logging;         // Logger, LogLevel, handlers
-import system.crypto;          // Sha256, HmacSha256, SecureRandom
-import system.task;            // Task, TaskPool (real threads)
+import system; // System, DateTime, Stopwatch, Random, …
+import system.collections; // List, Map, Set, Queue, Stack
+import system.text; // string methods, StringBuilder, Regex
+import system.json; // Json, JsonValue
+import system.io; // File, FileStream, Path, IoError
+import system.encoding; // Encoding (UTF-8 / hex / Base64)
+import system.logging; // Logger, LogLevel, handlers
+import system.crypto; // Sha256, HmacSha256, SecureRandom
+import system.task; // Task, TaskPool (real threads)
 ```
 
 Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `RawPtr`, `Arena`, `Promise`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
@@ -49,7 +49,7 @@ import math_lib;
 import system;
 
 fun main() {
-    System.println(add_numbers(10, 20));   // 30
+    System.println(add_numbers(10, 20)); // 30
 }
 ```
 
@@ -79,7 +79,7 @@ public fun add(a: int, b: int): int {
 Because two modules can legally define the same name, `import` has a second form — with a trailing `as` clause — that pulls in one specific item from a *module* (not a file) under a chosen local alias:
 
 ```dream
-import <dotted-module-path>.<item> as <alias>;
+import < dotted - module -path >.< item > as < alias >;
 ```
 
 ```dream
@@ -94,15 +94,15 @@ public fun add(a: float, b: float): float {
 ```dream
 // main.dream
 import system;
-import utils.math_lib;               // file import, unchanged: loads utils/math_lib.dream
-import vendor.math_lib;              // loads vendor/math_lib.dream
+import utils.math_lib; // file import, unchanged: loads utils/math_lib.dream
+import vendor.math_lib; // loads vendor/math_lib.dream
 
-import utils.math.add as add_int;    // aliases the `add` declared in module `utils.math`
+import utils.math.add as add_int; // aliases the `add` declared in module `utils.math`
 import vendor.math.add as add_float; // aliases the `add` declared in module `vendor.math`
 
 fun main() {
-    System.println(add_int(1, 2));           // 3
-    System.println(add_float(1.5, 2.5));     // 4.0
+    System.println(add_int(1, 2)); // 3
+    System.println(add_float(1.5, 2.5)); // 4.0
 }
 ```
 
@@ -130,17 +130,25 @@ A top-level declaration (function, class, interface, enum, or global) is **priva
 // lib.dream
 module utils.math;
 
-public fun public_add(a: int, b: int): int { return a + b; }
-internal fun shared_helper(): int { return 99; }  // visible anywhere in module utils.math
-fun private_helper(): int { return 1; }           // file-private
+public fun public_add(a: int, b: int): int {
+    return a + b;
+}
+
+internal fun shared_helper(): int {
+    return 99;
+} // visible anywhere in module utils.math
+
+fun private_helper(): int {
+    return 1;
+} // file-private
 ```
 
 ```dream
 // other_file_same_module.dream
-module utils.math;   // same module as lib.dream
+module utils.math; // same module as lib.dream
 
 fun uses_helper(): int {
-    return shared_helper();  // ok: same module
+    return shared_helper(); // ok: same module
 }
 ```
 
@@ -149,9 +157,9 @@ fun uses_helper(): int {
 import lib;
 
 fun main() {
-    System.println(public_add(2, 3));   // ok: public
-    System.println(shared_helper());    // error: 'shared_helper' is internal to module utils.math
-    System.println(private_helper());   // error: 'private_helper' is not 'public'
+    System.println(public_add(2, 3)); // ok: public
+    System.println(shared_helper()); // error: 'shared_helper' is internal to module utils.math
+    System.println(private_helper()); // error: 'private_helper' is not 'public'
 }
 ```
 
@@ -168,7 +176,7 @@ Constructors follow the same rule: mark them `public` (or `internal`) to allow `
 module utils.math;
 
 public class Vector {
-    internal x: int;                          // visible anywhere in module utils.math
+    internal x: int; // visible anywhere in module utils.math
     public fun length_sq(): int {
         return helper_square(this.x);
     }

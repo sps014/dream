@@ -1,8 +1,8 @@
 import system.testing;
 // Variadic parameters (`...name: T[]`): zero, one, and several trailing arguments collected into
 // an array, across a free function and an instance method.
-
 import system;
+
 fun c298_sum(...nums: int[]): int {
     let total = 0;
     for (let n in nums) {
@@ -31,16 +31,16 @@ class c298_Counter {
 }
 
 fun c298_body(): void {
-    c298_verify_observation((c298_sum()).to_string());              // 0
-    c298_verify_observation((c298_sum(1)).to_string());             // 1
-    c298_verify_observation((c298_sum(1, 2, 3)).to_string());       // 6
+    c298_verify_observation((c298_sum()).to_string()); // 0
+    c298_verify_observation((c298_sum(1)).to_string()); // 1
+    c298_verify_observation((c298_sum(1, 2, 3)).to_string()); // 6
 
-    c298_verify_observation((c298_sum_with_base(10)).to_string());           // 10
-    c298_verify_observation((c298_sum_with_base(10, 1, 2, 3)).to_string());  // 16
+    c298_verify_observation((c298_sum_with_base(10)).to_string()); // 10
+    c298_verify_observation((c298_sum_with_base(10, 1, 2, 3)).to_string()); // 16
 
     let c = c298_Counter();
-    c298_verify_observation((c.count_all()).to_string());              // 0 (no lines printed)
-    c298_verify_observation((c.count_all("a", "b")).to_string());       // prints "a","b", then 2
+    c298_verify_observation((c.count_all()).to_string()); // 0 (no lines printed)
+    c298_verify_observation((c.count_all("a", "b")).to_string()); // prints "a","b", then 2
 }
 
 let c298_cursor: int = 0;

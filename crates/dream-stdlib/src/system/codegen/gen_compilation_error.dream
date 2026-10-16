@@ -2,8 +2,11 @@ module system.codegen;
 
 import system.json;
 
+/// A diagnostic associated with a declaration in the generator's input.
 public class GenCompilationError {
+    /// Target declaration or build target associated with this result.
     public target: string;
+    /// Human-readable explanation of the result or failure.
     public message: string;
 
     // Decodes a pre-generation error restricted to this generator's triggered declarations.

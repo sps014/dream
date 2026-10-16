@@ -3,6 +3,7 @@ module system.core;
 // Halt used by bootstrap (`Option.unwrap`, bounds checks). Full console I/O lives on `extend System`
 // in `system.dream` (`import system;`).
 public static class System {
+    /// Stops execution and reports `message`.
     @intrinsic(Intrinsic.DreamPanic)
     public static extern fun panic(borrow message: string): void;
 }

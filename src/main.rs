@@ -1048,7 +1048,10 @@ fn run_fmt(ui: &Ui, paths: &[String], check: bool) -> ExitCode {
             ui.error(&format!("no such file or directory: {raw}"));
             return ExitCode::FAILURE;
         }
-        collect_dream_files(path, &mut files);
+        if let Err(error) = collect_dream_files(path, &mut files) {
+            ui.error(&format!("cannot read {}: {error}", path.display()));
+            return ExitCode::FAILURE;
+        }
     }
     if files.is_empty() {
         ui.error("no .dream files found");
@@ -1060,16 +1063,19 @@ fn run_fmt(ui: &Ui, paths: &[String], check: bool) -> ExitCode {
     files.dedup();
 
     let mut unformatted: Vec<PathBuf> = Vec::new();
+    let mut failed = false;
     for file in &files {
         let Ok(source) = std::fs::read_to_string(file) else {
-            ui.warning(&format!("could not read {}", file.display()));
+            ui.error(&format!("could not read {}", file.display()));
+            failed = true;
             continue;
         };
         let Some(formatted) = dream_format::try_format(&source) else {
             ui.warning(&format!(
-                "skipped {} (does not lex cleanly — fix syntax errors first)",
+                "skipped {} (cannot safely format this source)",
                 file.display()
             ));
+            failed = true;
             continue;
         };
         if formatted == source {
@@ -1089,29 +1095,45 @@ fn run_fmt(ui: &Ui, paths: &[String], check: bool) -> ExitCode {
         for file in &unformatted {
             ui.note(&format!("{} needs formatting", file.display()));
         }
-        if unformatted.is_empty() {
+        if unformatted.is_empty() && !failed {
             ui.success("all files are formatted");
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE
         }
+    } else if failed {
+        ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
     }
 }
 
 /// Appends `path` and, for directories, every `.dream` file beneath it (recursively).
-fn collect_dream_files(path: &Path, out: &mut Vec<PathBuf>) {
+fn collect_dream_files(path: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     if path.is_dir() {
-        let Ok(entries) = std::fs::read_dir(path) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            collect_dream_files(&entry.path(), out);
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir()
+                && matches!(
+                    entry.file_name().to_str(),
+                    Some("target" | ".git" | ".dream" | "node_modules" | "site")
+                )
+            {
+                continue;
+            }
+            collect_dream_files(&entry.path(), out)?;
         }
-    } else if path.extension().map(|e| e == "dream").unwrap_or(false) {
+    } else if path
+        .extension()
+        .is_some_and(|extension| extension == "dream")
+    {
         out.push(path.to_path_buf());
     }
+    Ok(())
 }
 
 /// Walk upward from a file's directory looking for `dream.toml`.

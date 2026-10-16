@@ -2,8 +2,15 @@ import system.testing;
 // `uint`/`ulong` values above the signed range must compare, divide, and shift as unsigned, even
 // when the operands only become known at runtime.
 import system;
-fun cfd_uint_max(): uint { return 4294967295u; }
-fun cfd_ulong_max(): ulong { return 18446744073709551615uL; }
+
+fun cfd_uint_max(): uint {
+    return 4294967295u;
+}
+
+fun cfd_ulong_max(): ulong {
+    return 18446744073709551615uL;
+}
+
 @test
 @timeout(180000)
 fun integer_unsigned_semantics(): void {

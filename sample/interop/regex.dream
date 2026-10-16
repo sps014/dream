@@ -3,9 +3,9 @@
 //
 //   cargo run -- run sample/interop/regex.dream
 //   node sample/interop/regex.mjs sample/interop/regex.wasm
-
 import system;
 import system.text;
+
 fun main(): void {
     let digits = Regex("\\d+", RegexFlags.Global);
 
@@ -14,10 +14,10 @@ fun main(): void {
     }
 
     let cleaned = digits.replace("a1b2c3", "#");
-    System.println(cleaned);                          // a#b#c#
+    System.println(cleaned); // a#b#c#
 
     let parts = digits.match("a1b2c3");
-    System.println(parts.length);           // 3
-    System.println(parts[0]);                         // 1
-    System.println(parts[2]);                         // 3
+    System.println(parts.length); // 3
+    System.println(parts[0]); // 1
+    System.println(parts[2]); // 3
 }

@@ -1,18 +1,22 @@
 import system.testing;
 import system;
+
 fun c23a_pick(b: bool): string {
     return switch (b) {
         true => "yes",
         false => "no",
     };
 }
+
 fun c23a_body() {
     c23a_verify_observation((c23a_pick(true)).to_string());
     c23a_verify_observation((c23a_pick(false)).to_string());
     let flag = false;
     switch (flag) {
-        case true: c23a_verify_observation(("t").to_string());
-        default: c23a_verify_observation(("d").to_string());
+        case true:
+            c23a_verify_observation(("t").to_string());
+        default:
+            c23a_verify_observation(("d").to_string());
     }
 }
 

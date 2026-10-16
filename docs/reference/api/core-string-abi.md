@@ -73,7 +73,13 @@ public static extern fun clone(borrow s: string): string
 Bulk-copies `count` payload bytes from `src` into `dst` at `dst_off`.
 
 ```dream
-public static extern fun copy_utf8(borrow dst: byte[], dst_off: int, borrow src: string, src_off: int, count: int): void
+public static extern fun copy_utf8(
+    borrow dst: byte[],
+    dst_off: int,
+    borrow src: string,
+    src_off: int,
+    count: int
+): void
 ```
 
 ## `compare_raw`

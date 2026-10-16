@@ -2,29 +2,41 @@ module system.core;
 
 // Promise utilities for async tasks.
 public static class Promise {
+    /// Waits for every future and returns their results in input order.
     @intrinsic(Intrinsic.PromiseAll)
     public static extern async fun all_host<T>(borrow promises: T[]): T[];
 
+    /// Waits for the first successful future and returns its result.
     @intrinsic(Intrinsic.PromiseAny)
     public static extern async fun any_host<T>(borrow promises: T[]): T;
 
+    /// Returns the result of the first future to complete.
     @intrinsic(Intrinsic.PromiseRace)
     public static extern async fun race_host<T>(borrow promises: T[]): T;
 
     // Waits for all promises in the array to resolve.
-    public static async fun all<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T[] {
+    public static async fun all<T>(
+        borrow promises: Future<T>[],
+        token: Option<CancellationToken> = Option.None
+    ): T[] {
         CancellationToken.throw_if_opt(token);
         return Promise.all_host(promises).await;
     }
 
     // Waits for any promise in the array to resolve.
-    public static async fun any<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
+    public static async fun any<T>(
+        borrow promises: Future<T>[],
+        token: Option<CancellationToken> = Option.None
+    ): T {
         CancellationToken.throw_if_opt(token);
         return Promise.any_host(promises).await;
     }
 
     // Returns the first promise to resolve or reject.
-    public static async fun race<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T {
+    public static async fun race<T>(
+        borrow promises: Future<T>[],
+        token: Option<CancellationToken> = Option.None
+    ): T {
         CancellationToken.throw_if_opt(token);
         return Promise.race_host(promises).await;
     }
@@ -33,6 +45,9 @@ public static class Promise {
     // awaiting is cancelled too when nothing else holds it. Best-effort for in-flight native
     // host HTTP; cooperative `CancellationToken` is preferred for app logic.
     // Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
+    /// Requests cancellation of a future and of its awaited work when no other owner needs it.
+    /// Cancellation of an in-flight network request is best effort; use `CancellationToken` for
+    /// cooperative application cancellation.
     @intrinsic(Intrinsic.DreamCancel)
     public static extern fun cancel(borrow future: object): void;
 

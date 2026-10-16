@@ -65,7 +65,9 @@ public static class Channel
 Creates a bounded cross-worker queue, enforcing the shared transfer constraint.
 
 ```dream
-public static fun shared_bounded<T : shared>(capacity: int): Result<SharedChannelEndpoints<T>, ChannelError>
+public static fun shared_bounded<T: shared>(
+    capacity: int
+): Result<SharedChannelEndpoints<T>, ChannelError>
 ```
 
 ## `shared_unbounded`
@@ -73,7 +75,7 @@ public static fun shared_bounded<T : shared>(capacity: int): Result<SharedChanne
 Creates an explicitly unbounded cross-worker queue of shared values.
 
 ```dream
-public static fun shared_unbounded<T : shared>(): SharedChannelEndpoints<T>
+public static fun shared_unbounded<T: shared>(): SharedChannelEndpoints<T>
 ```
 
 ## `bounded`
@@ -137,7 +139,10 @@ public fun try_send(value: T): Result<bool, ChannelError>
 Suspends for capacity and observes the inherited scope token unless explicitly overridden.
 
 ```dream
-public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>>
+public fun send(
+    value: T,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<bool, ChannelError>>
 ```
 
 ## `close`
@@ -169,7 +174,9 @@ public fun try_receive(): Result<Option<T>, ChannelError>
 Waits for an item; None means that all senders closed and the queue has drained.
 
 ```dream
-public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>>
+public fun receive(
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Option<T>, ChannelError>>
 ```
 
 ## `close`

@@ -2,7 +2,7 @@
 
 **Import:** `import system.core;`
 
-## `public struct ExportAttribute`
+## `ExportAttribute`
 
 Exports a non-generic synchronous function through a plain C ABI wrapper.
 
@@ -10,37 +10,39 @@ Exports a non-generic synchronous function through a plain C ABI wrapper.
 public struct ExportAttribute
 ```
 
-## `public struct IntrinsicAttribute`
+## `IntrinsicAttribute`
 
-Marks an extern function/method as a compiler intrinsic. The string argument is the intrinsic key (e.g. `"print"`).
+Binds an external declaration to the specified built-in operation.
 
 ```dream
 public struct IntrinsicAttribute
 ```
 
-## `public operation: Intrinsic`
+## `operation`
+
+Operation associated with this intrinsic declaration.
 
 ```dream
 public operation: Intrinsic
 ```
 
-## `public struct InlineAttribute`
+## `InlineAttribute`
 
-Raises the inliner's size budget for this function/method. A compiler hint, not a guarantee.
+Requests inlining of the annotated function or method; it is a hint rather than a guarantee.
 
 ```dream
 public struct InlineAttribute
 ```
 
-## `public struct NoinlineAttribute`
+## `NoinlineAttribute`
 
-Never inline this function/method (neither the MIR inliner nor LLVM). Keeps benchmark sinks opaque.
+Prevents inlining of the annotated function or method.
 
 ```dream
 public struct NoinlineAttribute
 ```
 
-## `public struct UnsafeAttribute`
+## `UnsafeAttribute`
 
 Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.
 
@@ -48,7 +50,7 @@ Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` c
 public struct UnsafeAttribute
 ```
 
-## `public struct AllowCycleAttribute`
+## `AllowCycleAttribute`
 
 Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.
 
@@ -56,7 +58,7 @@ Acknowledges that this class can form strong ownership cycles. ARC does not coll
 public struct AllowCycleAttribute
 ```
 
-## `public struct ConsumingAttribute`
+## `ConsumingAttribute`
 
 Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.
 
@@ -64,7 +66,7 @@ Marks an extern whose reference parameters transfer ownership to the host, which
 public struct ConsumingAttribute
 ```
 
-## `public struct OwnedAttribute`
+## `OwnedAttribute`
 
 The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned("free_fn")` names the C function that frees the pointer when the last reference is released.
 
@@ -72,47 +74,55 @@ The extern's result transfers ownership to Dream. On a `@cpp` member returning `
 public struct OwnedAttribute
 ```
 
-## `public free_function: Option<string>`
+## `free_function`
+
+Optional function used to release foreign storage.
 
 ```dream
 public free_function: Option<string>
 ```
 
-## `public struct JsAttribute`
+## `JsAttribute`
 
-Binds an extern function to a JavaScript host import: `@js("module", "export")`. JS-only (user interop, `js` type, WASM `env`/libm). Dream runtime hosts that exist on native and WASM use `@runtime` instead.
+Binds an external function to a JavaScript export using `@js("module", "export")`. Available only on JavaScript platforms.
 
 ```dream
 public struct JsAttribute
 ```
 
-## `public module_name: string`
+## `module_name`
+
+Fully qualified module containing the declaration.
 
 ```dream
 public module_name: string
 ```
 
-## `public export_name: string`
+## `export_name`
+
+Name exposed to callers of the foreign function.
 
 ```dream
 public export_name: string
 ```
 
-## `public struct RuntimeAttribute`
+## `RuntimeAttribute`
 
-Binds an extern to the Dream runtime host on WASM and native: `@runtime("fileRead")` imports `Dream.fileRead` and calls the C symbol `fileRead`.
+Binds an external function to a named Dream host service on supported platforms.
 
 ```dream
 public struct RuntimeAttribute
 ```
 
-## `public export_name: string`
+## `export_name`
+
+Name exposed to callers of the foreign function.
 
 ```dream
 public export_name: string
 ```
 
-## `public struct AsyncHostAttribute`
+## `AsyncHostAttribute`
 
 Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes the future as its leading argument, performs the work off-thread, and completes it via the bound dream_complete_foreign. The run loop stays parked while the work is in flight.
 
@@ -120,7 +130,7 @@ Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes
 public struct AsyncHostAttribute
 ```
 
-## `public struct NativeAttribute`
+## `NativeAttribute`
 
 Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.
 
@@ -128,7 +138,7 @@ Marks a function/method as available on the native (C) host. Combine with `@node
 public struct NativeAttribute
 ```
 
-## `public struct NodeAttribute`
+## `NodeAttribute`
 
 Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.
 
@@ -136,7 +146,7 @@ Marks a function/method as available on the Node.js host. Combine with `@native`
 public struct NodeAttribute
 ```
 
-## `public struct WebAttribute`
+## `WebAttribute`
 
 Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.
 

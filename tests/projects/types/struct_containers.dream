@@ -2,8 +2,8 @@ import system.testing;
 // Value `struct`s are stored inline wherever they live: as array elements (stride = full size), as
 // fields embedded directly inside a heap `class`, and as union payloads. Each is read/written and
 // mutated in place.
-
 import system;
+
 struct c233_Pair {
     public a: int;
     public b: int;
@@ -30,17 +30,17 @@ enum c233_Opt {
 fun c233_body() {
     // Array of value structs.
     let arr = [c233_Pair(1, 2), c233_Pair(3, 4)];
-    c233_verify_observation((arr[0].a).to_string());   // 1
-    c233_verify_observation((arr[1].b).to_string());   // 4
+    c233_verify_observation((arr[0].a).to_string()); // 1
+    c233_verify_observation((arr[1].b).to_string()); // 4
     arr[0].a = 100;
-    c233_verify_observation((arr[0].a).to_string());   // 100
-    c233_verify_observation((arr[1].a).to_string());   // 3 (independent element)
+    c233_verify_observation((arr[0].a).to_string()); // 100
+    c233_verify_observation((arr[1].a).to_string()); // 3 (independent element)
 
     // Value field embedded inline in a heap class.
     let box = c233_Box(c233_Pair(5, 6));
-    c233_verify_observation((box.p.a).to_string());    // 5
+    c233_verify_observation((box.p.a).to_string()); // 5
     box.p.b = 60;
-    c233_verify_observation((box.p.b).to_string());    // 60
+    c233_verify_observation((box.p.b).to_string()); // 60
 
     // Value payload carried inline in a union variant.
     let o = c233_Opt.Some(c233_Pair(7, 8));
@@ -48,7 +48,7 @@ fun c233_body() {
         Some(pr) => pr.a + pr.b,
         None => 0,
     };
-    c233_verify_observation((r).to_string());          // 15
+    c233_verify_observation((r).to_string()); // 15
 }
 
 let c233_cursor: int = 0;

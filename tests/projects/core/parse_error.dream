@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun c1a8_body(): void {
     switch (int.parse("42")) {
         Ok(n) => c1a8_verify_observation((n).to_string()),

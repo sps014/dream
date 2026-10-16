@@ -5,62 +5,167 @@ module system.core;
 public struct RawPtr<T: unmanaged> {
     raw: usize;
 
-    constructor(address: usize) { this.raw = address; }
+    constructor(address: usize) {
+        this.raw = address;
+    }
 
-    public static fun null(): RawPtr<T> { return RawPtr<T>((usize)0); }
-    public fun is_null(): bool { return this.raw == (usize)0; }
-    public fun address(): usize { return this.raw; }
-    public fun operator ==(other: RawPtr<T>): bool { return this.raw == other.raw; }
+    /// Returns a null pointer with address zero.
+    public static fun null(): RawPtr<T> {
+        return RawPtr<T>((usize)0);
+    }
 
+    /// Returns whether the pointer address is zero.
+    public fun is_null(): bool {
+        return this.raw == (usize)0;
+    }
+
+    /// Returns the numeric address without dereferencing it.
+    public fun address(): usize {
+        return this.raw;
+    }
+
+    /// Returns whether both pointers have the same numeric address.
+    public fun operator ==(other: RawPtr<T>): bool {
+        return this.raw == other.raw;
+    }
+
+    /// Creates a pointer from an address. The caller must ensure alignment, validity, and
+    /// lifetime before dereferencing.
     @unsafe
-    public static fun from_address(address: usize): RawPtr<T> { return RawPtr<T>(address); }
+    public static fun from_address(address: usize): RawPtr<T> {
+        return RawPtr<T>(address);
+    }
+
+    /// Reinterprets the address as `U`; the caller must ensure the new alignment and layout are
+    /// valid.
     @unsafe
-    public fun cast<U: unmanaged>(): RawPtr<U> { return RawPtr<U>.from_address(this.raw); }
+    public fun cast<U: unmanaged>(): RawPtr<U> {
+        return RawPtr<U>.from_address(this.raw);
+    }
+
+    /// Moves by `elements` values of `T`. The caller must keep the resulting pointer within
+    /// valid storage before dereferencing.
     @unsafe
     public fun offset(elements: isize): RawPtr<T> {
         return RawPtr<T>(this.raw + (usize)elements * (usize)sizeof(T));
     }
-    @unsafe
-    public fun byte_offset(bytes: isize): RawPtr<T> { return RawPtr<T>(this.raw + (usize)bytes); }
 
+    /// Moves the address by `bytes`. The caller must ensure alignment and valid storage before
+    /// dereferencing.
     @unsafe
-    public fun read(): T { return RawMemory.load<T>(this.raw); }
+    public fun byte_offset(bytes: isize): RawPtr<T> {
+        return RawPtr<T>(this.raw + (usize)bytes);
+    }
+
+    /// Reads an initialized `T` from the address. The address must be valid and aligned.
     @unsafe
-    public fun write(value: T): void { RawMemory.store<T>(this.raw, value); }
+    public fun read(): T {
+        return RawMemory.load<T>(this.raw);
+    }
+
+    /// Writes `value` to the address. The destination must be valid, writable, and aligned for
+    /// `T`.
     @unsafe
-    public fun this[index: isize]: T { return this.offset(index).read(); }
+    public fun write(value: T): void {
+        RawMemory.store<T>(this.raw, value);
+    }
+
+    /// Accesses the value at element offset `index`. The caller must ensure valid, aligned
+    /// storage and initialize it before reading.
     @unsafe
-    public fun this[index: isize] = value: T { this.offset(index).write(value); }
+    public fun this[index: isize]: T {
+        return this.offset(index).read();
+    }
+
+    /// Accesses the value at element offset `index`. The caller must ensure valid, aligned
+    /// storage and initialize it before reading.
+    @unsafe
+    public fun this[index: isize] = value: T {
+        this.offset(index).write(value);
+    }
 
     // Only independently allocated base pointers can be resized or freed. Interior and arena
     // pointers have no allocation metadata; using either here violates the unsafe contract.
+    /// Allocates uninitialized storage for `count` values of `T`. Initialize it before reading
+    /// and release the base pointer with `free` when finished.
     @unsafe
     public static fun alloc(count: usize): RawPtr<T> {
-        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), (usize)alignof(T), 0));
+        return RawPtr<T>(
+            RawMemory.alloc(
+                RawMemory.size(count, (usize)sizeof(T)),
+                (usize)alignof(T),
+                (usize)alignof(T),
+                0
+            )
+        );
     }
+
+    /// Allocates zero-filled storage for `count` values. The caller must release the allocation
+    /// when finished.
     @unsafe
     public static fun alloc_zeroed(count: usize): RawPtr<T> {
-        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), (usize)alignof(T), 1));
+        return RawPtr<T>(
+            RawMemory.alloc(
+                RawMemory.size(count, (usize)sizeof(T)),
+                (usize)alignof(T),
+                (usize)alignof(T),
+                1
+            )
+        );
     }
+
+    /// Allocates storage for `count` values with the requested power-of-two alignment. Release
+    /// it with `free`.
     @unsafe
     public static fun alloc_aligned(count: usize, alignment: usize): RawPtr<T> {
-        return RawPtr<T>(RawMemory.alloc(RawMemory.size(count, (usize)sizeof(T)), alignment, (usize)alignof(T), 0));
+        return RawPtr<T>(
+            RawMemory.alloc(
+                RawMemory.size(count, (usize)sizeof(T)),
+                alignment,
+                (usize)alignof(T),
+                0
+            )
+        );
     }
+
+    /// Resizes an independently allocated base pointer, preserving the common prefix. Use the
+    /// returned pointer and discard all old aliases.
     @unsafe
     public fun realloc(new_count: usize): RawPtr<T> {
-        return RawPtr<T>(RawMemory.realloc(this.raw, RawMemory.size(new_count, (usize)sizeof(T)), (usize)alignof(T)));
+        return RawPtr<T>(
+            RawMemory.realloc(
+                this.raw,
+                RawMemory.size(new_count, (usize)sizeof(T)),
+                (usize)alignof(T)
+            )
+        );
     }
-    @unsafe
-    public fun free(): void { RawMemory.free(this.raw); this.raw = (usize)0; }
 
+    /// Releases this allocation. Every other pointer into the allocation becomes invalid.
+    @unsafe
+    public fun free(): void {
+        RawMemory.free(this.raw);
+        this.raw = (usize)0;
+    }
+
+    /// Copies `count` initialized values into `dst`. Both ranges must be valid and must not
+    /// overlap.
     @unsafe
     public fun copy_to(dst: RawPtr<T>, count: usize): void {
         RawMemory.copy(dst.raw, this.raw, RawMemory.size(count, (usize)sizeof(T)));
     }
+
+    /// Copies `count` initialized values into `dst`, allowing overlapping ranges. Both ranges
+    /// must be valid.
     @unsafe
     public fun move_to(dst: RawPtr<T>, count: usize): void {
         RawMemory.move(dst.raw, this.raw, RawMemory.size(count, (usize)sizeof(T)));
     }
+
+    /// Fills `byte_count` writable bytes with `value`. The caller must ensure the range is
+    /// valid.
     @unsafe
-    public fun fill_bytes(value: byte, byte_count: usize): void { RawMemory.fill(this.raw, (int)value, byte_count); }
+    public fun fill_bytes(value: byte, byte_count: usize): void {
+        RawMemory.fill(this.raw, (int)value, byte_count);
+    }
 }

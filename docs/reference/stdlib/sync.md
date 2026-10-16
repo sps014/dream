@@ -47,7 +47,7 @@ gate.release();
 let src = CancellationSource();
 let tok = src.token;
 src.cancel();
-System.println(tok.is_cancelled);   // true
+System.println(tok.is_cancelled); // true
 ```
 
 Cross-thread locking only works when workers share memory (native, or a browser page that is allowed to share memory — see [Tasks](../language/tasks.md)).

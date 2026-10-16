@@ -24,7 +24,9 @@ fun sio_saved_view(): int {
 fun sio_split_array(): int {
     let split = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
     let n = 0;
-    while split.move_next() { n = n + split.current.length; }
+    while split.move_next() {
+        n = n + split.current.length;
+    }
     return n;
 }
 
@@ -32,7 +34,9 @@ fun sio_split_array(): int {
 fun sio_lines_array(): int {
     let lines = ReadOnlySpan<char>.of(['x', '\n', 'y']).lines();
     let n = 0;
-    while lines.move_next() { n = n + lines.current.length; }
+    while lines.move_next() {
+        n = n + lines.current.length;
+    }
     return n;
 }
 

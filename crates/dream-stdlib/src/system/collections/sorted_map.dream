@@ -4,7 +4,7 @@ module system.collections;
 // O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order
 // doesn't matter — it has O(1) average insert/lookup.
 @allow_cycle
-public class SortedMap<K : Comparable<K>, V> {
+public class SortedMap<K: Comparable<K>, V> {
     keys_arr: K[];
     values_arr: V[];
     count: int;
@@ -94,6 +94,7 @@ public class SortedMap<K : Comparable<K>, V> {
         }
     }
 
+    /// Inserts `key` and `value`, replacing the value if the key is already present.
     public fun set(key: K, value: V): void {
         this[key] = value;
     }

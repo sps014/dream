@@ -1,9 +1,9 @@
 module system.logging;
 
 // Writes formatted lines to stdout via `System.println`.
-public class ConsoleHandler : LogHandler {
+public class ConsoleHandler: LogHandler {
     // Creates a console handler.
-    public constructor() { }
+    public constructor() {}
 
     // Prints `[LEVEL] name: message`.
     public fun emit(record: LogRecord): void {

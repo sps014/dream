@@ -8,7 +8,10 @@ fun fmt_basic(): void {
     let args1: object[] = Buffer.alloc<object>(2);
     args1[0] = "world";
     args1[1] = 42;
-    Assert.eq_str((Fmt.format("Hello, {0}! The answer is {1}.", args1)).to_string(), "Hello, world! The answer is 42.");
+    Assert.eq_str(
+        (Fmt.format("Hello, {0}! The answer is {1}.", args1)).to_string(),
+        "Hello, world! The answer is 42."
+    );
 
     let args2: object[] = Buffer.alloc<object>(1);
     args2[0] = 3.14159d;
@@ -20,5 +23,8 @@ fun fmt_basic(): void {
     Assert.eq_str((Fmt.format("{0} + {1} = {0}", args3)).to_string(), "1 + 1 = 1");
 
     let args4: object[] = Buffer.alloc<object>(0);
-    Assert.eq_str((Fmt.format("literal {{braces}} stay", args4)).to_string(), "literal {braces} stay");
+    Assert.eq_str(
+        (Fmt.format("literal {{braces}} stay", args4)).to_string(),
+        "literal {braces} stay"
+    );
 }

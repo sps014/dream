@@ -2,45 +2,57 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenToolResult`
+## `GenToolResult`
+
+Result of a tool requested during generation, including output and files.
 
 ```dream
 public class GenToolResult
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public exit: int`
+## `exit`
+
+Process exit code.
 
 ```dream
 public exit: int
 ```
 
-## `public stdout: string`
+## `stdout`
+
+Text captured from standard output.
 
 ```dream
 public stdout: string
 ```
 
-## `public stderr: string`
+## `stderr`
+
+Text captured from standard error.
 
 ```dream
 public stderr: string
 ```
 
-## `public files: List<GenToolFile>`
+## `files`
+
+Files available to this operation.
 
 ```dream
 public files: List<GenToolFile>
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
-Decodes compiler-collected tool metadata from a snapshot.
+Reads a tool result from its JSON representation.
 
 ```dream
 public constructor(borrow v: JsonValue)

@@ -6,75 +6,189 @@ import system.validation;
 import system.validation.derive;
 
 extend WebGenerator {
-    internal fun arguments(f: GenFunction, out: CodeBuilder, memo: Map<string, string>, route: WebRoute): string {
+    internal fun arguments(
+        f: GenFunction,
+        out: CodeBuilder,
+        memo: Map<string, string>,
+        route: WebRoute
+    ): string {
         let args = "";
         for (let p in f.params) {
             let value = this.extract(p, out, memo, route, f.id != route.function.id);
-            if !args.is_empty() { args = args + ", "; }
+            if !args.is_empty() {
+                args = args + ", ";
+            }
             args = args + value;
         }
         return args;
     }
-    internal fun extract(p: GenParam, out: CodeBuilder, memo: Map<string, string>, route: WebRoute, dependency: bool): string {
-        if p.ty.name == nameof(HttpIncoming) { return "ctx.incoming"; }
-        if p.ty.name == nameof(RequestContext) { return "ctx"; }
-        if p.has<DepAttribute>() { return this.dependency(p, out, memo, route); }
+
+    internal fun extract(
+        p: GenParam,
+        out: CodeBuilder,
+        memo: Map<string, string>,
+        route: WebRoute,
+        dependency: bool
+    ): string {
+        if p.ty.name == nameof(HttpIncoming) {
+            return "ctx.incoming";
+        }
+        if p.ty.name == nameof(RequestContext) {
+            return "ctx";
+        }
+        if p.has<DepAttribute>() {
+            return this.dependency(p, out, memo, route);
+        }
         let value = this.fresh();
         if p.ty.name == nameof(ServerWebSocket) {
-            out.line("let " + value + "_upgrade = ServerWebSocket.upgrade(ctx.incoming, ctx.cancellation_token).await;");
-            out.line("if " + value + "_upgrade.is_err() { return HttpOutgoing.detail(\"websocket upgrade failed\", 400); }");
+            out.line(
+                "let "
+                    + value
+                    + "_upgrade = ServerWebSocket.upgrade(ctx.incoming, ctx.cancellation_token).await;"
+            );
+            out.line(
+                "if "
+                    + value
+                    + "_upgrade.is_err() { return HttpOutgoing.detail(\"websocket upgrade failed\", 400); }"
+            );
             out.line("let " + value + " = " + value + "_upgrade.unwrap();");
             return value;
         }
         if p.has<BodyAttribute>() {
             let bytes = this.type_code(p.ty) == "byte[]";
-            let read = "read_body_text"; if bytes { read = "read_body_bytes"; }
-            out.line("let " + value + "_body = ctx.incoming." + read + "(ctx.cancellation_token).await;");
-            out.line("if " + value + "_body.is_err() { return HttpOutgoing.from_body_error(" + value + "_body.unwrap_err()); }");
-            if p.ty.name == "string" || bytes { out.line("let " + value + " = " + value + "_body.unwrap();"); }
-            else {
-                let decode = "Validation.decode"; if p.ty.name == nameof(JsonValue) { decode = "Json.deserialize"; }
-                out.line("let " + value + "_json = " + decode + "<" + this.type_code(p.ty) + ">(" + value + "_body.unwrap());");
-                if p.ty.name == nameof(JsonValue) { out.line("if " + value + "_json.is_err() { return HttpOutgoing.invalid_input(\"body\", \"\", \"json\", \"invalid JSON\"); }"); }
-                else { out.line("if " + value + "_json.is_err() { return HttpOutgoing.from_validation(" + value + "_json.unwrap_err(), \"body\"); }"); }
+            let read = "read_body_text";
+            if bytes {
+                read = "read_body_bytes";
+            }
+            out.line(
+                "let " + value + "_body = ctx.incoming." + read + "(ctx.cancellation_token).await;"
+            );
+            out.line(
+                "if "
+                    + value
+                    + "_body.is_err() { return HttpOutgoing.from_body_error("
+                    + value + "_body.unwrap_err()); }"
+            );
+            if p.ty.name == "string" || bytes {
+                out.line("let " + value + " = " + value + "_body.unwrap();");
+            } else {
+                let decode = "Validation.decode";
+                if p.ty.name == nameof(JsonValue) {
+                    decode = "Json.deserialize";
+                }
+                out.line(
+                    "let "
+                        + value
+                        + "_json = "
+                        + decode + "<" + this.type_code(p.ty) + ">(" + value + "_body.unwrap());"
+                );
+                if p.ty.name == nameof(JsonValue) {
+                    out.line(
+                        "if "
+                            + value
+                            + "_json.is_err() { return HttpOutgoing.invalid_input(\"body\", \"\", \"json\", \"invalid JSON\"); }"
+                    );
+                } else {
+                    out.line(
+                        "if "
+                            + value
+                            + "_json.is_err() { return HttpOutgoing.from_validation("
+                            + value + "_json.unwrap_err(), \"body\"); }"
+                    );
+                }
                 out.line("let " + value + " = " + value + "_json.unwrap();");
             }
             return value;
         }
         if p.has<FileAttribute>() || p.has<FormAttribute>() {
             let name = p.name;
-            if p.has<FileAttribute>() { name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name); }
-            else { name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name); }
-            out.line("let " + value + "_parts = ctx.incoming.multipart_parts(ctx.cancellation_token).await;");
-            out.line("if " + value + "_parts.is_err() { return HttpOutgoing.from_body_error(" + value + "_parts.unwrap_err()); }");
-            let kind = "string"; if p.has<FileAttribute>() { kind = "UploadedFile"; }
+            if p.has<FileAttribute>() {
+                name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name);
+            } else {
+                name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name);
+            }
+            out.line(
+                "let "
+                    + value + "_parts = ctx.incoming.multipart_parts(ctx.cancellation_token).await;"
+            );
+            out.line(
+                "if "
+                    + value
+                    + "_parts.is_err() { return HttpOutgoing.from_body_error("
+                    + value + "_parts.unwrap_err()); }"
+            );
+            let kind = "string";
+            if p.has<FileAttribute>() {
+                kind = "UploadedFile";
+            }
             out.line("let " + value + "_option: Option<" + kind + "> = Option.None;");
-            out.line("for (let part in " + value + "_parts.unwrap().as_array().unwrap_or(List<JsonValue>())) {");
-            out.line("if part.get_or(\"name\", JsonValue.none()).as_string().unwrap_or(\"\") == " + web_quote(name) + " {");
+            out.line(
+                "for (let part in "
+                    + value + "_parts.unwrap().as_array().unwrap_or(List<JsonValue>())) {"
+            );
+            out.line(
+                "if part.get_or(\"name\", JsonValue.none()).as_string().unwrap_or(\"\") == "
+                    + web_quote(name) + " {"
+            );
             let content = "Encoding.hex_decode(part.get_or(\"bytes\", JsonValue.none()).as_string().unwrap_or(\"\")).unwrap_or([])";
             if p.has<FileAttribute>() {
-                out.line("if part.get_or(\"filename\", JsonValue.none()).as_string().is_some() { " + value + "_option = Option.Some(UploadedFile(part.get_or(\"filename\", JsonValue.none()).as_string().unwrap_or(\"\"), part.get_or(\"content_type\", JsonValue.none()).as_string().unwrap_or(\"\"), " + content + ")); }");
-            } else { out.line(value + "_option = Option.Some(Encoding.utf8_decode(" + content + "));"); }
+                out.line(
+                    "if part.get_or(\"filename\", JsonValue.none()).as_string().is_some() { "
+                        + value
+                        + "_option = Option.Some(UploadedFile(part.get_or(\"filename\", JsonValue.none()).as_string().unwrap_or(\"\"), part.get_or(\"content_type\", JsonValue.none()).as_string().unwrap_or(\"\"), "
+                        + content + ")); }"
+                );
+            } else {
+                out.line(value + "_option = Option.Some(Encoding.utf8_decode(" + content + "));");
+            }
             out.line("} }");
             if p.has<FileAttribute>() {
-                if p.ty.is_option() { return value + "_option"; }
-                out.line("if " + value + "_option.is_none() { return HttpOutgoing.invalid_input(\"body\", " + web_quote(name) + ", \"missing\", \"file is required\"); }");
+                if p.ty.is_option() {
+                    return value + "_option";
+                }
+                out.line(
+                    "if "
+                        + value
+                        + "_option.is_none() { return HttpOutgoing.invalid_input(\"body\", "
+                        + web_quote(name) + ", \"missing\", \"file is required\"); }"
+                );
                 return value + "_option.unwrap()";
             }
             return this.scalar(p.ty, value + "_option", value, name, out, p.attributes);
         }
-        let name = p.name; let option = "";
-        if p.has<QueryAttribute>() { name = p.attribute<QueryAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.query_param(" + web_quote(name) + ")"; }
-        else if p.has<HeaderAttribute>() { name = p.attribute<HeaderAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.header(" + web_quote(name) + ")"; }
-        else if p.has<CookieAttribute>() { name = p.attribute<CookieAttribute>().unwrap().name.unwrap_or(name); option = "ctx.incoming.cookie(" + web_quote(name) + ")"; }
-        else {
-            if p.has<PathAttribute>() { name = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name); }
+        let name = p.name;
+        let option = "";
+        if p.has<QueryAttribute>() {
+            name = p.attribute<QueryAttribute>().unwrap().name.unwrap_or(name);
+            option = "ctx.incoming.query_param(" + web_quote(name) + ")";
+        } else if p.has<HeaderAttribute>() {
+            name = p.attribute<HeaderAttribute>().unwrap().name.unwrap_or(name);
+            option = "ctx.incoming.header(" + web_quote(name) + ")";
+        } else if p.has<CookieAttribute>() {
+            name = p.attribute<CookieAttribute>().unwrap().name.unwrap_or(name);
+            option = "ctx.incoming.cookie(" + web_quote(name) + ")";
+        } else {
+            if p.has<PathAttribute>() {
+                name = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name);
+            }
             option = "params.get(" + web_quote(name) + ")";
         }
-        let missing_status = 422; if dependency && p.has<HeaderAttribute>() { missing_status = 401; }
+        let missing_status = 422;
+        if dependency && p.has<HeaderAttribute>() {
+            missing_status = 401;
+        }
         return this.scalar(p.ty, option, value, name, out, p.attributes, missing_status);
     }
-    internal fun scalar(ty: GenTypeRef, option: string, value: string, name: string, out: CodeBuilder, attributes: List<GenAttribute>, missing_status: int = 422): string {
+
+    internal fun scalar(
+        ty: GenTypeRef,
+        option: string,
+        value: string,
+        name: string,
+        out: CodeBuilder,
+        attributes: List<GenAttribute>,
+        missing_status: int = 422
+    ): string {
         let core = web_inner(ty);
         out.line("let " + value + "_text = " + option + ";");
         let fallback = GenAttributes.decode<DefaultJsonAttribute>(attributes);
@@ -82,32 +196,87 @@ extend WebGenerator {
             let decoded = Json.deserialize<JsonValue>(fallback.unwrap().value);
             if decoded.is_ok() {
                 let text = decoded.unwrap().as_string().unwrap_or(Json.serialize(decoded.unwrap()));
-                out.line("if " + value + "_text.is_none() { " + value + "_text = Option.Some(" + web_quote(text) + "); }");
+                out.line(
+                    "if "
+                        + value
+                        + "_text.is_none() { "
+                        + value + "_text = Option.Some(" + web_quote(text) + "); }"
+                );
             }
         }
         if ty.is_option() {
             out.line("let " + value + ": " + this.type_code(ty) + " = Option.None;");
             out.line("if " + value + "_text.is_some() {");
         } else {
-            if missing_status == 401 { out.line("if " + value + "_text.is_none() { return HttpOutgoing.detail(\"authentication required\", 401); }"); }
-            else { out.line("if " + value + "_text.is_none() { return HttpOutgoing.invalid_input(\"parameter\", " + web_quote(name) + ", \"missing\", \"parameter is required\"); }"); }
+            if missing_status == 401 {
+                out.line(
+                    "if "
+                        + value
+                        + "_text.is_none() { return HttpOutgoing.detail(\"authentication required\", 401); }"
+                );
+            } else {
+                out.line(
+                    "if "
+                        + value
+                        + "_text.is_none() { return HttpOutgoing.invalid_input(\"parameter\", "
+                        + web_quote(name) + ", \"missing\", \"parameter is required\"); }"
+                );
+            }
         }
         let text = value + "_text.unwrap_or(\"\")";
         let parsed = text;
         if core.name != "string" {
-            out.line("let " + value + "_parsed = " + this.type_code(core) + ".parse(" + text + ");");
-            out.line("if " + value + "_parsed.is_err() { return HttpOutgoing.invalid_input(\"parameter\", " + web_quote(name) + ", \"type\", \"invalid parameter\"); }");
+            out.line(
+                "let " + value + "_parsed = " + this.type_code(core) + ".parse(" + text + ");"
+            );
+            out.line(
+                "if "
+                    + value
+                    + "_parsed.is_err() { return HttpOutgoing.invalid_input(\"parameter\", "
+                    + web_quote(name) + ", \"type\", \"invalid parameter\"); }"
+            );
             parsed = value + "_parsed.unwrap()";
         }
-        if GenAttributes.has(attributes, GenAttributes.id<MinimumAttribute>()) || GenAttributes.has(attributes, GenAttributes.id<MaximumAttribute>()) || GenAttributes.has(attributes, GenAttributes.id<MinLengthAttribute>()) || GenAttributes.has(attributes, GenAttributes.id<MaxLengthAttribute>()) || GenAttributes.has(attributes, GenAttributes.id<PatternAttribute>()) {
-            let rule = JsonValue.dict(); let kind = "integer"; if core.name == "string" { kind = "string"; } else if core.name == "bool" { kind = "boolean"; } else if core.name == "double" || core.name == "float" { kind = "number"; }
-            rule.set("type", JsonValue.from_string(kind)); ValidationGenerator.constraints(attributes, rule);
-            out.line("let " + value + "_rule = Json.deserialize<JsonValue>(" + web_quote(Json.serialize(rule)) + ").unwrap();");
-            out.line("let " + value + "_errors = Validation.check(Json.deserialize<JsonValue>(Json.serialize(" + parsed + ")).unwrap(), " + value + "_rule);");
-            out.line("if !" + value + "_errors.is_empty() { return HttpOutgoing.from_validation(" + value + "_errors, " + web_quote(name) + "); }");
+        if GenAttributes.has(attributes, GenAttributes.id<MinimumAttribute>())
+            || GenAttributes.has(attributes, GenAttributes.id<MaximumAttribute>())
+            || GenAttributes.has(attributes, GenAttributes.id<MinLengthAttribute>())
+            || GenAttributes.has(attributes, GenAttributes.id<MaxLengthAttribute>())
+            || GenAttributes.has(attributes, GenAttributes.id<PatternAttribute>()) {
+            let rule = JsonValue.dict();
+            let kind = "integer";
+            if core.name == "string" {
+                kind = "string";
+            } else if core.name == "bool" {
+                kind = "boolean";
+            } else if core.name == "double" || core.name == "float" {
+                kind = "number";
+            }
+            rule.set("type", JsonValue.from_string(kind));
+            ValidationGenerator.constraints(attributes, rule);
+            out.line(
+                "let "
+                    + value
+                    + "_rule = Json.deserialize<JsonValue>("
+                    + web_quote(Json.serialize(rule)) + ").unwrap();"
+            );
+            out.line(
+                "let "
+                    + value
+                    + "_errors = Validation.check(Json.deserialize<JsonValue>(Json.serialize("
+                    + parsed + ")).unwrap(), " + value + "_rule);"
+            );
+            out.line(
+                "if !"
+                    + value
+                    + "_errors.is_empty() { return HttpOutgoing.from_validation("
+                    + value + "_errors, " + web_quote(name) + "); }"
+            );
         }
-        if ty.is_option() { out.line(value + " = Option.Some(" + parsed + "); }"); }
-        else { out.line("let " + value + " = " + parsed + ";"); }
+        if ty.is_option() {
+            out.line(value + " = Option.Some(" + parsed + "); }");
+        } else {
+            out.line("let " + value + " = " + parsed + ";");
+        }
         return value;
     }
 }

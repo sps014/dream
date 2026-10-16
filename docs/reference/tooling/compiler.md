@@ -30,8 +30,8 @@ The first command builds and runs the file. The second only builds it. The third
 | `--release` | Build an optimized version |
 | `-O0` through `-O4`, `-Os`, `-Oz` | Choose an optimization setting; overrides `--release` |
 | `-O` | Use size optimization when no level follows |
-| `-g`, `--debug-info` | Include debugger information and preserve debugger-oriented MIR behavior |
-| `--release --perf-symbols` | Include source/function symbols while retaining ordinary Release MIR optimization |
+| `-g`, `--debug-info` | Include debugger information and favor stepping through source and inspecting locals |
+| `--release --perf-symbols` | Include source and function names for profiling while keeping release optimizations |
 | `-o path`, `--output path` | Choose an output path |
 | `-v`, `--verbose` | Show more build progress |
 | `--relocatable` | Put required native libraries beside the program for sharing |

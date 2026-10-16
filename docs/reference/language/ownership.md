@@ -14,13 +14,15 @@ This page is only about **who owns that value** when you pass or assign somethin
 ```dream
 class Point {
     public x: int;
-    public constructor(x: int) { this.x = x; }
+    public constructor(x: int) {
+        this.x = x;
+    }
 }
 
 let p = Point(1);
-let q = p;      // same Point
+let q = p; // same Point
 q.x = 9;
-System.println(p.x);   // 9
+System.println(p.x); // 9
 ```
 
 ```dream
@@ -30,9 +32,9 @@ struct Vec2 {
 }
 
 let a = Vec2(1, 2);
-let b = a;      // copy
+let b = a; // copy
 b.x = 9;
-System.println(a.x);   // 1
+System.println(a.x); // 1
 ```
 
 Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A struct that is still used later, or a field or index, still counts them again.
@@ -68,11 +70,11 @@ fun peek(borrow s: string): void {
 
 fun demo() {
     let a = "hi";
-    take(a);        // last use of a → move, no extra copy
+    take(a); // last use of a → move, no extra copy
 
     let b = "yo";
-    peek(b);        // borrow: b stays yours
-    take(b);        // last use → move
+    peek(b); // borrow: b stays yours
+    take(b); // last use → move
 }
 ```
 
@@ -82,8 +84,8 @@ If you use the name **after** a sink call, that call becomes a copy:
 fun demo() {
     let b = "yo";
     peek(b);
-    take(b);        // b is used again below → copy into take
-    peek(b);        // still valid
+    take(b); // b is used again below → copy into take
+    peek(b); // still valid
 }
 ```
 
@@ -92,7 +94,7 @@ fun demo() {
 ```dream
 let xs = List<string>();
 let s = "item";
-xs.push(s);         // last use of s → move into the list
+xs.push(s); // last use of s → move into the list
 ```
 
 A method’s implicit `this` is **never** a sink. Calling `obj.foo()` does not consume `obj`.
@@ -127,8 +129,8 @@ class Bag {
 
     public constructor(items: List<int>) {
         this.items = items;
-        this.end = this.items.length;   // OK
-        // this.end = items.length;     // error: 'items' was moved into the field
+        this.end = this.items.length; // OK
+    // this.end = items.length;     // error: 'items' was moved into the field
     }
 }
 ```
@@ -149,10 +151,14 @@ class Counter {
     count: int;
 
     // Inferred borrow: reads only.
-    public fun value(): int { return this.count; }
+    public fun value(): int {
+        return this.count;
+    }
 
     // Inferred unique: writes this.count.
-    public fun increment(): void { this.count = this.count + 1; }
+    public fun increment(): void {
+        this.count = this.count + 1;
+    }
 }
 ```
 
@@ -166,8 +172,12 @@ Pin a contract explicitly with `borrow fun` / `unique fun` when inference isn't 
 ```dream
 class Counter {
     count: int;
-    borrow fun value(): int { return this.count; }
-    unique fun increment(): void { this.count += 1; }
+    borrow fun value(): int {
+        return this.count;
+    }
+    unique fun increment(): void {
+        this.count += 1;
+    }
 }
 ```
 

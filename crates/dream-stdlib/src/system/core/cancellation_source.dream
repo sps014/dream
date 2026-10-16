@@ -2,7 +2,6 @@ module system.core;
 
 // Cooperative cancellation flag shared with tokens from a `CancellationSource`.
 // `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.
-
 shared public class CancellationSource {
     _state: usize;
 
@@ -21,7 +20,9 @@ shared public class CancellationSource {
         CancellationSource.cancel_host(this._state);
     }
 
-    del() { CancellationSource.release_host(this._state); }
+    del() {
+        CancellationSource.release_host(this._state);
+    }
 
     @intrinsic(Intrinsic.DreamCancellationNew)
     static extern fun create_host(): usize;
@@ -34,7 +35,9 @@ shared public class CancellationSource {
     @intrinsic(Intrinsic.DreamCancellationRegister)
     static extern fun register_host(state: usize): usize;
 
-    internal fun register(): usize { return CancellationSource.register_host(this._state); }
+    internal fun register(): usize {
+        return CancellationSource.register_host(this._state);
+    }
 
     // Returns a token that observes this source's cancelled state.
     public get token(): CancellationToken {

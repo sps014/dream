@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+
 @json
 class c11d_Address {
     city: string;
@@ -32,7 +33,8 @@ fun c11d_body(): void {
 
     c11d_verify_observation((Json.serialize_pretty(u.to_json(), 2)).to_string());
 
-    let v = Json.deserialize<JsonValue>("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}").unwrap_or(JsonValue.none());
+    let v = Json.deserialize<JsonValue>("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}")
+        .unwrap_or(JsonValue.none());
     c11d_verify_observation((Json.serialize_pretty(v, 4)).to_string());
 
     // indent 0 falls back to compact output.
@@ -56,5 +58,10 @@ fun c11d_verify_observation(borrow value: string): void {
 fun json_pretty(): void {
     c11d_cursor = 0;
     c11d_body();
-    Assert.eq(c11d_cursor, ("{\n  \"name\": \"Ada\",\n  \"age\": 36,\n  \"address\": {\n    \"city\": \"London\",\n    \"zip\": \"NW1\"\n  },\n  \"tags\": [\n    \"dev\",\n    \"math\"\n  ]\n}\n{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    },\n    \"d\": []\n}\n{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}\n").length);
+    Assert.eq(
+        c11d_cursor,
+        (
+            "{\n  \"name\": \"Ada\",\n  \"age\": 36,\n  \"address\": {\n    \"city\": \"London\",\n    \"zip\": \"NW1\"\n  },\n  \"tags\": [\n    \"dev\",\n    \"math\"\n  ]\n}\n{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    },\n    \"d\": []\n}\n{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}\n"
+        ).length
+    );
 }

@@ -4,15 +4,15 @@
 
 ## `clear`
 
-Unmanaged: no RC to release — rewind the count only.
+Removes all elements and releases the references they held. Capacity is unchanged.
 
 ```dream
-public fun clear(): void where T : unmanaged
+public fun clear(): void where T: unmanaged
 ```
 
 ## `insert`
 
-Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out of range (index may equal `size()` to append).
+Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
 
 ```dream
 public fun insert(index: int, value: T): bool
@@ -20,10 +20,10 @@ public fun insert(index: int, value: T): bool
 
 ## `insert`
 
-Unmanaged: one `memory.copy` shift (no Span wrappers).
+Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
 
 ```dream
-public fun insert(index: int, value: T): bool where T : unmanaged
+public fun insert(index: int, value: T): bool where T: unmanaged
 ```
 
 ## `remove_at`
@@ -79,7 +79,7 @@ public fun sort_by(borrow cmp: fun(T, T): int): void
 Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).
 
 ```dream
-public fun sort(): void where T : Comparable<T>
+public fun sort(): void where T: Comparable<T>
 ```
 
 ## `binary_search`
@@ -87,10 +87,12 @@ public fun sort(): void where T : Comparable<T>
 Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).
 
 ```dream
-public fun binary_search(borrow value: T): Option<int> where T : Comparable<T>
+public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>
 ```
 
 ## `to_string`
+
+Returns a text representation of this value.
 
 ```dream
 public override fun to_string(): string

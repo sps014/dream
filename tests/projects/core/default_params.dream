@@ -1,8 +1,8 @@
 import system.testing;
 // Default parameter values (literal-only) across a free function, a constructor, and a method.
 // Each optional trailing parameter is exercised both omitted (default substituted) and supplied.
-
 import system;
+
 fun cb0_add(base: int, delta: int = 10): int {
     return base + delta;
 }
@@ -22,13 +22,13 @@ class cb0_Greeter {
 @test
 @timeout(180000)
 fun default_params(): void {
-    Assert.eq_str((cb0_add(5)).to_string(), "15");        // 5 + 10 = 15
-    Assert.eq_str((cb0_add(5, 1)).to_string(), "6");     // 5 + 1  = 6
+    Assert.eq_str((cb0_add(5)).to_string(), "15"); // 5 + 10 = 15
+    Assert.eq_str((cb0_add(5, 1)).to_string(), "6"); // 5 + 1  = 6
 
-    let g = cb0_Greeter();             // factor defaults to 3
-    let h = cb0_Greeter(10);           // factor = 10
+    let g = cb0_Greeter(); // factor defaults to 3
+    let h = cb0_Greeter(10); // factor = 10
 
-    Assert.eq_str((g.scale(4)).to_string(), "24");    // 4 * 2 * 3  = 24
+    Assert.eq_str((g.scale(4)).to_string(), "24"); // 4 * 2 * 3  = 24
     Assert.eq_str((g.scale(4, 5)).to_string(), "60"); // 4 * 5 * 3  = 60
-    Assert.eq_str((h.scale(4)).to_string(), "80");    // 4 * 2 * 10 = 80
+    Assert.eq_str((h.scale(4)).to_string(), "80"); // 4 * 2 * 10 = 80
 }

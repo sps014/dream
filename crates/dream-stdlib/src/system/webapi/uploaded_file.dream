@@ -2,10 +2,14 @@ module system.webapi;
 
 // One `multipart/form-data` file part (`@file`).
 public class UploadedFile {
+    /// Original filename reported with the upload.
     public filename: string;
+    /// Media type of the response body.
     public content_type: string;
+    /// Contents as a byte array.
     public bytes: byte[];
 
+    /// Creates a `UploadedFile` with `filename`, `content_type`, `bytes`.
     public constructor(filename: string, content_type: string, bytes: byte[]) {
         this.filename = filename;
         this.content_type = content_type;

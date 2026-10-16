@@ -2,8 +2,8 @@ import system.testing;
 // A user class opting into `for let x in obj` via the enumerator protocol: `iterator()`
 // returns an object whose `next(): Option<T>` yields elements until `None`. Exercises `break`
 // and `continue` inside the loop body.
-
 import system;
+
 class c75_RangeIter {
     current: int;
     end: int;
@@ -40,14 +40,18 @@ class c75_Range {
 fun c75_body() {
     let total = 0;
     for (let x in c75_Range(0, 6)) {
-        if x == 2 { continue; }   // skip 2
-        if x == 5 { break; }      // stop before 5
+        if x == 2 {
+            continue;
+        } // skip 2
+        if x == 5 {
+            break;
+        } // stop before 5
         total = total + x;
     }
-    c75_verify_observation((total).to_string());          // 0 + 1 + 3 + 4 = 8
+    c75_verify_observation((total).to_string()); // 0 + 1 + 3 + 4 = 8
 
     for (let y in c75_Range(10, 13)) {
-        c75_verify_observation((y).to_string());          // 10, 11, 12
+        c75_verify_observation((y).to_string()); // 10, 11, 12
     }
 }
 

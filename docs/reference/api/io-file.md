@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class File`
+## `File`
 
 `File` - a small cross-runtime filesystem API.
 
@@ -17,7 +17,10 @@ public static class File
 Reads the whole file at `path` as UTF-8 text.
 
 ```dream
-public static async fun read(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string, IoError>
+public static async fun read(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<string, IoError>
 ```
 
 ## `write`
@@ -25,7 +28,11 @@ public static async fun read(borrow path: string, token: Option<CancellationToke
 Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
 
 ```dream
-public static async fun write(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError>
+public static async fun write(
+    borrow path: string,
+    borrow content: string,
+    token: Option<CancellationToken> = Option.None
+): Result<long, IoError>
 ```
 
 ## `append`
@@ -33,7 +40,11 @@ public static async fun write(borrow path: string, borrow content: string, token
 Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
 
 ```dream
-public static async fun append(borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None): Result<long, IoError>
+public static async fun append(
+    borrow path: string,
+    borrow content: string,
+    token: Option<CancellationToken> = Option.None
+): Result<long, IoError>
 ```
 
 ## `read_bytes`
@@ -41,7 +52,10 @@ public static async fun append(borrow path: string, borrow content: string, toke
 Reads the whole file at `path` as raw bytes.
 
 ```dream
-public static async fun read_bytes(borrow path: string, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
+public static async fun read_bytes(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<byte[], IoError>
 ```
 
 ## `write_bytes`
@@ -49,7 +63,11 @@ public static async fun read_bytes(borrow path: string, token: Option<Cancellati
 Writes raw bytes to `path`, replacing any existing contents.
 
 ```dream
-public static async fun write_bytes(borrow path: string, borrow data: byte[], token: Option<CancellationToken> = Option.None): Result<long, IoError>
+public static async fun write_bytes(
+    borrow path: string,
+    borrow data: byte[],
+    token: Option<CancellationToken> = Option.None
+): Result<long, IoError>
 ```
 
 ## `delete`
@@ -57,7 +75,10 @@ public static async fun write_bytes(borrow path: string, borrow data: byte[], to
 Deletes `path`; resolves `Ok(true)` on success.
 
 ```dream
-public static async fun delete(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun delete(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `copy`
@@ -65,7 +86,11 @@ public static async fun delete(borrow path: string, token: Option<CancellationTo
 Copies a file from `from` to `to`, overwriting `to` when it already exists.
 
 ```dream
-public static async fun copy(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun copy(
+    borrow from: string,
+    borrow to: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `rename`
@@ -73,7 +98,11 @@ public static async fun copy(borrow from: string, borrow to: string, token: Opti
 Renames or moves `from` to `to` (same-volume when the OS requires it).
 
 ```dream
-public static async fun rename(borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun rename(
+    borrow from: string,
+    borrow to: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `remove_dir`
@@ -81,7 +110,10 @@ public static async fun rename(borrow from: string, borrow to: string, token: Op
 Removes an empty directory at `path`.
 
 ```dream
-public static async fun remove_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun remove_dir(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `remove_dir_all`
@@ -89,7 +121,10 @@ public static async fun remove_dir(borrow path: string, token: Option<Cancellati
 Recursively deletes `path` (file or directory tree).
 
 ```dream
-public static async fun remove_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun remove_dir_all(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `create_dir`
@@ -97,7 +132,10 @@ public static async fun remove_dir_all(borrow path: string, token: Option<Cancel
 Creates a single directory at `path`; resolves `Ok(true)` on success.
 
 ```dream
-public static async fun create_dir(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun create_dir(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `create_dir_all`
@@ -105,7 +143,10 @@ public static async fun create_dir(borrow path: string, token: Option<Cancellati
 Creates `path` and any missing parents; resolves `Ok(true)` on success.
 
 ```dream
-public static async fun create_dir_all(borrow path: string, token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public static async fun create_dir_all(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `list`
@@ -113,7 +154,10 @@ public static async fun create_dir_all(borrow path: string, token: Option<Cancel
 Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a directory (an existing empty directory yields `Ok([])`).
 
 ```dream
-public static async fun list(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>
+public static async fun list(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<string[], IoError>
 ```
 
 ## `list_paths`
@@ -121,7 +165,10 @@ public static async fun list(borrow path: string, token: Option<CancellationToke
 Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
 
 ```dream
-public static async fun list_paths(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>
+public static async fun list_paths(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<string[], IoError>
 ```
 
 ## `read_lines`
@@ -129,7 +176,10 @@ public static async fun list_paths(borrow path: string, token: Option<Cancellati
 Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
 
 ```dream
-public static async fun read_lines(borrow path: string, token: Option<CancellationToken> = Option.None): Result<string[], IoError>
+public static async fun read_lines(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<string[], IoError>
 ```
 
 ## `write_lines`
@@ -137,7 +187,11 @@ public static async fun read_lines(borrow path: string, token: Option<Cancellati
 Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.
 
 ```dream
-public static async fun write_lines(borrow path: string, borrow lines: string[], token: Option<CancellationToken> = Option.None): Result<long, IoError>
+public static async fun write_lines(
+    borrow path: string,
+    borrow lines: string[],
+    token: Option<CancellationToken> = Option.None
+): Result<long, IoError>
 ```
 
 ## `exists`
@@ -157,6 +211,8 @@ public static fun size(borrow path: string): Option<long>
 ```
 
 ## `is_dir`
+
+Returns whether the path refers to a directory.
 
 ```dream
 public static fun is_dir(borrow path: string): bool
@@ -191,5 +247,8 @@ public static fun open(borrow path: string): Result<FileStream, IoError>
 Async wrapper around `open`.
 
 ```dream
-public static async fun open_async(borrow path: string, token: Option<CancellationToken> = Option.None): Result<FileStream, IoError>
+public static async fun open_async(
+    borrow path: string,
+    token: Option<CancellationToken> = Option.None
+): Result<FileStream, IoError>
 ```

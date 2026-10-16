@@ -3,8 +3,16 @@ import system.testing;
 // `Wrap(A(n))` + `Wrap(B)` together cover the `Wrap` variant (all of `Inner`), and `Bare` covers
 // the rest of `Outer`. Coverage is computed recursively across arms in `check_exhaustiveness`.
 import system;
-enum c23b_Inner { A(int), B }
-enum c23b_Outer { Wrap(c23b_Inner), Bare }
+
+enum c23b_Inner {
+    A(int),
+    B
+}
+
+enum c23b_Outer {
+    Wrap(c23b_Inner),
+    Bare
+}
 
 fun c23b_describe(o: c23b_Outer): int {
     return switch (o) {

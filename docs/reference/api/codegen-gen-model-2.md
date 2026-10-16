@@ -6,11 +6,15 @@
 
 ## `Named`
 
+Identifies named types.
+
 ```dream
 Named
 ```
 
 ## `Param`
+
+Identifies param types.
 
 ```dream
 Param
@@ -18,11 +22,15 @@ Param
 
 ## `Array`
 
+Identifies array types.
+
 ```dream
 Array
 ```
 
 ## `Tuple`
+
+Identifies tuple types.
 
 ```dream
 Tuple
@@ -30,11 +38,15 @@ Tuple
 
 ## `Function`
 
+Identifies function types.
+
 ```dream
 Function
 ```
 
 ## `Void`
+
+Identifies void types.
 
 ```dream
 Void
@@ -42,11 +54,13 @@ Void
 
 ## `Unknown`
 
+Identifies unknown types.
+
 ```dream
 Unknown
 ```
 
-## `public enum DeclKind`
+## `DeclKind`
 
 What a `GenDecl` declares.
 
@@ -56,11 +70,15 @@ public enum DeclKind
 
 ## `Class`
 
+Identifies class declarations.
+
 ```dream
 Class
 ```
 
 ## `Struct`
+
+Identifies struct declarations.
 
 ```dream
 Struct
@@ -68,17 +86,23 @@ Struct
 
 ## `Union`
 
+Identifies union declarations.
+
 ```dream
 Union
 ```
 
 ## `Enum`
 
+Identifies enum declarations.
+
 ```dream
 Enum
 ```
 
 ## `Interface`
+
+Identifies interface declarations.
 
 ```dream
 Interface

@@ -9,8 +9,22 @@ public class WebEndpoint {
     internal paths: string;
     internal components: string;
     internal websocket: bool;
-    public constructor(method: string, path: string, handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>, paths: string, websocket: bool = false, components: string = "{}") {
-        this.method = method; this.path = path; this.handler = handler; this.paths = paths; this.websocket = websocket; this.components = components;
+    /// Creates a `WebEndpoint` with `method`, `path`, `handler`, `paths`, `websocket`,
+    /// `components`.
+    public constructor(
+        method: string,
+        path: string,
+        handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>,
+        paths: string,
+        websocket: bool = false,
+        components: string = "{}"
+    ) {
+        this.method = method;
+        this.path = path;
+        this.handler = handler;
+        this.paths = paths;
+        this.websocket = websocket;
+        this.components = components;
     }
 }
 
@@ -18,5 +32,11 @@ public class WebEndpoint {
 @allow_cycle
 public class WebRouter {
     internal routes: List<WebEndpoint>;
-    public constructor(routes: List<WebEndpoint>) { this.routes = List<WebEndpoint>(); for (let route in routes) { this.routes.push(route); } }
+    /// Creates a `WebRouter` with `routes`.
+    public constructor(routes: List<WebEndpoint>) {
+        this.routes = List<WebEndpoint>();
+        for (let route in routes) {
+            this.routes.push(route);
+        }
+    }
 }

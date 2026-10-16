@@ -93,5 +93,10 @@ fun c0_verify_observation(borrow value: string): void {
 fun abc_loop_shapes(): void {
     c0_cursor = 0;
     c0_body();
-    Assert.eq(c0_cursor, ("31\n31\n14\n0\n0\n0\n10\n9\n100\nSome(81)\ntrue\nSome(5)\n64,49,36,25,16,100,4,1,0\n49,36,25\n11\n[49, 36, 25, 16, 100, 4, 1, 0]\n0\n7\nSome(a)\nSome(b)\n3\n").length);
+    Assert.eq(
+        c0_cursor,
+        (
+            "31\n31\n14\n0\n0\n0\n10\n9\n100\nSome(81)\ntrue\nSome(5)\n64,49,36,25,16,100,4,1,0\n49,36,25\n11\n[49, 36, 25, 16, 100, 4, 1, 0]\n0\n7\nSome(a)\nSome(b)\n3\n"
+        ).length
+    );
 }

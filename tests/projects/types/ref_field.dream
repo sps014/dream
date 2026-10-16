@@ -1,8 +1,11 @@
 import system.testing;
 import system;
+
 struct c1cf_Counter {
     public value: int;
-    public constructor() { this.value = 0; }
+    public constructor() {
+        this.value = 0;
+    }
 }
 
 fun c1cf_increment(ref x: int): void {

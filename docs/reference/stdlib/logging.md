@@ -46,7 +46,7 @@ A `LogHandler` implements `emit(record: LogRecord): void`. Each record has four 
 import system;
 import system.logging;
 
-class ShortHandler : LogHandler {
+class ShortHandler: LogHandler {
     public fun emit(record: LogRecord): void {
         System.println(record.name + ": " + record.message);
     }

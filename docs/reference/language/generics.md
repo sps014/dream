@@ -15,8 +15,8 @@ fun first<T>(arr: T[]): T {
 
 let nums = [10, 20, 30];
 let words = ["a", "b", "c"];
-System.println(first<int>(nums));      // 10
-System.println(first(words));          // "a" (inferred)
+System.println(first<int>(nums)); // 10
+System.println(first(words)); // "a" (inferred)
 ```
 
 Multiple type parameters are allowed: `fun swap<A, B>(a: A, b: B): A { ... }`.
@@ -28,13 +28,14 @@ Type arguments can themselves be generic or arrays, so generics nest freely:
 
 ```dream
 class Pair<A, B>(first: A, second: B);
+
 class ValueBox<T>(v: T);
 
 let p = Pair<int, string>(1, "one");
-System.println(p.first);   // 1
+System.println(p.first); // 1
 
 let nested = Pair<ValueBox<int>, int>(ValueBox<int>(7), 5);
-System.println(nested.first.v);   // 7
+System.println(nested.first.v); // 7
 ```
 
 ## Generic methods
@@ -43,13 +44,18 @@ A method automatically sees its class's type parameters:
 
 ```dream
 class Box<T>(value: T) {
-    public fun get(): T { return this.value; }
-    public fun set(v: T): void { this.value = v; }
+    public fun get(): T {
+        return this.value;
+    }
+
+    public fun set(v: T): void {
+        this.value = v;
+    }
 }
 
 let b = Box<int>(42);
 b.set(100);
-System.println(b.get());   // 100
+System.println(b.get()); // 100
 ```
 
 ## Advanced
@@ -65,8 +71,10 @@ Inside the body, that interface's methods are available.
 Constraints apply to functions, classes, structs, interfaces, and `extend` blocks:
 
 ```dream
-fun max_of<T : Comparable<T>>(a: T, b: T): T {
-    if a.compare(b) > 0 { return a; }   // compare available because T : Comparable<T>
+fun max_of<T: Comparable<T>>(a: T, b: T): T {
+    if a.compare(b) > 0 {
+        return a;
+    } // compare available because T : Comparable<T>
     return b;
 }
 ```
@@ -74,14 +82,16 @@ fun max_of<T : Comparable<T>>(a: T, b: T): T {
 Combine bounds with `+`:
 
 ```dream
-struct Sorted<T : Comparable<T> + Equatable<T>> { /* ... */ }
+struct Sorted<T: Comparable<T> +Equatable<T>> { /* ... */
+}
 ```
 
 Kind constraints include `struct`, `class`, `unmanaged`, and `shared`.
 A `shared` type is a blittable value, `string`, a struct of shared fields, or a `shared class`:
 
 ```dream
-fun send<T : shared>(value: T): void { /* … */ }
+fun send<T: shared>(value: T): void { /* … */
+}
 ```
 
 At each use, Dream checks that the concrete type satisfies the constraint.
@@ -99,14 +109,17 @@ Explicit `Class<Args>.method(...)` always works, and is required when a paramete
 ```dream
 class Cache<T> {
     seed: int;
-    public constructor(seed: int) { this.seed = seed; }
+    public constructor(seed: int) {
+        this.seed = seed;
+    }
+
     public static fun make(seed: int): Cache<T> {
         return Cache<T>(seed);
     }
 }
 
-let c = Cache<int>.make(5);   // T is not in make's parameters — write it on the class
-System.println(c.seed);              // 5
+let c = Cache<int>.make(5); // T is not in make's parameters — write it on the class
+System.println(c.seed); // 5
 ```
 
 As with any static member, the method must be `public` to be called from another file, and the generic class itself must be `public` to be referenced across files. See [visibility](imports.md).
@@ -118,14 +131,14 @@ With a concrete `fun(...)` type at the use site, its type arguments are inferred
 A bare binding stays generic and picks a type independently at each later use (typed assignment, typed argument, or call):
 
 ```dream
-fun natural_order<T : Comparable<T>>(a: T, b: T): int {
+fun natural_order<T: Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 
-let cmp: fun(int, int): int = natural_order;   // inferred as natural_order<int>
-let f = natural_order;                         // polymorphic until used
-System.println(f(3, 1));                              // instantiates from argument types
-let g: fun(int, int): int = f;                 // instantiates from the annotation
+let cmp: fun(int, int): int = natural_order; // inferred as natural_order<int>
+let f = natural_order; // polymorphic until used
+System.println(f(3, 1)); // instantiates from argument types
+let g: fun(int, int): int = f; // instantiates from the annotation
 ```
 
 ### Type checking inside generic bodies

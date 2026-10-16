@@ -10,7 +10,7 @@ One UDP datagram; empty data is a valid message and never denotes EOF.
 public class UdpDatagram
 ```
 
-## `public data: byte[]`
+## `data`
 
 Received bytes, limited to the requested receive size.
 
@@ -18,7 +18,7 @@ Received bytes, limited to the requested receive size.
 public data: byte[]
 ```
 
-## `public host: string`
+## `host`
 
 Numeric address of the sender.
 
@@ -26,7 +26,7 @@ Numeric address of the sender.
 public host: string
 ```
 
-## `public port: int`
+## `port`
 
 UDP port of the sender.
 
@@ -34,7 +34,7 @@ UDP port of the sender.
 public port: int
 ```
 
-## `public truncated: bool`
+## `truncated`
 
 True when the message contained more bytes than the receive buffer could retain.
 
@@ -55,7 +55,11 @@ public class UdpSocket
 Binds an endpoint; port zero selects an ephemeral port.
 
 ```dream
-public static async fun bind(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<UdpSocket, IoError>
+public static async fun bind(
+    host: string,
+    port: int,
+    token: Option<CancellationToken> = Option.None
+): Result<UdpSocket, IoError>
 ```
 
 ## `local_host`
@@ -79,7 +83,13 @@ public get local_port(): int
 Sends one datagram of at most 65507 bytes with optional deadline and cancellation.
 
 ```dream
-public async fun send(host: string, port: int, data: byte[], timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<int, IoError>
+public async fun send(
+    host: string,
+    port: int,
+    data: byte[],
+    timeout_ms: int = 0,
+    token: Option<CancellationToken> = Option.None
+): Result<int, IoError>
 ```
 
 ## `receive`
@@ -87,7 +97,11 @@ public async fun send(host: string, port: int, data: byte[], timeout_ms: int = 0
 Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.
 
 ```dream
-public async fun receive(max_bytes: int = 65535, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<UdpDatagram, IoError>
+public async fun receive(
+    max_bytes: int = 65535,
+    timeout_ms: int = 0,
+    token: Option<CancellationToken> = Option.None
+): Result<UdpDatagram, IoError>
 ```
 
 ## `set_broadcast`

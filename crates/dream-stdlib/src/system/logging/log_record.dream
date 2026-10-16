@@ -1,7 +1,6 @@
 module system.logging;
 
 // One log event ready for handlers.
-
 public class LogRecord {
     // Severity of this record.
     public level: LogLevel;

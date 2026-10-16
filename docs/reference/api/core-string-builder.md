@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class StringBuilder`
+## `StringBuilder`
 
 `StringBuilder` — growable UTF-16 string construction. Lives in the bootstrap core so every package (collections included) can build strings in O(n); always available without imports.
 
@@ -46,7 +46,7 @@ public fun append_char(c: char): void
 
 ## `push_raw`
 
-Appends text to a string builder. Prefer `StringBuilder.push`.
+Appends `text` to the builder.
 
 ```dream
 public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void
@@ -62,7 +62,7 @@ public static extern fun new_buffer(capacity: int): byte[]
 
 ## `push_int`
 
-Appends the decimal representation of an integer to a string builder.
+Appends the decimal representation of `n`.
 
 ```dream
 public static extern fun push_int(borrow sb: StringBuilder, n: int): void
@@ -70,7 +70,7 @@ public static extern fun push_int(borrow sb: StringBuilder, n: int): void
 
 ## `push_long`
 
-Appends the decimal representation of a long integer to a string builder.
+Appends the decimal representation of `n`.
 
 ```dream
 public static extern fun push_long(borrow sb: StringBuilder, n: long): void
@@ -126,7 +126,7 @@ public fun append_long(n: long): void
 
 ## `append_double`
 
-Appends a double via `to_string`.
+Appends the decimal representation of `n`.
 
 ```dream
 public fun append_double(n: double): void
@@ -150,7 +150,7 @@ public fun clear(): void
 
 ## `view_raw`
 
-Creates a string view of the initialized builder bytes. Prefer the builder view API to preserve its lifetime rules.
+Creates a string from the first `len` bytes in the builder buffer. The range must be valid.
 
 ```dream
 public static extern fun view_raw(borrow bytes: byte[], len: int): string
@@ -166,13 +166,15 @@ public fun as_span(): ReadOnlySpan<char>
 
 ## `build`
 
-Snapshot into a new string.
+Snapshot into a new string. `from_builder` copies once; do not stage through a second `byte[]` (that doubled the finish memcpy).
 
 ```dream
 public fun build(): string
 ```
 
 ## `to_string`
+
+Returns a text representation of this value.
 
 ```dream
 public override fun to_string(): string

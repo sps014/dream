@@ -2,7 +2,7 @@
 
 **Import:** `import system.encoding;`
 
-## `public static class Encoding`
+## `Encoding`
 
 UTF-8 / hex / Base64 encode and decode helpers.
 
@@ -10,7 +10,7 @@ UTF-8 / hex / Base64 encode and decode helpers.
 public static class Encoding
 ```
 
-## `public static fun utf8_encode`
+## `utf8_encode`
 
 Copies the UTF-8 encoding of `text` into a new `byte[]`.
 
@@ -18,7 +18,7 @@ Copies the UTF-8 encoding of `text` into a new `byte[]`.
 public static fun utf8_encode(text: string): byte[]
 ```
 
-## `public static fun utf8_decode`
+## `utf8_decode`
 
 Interprets `bytes` as UTF-8 and builds a Dream string.
 
@@ -26,7 +26,7 @@ Interprets `bytes` as UTF-8 and builds a Dream string.
 public static fun utf8_decode(bytes: byte[]): string
 ```
 
-## `public static fun hex_encode`
+## `hex_encode`
 
 Encodes `bytes` as lowercase hexadecimal text.
 
@@ -34,7 +34,7 @@ Encodes `bytes` as lowercase hexadecimal text.
 public static fun hex_encode(bytes: byte[]): string
 ```
 
-## `public static fun hex_decode`
+## `hex_decode`
 
 Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
 
@@ -42,7 +42,7 @@ Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
 public static fun hex_decode(text: string): Result<byte[], ParseError>
 ```
 
-## `public static fun base64_encode`
+## `base64_encode`
 
 Encodes `bytes` as standard Base64 (with `=` padding).
 
@@ -50,7 +50,7 @@ Encodes `bytes` as standard Base64 (with `=` padding).
 public static fun base64_encode(bytes: byte[]): string
 ```
 
-## `public static fun base64_decode`
+## `base64_decode`
 
 Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
 
@@ -58,7 +58,7 @@ Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
 public static fun base64_decode(text: string): Result<byte[], ParseError>
 ```
 
-## `public static fun base64url_encode`
+## `base64url_encode`
 
 Encodes `bytes` as Base64url without padding.
 
@@ -66,7 +66,7 @@ Encodes `bytes` as Base64url without padding.
 public static fun base64url_encode(bytes: byte[]): string
 ```
 
-## `public static fun base64url_decode`
+## `base64url_decode`
 
 Decodes Base64url text (`-`/`_`, padding optional).
 
@@ -74,7 +74,7 @@ Decodes Base64url text (`-`/`_`, padding optional).
 public static fun base64url_decode(text: string): Result<byte[], ParseError>
 ```
 
-## `public static fun uri_encode_component`
+## `uri_encode_component`
 
 Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).
 
@@ -82,7 +82,7 @@ Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).
 public static fun uri_encode_component(text: string): string
 ```
 
-## `public static fun uri_decode_component`
+## `uri_decode_component`
 
 Decodes percent escapes as strict UTF-8, preserving literal `+`. Malformed escapes or invalid UTF-8 return a parse error.
 
@@ -90,7 +90,7 @@ Decodes percent escapes as strict UTF-8, preserving literal `+`. Malformed escap
 public static fun uri_decode_component(text: string): Result<string, ParseError>
 ```
 
-## `public static fun form_encode_component`
+## `form_encode_component`
 
 Encodes a form component as UTF-8, using `+` for spaces and percent escapes except for ASCII letters, digits, `*`, `-`, `.`, and `_`.
 
@@ -98,7 +98,7 @@ Encodes a form component as UTF-8, using `+` for spaces and percent escapes exce
 public static fun form_encode_component(text: string): string
 ```
 
-## `public static fun form_decode_component`
+## `form_decode_component`
 
 Decodes a form component, interpreting `+` as space and validating escaped UTF-8. Malformed escapes or invalid UTF-8 return a parse error.
 

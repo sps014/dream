@@ -14,17 +14,29 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
         let allocations = Debug.total_allocations;
         let retains = Debug.runtime_counter(3);
         let releases = Debug.runtime_counter(4);
-        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
-            + ",retain:" + (retains - last_retains).to_string()
-            + ",release:" + (releases - last_releases).to_string();
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string() + ",release:" + (releases - last_releases)
+            .to_string();
         last_allocations = allocations;
         last_retains = retains;
         last_releases = releases;
     }
     if measuring {
-        System.println("bench " + name + " ns_total=" + nanos.to_string()
-            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
-            + " checksum=" + checksum.to_string() + counters);
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters)
+                .to_string() + " checksum=" + checksum.to_string() + counters
+        );
     }
     sink = sink + checksum;
 }
@@ -33,8 +45,12 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 fun parse_strings(n: int, iters: int, escaped: bool): int {
     let make = StringBuilder(n * 2 + 16);
     make.append_char('"');
-    for (let i = 0; i < n; i = i + 1) { make.append_char('x'); }
-    if escaped { make.append("\\n"); }
+    for (let i = 0; i < n; i = i + 1) {
+        make.append_char('x');
+    }
+    if escaped {
+        make.append("\\n");
+    }
     make.append_char('"');
     let input = make.build();
     let total = 0;
@@ -57,15 +73,25 @@ fun numbers(iters: int): int {
 }
 
 fun run_suite(): void {
-    let sw = Stopwatch(); let value = parse_strings(8, 2000, false); sw.stop();
+    let sw = Stopwatch();
+    let value = parse_strings(8, 2000, false);
+    sw.stop();
     report("json_string_8", sw.elapsed_nanos, 2000, value);
-    sw = Stopwatch(); value = parse_strings(256, 1000, false); sw.stop();
+    sw = Stopwatch();
+    value = parse_strings(256, 1000, false);
+    sw.stop();
     report("json_string_256", sw.elapsed_nanos, 1000, value);
-    sw = Stopwatch(); value = parse_strings(8192, 100, false); sw.stop();
+    sw = Stopwatch();
+    value = parse_strings(8192, 100, false);
+    sw.stop();
     report("json_string_8192", sw.elapsed_nanos, 100, value);
-    sw = Stopwatch(); value = parse_strings(256, 1000, true); sw.stop();
+    sw = Stopwatch();
+    value = parse_strings(256, 1000, true);
+    sw.stop();
     report("json_escaped_256", sw.elapsed_nanos, 1000, value);
-    sw = Stopwatch(); value = numbers(20000); sw.stop();
+    sw = Stopwatch();
+    value = numbers(20000);
+    sw.stop();
     report("builder_double", sw.elapsed_nanos, 20000, value);
 }
 
@@ -74,6 +100,8 @@ fun main(): void {
     run_suite();
     measuring = true;
     let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
-    for (let p = 0; p < passes; p = p + 1) { run_suite(); }
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite();
+    }
     System.println("sink " + sink.to_string());
 }

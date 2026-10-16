@@ -17,8 +17,8 @@ fun greet(name: string, times: int = 1): void {
     }
 }
 
-greet("Ada");      // times = 1
-greet("Ada", 3);   // times = 3
+greet("Ada"); // times = 1
+greet("Ada", 3); // times = 3
 ```
 
 Rules:
@@ -32,13 +32,18 @@ Defaults also apply to constructors and methods:
 ```dream
 class Greeter {
     public factor: int;
-    public constructor(factor: int = 3) { this.factor = factor; }
-    public fun scale(n: int, by: int = 2): int { return n * by * this.factor; }
+    public constructor(factor: int = 3) {
+        this.factor = factor;
+    }
+
+    public fun scale(n: int, by: int = 2): int {
+        return n * by * this.factor;
+    }
 }
 
-let g = Greeter();        // factor = 3
-System.println(g.scale(4));      // 4 * 2 * 3 = 24
-System.println(g.scale(4, 5));   // 4 * 5 * 3 = 60
+let g = Greeter(); // factor = 3
+System.println(g.scale(4)); // 4 * 2 * 3 = 24
+System.println(g.scale(4, 5)); // 4 * 5 * 3 = 60
 ```
 
 
@@ -52,11 +57,11 @@ fun greet(name: string, greeting: string = "Hello", punctuation: string = "!"): 
     return greeting + ", " + name + punctuation;
 }
 
-greet(name: "Ada");                          // "Hello, Ada!"
-greet(name: "Lin", greeting: "Hi");          // "Hi, Lin!"
-greet(greeting: "Hi", name: "Grace");        // "Hi, Grace!" — order doesn't matter
-greet("Bob", punctuation: "?");              // "Hello, Bob?" — positional + named mixed
-greet(name: "Amy", punctuation: ".");        // "Hello, Amy." — skips `greeting`, its default fills in
+greet(name: "Ada"); // "Hello, Ada!"
+greet(name: "Lin", greeting: "Hi"); // "Hi, Lin!"
+greet(greeting: "Hi", name: "Grace"); // "Hi, Grace!" — order doesn't matter
+greet("Bob", punctuation: "?"); // "Hello, Bob?" — positional + named mixed
+greet(name: "Amy", punctuation: "."); // "Hello, Amy." — skips `greeting`, its default fills in
 ```
 
 Rules:
@@ -81,14 +86,18 @@ cannot express:
 class Rect {
     public width: int;
     public height: int;
-    public constructor(width: int, height: int = 1) { this.width = width; this.height = height; }
+    public constructor(width: int, height: int = 1) {
+        this.width = width;
+        this.height = height;
+    }
+
     public fun area(scale: int = 1, offset: int = 0): int {
         return (this.width * this.height * scale) + offset;
     }
 }
 
 let r = Rect(width: 3, height: 4);
-System.println(r.area(offset: 5));   // scale keeps its default (1): 3*4*1 + 5 = 17
+System.println(r.area(offset: 5)); // scale keeps its default (1): 3*4*1 + 5 = 17
 ```
 
 
@@ -106,9 +115,9 @@ fun sum(...nums: int[]): int {
     return total;
 }
 
-sum();          // total = 0  (nums is an empty array)
-sum(1);         // total = 1
-sum(1, 2, 3);   // total = 6
+sum(); // total = 0  (nums is an empty array)
+sum(1); // total = 1
+sum(1, 2, 3); // total = 6
 ```
 
 A variadic parameter can follow ordinary (including defaulted) parameters, as long as it is last:
@@ -122,8 +131,8 @@ fun sum_with_base(base: int, ...nums: int[]): int {
     return total;
 }
 
-sum_with_base(10);           // 10
-sum_with_base(10, 1, 2, 3);  // 16
+sum_with_base(10); // 10
+sum_with_base(10, 1, 2, 3); // 16
 ```
 
 Rules:
@@ -166,8 +175,8 @@ fun swap(ref a: int, ref b: int): void {
 let p: int = 1;
 let q: int = 2;
 swap(ref p, ref q);
-System.println(p);   // 2
-System.println(q);   // 1
+System.println(p); // 2
+System.println(q); // 1
 ```
 
 `ref` works the same way on instance and static methods (the implicit `this` is unaffected — `ref`
@@ -183,7 +192,7 @@ struct Doubler {
 let d: Doubler = Doubler();
 let n: int = 5;
 d.apply(ref n);
-System.println(n);   // 10
+System.println(n); // 10
 ```
 
 Rules:
@@ -196,7 +205,9 @@ Rules:
 - A lambda may declare `ref` parameters. Annotate the function type as `fun(ref T): R` (the
   `ref` markers are part of the type) and call with `f(ref x)`:
   ```dream
-  let inc: fun(ref int): void = (ref n: int) => { n = n + 1; };
+  let inc: fun(ref int): void = (ref n: int) => {
+      n = n + 1;
+  };
   let a: int = 5;
   inc(ref a);
   System.println(a); // 6
@@ -220,14 +231,14 @@ fun increment(ref x: int): void {
 fun main(): void {
     let counter: int = 0;
     let inc: fun(): int = () => {
-        increment(ref counter);   // ref-passes the closure's own captured storage
+        increment(ref counter); // ref-passes the closure's own captured storage
         return counter;
     };
-    System.println(inc());     // 1
-    System.println(inc());     // 2
-    System.println(counter);   // 2 — visible to the enclosing scope too
+    System.println(inc()); // 1
+    System.println(inc()); // 2
+    System.println(counter); // 2 — visible to the enclosing scope too
 
-    increment(ref counter);   // and the enclosing scope's writes are visible to the closure
-    System.println(inc());           // 4
+    increment(ref counter); // and the enclosing scope's writes are visible to the closure
+    System.println(inc()); // 4
 }
 ```

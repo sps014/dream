@@ -78,5 +78,8 @@ fun c6f_verify_observation(borrow value: string): void {
 fun char_storage_unicode(): void {
     c6f_cursor = 0;
     c6f_body();
-    Assert.eq(c6f_cursor, ("937\n30028\n128512\n30028\n128512\n937\n30028\n30607\n129091\n937\n128512\n").length);
+    Assert.eq(
+        c6f_cursor,
+        ("937\n30028\n128512\n30028\n128512\n937\n30028\n30607\n129091\n937\n128512\n").length
+    );
 }

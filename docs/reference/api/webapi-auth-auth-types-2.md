@@ -4,19 +4,30 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public consumed`
+## `consumed`
+
+Whether this refresh session has already been rotated.
 
 ```dream
 public consumed: bool
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `AuthSession` with `hash`, `family`, `subject`, `scopes`, `expires`, `csrf`.
 
 ```dream
-public constructor(hash: string, family: string, subject: string, scopes: string, expires: long, csrf: string)
+public constructor(
+    hash: string,
+    family: string,
+    subject: string,
+    scopes: string,
+    expires: long,
+    csrf: string
+)
 ```
 
-## `public class OidcTransaction`
+## `OidcTransaction`
 
 An expiring, browser-bound OIDC authorization transaction.
 
@@ -24,37 +35,47 @@ An expiring, browser-bound OIDC authorization transaction.
 public class OidcTransaction
 ```
 
-## `public provider`
+## `provider`
+
+Name of the identity provider handling this login.
 
 ```dream
 public provider: string
 ```
 
-## `public nonce`
+## `nonce`
+
+Random value used to bind an identity response to its login request.
 
 ```dream
 public nonce: string
 ```
 
-## `public verifier`
+## `verifier`
+
+PKCE verifier kept until the authorization code is exchanged.
 
 ```dream
 public verifier: string
 ```
 
-## `public expires`
+## `expires`
+
+Expiry time in Unix epoch seconds.
 
 ```dream
 public expires: long
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `OidcTransaction` with `provider`, `nonce`, `verifier`, `expires`.
 
 ```dream
 public constructor(provider: string, nonce: string, verifier: string, expires: long)
 ```
 
-## `public interface AuthSessionStore`
+## `AuthSessionStore`
 
 Persistence operations must be atomic, including refresh replay detection and transaction consumption.
 
@@ -62,49 +83,70 @@ Persistence operations must be atomic, including refresh replay detection and tr
 public interface AuthSessionStore
 ```
 
-## `async unique fun create`
+## `create`
+
+Stores a new refresh session; returns an error if its token hash already exists.
 
 ```dream
 async unique fun create(session: AuthSession): Result<bool, AuthError>
 ```
 
-## `async unique fun find`
+## `find`
+
+Finds an unexpired session at epoch-second time `now`; rejects revoked or missing sessions.
 
 ```dream
 async unique fun find(hash: string, now: long): Result<AuthSession, AuthError>
 ```
 
-## `async unique fun rotate`
+## `rotate`
+
+Consumes a refresh session and stores its replacement. Replay revokes the family; invalid replacements return an error.
 
 ```dream
-async unique fun rotate(hash: string, replacement: AuthSession, now: long): Result<AuthSession, AuthError>
+async unique fun rotate(
+    hash: string,
+    replacement: AuthSession,
+    now: long
+): Result<AuthSession, AuthError>
 ```
 
-## `async unique fun revoke`
+## `revoke`
+
+Revokes all refresh sessions in `family`.
 
 ```dream
 async unique fun revoke(family: string): Result<bool, AuthError>
 ```
 
-## `async unique fun active`
+## `active`
+
+Returns whether `family` has an unexpired, unconsumed session at epoch-second time `now`.
 
 ```dream
 async unique fun active(family: string, now: long): bool
 ```
 
-## `async unique fun put_transaction`
+## `put_transaction`
+
+Stores a login transaction under `state`; duplicate state returns an error.
 
 ```dream
-async unique fun put_transaction(state: string, transaction: OidcTransaction): Result<bool, AuthError>
+async unique fun put_transaction(
+    state: string,
+    transaction: OidcTransaction
+): Result<bool, AuthError>
 ```
 
-## `async unique fun take_transaction`
+## `take_transaction`
+
+Removes and returns the login transaction. Missing or expired state returns an error.
 
 ```dream
 async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>
 ```
 
-## `public class JwtOptions`
+## `JwtOptions`
 
 Native JWT configuration; RS256 uses PEM keys, HS256 requires an explicit 32-byte minimum secret.
 
@@ -112,43 +154,61 @@ Native JWT configuration; RS256 uses PEM keys, HS256 requires an explicit 32-byt
 public class JwtOptions
 ```
 
-## `public issuer`
+## `issuer`
+
+Identity of the token issuer.
 
 ```dream
 public issuer: string
 ```
 
-## `public audience`
+## `audience`
+
+Expected token audience.
 
 ```dream
 public audience: string
 ```
 
-## `public signing_key`
+## `signing_key`
+
+Private key used to sign tokens; keep it secret.
 
 ```dream
 public signing_key: string
 ```
 
-## `public verification_key`
+## `verification_key`
+
+Public key used to verify token signatures.
 
 ```dream
 public verification_key: string
 ```
 
-## `public algorithm`
+## `algorithm`
+
+Signature algorithm name, such as `RS256`.
 
 ```dream
 public algorithm: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `JwtOptions` with `issuer`, `audience`, `signing_key`, `verification_key`, `algorithm`.
 
 ```dream
-public constructor(issuer: string, audience: string, signing_key: string, verification_key: string, algorithm: string = "RS256")
+public constructor(
+    issuer: string,
+    audience: string,
+    signing_key: string,
+    verification_key: string,
+    algorithm: string = "RS256"
+)
 ```
 
-## `public class OidcOptions`
+## `OidcOptions`
 
 One external OIDC identity provider. Redirect URIs must match the registered callback exactly.
 

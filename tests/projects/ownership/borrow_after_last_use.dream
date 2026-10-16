@@ -1,6 +1,5 @@
 import system.testing;
 // Mutating after the cursor's final read is legal — the borrow has ended.
-
 import system;
 import system.collections;
 

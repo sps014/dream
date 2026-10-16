@@ -9,7 +9,7 @@ fun main() {
     let maybe: Option<int> = Some(3);
     System.println(maybe.unwrap_or(0));
 
-    let parsed = int.parse("42");   // Result<int, ParseError>
+    let parsed = int.parse("42"); // Result<int, ParseError>
     switch (parsed) {
         Ok(n) => System.println(n),
         Err(e) => System.println(e.message()),
@@ -52,7 +52,7 @@ File and parse APIs return `Result`. In an `async` function (or any function tha
 `Option` and `Result` do not mix: `?` on an `Option` needs the enclosing function to return a matching `Option`. `?` on a `Result` rebuilds `Err` at the function’s `Result` type: `E` may widen when the operand’s error implements the function’s error interface (`IoError` → `Error`), but there is no general conversion between unrelated error types. Bridge those explicitly:
 
 ```dream
-let first = first_line(text).ok_or(ParseError.invalid("empty input"))?;   // Option → Result
+let first = first_line(text).ok_or(ParseError.invalid("empty input"))?; // Option → Result
 let n = int.parse(text).map_err(fun(e: ParseError): ConfigError => ConfigError.from_parse(e))?;
 ```
 
@@ -77,9 +77,9 @@ fun main(): Result<bool, ParseError> {
     let port = parse_port("8080")?;
     System.println("listening on " + port.to_string());
 
-    let bad = parse_port("not-a-number")?;   // Err: returns from main right here
+    let bad = parse_port("not-a-number")?; // Err: returns from main right here
     System.println("never reached " + bad.to_string());
-}   // falling off the end of main is an implicit Result.Ok(true)
+} // falling off the end of main is an implicit Result.Ok(true)
 ```
 
 Dream has no unit type, so the success slot is spelled `bool`. `main` alone may fall off the end when it returns `Result<bool, E>`, which the compiler treats as `return Result.Ok(true);` — an explicit one stays legal, and any other `Result<T, E>` still requires a return on every path.

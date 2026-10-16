@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenCallSite`
+## `GenCallSite`
 
 A call of one of the generator's `@on_call` functions.
 
@@ -10,13 +10,15 @@ A call of one of the generator's `@on_call` functions.
 public class GenCallSite
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public callee: string`
+## `callee`
 
 Identity of the callee (compare with `declof(Json.serialize)`).
 
@@ -24,13 +26,15 @@ Identity of the callee (compare with `declof(Json.serialize)`).
 public callee: string
 ```
 
-## `public type_args: List<GenTypeRef>`
+## `type_args`
+
+Concrete type arguments, in parameter order.
 
 ```dream
 public type_args: List<GenTypeRef>
 ```
 
-## `public arg_types: List<GenTypeRef>`
+## `arg_types`
 
 Statically known argument types (`TypeRefKind.Unknown` when not inferable).
 
@@ -38,16 +42,24 @@ Statically known argument types (`TypeRefKind.Unknown` when not inferable).
 public arg_types: List<GenTypeRef>
 ```
 
-## `public location: GenLocation`
+## `location`
+
+Source location associated with this entry.
 
 ```dream
 public location: GenLocation
 ```
 
-## `public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(id: string, callee: string, type_args: List<GenTypeRef>, arg_types: List<GenTypeRef>, location: GenLocation)
+public constructor(
+    id: string,
+    callee: string,
+    type_args: List<GenTypeRef>,
+    arg_types: List<GenTypeRef>,
+    location: GenLocation
+)
 ```

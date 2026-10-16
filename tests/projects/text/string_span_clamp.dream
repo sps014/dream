@@ -1,6 +1,5 @@
 import system.testing;
 // `span(start, end)` clamps out-of-range bounds like `substring`; `slice` and `char_at` trap.
-
 import system;
 
 @test

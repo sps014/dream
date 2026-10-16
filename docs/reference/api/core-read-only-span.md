@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [span guide](../language/spans.md) for usage and backing-storage semantics.
 
-## `ReadOnlySpan<T>`
+## `ReadOnlySpan`
 
 `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or `copy_from`. Take one when a function borrows a run of elements and promises not to change them. The same `ref struct` escape rules as `Span<T>` apply (see `docs/reference/language/spans.md`).
 
@@ -21,6 +21,8 @@ public constructor(borrow array: T[], offset: int, length: int)
 ```
 
 ## `of`
+
+Creates a read-only character view of `src` without copying its contents.
 
 ```dream
 public static fun of(borrow src: string): ReadOnlySpan<T> where T: SpanCharacter
@@ -60,11 +62,15 @@ public fun this[index: int]: T
 
 ## `this`
 
+Accesses the element at `index`; an out-of-range index panics.
+
 ```dream
 public fun this[index: int]: char where T: SpanCharacter
 ```
 
 ## `get`
+
+Returns the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun get(index: int): T
@@ -79,6 +85,8 @@ public fun slice(start: int, count: int): ReadOnlySpan<T>
 ```
 
 ## `slice`
+
+Returns a view of `count` elements starting at `start`; invalid bounds panic.
 
 ```dream
 public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter
@@ -101,6 +109,8 @@ public fun index_of(borrow value: T): Option<int>
 ```
 
 ## `index_of`
+
+Returns the first matching index, or `None` when no match exists.
 
 ```dream
 public fun index_of(borrow value: T): Option<int> where T: SpanCharacter
@@ -135,7 +145,7 @@ public fun copy_to(dst: Span<T>): void
 Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
 
 ```dream
-public fun copy_to(dst: Span<T>): void where T : unmanaged
+public fun copy_to(dst: Span<T>): void where T: unmanaged
 ```
 
 ## `to_array`
@@ -148,6 +158,8 @@ public fun to_array(): T[]
 
 ## `to_array`
 
+Copies the elements into a new array.
+
 ```dream
-public fun to_array(): T[] where T : unmanaged
+public fun to_array(): T[]where T: unmanaged
 ```

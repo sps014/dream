@@ -2,22 +2,30 @@ import system.testing;
 import system;
 
 fun c1ed_count_paths(n: int): int {
-    if n < 2 { return n; }
+    if n < 2 {
+        return n;
+    }
     return c1ed_count_paths(n - 1) + c1ed_count_paths(n - 2);
 }
 
 fun c1ed_signed_sum(n: int): int {
-    if n < 2 { return n * 3; }
+    if n < 2 {
+        return n * 3;
+    }
     return c1ed_signed_sum(n - 1) - c1ed_signed_sum(n - 2);
 }
 
 fun c1ed_duplicate(n: int, x: double): double {
-    if n < 1 { return x; }
+    if n < 1 {
+        return x;
+    }
     return c1ed_duplicate(n - 1, x) + c1ed_duplicate(n - 1, x);
 }
 
 fun c1ed_wrap_sum(n: int, x: int): int {
-    if n < 1 { return x; }
+    if n < 1 {
+        return x;
+    }
     return c1ed_wrap_sum(n - 1, x) + c1ed_wrap_sum(n - 1, x);
 }
 

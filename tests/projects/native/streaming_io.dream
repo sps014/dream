@@ -2,17 +2,28 @@ import system.io;
 import system.encoding;
 import system.testing;
 
-class StreamingShortWriter : Writer {
+class StreamingShortWriter: Writer {
     public memory: MemoryStream;
     public fail: bool;
-    public constructor() { this.memory = MemoryStream(); this.fail = false; }
+    public constructor() {
+        this.memory = MemoryStream();
+        this.fail = false;
+    }
+
     public fun write(bytes: byte[]): Result<int, IoError> {
-        if this.fail { return Result.Err(IoError.other("", "injected failure")); }
-        if bytes.length == 0 { return Result.Ok(0); }
+        if this.fail {
+            return Result.Err(IoError.other("", "injected failure"));
+        }
+        if bytes.length == 0 {
+            return Result.Ok(0);
+        }
         this.memory.write([bytes[0]])?;
         return Result.Ok(1);
     }
-    public unique fun flush(): Result<bool, IoError> { return Result.Ok(true); }
+
+    public unique fun flush(): Result<bool, IoError> {
+        return Result.Ok(true);
+    }
 }
 
 @test

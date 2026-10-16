@@ -6,7 +6,12 @@ internal static class CollectionStorage {
 
     // Slot permutation has no ownership transition, including nested managed value fields.
     @intrinsic(Intrinsic.ArraySlotSwap)
-    internal static extern fun exchange<T>(borrow array: T[], left: int, borrow other: T[], right: int): void;
+    internal static extern fun exchange<T>(
+        borrow array: T[],
+        left: int,
+        borrow other: T[],
+        right: int
+    ): void;
 
     @intrinsic(Intrinsic.DebugGetRefCount)
     internal static extern fun owners(borrow array: object): int;
@@ -23,7 +28,7 @@ internal static class CollectionStorage {
 // Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
 // so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
 // `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
-fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
+fun compare_ascending<T: Comparable<T>>(borrow a: T, borrow b: T): int {
     return a.compare(b);
 }
 
@@ -31,8 +36,10 @@ fun compare_ascending<T : Comparable<T>>(borrow a: T, borrow b: T): int {
 //
 // Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is
 // what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
+/// A growable, ordered sequence with zero-based indexed access. Adding elements may increase
+/// its capacity.
 @allow_cycle
-public class List<T> : IndexedCollection<T> {
+public class List<T>: IndexedCollection<T> {
     items: T[];
     count: int;
 
@@ -73,8 +80,12 @@ public class List<T> : IndexedCollection<T> {
     // Reserves room for additional elements without changing length or existing values.
     public fun reserve(additional: int): Result<bool, CapacityError> {
         let need = (long)this.count + (long)additional;
-        if additional < 0 || need > 2147483647L { return Result.Err(CapacityError()); }
-        if need > (long)this.items.length { this.items = Buffer.realloc<T>(this.items, (int)need); }
+        if additional < 0 || need > 2147483647L {
+            return Result.Err(CapacityError());
+        }
+        if need >(long)this.items.length {
+            this.items = Buffer.realloc<T>(this.items, (int)need);
+        }
         return Result.Ok(true);
     }
 
@@ -96,6 +107,7 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Appends every element of `items`, ensuring capacity once then copying via `Span`.
+    /// Appends every element of `items` in order.
     public fun push_all(borrow items: T[]): void {
         let src = Span<T>.of(items);
         let n = src.length;
@@ -110,6 +122,8 @@ public class List<T> : IndexedCollection<T> {
 
     // Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]`
     // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
+    /// Creates a list containing the elements of `items` in order. List literals such as `[1,
+    /// 2, 3]` create lists in the same way.
     public static fun from_array(borrow items: T[]): List<T> {
         let result = List<T>(items.length);
         result.push_all(items);
@@ -118,6 +132,8 @@ public class List<T> : IndexedCollection<T> {
 
     // Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when
     // capacity is larger than `count` so the result's `.length` is the live element count.
+    /// Returns the elements as an array and leaves the list empty. The returned array has
+    /// exactly the previous list length.
     public fun take_array(): T[] {
         let n = this.count;
         let storage = this.items;
@@ -155,6 +171,7 @@ public class List<T> : IndexedCollection<T> {
         Buffer.set_unchecked<T>(this.items, index, value);
     }
 
+    /// Replaces the element at `index`; an out-of-range index panics.
     public fun set(index: int, value: T): void {
         this[index] = value;
     }
@@ -278,6 +295,7 @@ public class List<T> : IndexedCollection<T> {
     // Empties the list while keeping the backing buffer. Live slots are overwritten with a zero
     // value so reference fields inside value-struct elements (and class elements) release
     // immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).
+    /// Removes all elements and releases the references they held. Capacity is unchanged.
     @inline
     public fun clear(): void {
         if this.count > 0 {
@@ -292,13 +310,16 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Unmanaged: no RC to release — rewind the count only.
+    /// Removes all elements and releases the references they held. Capacity is unchanged.
     @inline
-    public fun clear(): void where T : unmanaged {
+    public fun clear(): void where T: unmanaged {
         this.count = 0;
     }
 
     // Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out
     // of range (index may equal `size()` to append).
+    /// Inserts `value` at `index`, shifting later elements right. Returns false if the index is
+    /// outside 0 through length.
     public fun insert(index: int, value: T): bool {
         if (index < 0) || (index > this.count) {
             return false;
@@ -316,7 +337,9 @@ public class List<T> : IndexedCollection<T> {
     }
 
     // Unmanaged: one `memory.copy` shift (no Span wrappers).
-    public fun insert(index: int, value: T): bool where T : unmanaged {
+    /// Inserts `value` at `index`, shifting later elements right. Returns false if the index is
+    /// outside 0 through length.
+    public fun insert(index: int, value: T): bool where T: unmanaged {
         if (index < 0) || (index > this.count) {
             return false;
         }
@@ -437,7 +460,7 @@ public class List<T> : IndexedCollection<T> {
 
     // Sorts the list in place into ascending order using each element's `compare` method.
     // Only attached when `T : Comparable<T>` (via `where`).
-    public fun sort(): void where T : Comparable<T> {
+    public fun sort(): void where T: Comparable<T> {
         let cmp: fun(T, T): int = compare_ascending;
         this.sort_by(cmp);
     }
@@ -445,7 +468,7 @@ public class List<T> : IndexedCollection<T> {
     // Binary search over a list that is already sorted ascending (by `compare`). Returns the index
     // of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
     // Only attached when `T : Comparable<T>` (via `where`).
-    public fun binary_search(borrow value: T): Option<int> where T : Comparable<T> {
+    public fun binary_search(borrow value: T): Option<int> where T: Comparable<T> {
         let lo = 0;
         let hi = this.count - 1;
         while lo <= hi {
@@ -463,6 +486,7 @@ public class List<T> : IndexedCollection<T> {
         return Option.None;
     }
 
+    /// Returns a text representation of this value.
     public override fun to_string(): string {
         let sb = StringBuilder();
         sb.append("[");

@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.collections;
+
 @test
 @timeout(180000)
 fun collections_capacity(): void {

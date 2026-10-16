@@ -4,7 +4,6 @@ import system.collections;
 
 // IndexedCollection extends Collection: List only declares IndexedCollection but is usable
 // as Collection, and IndexedCollection-typed values expose inherited size/is_empty.
-
 fun c102_as_collection(xs: Collection<int>): int {
     return xs.length;
 }
@@ -23,18 +22,29 @@ interface c102_Writable {
     unique fun write(v: int): void;
 }
 
-interface c102_ReadWrite : c102_Readable + c102_Writable {
+interface c102_ReadWrite: c102_Readable + c102_Writable {
     // Implementors reset state here, so the contract must grant mutation rights
     // (signature-only methods default to borrow; a mutating body infers unique).
     unique fun flush(): void;
 }
 
-class c102_Store : c102_ReadWrite {
+class c102_Store: c102_ReadWrite {
     value: int;
-    public constructor() { this.value = 0; }
-    public fun read(): int { return this.value; }
-    public fun write(v: int): void { this.value = v; }
-    public fun flush(): void { this.value = 0; }
+    public constructor() {
+        this.value = 0;
+    }
+
+    public fun read(): int {
+        return this.value;
+    }
+
+    public fun write(v: int): void {
+        this.value = v;
+    }
+
+    public fun flush(): void {
+        this.value = 0;
+    }
 }
 
 fun c102_use_readable(r: c102_Readable): int {

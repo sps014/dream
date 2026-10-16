@@ -2,7 +2,6 @@ import system;
 import html;
 
 // Demo: `html { }` markup expanded at compile time by the sample Dream parser.
-
 fun page(title: string): string {
     return html {
         <div class="hero">

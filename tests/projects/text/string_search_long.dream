@@ -4,8 +4,12 @@ import system;
 fun c220_body(): void {
     let h = string.alloc(2048);
     let n = string.alloc(256);
-    for (let i = 0; i < h.length; i = i + 1) { string.set(h, i, 'a'); }
-    for (let i = 0; i < n.length; i = i + 1) { string.set(n, i, 'a'); }
+    for (let i = 0; i < h.length; i = i + 1) {
+        string.set(h, i, 'a');
+    }
+    for (let i = 0; i < n.length; i = i + 1) {
+        string.set(n, i, 'a');
+    }
     string.set(n, 255, 'b');
     c220_verify_observation((h.span().index_of(n).unwrap_or(-1)).to_string());
     string.set(h, 2047, 'b');
@@ -19,7 +23,9 @@ fun c220_body(): void {
     string.set(h, 2047, 'a');
     c220_verify_observation((observed.index_of(n).unwrap_or(-1)).to_string());
     let binary = string.alloc(96);
-    for (let i = 0; i < binary.length; i = i + 1) { string.set(binary, i, (char)(i & 1)); }
+    for (let i = 0; i < binary.length; i = i + 1) {
+        string.set(binary, i, (char)(i & 1));
+    }
     let binary_needle = binary.substring(32, 96);
     c220_verify_observation((binary.span().index_of(binary_needle, 1).unwrap_or(-1)).to_string());
     let unicode = string.alloc(256);
@@ -27,7 +33,9 @@ fun c220_body(): void {
         string.set(unicode, i, (char)(55296 + (i & 1) * 1024));
     }
     let unicode_needle = unicode.substring(128, 192);
-    c220_verify_observation((unicode.span(1, 255).index_of(unicode_needle).unwrap_or(-1)).to_string());
+    c220_verify_observation(
+        (unicode.span(1, 255).index_of(unicode_needle).unwrap_or(-1)).to_string()
+    );
     string.set(unicode, 1, (char)0);
     c220_verify_observation((unicode.span().index_of(unicode_needle).unwrap_or(-1)).to_string());
 }

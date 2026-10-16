@@ -3,14 +3,25 @@ module system.json.derive;
 // Outcome of a `@json` source-generator expand pass.
 // Optional `error_type` / `error_field` name the type / field the error is reported at.
 public class JsonGenOutput {
+    /// Whether the operation succeeded.
     public ok: bool;
+    /// Generated Dream source text for this JSON result type.
     public source: string;
+    /// Error message reported by the operation.
     public error: string;
+    /// Dream type name of the error payload.
     public error_type: string;
+    /// Name of the field used to represent the error payload.
     public error_field: string;
 
     // Builds a raw result; prefer `success` / `failure` / `failure_at`.
-    internal constructor(ok: bool, source: string, error: string, error_type: string, error_field: string) {
+    internal constructor(
+        ok: bool,
+        source: string,
+        error: string,
+        error_type: string,
+        error_field: string
+    ) {
         this.ok = ok;
         this.source = source;
         this.error = error;
@@ -29,7 +40,11 @@ public class JsonGenOutput {
     }
 
     // Failed expand with type/field names for host span recovery.
-    public static fun failure_at(error: string, type_name: string, field_name: string): JsonGenOutput {
+    public static fun failure_at(
+        error: string,
+        type_name: string,
+        field_name: string
+    ): JsonGenOutput {
         return JsonGenOutput(false, "", error, type_name, field_name);
     }
 }

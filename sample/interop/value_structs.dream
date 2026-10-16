@@ -3,8 +3,8 @@
 //
 //   cargo run -- sample/interop/value_structs.dream
 //   node sample/interop/value_structs.mjs sample/interop/value_structs.wasm
-
 import system;
+
 struct Point {
     public x: int;
     public y: int;

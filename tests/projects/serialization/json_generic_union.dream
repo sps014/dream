@@ -4,8 +4,16 @@ import system.testing;
 // `Json.serialize`/`Json.deserialize`, resolved per instance by the monomorphizer.
 import system;
 import system.json;
+
 @json
-struct c115_Point { public x: int; public y: int; public constructor(x: int, y: int) { this.x = x; this.y = y; } }
+struct c115_Point {
+    public x: int;
+    public y: int;
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
 
 @json
 enum c115_Opt<T> {
@@ -19,8 +27,13 @@ fun c115_body(): void {
     c115_verify_observation((sa).to_string());
     let backA = Json.deserialize<c115_Opt<c115_Point>>(sa).unwrap_or(a);
     switch (backA) {
-        Some(value) => { c115_verify_observation((value.x).to_string()); c115_verify_observation((value.y).to_string()); }
-        None => { c115_verify_observation(("none").to_string()); }
+        Some(value) => {
+            c115_verify_observation((value.x).to_string());
+            c115_verify_observation((value.y).to_string());
+        }
+        None => {
+            c115_verify_observation(("none").to_string());
+        }
     }
 
     let b: c115_Opt<c115_Point> = c115_Opt.None;
@@ -28,8 +41,12 @@ fun c115_body(): void {
     c115_verify_observation((sb).to_string());
     let backB = Json.deserialize<c115_Opt<c115_Point>>(sb).unwrap_or(b);
     switch (backB) {
-        Some(value) => { c115_verify_observation(("some").to_string()); }
-        None => { c115_verify_observation(("none").to_string()); }
+        Some(value) => {
+            c115_verify_observation(("some").to_string());
+        }
+        None => {
+            c115_verify_observation(("none").to_string());
+        }
     }
 }
 
@@ -50,5 +67,8 @@ fun c115_verify_observation(borrow value: string): void {
 fun json_generic_union(): void {
     c115_cursor = 0;
     c115_body();
-    Assert.eq(c115_cursor, ("{\"type\":\"Some\",\"_0\":{\"x\":3,\"y\":4}}\n3\n4\n{\"type\":\"None\"}\nnone\n").length);
+    Assert.eq(
+        c115_cursor,
+        ("{\"type\":\"Some\",\"_0\":{\"x\":3,\"y\":4}}\n3\n4\n{\"type\":\"None\"}\nnone\n").length
+    );
 }

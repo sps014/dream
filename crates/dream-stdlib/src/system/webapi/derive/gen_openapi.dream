@@ -9,151 +9,384 @@ import system.json;
 extend WebGenerator {
     internal fun schema(ty: GenTypeRef, active: Map<string, bool>): JsonValue {
         let schema = JsonValue.dict();
-        if ty.is_option() { schema = this.schema(ty.arg(0), active); schema.set("nullable", JsonValue.boolean(true)); return schema; }
-        if ty.kind == TypeRefKind.Array || ty.collection() == CollectionKind.List || ty.collection() == CollectionKind.Set {
-            schema.set("type", JsonValue.from_string("array")); schema.set("items", this.schema(ty.arg(0), active)); return schema;
+        if ty.is_option() {
+            schema = this.schema(ty.arg(0), active);
+            schema.set("nullable", JsonValue.boolean(true));
+            return schema;
+        }
+        if ty.kind
+            == TypeRefKind.Array
+            || ty.collection() == CollectionKind.List || ty.collection() == CollectionKind.Set {
+            schema.set("type", JsonValue.from_string("array"));
+            schema.set("items", this.schema(ty.arg(0), active));
+            return schema;
         }
         let kind = "object";
-        if ty.name == "string" || ty.name == "char" { kind = "string"; }
-        else if ty.name == "bool" { kind = "boolean"; }
-        else if ty.name == "float" || ty.name == "double" { kind = "number"; }
-        else if web_scalar(ty) { kind = "integer"; }
+        if ty.name == "string" || ty.name == "char" {
+            kind = "string";
+        } else if ty.name == "bool" {
+            kind = "boolean";
+        } else if ty.name == "float" || ty.name == "double" {
+            kind = "number";
+        } else if web_scalar(ty) {
+            kind = "integer";
+        }
         schema.set("type", JsonValue.from_string(kind));
-        if kind != "object" || active.contains(ty.decl) { return schema; }
+        if kind != "object" || active.contains(ty.decl) {
+            return schema;
+        }
         let declaration = this.declaration(ty);
-        if declaration.is_none() { return schema; }
+        if declaration.is_none() {
+            return schema;
+        }
         let d = declaration.unwrap();
-        if !d.has<JsonAttribute>() { return schema; }
+        if !d.has<JsonAttribute>() {
+            return schema;
+        }
         return ValidationGenerator.type_schema(ty, this.ctx, this.schemas);
     }
-    internal fun security(f: GenFunction, requirement: JsonValue, visited: Map<string, bool>, scopes: JsonValue): void {
-        if visited.contains(f.id) { return; } visited.set(f.id, true);
+
+    internal fun security(
+        f: GenFunction,
+        requirement: JsonValue,
+        visited: Map<string, bool>,
+        scopes: JsonValue
+    ): void {
+        if visited.contains(f.id) {
+            return;
+        }
+        visited.set(f.id, true);
         if f.has<SecuritySchemeAttribute>() {
-            let attribute = f.attribute<SecuritySchemeAttribute>().unwrap(); let scheme = JsonValue.dict();
+            let attribute = f.attribute<SecuritySchemeAttribute>().unwrap();
+            let scheme = JsonValue.dict();
             scheme.set("type", JsonValue.from_string(attribute.kind));
-            if attribute.kind == "http" { scheme.set("scheme", JsonValue.from_string(attribute.scheme)); }
-            if attribute.kind == "apiKey" { scheme.set("name", JsonValue.from_string(attribute.name.unwrap_or("X-Api-Key"))); scheme.set("in", JsonValue.from_string(attribute.location.unwrap_or("header"))); }
-            this.security_schemes.set(attribute.id, scheme); requirement.set(attribute.id, JsonValue.array());
+            if attribute.kind == "http" {
+                scheme.set("scheme", JsonValue.from_string(attribute.scheme));
+            }
+            if attribute.kind == "apiKey" {
+                scheme.set("name", JsonValue.from_string(attribute.name.unwrap_or("X-Api-Key")));
+                scheme.set("in", JsonValue.from_string(attribute.location.unwrap_or("header")));
+            }
+            this.security_schemes.set(attribute.id, scheme);
+            requirement.set(attribute.id, JsonValue.array());
         }
         if f.has<OAuth2SchemeAttribute>() {
-            let attribute = f.attribute<OAuth2SchemeAttribute>().unwrap(); let scheme = JsonValue.dict(); scheme.set("type", JsonValue.from_string("oauth2"));
-            let code = JsonValue.dict(); code.set("authorizationUrl", JsonValue.from_string(attribute.authorization_url)); code.set("tokenUrl", JsonValue.from_string(attribute.token_url));
-            let permissions = JsonValue.dict(); for (let scope in attribute.scopes.unwrap_or("").split(' ')) { if !scope.is_empty() { permissions.set(scope, JsonValue.from_string(scope)); } }
-            code.set("scopes", permissions); let flows = JsonValue.dict(); flows.set("authorizationCode", code); scheme.set("flows", flows);
-            this.security_schemes.set(attribute.id, scheme); requirement.set(attribute.id, scopes);
+            let attribute = f.attribute<OAuth2SchemeAttribute>().unwrap();
+            let scheme = JsonValue.dict();
+            scheme.set("type", JsonValue.from_string("oauth2"));
+            let code = JsonValue.dict();
+            code.set("authorizationUrl", JsonValue.from_string(attribute.authorization_url));
+            code.set("tokenUrl", JsonValue.from_string(attribute.token_url));
+            let permissions = JsonValue.dict();
+            for (let scope in attribute.scopes.unwrap_or("").split(' ')) {
+                if !scope.is_empty() {
+                    permissions.set(scope, JsonValue.from_string(scope));
+                }
+            }
+            code.set("scopes", permissions);
+            let flows = JsonValue.dict();
+            flows.set("authorizationCode", code);
+            scheme.set("flows", flows);
+            this.security_schemes.set(attribute.id, scheme);
+            requirement.set(attribute.id, scopes);
         }
         for (let p in f.params) {
-            if !p.has<DepAttribute>() { continue; }
+            if !p.has<DepAttribute>() {
+                continue;
+            }
             let provider = this.functions.get(p.attribute<DepAttribute>().unwrap().provider.symbol);
-            if provider.is_some() { this.security(provider.unwrap(), requirement, visited, scopes); }
+            if provider.is_some() {
+                this.security(provider.unwrap(), requirement, visited, scopes);
+            }
         }
     }
+
     internal fun openapi_refs(value: JsonValue): void {
         if value.is_object() {
-            if value.get("$ref").is_some() { value.set("$ref", JsonValue.from_string("#/components/schemas/" + value.get_or("$ref", JsonValue.none()).as_string().unwrap_or(""))); }
-            for (let key in value.keys()) { this.openapi_refs(value.get_or(key, JsonValue.none())); }
-        } else if value.is_array() { for (let item in value.as_array().unwrap()) { this.openapi_refs(item); } }
+            if value.get("$ref").is_some() {
+                value.set(
+                    "$ref",
+                    JsonValue.from_string(
+                        "#/components/schemas/"
+                            + value.get_or("$ref", JsonValue.none())
+                            .as_string()
+                            .unwrap_or("")
+                    )
+                );
+            }
+            for (let key in value.keys()) {
+                this.openapi_refs(value.get_or(key, JsonValue.none()));
+            }
+        } else if value.is_array() {
+            for (let item in value.as_array().unwrap()) {
+                this.openapi_refs(item);
+            }
+        }
     }
-    internal fun openapi_parameters(f: GenFunction, route: WebRoute, parameters: JsonValue, fields: JsonValue, required: JsonValue, body: JsonValue, visited: Map<string, bool>): void {
-        if visited.contains(f.id) { return; }
+
+    internal fun openapi_parameters(
+        f: GenFunction,
+        route: WebRoute,
+        parameters: JsonValue,
+        fields: JsonValue,
+        required: JsonValue,
+        body: JsonValue,
+        visited: Map<string, bool>
+    ): void {
+        if visited.contains(f.id) {
+            return;
+        }
         visited.set(f.id, true);
         for (let p in f.params) {
             if p.has<DepAttribute>() {
                 let dep = this.functions.get(p.attribute<DepAttribute>().unwrap().provider.symbol);
-                if dep.is_some() { this.openapi_parameters(dep.unwrap(), route, parameters, fields, required, body, visited); }
+                if dep.is_some() {
+                    this.openapi_parameters(
+                        dep.unwrap(),
+                        route,
+                        parameters,
+                        fields,
+                        required,
+                        body,
+                        visited
+                    );
+                }
                 continue;
             }
-            let name = p.name; let where = "path";
+            let name = p.name;
+            let where = "path";
             if p.has<BodyAttribute>() {
-                let media = JsonValue.dict(); let entry = JsonValue.dict();
-                entry.set("schema", this.schema(p.ty, Map<string, bool>())); media.set("application/json", entry);
-                body.set("content", media); body.set("required", JsonValue.boolean(true)); continue;
+                let media = JsonValue.dict();
+                let entry = JsonValue.dict();
+                entry.set("schema", this.schema(p.ty, Map<string, bool>()));
+                media.set("application/json", entry);
+                body.set("content", media);
+                body.set("required", JsonValue.boolean(true));
+                continue;
             }
             if p.has<FormAttribute>() || p.has<FileAttribute>() {
                 let schema = this.schema(web_inner(p.ty), Map<string, bool>());
-                if p.has<FileAttribute>() { name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name); schema = JsonValue.dict(); schema.set("type", JsonValue.from_string("string")); schema.set("format", JsonValue.from_string("binary")); }
-                else { name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name); }
-                fields.set(name, schema); if !p.ty.is_option() { required.push(JsonValue.from_string(name)); } continue;
+                if p.has<FileAttribute>() {
+                    name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name);
+                    schema = JsonValue.dict();
+                    schema.set("type", JsonValue.from_string("string"));
+                    schema.set("format", JsonValue.from_string("binary"));
+                } else {
+                    name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name);
+                }
+                fields.set(name, schema);
+                if !p.ty.is_option() {
+                    required.push(JsonValue.from_string(name));
+                }
+                continue;
             }
-            if p.ty.name == nameof(HttpIncoming) || p.ty.name == nameof(RequestContext) || p.ty.name == nameof(ServerWebSocket) { continue; }
-            if p.has<QueryAttribute>() { where = "query"; name = p.attribute<QueryAttribute>().unwrap().name.unwrap_or(name); }
-            else if p.has<HeaderAttribute>() { where = "header"; name = p.attribute<HeaderAttribute>().unwrap().name.unwrap_or(name); }
-            else if p.has<CookieAttribute>() { where = "cookie"; name = p.attribute<CookieAttribute>().unwrap().name.unwrap_or(name); }
-            else if p.has<PathAttribute>() { name = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name); }
+            if p.ty.name
+                == nameof(HttpIncoming)
+                || p.ty.name == nameof(RequestContext) || p.ty.name == nameof(ServerWebSocket) {
+                continue;
+            }
+            if p.has<QueryAttribute>() {
+                where = "query";
+                name = p.attribute<QueryAttribute>().unwrap().name.unwrap_or(name);
+            } else if p.has<HeaderAttribute>() {
+                where = "header";
+                name = p.attribute<HeaderAttribute>().unwrap().name.unwrap_or(name);
+            } else if p.has<CookieAttribute>() {
+                where = "cookie";
+                name = p.attribute<CookieAttribute>().unwrap().name.unwrap_or(name);
+            } else if p.has<PathAttribute>() {
+                name = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name);
+            }
             let parameter = JsonValue.dict();
-            parameter.set("name", JsonValue.from_string(name)); parameter.set("in", JsonValue.from_string(where));
+            parameter.set("name", JsonValue.from_string(name));
+            parameter.set("in", JsonValue.from_string(where));
             parameter.set("required", JsonValue.boolean(where == "path" || !p.ty.is_option()));
-            let parameter_schema = this.schema(p.ty, Map<string, bool>()); ValidationGenerator.constraints(p.attributes, parameter_schema);
-            if p.has<DefaultJsonAttribute>() { parameter.set("required", JsonValue.boolean(false)); }
-            parameter.set("schema", parameter_schema); parameters.push(parameter);
+            let parameter_schema = this.schema(p.ty, Map<string, bool>());
+            ValidationGenerator.constraints(p.attributes, parameter_schema);
+            if p.has<DefaultJsonAttribute>() {
+                parameter.set("required", JsonValue.boolean(false));
+            }
+            parameter.set("schema", parameter_schema);
+            parameters.push(parameter);
         }
     }
+
     internal fun openapi(owner: string): string {
-        this.schemas = JsonValue.dict(); this.security_schemes = JsonValue.dict();
+        this.schemas = JsonValue.dict();
+        this.security_schemes = JsonValue.dict();
         let paths = JsonValue.dict();
         for (let route in this.routes) {
-            if this.owners.get(route.index).unwrap_or("") != owner { continue; }
-            if route.websocket { continue; }
-            let operation = JsonValue.dict(); operation.set("operationId", JsonValue.from_string(route.function.id));
-            let status = 200; if web_return_type(route.function).kind == TypeRefKind.Void { status = 204; }
+            if this.owners.get(route.index).unwrap_or("") != owner {
+                continue;
+            }
+            if route.websocket {
+                continue;
+            }
+            let operation = JsonValue.dict();
+            operation.set("operationId", JsonValue.from_string(route.function.id));
+            let status = 200;
+            if web_return_type(route.function).kind == TypeRefKind.Void {
+                status = 204;
+            }
             if route.function.has<OperationAttribute>() {
-                let meta = route.function.attribute<OperationAttribute>().unwrap(); status = meta.status.unwrap_or(status);
-                if meta.summary.is_some() { operation.set("summary", JsonValue.from_string(meta.summary.unwrap())); }
-                if meta.description.is_some() { operation.set("description", JsonValue.from_string(meta.description.unwrap())); }
-                if meta.deprecated.is_some() { operation.set("deprecated", JsonValue.boolean(meta.deprecated.unwrap())); }
-                if meta.tags.is_some() { let tags = JsonValue.array(); for (let tag in meta.tags.unwrap().split(',')) { tags.push(JsonValue.from_string(tag.trim())); } operation.set("tags", tags); }
+                let meta = route.function.attribute<OperationAttribute>().unwrap();
+                status = meta.status.unwrap_or(status);
+                if meta.summary.is_some() {
+                    operation.set("summary", JsonValue.from_string(meta.summary.unwrap()));
+                }
+                if meta.description.is_some() {
+                    operation.set("description", JsonValue.from_string(meta.description.unwrap()));
+                }
+                if meta.deprecated.is_some() {
+                    operation.set("deprecated", JsonValue.boolean(meta.deprecated.unwrap()));
+                }
+                if meta.tags.is_some() {
+                    let tags = JsonValue.array();
+                    for (let tag in meta.tags.unwrap().split(',')) {
+                        tags.push(JsonValue.from_string(tag.trim()));
+                    }
+                    operation.set("tags", tags);
+                }
             }
             let scopes = JsonValue.array();
-            if route.function.has<RequiresScopesAttribute>() { for (let scope in route.function.attribute<RequiresScopesAttribute>().unwrap().scopes.split(' ')) { if !scope.is_empty() { scopes.push(JsonValue.from_string(scope)); } } }
-            if scopes.length > 0 { operation.set("x-required-scopes", scopes); }
-            let requirement = JsonValue.dict(); this.security(route.function, requirement, Map<string, bool>(), scopes);
-            if requirement.length > 0 { let security = JsonValue.array(); security.push(requirement); operation.set("security", security); }
-            let parameters = JsonValue.array(); let fields = JsonValue.dict(); let required = JsonValue.array(); let body = JsonValue.dict();
-            this.openapi_parameters(route.function, route, parameters, fields, required, body, Map<string, bool>());
-            if parameters.length > 0 { operation.set("parameters", parameters); }
-            if fields.length > 0 {
-                let schema = JsonValue.dict(); schema.set("type", JsonValue.from_string("object")); schema.set("properties", fields);
-                if required.length > 0 { schema.set("required", required); }
-                let entry = JsonValue.dict(); entry.set("schema", schema); let content = JsonValue.dict(); content.set("multipart/form-data", entry); body.set("content", content);
+            if route.function.has<RequiresScopesAttribute>() {
+                for (let scope in route.function.attribute<RequiresScopesAttribute>()
+                    .unwrap()
+                    .scopes.split(' ')) {
+                    if !scope.is_empty() {
+                        scopes.push(JsonValue.from_string(scope));
+                    }
+                }
             }
-            if body.length > 0 { operation.set("requestBody", body); }
-            let ty = route.function.ret; if ty.name == "Result" { ty = ty.arg(0); }
-            let content_type = "application/json";
-            if ty.name == "string" { content_type = "text/plain"; }
-            if ty.display == "byte[]" { content_type = "application/octet-stream"; }
-            if ty.name == "Iterable" || ty.name == "AsyncIterable" {
-                content_type = "application/octet-stream";
-                if ty.arg(0).name == nameof(SseEvent) { content_type = "text/event-stream"; }
-                if ty.arg(0).name == "string" { content_type = "text/plain; charset=utf-8"; }
-                if route.function.has<ProducesAttribute>() && ty.arg(0).name != "SseEvent" { content_type = route.function.attribute<ProducesAttribute>().unwrap().content_type; }
+            if scopes.length > 0 {
+                operation.set("x-required-scopes", scopes);
+            }
+            let requirement = JsonValue.dict();
+            this.security(route.function, requirement, Map<string, bool>(), scopes);
+            if requirement.length > 0 {
+                let security = JsonValue.array();
+                security.push(requirement);
+                operation.set("security", security);
+            }
+            let parameters = JsonValue.array();
+            let fields = JsonValue.dict();
+            let required = JsonValue.array();
+            let body = JsonValue.dict();
+            this.openapi_parameters(
+                route.function,
+                route,
+                parameters,
+                fields,
+                required,
+                body,
+                Map<string, bool>()
+            );
+            if parameters.length > 0 {
+                operation.set("parameters", parameters);
+            }
+            if fields.length > 0 {
+                let schema = JsonValue.dict();
+                schema.set("type", JsonValue.from_string("object"));
+                schema.set("properties", fields);
+                if required.length > 0 {
+                    schema.set("required", required);
+                }
+                let entry = JsonValue.dict();
+                entry.set("schema", schema);
+                let content = JsonValue.dict();
+                content.set("multipart/form-data", entry);
+                body.set("content", content);
+            }
+            if body.length > 0 {
+                operation.set("requestBody", body);
+            }
+            let ty = route.function.ret;
+            if ty.name == "Result" {
                 ty = ty.arg(0);
             }
-            let response = JsonValue.dict(); response.set("description", JsonValue.from_string("Success"));
-            let entry = JsonValue.dict(); entry.set("schema", this.schema(ty, Map<string, bool>()));
-            let content = JsonValue.dict(); content.set(content_type, entry); if ty.kind != TypeRefKind.Void && ty.name != nameof(HttpOutgoing) { response.set("content", content); }
-            let responses = JsonValue.dict(); responses.set(status.to_string(), response);
-            let validation = JsonValue.dict(); validation.set("description", JsonValue.from_string("Input validation failed")); responses.set("422", validation); operation.set("responses", responses);
-            for (let metadata in GenAttributes.decode_all<ResponseAttribute>(route.function.attributes)) {
-                let documented = JsonValue.dict(); documented.set("description", JsonValue.from_string(metadata.description));
+            let content_type = "application/json";
+            if ty.name == "string" {
+                content_type = "text/plain";
+            }
+            if ty.display == "byte[]" {
+                content_type = "application/octet-stream";
+            }
+            if ty.name == "Iterable" || ty.name == "AsyncIterable" {
+                content_type = "application/octet-stream";
+                if ty.arg(0).name == nameof(SseEvent) {
+                    content_type = "text/event-stream";
+                }
+                if ty.arg(0).name == "string" {
+                    content_type = "text/plain; charset=utf-8";
+                }
+                if route.function.has<ProducesAttribute>() && ty.arg(0).name != "SseEvent" {
+                    content_type = route.function.attribute<ProducesAttribute>()
+                        .unwrap()
+                        .content_type;
+                }
+                ty = ty.arg(0);
+            }
+            let response = JsonValue.dict();
+            response.set("description", JsonValue.from_string("Success"));
+            let entry = JsonValue.dict();
+            entry.set("schema", this.schema(ty, Map<string, bool>()));
+            let content = JsonValue.dict();
+            content.set(content_type, entry);
+            if ty.kind != TypeRefKind.Void && ty.name != nameof(HttpOutgoing) {
+                response.set("content", content);
+            }
+            let responses = JsonValue.dict();
+            responses.set(status.to_string(), response);
+            let validation = JsonValue.dict();
+            validation.set("description", JsonValue.from_string("Input validation failed"));
+            responses.set("422", validation);
+            operation.set("responses", responses);
+            for (let metadata in GenAttributes.decode_all<ResponseAttribute>(
+                route.function.attributes
+            )) {
+                let documented = JsonValue.dict();
+                documented.set("description", JsonValue.from_string(metadata.description));
                 if metadata.model.is_some() {
                     let symbol = this.ctx.find_symbol(metadata.model.unwrap().symbol);
-                    if symbol.is_none() || symbol.unwrap().declaration.is_none() { this.ctx.error_at(route.function.id, "@response model must resolve to an @json declaration"); }
-                    else {
+                    if symbol.is_none() || symbol.unwrap().declaration.is_none() {
+                        this.ctx.error_at(
+                            route.function.id,
+                            "@response model must resolve to an @json declaration"
+                        );
+                    } else {
                         let declaration = symbol.unwrap().declaration.unwrap();
-                        if !declaration.has<JsonAttribute>() { this.ctx.error_at(route.function.id, "@response model must be @json"); }
-                        else {
-                            let model = ValidationGenerator.model(declaration, this.ctx, this.schemas); this.schemas.set(declaration.id, model);
-                            let reference = JsonValue.dict(); reference.set("$ref", JsonValue.from_string(declaration.id)); let entry = JsonValue.dict(); entry.set("schema", reference);
-                            let content = JsonValue.dict(); content.set(metadata.content_type.unwrap_or("application/json"), entry); documented.set("content", content);
+                        if !declaration.has<JsonAttribute>() {
+                            this.ctx.error_at(route.function.id, "@response model must be @json");
+                        } else {
+                            let model = ValidationGenerator.model(
+                                declaration,
+                                this.ctx,
+                                this.schemas
+                            );
+                            this.schemas.set(declaration.id, model);
+                            let reference = JsonValue.dict();
+                            reference.set("$ref", JsonValue.from_string(declaration.id));
+                            let entry = JsonValue.dict();
+                            entry.set("schema", reference);
+                            let content = JsonValue.dict();
+                            content.set(metadata.content_type.unwrap_or("application/json"), entry);
+                            documented.set("content", content);
                         }
                     }
                 }
                 responses.set(metadata.status.to_string(), documented);
             }
-            let path = paths.get(route.path).unwrap_or(JsonValue.dict()); path.set(route.method.to_lower(), operation); paths.set(route.path, path);
+            let path = paths.get(route.path).unwrap_or(JsonValue.dict());
+            path.set(route.method.to_lower(), operation);
+            paths.set(route.path, path);
         }
-        let document = JsonValue.dict(); document.set("paths", paths);
-        let components = JsonValue.dict(); components.set("schemas", this.schemas); components.set("securitySchemes", this.security_schemes); document.set("components", components);
-        this.openapi_refs(document); return Json.serialize(document);
+        let document = JsonValue.dict();
+        document.set("paths", paths);
+        let components = JsonValue.dict();
+        components.set("schemas", this.schemas);
+        components.set("securitySchemes", this.security_schemes);
+        document.set("components", components);
+        this.openapi_refs(document);
+        return Json.serialize(document);
     }
 }

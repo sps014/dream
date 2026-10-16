@@ -4,19 +4,41 @@ import system.codegen;
 import system.webapi;
 import system.json;
 
+/// Generates routes and API descriptions for annotated web API declarations.
 @generator
 @incremental
-@on_attribute(GetAttribute, PostAttribute, PutAttribute, PatchAttribute, DeleteAttribute, HeadAttribute, OptionsAttribute, WebsocketAttribute, RouterAttribute, UseAttribute, DepAttribute, DependencyOverrideAttribute)
+@on_attribute(
+    GetAttribute,
+    PostAttribute,
+    PutAttribute,
+    PatchAttribute,
+    DeleteAttribute,
+    HeadAttribute,
+    OptionsAttribute,
+    WebsocketAttribute,
+    RouterAttribute,
+    UseAttribute,
+    DepAttribute,
+    DependencyOverrideAttribute
+)
 public fun webapi_derive(ctx: GenContext): void {
     let gen = WebGenerator(ctx);
     gen.collect();
     gen.collect_overrides();
     gen.validate_dependencies();
-    if ctx.has_errors() { return; }
-    for (let route in gen.routes) { gen.validate_route(route); }
-    if ctx.has_errors() { return; }
+    if ctx.has_errors() {
+        return;
+    }
+    for (let route in gen.routes) {
+        gen.validate_route(route);
+    }
+    if ctx.has_errors() {
+        return;
+    }
     gen.emit_routes();
-    if ctx.has_errors() { return; }
+    if ctx.has_errors() {
+        return;
+    }
     gen.emit_routers();
     ctx.emit_file("routes.dream", gen.imports.to_string() + gen.source.to_string());
 }
@@ -28,8 +50,20 @@ internal class WebRoute {
     internal uses: List<UseAttribute>;
     internal websocket: bool;
     internal index: int;
-    internal constructor(function: GenFunction, method: string, path: string, uses: List<UseAttribute>, websocket: bool, index: int) {
-        this.function = function; this.method = method; this.path = path; this.uses = uses; this.websocket = websocket; this.index = index;
+    internal constructor(
+        function: GenFunction,
+        method: string,
+        path: string,
+        uses: List<UseAttribute>,
+        websocket: bool,
+        index: int
+    ) {
+        this.function = function;
+        this.method = method;
+        this.path = path;
+        this.uses = uses;
+        this.websocket = websocket;
+        this.index = index;
     }
 }
 
@@ -49,17 +83,38 @@ internal class WebGenerator {
     internal sequence: int;
     internal colors: Map<string, int>;
     internal constructor(ctx: GenContext) {
-        this.ctx = ctx; this.functions = Map<string, GenFunction>(); this.calls = Map<string, string>();
-        this.declarations = Map<string, GenDecl>(); this.routes = List<WebRoute>(); this.owners = Map<int, string>(); this.replacements = Map<string, List<GenFunction>>(); this.schemas = JsonValue.dict(); this.security_schemes = JsonValue.dict();
-        this.source = CodeBuilder(); this.imports = CodeBuilder(); this.imports.line("module system.webapi;"); this.type_aliases = Map<string, string>(); this.sequence = 0; this.colors = Map<string, int>();
+        this.ctx = ctx;
+        this.functions = Map<string, GenFunction>();
+        this.calls = Map<string, string>();
+        this.declarations = Map<string, GenDecl>();
+        this.routes = List<WebRoute>();
+        this.owners = Map<int, string>();
+        this.replacements = Map<string, List<GenFunction>>();
+        this.schemas = JsonValue.dict();
+        this.security_schemes = JsonValue.dict();
+        this.source = CodeBuilder();
+        this.imports = CodeBuilder();
+        this.imports.line("module system.webapi;");
+        this.type_aliases = Map<string, string>();
+        this.sequence = 0;
+        this.colors = Map<string, int>();
     }
-    internal fun fresh(): string { let value = "__web_v" + this.sequence.to_string(); this.sequence = this.sequence + 1; return value; }
+
+    internal fun fresh(): string {
+        let value = "__web_v" + this.sequence.to_string();
+        this.sequence = this.sequence + 1;
+        return value;
+    }
+
     internal fun remember(f: GenFunction, owner: string): void {
-        if this.functions.contains(f.id) { return; }
+        if this.functions.contains(f.id) {
+            return;
+        }
         this.functions.set(f.id, f);
         let call = f.name;
-        if !owner.is_empty() { call = owner + "." + f.name; }
-        else {
+        if !owner.is_empty() {
+            call = owner + "." + f.name;
+        } else {
             let split = f.id.index_of("::").unwrap_or(0);
             let module_name = f.id.substring(0, split);
             if !module_name.is_empty() {
@@ -69,46 +124,127 @@ internal class WebGenerator {
         }
         this.calls.set(f.id, call);
     }
+
     internal fun owner_name(d: GenDecl): string {
-        if d.module_name.is_empty() || d.module_name == "system" || d.module_name.starts_with("system.") { return d.name; }
-        if this.type_aliases.contains(d.id) { return this.type_aliases.get(d.id).unwrap(); }
-        let alias = "__web_type" + this.type_aliases.length.to_string(); this.type_aliases.set(d.id, alias);
-        this.imports.line("import " + d.module_name + "." + d.name + " as " + alias + ";"); return alias;
+        if d.module_name.is_empty()
+            || d.module_name == "system" || d.module_name.starts_with("system.") {
+            return d.name;
+        }
+        if this.type_aliases.contains(d.id) {
+            return this.type_aliases.get(d.id).unwrap();
+        }
+        let alias = "__web_type" + this.type_aliases.length.to_string();
+        this.type_aliases.set(d.id, alias);
+        this.imports.line("import " + d.module_name + "." + d.name + " as " + alias + ";");
+        return alias;
     }
+
     internal fun type_code(ty: GenTypeRef): string {
-        if ty.kind == TypeRefKind.Array { return this.type_code(ty.arg(0)) + "[]"; }
+        if ty.kind == TypeRefKind.Array {
+            return this.type_code(ty.arg(0)) + "[]";
+        }
         if ty.kind == TypeRefKind.Tuple || ty.kind == TypeRefKind.Function {
-            let result = "("; if ty.kind == TypeRefKind.Function { result = "fun("; }
-            let end = ty.args.length; if ty.kind == TypeRefKind.Function { end--; }
-            let i = 0; while i < end { if i > 0 { result = result + ", "; } result = result + this.type_code(ty.arg(i)); i++; }
-            result = result + ")"; if ty.kind == TypeRefKind.Function { result = result + ": " + this.type_code(ty.arg(end)); } return result;
+            let result = "(";
+            if ty.kind == TypeRefKind.Function {
+                result = "fun(";
+            }
+            let end = ty.args.length;
+            if ty.kind == TypeRefKind.Function {
+                end--;
+            }
+            let i = 0;
+            while i < end {
+                if i > 0 {
+                    result = result + ", ";
+                }
+                result = result + this.type_code(ty.arg(i));
+                i++;
+            }
+            result = result + ")";
+            if ty.kind == TypeRefKind.Function {
+                result = result + ": " + this.type_code(ty.arg(end));
+            }
+            return result;
         }
         let name = ty.name;
-        if !ty.decl.is_empty() { let declaration = this.declaration(ty); if declaration.is_some() { name = this.owner_name(declaration.unwrap()); } }
-        if !ty.args.is_empty() { name = name + "<"; let i = 0; for (let arg in ty.args) { if i > 0 { name = name + ", "; } name = name + this.type_code(arg); i++; } name = name + ">"; }
+        if !ty.decl.is_empty() {
+            let declaration = this.declaration(ty);
+            if declaration.is_some() {
+                name = this.owner_name(declaration.unwrap());
+            }
+        }
+        if !ty.args.is_empty() {
+            name = name + "<";
+            let i = 0;
+            for (let arg in ty.args) {
+                if i > 0 {
+                    name = name + ", ";
+                }
+                name = name + this.type_code(arg);
+                i++;
+            }
+            name = name + ">";
+        }
         return name;
     }
+
     internal fun declaration(ty: GenTypeRef): Option<GenDecl> {
-        if ty.decl.is_empty() { return Option.None; }
-        if this.declarations.contains(ty.decl) { return this.declarations.get(ty.decl); }
+        if ty.decl.is_empty() {
+            return Option.None;
+        }
+        if this.declarations.contains(ty.decl) {
+            return this.declarations.get(ty.decl);
+        }
         let symbol = this.ctx.find_symbol(ty.decl);
-        if symbol.is_none() { return Option.None; }
+        if symbol.is_none() {
+            return Option.None;
+        }
         let declaration = symbol.unwrap().declaration;
-        if declaration.is_some() { this.declarations.set(ty.decl, declaration.unwrap()); }
+        if declaration.is_some() {
+            this.declarations.set(ty.decl, declaration.unwrap());
+        }
         return declaration;
     }
 }
 
-internal fun web_quote(text: string): string { return Json.serialize(JsonValue.from_string(text)); }
-internal fun web_return_type(f: GenFunction): GenTypeRef { return f.ret; }
-internal fun web_inner(ty: GenTypeRef): GenTypeRef { if ty.is_option() { return ty.arg(0); } return ty; }
+internal fun web_quote(text: string): string {
+    return Json.serialize(JsonValue.from_string(text));
+}
+
+internal fun web_return_type(f: GenFunction): GenTypeRef {
+    return f.ret;
+}
+
+internal fun web_inner(ty: GenTypeRef): GenTypeRef {
+    if ty.is_option() {
+        return ty.arg(0);
+    }
+    return ty;
+}
+
 internal fun web_scalar(ty: GenTypeRef): bool {
     let name = web_inner(ty).name;
-    return name == "string" || name == "int" || name == "long" || name == "bool" || name == "double" || name == "float" || name == "uint" || name == "ulong" || name == "byte";
+    return name
+        == "string"
+        || name
+        == "int"
+        || name
+        == "long"
+        || name
+        == "bool"
+        || name
+        == "double" || name == "float" || name == "uint" || name == "ulong" || name == "byte";
 }
+
 internal fun web_join(prefix: string, path: string): string {
-    while prefix.ends_with("/") { prefix = prefix.substring(0, prefix.length - 1); }
-    if !path.starts_with("/") { path = "/" + path; }
-    if path == "/" && !prefix.is_empty() { return prefix; }
+    while prefix.ends_with("/") {
+        prefix = prefix.substring(0, prefix.length - 1);
+    }
+    if !path.starts_with("/") {
+        path = "/" + path;
+    }
+    if path == "/" && !prefix.is_empty() {
+        return prefix;
+    }
     return prefix + path;
 }

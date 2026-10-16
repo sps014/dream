@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class DependencyResource<T>`
+## `DependencyResource`
 
 A dependency value and its asynchronous release operation.
 
@@ -12,25 +12,31 @@ A dependency value and its asynchronous release operation.
 public class DependencyResource<T>
 ```
 
-## `public value`
+## `value`
+
+Value carried by this entry.
 
 ```dream
 public value: T
 ```
 
-## `public cleanup`
+## `cleanup`
+
+Asynchronous cleanup action, given the cancellation token.
 
 ```dream
 public cleanup: fun(CancellationToken): Future<void>
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `DependencyResource` with `value`, `cleanup`.
 
 ```dream
 public constructor(value: T, cleanup: fun(CancellationToken): Future<void>)
 ```
 
-## `public class DependencyOverrides`
+## `DependencyOverrides`
 
 Generated, type-checked dependency replacement selection for one application.
 
@@ -38,7 +44,9 @@ Generated, type-checked dependency replacement selection for one application.
 public class DependencyOverrides
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `DependencyOverrides` with `providers`.
 
 ```dream
 public constructor(providers: Map<string, string>)

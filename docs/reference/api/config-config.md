@@ -7,10 +7,10 @@
 Invalid or missing configuration, including the originating source and key.
 
 ```dream
-public class ConfigError : Error
+public class ConfigError: Error
 ```
 
-## `public key: string`
+## `key`
 
 Logical setting name associated with the failure.
 
@@ -18,7 +18,7 @@ Logical setting name associated with the failure.
 public key: string
 ```
 
-## `public source: string`
+## `source`
 
 The default, JSON filename, environment variable, or CLI argument that supplied it.
 

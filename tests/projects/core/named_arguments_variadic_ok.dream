@@ -1,7 +1,7 @@
 import system.testing;
 // Named args for fixed parameters may mix with trailing positional variadic args.
-
 import system;
+
 fun c167_sum_with_base(base: int, ...nums: int[]): int {
     let total = base;
     for (let n in nums) {

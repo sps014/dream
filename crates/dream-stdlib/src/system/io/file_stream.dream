@@ -26,7 +26,9 @@ public class FileStream {
         let bytes = List<byte>();
         while true {
             let chunk = this.read_bytes(8192)?;
-            if chunk.length == 0 { break; }
+            if chunk.length == 0 {
+                break;
+            }
             for (let i = 0; i < chunk.length; i = i + 1) {
                 bytes.push(chunk[i]);
             }

@@ -6,112 +6,286 @@ import system.json;
 
 extend WebGenerator {
     internal fun collect(): void {
-        for (let f in this.ctx.referenced_functions()) { this.remember(f, ""); }
+        for (let f in this.ctx.referenced_functions()) {
+            this.remember(f, "");
+        }
         for (let d in this.ctx.referenced_decls()) {
             this.declarations.set(d.id, d);
-            for (let f in d.methods) { this.remember(f, this.owner_name(d)); }
+            for (let f in d.methods) {
+                this.remember(f, this.owner_name(d));
+            }
         }
         for (let d in this.ctx.decls()) {
             this.declarations.set(d.id, d);
-            for (let f in d.methods) { this.remember(f, this.owner_name(d)); }
+            for (let f in d.methods) {
+                this.remember(f, this.owner_name(d));
+            }
         }
         // Imports are emitted before definitions, including attribute-only dependencies.
-        for (let f in this.ctx.functions_with<GetAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<PostAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<PutAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<PatchAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<DeleteAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<HeadAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<OptionsAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<WebsocketAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<DepAttribute>()) { this.remember(f, ""); }
-        for (let f in this.ctx.functions_with<UseAttribute>()) { this.remember(f, ""); }
+        for (let f in this.ctx.functions_with<GetAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<PostAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<PutAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<PatchAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<DeleteAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<HeadAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<OptionsAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<WebsocketAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<DepAttribute>()) {
+            this.remember(f, "");
+        }
+        for (let f in this.ctx.functions_with<UseAttribute>()) {
+            this.remember(f, "");
+        }
         for (let d in this.ctx.decls()) {
             let prefix = "";
-            if d.has<RouterAttribute>() { prefix = d.attribute<RouterAttribute>().unwrap().prefix; }
-            if !prefix.is_empty() && !prefix.starts_with("/") { this.ctx.error_at(d.id, "@router prefix must be empty or start with '/'"); }
+            if d.has<RouterAttribute>() {
+                prefix = d.attribute<RouterAttribute>().unwrap().prefix;
+            }
+            if !prefix.is_empty() && !prefix.starts_with("/") {
+                this.ctx.error_at(d.id, "@router prefix must be empty or start with '/'");
+            }
             let uses = GenAttributes.decode_all<UseAttribute>(d.attributes);
             for (let f in d.methods) {
                 let before = this.routes.length;
                 this.candidate(f, prefix, uses, true);
                 if this.routes.length > before {
-                    if !d.has<RouterAttribute>() { this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class"); }
+                    if !d.has<RouterAttribute>() {
+                        this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class");
+                    }
                     this.owners.set(before, d.id);
                 }
             }
         }
         let methods = Map<string, bool>();
-        for (let d in this.ctx.decls()) { for (let f in d.methods) { methods.set(f.id, true); } }
-        for (let entry in this.functions.entries()) { if !methods.contains(entry.key) { this.candidate(entry.value, "", List<UseAttribute>(), false); } }
+        for (let d in this.ctx.decls()) {
+            for (let f in d.methods) {
+                methods.set(f.id, true);
+            }
+        }
+        for (let entry in this.functions.entries()) {
+            if !methods.contains(entry.key) {
+                this.candidate(entry.value, "", List<UseAttribute>(), false);
+            }
+        }
         let seen = Map<string, bool>();
         for (let route in this.routes) {
-            let key = this.owners.get(route.index).unwrap_or("") + " " + route.method + " " + route.path;
-            if seen.contains(key) { this.ctx.error_at(route.function.id, "duplicate " + route.method + " route '" + route.path + "'"); }
+            let key = this.owners.get(route.index)
+                .unwrap_or("") + " " + route.method + " " + route.path;
+            if seen.contains(key) {
+                this.ctx.error_at(
+                    route.function.id,
+                    "duplicate " + route.method + " route '" + route.path + "'"
+                );
+            }
             seen.set(key, true);
         }
     }
-    internal fun candidate(f: GenFunction, prefix: string, group: List<UseAttribute>, method: bool): void {
-        let verb = ""; let path = ""; let websocket = false;
-        if f.has<GetAttribute>() { verb = "GET"; path = f.attribute<GetAttribute>().unwrap().path; }
-        if f.has<PostAttribute>() { verb = "POST"; path = f.attribute<PostAttribute>().unwrap().path; }
-        if f.has<PutAttribute>() { verb = "PUT"; path = f.attribute<PutAttribute>().unwrap().path; }
-        if f.has<PatchAttribute>() { verb = "PATCH"; path = f.attribute<PatchAttribute>().unwrap().path; }
-        if f.has<DeleteAttribute>() { verb = "DELETE"; path = f.attribute<DeleteAttribute>().unwrap().path; }
-        if f.has<HeadAttribute>() { verb = "HEAD"; path = f.attribute<HeadAttribute>().unwrap().path; }
-        if f.has<OptionsAttribute>() { verb = "OPTIONS"; path = f.attribute<OptionsAttribute>().unwrap().path; }
-        if f.has<WebsocketAttribute>() { verb = "GET"; path = f.attribute<WebsocketAttribute>().unwrap().path; websocket = true; }
-        if verb.is_empty() { return; }
-        if !method { this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class"); return; }
-        if !f.is_static { this.ctx.error_at(f.id, "HTTP route methods on a class must be static"); return; }
+
+    internal fun candidate(
+        f: GenFunction,
+        prefix: string,
+        group: List<UseAttribute>,
+        method: bool
+    ): void {
+        let verb = "";
+        let path = "";
+        let websocket = false;
+        if f.has<GetAttribute>() {
+            verb = "GET";
+            path = f.attribute<GetAttribute>().unwrap().path;
+        }
+        if f.has<PostAttribute>() {
+            verb = "POST";
+            path = f.attribute<PostAttribute>().unwrap().path;
+        }
+        if f.has<PutAttribute>() {
+            verb = "PUT";
+            path = f.attribute<PutAttribute>().unwrap().path;
+        }
+        if f.has<PatchAttribute>() {
+            verb = "PATCH";
+            path = f.attribute<PatchAttribute>().unwrap().path;
+        }
+        if f.has<DeleteAttribute>() {
+            verb = "DELETE";
+            path = f.attribute<DeleteAttribute>().unwrap().path;
+        }
+        if f.has<HeadAttribute>() {
+            verb = "HEAD";
+            path = f.attribute<HeadAttribute>().unwrap().path;
+        }
+        if f.has<OptionsAttribute>() {
+            verb = "OPTIONS";
+            path = f.attribute<OptionsAttribute>().unwrap().path;
+        }
+        if f.has<WebsocketAttribute>() {
+            verb = "GET";
+            path = f.attribute<WebsocketAttribute>().unwrap().path;
+            websocket = true;
+        }
+        if verb.is_empty() {
+            return;
+        }
+        if !method {
+            this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class");
+            return;
+        }
+        if !f.is_static {
+            this.ctx.error_at(f.id, "HTTP route methods on a class must be static");
+            return;
+        }
         let uses = List<UseAttribute>();
-        for (let use in group) { uses.push(use); }
-        for (let use in GenAttributes.decode_all<UseAttribute>(f.attributes)) { uses.push(use); }
+        for (let use in group) {
+            uses.push(use);
+        }
+        for (let use in GenAttributes.decode_all<UseAttribute>(f.attributes)) {
+            uses.push(use);
+        }
         let route = WebRoute(f, verb, web_join(prefix, path), uses, websocket, this.routes.length);
-        this.validate_route(route); this.routes.push(route);
+        this.validate_route(route);
+        this.routes.push(route);
     }
+
     internal fun validate_route(route: WebRoute): void {
         let f = route.function;
         let placeholders = Map<string, bool>();
         for (let segment in route.path.split('/')) {
-            if segment.starts_with("{") && segment.ends_with("}") && segment.length > 2 { placeholders.set(segment.substring(1, segment.length - 1), false); }
+            if segment.starts_with("{") && segment.ends_with("}") && segment.length > 2 {
+                placeholders.set(segment.substring(1, segment.length - 1), false);
+            }
         }
         let flags = Map<string, bool>();
         this.validate_parameters(f, route, placeholders, flags, Map<string, bool>());
-        if flags.contains("body") && flags.contains("form") { this.ctx.error_at(f.id, "@body cannot be combined with @form/@file"); }
-        for (let entry in placeholders.entries()) { if !entry.value { this.ctx.error_at(f.id, "path placeholder '{" + entry.key + "}' has no matching parameter"); } }
-        if route.websocket && !flags.contains("ws") { this.ctx.error_at(f.id, "@websocket handler must take a ServerWebSocket parameter"); }
-        for (let use in route.uses) { this.validate_use(f, use); }
+        if flags.contains("body") && flags.contains("form") {
+            this.ctx.error_at(f.id, "@body cannot be combined with @form/@file");
+        }
+        for (let entry in placeholders.entries()) {
+            if !entry.value {
+                this.ctx.error_at(
+                    f.id,
+                    "path placeholder '{" + entry.key + "}' has no matching parameter"
+                );
+            }
+        }
+        if route.websocket && !flags.contains("ws") {
+            this.ctx.error_at(f.id, "@websocket handler must take a ServerWebSocket parameter");
+        }
+        for (let use in route.uses) {
+            this.validate_use(f, use);
+        }
     }
-    internal fun validate_parameters(f: GenFunction, route: WebRoute, placeholders: Map<string, bool>, flags: Map<string, bool>, visited: Map<string, bool>): void {
-        if visited.contains(f.id) { return; }
+
+    internal fun validate_parameters(
+        f: GenFunction,
+        route: WebRoute,
+        placeholders: Map<string, bool>,
+        flags: Map<string, bool>,
+        visited: Map<string, bool>
+    ): void {
+        if visited.contains(f.id) {
+            return;
+        }
         visited.set(f.id, true);
         for (let p in f.params) {
             if p.has<DepAttribute>() {
-                let dependency = this.functions.get(p.attribute<DepAttribute>().unwrap().provider.symbol);
-                if dependency.is_some() { this.validate_parameters(dependency.unwrap(), route, placeholders, flags, visited); }
-                for (let replacement in this.replacements.get(p.attribute<DepAttribute>().unwrap().provider.symbol).unwrap_or(List<GenFunction>())) { this.validate_parameters(replacement, route, placeholders, flags, visited); }
-                continue;
-            }
-            let ty = p.ty; let name = p.name;
-            if ty.name == nameof(ServerWebSocket) { flags.set("ws", true); if !route.websocket { this.ctx.error_at(f.id, "ServerWebSocket is only valid on `@websocket` routes"); } continue; }
-            if ty.name == nameof(HttpIncoming) || ty.name == nameof(RequestContext) { continue; }
-            if p.has<BodyAttribute>() {
-                flags.set("body", true);
-                let declaration = this.declaration(ty);
-                if ty.name != "string" && ty.display != "byte[]" && ty.name != "JsonValue" && (declaration.is_none() || !declaration.unwrap().has<JsonAttribute>()) {
-                    this.ctx.error_at(f.id, "@body parameter '" + name + "' must be @json, string, byte[], or JsonValue");
+                let dependency = this.functions.get(
+                    p.attribute<DepAttribute>().unwrap().provider.symbol
+                );
+                if dependency.is_some() {
+                    this.validate_parameters(
+                        dependency.unwrap(),
+                        route,
+                        placeholders,
+                        flags,
+                        visited
+                    );
+                }
+                for (let replacement in this.replacements.get(
+                    p.attribute<DepAttribute>().unwrap().provider.symbol
+                ).unwrap_or(List<GenFunction>())) {
+                    this.validate_parameters(replacement, route, placeholders, flags, visited);
                 }
                 continue;
             }
-            if p.has<FileAttribute>() { flags.set("form", true); if web_inner(ty).name != nameof(UploadedFile) { this.ctx.error_at(f.id, "@file parameter '" + name + "' must be UploadedFile"); } continue; }
-            if p.has<FormAttribute>() { flags.set("form", true); continue; }
+            let ty = p.ty;
+            let name = p.name;
+            if ty.name == nameof(ServerWebSocket) {
+                flags.set("ws", true);
+                if !route.websocket {
+                    this.ctx.error_at(f.id, "ServerWebSocket is only valid on `@websocket` routes");
+                }
+                continue;
+            }
+            if ty.name == nameof(HttpIncoming) || ty.name == nameof(RequestContext) {
+                continue;
+            }
+            if p.has<BodyAttribute>() {
+                flags.set("body", true);
+                let declaration = this.declaration(ty);
+                if ty.name
+                    != "string"
+                    && ty.display
+                    != "byte[]"
+                    && ty.name
+                    != "JsonValue"
+                    && (declaration.is_none() || !declaration.unwrap().has<JsonAttribute>()) {
+                    this.ctx.error_at(
+                        f.id,
+                        "@body parameter '" + name + "' must be @json, string, byte[], or JsonValue"
+                    );
+                }
+                continue;
+            }
+            if p.has<FileAttribute>() {
+                flags.set("form", true);
+                if web_inner(ty).name != nameof(UploadedFile) {
+                    this.ctx.error_at(f.id, "@file parameter '" + name + "' must be UploadedFile");
+                }
+                continue;
+            }
+            if p.has<FormAttribute>() {
+                flags.set("form", true);
+                continue;
+            }
             if p.has<QueryAttribute>() || p.has<HeaderAttribute>() || p.has<CookieAttribute>() {
-                if !web_scalar(ty) { this.ctx.error_at(f.id, "extractor parameter '" + name + "' must be a scalar or Option<scalar>"); } continue;
+                if !web_scalar(ty) {
+                    this.ctx.error_at(
+                        f.id,
+                        "extractor parameter '" + name + "' must be a scalar or Option<scalar>"
+                    );
+                }
+                continue;
             }
             let key = name;
-            if p.has<PathAttribute>() { key = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name); }
-            if !placeholders.contains(key) { this.ctx.error_at(f.id, "parameter '" + name + "' is not a path segment of '" + route.path + "' and has no extractor"); }
-            else { placeholders.set(key, true); }
+            if p.has<PathAttribute>() {
+                key = p.attribute<PathAttribute>().unwrap().name.unwrap_or(name);
+            }
+            if !placeholders.contains(key) {
+                this.ctx.error_at(
+                    f.id,
+                    "parameter '"
+                        + name
+                        + "' is not a path segment of '" + route.path + "' and has no extractor"
+                );
+            } else {
+                placeholders.set(key, true);
+            }
         }
     }
 }

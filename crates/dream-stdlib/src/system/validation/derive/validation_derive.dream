@@ -4,72 +4,185 @@ import system.codegen;
 import system.json;
 import system.validation;
 
+/// Generates validation and schema support for annotated declarations.
 @generator
 @incremental
-@on_attribute(JsonAttribute, MinimumAttribute, MaximumAttribute, MinLengthAttribute, MaxLengthAttribute, PatternAttribute, DefaultJsonAttribute, AllowExtraAttribute, ValidateWithAttribute, ModelValidatorAttribute)
+@on_attribute(
+    JsonAttribute,
+    MinimumAttribute,
+    MaximumAttribute,
+    MinLengthAttribute,
+    MaxLengthAttribute,
+    PatternAttribute,
+    DefaultJsonAttribute,
+    AllowExtraAttribute,
+    ValidateWithAttribute,
+    ModelValidatorAttribute
+)
 public fun validation_derive(ctx: GenContext): void {
     for (let d in ctx.types_with<JsonAttribute>()) {
-        if d.kind != DeclKind.Class && d.kind != DeclKind.Struct { continue; }
-        if !d.generics.is_empty() { continue; }
-        let definitions = JsonValue.dict(); definitions.set(d.id, JsonValue.dict());
+        if d.kind != DeclKind.Class && d.kind != DeclKind.Struct {
+            continue;
+        }
+        if !d.generics.is_empty() {
+            continue;
+        }
+        let definitions = JsonValue.dict();
+        definitions.set(d.id, JsonValue.dict());
         let schema = ValidationGenerator.model(d, ctx, definitions);
         definitions.set(d.id, Json.deserialize<JsonValue>(Json.serialize(schema)).unwrap());
         schema.set("definitions", definitions);
-        let out = CodeBuilder(); let ty = d.self_type();
-        out.line("public static fun __validation_schema(): JsonValue { return Json.deserialize<JsonValue>(" + Json.serialize(JsonValue.from_string(Json.serialize(schema))) + ").unwrap(); }");
-        out.line("public static fun __validation_decode(text: string): Result<" + ty + ", ValidationErrors> {");
-        out.line("let parsed = Json.deserialize<JsonValue>(text); let errors = ValidationErrors();");
-        out.line("if parsed.is_err() { errors.add(List<string>(), \"json\", \"invalid JSON\"); return Result.Err(errors); }");
-        out.line("let raw = parsed.unwrap(); let shape = Validation.check(raw, " + ty + ".__validation_schema());");
+        let out = CodeBuilder();
+        let ty = d.self_type();
+        out.line(
+            "public static fun __validation_schema(): JsonValue { return Json.deserialize<JsonValue>("
+                + Json.serialize(JsonValue.from_string(Json.serialize(schema))) + ").unwrap(); }"
+        );
+        out.line(
+            "public static fun __validation_decode(text: string): Result<"
+                + ty + ", ValidationErrors> {"
+        );
+        out.line(
+            "let parsed = Json.deserialize<JsonValue>(text); let errors = ValidationErrors();"
+        );
+        out.line(
+            "if parsed.is_err() { errors.add(List<string>(), \"json\", \"invalid JSON\"); return Result.Err(errors); }"
+        );
+        out.line(
+            "let raw = parsed.unwrap(); let shape = Validation.check(raw, "
+                + ty + ".__validation_schema());"
+        );
         out.line("if !shape.is_empty() { return Result.Err(shape); }");
         out.line("return " + ty + ".__validation_validate(Json.from_value<" + ty + ">(raw)); }");
-        out.line("public static fun __validation_validate(value: " + ty + "): Result<" + ty + ", ValidationErrors> {");
-        out.line("let errors = Validation.check(Json.deserialize<JsonValue>(Json.serialize(value)).unwrap(), " + ty + ".__validation_schema());");
+        out.line(
+            "public static fun __validation_validate(value: "
+                + ty + "): Result<" + ty + ", ValidationErrors> {"
+        );
+        out.line(
+            "let errors = Validation.check(Json.deserialize<JsonValue>(Json.serialize(value)).unwrap(), "
+                + ty + ".__validation_schema());"
+        );
         out.line("if !errors.is_empty() { return Result.Err(errors); }");
         for (let field in d.fields) {
-            if field.has<JsonIgnoreAttribute>() { continue; }
+            if field.has<JsonIgnoreAttribute>() {
+                continue;
+            }
             let key = field.name;
-            if field.has<PropertyNameAttribute>() { key = field.attribute<PropertyNameAttribute>().unwrap().name; }
-            validation_nested(field.ty, "value." + field.name, "Validation.child(List<string>(), " + Json.serialize(JsonValue.from_string(key)) + ")", out, ctx, 0);
+            if field.has<PropertyNameAttribute>() {
+                key = field.attribute<PropertyNameAttribute>().unwrap().name;
+            }
+            validation_nested(
+                field.ty,
+                "value." + field.name,
+                "Validation.child(List<string>(), "
+                    + Json.serialize(JsonValue.from_string(key)) + ")",
+                out,
+                ctx,
+                0
+            );
         }
         for (let field in d.fields) {
-            if !field.has<ValidateWithAttribute>() { continue; }
+            if !field.has<ValidateWithAttribute>() {
+                continue;
+            }
             let validator = field.attribute<ValidateWithAttribute>().unwrap().validator;
             let key = field.name;
-            if field.has<PropertyNameAttribute>() { key = field.attribute<PropertyNameAttribute>().unwrap().name; }
-            out.line("let check_" + field.name + " = " + validator.text + "(value." + field.name + ");");
-            out.line("if check_" + field.name + ".is_some() { errors.add(Validation.child(List<string>(), " + Json.serialize(JsonValue.from_string(key)) + "), \"custom\", check_" + field.name + ".unwrap()); }");
+            if field.has<PropertyNameAttribute>() {
+                key = field.attribute<PropertyNameAttribute>().unwrap().name;
+            }
+            out.line(
+                "let check_" + field.name + " = " + validator.text + "(value." + field.name + ");"
+            );
+            out.line(
+                "if check_"
+                    + field.name
+                    + ".is_some() { errors.add(Validation.child(List<string>(), "
+                    + Json.serialize(JsonValue.from_string(key))
+                    + "), \"custom\", check_" + field.name + ".unwrap()); }"
+            );
         }
         out.line("if !errors.is_empty() { return Result.Err(errors); }");
         for (let method in d.methods) {
-            if !method.has<ModelValidatorAttribute>() { continue; }
-            if !method.is_static { ctx.error_at(method.id, "@model_validator must be static"); continue; }
-            out.line("for (let issue in " + ty + "." + method.name + "(value)) { errors.issues.push(issue); }");
+            if !method.has<ModelValidatorAttribute>() {
+                continue;
+            }
+            if !method.is_static {
+                ctx.error_at(method.id, "@model_validator must be static");
+                continue;
+            }
+            out.line(
+                "for (let issue in "
+                    + ty + "." + method.name + "(value)) { errors.issues.push(issue); }"
+            );
         }
         out.line("if !errors.is_empty() { return Result.Err(errors); } return Result.Ok(value); }");
         ctx.emit_extend(d, out.to_string());
     }
 }
 
-fun validation_nested(ty: GenTypeRef, value: string, location: string, out: CodeBuilder, ctx: GenContext, depth: int): void {
+fun validation_nested(
+    ty: GenTypeRef,
+    value: string,
+    location: string,
+    out: CodeBuilder,
+    ctx: GenContext,
+    depth: int
+): void {
     let suffix = depth.to_string();
     if ty.is_option() {
         out.line("if " + value + ".is_some() {");
-        validation_nested(ty.arg(0), value + ".unwrap()", location, out, ctx, depth + 1); out.line("}"); return;
+        validation_nested(ty.arg(0), value + ".unwrap()", location, out, ctx, depth + 1);
+        out.line("}");
+        return;
     }
     let kind = ty.collection();
     if ty.kind == TypeRefKind.Array || kind == CollectionKind.List || kind == CollectionKind.Set {
-        out.line("if true { let index" + suffix + " = 0; for (let element" + suffix + " in " + value + ") {");
-        validation_nested(ty.arg(0), "element" + suffix, "Validation.child(" + location + ", index" + suffix + ".to_string())", out, ctx, depth + 1);
-        out.line("index" + suffix + "++; } }"); return;
+        out.line(
+            "if true { let index"
+                + suffix + " = 0; for (let element" + suffix + " in " + value + ") {"
+        );
+        validation_nested(
+            ty.arg(0),
+            "element" + suffix,
+            "Validation.child(" + location + ", index" + suffix + ".to_string())",
+            out,
+            ctx,
+            depth + 1
+        );
+        out.line("index" + suffix + "++; } }");
+        return;
     }
     if kind == CollectionKind.Map || kind == CollectionKind.SortedMap {
         out.line("for (let entry" + suffix + " in " + value + ".entries()) {");
-        validation_nested(ty.arg(1), "entry" + suffix + ".value", "Validation.child(" + location + ", entry" + suffix + ".key)", out, ctx, depth + 1); out.line("}"); return;
+        validation_nested(
+            ty.arg(1),
+            "entry" + suffix + ".value",
+            "Validation.child(" + location + ", entry" + suffix + ".key)",
+            out,
+            ctx,
+            depth + 1
+        );
+        out.line("}");
+        return;
     }
-    if ty.decl.is_empty() || ty.name == nameof(JsonValue) { return; }
+    if ty.decl.is_empty() || ty.name == nameof(JsonValue) {
+        return;
+    }
     let symbol = ctx.find_symbol(ty.decl);
-    if symbol.is_none() || symbol.unwrap().declaration.is_none() || !symbol.unwrap().declaration.unwrap().has<JsonAttribute>() { return; }
-    out.line("if true { let nested = Validation.validate(" + value + "); if nested.is_err() { for (let issue in nested.unwrap_err().issues) {");
-    out.line("let path = " + location + "; for (let part in issue.location) { path.push(part); } errors.add(path, issue.code, issue.message); } } }");
+    if symbol.is_none()
+        || symbol.unwrap()
+        .declaration.is_none() || !symbol.unwrap()
+        .declaration.unwrap()
+        .has<JsonAttribute>() {
+        return;
+    }
+    out.line(
+        "if true { let nested = Validation.validate("
+            + value + "); if nested.is_err() { for (let issue in nested.unwrap_err().issues) {"
+    );
+    out.line(
+        "let path = "
+            + location
+            + "; for (let part in issue.location) { path.push(part); } errors.add(path, issue.code, issue.message); } } }"
+    );
 }

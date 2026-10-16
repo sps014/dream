@@ -2,8 +2,8 @@ import system.testing;
 // Interface default methods: `greet` has a default body that classes inherit when they omit it.
 // The default calls another interface method (`name`) on `this`, which dispatches to the concrete
 // implementation. `Robot` overrides the default; `Person` inherits it.
-
 import system;
+
 interface c100_Greeter {
     fun name(): string;
     fun greet(): string {
@@ -11,14 +11,21 @@ interface c100_Greeter {
     }
 }
 
-class c100_Person : c100_Greeter {
-    public fun name(): string { return "Ada"; }
+class c100_Person: c100_Greeter {
+    public fun name(): string {
+        return "Ada";
+    }
 }
 
-class c100_Robot : c100_Greeter {
-    public fun name(): string { return "R2"; }
+class c100_Robot: c100_Greeter {
+    public fun name(): string {
+        return "R2";
+    }
+
     // Overrides the default.
-    public fun greet(): string { return "BEEP " + this.name(); }
+    public fun greet(): string {
+        return "BEEP " + this.name();
+    }
 }
 
 // Interface-typed parameter dispatches `greet` dynamically: the default for Person, the override

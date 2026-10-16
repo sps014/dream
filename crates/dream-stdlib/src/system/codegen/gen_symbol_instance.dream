@@ -6,10 +6,15 @@ import system.json;
 
 // Concrete semantic members, including inherited defaults and substituted generic arguments.
 public class GenSymbolInstance {
+    /// Type of this declaration or expression.
     public ty: GenTypeRef;
+    /// Base types declared by this type.
     public bases: List<GenTypeRef>;
+    /// Fields of this type, in declaration order.
     public fields: List<GenField>;
+    /// Methods declared by this type.
     public methods: List<GenFunction>;
+    /// Choices declared by this union or enum, in declaration order.
     public variants: List<GenVariant>;
 
     // Decodes an instantiated type view exported by semantic analysis.
@@ -20,7 +25,14 @@ public class GenSymbolInstance {
         this.methods = gen_functions(v, "methods");
         this.variants = List<GenVariant>();
         for (let variant in gen_items(v, "variants")) {
-            this.variants.push(GenVariant(gen_str(variant, "id"), gen_str(variant, "name"), gen_fields(variant), gen_location(variant)));
+            this.variants.push(
+                GenVariant(
+                    gen_str(variant, "id"),
+                    gen_str(variant, "name"),
+                    gen_fields(variant),
+                    gen_location(variant)
+                )
+            );
         }
     }
 }

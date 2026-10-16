@@ -2,21 +2,31 @@ import system.testing;
 // Interfaces: multiple implementations, dynamic dispatch through an interface-typed value,
 // implicit class->interface upcasts at call sites, and `is`-with-binding for both a reference
 // (interface) value and a boxed primitive.
-
 import system;
+
 interface c106_Animal {
     fun speak(): string;
     fun legs(): int;
 }
 
-class c106_Cat : c106_Animal {
-    public fun speak(): string { return "meow"; }
-    public fun legs(): int { return 4; }
+class c106_Cat: c106_Animal {
+    public fun speak(): string {
+        return "meow";
+    }
+
+    public fun legs(): int {
+        return 4;
+    }
 }
 
-class c106_Dog : c106_Animal {
-    public fun speak(): string { return "woof"; }
-    public fun legs(): int { return 2; }
+class c106_Dog: c106_Animal {
+    public fun speak(): string {
+        return "woof";
+    }
+
+    public fun legs(): int {
+        return 2;
+    }
 }
 
 // Passing a concrete class where the interface is expected is an implicit upcast; the call

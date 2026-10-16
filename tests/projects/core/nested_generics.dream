@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 class c16a_Box<T> {
     public v: T;
 

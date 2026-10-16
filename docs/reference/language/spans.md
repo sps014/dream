@@ -7,10 +7,10 @@ import system;
 
 fun main() {
     let line = "name=Ada; lang=Dream";
-    let key = line.span(0, 4);              // "name", no allocation
-    System.println(key == "name");     // true
-    System.println(key.length);             // 4
-    let owned = key.to_string();            // the explicit allocation point
+    let key = line.span(0, 4); // "name", no allocation
+    System.println(key == "name"); // true
+    System.println(key.length); // 4
+    let owned = key.to_string(); // the explicit allocation point
     System.println(owned);
 }
 ```
@@ -54,7 +54,7 @@ String-backed spans and arrays of matching UTF-16 elements hash like the equal `
 let ages = Map<string, int>();
 ages.set("ada", 36);
 let text = "ada,grace";
-System.println(ages.get_or(text.span(0, 3), 0));   // 36
+System.println(ages.get_or(text.span(0, 3), 0)); // 36
 ```
 
 `Map.get`, `Map.get_or`, `Map.contains` and `Set.contains` accept a `ReadOnlySpan<char>` when the key type is `string`.
@@ -64,7 +64,7 @@ Split and line iterators are cursors: call `move_next()`, then read `current`.
 ```dream
 let it = "a,b,,c".span().split_iter(',');
 while it.move_next() {
-    System.println(it.current.length);   // 1, 1, 0, 1
+    System.println(it.current.length); // 1, 1, 0, 1
 }
 ```
 
@@ -100,12 +100,12 @@ A span may be a local, a parameter, a return value, or a field of another `ref s
 
 The full list, with the reasoning, is under [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type).
 
-## Cost
+## When to use a span
 
-A span holds its source strongly, so the data can never be freed while you use it. The compiler removes that cost where it can prove it is unnecessary:
+Use spans when parsing, searching, or processing a range without copying it. A span keeps
+its source alive and checks indexing against its own length. Creating a slice does not
+copy the elements; a writable span changes the original array.
 
-- A span built from a `borrow` parameter, a string literal, or another such span does no reference counting. Its fields stay in registers, so `span.length` in a loop often folds to a constant.
-- Span indexers check bounds against the span's own length. In `while i < sp.length` loops the optimizer removes the check, and simple loops vectorize.
-- Where a `substring` result replaces a previous one in a loop, the old slice block is reused in place.
-
-Prefer spans over `substring` for parsing and lookups. Call `to_string()` only for values that must outlive the frame, such as map keys you insert or fields you store.
+Call `to_string()` or `to_array()` when you need an independent copy, such as a string
+stored in an object or used as a map key. Keep spans within synchronous work; they
+cannot be stored in heap objects or kept across an `await`.

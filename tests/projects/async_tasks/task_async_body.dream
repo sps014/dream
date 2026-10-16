@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 async fun c241_tick(): void {
     Time.sleep(1).await;
 }

@@ -3,6 +3,7 @@ import system.testing;
 import system;
 import system.task;
 import system.text;
+
 struct c240_Point {
     public x: int;
     public y: int;

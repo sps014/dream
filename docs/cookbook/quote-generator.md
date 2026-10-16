@@ -38,7 +38,9 @@ fun as_dream_string(s: string): string {
 import system;
 
 fun main() {
-    System.println(quote { Hello generators });
+    System.println(
+        quote { Hello generators }
+    );
 }
 ```
 

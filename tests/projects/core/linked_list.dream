@@ -2,6 +2,7 @@ import system.testing;
 // `next` is a self-reference (`Node` holding a strong `Option<Node>`), so the compiler's
 // structural cycle check flags it: it cannot prove this list is never wired into a loop. This
 import system;
+
 @allow_cycle
 class c130_Node {
     public value: int;

@@ -15,7 +15,9 @@ async fun compute(value: int): Result<int, string> {
 
 async fun main(): void {
     let values = Task.map<int, int, string>([1, 2, 3], compute, concurrency: 2).await.unwrap();
-    for (let value in values) { System.println(value); }
+    for (let value in values) {
+        System.println(value);
+    }
 }
 ```
 

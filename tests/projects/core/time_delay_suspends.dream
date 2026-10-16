@@ -19,7 +19,9 @@ async fun c261_after(log: c261_Log, ms: int, name: string): void {
 @timeout(180000)
 async fun time_delay_suspends() {
     let log = c261_Log();
-    Promise.all([c261_after(log, 60, "slow"), c261_after(log, 5, "fast"), c261_after(log, 30, "mid")]).await;
+    Promise.all(
+        [c261_after(log, 60, "slow"), c261_after(log, 5, "fast"), c261_after(log, 30, "mid")]
+    ).await;
     Assert.eq_str((log.text).to_string(), "fast mid slow ");
 
     let t0 = Time.nano_time();

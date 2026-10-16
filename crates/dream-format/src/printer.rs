@@ -1,7 +1,12 @@
+mod opaque;
+mod policy;
+
+use crate::MAX_WIDTH;
 use crate::generics::detect_type_arg_regions;
+use crate::groups::Groups;
 use crate::layout::Layout;
 use crate::line_index::LineIndex;
-use crate::spacing::{is_decl_starter, is_try_question_mark, needs_space};
+use crate::spacing::{ends_operand, is_decl_starter, is_try_question_mark, needs_space};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 
@@ -9,9 +14,20 @@ use dream_syntax::token::token_kind::TokenKind;
 /// statement newlines (`;` inside a `for` header or subscript stays inline).
 #[derive(Clone, Copy)]
 enum Ctx {
-    Block { switch_body: bool },
-    Paren,
-    Bracket,
+    Block {
+        switch_body: bool,
+        case_body: bool,
+        enum_body: bool,
+        do_body: bool,
+    },
+    Paren {
+        multiline: bool,
+        continuation: bool,
+    },
+    Bracket {
+        multiline: bool,
+        continuation: bool,
+    },
     TypeArgs,
 }
 
@@ -25,7 +41,10 @@ pub(super) struct Printer {
     /// `case`/`default` labels and bodies get dedicated indentation.
     pending_switch: bool,
     /// True while emitting statements after a `case ...:` header (one extra indent level).
-    in_case_body: bool,
+    pending_enum: bool,
+    pending_do: bool,
+    chain_indent: bool,
+    attribute_end: Option<usize>,
     /// Armed after a `case`/`default` label; the next colon switches into its body indent.
     case_colon_pending: bool,
     prev_kind: Option<TokenKind>,
@@ -45,7 +64,10 @@ impl Printer {
             ctxs: Vec::new(),
             brace_indent: 0,
             pending_switch: false,
-            in_case_body: false,
+            pending_enum: false,
+            pending_do: false,
+            chain_indent: false,
+            attribute_end: None,
             case_colon_pending: false,
             prev_kind: None,
             prev_prev_kind: None,
@@ -54,8 +76,11 @@ impl Printer {
         }
     }
 
-    pub fn run(mut self, tokens: &[SyntaxToken]) -> String {
+    pub fn run(mut self, source: &str, tokens: &[SyntaxToken]) -> String {
+        let opaque = crate::opaque::regions(source);
+        let mut next_opaque = 0;
         let regions = detect_type_arg_regions(tokens);
+        let groups = Groups::new(tokens);
         let mut next_region = 0usize;
         // Stack of `(open_idx, close_idx)` for currently-open type-argument regions; pushes are
         // ordered by open index and every close matches the innermost open region.
@@ -69,6 +94,21 @@ impl Printer {
                 break;
             }
 
+            if let Some(&(start, end)) = opaque.get(next_opaque)
+                && token.position.start == start
+            {
+                let close = tokens
+                    .partition_point(|token| token.position.end <= end)
+                    .saturating_sub(1);
+                self.print_opaque(source, i, close, end, tokens);
+                i = close + 1;
+                next_opaque += 1;
+                while next_region < regions.len() && regions[next_region].0 < i {
+                    next_region += 1;
+                }
+                continue;
+            }
+
             if next_region < regions.len() && regions[next_region].0 == i {
                 open_regions.push(regions[next_region]);
                 self.ctxs.push(Ctx::TypeArgs);
@@ -77,6 +117,7 @@ impl Printer {
 
             if token.kind == TokenKind::CurlyOpenBracketToken
                 && tokens.get(i + 1).map(|t| t.kind) == Some(TokenKind::CurlyCloseBracketToken)
+                && token.trailing_trivia.is_empty()
                 && tokens[i + 1].leading_trivia.is_empty()
             {
                 // `{}` collapses onto one line (the closer carries no comments to drop).
@@ -90,7 +131,7 @@ impl Printer {
                 continue;
             }
 
-            self.print_token(i, tokens);
+            self.print_token(i, tokens, &groups);
 
             while open_regions.last().map(|r| r.1) == Some(i) {
                 open_regions.pop();
@@ -103,7 +144,7 @@ impl Printer {
         self.layout.finish()
     }
 
-    fn print_token(&mut self, i: usize, tokens: &[SyntaxToken]) {
+    fn print_token(&mut self, i: usize, tokens: &[SyntaxToken], groups: &Groups) {
         let token = &tokens[i];
         let kind = token.kind;
         let next_kind = tokens
@@ -114,34 +155,93 @@ impl Printer {
         // Ordering matters: blank-line decisions precede comment emission so a preserved blank
         // separates the previous statement from this token's leading comments — never the
         // comments from their own code.
+        let closes_do = kind == TokenKind::CurlyCloseBracketToken
+            && matches!(self.ctxs.last(), Some(Ctx::Block { do_body: true, .. }));
         self.set_anchor_offset(token);
         match kind {
             TokenKind::CurlyCloseBracketToken => {
                 if let Some(Ctx::Block { .. }) = self.ctxs.last() {
                     self.ctxs.pop();
                     self.brace_indent = self.brace_indent.saturating_sub(1);
-                    self.in_case_body = false;
                 }
                 // Take the closing brace onto its own (dedented) line; whether it breaks
                 // *after* — or joins `else`/`while` — is decided post-emission.
                 self.layout.break_line();
             }
             TokenKind::CaseToken | TokenKind::DefaultToken => {
-                self.in_case_body = false;
+                if let Some(Ctx::Block { case_body, .. }) = self.ctxs.last_mut() {
+                    *case_body = false;
+                }
                 self.case_colon_pending = false;
                 self.layout.break_line();
             }
             _ => {}
         }
 
+        let closing_multiline = matches!(
+            kind,
+            TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken
+        ) && matches!(
+            self.ctxs.last(),
+            Some(
+                Ctx::Paren {
+                    multiline: true,
+                    ..
+                } | Ctx::Bracket {
+                    multiline: true,
+                    ..
+                }
+            )
+        );
+        if closing_multiline {
+            self.close_list();
+            self.layout.break_line();
+        }
+        if kind == TokenKind::AtToken && self.at_statement_level() {
+            self.layout.break_line();
+            let name_end = i + 1;
+            self.attribute_end = Some(
+                groups
+                    .closes
+                    .get(i + 2)
+                    .copied()
+                    .flatten()
+                    .unwrap_or(name_end),
+            );
+        }
         self.insert_blank_lines(kind);
         self.emit_leading_trivia(token);
 
         if kind == TokenKind::DotToken
             && Self::should_break_before_dot(self.prev_kind)
+            && (self.chain_indent || self.chain_overflows(i, tokens, groups))
             && !self.layout.at_line_start()
         {
             self.layout.break_line();
+            self.chain_indent = true;
+        }
+
+        let expression_operator = matches!(
+            kind,
+            TokenKind::PlusToken
+                | TokenKind::MinusToken
+                | TokenKind::StarToken
+                | TokenKind::SlashToken
+                | TokenKind::AmpersandAmpersandToken
+                | TokenKind::PipePipeToken
+                | TokenKind::QuestionQuestionToken
+                | TokenKind::EqualEqualToken
+                | TokenKind::NotEqualToken
+                | TokenKind::QuestionMarkToken
+        ) && self.prev_kind.is_some_and(ends_operand)
+            && !(kind == TokenKind::QuestionMarkToken && is_try_question_mark(tokens, i));
+        if expression_operator
+            && self.chain_overflows(i, tokens, groups)
+            && !matches!(self.ctxs.last(), Some(Ctx::TypeArgs))
+            && !self.layout.at_line_start()
+        {
+            self.layout.break_line();
+            self.chain_indent = true;
         }
 
         if self.layout.at_line_start() {
@@ -153,6 +253,19 @@ impl Printer {
                 kind,
             );
             if kind == TokenKind::QuestionMarkToken && is_try_question_mark(tokens, i) {
+                space = false;
+            }
+            if self.prev_kind == Some(TokenKind::QuestionMarkToken)
+                && !is_try_question_mark(tokens, i - 1)
+            {
+                space = true;
+            }
+            if groups.ternary_colons[i] {
+                space = true;
+            }
+            if kind == TokenKind::OpenParenthesisToken
+                && self.prev_prev_kind == Some(TokenKind::OperatorToken)
+            {
                 space = false;
             }
             let in_type_args = matches!(self.ctxs.last(), Some(Ctx::TypeArgs));
@@ -180,51 +293,66 @@ impl Printer {
             TokenKind::CurlyCloseBracketToken => {
                 // `} else {`, `do { ... } while (`, and expression statements ending in
                 // `};` (switch expressions) stay on the closing line.
-                if !matches!(
-                    next_kind,
-                    TokenKind::ElseToken | TokenKind::WhileToken | TokenKind::SemicolonToken
-                ) {
+                if !Self::joins_closer(next_kind, closes_do) {
                     self.layout.break_line();
                 }
             }
             TokenKind::CurlyOpenBracketToken => {
                 let switch_body = self.pending_switch;
                 self.pending_switch = false;
-                self.ctxs.push(Ctx::Block { switch_body });
+                let enum_body = self.pending_enum;
+                self.pending_enum = false;
+                self.ctxs.push(Ctx::Block {
+                    switch_body,
+                    case_body: false,
+                    enum_body,
+                    do_body: self.pending_do,
+                });
+                self.pending_do = false;
+                self.chain_indent = false;
                 self.brace_indent += 1;
                 self.layout.break_line();
             }
             TokenKind::OpenParenthesisToken => {
-                self.ctxs.push(Ctx::Paren);
+                self.open_list(i, tokens, groups, true);
             }
             TokenKind::CloseParenthesisToken => {
-                if matches!(self.ctxs.last(), Some(Ctx::Paren)) {
-                    self.ctxs.pop();
+                if !closing_multiline && matches!(self.ctxs.last(), Some(Ctx::Paren { .. })) {
+                    self.close_list();
                 }
             }
             TokenKind::OpenBracketToken => {
-                self.ctxs.push(Ctx::Bracket);
+                self.open_list(i, tokens, groups, false);
             }
             TokenKind::CloseBracketToken => {
-                if matches!(self.ctxs.last(), Some(Ctx::Bracket)) {
-                    self.ctxs.pop();
+                if !closing_multiline && matches!(self.ctxs.last(), Some(Ctx::Bracket { .. })) {
+                    self.close_list();
                 }
+            }
+            TokenKind::DoToken => {
+                self.pending_do = true;
+            }
+            TokenKind::EnumToken => {
+                self.pending_enum = true;
             }
             TokenKind::SwitchToken => {
                 self.pending_switch = true;
             }
             TokenKind::SemicolonToken => {
                 self.pending_switch = false;
+                self.chain_indent = false;
                 if !matches!(
                     self.ctxs.last(),
-                    Some(Ctx::Paren) | Some(Ctx::Bracket) | Some(Ctx::TypeArgs)
+                    Some(Ctx::Paren { .. }) | Some(Ctx::Bracket { .. }) | Some(Ctx::TypeArgs)
                 ) {
                     self.layout.break_line();
                 }
             }
             TokenKind::ColonToken => {
                 if self.case_colon_pending && self.top_block_is_switch_body() {
-                    self.in_case_body = true;
+                    if let Some(Ctx::Block { case_body, .. }) = self.ctxs.last_mut() {
+                        *case_body = true;
+                    }
                     // Case bodies start on their own line, unless a block follows (`case 2: {`).
                     if next_kind != TokenKind::CurlyOpenBracketToken {
                         self.layout.break_line();
@@ -235,156 +363,36 @@ impl Printer {
             TokenKind::CaseToken | TokenKind::DefaultToken => {
                 self.case_colon_pending = true;
             }
+            TokenKind::CommaToken => {
+                self.chain_indent = false;
+                if matches!(
+                    self.ctxs.last(),
+                    Some(
+                        Ctx::Paren {
+                            multiline: true,
+                            ..
+                        } | Ctx::Bracket {
+                            multiline: true,
+                            ..
+                        } | Ctx::Block {
+                            enum_body: true,
+                            ..
+                        } | Ctx::Block {
+                            switch_body: true,
+                            ..
+                        }
+                    )
+                ) {
+                    self.layout.break_line();
+                }
+            }
             _ => {}
         }
 
-        self.update_prev_tracking(token);
-    }
-
-    /// `{}` on one line: blank/indent decisions for the opener, both brace glyphs, then the
-    /// closer's trailing comments and bookkeeping (its leading trivia is empty by contract).
-    fn print_collapsed_empty_block(&mut self, i: usize, tokens: &[SyntaxToken]) {
-        let open = &tokens[i];
-        let close = &tokens[i + 1];
-        let space_before = !self.layout.at_line_start()
-            && needs_space(
-                self.prev_prev_kind,
-                self.prev_kind.unwrap_or(TokenKind::EndOfFileToken),
-                open.kind,
-            );
-
-        self.set_anchor_offset(open);
-        self.insert_blank_lines(open.kind);
-        self.emit_leading_trivia(open);
-
-        if self.layout.at_line_start() {
-            self.layout.write_indent(self.current_indent(open.kind));
-        } else if space_before {
-            self.layout.space();
-        }
-        self.layout.text("{}");
-        self.emit_trailing_trivia(close);
-        if self.pending_switch {
-            self.pending_switch = false;
-        }
-        // Mirror the non-collapsed `}` post-emission break (join rules included).
-        let next_kind = tokens
-            .get(i + 2)
-            .map(|t| t.kind)
-            .unwrap_or(TokenKind::EndOfFileToken);
-        if !matches!(
-            next_kind,
-            TokenKind::ElseToken
-                | TokenKind::WhileToken
-                | TokenKind::SemicolonToken
-                | TokenKind::CommaToken
-                | TokenKind::CloseParenthesisToken
-                | TokenKind::CloseBracketToken
-                | TokenKind::DotToken
-        ) {
+        if self.attribute_end == Some(i) {
             self.layout.break_line();
+            self.attribute_end = None;
         }
-        self.prev_prev_kind = self.prev_kind;
-        self.prev_kind = Some(TokenKind::CurlyCloseBracketToken);
-        self.prev_end_line = self
-            .line_index
-            .line_of(close.position.end.saturating_sub(1));
-    }
-
-    /// Preserves up to one user blank line between statements and enforces exactly one blank
-    /// line between top-level declarations that were adjacent in the source.
-    fn insert_blank_lines(&mut self, kind: TokenKind) {
-        if self.layout.is_empty()
-            || matches!(kind, TokenKind::CurlyCloseBracketToken)
-            || matches!(
-                self.ctxs.last(),
-                Some(Ctx::Paren) | Some(Ctx::Bracket) | Some(Ctx::TypeArgs)
-            )
-            || self.layout.has_pending_blank()
-        {
-            return;
-        }
-        if self.blank_gap() >= 1 {
-            // Blank lines right after an opening brace are noise; strip them.
-            if self.prev_kind != Some(TokenKind::CurlyOpenBracketToken) {
-                self.layout.blank_line();
-            }
-        } else if self.brace_indent == 0
-            && matches!(
-                self.prev_kind,
-                Some(TokenKind::SemicolonToken) | Some(TokenKind::CurlyCloseBracketToken)
-            )
-            && is_decl_starter(kind)
-            && kind != TokenKind::ImportToken
-        {
-            self.layout.blank_line();
-        }
-    }
-
-    /// Source blank lines between the previous emitted token/comment and the current position.
-    fn blank_gap(&self) -> usize {
-        self.anchor_line().saturating_sub(self.prev_end_line + 1)
-    }
-
-    fn set_anchor_offset(&mut self, token: &SyntaxToken) {
-        self.pending_anchor_offset = token
-            .leading_trivia
-            .first()
-            .map(|t| t.position.start)
-            .unwrap_or(token.position.start);
-    }
-
-    fn anchor_line(&self) -> usize {
-        self.line_index.line_of(self.pending_anchor_offset)
-    }
-
-    fn current_indent(&self, kind: TokenKind) -> usize {
-        let mut level = self.brace_indent;
-        // The case-body bonus applies only to bare statements directly inside the switch
-        // body; an explicit `{ ... }` block under a case indents on its own.
-        if self.in_case_body
-            && !matches!(kind, TokenKind::CaseToken | TokenKind::DefaultToken)
-            && self.top_block_is_switch_body()
-        {
-            level += 1;
-        }
-        // Continuation indent for a postfix chain that rustfmt would wrap: `foo()\n    .await`.
-        if kind == TokenKind::DotToken && self.layout.at_line_start() {
-            level += 1;
-        }
-        level
-    }
-
-    /// Rust-style chain wrap: break before `.await` / `.method(` when the receiver already ended
-    /// (`foo().bar()`, `foo().await`, `foo().await?.ok()`).
-    fn should_break_before_dot(prev: Option<TokenKind>) -> bool {
-        matches!(
-            prev,
-            Some(
-                TokenKind::CloseParenthesisToken
-                    | TokenKind::CloseBracketToken
-                    | TokenKind::AwaitToken
-                    | TokenKind::QuestionMarkToken
-            )
-        )
-    }
-
-    /// Indent for standalone comment lines — block level, without case-body bonus.
-    pub(super) fn plain_indent(&self) -> usize {
-        self.brace_indent
-    }
-
-    fn top_block_is_switch_body(&self) -> bool {
-        matches!(self.ctxs.last(), Some(Ctx::Block { switch_body: true }))
-    }
-
-    fn update_prev_tracking(&mut self, token: &SyntaxToken) {
-        self.prev_prev_kind = self.prev_kind;
-        self.prev_kind = Some(token.kind);
-        let mut end = token.position.end.saturating_sub(1);
-        for t in &token.trailing_trivia {
-            end = end.max(t.position.end.saturating_sub(1));
-        }
-        self.prev_end_line = self.line_index.line_of(end);
+        self.update_prev_tracking(token);
     }
 }

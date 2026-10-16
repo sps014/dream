@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class CodeBuilder`
+## `CodeBuilder`
 
 Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies. Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth; `line` / `append` apply the current indent only at the start of a line.
 
@@ -10,7 +10,7 @@ Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
 public class CodeBuilder
 ```
 
-## `public constructor()`
+## `constructor`
 
 Creates a builder that indents with four spaces.
 

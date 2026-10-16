@@ -12,11 +12,15 @@ shared public class Lock
 
 ## `host_acquire`
 
+Waits until the synchronization object can be acquired.
+
 ```dream
 public static extern fun host_acquire(borrow target: Lock): void
 ```
 
 ## `host_release`
+
+Releases the synchronization object after acquisition.
 
 ```dream
 public static extern fun host_release(borrow target: Lock): void
@@ -24,11 +28,15 @@ public static extern fun host_release(borrow target: Lock): void
 
 ## `host_try_acquire`
 
+Attempts acquisition without waiting; returns whether it succeeded.
+
 ```dream
 public static extern fun host_try_acquire(borrow target: Lock): bool
 ```
 
 ## `host_try_acquire_for`
+
+Attempts acquisition for up to `timeout_ms` milliseconds.
 
 ```dream
 public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool

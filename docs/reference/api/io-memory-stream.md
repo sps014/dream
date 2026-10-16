@@ -2,15 +2,15 @@
 
 **Import:** `import system.io;`
 
-## `public class MemoryStream : Reader, Writer, AsyncReader, AsyncWriter`
+## `MemoryStream`
 
 Seekable in-memory byte storage; closing rejects operations while retaining its data.
 
 ```dream
-public class MemoryStream : Reader, Writer, AsyncReader, AsyncWriter
+public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter
 ```
 
-## `public constructor`
+## `constructor`
 
 Creates an empty stream positioned at byte zero.
 
@@ -18,7 +18,7 @@ Creates an empty stream positioned at byte zero.
 public constructor()
 ```
 
-## `public constructor`
+## `constructor`
 
 Copies `bytes` into independent storage and starts at byte zero.
 
@@ -26,7 +26,7 @@ Copies `bytes` into independent storage and starts at byte zero.
 public constructor(bytes: byte[])
 ```
 
-## `public get position`
+## `position`
 
 Last cursor position in bytes; remains readable after closure.
 
@@ -34,7 +34,7 @@ Last cursor position in bytes; remains readable after closure.
 public get position(): long
 ```
 
-## `public fun tell`
+## `tell`
 
 Returns the current byte position, or a closed-resource error.
 
@@ -42,7 +42,7 @@ Returns the current byte position, or a closed-resource error.
 public fun tell(): Result<long, IoError>
 ```
 
-## `public get length`
+## `length`
 
 Stored byte count; remains readable after closure.
 
@@ -50,7 +50,7 @@ Stored byte count; remains readable after closure.
 public get length(): long
 ```
 
-## `public fun read`
+## `read`
 
 Reads up to the requested size and advances the cursor; empty success indicates EOF. Negative sizes and reads after closure return errors.
 
@@ -58,7 +58,7 @@ Reads up to the requested size and advances the cursor; empty success indicates 
 public fun read(max_bytes: int): Result<byte[], IoError>
 ```
 
-## `public fun write`
+## `write`
 
 Overwrites or appends bytes at the cursor and returns their count. A nonempty write beyond EOF fills the gap with zeros; size is limited to `int` range.
 
@@ -66,7 +66,7 @@ Overwrites or appends bytes at the cursor and returns their count. A nonempty wr
 public fun write(bytes: byte[]): Result<int, IoError>
 ```
 
-## `public fun seek`
+## `seek`
 
 Sets a byte position from zero through the maximum `int`, including beyond EOF. Invalid positions or closure return errors without changing the cursor.
 
@@ -74,7 +74,7 @@ Sets a byte position from zero through the maximum `int`, including beyond EOF. 
 public fun seek(position: long): Result<bool, IoError>
 ```
 
-## `public fun to_bytes`
+## `to_bytes`
 
 Copies all stored bytes independently of the cursor; returns an error after closure.
 
@@ -82,7 +82,7 @@ Copies all stored bytes independently of the cursor; returns an error after clos
 public fun to_bytes(): Result<byte[], IoError>
 ```
 
-## `public unique fun flush`
+## `flush`
 
 Validates that the stream is open; memory storage has no pending output.
 
@@ -90,7 +90,7 @@ Validates that the stream is open; memory storage has no pending output.
 public unique fun flush(): Result<bool, IoError>
 ```
 
-## `public fun close`
+## `close`
 
 Closes the stream idempotently; subsequent I/O returns a closed-resource error.
 
@@ -98,26 +98,34 @@ Closes the stream idempotently; subsequent I/O returns a closed-resource error.
 public fun close(): Result<bool, IoError>
 ```
 
-## `public async fun read_async`
+## `read_async`
 
 Checks cancellation, then performs an immediately ready in-memory read.
 
 ```dream
-public async fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
+public async fun read_async(
+    max_bytes: int,
+    token: Option<CancellationToken> = Option.None
+): Result<byte[], IoError>
 ```
 
-## `public async fun write_async`
+## `write_async`
 
 Checks cancellation, then performs an immediately ready in-memory write.
 
 ```dream
-public async fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>
+public async fun write_async(
+    data: byte[],
+    token: Option<CancellationToken> = Option.None
+): Result<int, IoError>
 ```
 
-## `public async unique fun flush_async`
+## `flush_async`
 
 Checks cancellation and validates that the stream is open.
 
 ```dream
-public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public async unique fun flush_async(
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```

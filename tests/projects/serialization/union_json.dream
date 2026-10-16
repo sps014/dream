@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+
 @json
 class c276_Point {
     public x: int;
@@ -25,17 +26,36 @@ enum c276_Shape {
 fun union_json(): void {
     let c = c276_Shape.Circle(7);
     Assert.eq_str((Json.serialize(c)).to_string(), "{\"type\":\"Circle\",\"_0\":7}");
-    Assert.eq_str((Json.deserialize<c276_Shape>(Json.serialize(c)).unwrap_or(c276_Shape.Empty).to_string()).to_string(), "Circle(7)");
+    Assert.eq_str(
+        (Json.deserialize<c276_Shape>(Json.serialize(c)).unwrap_or(c276_Shape.Empty).to_string())
+            .to_string(),
+        "Circle(7)"
+    );
 
     let r = c276_Shape.Rect(3, 4);
     Assert.eq_str((Json.serialize(r)).to_string(), "{\"type\":\"Rect\",\"width\":3,\"height\":4}");
-    Assert.eq_str((Json.deserialize<c276_Shape>(Json.serialize(r)).unwrap_or(c276_Shape.Empty).to_string()).to_string(), "Rect(width: 3, height: 4)");
+    Assert.eq_str(
+        (Json.deserialize<c276_Shape>(Json.serialize(r)).unwrap_or(c276_Shape.Empty).to_string())
+            .to_string(),
+        "Rect(width: 3, height: 4)"
+    );
 
     let e = c276_Shape.Empty;
     Assert.eq_str((Json.serialize(e)).to_string(), "{\"type\":\"Empty\"}");
-    Assert.eq_str((Json.deserialize<c276_Shape>(Json.serialize(e)).unwrap_or(c276_Shape.Empty).to_string()).to_string(), "Empty");
+    Assert.eq_str(
+        (Json.deserialize<c276_Shape>(Json.serialize(e)).unwrap_or(c276_Shape.Empty).to_string())
+            .to_string(),
+        "Empty"
+    );
 
     let l = c276_Shape.Located(c276_Point(1, 2));
-    Assert.eq_str((Json.serialize(l)).to_string(), "{\"type\":\"Located\",\"_0\":{\"x\":1,\"y\":2}}");
-    Assert.eq_str((Json.deserialize<c276_Shape>(Json.serialize(l)).unwrap_or(c276_Shape.Empty).to_string()).to_string(), "Located(c276_Point { x: 1, y: 2 })");
+    Assert.eq_str(
+        (Json.serialize(l)).to_string(),
+        "{\"type\":\"Located\",\"_0\":{\"x\":1,\"y\":2}}"
+    );
+    Assert.eq_str(
+        (Json.deserialize<c276_Shape>(Json.serialize(l)).unwrap_or(c276_Shape.Empty).to_string())
+            .to_string(),
+        "Located(c276_Point { x: 1, y: 2 })"
+    );
 }

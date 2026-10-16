@@ -2,37 +2,47 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSpan`
+## `GenSpan`
+
+A source range described by its starting location and length.
 
 ```dream
 public class GenSpan
 ```
 
-## `public file: string`
+## `file`
+
+Source file path.
 
 ```dream
 public file: string
 ```
 
-## `public line: int`
+## `line`
+
+One-based line number in the source file.
 
 ```dream
 public line: int
 ```
 
-## `public column: int`
+## `column`
+
+One-based column number in the source file.
 
 ```dream
 public column: int
 ```
 
-## `public length: int`
+## `length`
+
+Number of elements in this range.
 
 ```dream
 public length: int
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Creates this model from snapshot JSON.
 

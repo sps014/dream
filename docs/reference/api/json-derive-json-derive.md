@@ -6,7 +6,7 @@ Read the [usage guide](../stdlib/json.md) for examples and common tasks. This re
 
 ## `json_derive`
 
-The `@json` derive: `to_json` / `write_json` / `from_json` for every `@json` type, plus the `Json` collection adapters that `Json.serialize/deserialize/from_value` calls on collection types need. One generated file, `json.dream`.
+Adds JSON serialization and deserialization methods for types annotated with `@json`.
 
 ```dream
 public fun json_derive(ctx: GenContext): void

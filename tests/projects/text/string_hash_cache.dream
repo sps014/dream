@@ -2,7 +2,6 @@ import system.testing;
 // Map<string, _> keys reached through every string representation must agree on the hash:
 // static literals (precomputed), heap concat/builder/interpolation results, substring slices,
 // in-place `_into` reuse, and strings mutated through `s[i] = c` after being hashed.
-
 import system;
 import system.collections;
 import system.text;
@@ -79,5 +78,8 @@ fun c219_verify_observation(borrow value: string): void {
 fun string_hash_cache(): void {
     c219_cursor = 0;
     c219_body();
-    Assert.eq(c219_cursor, ("1\n2\n20\n101\n120\n103\n100\n100\n-1\n7\n0\n1\n2\n-1\n9\n9\n").length);
+    Assert.eq(
+        c219_cursor,
+        ("1\n2\n20\n101\n120\n103\n100\n100\n-1\n7\n0\n1\n2\n-1\n9\n9\n").length
+    );
 }

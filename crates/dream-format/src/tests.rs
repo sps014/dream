@@ -184,27 +184,15 @@ class Empty {}
 #[test]
 fn chained_calls_have_no_spaces_around_dots() {
     let out = format("let s:string=list.map(f).filter(g).join(\", \");");
-    assert!(
-        out.contains("list.map(f)\n    .filter(g)\n    .join"),
-        "got:\n{}",
-        out
-    );
+    assert!(out.contains("list.map(f).filter(g).join"), "got:\n{}", out);
 }
 
 #[test]
-fn postfix_await_chain_breaks_like_rust() {
+fn short_postfix_await_chains_stay_compact() {
     let out =
         format("async fun f():void{let x=xyz().mzk().await.mka();let y=Time.sleep(1).await?;}");
-    assert!(
-        out.contains("xyz()\n        .mzk()\n        .await\n        .mka()"),
-        "got:\n{}",
-        out
-    );
-    assert!(
-        out.contains("Time.sleep(1)\n        .await?;"),
-        "got:\n{}",
-        out
-    );
+    assert!(out.contains("xyz().mzk().await.mka()"), "got:\n{}", out);
+    assert!(out.contains("Time.sleep(1).await?;"), "got:\n{}", out);
 }
 
 #[test]
@@ -229,7 +217,7 @@ fn empty_and_whitespace_only_input() {
 #[test]
 fn attributes_keep_decl_spacing() {
     let out = format("@json enum Shape{Circle,Square}enum Other{A}");
-    assert!(out.contains("@json enum Shape {"), "got:\n{}", out);
+    assert!(out.contains("@json\nenum Shape {"), "got:\n{}", out);
     assert!(out.contains("}\n\nenum Other {"), "got:\n{}", out);
 }
 
@@ -256,26 +244,10 @@ fn postfix_await_binds_tight() {
     let out = format(
         "async fun f():void{let b=g().await;let c=g().await?;let d=g().await[0];let e=g().await+1;}",
     );
-    assert!(
-        out.contains("let b = g()\n        .await;"),
-        "got:\n{}",
-        out
-    );
-    assert!(
-        out.contains("let c = g()\n        .await?;"),
-        "got:\n{}",
-        out
-    );
-    assert!(
-        out.contains("let d = g()\n        .await[0];"),
-        "got:\n{}",
-        out
-    );
-    assert!(
-        out.contains("let e = g()\n        .await + 1;"),
-        "got:\n{}",
-        out
-    );
+    assert!(out.contains("let b = g().await;"), "got:\n{}", out);
+    assert!(out.contains("let c = g().await?;"), "got:\n{}", out);
+    assert!(out.contains("let d = g().await[0];"), "got:\n{}", out);
+    assert!(out.contains("let e = g().await + 1;"), "got:\n{}", out);
 }
 
 #[test]
@@ -303,4 +275,197 @@ fn formats_yield_and_async_iteration_without_changing_tokens() {
             .collect::<Vec<_>>()
     };
     assert_eq!(tokens(source), tokens(&formatted));
+}
+
+#[test]
+fn wraps_long_parameter_and_argument_lists() {
+    let source = "public fun build(first_parameter: string, second_parameter: string, third_parameter: string, fourth_parameter: string): string { return combine(first_parameter, second_parameter, third_parameter, fourth_parameter); }";
+    let formatted = format(source);
+    assert!(
+        formatted.contains("build(\n    first_parameter: string,\n"),
+        "{formatted}"
+    );
+    assert!(
+        formatted.lines().all(|line| line.chars().count() <= 100),
+        "{formatted}"
+    );
+    assert_idempotent(source);
+}
+
+#[test]
+fn closure_closers_keep_call_punctuation_attached() {
+    assert_format(
+        "fun main(){run((x)=>{return x;}, [1,2]);}",
+        "fun main() {\n    run(\n        (x) => {\n            return x;\n        },\n        [1, 2]\n    );\n}\n",
+    );
+}
+
+#[test]
+fn empty_block_with_trailing_comment_is_not_collapsed() {
+    let source = "fun main(){if true { // intentional\n}}";
+    assert!(format(source).contains("{ // intentional\n"));
+    assert_idempotent(source);
+}
+
+#[test]
+fn unary_signs_do_not_become_increment_or_decrement() {
+    assert_format(
+        "let x = - -1; let y = + +2;",
+        "let x = - -1;\nlet y = + +2;\n",
+    );
+}
+
+#[test]
+fn shared_override_and_operator_keywords_keep_word_boundaries() {
+    let source = "shared public class Value { public override fun to_string(): string { return \"v\"; } public fun operator ==(other: Value): bool { return true; } }";
+    let result = format(source);
+    assert!(result.contains("shared public class"));
+    assert!(result.contains("public override fun"));
+    assert!(result.contains("operator ==("));
+    assert_idempotent(source);
+}
+
+#[test]
+fn nested_switch_does_not_clear_the_outer_case_indent() {
+    let result =
+        format("fun f(){switch(x){case 1: switch(y){case 2: run();} next(); default: done();}}");
+    assert!(result.contains("\n            next();"), "{result}");
+    assert_idempotent(&result);
+}
+
+#[test]
+fn documentation_stays_above_members_instead_of_trailing_previous_tokens() {
+    assert_format(
+        "class C {\n    /// First member.\n    public x: int;\n    /// Second member.\n    public fun f() {}\n\n    /// Third member.\n    public fun g() {}\n}",
+        "class C {\n    /// First member.\n    public x: int;\n    /// Second member.\n    public fun f() {}\n\n    /// Third member.\n    public fun g() {}\n}\n",
+    );
+}
+
+#[test]
+fn generic_signature_fragments_keep_type_spacing() {
+    assert_format(
+        "public value: Option<string>",
+        "public value: Option<string>\n",
+    );
+    assert_format("public class List<T>", "public class List<T>\n");
+    assert_format(
+        "fun f(token: Option<CancellationToken> = Option.None) {}",
+        "fun f(token: Option<CancellationToken> = Option.None) {}\n",
+    );
+    assert_format(
+        "let callback: NativeCallback<fun(int): int>;",
+        "let callback: NativeCallback<fun(int): int>;\n",
+    );
+}
+
+#[test]
+fn ternary_branches_have_spaces_and_try_propagation_stays_tight() {
+    assert_format(
+        "let value = ready?yes:no;",
+        "let value = ready ? yes : no;\n",
+    );
+    assert_format("let value = run()?;", "let value = run()?;\n");
+}
+
+#[test]
+fn unicode_comments_do_not_move_documentation_onto_previous_statements() {
+    let source = format!(
+        "// {}\nclass C {{\n    /// First field.\n    public x: int;\n    /// Second field.\n    public y: int;\n    fun f() {{ use(); }}\n\n    /// Next method.\n    public fun g() {{ use(); }}\n}}\n",
+        "界🦀—".repeat(80)
+    );
+    let result = format(&source);
+    assert!(
+        result.contains("{\n    /// First field.\n    public x: int;\n    /// Second field."),
+        "{result}"
+    );
+    assert!(
+        result.contains("}\n\n    /// Next method.\n    public fun g()"),
+        "{result}"
+    );
+    assert_idempotent(&source);
+}
+
+#[test]
+fn return_types_contribute_to_signature_width() {
+    let source = "public async fun send(request: HttpRequest, token: Option<CancellationToken> = Option.None): Result<HttpResponse, HttpError> {}";
+    let result = format(source);
+    assert!(result.contains("send(\n"), "{result}");
+    assert!(
+        result.lines().all(|line| line.chars().count() <= 100),
+        "{result}"
+    );
+    assert_idempotent(source);
+}
+
+#[test]
+fn wrapped_chains_stay_vertical_after_multi_argument_calls() {
+    let source = "let command = Command(\"download\").version(\"1.0.0\").description(\"Download a file\").positional(\"url\", required: true).string_option(\"output\", short: \"o\", default_value: \"download.bin\").int_option(\"timeout\", default_value: 10000).flag(\"verbose\", short: \"v\");";
+    let result = format(source);
+    assert!(
+        result.contains("\n    .int_option(\"timeout\", default_value: 10000)\n    .flag("),
+        "{result}"
+    );
+    assert_idempotent(source);
+}
+
+#[test]
+fn generic_static_receivers_inside_parentheses_keep_type_spacing() {
+    let source = "(Vector < float >.load(a, i) + Vector < float >.load(b, i)).store(c, i);";
+    assert_format(
+        source,
+        "(Vector<float>.load(a, i) + Vector<float>.load(b, i)).store(c, i);\n",
+    );
+    assert_idempotent(source);
+    assert_format(
+        "consume(Vector < float >.load(a, i));",
+        "consume(Vector<float>.load(a, i));\n",
+    );
+}
+
+#[test]
+fn independent_while_loops_never_join_like_do_while() {
+    let source = "fun f(){while i + lanes <= n {i = i + lanes;} while i < n {i = i + 1;}}";
+    let result = format(source);
+    assert!(result.contains("    }\n    while i < n {"), "{result}");
+    assert!(!result.contains("} while"), "{result}");
+    assert_format(
+        "while ready {} while pending {}",
+        "while ready {}\nwhile pending {}\n",
+    );
+    assert_format("do {} while (ready);", "do {} while (ready);\n");
+    assert_idempotent(source);
+}
+
+#[test]
+fn generic_arrays_in_parameter_types_keep_type_spacing() {
+    assert_format(
+        "fun f(values: List < int >[]) {}",
+        "fun f(values: List<int>[]) {}\n",
+    );
+}
+
+#[test]
+fn generic_marker_bounds_are_types_instead_of_comparisons() {
+    assert_format(
+        "public struct Vector < T: unmanaged > {}",
+        "public struct Vector<T: unmanaged> {}\n",
+    );
+    assert_format(
+        "shared public class Sender < T: shared > {}",
+        "shared public class Sender<T: shared> {}\n",
+    );
+    assert_format(
+        "public class Weak < T: class > {}",
+        "public class Weak<T: class> {}\n",
+    );
+}
+
+#[test]
+fn opaque_dsl_payloads_preserve_all_bytes_including_adjacency_and_spaces() {
+    let payload =
+        "{\n        <div class=\"hero\"><h1>{title}</h1><p>  Welcome  </p></div>  \n    }";
+    let source = format!("fun page(title:string):string{{return html {payload};}}");
+    let result = format(&source);
+    assert!(result.contains(&format!("html {payload};")), "{result}");
+    assert_idempotent(&source);
 }

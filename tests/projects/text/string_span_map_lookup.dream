@@ -10,7 +10,18 @@ fun c22c_body() {
     let it = text.span().split_iter(',');
     while it.move_next() {
         let k = it.current;
-        c22c_verify_observation((k.to_string() + "=" + m.get(k).unwrap_or(-1).to_string() + " " + m.contains(k).to_string() + " " + m.get_or(k, 0).to_string()).to_string());
+        c22c_verify_observation(
+            (
+                k.to_string()
+                    + "="
+                    + m.get(k)
+                    .unwrap_or(-1)
+                    .to_string()
+                    + " " + m.contains(k)
+                    .to_string() + " " + m.get_or(k, 0)
+                    .to_string()
+            ).to_string()
+        );
     }
     c22c_verify_observation((m.get("pear").unwrap_or(0)).to_string());
     let s = Set<string>();
@@ -36,5 +47,8 @@ fun c22c_verify_observation(borrow value: string): void {
 fun string_span_map_lookup(): void {
     c22c_cursor = 0;
     c22c_body();
-    Assert.eq(c22c_cursor, ("apple=1 true 1\npear=2 true 2\nplum=-1 false 0\n2\ntrue\nfalse\n").length);
+    Assert.eq(
+        c22c_cursor,
+        ("apple=1 true 1\npear=2 true 2\nplum=-1 false 0\n2\ntrue\nfalse\n").length
+    );
 }

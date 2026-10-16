@@ -15,7 +15,9 @@ referents may point back to the owner. Weak and unowned edges do not participate
 @allow_cycle
 class Node {
     public next: Option<Node>;
-    public constructor() { this.next = Option.None; }
+    public constructor() {
+        this.next = Option.None;
+    }
 }
 
 fun main() {
@@ -48,8 +50,13 @@ temporary strong reference that survives the consuming expression's cleanup boun
 Neither field extends the target's lifetime while stored.
 
 ```dream
-class Parent { public weak child: Option<Child>; }
-class Child { public unowned parent: Parent; }
+class Parent {
+    public weak child: Option<Child>;
+}
+
+class Child {
+    public unowned parent: Parent;
+}
 ```
 
 These fields have no strong cycle, so neither class needs `@allow_cycle`. A recursive

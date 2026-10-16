@@ -7,7 +7,6 @@ import system.text;
 
 // Compile-time HTML markup → Dream source (`Html.el` / `Html.render`).
 // Called from the `html` generator in `gen.dream`.
-
 public class HtmlResult {
     public ok: bool;
     public source: string;
@@ -46,7 +45,11 @@ public class HtmlCompiler {
         return HtmlResult.success("Html.render(" + frag.source + ")");
     }
 
-    static fun compile_fragment(body: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
+    static fun compile_fragment(
+        body: string,
+        splices: List<string>,
+        cur: SpliceCursor
+    ): HtmlResult {
         let trimmed = body.trim();
         if trimmed.length == 0 {
             return HtmlResult.success("\"\"");
@@ -74,7 +77,11 @@ public class HtmlCompiler {
     }
 
     // Success with empty source means "not an element" (caller may fall through).
-    static fun try_compile_element(s: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
+    static fun try_compile_element(
+        s: string,
+        splices: List<string>,
+        cur: SpliceCursor
+    ): HtmlResult {
         let t = s.trim();
         if !t.starts_with("<") {
             return HtmlResult.success("");
@@ -111,11 +118,7 @@ public class HtmlCompiler {
             return HtmlResult.failure("html syntax block: missing closing tag '</" + tag + ">'");
         }
         let close_pos = close_pos_opt.unwrap_or(0);
-        let inner = HtmlCompiler.compile_children(
-            after_open.substring(0, close_pos),
-            splices,
-            cur
-        );
+        let inner = HtmlCompiler.compile_children(after_open.substring(0, close_pos), splices, cur);
         if !inner.ok {
             return inner;
         }
@@ -180,7 +183,8 @@ public class HtmlCompiler {
             rest = rest.substring(eq + 1, rest.length).trim();
             if !rest.starts_with("\"") {
                 return HtmlResult.failure(
-                    "html syntax block: attribute '" + key + "' value must be a double-quoted string"
+                    "html syntax block: attribute '"
+                        + key + "' value must be a double-quoted string"
                 );
             }
             let after_q = rest.substring(1, rest.length);
@@ -214,7 +218,11 @@ public class HtmlCompiler {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    static fun compile_children(inner: string, splices: List<string>, cur: SpliceCursor): HtmlResult {
+    static fun compile_children(
+        inner: string,
+        splices: List<string>,
+        cur: SpliceCursor
+    ): HtmlResult {
         let text = inner.trim();
         if text.length == 0 {
             return HtmlResult.success("\"\"");

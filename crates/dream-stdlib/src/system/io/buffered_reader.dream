@@ -3,7 +3,7 @@ module system.io;
 // Reads ahead from a borrowed reader without closing it; use this wrapper for positioning
 // while buffered bytes remain, or recover them before accessing the source directly.
 @allow_cycle
-public class BufferedReader : Reader {
+public class BufferedReader: Reader {
     source: Reader;
     capacity: int;
     buffer: byte[];
@@ -18,7 +18,9 @@ public class BufferedReader : Reader {
     }
 
     fun fill(): Result<bool, IoError> {
-        if this.capacity <= 0 { return Result.Err(IoError.invalid("", "buffer size must be positive")); }
+        if this.capacity <= 0 {
+            return Result.Err(IoError.invalid("", "buffer size must be positive"));
+        }
         if this.offset == this.buffer.length {
             this.buffer = this.source.read(this.capacity)?;
             this.offset = 0;
@@ -35,10 +37,14 @@ public class BufferedReader : Reader {
         if this.capacity <= 0 || max_bytes < 0 {
             return Result.Err(IoError.invalid("", "invalid buffer or read size"));
         }
-        if max_bytes == 0 { return Result.Ok(Buffer.alloc<byte>(0)); }
+        if max_bytes == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
         this.fill()?;
         let count = this.buffer.length - this.offset;
-        if count > max_bytes { count = max_bytes; }
+        if count > max_bytes {
+            count = max_bytes;
+        }
         let bytes = Streams.slice(this.buffer, this.offset, count);
         this.offset = this.offset + count;
         return Result.Ok(bytes);
@@ -48,7 +54,9 @@ public class BufferedReader : Reader {
     // Returns `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte when the pre-LF
     // byte count exceeds `max_bytes` (default 1 MiB, including any CR).
     public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError> {
-        if max_bytes < 0 { return Result.Err(IoError.invalid("", "negative line limit")); }
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative line limit"));
+        }
         let bytes = List<byte>();
         while true {
             if !this.fill()? {
@@ -61,7 +69,9 @@ public class BufferedReader : Reader {
             let next = this.buffer[this.offset];
             this.offset = this.offset + 1;
             if next == (byte)10 {
-                if bytes.length > 0 && bytes.get(bytes.length - 1) == (byte)13 { bytes.pop(); }
+                if bytes.length > 0 && bytes.get(bytes.length - 1) == (byte)13 {
+                    bytes.pop();
+                }
                 return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
             }
             if bytes.length >= max_bytes {
@@ -82,7 +92,7 @@ public class BufferedReader : Reader {
 
     // Returns the source position minus unread buffered bytes; propagates positioning errors.
     public fun tell(): Result<long, IoError> {
-        return Result.Ok(this.source.tell()? - (long)(this.buffer.length - this.offset));
+        return Result.Ok(this.source.tell()? -(long)(this.buffer.length - this.offset));
     }
 
     // Copies and removes unread buffered bytes without repositioning the source.

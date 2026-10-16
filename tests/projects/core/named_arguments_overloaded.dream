@@ -1,9 +1,14 @@
 import system.testing;
 // Named arguments work on overloaded functions: the name set filters candidates, then types pick.
-
 import system;
-fun c162_h(x: int): int { return x; }
-fun c162_h(x: string): int { return 1; }
+
+fun c162_h(x: int): int {
+    return x;
+}
+
+fun c162_h(x: string): int {
+    return 1;
+}
 
 @test
 @timeout(180000)

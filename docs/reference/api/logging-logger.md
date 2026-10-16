@@ -4,15 +4,17 @@
 
 Read the [usage guide](../stdlib/logging.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class Logger`
+## `Logger`
 
-Named logger with a minimum level and zero or more handlers.
+A named logger with a minimum severity and configurable output handlers.
 
 ```dream
 public class Logger
 ```
 
 ## `constructor`
+
+Creates a `Logger` with `name`.
 
 ```dream
 public constructor(name: string)
@@ -28,11 +30,15 @@ public static fun get(name: string): Logger
 
 ## `level`
 
+Minimum severity emitted by this logger.
+
 ```dream
 public get level(): LogLevel
 ```
 
 ## `level`
+
+Minimum severity emitted by this logger.
 
 ```dream
 public set level(level: LogLevel)

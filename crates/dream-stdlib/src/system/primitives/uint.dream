@@ -1,7 +1,7 @@
 module system.primitives;
 
 // The `uint` primitive.
-extend uint : Comparable<uint> {
+extend uint: Comparable<uint> {
     // Orders this value against `other`.
     public fun compare(other: uint): int {
         if this < other {

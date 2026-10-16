@@ -4,20 +4,29 @@ import system;
 import system.collections;
 import system.json;
 
+/// Result of a tool requested during generation, including output and files.
 public class GenToolResult {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Process exit code.
     public exit: int;
+    /// Text captured from standard output.
     public stdout: string;
+    /// Text captured from standard error.
     public stderr: string;
+    /// Files available to this operation.
     public files: List<GenToolFile>;
 
     // Decodes compiler-collected tool metadata from a snapshot.
+    /// Reads a tool result from its JSON representation.
     public constructor(borrow v: JsonValue) {
         this.id = gen_str(v, "id");
         this.exit = gen_int(v, "exit");
         this.stdout = gen_str(v, "stdout");
         this.stderr = gen_str(v, "stderr");
         this.files = List<GenToolFile>();
-        for (let f in gen_items(v, "files")) { this.files.push(GenToolFile(f)); }
+        for (let f in gen_items(v, "files")) {
+            this.files.push(GenToolFile(f));
+        }
     }
 }

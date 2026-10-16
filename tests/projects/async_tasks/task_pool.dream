@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 fun c252_square(x: string): string {
     let n = int.parse(x).unwrap_or(0);
     return (n * n).to_string();

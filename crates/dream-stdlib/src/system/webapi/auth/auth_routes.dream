@@ -2,108 +2,334 @@ module system.webapi.auth;
 
 extend AuthService {
     /// Generates the auth endpoints; mount the result explicitly on one application.
-    @native public fun router(): Result<WebRouter, AuthError> {
-        if this.frozen { return Result.Err(AuthError("EINVAL", "authentication configuration is frozen")); }
-        if this.access_seconds <= 0 || this.refresh_seconds <= this.access_seconds || !this.prefix.starts_with("/") || this.prefix.ends_with("/") || this.jwt.issuer.is_empty() || this.jwt.audience.is_empty() || this.jwt.signing_key.is_empty() || this.jwt.verification_key.is_empty() { return Result.Err(AuthError("EINVAL", "invalid authentication configuration")); }
+    @native
+    public fun router(): Result<WebRouter, AuthError> {
+        if this.frozen {
+            return Result.Err(AuthError("EINVAL", "authentication configuration is frozen"));
+        }
+        if this.access_seconds <= 0
+            || this.refresh_seconds <= this.access_seconds
+            || !this.prefix.starts_with("/")
+            || this.prefix.ends_with("/")
+            || this.jwt.issuer.is_empty()
+            || this.jwt.audience.is_empty()
+            || this.jwt.signing_key.is_empty() || this.jwt.verification_key.is_empty() {
+            return Result.Err(AuthError("EINVAL", "invalid authentication configuration"));
+        }
         if this.browser_sessions {
             let origin = Url.parse(this.browser_origin);
-            if origin.is_err() { return Result.Err(AuthError("EINVAL", "browser sessions require browser_origin")); }
+            if origin.is_err() {
+                return Result.Err(AuthError("EINVAL", "browser sessions require browser_origin"));
+            }
             let url = origin.unwrap();
-            if url.path != "/" || this.browser_origin.contains("?") || this.browser_origin.contains("#") || this.browser_origin.contains("@") || (url.scheme != "https" && (url.scheme != "http" || (url.host != "localhost" && url.host != "127.0.0.1" && url.host != "[::1]"))) { return Result.Err(AuthError("EINVAL", "browser_origin must be an HTTPS or loopback origin")); }
+            if url.path
+                != "/"
+                || this.browser_origin.contains("?")
+                || this.browser_origin.contains("#")
+                || this.browser_origin.contains("@")
+                || (
+                    url.scheme
+                        != "https"
+                        && (
+                            url.scheme
+                                != "http"
+                                || (
+                                    url.host
+                                        != "localhost"
+                                        && url.host != "127.0.0.1" && url.host != "[::1]"
+                                )
+                        )
+                ) {
+                return Result.Err(
+                    AuthError("EINVAL", "browser_origin must be an HTTPS or loopback origin")
+                );
+            }
         }
-        let probe = JsonValue.dict(); probe.set("sub", JsonValue.from_string("configuration")); probe.set("exp", JsonValue.number((double)(AuthCrypto.now() + 60L)));
-        let signed = AuthCrypto.jwt(this.jwt, "sign", probe)?; AuthCrypto.jwt(this.jwt, "verify", signed)?;
+        let probe = JsonValue.dict();
+        probe.set("sub", JsonValue.from_string("configuration"));
+        probe.set("exp", JsonValue.number((double)(AuthCrypto.now() + 60L)));
+        let signed = AuthCrypto.jwt(this.jwt, "sign", probe)?;
+        AuthCrypto.jwt(this.jwt, "verify", signed)?;
         this.frozen = true;
-        let service = this; let routes = List<WebEndpoint>();
+        let service = this;
+        let routes = List<WebEndpoint>();
         for (let action in ["login", "refresh", "logout"]) {
             let selected = action;
-            let handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => { return AuthService.handle_local(service, ctx, selected).await; };
-            routes.push(WebEndpoint("POST", this.prefix + "/" + action, handler, AuthService.operation("auth_" + action, action)));
+            let handler: fun(
+                RequestContext,
+                Map<string, string>
+            ): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => {
+                return AuthService.handle_local(service, ctx, selected).await;
+            };
+            routes.push(
+                WebEndpoint(
+                    "POST",
+                    this.prefix + "/" + action,
+                    handler,
+                    AuthService.operation("auth_" + action, action)
+                )
+            );
         }
         for (let entry in this.providers.entries()) {
             let provider = entry.value;
-            let begin: fun(RequestContext, Map<string, string>): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => { return AuthService.handle_oidc(service, ctx, provider, false).await; };
-            let complete: fun(RequestContext, Map<string, string>): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => { return AuthService.handle_oidc(service, ctx, provider, true).await; };
-            routes.push(WebEndpoint("GET", this.prefix + "/oidc/" + entry.key, begin, AuthService.operation("oidc_" + entry.key, "oidc_begin")));
-            routes.push(WebEndpoint("GET", this.prefix + "/oidc/" + entry.key + "/callback", complete, AuthService.operation("oidc_" + entry.key + "_callback")));
+            let begin: fun(
+                RequestContext,
+                Map<string, string>
+            ): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => {
+                return AuthService.handle_oidc(service, ctx, provider, false).await;
+            };
+            let complete: fun(
+                RequestContext,
+                Map<string, string>
+            ): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => {
+                return AuthService.handle_oidc(service, ctx, provider, true).await;
+            };
+            routes.push(
+                WebEndpoint(
+                    "GET",
+                    this.prefix + "/oidc/" + entry.key,
+                    begin,
+                    AuthService.operation("oidc_" + entry.key, "oidc_begin")
+                )
+            );
+            routes.push(
+                WebEndpoint(
+                    "GET",
+                    this.prefix + "/oidc/" + entry.key + "/callback",
+                    complete,
+                    AuthService.operation("oidc_" + entry.key + "_callback")
+                )
+            );
         }
         return Result.Ok(WebRouter(routes));
     }
+
     static fun operation(id: string, action: string = ""): string {
-        let operation = JsonValue.dict(); operation.set("operationId", JsonValue.from_string(id));
-        let responses = JsonValue.dict(); let ok = JsonValue.dict(); ok.set("description", JsonValue.from_string("Authentication response"));
-        let status = "200"; if action == "logout" { status = "204"; } if action == "oidc_begin" { status = "302"; } responses.set(status, ok);
-        let denied = JsonValue.dict(); denied.set("description", JsonValue.from_string("Invalid credentials or login transaction")); responses.set("401", denied); operation.set("responses", responses);
+        let operation = JsonValue.dict();
+        operation.set("operationId", JsonValue.from_string(id));
+        let responses = JsonValue.dict();
+        let ok = JsonValue.dict();
+        ok.set("description", JsonValue.from_string("Authentication response"));
+        let status = "200";
+        if action == "logout" {
+            status = "204";
+        }
+        if action == "oidc_begin" {
+            status = "302";
+        }
+        responses.set(status, ok);
+        let denied = JsonValue.dict();
+        denied.set(
+            "description",
+            JsonValue.from_string("Invalid credentials or login transaction")
+        );
+        responses.set("401", denied);
+        operation.set("responses", responses);
         if action == "login" || action == "refresh" || action == "logout" {
-            let properties = JsonValue.dict(); let required = JsonValue.array();
-            let keys = ["refresh_token"]; if action == "login" { keys = ["username", "password"]; }
-            for (let key in keys) { let field = JsonValue.dict(); field.set("type", JsonValue.from_string("string")); if key == "password" { field.set("format", JsonValue.from_string("password")); } properties.set(key, field); required.push(JsonValue.from_string(key)); }
-            let schema = JsonValue.dict(); schema.set("type", JsonValue.from_string("object")); schema.set("properties", properties); schema.set("required", required);
-            let media = JsonValue.dict(); media.set("schema", schema); let content = JsonValue.dict(); content.set("application/json", media);
-            let body = JsonValue.dict(); body.set("required", JsonValue.boolean(action == "login")); body.set("content", content); operation.set("requestBody", body);
+            let properties = JsonValue.dict();
+            let required = JsonValue.array();
+            let keys = ["refresh_token"];
+            if action == "login" {
+                keys = ["username", "password"];
+            }
+            for (let key in keys) {
+                let field = JsonValue.dict();
+                field.set("type", JsonValue.from_string("string"));
+                if key == "password" {
+                    field.set("format", JsonValue.from_string("password"));
+                }
+                properties.set(key, field);
+                required.push(JsonValue.from_string(key));
+            }
+            let schema = JsonValue.dict();
+            schema.set("type", JsonValue.from_string("object"));
+            schema.set("properties", properties);
+            schema.set("required", required);
+            let media = JsonValue.dict();
+            media.set("schema", schema);
+            let content = JsonValue.dict();
+            content.set("application/json", media);
+            let body = JsonValue.dict();
+            body.set("required", JsonValue.boolean(action == "login"));
+            body.set("content", content);
+            operation.set("requestBody", body);
         }
         return Json.serialize(operation);
     }
-    static fun cookie(token: string, seconds: int): string { return "__Host-dream_session=" + token + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=" + seconds.to_string(); }
-    @native static async fun handle_local(service: AuthService, ctx: RequestContext, action: string): HttpOutgoing {
+
+    static fun cookie(token: string, seconds: int): string {
+        return "__Host-dream_session="
+            + token + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=" + seconds.to_string();
+    }
+
+    @native
+    static async fun handle_local(
+        service: AuthService,
+        ctx: RequestContext,
+        action: string
+    ): HttpOutgoing {
         let incoming = ctx.incoming;
         let bytes = incoming.read_body_text().await;
-        if bytes.is_err() { return HttpOutgoing.from_body_error(bytes.unwrap_err()); }
+        if bytes.is_err() {
+            return HttpOutgoing.from_body_error(bytes.unwrap_err());
+        }
         let parsed = Json.deserialize<JsonValue>(bytes.unwrap());
-        if parsed.is_err() || !parsed.unwrap().is_object() { return HttpOutgoing.detail("expected a JSON object", 422); }
+        if parsed.is_err() || !parsed.unwrap().is_object() {
+            return HttpOutgoing.detail("expected a JSON object", 422);
+        }
         let body = parsed.unwrap();
         if action == "login" {
-            if service.browser_sessions && incoming.header("Origin").unwrap_or("") != service.browser_origin { return HttpOutgoing.detail("login origin verification failed", 403); }
-            let result = service.login(body.get_or("username", JsonValue.none()).as_string().unwrap_or(""), body.get_or("password", JsonValue.none()).as_string().unwrap_or("")).await;
-            if result.is_err() { return HttpOutgoing.detail("invalid credentials", 401); }
+            if service.browser_sessions
+                && incoming.header("Origin")
+                .unwrap_or("") != service.browser_origin {
+                return HttpOutgoing.detail("login origin verification failed", 403);
+            }
+            let result = service.login(
+                body.get_or("username", JsonValue.none()).as_string().unwrap_or(""),
+                body.get_or("password", JsonValue.none()).as_string().unwrap_or("")
+            ).await;
+            if result.is_err() {
+                return HttpOutgoing.detail("invalid credentials", 401);
+            }
             let response = HttpOutgoing.json_text(Json.serialize(result.unwrap()));
-            if service.browser_sessions { response.set_header("Set-Cookie", AuthService.cookie(result.unwrap().refresh_token, service.refresh_seconds)); }
+            if service.browser_sessions {
+                response.set_header(
+                    "Set-Cookie",
+                    AuthService.cookie(result.unwrap().refresh_token, service.refresh_seconds)
+                );
+            }
             return response.set_header("Cache-Control", "no-store");
         }
-        let token = body.get_or("refresh_token", JsonValue.none()).as_string().unwrap_or(""); let cookie = incoming.cookie("__Host-dream_session");
+        let token = body.get_or("refresh_token", JsonValue.none()).as_string().unwrap_or("");
+        let cookie = incoming.cookie("__Host-dream_session");
         if cookie.is_some() {
-            token = cookie.unwrap(); let session = service.store.find(AuthCrypto.digest(token), AuthCrypto.now()).await;
-            if session.is_err() || incoming.header("X-CSRF-Token").unwrap_or("") != session.unwrap().csrf { return HttpOutgoing.detail("CSRF verification failed", 403); }
+            token = cookie.unwrap();
+            let session = service.store.find(AuthCrypto.digest(token), AuthCrypto.now()).await;
+            if session.is_err()
+                || incoming.header("X-CSRF-Token")
+                .unwrap_or("") != session.unwrap()
+                .csrf {
+                return HttpOutgoing.detail("CSRF verification failed", 403);
+            }
         }
         if action == "logout" {
             let result = service.logout(token).await;
-            if result.is_err() { return HttpOutgoing.detail("invalid session", 401); }
+            if result.is_err() {
+                return HttpOutgoing.detail("invalid session", 401);
+            }
             return HttpOutgoing.empty(204).set_header("Set-Cookie", AuthService.cookie("", 0));
         }
         let result = service.refresh(token).await;
-        if result.is_err() { return HttpOutgoing.detail("invalid session", 401); }
-        let response = HttpOutgoing.json_text(Json.serialize(result.unwrap())).set_header("Cache-Control", "no-store");
-        if cookie.is_some() { response.set_header("Set-Cookie", AuthService.cookie(result.unwrap().refresh_token, service.refresh_seconds)); }
+        if result.is_err() {
+            return HttpOutgoing.detail("invalid session", 401);
+        }
+        let response = HttpOutgoing.json_text(Json.serialize(result.unwrap()))
+            .set_header("Cache-Control", "no-store");
+        if cookie.is_some() {
+            response.set_header(
+                "Set-Cookie",
+                AuthService.cookie(result.unwrap().refresh_token, service.refresh_seconds)
+            );
+        }
         return response;
     }
+
     static fun oidc_request(provider: OidcOptions, action: string): JsonValue {
-        let request = JsonValue.dict(); request.set("action", JsonValue.from_string(action)); request.set("timeout_ms", JsonValue.from_int(30000));
-        request.set("issuer", JsonValue.from_string(provider.issuer)); request.set("client_id", JsonValue.from_string(provider.client_id)); request.set("client_secret", JsonValue.from_string(provider.client_secret)); request.set("redirect_uri", JsonValue.from_string(provider.redirect_uri)); return request;
+        let request = JsonValue.dict();
+        request.set("action", JsonValue.from_string(action));
+        request.set("timeout_ms", JsonValue.from_int(30000));
+        request.set("issuer", JsonValue.from_string(provider.issuer));
+        request.set("client_id", JsonValue.from_string(provider.client_id));
+        request.set("client_secret", JsonValue.from_string(provider.client_secret));
+        request.set("redirect_uri", JsonValue.from_string(provider.redirect_uri));
+        return request;
     }
-    @native static async fun handle_oidc(service: AuthService, ctx: RequestContext, provider: OidcOptions, complete: bool): HttpOutgoing {
-        let action = "oidc_begin"; if complete { action = "oidc_complete"; }
+
+    @native
+    static async fun handle_oidc(
+        service: AuthService,
+        ctx: RequestContext,
+        provider: OidcOptions,
+        complete: bool
+    ): HttpOutgoing {
+        let action = "oidc_begin";
+        if complete {
+            action = "oidc_complete";
+        }
         let request = AuthService.oidc_request(provider, action);
         if complete {
             let state = ctx.incoming.query_param("state").unwrap_or("");
-            if state.is_empty() || ctx.incoming.cookie("__Host-dream_oidc").unwrap_or("") != state { return HttpOutgoing.detail("invalid login transaction", 401); }
-            let transaction = service.store.take_transaction(AuthCrypto.digest(state), AuthCrypto.now()).await;
-            if transaction.is_err() || transaction.unwrap().provider != provider.name { return HttpOutgoing.detail("invalid login transaction", 401); }
-            request.set("code", JsonValue.from_string(ctx.incoming.query_param("code").unwrap_or(""))); request.set("nonce", JsonValue.from_string(transaction.unwrap().nonce)); request.set("verifier", JsonValue.from_string(transaction.unwrap().verifier));
+            if state.is_empty() || ctx.incoming.cookie("__Host-dream_oidc").unwrap_or("") != state {
+                return HttpOutgoing.detail("invalid login transaction", 401);
+            }
+            let transaction = service.store.take_transaction(
+                AuthCrypto.digest(state),
+                AuthCrypto.now()
+            ).await;
+            if transaction.is_err() || transaction.unwrap().provider != provider.name {
+                return HttpOutgoing.detail("invalid login transaction", 401);
+            }
+            request.set(
+                "code",
+                JsonValue.from_string(ctx.incoming.query_param("code").unwrap_or(""))
+            );
+            request.set("nonce", JsonValue.from_string(transaction.unwrap().nonce));
+            request.set("verifier", JsonValue.from_string(transaction.unwrap().verifier));
         }
         let operation = OidcTransport.exchange(request, ctx.cancellation_token).await;
-        if operation.is_err() { return HttpOutgoing.detail("external login failed", 401); }
+        if operation.is_err() {
+            return HttpOutgoing.detail("external login failed", 401);
+        }
         let value = operation.unwrap();
         if !complete {
             let state = value.get_or("state", JsonValue.none()).as_string().unwrap_or("");
-            let saved = service.store.put_transaction(AuthCrypto.digest(state), OidcTransaction(provider.name, value.get_or("nonce", JsonValue.none()).as_string().unwrap_or(""), value.get_or("verifier", JsonValue.none()).as_string().unwrap_or(""), AuthCrypto.now() + 600L)).await;
-            if saved.is_err() { return HttpOutgoing.detail("login storage unavailable", 503); }
-            return HttpOutgoing.empty(302).set_header("Location", value.get_or("url", JsonValue.none()).as_string().unwrap_or("")).set_header("Set-Cookie", "__Host-dream_oidc=" + state + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600").set_header("Cache-Control", "no-store");
+            let saved = service.store.put_transaction(
+                AuthCrypto.digest(state),
+                OidcTransaction(
+                    provider.name,
+                    value.get_or("nonce", JsonValue.none()).as_string().unwrap_or(""),
+                    value.get_or("verifier", JsonValue.none()).as_string().unwrap_or(""),
+                    AuthCrypto.now() + 600L
+                )
+            ).await;
+            if saved.is_err() {
+                return HttpOutgoing.detail("login storage unavailable", 503);
+            }
+            return HttpOutgoing.empty(302)
+                .set_header(
+                    "Location",
+                    value.get_or("url", JsonValue.none()).as_string().unwrap_or("")
+                )
+                .set_header(
+                    "Set-Cookie",
+                    "__Host-dream_oidc="
+                        + state + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600"
+                )
+                .set_header("Cache-Control", "no-store");
         }
-        let account = service.accounts.link_identity(value.get_or("issuer", JsonValue.none()).as_string().unwrap_or(""), value.get_or("subject", JsonValue.none()).as_string().unwrap_or(""), value.get_or("email", JsonValue.none()).as_string().unwrap_or(""), value.get_or("email_verified", JsonValue.none()).as_bool().unwrap_or(false)).await;
-        if account.is_err() { return HttpOutgoing.detail("identity is not authorized", 403); }
+        let account = service.accounts.link_identity(
+            value.get_or("issuer", JsonValue.none()).as_string().unwrap_or(""),
+            value.get_or("subject", JsonValue.none()).as_string().unwrap_or(""),
+            value.get_or("email", JsonValue.none()).as_string().unwrap_or(""),
+            value.get_or("email_verified", JsonValue.none()).as_bool().unwrap_or(false)
+        ).await;
+        if account.is_err() {
+            return HttpOutgoing.detail("identity is not authorized", 403);
+        }
         let tokens = AuthService.issue(service, account.unwrap()).await;
-        if tokens.is_err() { return HttpOutgoing.detail("login storage unavailable", 503); }
-        let response = HttpOutgoing.json_text(Json.serialize(tokens.unwrap())).set_header("Set-Cookie", AuthService.cookie(tokens.unwrap().refresh_token, service.refresh_seconds)).set_header("Cache-Control", "no-store");
-        response.headers.append("Set-Cookie", "__Host-dream_oidc=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"); return response;
+        if tokens.is_err() {
+            return HttpOutgoing.detail("login storage unavailable", 503);
+        }
+        let response = HttpOutgoing.json_text(Json.serialize(tokens.unwrap()))
+            .set_header(
+                "Set-Cookie",
+                AuthService.cookie(tokens.unwrap().refresh_token, service.refresh_seconds)
+            )
+            .set_header("Cache-Control", "no-store");
+        response.headers.append(
+            "Set-Cookie",
+            "__Host-dream_oidc=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+        );
+        return response;
     }
 }

@@ -4,16 +4,27 @@ import system;
 import system.collections;
 import system.json;
 
+/// A statement that a source generator can inspect.
 public class GenStmt {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Category of this entry.
     public kind: StmtKind;
+    /// Source range occupied by this node.
     public span: GenSpan;
+    /// Constant value of the expression, when known.
     public constant: Option<GenConstant>;
+    /// Source text represented by this entry.
     public text: string;
+    /// Type of this declaration or expression.
     public ty: GenTypeRef;
+    /// Identifier of the referenced symbol.
     public symbol: string;
+    /// Identifier distinguishing this function's overload.
     public overload: string;
+    /// Concrete type arguments, in parameter order.
     public type_args: List<GenTypeRef>;
+    /// Type references associated with this expression.
     public types: List<GenTypeRef>;
     nodes: List<GenExpr>;
 
@@ -26,17 +37,26 @@ public class GenStmt {
         this.type_args = gen_type_refs(v, "type_args");
         this.constant = Option.None;
         let constant = gen_obj(v, "constant");
-        if !constant.is_null() { this.constant = Option.Some(GenConstant(constant)); }
+        if !constant.is_null() {
+            this.constant = Option.Some(GenConstant(constant));
+        }
         this.kind = gen_stmt_kind(gen_str(v, "kind"));
         this.span = GenSpan(gen_obj(v, "span"));
         this.text = gen_str(v, "text");
         this.types = gen_type_refs(v, "types");
         this.nodes = List<GenExpr>();
-        for (let child in gen_items(v, "children")) { this.nodes.push(GenExpr(child)); }
+        for (let child in gen_items(v, "children")) {
+            this.nodes.push(GenExpr(child));
+        }
     }
 
     // Returns child nodes in source order.
-    public fun children(): List<GenExpr> { return this.nodes; }
+    public fun children(): List<GenExpr> {
+        return this.nodes;
+    }
+
     // Tests the node kind.
-    public fun is_kind(kind: StmtKind): bool { return this.kind == kind; }
+    public fun is_kind(kind: StmtKind): bool {
+        return this.kind == kind;
+    }
 }

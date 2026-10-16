@@ -6,13 +6,20 @@ import system.json;
 
 fun c125_describe(borrow v: JsonValue): string {
     switch (v.kind()) {
-        case JsonKind.Null: return "null";
-        case JsonKind.Object: return "object";
-        case JsonKind.Array: return "array";
-        case JsonKind.Bool: return "bool:" + v.bool_or(false).to_string();
-        case JsonKind.String: return "string:" + v.str_or("");
-        case JsonKind.Number: return "number:" + v.int_or(0).to_string();
-        default: return "unknown";
+        case JsonKind.Null:
+            return "null";
+        case JsonKind.Object:
+            return "object";
+        case JsonKind.Array:
+            return "array";
+        case JsonKind.Bool:
+            return "bool:" + v.bool_or(false).to_string();
+        case JsonKind.String:
+            return "string:" + v.str_or("");
+        case JsonKind.Number:
+            return "number:" + v.int_or(0).to_string();
+        default:
+            return "unknown";
     }
 }
 
@@ -26,31 +33,31 @@ fun c125_walk(path: string, borrow v: JsonValue): void {
         case JsonKind.Object:
             let i = 0;
             while i < v.length {
-                let key = v.key_at(i).unwrap_or("");
-                let child = v.value_at(i).unwrap_or(JsonValue.none());
-                let next = key;
-                if path.length > 0 {
-                    next = path + "." + key;
-                }
-                c125_walk(next, child);
-                i = i + 1;
+            let key = v.key_at(i).unwrap_or("");
+            let child = v.value_at(i).unwrap_or(JsonValue.none());
+            let next = key;
+            if path.length > 0 {
+                next = path + "." + key;
             }
+            c125_walk(next, child);
+            i = i + 1;
+        }
         case JsonKind.Array:
             switch (v.as_array()) {
-                Some(items) => {
-                    let i = 0;
-                    for (let item in items) {
-                        let idx = "[" + i.to_string() + "]";
-                        let next = idx;
-                        if path.length > 0 {
-                            next = path + idx;
-                        }
-                        c125_walk(next, item);
-                        i = i + 1;
+            Some(items) => {
+                let i = 0;
+                for (let item in items) {
+                    let idx = "[" + i.to_string() + "]";
+                    let next = idx;
+                    if path.length > 0 {
+                        next = path + idx;
                     }
-                },
-                None => {}
-            }
+                    c125_walk(next, item);
+                    i = i + 1;
+                }
+            },
+            None => {}
+        }
         default:
     }
 }
@@ -100,5 +107,10 @@ fun c125_verify_observation(borrow value: string): void {
 fun json_value_walk(): void {
     c125_cursor = 0;
     c125_body();
-    Assert.eq(c125_cursor, ("object\nname=string:ada\ntags=array\ntags[0]=number:1\ntags[1]=number:2\non=bool:true\nmeta=object\nmeta.id=number:9\ntrue\ntrue\ntrue\n9\n{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}\n").length);
+    Assert.eq(
+        c125_cursor,
+        (
+            "object\nname=string:ada\ntags=array\ntags[0]=number:1\ntags[1]=number:2\non=bool:true\nmeta=object\nmeta.id=number:9\ntrue\ntrue\ntrue\n9\n{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}\n"
+        ).length
+    );
 }

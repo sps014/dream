@@ -1,7 +1,7 @@
 import system.testing;
 // A user class opting into `obj[i]` / `obj[i] = v` via `fun this[...]`.
-
 import system;
+
 class c76_Grid {
     cells: int[];
 
@@ -24,7 +24,7 @@ fun class_indexer() {
     let g = c76_Grid(4);
     g[0] = 5;
     g[1] = 10;
-    g[2] = g[0] + g[1];   // read indexer on both sides
+    g[2] = g[0] + g[1]; // read indexer on both sides
     Assert.eq_str((g[0]).to_string(), "5"); // 5
     Assert.eq_str((g[1]).to_string(), "10"); // 10
     Assert.eq_str((g[2]).to_string(), "15"); // 15

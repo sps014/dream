@@ -1,11 +1,13 @@
 module system.json;
 
 // The public JSON API: one pair of names for text <-> value.
-
 public static class Json {
+    /// Encodes `value` as JSON text. User-defined types need `@json`.
     @intrinsic(Intrinsic.JsonSerialize)
     public static extern fun serialize<T>(borrow value: T): string;
 
+    /// Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. User-defined
+    /// types need `@json`.
     @intrinsic(Intrinsic.JsonDeserialize)
     public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
 
@@ -44,13 +46,12 @@ public static class Json {
         return Result.Ok(value);
     }
 
-
     // --- serialization helpers (also used by `@json` `write_json` methods) -------------------
-
     public static fun write_string(borrow sb: StringBuilder, borrow s: string): void {
         Json._json_escape_into(sb, s);
     }
 
+    /// Appends a JSON boolean to `sb`.
     public static fun write_bool(borrow sb: StringBuilder, b: bool): void {
         if b == true {
             sb.append("true");
@@ -59,20 +60,24 @@ public static class Json {
         }
     }
 
+    /// Appends JSON null to `sb`.
     public static fun write_null(borrow sb: StringBuilder): void {
         sb.append("null");
     }
 
     // Appends an already-built dynamic value as compact JSON text. Generated `write_json` methods
     // use this for `JsonValue` fields and collection elements, which carry their own shape.
+    /// Appends a dynamic JSON value to `sb` as compact JSON text.
     public static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): void {
         Json._json_stringify_into(sb, v);
     }
 
+    /// Appends a JSON integer to `sb`.
     public static fun write_int(borrow sb: StringBuilder, n: int): void {
         sb.append_int(n);
     }
 
+    /// Appends a JSON number to `sb`.
     public static fun write_number(borrow sb: StringBuilder, n: double): void {
         sb.append(Json._json_number(n));
     }
@@ -231,7 +236,12 @@ public static class Json {
     }
 
     // Recursively serializes a JsonValue with newlines and `indent` spaces of nesting per level.
-    static fun _json_stringify_pretty_into(borrow sb: StringBuilder, borrow v: JsonValue, indent: int, depth: int): void {
+    static fun _json_stringify_pretty_into(
+        borrow sb: StringBuilder,
+        borrow v: JsonValue,
+        indent: int,
+        depth: int
+    ): void {
         let k = v.kind;
         if k == 4 {
             let n = v.length;
@@ -246,7 +256,12 @@ public static class Json {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
-                Json._json_stringify_pretty_into(sb, v.at(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_stringify_pretty_into(
+                    sb,
+                    v.at(i).unwrap_or(JsonValue.none()),
+                    indent,
+                    depth + 1
+                );
                 i = i + 1;
             }
             sb.append_char('\n');
@@ -270,7 +285,12 @@ public static class Json {
                 let key = v.key_at(i).unwrap_or(string.empty);
                 Json._json_escape_into(sb, key);
                 sb.append(": ");
-                Json._json_stringify_pretty_into(sb, v.value_at(i).unwrap_or(JsonValue.none()), indent, depth + 1);
+                Json._json_stringify_pretty_into(
+                    sb,
+                    v.value_at(i).unwrap_or(JsonValue.none()),
+                    indent,
+                    depth + 1
+                );
                 i = i + 1;
             }
             sb.append_char('\n');

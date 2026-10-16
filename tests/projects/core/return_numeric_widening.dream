@@ -3,8 +3,8 @@ import system.testing;
 // declared return type: `return 2.71828;` from a `fun f(): double` used to keep the literal's own
 // (narrower) inferred type, silently desyncing the value from every call site that trusts the
 // declared `double` signature.
-
 import system;
+
 fun c1e9_asDouble(): double {
     return 2.71828;
 }

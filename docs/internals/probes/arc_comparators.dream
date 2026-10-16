@@ -1,7 +1,8 @@
 import system;
 import system.collections;
 
-@noinline fun compare_work(n: int): int {
+@noinline
+fun compare_work(n: int): int {
     let queue = PriorityQueue<string>();
     let list = List<string>();
     let i = 0;
@@ -15,4 +16,6 @@ import system.collections;
     return queue.pop().unwrap().length + list[0].length;
 }
 
-fun main(): void { System.println(compare_work(8)); }
+fun main(): void {
+    System.println(compare_work(8));
+}

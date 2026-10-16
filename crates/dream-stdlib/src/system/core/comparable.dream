@@ -2,5 +2,7 @@ module system.core;
 
 // Total order: `compare` returns negative / zero / positive like `strcmp`.
 public interface Comparable<T> {
+    /// Returns a negative number, zero, or a positive number for less than, equal to, or
+    /// greater than `other`.
     fun compare(borrow other: T): int;
 }

@@ -4,7 +4,7 @@
 
 For behavior and native target requirements, see [Native Web APIs](../../web-apis/index.md).
 
-## `public class HttpStatus`
+## `HttpStatus`
 
 HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).
 
@@ -12,68 +12,90 @@ HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`)
 public class HttpStatus
 ```
 
-## `public code: int`
+## `code`
+
+HTTP status code.
 
 ```dream
 public code: int
 ```
 
-## `public message: string`
+## `message`
+
+Human-readable explanation of the result or failure.
 
 ```dream
 public message: string
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `HttpStatus` with `code`, `message`.
 
 ```dream
 public constructor(code: int, message: string = "")
 ```
 
-## `public static fun bad_request`
+## `bad_request`
+
+Creates a 400 Bad Request status.
 
 ```dream
 public static fun bad_request(): HttpStatus
 ```
 
-## `public static fun unauthorized`
+## `unauthorized`
+
+Creates a 401 Unauthorized status.
 
 ```dream
 public static fun unauthorized(): HttpStatus
 ```
 
-## `public static fun forbidden`
+## `forbidden`
+
+Creates a 403 Forbidden status.
 
 ```dream
 public static fun forbidden(): HttpStatus
 ```
 
-## `public static fun not_found`
+## `not_found`
+
+Creates a 404 Not Found response.
 
 ```dream
 public static fun not_found(): HttpStatus
 ```
 
-## `public static fun conflict`
+## `conflict`
+
+Creates a 409 Conflict status.
 
 ```dream
 public static fun conflict(): HttpStatus
 ```
 
-## `public static fun unprocessable`
+## `unprocessable`
+
+Creates a 422 Unprocessable Entity status.
 
 ```dream
 public static fun unprocessable(): HttpStatus
 ```
 
-## `public static fun too_many`
+## `too_many`
+
+Creates a 429 Too Many Requests status.
 
 ```dream
 public static fun too_many(): HttpStatus
 ```
 
-## `public static fun internal`
+## `internal`
+
+Creates a 500 Internal Server Error status.
 
 ```dream
-public static fun internal(): HttpStatus
+public static fun internal (): HttpStatus
 ```

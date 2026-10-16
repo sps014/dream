@@ -61,6 +61,15 @@ fn region_is_type_like(tokens: &[SyntaxToken], open: usize, close: usize) -> boo
                 | TokenKind::SmallerThanToken
                 | TokenKind::GreaterThanToken
                 | TokenKind::ShiftRightToken
+                | TokenKind::FunToken
+                | TokenKind::OpenParenthesisToken
+                | TokenKind::CloseParenthesisToken
+                | TokenKind::DotToken
+                | TokenKind::BorrowToken
+                | TokenKind::RefToken
+                | TokenKind::UnmanagedToken
+                | TokenKind::SharedToken
+                | TokenKind::ClassToken
         )
     })
 }
@@ -77,6 +86,19 @@ fn close_continues_a_type(tokens: &[SyntaxToken], open: usize, close: usize) -> 
         return false;
     };
     let nested = has_nested_generic(tokens, open, close);
+    if in_type_position(tokens, open)
+        && matches!(
+            next.kind,
+            TokenKind::EqualToken
+                | TokenKind::EndOfFileToken
+                | TokenKind::SemicolonToken
+                | TokenKind::CloseParenthesisToken
+                | TokenKind::OpenBracketToken
+                | TokenKind::CommaToken
+        )
+    {
+        return true;
+    }
     if paren_depth_before(tokens, open) > 0 {
         // Inside call/paren groups require stronger evidence — `f(a < b, c > d)` must stay
         // comparisons. A list closed by `)`/`,`/`]`/`(` (chained generic ctor) or real
@@ -87,6 +109,7 @@ fn close_continues_a_type(tokens: &[SyntaxToken], open: usize, close: usize) -> 
                 | TokenKind::OpenParenthesisToken
                 | TokenKind::CloseParenthesisToken
                 | TokenKind::CloseBracketToken
+                | TokenKind::DotToken
         ) || nested
     } else {
         matches!(
@@ -129,7 +152,12 @@ fn in_type_position(tokens: &[SyntaxToken], open_idx: usize) -> bool {
             | TokenKind::SmallerThanToken
             | TokenKind::GreaterThanToken
             | TokenKind::ShiftRightToken
-            | TokenKind::CommaToken => return true,
+            | TokenKind::CommaToken
+            | TokenKind::ClassToken
+            | TokenKind::StructToken
+            | TokenKind::InterfaceToken
+            | TokenKind::EnumToken
+            | TokenKind::ExtendToken => return true,
             _ => return false,
         }
     }

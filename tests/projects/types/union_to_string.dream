@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 enum c281_Shape {
     Circle(int),
     Rect(width: int, height: int),

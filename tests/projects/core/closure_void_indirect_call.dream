@@ -3,8 +3,8 @@ import system.testing;
 // as here, or inlined from inside another function that just forwards the call) must not try to
 // materialize a "result" for the call — there is none. See `Statement::IndirectCall` in
 // `src/mir/mod.rs`.
-
 import system;
+
 class c80_Counter {
     public value: int;
 

@@ -4,7 +4,7 @@
 
 For behavior and native target requirements, see [Native Web APIs](../../web-apis/index.md).
 
-## `public class HttpIncoming`
+## `HttpIncoming`
 
 Headers and routing fields for one owned inbound HTTP request.
 
@@ -12,37 +12,47 @@ Headers and routing fields for one owned inbound HTTP request.
 public class HttpIncoming
 ```
 
-## `public req_id: int`
+## `req_id`
+
+Identifier of the active HTTP request.
 
 ```dream
 public req_id: int
 ```
 
-## `public method: string`
+## `method`
+
+HTTP request method.
 
 ```dream
 public method: string
 ```
 
-## `public path: string`
+## `path`
+
+Request or resource path.
 
 ```dream
 public path: string
 ```
 
-## `public query: string`
+## `query`
+
+Query string supplied with the request.
 
 ```dream
 public query: string
 ```
 
-## `public headers: HttpHeaders`
+## `headers`
+
+HTTP headers associated with this message.
 
 ```dream
 public headers: HttpHeaders
 ```
 
-## `public fun query_param`
+## `query_param`
 
 Returns the first decoded query value with this name.
 
@@ -50,7 +60,7 @@ Returns the first decoded query value with this name.
 public fun query_param(name: string): Option<string>
 ```
 
-## `public fun header`
+## `header`
 
 Returns the first matching request header.
 
@@ -58,7 +68,7 @@ Returns the first matching request header.
 public fun header(name: string): Option<string>
 ```
 
-## `public fun cookie`
+## `cookie`
 
 Returns a named cookie, without decoding its value.
 
@@ -66,18 +76,22 @@ Returns a named cookie, without decoding its value.
 public fun cookie(name: string): Option<string>
 ```
 
-## `public fun read_body_bytes`
+## `read_body_bytes`
 
 Reads the bounded request body as bytes, with inherited cancellation.
 
 ```dream
-public fun read_body_bytes(token: Option<CancellationToken> = Option.None): Future<Result<byte[], IoError>>
+public fun read_body_bytes(
+    token: Option<CancellationToken> = Option.None
+): Future<Result<byte[], IoError>>
 ```
 
-## `public async fun read_body_text`
+## `read_body_text`
 
 Reads the bounded request body as UTF-8 text.
 
 ```dream
-public async fun read_body_text(token: Option<CancellationToken> = Option.None): Result<string, IoError>
+public async fun read_body_text(
+    token: Option<CancellationToken> = Option.None
+): Result<string, IoError>
 ```

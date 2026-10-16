@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenAttrArg`
+## `GenAttrArg`
 
 One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or `enum`; `value` is the unquoted string, literal text, or dotted enum path.
 
@@ -10,27 +10,31 @@ One attribute argument as written: `kind` is `string`, `int`, `float`, `double`,
 public class GenAttrArg
 ```
 
-## `public kind: string`
+## `kind`
+
+Category of this entry.
 
 ```dream
 public kind: string
 ```
 
-## `public value: string`
+## `value`
+
+Value carried by this entry.
 
 ```dream
 public value: string
 ```
 
-## `public symbol: string`
+## `symbol`
 
-Canonical compiler identity for a declaration reference, or empty.
+Resolved identifier of a declaration argument, or an empty string when unresolved.
 
 ```dream
 public symbol: string
 ```
 
-## `public constructor`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

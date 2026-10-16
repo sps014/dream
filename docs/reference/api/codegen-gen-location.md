@@ -2,13 +2,15 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenLocation`
+## `GenLocation`
+
+A file, line, and column identifying a source location.
 
 ```dream
 public class GenLocation
 ```
 
-## `public file: string`
+## `file`
 
 Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
 
@@ -16,19 +18,23 @@ Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
 public file: string
 ```
 
-## `public line: int`
+## `line`
+
+One-based line number in the source file.
 
 ```dream
 public line: int
 ```
 
-## `public column: int`
+## `column`
+
+One-based column number in the source file.
 
 ```dream
 public column: int
 ```
 
-## `public constructor(file: string, line: int, column: int)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

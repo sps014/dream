@@ -2,6 +2,7 @@ import system.testing;
 import system;
 import system.collections;
 import system.text;
+
 fun c1f1_body(): void {
     let s = Set<int>();
 
@@ -65,5 +66,10 @@ fun c1f1_verify_observation(borrow value: string): void {
 fun set(): void {
     c1f1_cursor = 0;
     c1f1_body();
-    Assert.eq(c1f1_cursor, ("Empty? true\nSize: 0\nAdd 1: true\nAdd 2: true\nAdd 3: true\nAdd 2 again: false\nEmpty? false\nSize: 3\nContains 1: true\nContains 4: false\nRemove 2: true\nRemove 4: false\nContains 2: false\nSize after remove: 2\nIterated: 2\nElem: 1\nElem: 3\nSize after clear: 0\n").length);
+    Assert.eq(
+        c1f1_cursor,
+        (
+            "Empty? true\nSize: 0\nAdd 1: true\nAdd 2: true\nAdd 3: true\nAdd 2 again: false\nEmpty? false\nSize: 3\nContains 1: true\nContains 4: false\nRemove 2: true\nRemove 4: false\nContains 2: false\nSize after remove: 2\nIterated: 2\nElem: 1\nElem: 3\nSize after clear: 0\n"
+        ).length
+    );
 }

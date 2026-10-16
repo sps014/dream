@@ -2,15 +2,15 @@
 
 **Import:** `import system.io;`
 
-## `public class IoError : Error`
+## `IoError`
 
 Filesystem / path failure implementing `Error`.
 
 ```dream
-public class IoError : Error
+public class IoError: Error
 ```
 
-## `public path: string`
+## `path`
 
 Path involved in the failure (may be empty for non-path errors).
 
@@ -18,7 +18,7 @@ Path involved in the failure (may be empty for non-path errors).
 public path: string
 ```
 
-## `public constructor`
+## `constructor`
 
 Creates an error with path, machine code, and message.
 
@@ -26,7 +26,7 @@ Creates an error with path, machine code, and message.
 public constructor(path: string, code: string, message: string)
 ```
 
-## `public fun message`
+## `message`
 
 Human-readable description.
 
@@ -34,7 +34,7 @@ Human-readable description.
 public fun message(): string
 ```
 
-## `public fun code`
+## `code`
 
 Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
 
@@ -42,7 +42,7 @@ Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
 public fun code(): string
 ```
 
-## `public static fun not_found`
+## `not_found`
 
 File or directory does not exist.
 
@@ -50,7 +50,7 @@ File or directory does not exist.
 public static fun not_found(path: string): IoError
 ```
 
-## `public static fun permission_denied`
+## `permission_denied`
 
 Permission was denied for the operation.
 
@@ -58,7 +58,7 @@ Permission was denied for the operation.
 public static fun permission_denied(path: string): IoError
 ```
 
-## `public static fun other`
+## `other`
 
 Generic I/O failure with a custom message.
 
@@ -66,7 +66,7 @@ Generic I/O failure with a custom message.
 public static fun other(path: string, message: string): IoError
 ```
 
-## `public static fun exists`
+## `exists`
 
 Path already exists when exclusive create was requested.
 
@@ -74,7 +74,7 @@ Path already exists when exclusive create was requested.
 public static fun exists(path: string): IoError
 ```
 
-## `public static fun closed`
+## `closed`
 
 Creates an `ECLOSED` error for an operation on a closed resource.
 
@@ -82,7 +82,7 @@ Creates an `ECLOSED` error for an operation on a closed resource.
 public static fun closed(path: string): IoError
 ```
 
-## `public static fun invalid`
+## `invalid`
 
 Creates an `EINVAL` error for an invalid argument or operation.
 
@@ -90,7 +90,7 @@ Creates an `EINVAL` error for an invalid argument or operation.
 public static fun invalid(path: string, message: string): IoError
 ```
 
-## `public static fun cancelled`
+## `cancelled`
 
 Cooperative cancellation (`CancellationToken`).
 

@@ -3,9 +3,19 @@ import system.testing;
 // wrapping inside it. The mode is lexical: it covers lambdas written in the block but not
 // functions called from it.
 import system;
-fun c184_bump(x: int): int { return x + 1; }
-fun c184_mul_long(a: long, b: long): long { return a * b; }
-fun c184_mul_ulong(a: ulong, b: ulong): ulong { return a * b; }
+
+fun c184_bump(x: int): int {
+    return x + 1;
+}
+
+fun c184_mul_long(a: long, b: long): long {
+    return a * b;
+}
+
+fun c184_mul_ulong(a: ulong, b: ulong): ulong {
+    return a * b;
+}
+
 fun c184_hash(data: byte[]): uint {
     let h: uint = 2166136261u;
     for (let b in data) {
@@ -13,6 +23,7 @@ fun c184_hash(data: byte[]): uint {
     }
     return h;
 }
+
 fun c184_body(): void {
     let big: int = 2147483647;
     c184_verify_observation((big + 1).to_string());
@@ -59,5 +70,10 @@ fun c184_verify_observation(borrow value: string): void {
 fun overflow_blocks(): void {
     c184_cursor = 0;
     c184_body();
-    Assert.eq(c184_cursor, ("-2147483648\n4\n-1589934592\n-2147483648\n4294967295\n42\n2147483646\n2193733020\n45\n-9000000000000000000\n16000000000000000000\n").length);
+    Assert.eq(
+        c184_cursor,
+        (
+            "-2147483648\n4\n-1589934592\n-2147483648\n4294967295\n42\n2147483646\n2193733020\n45\n-9000000000000000000\n16000000000000000000\n"
+        ).length
+    );
 }

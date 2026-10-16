@@ -3,14 +3,13 @@ import math_lib;
 import basic_sum;
 
 public fun main() {
-    let result = add_numbers(10,20);
+    let result = add_numbers(10, 20);
     System.println(result);
-    
+
     let s = Math.sin(3.14);
     System.println(s);
 
-    let t = Test("John",20);
+    let t = Test("John", 20);
     t.name = "Jane";
     t.print_name();
-
 }

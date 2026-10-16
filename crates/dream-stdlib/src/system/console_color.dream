@@ -2,20 +2,36 @@ module system;
 
 // Standard console colors.
 public enum ConsoleColor {
+    /// The black terminal color.
     Black,
+    /// The dark blue terminal color.
     DarkBlue,
+    /// The dark green terminal color.
     DarkGreen,
+    /// The dark cyan terminal color.
     DarkCyan,
+    /// The dark red terminal color.
     DarkRed,
+    /// The dark magenta terminal color.
     DarkMagenta,
+    /// The dark yellow terminal color.
     DarkYellow,
+    /// The gray terminal color.
     Gray,
+    /// The dark gray terminal color.
     DarkGray,
+    /// The blue terminal color.
     Blue,
+    /// The green terminal color.
     Green,
+    /// The cyan terminal color.
     Cyan,
+    /// The red terminal color.
     Red,
+    /// The magenta terminal color.
     Magenta,
+    /// The yellow terminal color.
     Yellow,
+    /// The white terminal color.
     White,
 }

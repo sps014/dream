@@ -22,9 +22,13 @@ public class TaskPool {
     // Creates a fixed worker set; nonpositive sizes produce InvalidSize on operations.
     public constructor(size: int) {
         let count = size;
-        if count < 0 { count = 0; }
+        if count < 0 {
+            count = 0;
+        }
         this.ids = Buffer.alloc<int>(count);
-        for (let i = 0; i < count; i = i + 1) { this.ids[i] = Task.spawn_host(false); }
+        for (let i = 0; i < count; i = i + 1) {
+            this.ids[i] = Task.spawn_host(false);
+        }
         this.next = 0;
         this.active = 0;
         this.closing = false;
@@ -32,104 +36,182 @@ public class TaskPool {
     }
 
     // Number of reusable parallel workers in this pool.
-    public get size(): int { return this.ids.length; }
+    public get size(): int {
+        return this.ids.length;
+    }
 
     // Dispatches a CPU job; capture and return values follow the shared/move worker rules.
-    public fun dispatch<TOut : shared>(body: fun(): TOut, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>> {
+    public fun dispatch<TOut: shared>(
+        body: fun(): TOut,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<TOut, TaskPoolError>> {
         return TaskPool.dispatch_owned<TOut>(this, body, CancellationToken.resolve(token));
     }
 
-    static async fun dispatch_owned<TOut : shared>(pool: TaskPool, body: fun(): TOut, token: Option<CancellationToken>): Result<TOut, TaskPoolError> {
-        if pool.ids.length == 0 { return Result.Err(TaskPoolError.InvalidSize); }
-        if pool.closing { return Result.Err(TaskPoolError.Closed); }
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(TaskPoolError.Cancelled); }
+    static async fun dispatch_owned<TOut: shared>(
+        pool: TaskPool,
+        body: fun(): TOut,
+        token: Option<CancellationToken>
+    ): Result<TOut, TaskPoolError> {
+        if pool.ids.length == 0 {
+            return Result.Err(TaskPoolError.InvalidSize);
+        }
+        if pool.closing {
+            return Result.Err(TaskPoolError.Closed);
+        }
+        if CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(TaskPoolError.Cancelled);
+        }
         let guard = CancellationSource();
         TaskPool.protect_host(guard);
         let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
         let id = pool.ids[pool.next];
         pool.next = (pool.next + 1) % pool.ids.length;
-        if pool.active == 0 { pool.changed = CancellationSource(); }
+        if pool.active == 0 {
+            pool.changed = CancellationSource();
+        }
         pool.active = pool.active + 1;
         let wire = Task.dispatch_host(id, Task.funcidx(wrapped), Task.env(wrapped), "").await;
         TaskPool.keep_alive(wrapped);
         pool.settled();
-        if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) { return Result.Err(TaskPoolError.Cancelled); }
+        if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(TaskPoolError.Cancelled);
+        }
         return Result.Ok(Bytes.fromWire<TOut>(wire));
     }
 
     // Dispatches an async job on a pool worker and waits for its operation to settle.
-    public fun dispatch_async<TOut : shared>(body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None): Future<Result<TOut, TaskPoolError>> {
+    public fun dispatch_async<TOut: shared>(
+        body: fun(): Future<TOut>,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<TOut, TaskPoolError>> {
         return TaskPool.dispatch_async_owned<TOut>(this, body, CancellationToken.resolve(token));
     }
 
-    static async fun dispatch_async_owned<TOut : shared>(pool: TaskPool, body: fun(): Future<TOut>, token: Option<CancellationToken>): Result<TOut, TaskPoolError> {
-        if pool.ids.length == 0 { return Result.Err(TaskPoolError.InvalidSize); }
-        if pool.closing { return Result.Err(TaskPoolError.Closed); }
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(TaskPoolError.Cancelled); }
+    static async fun dispatch_async_owned<TOut: shared>(
+        pool: TaskPool,
+        body: fun(): Future<TOut>,
+        token: Option<CancellationToken>
+    ): Result<TOut, TaskPoolError> {
+        if pool.ids.length == 0 {
+            return Result.Err(TaskPoolError.InvalidSize);
+        }
+        if pool.closing {
+            return Result.Err(TaskPoolError.Closed);
+        }
+        if CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(TaskPoolError.Cancelled);
+        }
         let guard = CancellationSource();
         TaskPool.protect_host(guard);
         let completion_token = token;
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
             let pending = body();
-            if token.is_some() { TaskPool.attach_host(pending, token.unwrap()); }
+            if token.is_some() {
+                TaskPool.attach_host(pending, token.unwrap());
+            }
             return Bytes.toWire<TOut>(pending.await);
         };
         let id = pool.ids[pool.next];
         pool.next = (pool.next + 1) % pool.ids.length;
-        if pool.active == 0 { pool.changed = CancellationSource(); }
+        if pool.active == 0 {
+            pool.changed = CancellationSource();
+        }
         pool.active = pool.active + 1;
-        let wire = Task.dispatch_host(id, Task.funcidx_async(wrapped), Task.env_async(wrapped), "").await;
+        let wire = Task.dispatch_host(id, Task.funcidx_async(wrapped), Task.env_async(wrapped), "")
+            .await;
         TaskPool.keep_alive(wrapped);
         pool.settled();
-        if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) { return Result.Err(TaskPoolError.Cancelled); }
+        if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) {
+            return Result.Err(TaskPoolError.Cancelled);
+        }
         return Result.Ok(Bytes.fromWire<TOut>(wire));
     }
 
     fun settled(): void {
         this.active = this.active - 1;
-        if this.active == 0 { this.changed.cancel(); }
+        if this.active == 0 {
+            this.changed.cancel();
+        }
     }
 
     // Maps CPU work with at most size active dispatches and preserves input order.
-    public fun map<T : shared, U : shared>(items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>> {
+    public fun map<T: shared, U: shared>(
+        items: T[],
+        body: fun(T): U,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<U[], TaskFailure<TaskPoolError>>> {
         return TaskPool.map_owned<T, U>(this, items, body, CancellationToken.resolve(token));
     }
 
-    static async fun map_owned<T : shared, U : shared>(pool: TaskPool, items: T[], body: fun(T): U, token: Option<CancellationToken>): Result<U[], TaskFailure<TaskPoolError>> {
+    static async fun map_owned<T: shared, U: shared>(
+        pool: TaskPool,
+        items: T[],
+        body: fun(T): U,
+        token: Option<CancellationToken>
+    ): Result<U[], TaskFailure<TaskPoolError>> {
         let concurrency = pool.size;
         let parent_token = token;
-        return Task.map<T, U, TaskPoolError>(items, async (item: T) => pool.dispatch<U>(() => body(item), token).await, concurrency, parent_token).await;
+        return Task.map<T, U, TaskPoolError>(
+            items,
+            async (item: T) => pool.dispatch<U>(() => body(item), token).await,
+            concurrency,
+            parent_token
+        ).await;
     }
 
     // Maps async worker jobs with bounded dispatch rather than creating one worker per input.
-    public fun map_async<T : shared, U : shared>(items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None): Future<Result<U[], TaskFailure<TaskPoolError>>> {
+    public fun map_async<T: shared, U: shared>(
+        items: T[],
+        body: fun(T): Future<U>,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<U[], TaskFailure<TaskPoolError>>> {
         return TaskPool.map_async_owned<T, U>(this, items, body, CancellationToken.resolve(token));
     }
 
-    static async fun map_async_owned<T : shared, U : shared>(pool: TaskPool, items: T[], body: fun(T): Future<U>, token: Option<CancellationToken>): Result<U[], TaskFailure<TaskPoolError>> {
+    static async fun map_async_owned<T: shared, U: shared>(
+        pool: TaskPool,
+        items: T[],
+        body: fun(T): Future<U>,
+        token: Option<CancellationToken>
+    ): Result<U[], TaskFailure<TaskPoolError>> {
         let concurrency = pool.size;
         let parent_token = token;
-        return Task.map<T, U, TaskPoolError>(items, async (item: T) => pool.dispatch_async<U>(async () => body(item).await, token).await, concurrency, parent_token).await;
+        return Task.map<T, U, TaskPoolError>(
+            items,
+            async (item: T) => pool.dispatch_async<U>(async () => body(item).await, token).await,
+            concurrency,
+            parent_token
+        ).await;
     }
 
     // Stops accepting work, waits for submitted jobs, then closes workers idempotently.
-    public fun close(): Future<Result<bool, TaskPoolError>> { return TaskPool.close_owned(this); }
+    public fun close(): Future<Result<bool, TaskPoolError>> {
+        return TaskPool.close_owned(this);
+    }
 
     static async fun close_owned(pool: TaskPool): Result<bool, TaskPoolError> {
         let shield = CancellationSource();
         TaskPool.protect_host(shield);
         pool.closing = true;
-        while pool.active > 0 { pool.changed.token.wait_cancelled().await; }
+        while pool.active > 0 {
+            pool.changed.token.wait_cancelled().await;
+        }
         pool.terminate();
         return Result.Ok(true);
     }
 
     fun terminate(): void {
         for (let i = 0; i < this.ids.length; i = i + 1) {
-            if this.ids[i] != 0 { Task.terminate_host(this.ids[i]); this.ids[i] = 0; }
+            if this.ids[i] != 0 {
+                Task.terminate_host(this.ids[i]);
+                this.ids[i] = 0;
+            }
         }
     }
-    del() { this.terminate(); }
+    del() {
+        this.terminate();
+    }
 
     @intrinsic(Intrinsic.DreamTaskAttach)
     static extern fun attach_host(borrow pending: object, borrow token: CancellationToken): void;
@@ -139,5 +221,4 @@ public class TaskPool {
 
     @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;
-
 }

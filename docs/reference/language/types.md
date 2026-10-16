@@ -66,10 +66,10 @@ flowchart LR
 ```
 
 ```dream
-let a: long = 5;              // int -> long
-let b: ulong = 7u;            // uint -> ulong
-let d: double = 9000000000L;  // long -> double
-let n: int = (int)d;          // narrowing: cast required
+let a: long = 5; // int -> long
+let b: ulong = 7u; // uint -> ulong
+let d: double = 9000000000L; // long -> double
+let n: int = (int)d; // narrowing: cast required
 ```
 
 ## Arrays
@@ -78,7 +78,7 @@ Append `[]` to any type. Arrays are fixed-size, zero-indexed reference types:
 
 ```dream
 let nums: int[] = [10, 20, 30];
-let first = nums[0];   // 10
+let first = nums[0]; // 10
 nums[1] = 99;
 ```
 
@@ -92,7 +92,7 @@ Positional product types `(T, U, …)` (arity ≥ 2) are always-inline value typ
 let t: (int, string) = (1, "hi");
 System.println(t.0);
 t.1 = "bye";
-let (a, b) = t;         // destructure
+let (a, b) = t; // destructure
 let (x, (y, z)) = (1, (2, 3));
 ```
 
@@ -124,6 +124,7 @@ Calling a method or reading a field through a value that might be absent is a ty
 
 ```dream
 type Number = int;
+
 type Names = string[];
 
 fun add(a: Number, b: Number): Number {
@@ -137,11 +138,11 @@ A cast converts between numeric types or between a value and `object`:
 
 ```dream
 let n = 7;
-let f = (float)n;        // int -> float
-let back = (int)f;       // float -> int
+let f = (float)n; // int -> float
+let back = (int)f; // float -> int
 
-let o: object = n;       // boxing
-let unboxed = (int)o;    // unboxing — traps if the runtime type is wrong
+let o: object = n; // boxing
+let unboxed = (int)o; // unboxing — traps if the runtime type is wrong
 ```
 
 Supported: any numeric type ↔ any numeric type, `char ↔ int`, `char ↔ byte`, and any type ↔ `object`. Widening is implicit; narrowing and same-width sign changes need a cast. Casting into `byte` keeps only the low 8 bits.

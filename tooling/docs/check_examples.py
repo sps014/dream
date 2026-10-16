@@ -28,11 +28,15 @@ def main():
             failed.append(case["name"])
             print(f"FAIL {case['name']}: example block is missing from {case['page']}")
             continue
-        source = blocks[case["block"]]
+        source = "\n".join(blocks[index] for index in [case["block"], *case.get("append_blocks", [])])
         directory = output / case["name"]
         directory.mkdir(exist_ok=True)
-        path = directory / "main.dream"
+        path = directory / case.get("entry", "main.dream")
         path.write_text(source, encoding="utf-8")
+        for extra in case.get("files", []):
+            destination = directory / extra["name"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(blocks[extra["block"]], encoding="utf-8")
         mode = case.get("mode", "run")
         if mode not in {"run", "compile", "test"}:
             raise ValueError(f"Unsupported example mode: {mode}")

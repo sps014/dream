@@ -8,6 +8,7 @@ public struct JsonAttribute {}
 // Overrides the JSON property name of a field of a `@json` type.
 @attribute(AttributeTarget.Field)
 public struct PropertyNameAttribute {
+    /// Name identifying this entry.
     public name: string;
 }
 

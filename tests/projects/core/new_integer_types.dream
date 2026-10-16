@@ -2,8 +2,8 @@ import system.testing;
 // End-to-end coverage for the long/uint/ulong/byte primitives: literals, width-specific
 // arithmetic (signed vs unsigned), implicit widening, explicit narrowing casts, boxing into
 // object, string conversion, byte arrays, and the prelude extension methods.
-
 import system;
+
 @test
 @timeout(180000)
 fun new_integer_types() {

@@ -5,7 +5,9 @@ module system.text;
 // since `full` already covers group 0), with `""` for a group that didn't participate; `named`
 // looks a group up by the name it was given via `(?<name>...)`.
 public class RegexMatchInfo {
+    /// Text of the complete regular-expression match.
     public full: string;
+    /// Text captured by each numbered group.
     public groups: string[];
     names: string[];
     name_numbers: int[]; // 1-based group numbers, parallel to `names`

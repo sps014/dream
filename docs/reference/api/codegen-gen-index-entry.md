@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenIndexEntry`
+## `GenIndexEntry`
 
 Every type in the program (user and stdlib), names and kinds only.
 
@@ -10,25 +10,31 @@ Every type in the program (user and stdlib), names and kinds only.
 public class GenIndexEntry
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public kind: DeclKind`
+## `kind`
+
+Category of this entry.
 
 ```dream
 public kind: DeclKind
 ```
 
-## `public constructor(id: string, name: string, kind: DeclKind)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

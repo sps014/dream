@@ -6,23 +6,41 @@ import system.json;
 
 // Decoded snapshot behind a `GenContext`.
 public class GenSnapshot {
+    /// Version identifying this API or snapshot format.
     public version: int;
+    /// Current source-generation phase.
     public phase: int;
+    /// Symbols available to the generator.
     public symbols: List<GenSymbol>;
+    /// Errors available for the generator to inspect.
     public compilation_errors: List<GenCompilationError>;
+    /// Tools available to the generator.
     public tools: List<GenToolInfo>;
+    /// Results of tool requests made by the generator.
     public tool_results: List<GenToolResult>;
+    /// Referenced type declarations available to the generator.
     public referenced: List<GenDecl>;
+    /// Referenced function declarations available to the generator.
     public referenced_functions: List<GenFunction>;
+    /// Name of the generator being executed.
     public generator: string;
+    /// Stable identifier of the generator being executed.
     public generator_id: string;
+    /// Target declaration or build target associated with this result.
     public target: string;
+    /// Options supplied to this generator.
     public options: JsonValue;
+    /// Files available to this operation.
     public files: List<GenFile>;
+    /// Searchable declaration index available to the generator.
     public index: List<GenIndexEntry>;
+    /// Type declarations available to the generator.
     public decls: List<GenDecl>;
+    /// Function declarations available to the generator.
     public functions: List<GenFunction>;
+    /// Syntax blocks available to the generator.
     public blocks: List<GenSyntaxBlock>;
+    /// Function call sites available to the generator.
     public calls: List<GenCallSite>;
 
     // Creates the snapshot model from the supplied values.
@@ -30,15 +48,25 @@ public class GenSnapshot {
         this.version = gen_int(root, "version");
         this.phase = gen_int(root, "phase");
         this.symbols = List<GenSymbol>();
-        for (let s in gen_items(root, "symbols")) { this.symbols.push(GenSymbol(s)); }
+        for (let s in gen_items(root, "symbols")) {
+            this.symbols.push(GenSymbol(s));
+        }
         this.compilation_errors = List<GenCompilationError>();
-        for (let e in gen_items(root, "compilation_errors")) { this.compilation_errors.push(GenCompilationError(e)); }
+        for (let e in gen_items(root, "compilation_errors")) {
+            this.compilation_errors.push(GenCompilationError(e));
+        }
         this.tools = List<GenToolInfo>();
-        for (let t in gen_items(root, "tools")) { this.tools.push(GenToolInfo(t)); }
+        for (let t in gen_items(root, "tools")) {
+            this.tools.push(GenToolInfo(t));
+        }
         this.tool_results = List<GenToolResult>();
-        for (let t in gen_items(root, "tool_results")) { this.tool_results.push(GenToolResult(t)); }
+        for (let t in gen_items(root, "tool_results")) {
+            this.tool_results.push(GenToolResult(t));
+        }
         this.referenced = List<GenDecl>();
-        for (let d in gen_items(root, "referenced")) { this.referenced.push(gen_decl(d)); }
+        for (let d in gen_items(root, "referenced")) {
+            this.referenced.push(gen_decl(d));
+        }
         this.referenced_functions = gen_functions(root, "referenced_functions");
         this.generator = gen_str(root, "generator");
         this.generator_id = gen_str(root, "generator_id");
@@ -50,7 +78,13 @@ public class GenSnapshot {
         }
         this.index = List<GenIndexEntry>();
         for (let e in gen_items(root, "index")) {
-            this.index.push(GenIndexEntry(gen_str(e, "id"), gen_str(e, "name"), gen_decl_kind(gen_str(e, "kind"))));
+            this.index.push(
+                GenIndexEntry(
+                    gen_str(e, "id"),
+                    gen_str(e, "name"),
+                    gen_decl_kind(gen_str(e, "kind"))
+                )
+            );
         }
         this.decls = List<GenDecl>();
         for (let d in gen_items(root, "decls")) {
@@ -59,11 +93,27 @@ public class GenSnapshot {
         this.functions = gen_functions(root, "functions");
         this.blocks = List<GenSyntaxBlock>();
         for (let b in gen_items(root, "blocks")) {
-            this.blocks.push(GenSyntaxBlock(gen_str(b, "id"), gen_str(b, "name"), gen_str(b, "body"), gen_strings(b, "splices"), gen_location(b)));
+            this.blocks.push(
+                GenSyntaxBlock(
+                    gen_str(b, "id"),
+                    gen_str(b, "name"),
+                    gen_str(b, "body"),
+                    gen_strings(b, "splices"),
+                    gen_location(b)
+                )
+            );
         }
         this.calls = List<GenCallSite>();
         for (let c in gen_items(root, "calls")) {
-            this.calls.push(GenCallSite(gen_str(c, "id"), gen_str(c, "callee"), gen_type_refs(c, "type_args"), gen_type_refs(c, "arg_types"), gen_location(c)));
+            this.calls.push(
+                GenCallSite(
+                    gen_str(c, "id"),
+                    gen_str(c, "callee"),
+                    gen_type_refs(c, "type_args"),
+                    gen_type_refs(c, "arg_types"),
+                    gen_location(c)
+                )
+            );
         }
     }
 }

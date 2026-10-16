@@ -7,10 +7,22 @@ import system;
 import system.webapi;
 
 @router("")
-class Routes { @get("/health") public static fun health(): string { return "ok"; } }
+class Routes {
+    @get("/health")
+    public static fun health(): string {
+        return "ok";
+    }
+}
+
 async fun main(): void {
-    let options = WebAppOptions(title: "Production API", tls_cert_path: System.env("TLS_CERT").unwrap(), tls_key_path: System.env("TLS_KEY").unwrap());
-    let app = WebApp(options); app.include_router(Routes.router()).unwrap(); app.run("0.0.0.0", 8443).await.unwrap();
+    let options = WebAppOptions(
+        title: "Production API",
+        tls_cert_path: System.env("TLS_CERT").unwrap(),
+        tls_key_path: System.env("TLS_KEY").unwrap()
+    );
+    let app = WebApp(options);
+    app.include_router(Routes.router()).unwrap();
+    app.run("0.0.0.0", 8443).await.unwrap();
 }
 ```
 

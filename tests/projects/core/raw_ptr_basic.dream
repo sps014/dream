@@ -4,28 +4,41 @@ import system.testing;
 struct RawPair {
     public small: byte;
     public count: long;
-    public constructor(small: byte, count: long) { this.small = small; this.count = count; }
+    public constructor(small: byte, count: long) {
+        this.small = small;
+        this.count = count;
+    }
 }
 
 @packed
 struct RawPackedPair {
     public small: byte;
     public count: long;
-    public constructor(small: byte, count: long) { this.small = small; this.count = count; }
+    public constructor(small: byte, count: long) {
+        this.small = small;
+        this.count = count;
+    }
 }
 
 struct RawNode {
     public value: int;
     public next: RawPtr<RawNode>;
-    public constructor(value: int, next: RawPtr<RawNode>) { this.value = value; this.next = next; }
+    public constructor(value: int, next: RawPtr<RawNode>) {
+        this.value = value;
+        this.next = next;
+    }
 }
 
 struct T {
     public value: long;
-    public constructor(value: long) { this.value = value; }
+    public constructor(value: long) {
+        this.value = value;
+    }
 }
 
-fun raw_element_size<T: unmanaged>(): int { return sizeof(T); }
+fun raw_element_size<T: unmanaged>(): int {
+    return sizeof(T);
+}
 
 @unsafe
 @test

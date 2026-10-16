@@ -5,11 +5,24 @@ import system.testing;
 // delegates to `Point`'s (also `@json`) converters.
 import system;
 import system.json;
-@json
-struct c114_Point { public x: int; public y: int; public constructor(x: int, y: int) { this.x = x; this.y = y; } }
 
 @json
-struct c114_Box<T> { public value: T; public constructor(value: T) { this.value = value; } }
+struct c114_Point {
+    public x: int;
+    public y: int;
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+struct c114_Box<T> {
+    public value: T;
+    public constructor(value: T) {
+        this.value = value;
+    }
+}
 
 @test
 @timeout(180000)

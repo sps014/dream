@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public fun options<T>`
+## `options`
 
 `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
 
@@ -10,7 +10,7 @@
 public fun options<T>(): Result<T, ParseError>
 ```
 
-## `public fun option_or`
+## `option_or`
 
 One option as text (`fallback` when unset).
 
@@ -18,15 +18,15 @@ One option as text (`fallback` when unset).
 public fun option_or(borrow key: string, fallback: string): string
 ```
 
-## `public fun additional_files`
+## `additional_files`
 
-`dream.toml` `[[generators]].additional_files`, read by the compiler.
+Returns the files listed in `[[generators]].additional_files` in `dream.toml`.
 
 ```dream
 public fun additional_files(): List<GenFile>
 ```
 
-## `public fun replace`
+## `replace`
 
 Rewrites `block`'s site to the Dream expression `source`.
 
@@ -34,7 +34,7 @@ Rewrites `block`'s site to the Dream expression `source`.
 public fun replace(borrow block: GenSyntaxBlock, source: string): void
 ```
 
-## `public fun emit_file`
+## `emit_file`
 
 Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
 
@@ -42,7 +42,7 @@ Adds a complete Dream source file at the generator-relative path `path` (`models
 public fun emit_file(path: string, source: string): void
 ```
 
-## `public fun tools`
+## `tools`
 
 Declared tools with the versions and fingerprints used in this compilation.
 
@@ -50,23 +50,29 @@ Declared tools with the versions and fingerprints used in this compilation.
 public fun tools(): List<GenToolInfo>
 ```
 
-## `public fun tool_results`
+## `tool_results`
 
-Compiler-collected feedback from the previous phase.
+Returns tool results from the previous generation round.
 
 ```dream
 public fun tool_results(): List<GenToolResult>
 ```
 
-## `public fun run_tool`
+## `run_tool`
 
-Requests a declared tool; the compiler reruns this generator with its results.
+Requests a declared tool. The generator runs again with the result in the next phase.
 
 ```dream
-public fun run_tool(id: string, tool: string, args: List<string>, inputs: List<string>, outputs: List<string>): void
+public fun run_tool(
+    id: string,
+    tool: string,
+    args: List<string>,
+    inputs: List<string>,
+    outputs: List<string>
+): void
 ```
 
-## `public fun emit_asset`
+## `emit_asset`
 
 Embeds an artifact or tool output into every compilation target.
 
@@ -74,7 +80,7 @@ Embeds an artifact or tool output into every compilation target.
 public fun emit_asset(name: string, source: string): void
 ```
 
-## `public fun emit_asset`
+## `emit_asset`
 
 Embeds an artifact or tool output for the selected target triples or families.
 
@@ -82,7 +88,7 @@ Embeds an artifact or tool output for the selected target triples or families.
 public fun emit_asset(name: string, source: string, targets: List<string>): void
 ```
 
-## `public fun consume`
+## `consume`
 
 Removes a selected or referenced user function from the compiled program.
 
@@ -90,15 +96,20 @@ Removes a selected or referenced user function from the compiled program.
 public fun consume(borrow f: GenFunction): void
 ```
 
-## `public fun emit_artifact`
+## `emit_artifact`
 
 Emits a non-Dream file with source mappings under this generator's directory.
 
 ```dream
-public fun emit_artifact(path: string, contents: string, borrow map: GenSourceMap, publish: bool = false): void
+public fun emit_artifact(
+    path: string,
+    contents: string,
+    borrow map: GenSourceMap,
+    publish: bool = false
+): void
 ```
 
-## `public fun error_in_artifact`
+## `error_in_artifact`
 
 Reports an artifact location through its source map to the originating Dream node.
 
@@ -106,7 +117,7 @@ Reports an artifact location through its source map to the originating Dream nod
 public fun error_in_artifact(path: string, line: int, column: int, message: string): void
 ```
 
-## `public fun emit_extend`
+## `emit_extend`
 
 Extensions keep their declaring module, including its internal visibility and name scope.
 
@@ -114,7 +125,7 @@ Extensions keep their declaring module, including its internal visibility and na
 public fun emit_extend(borrow decl: GenDecl, body: string): void
 ```
 
-## `public fun error_at`
+## `error_at`
 
 An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.
 
@@ -122,7 +133,7 @@ An error at the node with identity `target` (any model node's `id`), or at the g
 public fun error_at(borrow target: string, message: string): void
 ```
 
-## `public fun warning_at`
+## `warning_at`
 
 Reports a warning at this model node.
 
@@ -130,7 +141,7 @@ Reports a warning at this model node.
 public fun warning_at(borrow target: string, message: string): void
 ```
 
-## `public fun error`
+## `error`
 
 Reports an error at this model node or at the generator when no node is supplied.
 
@@ -138,7 +149,7 @@ Reports an error at this model node or at the generator when no node is supplied
 public fun error(message: string): void
 ```
 
-## `public fun error`
+## `error`
 
 Reports an error at this model node or at the generator when no node is supplied.
 
@@ -146,7 +157,7 @@ Reports an error at this model node or at the generator when no node is supplied
 public fun error(borrow block: GenSyntaxBlock, message: string): void
 ```
 
-## `public fun error`
+## `error`
 
 Reports an error at this model node or at the generator when no node is supplied.
 
@@ -154,7 +165,7 @@ Reports an error at this model node or at the generator when no node is supplied
 public fun error(borrow decl: GenDecl, message: string): void
 ```
 
-## `public fun error`
+## `error`
 
 Reports an error at this model node or at the generator when no node is supplied.
 
@@ -162,7 +173,7 @@ Reports an error at this model node or at the generator when no node is supplied
 public fun error(borrow field: GenField, message: string): void
 ```
 
-## `public fun error`
+## `error`
 
 Reports an error at this model node or at the generator when no node is supplied.
 
@@ -170,7 +181,7 @@ Reports an error at this model node or at the generator when no node is supplied
 public fun error(borrow call: GenCallSite, message: string): void
 ```
 
-## `public fun warning`
+## `warning`
 
 Reports a warning at this model node.
 
@@ -178,7 +189,7 @@ Reports a warning at this model node.
 public fun warning(borrow decl: GenDecl, message: string): void
 ```
 
-## `public fun has_errors`
+## `has_errors`
 
 Returns the requested model information.
 
@@ -186,7 +197,7 @@ Returns the requested model information.
 public fun has_errors(): bool
 ```
 
-## `public fun log`
+## `log`
 
 A line shown with `dream -v` / `dream generate --explain`.
 

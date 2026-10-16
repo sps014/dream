@@ -3,21 +3,37 @@ import system.testing;
 import system.collections;
 
 let pq_drops = 0;
-class PqOwned : Comparable<PqOwned> {
+
+class PqOwned: Comparable<PqOwned> {
     public key: int;
-    public constructor(key: int) { this.key = key; }
-    public fun compare(borrow other: PqOwned): int { return this.key - other.key; }
-    del() { pq_drops = pq_drops + 1; }
-}
-class PqCustomOnly {
-    public key: int;
-    public constructor(key: int) { this.key = key; }
+    public constructor(key: int) {
+        this.key = key;
+    }
+
+    public fun compare(borrow other: PqOwned): int {
+        return this.key - other.key;
+    }
+    del() {
+        pq_drops = pq_drops + 1;
+    }
 }
 
-struct PqRecord : Comparable<PqRecord> {
+class PqCustomOnly {
+    public key: int;
+    public constructor(key: int) {
+        this.key = key;
+    }
+}
+
+struct PqRecord: Comparable<PqRecord> {
     public item: PqOwned;
-    public constructor(item: PqOwned) { this.item = item; }
-    public fun compare(borrow other: PqRecord): int { return this.item.key - other.item.key; }
+    public constructor(item: PqOwned) {
+        this.item = item;
+    }
+
+    public fun compare(borrow other: PqRecord): int {
+        return this.item.key - other.item.key;
+    }
 }
 
 @allow_cycle
@@ -81,7 +97,12 @@ fun priority_queue_ownership(): void {
     pq_record_run();
     Assert.eq(pq_drops - before, 132);
     let comparisons = 0;
-    let reverse = PriorityQueue<int>((a, b) => { comparisons = comparisons + 1; return b - a; });
+    let reverse = PriorityQueue<int>(
+        (a, b) => {
+            comparisons = comparisons + 1;
+            return b - a;
+        }
+    );
     let i = 0;
     while i < 100 {
         reverse.push(i % 7);

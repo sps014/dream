@@ -7,12 +7,19 @@ import system;
 import system.webapi;
 
 async fun main(): void {
-    let options = WebAppOptions(title: "Orders API", version: "1.0.0", docs_url: "/documentation", redoc_url: "", description: "Manage orders");
+    let options = WebAppOptions(
+        title: "Orders API",
+        version: "1.0.0",
+        docs_url: "/documentation",
+        redoc_url: "",
+        description: "Manage orders"
+    );
     options.swagger = SwaggerOptions(persist_authorization: false, deep_linking: true);
     let app = WebApp(options);
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     System.println("Listening on " + port.to_string());
-    app.shutdown(); app.wait().await;
+    app.shutdown();
+    app.wait().await;
 }
 ```
 

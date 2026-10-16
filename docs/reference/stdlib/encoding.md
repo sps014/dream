@@ -13,8 +13,8 @@ import system.encoding;
 
 fun main() {
     let bytes = Encoding.utf8_encode("hi");
-    System.println(Encoding.hex_encode(bytes));      // 6869
-    System.println(Encoding.utf8_decode(bytes));     // hi
+    System.println(Encoding.hex_encode(bytes)); // 6869
+    System.println(Encoding.utf8_decode(bytes)); // hi
 }
 ```
 

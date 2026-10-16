@@ -2,7 +2,7 @@
 
 **Import:** `import system.text;`
 
-## `public enum InvalidEncoding`
+## `InvalidEncoding`
 
 Policy for malformed or truncated UTF-8 input.
 
@@ -26,7 +26,7 @@ Emits U+FFFD replacement characters for invalid input and continues decoding.
 Replace
 ```
 
-## `public class Utf8Decoder`
+## `Utf8Decoder`
 
 Incremental UTF-8 decoding that retains incomplete sequences between chunks and preserves a leading byte-order mark as text.
 
@@ -34,7 +34,7 @@ Incremental UTF-8 decoding that retains incomplete sequences between chunks and 
 public class Utf8Decoder
 ```
 
-## `public constructor`
+## `constructor`
 
 Creates an active decoder with strict validation by default.
 
@@ -42,7 +42,7 @@ Creates an active decoder with strict validation by default.
 public constructor(policy: InvalidEncoding = InvalidEncoding.Strict)
 ```
 
-## `public fun decode_chunk`
+## `decode_chunk`
 
 Decodes complete scalars and retains a trailing incomplete sequence for the next chunk. Malformed input follows the selected policy; calls after failure or finish return errors.
 
@@ -50,7 +50,7 @@ Decodes complete scalars and retains a trailing incomplete sequence for the next
 public fun decode_chunk(bytes: byte[]): Result<string, ParseError>
 ```
 
-## `public fun finish`
+## `finish`
 
 Ends input, rejecting a truncated sequence in strict mode or replacing it with U+FFFD. Returns any trailing text; all subsequent calls return an inactive-decoder error.
 

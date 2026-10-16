@@ -5,18 +5,51 @@ module system.core;
 public struct Arena {
     state: usize;
 
+    /// Creates an arena with the requested initial byte capacity. Call `free` when finished.
     @unsafe
-    public constructor(initial_capacity: usize = 4096) { this.state = RawMemory.arena_new(initial_capacity); }
+    public constructor(initial_capacity: usize = 4096) {
+        this.state = RawMemory.arena_new(initial_capacity);
+    }
+
+    /// Allocates storage for `count` values of `T`. Initialize values before reading them.
     @unsafe
     public fun alloc<T: unmanaged>(count: usize): RawPtr<T> {
-        return RawPtr<T>.from_address(RawMemory.arena_alloc(this.state, RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), 0));
+        return RawPtr<T>.from_address(
+            RawMemory.arena_alloc(
+                this.state,
+                RawMemory.size(count, (usize)sizeof(T)),
+                (usize)alignof(T),
+                0
+            )
+        );
     }
+
+    /// Allocates zero-filled storage for `count` values. The arena owns it until `reset` or
+    /// `free`.
     @unsafe
     public fun alloc_zeroed<T: unmanaged>(count: usize): RawPtr<T> {
-        return RawPtr<T>.from_address(RawMemory.arena_alloc(this.state, RawMemory.size(count, (usize)sizeof(T)), (usize)alignof(T), 1));
+        return RawPtr<T>.from_address(
+            RawMemory.arena_alloc(
+                this.state,
+                RawMemory.size(count, (usize)sizeof(T)),
+                (usize)alignof(T),
+                1
+            )
+        );
     }
+
+    /// Discards all arena allocations for reuse. All pointers obtained from this arena become
+    /// invalid.
     @unsafe
-    public fun reset(): void { RawMemory.arena_reset(this.state); }
+    public fun reset(): void {
+        RawMemory.arena_reset(this.state);
+    }
+
+    /// Releases the arena and all its storage. All copies and allocated pointers become
+    /// invalid.
     @unsafe
-    public fun free(): void { RawMemory.arena_free(this.state); this.state = (usize)0; }
+    public fun free(): void {
+        RawMemory.arena_free(this.state);
+        this.state = (usize)0;
+    }
 }

@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class WebEndpoint`
+## `WebEndpoint`
 
 A compiled handler, path and its generated documentation.
 
@@ -12,13 +12,22 @@ A compiled handler, path and its generated documentation.
 public class WebEndpoint
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `WebEndpoint` with `method`, `path`, `handler`, `paths`, `websocket`, `components`.
 
 ```dream
-public constructor(method: string, path: string, handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>, paths: string, websocket: bool = false, components: string = "{}")
+public constructor(
+    method: string,
+    path: string,
+    handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>,
+    paths: string,
+    websocket: bool = false,
+    components: string = "{}"
+)
 ```
 
-## `public class WebRouter`
+## `WebRouter`
 
 Immutable generated route group; mount it explicitly on an application.
 
@@ -26,7 +35,9 @@ Immutable generated route group; mount it explicitly on an application.
 public class WebRouter
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `WebRouter` with `routes`.
 
 ```dream
 public constructor(routes: List<WebEndpoint>)

@@ -1,6 +1,6 @@
 # system.codegen
 
-General compile-time source generation. See the [generator guide](../language/generators.md) for the compiler execution model.
+General compile-time source generation. See the [generator guide](../language/generators.md) for configuration and usage.
 
 - [artifact_builder](codegen-artifact-builder.md)
 - [attributes](codegen-attributes.md)

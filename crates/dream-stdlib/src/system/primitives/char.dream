@@ -2,8 +2,7 @@ module system.primitives;
 
 // The `char` primitive as an extensible class. A `char` is a code point stored as an `i32`;
 // these methods classify and transform it. Auto-imported into every program.
-
-extend char : Comparable<char> {
+extend char: Comparable<char> {
     // Orders this character against `other` by code point, implementing `Comparable<char>`.
     public fun compare(other: char): int {
         if this < other {

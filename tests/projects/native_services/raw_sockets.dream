@@ -8,7 +8,9 @@ async fun socket_echo(listener: TcpListener): void {
     let input = "";
     while true {
         let bytes = stream.read_async(1024).await.unwrap();
-        if bytes.length == 0 { break; }
+        if bytes.length == 0 {
+            break;
+        }
         input = input + Encoding.utf8_decode(bytes);
     }
     Assert.eq_str(input, "hello");
@@ -24,7 +26,9 @@ async fun raw_sockets(): void {
     Assert.is_true(listener.local_port > 0);
     let server = socket_echo(listener);
     Promise.start(server);
-    let client = TcpStream.connect("127.0.0.1", listener.local_port, timeout_ms: 5000).await.unwrap();
+    let client = TcpStream.connect("127.0.0.1", listener.local_port, timeout_ms: 5000)
+        .await
+        .unwrap();
     client.set_nodelay(true).unwrap();
     client.write_all_async(Encoding.utf8_encode("hello")).await.unwrap();
     Assert.eq_str(client.read_with_timeout(1, 5).await.unwrap_err().code(), "ETIMEOUT");
@@ -39,7 +43,9 @@ async fun raw_sockets(): void {
     let response = "";
     while true {
         let bytes = client.read_async(1024).await.unwrap();
-        if bytes.length == 0 { break; }
+        if bytes.length == 0 {
+            break;
+        }
         response = response + Encoding.utf8_decode(bytes);
     }
     Assert.eq_str(response, "reply");

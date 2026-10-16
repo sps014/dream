@@ -1,8 +1,8 @@
 import system.testing;
 // `enum struct` allows any number of non-self-referential reference-typed payload fields inline:
 // refs across different variants (Either) and multiple refs in one variant (Pair).
-
 import system;
+
 enum struct c27f_Either {
     Left(string),
     Right(string),
@@ -14,7 +14,7 @@ enum struct c27f_Pair {
 
 fun c27f_side(e: c27f_Either): string {
     return switch (e) {
-        Left(v)  => "L:" + v,
+        Left(v) => "L:" + v,
         Right(v) => "R:" + v,
     };
 }

@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 fun c254_square(n: int): int {
     return n * n;
 }

@@ -2,6 +2,7 @@ import system.testing;
 // A class may declare more than one `constructor` overload; the matching one is selected by
 // argument count/types exactly like an overloaded free function or method call.
 import system;
+
 class c9d_Point {
     public x: int;
     public y: int;

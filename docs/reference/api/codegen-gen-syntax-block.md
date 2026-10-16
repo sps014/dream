@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenSyntaxBlock`
+## `GenSyntaxBlock`
 
 A `name { ... }` site of this generator (`@syntax_block` generators only).
 
@@ -10,19 +10,23 @@ A `name { ... }` site of this generator (`@syntax_block` generators only).
 public class GenSyntaxBlock
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public body: string`
+## `body`
 
 Reconstructed body text; splices appear as `{expr}`.
 
@@ -30,7 +34,7 @@ Reconstructed body text; splices appear as `{expr}`.
 public body: string
 ```
 
-## `public splices: List<string>`
+## `splices`
 
 Dream source of each `{ ... }` splice, in order.
 
@@ -38,16 +42,24 @@ Dream source of each `{ ... }` splice, in order.
 public splices: List<string>
 ```
 
-## `public location: GenLocation`
+## `location`
+
+Source location associated with this entry.
 
 ```dream
 public location: GenLocation
 ```
 
-## `public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(id: string, name: string, body: string, splices: List<string>, location: GenLocation)
+public constructor(
+    id: string,
+    name: string,
+    body: string,
+    splices: List<string>,
+    location: GenLocation
+)
 ```

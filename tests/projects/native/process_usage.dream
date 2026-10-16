@@ -4,7 +4,14 @@ import system;
 @test
 @timeout(180000)
 fun process_usage(): void {
-    Assert.eq_str((System.platform == Platform.Native || System.platform == Platform.Node || System.platform == Platform.Browser).to_string(), "true");
+    Assert.eq_str(
+        (
+            System.platform
+                == Platform.Native
+                || System.platform == Platform.Node || System.platform == Platform.Browser
+        ).to_string(),
+        "true"
+    );
     Assert.eq_str((System.cpu_time_nanos >= 0L).to_string(), "true");
     Assert.eq_str((System.memory_bytes > 0L).to_string(), "true");
 }

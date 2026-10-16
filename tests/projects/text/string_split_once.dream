@@ -1,7 +1,6 @@
 import system.testing;
 // `split_once` splits at the first occurrence into exactly two parts; a miss yields `[this]`
 // (never empty), matching `split`'s whole-string fallback.
-
 import system;
 import system.text;
 

@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum Platform`
+## `Platform`
 
 Host runtime kind.
 
@@ -14,11 +14,15 @@ public enum Platform
 
 ## `Native`
 
+A native executable.
+
 ```dream
 Native
 ```
 
 ## `Node`
+
+A program running under Node.js.
 
 ```dream
 Node
@@ -26,11 +30,15 @@ Node
 
 ## `Browser`
 
+A program running in a web browser.
+
 ```dream
 Browser
 ```
 
 ## `Unknown`
+
+An execution platform that is not recognized by this API.
 
 ```dream
 Unknown

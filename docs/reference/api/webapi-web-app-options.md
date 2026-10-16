@@ -4,7 +4,7 @@
 
 See the [Web APIs guide](../../web-apis/index.md) for runnable examples, lifecycle, and error behavior.
 
-## `public class WebAppOptions`
+## `WebAppOptions`
 
 API metadata, documentation endpoints and native TLS settings. Empty URLs disable endpoints.
 
@@ -12,74 +12,109 @@ API metadata, documentation endpoints and native TLS settings. Empty URLs disabl
 public class WebAppOptions
 ```
 
-## `public title`
+## `title`
+
+Title displayed in the API documentation.
 
 ```dream
 public title: string
 ```
 
-## `public version`
+## `version`
+
+Version identifying this API or snapshot format.
 
 ```dream
 public version: string
 ```
 
-## `public docs_url`
+## `docs_url`
+
+Path serving Swagger UI; an empty path disables it.
 
 ```dream
 public docs_url: string
 ```
 
-## `public openapi_url`
+## `openapi_url`
+
+Path serving the OpenAPI document.
 
 ```dream
 public openapi_url: string
 ```
 
-## `public redoc_url`
+## `redoc_url`
+
+Path serving ReDoc; an empty path disables it.
 
 ```dream
 public redoc_url: string
 ```
 
-## `public tls_cert_path`
+## `tls_cert_path`
+
+Path to the server certificate; leave empty to serve plain HTTP.
 
 ```dream
 public tls_cert_path: string
 ```
 
-## `public tls_key_path`
+## `tls_key_path`
+
+Path to the private key for the server certificate.
 
 ```dream
 public tls_key_path: string
 ```
 
-## `public summary`
+## `summary`
+
+Short summary displayed in the API documentation.
 
 ```dream
 public summary: string
 ```
 
-## `public description`
+## `description`
+
+Description displayed in the API documentation.
 
 ```dream
 public description: string
 ```
 
-## `public terms_of_service`
+## `terms_of_service`
+
+URL describing the API's terms of service.
 
 ```dream
 public terms_of_service: string
 ```
 
-## `public swagger`
+## `swagger`
+
+Options controlling the interactive API documentation.
 
 ```dream
 public swagger: SwaggerOptions
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `WebAppOptions` with `title`, `version`, `docs_url`, `openapi_url`, `redoc_url`, `tls_cert_path`, `tls_key_path`, `summary`, `description`, `terms_of_service`.
 
 ```dream
-public constructor( title: string = "Dream API", version: string = "0.1.0", docs_url: string = "/docs", openapi_url: string = "/openapi.json", redoc_url: string = "/redoc", tls_cert_path: string = "", tls_key_path: string = "", summary: string = "", description: string = "", terms_of_service: string = "" )
+public constructor(
+    title: string = "Dream API",
+    version: string = "0.1.0",
+    docs_url: string = "/docs",
+    openapi_url: string = "/openapi.json",
+    redoc_url: string = "/redoc",
+    tls_cert_path: string = "",
+    tls_key_path: string = "",
+    summary: string = "",
+    description: string = "",
+    terms_of_service: string = ""
+)
 ```

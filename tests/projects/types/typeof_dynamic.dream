@@ -7,12 +7,16 @@ interface c270_Shape {
     fun area(): int;
 }
 
-class c270_Circle : c270_Shape {
-    public fun area(): int { return 3; }
+class c270_Circle: c270_Shape {
+    public fun area(): int {
+        return 3;
+    }
 }
 
-class c270_Square : c270_Shape {
-    public fun area(): int { return 4; }
+class c270_Square: c270_Shape {
+    public fun area(): int {
+        return 4;
+    }
 }
 
 @test
@@ -47,7 +51,9 @@ fun typeof_dynamic() {
     Assert.eq_str((typeof(s)).to_string(), "c270_Square");
 
     // A generic instantiation held as `object` reports its source spelling.
-    let m: Map<string, int> = { "a": 1 };
+    let m: Map<string, int> = {
+        "a": 1
+    };
     let anymap: object = m;
     Assert.eq_str((typeof(anymap)).to_string(), "Map<string, int>");
 }

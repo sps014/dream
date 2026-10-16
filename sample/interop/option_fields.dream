@@ -2,7 +2,6 @@
 // None → JS null, Some(x) → x. Assigning a JS object back fills those fields.
 //
 //   cargo run -- --wasm --runtime --node sample/interop/option_fields.dream
-
 import system;
 
 class Profile {

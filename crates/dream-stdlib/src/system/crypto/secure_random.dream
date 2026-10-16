@@ -7,16 +7,24 @@ public static class SecureRandom {
 
     // Returns exactly n secure bytes, or EINVAL/EENTROPY without exposing partial output.
     public static fun bytes(n: int): Result<byte[], CryptoError> {
-        if n < 0 || n > 16777216 { return Result.Err(CryptoError("EINVAL", "random byte count must be between zero and 16 MiB")); }
+        if n < 0 || n > 16777216 {
+            return Result.Err(
+                CryptoError("EINVAL", "random byte count must be between zero and 16 MiB")
+            );
+        }
         let bytes = SecureRandom.bytes_host(n);
-        if bytes.length != n { return Result.Err(CryptoError("EENTROPY", "secure random source failed")); }
+        if bytes.length != n {
+            return Result.Err(CryptoError("EENTROPY", "secure random source failed"));
+        }
         return Result.Ok(bytes);
     }
 
     // Fills the destination only after obtaining all requested entropy; failure preserves it.
     public static fun fill(dest: byte[]): Result<bool, CryptoError> {
         let bytes = SecureRandom.bytes(dest.length)?;
-        for (let i = 0; i < bytes.length; i = i + 1) { dest[i] = bytes[i]; }
+        for (let i = 0; i < bytes.length; i = i + 1) {
+            dest[i] = bytes[i];
+        }
         return Result.Ok(true);
     }
 }

@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenDecl`
+## `GenDecl`
 
 A class, struct, union, enum or interface the generator's triggers selected.
 
@@ -10,84 +10,121 @@ A class, struct, union, enum or interface the generator's triggers selected.
 public class GenDecl
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public kind: DeclKind`
+## `kind`
+
+Category of this entry.
 
 ```dream
 public kind: DeclKind
 ```
 
-## `public module_name: string`
+## `module_name`
+
+Fully qualified module containing the declaration.
 
 ```dream
 public module_name: string
 ```
 
-## `public visibility: string`
+## `visibility`
+
+Declared access level of this symbol.
 
 ```dream
 public visibility: string
 ```
 
-## `public location: GenLocation`
+## `location`
+
+Source location associated with this entry.
 
 ```dream
 public location: GenLocation
 ```
 
-## `public generics: List<string>`
+## `generics`
+
+Names of the declared type parameters, in order.
 
 ```dream
 public generics: List<string>
 ```
 
-## `public interfaces: List<GenTypeRef>`
+## `interfaces`
+
+Interfaces implemented by the declaration.
 
 ```dream
 public interfaces: List<GenTypeRef>
 ```
 
-## `public attributes: List<GenAttribute>`
+## `attributes`
+
+Attributes attached to this declaration.
 
 ```dream
 public attributes: List<GenAttribute>
 ```
 
-## `public fields: List<GenField>`
+## `fields`
+
+Fields of this type, in declaration order.
 
 ```dream
 public fields: List<GenField>
 ```
 
-## `public methods: List<GenFunction>`
+## `methods`
+
+Methods declared by this type.
 
 ```dream
 public methods: List<GenFunction>
 ```
 
-## `public variants: List<GenVariant>`
+## `variants`
+
+Choices declared by this union or enum, in declaration order.
 
 ```dream
 public variants: List<GenVariant>
 ```
 
-## `public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(id: string, name: string, kind: DeclKind, module_name: string, visibility: string, location: GenLocation, generics: List<string>, interfaces: List<GenTypeRef>, attributes: List<GenAttribute>, fields: List<GenField>, methods: List<GenFunction>, variants: List<GenVariant>)
+public constructor(
+    id: string,
+    name: string,
+    kind: DeclKind,
+    module_name: string,
+    visibility: string,
+    location: GenLocation,
+    generics: List<string>,
+    interfaces: List<GenTypeRef>,
+    attributes: List<GenAttribute>,
+    fields: List<GenField>,
+    methods: List<GenFunction>,
+    variants: List<GenVariant>
+)
 ```
 
 ## `attribute`

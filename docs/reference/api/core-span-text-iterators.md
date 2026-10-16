@@ -14,11 +14,15 @@ public ref struct StringSplit
 
 ## `move_next`
 
+Advances to the next piece; `false` once every piece has been produced.
+
 ```dream
 public fun move_next(): bool
 ```
 
 ## `current`
+
+The piece produced by the last `move_next()`.
 
 ```dream
 public get current(): ReadOnlySpan<char>
@@ -34,11 +38,15 @@ public ref struct StringLines
 
 ## `move_next`
 
+Advances to the next segment; returns false at the end.
+
 ```dream
 public fun move_next(): bool
 ```
 
 ## `current`
+
+View of the segment selected by the last successful `move_next`.
 
 ```dream
 public get current(): ReadOnlySpan<char>
@@ -53,6 +61,8 @@ public interface StringKey
 ```
 
 ## `matches_span`
+
+Returns whether this value equals the supplied text view.
 
 ```dream
 fun matches_span(borrow other: ReadOnlySpan<char>): bool
@@ -76,29 +86,45 @@ public fun span(start: int, end: int): ReadOnlySpan<char>
 
 ## `matches_span`
 
+Returns whether this value equals the supplied text view.
+
 ```dream
 public fun matches_span(borrow other: ReadOnlySpan<char>): bool
 ```
 
 ## `view_eq`
 
-Compares two UTF-16 ranges for equality without allocating strings.
+Tests equality of the supplied text ranges.
 
 ```dream
-public static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int
+public static extern fun view_eq(
+    borrow a: string,
+    ao: int,
+    an: int,
+    borrow b: string,
+    bo: int,
+    bn: int
+): int
 ```
 
 ## `view_compare`
 
-Lexicographically compares two UTF-16 ranges, returning a negative, zero, or positive result.
+Compares the supplied text ranges in lexical order.
 
 ```dream
-public static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int
+public static extern fun view_compare(
+    borrow a: string,
+    ao: int,
+    an: int,
+    borrow b: string,
+    bo: int,
+    bn: int
+): int
 ```
 
 ## `view_hash`
 
-Hashes a UTF-16 range without allocating a string.
+Returns a hash of the specified text range.
 
 ```dream
 public static extern fun view_hash(borrow s: string, off: int, n: int): int
@@ -106,31 +132,52 @@ public static extern fun view_hash(borrow s: string, off: int, n: int): int
 
 ## `view_find`
 
-Finds a substring in a UTF-16 range starting at `from`; returns a relative index or -1.
+Finds the first matching text range at or after `from`, or returns -1.
 
 ```dream
-public static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int
+public static extern fun view_find(
+    borrow h: string,
+    ho: int,
+    hn: int,
+    borrow nd: string,
+    no: int,
+    nn: int,
+    from: int
+): int
 ```
 
 ## `view_rfind`
 
-Finds the last substring occurrence in a UTF-16 range; returns a relative index or -1.
+Finds the last matching text range, or returns -1.
 
 ```dream
-public static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int
+public static extern fun view_rfind(
+    borrow h: string,
+    ho: int,
+    hn: int,
+    borrow nd: string,
+    no: int,
+    nn: int
+): int
 ```
 
 ## `view_find_char`
 
-Finds code unit `c` in a UTF-16 range starting at `from`; returns a relative index or -1.
+Finds character `c` at or after `from`, or returns -1.
 
 ```dream
-public static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int
+public static extern fun view_find_char(
+    borrow s: string,
+    off: int,
+    n: int,
+    from: int,
+    c: int
+): int
 ```
 
 ## `view_rfind_char`
 
-Finds the last occurrence of code unit `c` in a UTF-16 range; returns a relative index or -1.
+Finds the last occurrence of character `c`, or returns -1.
 
 ```dream
 public static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int
@@ -138,7 +185,7 @@ public static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: 
 
 ## `view_count_char`
 
-Counts occurrences of code unit `c` in a UTF-16 range.
+Counts occurrences of character `c` in the specified text range.
 
 ```dream
 public static extern fun view_count_char(borrow s: string, off: int, n: int, c: int): int

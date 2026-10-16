@@ -2,7 +2,9 @@ module system.json.derive;
 
 // One variant of a `@json` discriminated union.
 public class JsonVariantSpec {
+    /// Name identifying this entry.
     public name: string;
+    /// Fields of this type, in declaration order.
     public fields: List<JsonFieldSpec>;
 
     // Builds a variant spec.

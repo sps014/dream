@@ -1,9 +1,11 @@
 import system.testing;
 import system;
+
 public struct c1da_P {
     public x: double;
     public y: double;
 }
+
 fun c1da_set(ref p: c1da_P): void {
     p.x = 1.5;
     p.y = 2.5;
@@ -12,9 +14,11 @@ fun c1da_set(ref p: c1da_P): void {
     c1da_verify_observation(("set").to_string());
     c1da_verify_observation(("set").to_string());
 }
+
 fun c1da_wrap(ref p: c1da_P): void {
     c1da_set(ref p);
 }
+
 fun c1da_body(): void {
     let p = c1da_P();
     c1da_wrap(ref p);

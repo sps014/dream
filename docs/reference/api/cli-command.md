@@ -10,7 +10,7 @@ Declarative CLI definition. Parsing consumes arguments without an executable nam
 public class Command
 ```
 
-## `Command constructor`
+## `constructor`
 
 Creates a command; invalid names or conflicting definitions return errors from parse.
 
@@ -18,7 +18,7 @@ Creates a command; invalid names or conflicting definitions return errors from p
 public constructor(name: string)
 ```
 
-## `Command.version`
+## `version`
 
 Sets version output and enables --version/-V for this command and its descendants.
 
@@ -26,7 +26,7 @@ Sets version output and enables --version/-V for this command and its descendant
 public fun version(value: string): Command
 ```
 
-## `Command.description`
+## `description`
 
 Sets text included in automatically generated help.
 
@@ -34,7 +34,7 @@ Sets text included in automatically generated help.
 public fun description(value: string): Command
 ```
 
-## `Command.require_subcommand`
+## `require_subcommand`
 
 Requires one of the declared subcommands; --help and --version still return normal outcomes.
 
@@ -42,31 +42,48 @@ Requires one of the declared subcommands; --help and --version still return norm
 public fun require_subcommand(required: bool = true): Command
 ```
 
-## `Command.positional`
+## `positional`
 
 Adds an ordered string positional; only the last positional can collect multiple arguments.
 
 ```dream
-public fun positional(name: string, required: bool = false, multiple: bool = false, description: string = ""): Command
+public fun positional(
+    name: string,
+    required: bool = false,
+    multiple: bool = false,
+    description: string = ""
+): Command
 ```
 
-## `Command.string_option`
+## `string_option`
 
 Adds a string option. Optional values default to empty; repeated occurrences are collected, with the last returned by get_string.
 
 ```dream
-public fun string_option(name: string, short: string = "", default_value: string = "", required: bool = false, description: string = ""): Command
+public fun string_option(
+    name: string,
+    short: string = "",
+    default_value: string = "",
+    required: bool = false,
+    description: string = ""
+): Command
 ```
 
-## `Command.int_option`
+## `int_option`
 
 Adds a decimal 32-bit integer option. Optional values default to zero; required options ignore defaults.
 
 ```dream
-public fun int_option(name: string, short: string = "", default_value: int = 0, required: bool = false, description: string = ""): Command
+public fun int_option(
+    name: string,
+    short: string = "",
+    default_value: int = 0,
+    required: bool = false,
+    description: string = ""
+): Command
 ```
 
-## `Command.flag`
+## `flag`
 
 Adds a boolean option defaulting to false; repeated occurrences remain true.
 
@@ -74,7 +91,7 @@ Adds a boolean option defaulting to false; repeated occurrences remain true.
 public fun flag(name: string, short: string = "", description: string = ""): Command
 ```
 
-## `Command.choices`
+## `choices`
 
 Restricts a previously declared string, positional, or integer argument to these exact values.
 
@@ -82,7 +99,7 @@ Restricts a previously declared string, positional, or integer argument to these
 public fun choices(name: string, values: string[]): Command
 ```
 
-## `Command.subcommand`
+## `subcommand`
 
 Snapshots a child definition. Later edits to the child do not mutate its attached copy.
 
@@ -90,7 +107,7 @@ Snapshots a child definition. Later edits to the child do not mutate its attache
 public fun subcommand(command: Command): Command
 ```
 
-## `Command.parse`
+## `parse`
 
 Parses explicit arguments on every target; pass System.args on native/Node. Errors include invalid definitions and conversions.
 

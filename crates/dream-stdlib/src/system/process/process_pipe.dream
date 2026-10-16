@@ -1,37 +1,65 @@
 module system.process;
 
 // A borrowed child output pipe; cancellation preserves bytes already consumed by the host.
-public class ProcessReader : AsyncReader {
+public class ProcessReader: AsyncReader {
     owner: ChildProcess;
     stream: int;
     pending: byte[];
     position: int;
     internal constructor(owner: ChildProcess, stream: int) {
-        this.owner = owner; this.stream = stream;
-        this.pending = Buffer.alloc<byte>(0); this.position = 0;
+        this.owner = owner;
+        this.stream = stream;
+        this.pending = Buffer.alloc<byte>(0);
+        this.position = 0;
     }
 
     // Reads at most max_bytes; a successful empty read for a positive size means EOF.
-    public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError> {
+    public async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
         let lifetime = [this];
-        return ProcessReader.read_owned(lifetime[0], max_bytes, CancellationToken.resolve(token)).await;
+        return ProcessReader.read_owned(lifetime[0], max_bytes, CancellationToken.resolve(token))
+            .await;
     }
-    static async fun read_owned(reader: ProcessReader, count: int, token: Option<CancellationToken>): Result<byte[], IoError> {
-        if reader.owner.handle <= 0 { return Result.Err(IoError.closed("")); }
-        if count < 0 { return Result.Err(IoError.invalid("", "negative process read size")); }
-        if count == 0 { return Result.Ok(Buffer.alloc<byte>(0)); }
-        if CancellationToken.is_cancelled_opt(token) { return Result.Err(IoError.cancelled()); }
+
+    static async fun read_owned(
+        reader: ProcessReader,
+        count: int,
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
+        if reader.owner.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if count < 0 {
+            return Result.Err(IoError.invalid("", "negative process read size"));
+        }
+        if count == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
+        if CancellationToken.is_cancelled_opt(token) {
+            return Result.Err(IoError.cancelled());
+        }
         if reader.position < reader.pending.length {
             let size = reader.pending.length - reader.position;
-            if size > count { size = count; }
+            if size > count {
+                size = count;
+            }
             let bytes = Buffer.alloc<byte>(size);
-            for (let i = 0; i < size; i = i + 1) { bytes[i] = reader.pending[reader.position + i]; }
+            for (let i = 0; i < size; i = i + 1) {
+                bytes[i] = reader.pending[reader.position + i];
+            }
             reader.position = reader.position + size;
             return Result.Ok(bytes);
         }
         return ProcessReader.raw_read(reader, count, token).await;
     }
-    static async fun raw_read(reader: ProcessReader, count: int, token: Option<CancellationToken>): Result<byte[], IoError> {
+
+    static async fun raw_read(
+        reader: ProcessReader,
+        count: int,
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         let request = ProcessOperation.request("read", reader.owner.handle);
         request.set("stream", JsonValue.number((double)reader.stream));
@@ -39,61 +67,107 @@ public class ProcessReader : AsyncReader {
         let operation = ProcessOperation(request, Buffer.alloc<byte>(0));
         let result = operation.wait(token).await;
         operation.close();
-        if result.is_err() { let error = result.unwrap_err(); return Result.Err(IoError("", error.code(), error.message())); }
+        if result.is_err() {
+            let error = result.unwrap_err();
+            return Result.Err(IoError("", error.code(), error.message()));
+        }
         return Result.Ok(result.unwrap());
     }
 
     // Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.
-    public unique fun read_line(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Future<Result<Option<string>, IoError>> {
+    public unique fun read_line(
+        max_bytes: int = 1048576,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Option<string>, IoError>> {
         return ProcessReader.line_owned(this, max_bytes, CancellationToken.resolve(token));
     }
-    static async fun line_owned(reader: ProcessReader, limit: int, token: Option<CancellationToken>): Result<Option<string>, IoError> {
-        if limit <= 0 { return Result.Err(IoError.invalid("", "line limit must be positive")); }
+
+    static async fun line_owned(
+        reader: ProcessReader,
+        limit: int,
+        token: Option<CancellationToken>
+    ): Result<Option<string>, IoError> {
+        if limit <= 0 {
+            return Result.Err(IoError.invalid("", "line limit must be positive"));
+        }
         let line = List<byte>();
         while true {
             if reader.position == reader.pending.length {
                 reader.pending = ProcessReader.raw_read(reader, 8192, token).await?;
                 reader.position = 0;
                 if reader.pending.length == 0 {
-                    if line.length == 0 { let end: Option<string> = Option.None; return Result.Ok(end); }
+                    if line.length == 0 {
+                        let end: Option<string> = Option.None;
+                        return Result.Ok(end);
+                    }
                     return Result.Ok(Option.Some(Encoding.utf8_decode(line.take_array())));
                 }
             }
             let value = reader.pending[reader.position];
             reader.position = reader.position + 1;
             if value == (byte)10 {
-                if line.length > 0 && line[line.length - 1] == (byte)13 { line.remove_at(line.length - 1); }
+                if line.length > 0 && line[line.length - 1] == (byte)13 {
+                    line.remove_at(line.length - 1);
+                }
                 return Result.Ok(Option.Some(Encoding.utf8_decode(line.take_array())));
             }
-            if line.length >= limit { return Result.Err(IoError("", "ELIMIT", "process line exceeds configured limit")); }
+            if line.length >= limit {
+                return Result.Err(IoError("", "ELIMIT", "process line exceeds configured limit"));
+            }
             line.push(value);
         }
     }
 }
 
 // A borrowed child input pipe implementing partial async writes.
-public class ProcessWriter : AsyncWriter {
+public class ProcessWriter: AsyncWriter {
     owner: ChildProcess;
-    internal constructor(owner: ChildProcess) { this.owner = owner; }
+    internal constructor(owner: ChildProcess) {
+        this.owner = owner;
+    }
+
     // Writes bytes with partial progress; closing stdin delivers EOF to the child.
-    public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError> {
+    public async unique fun write_async(
+        data: byte[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<int, IoError> {
         let lifetime = [this];
         return ProcessWriter.write_owned(lifetime[0], data, CancellationToken.resolve(token)).await;
     }
-    static async fun write_owned(writer: ProcessWriter, data: byte[], token: Option<CancellationToken>): Result<int, IoError> {
+
+    static async fun write_owned(
+        writer: ProcessWriter,
+        data: byte[],
+        token: Option<CancellationToken>
+    ): Result<int, IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
-        if writer.owner.handle <= 0 { return Result.Err(IoError.closed("")); }
-        if data.length == 0 { return Result.Ok(0); }
-        let operation = ProcessOperation(ProcessOperation.request("write", writer.owner.handle), data);
+        if writer.owner.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if data.length == 0 {
+            return Result.Ok(0);
+        }
+        let operation = ProcessOperation(
+            ProcessOperation.request("write", writer.owner.handle),
+            data
+        );
         let result = operation.wait(token).await;
         operation.close();
-        if result.is_err() { let error = result.unwrap_err(); return Result.Err(IoError("", error.code(), error.message())); }
+        if result.is_err() {
+            let error = result.unwrap_err();
+            return Result.Err(IoError("", error.code(), error.message()));
+        }
         return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(0));
     }
+
     // Confirms cancellation and ownership; the process pipe has no guest-side output buffer.
-    public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError> {
+    public async unique fun flush_async(
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
         let effective_token = CancellationToken.resolve(token);
-        if this.owner.handle <= 0 { return Result.Err(IoError.closed("")); }
+        if this.owner.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
         return CancellationToken.rejected(effective_token, IoError.cancelled());
     }
 }

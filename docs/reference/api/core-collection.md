@@ -4,21 +4,21 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `interface Collection<T> : Iterable<T>`
+## `Collection`
 
 Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for concrete `@iterator` types and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections` as `extend Collection<T>` so bootstrap does not depend on `List`.
 
 ```dream
-public interface Collection<T> : Iterable<T>
+public interface Collection<T>: Iterable<T>
 ```
 
 ## `length`
 
+Number of elements currently stored.
+
 ```dream
 get length(): int
 ```
-
-Iteration is inherited from [Iterable<T>](core-iterable-1.md).
 
 ## `is_empty`
 

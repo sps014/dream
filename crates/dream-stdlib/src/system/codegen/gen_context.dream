@@ -14,9 +14,12 @@ fun gen_snapshot_version(): int {
 // generator's cached executable with `--generator <name> --snapshot <in> --result <out>`; the
 // harness loads the context from the snapshot, calls the generator, and `finish()` writes the
 // result the compiler validates and merges.
+/// Input and output of a source generator. Inspect selected declarations, request tools, report
+/// diagnostics, and add or replace generated source through this context.
 public class GenContext {
     // The running generator's name and `module::name` identity.
     public generator_name: string;
+    /// Stable identifier of the generator being executed.
     public generator_id: string;
     // Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
     public target: string;
@@ -64,12 +67,20 @@ public class GenContext {
                     Ok(root) => {
                         let snapshot = GenSnapshot(root);
                         if snapshot.version != gen_snapshot_version() {
-                            return Result.Err("snapshot version " + snapshot.version.to_string() + " does not match system.codegen (" + gen_snapshot_version().to_string() + "); rebuild the generator");
+                            return Result.Err(
+                                "snapshot version "
+                                    + snapshot.version.to_string()
+                                    + " does not match system.codegen ("
+                                    + gen_snapshot_version()
+                                    .to_string() + "); rebuild the generator"
+                            );
                         }
                         return Result.Ok(GenContext(snapshot, result_path));
                     }
                     Err(e) => {
-                        return Result.Err("malformed snapshot " + snapshot_path + ": " + e.message());
+                        return Result.Err(
+                            "malformed snapshot " + snapshot_path + ": " + e.message()
+                        );
                     }
                 }
             }
@@ -109,60 +120,111 @@ public class GenContext {
     }
 
     // The compiler-tool feedback round, starting at zero.
-    public fun phase(): int { return this.snapshot.phase; }
+    /// Current generation round, starting at zero and increasing after tool requests.
+    public fun phase(): int {
+        return this.snapshot.phase;
+    }
 
     // Transitive dependencies of the declarations selected by this generator.
-    public fun referenced_decls(): List<GenDecl> { return this.snapshot.referenced; }
+    public fun referenced_decls(): List<GenDecl> {
+        return this.snapshot.referenced;
+    }
 
     // Top-level functions referenced by selected declarations or their dependencies.
-    public fun referenced_functions(): List<GenFunction> { return this.snapshot.referenced_functions; }
+    public fun referenced_functions(): List<GenFunction> {
+        return this.snapshot.referenced_functions;
+    }
 
     // Looks up a selected or referenced declaration by its compiler identity.
+    /// Looks up a selected or referenced declaration by its stable identifier.
     public fun find_decl(borrow id: string): Option<GenDecl> {
-        for (let d in this.snapshot.decls) { if d.id == id { return Option.Some(d); } }
-        for (let d in this.snapshot.referenced) { if d.id == id { return Option.Some(d); } }
+        for (let d in this.snapshot.decls) {
+            if d.id == id {
+                return Option.Some(d);
+            }
+        }
+        for (let d in this.snapshot.referenced) {
+            if d.id == id {
+                return Option.Some(d);
+            }
+        }
         return Option.None;
     }
 
     // Looks up a selected or referenced function, including methods.
     public fun find_function(borrow id: string): Option<GenFunction> {
-        for (let f in this.snapshot.functions) { if f.id == id || f.overload == id { return Option.Some(f); } }
-        for (let f in this.snapshot.referenced_functions) { if f.id == id || f.overload == id { return Option.Some(f); } }
+        for (let f in this.snapshot.functions) {
+            if f.id == id || f.overload == id {
+                return Option.Some(f);
+            }
+        }
+        for (let f in this.snapshot.referenced_functions) {
+            if f.id == id || f.overload == id {
+                return Option.Some(f);
+            }
+        }
         for (let d in this.snapshot.decls) {
-            for (let f in d.methods) { if f.id == id || f.overload == id { return Option.Some(f); } }
+            for (let f in d.methods) {
+                if f.id == id || f.overload == id {
+                    return Option.Some(f);
+                }
+            }
         }
         for (let d in this.snapshot.referenced) {
-            for (let f in d.methods) { if f.id == id || f.overload == id { return Option.Some(f); } }
+            for (let f in d.methods) {
+                if f.id == id || f.overload == id {
+                    return Option.Some(f);
+                }
+            }
         }
         return Option.None;
     }
 
     // The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
-    public fun type_of(borrow expr: GenExpr): GenTypeRef { return expr.ty; }
+    public fun type_of(borrow expr: GenExpr): GenTypeRef {
+        return expr.ty;
+    }
 
     // The inferred type attached to a statement, or Unknown when it has no value type.
-    public fun type_of(borrow stmt: GenStmt): GenTypeRef { return stmt.ty; }
+    public fun type_of(borrow stmt: GenStmt): GenTypeRef {
+        return stmt.ty;
+    }
 
     // The resolved symbol identity, or an empty string for an unresolved expression.
-    public fun symbol_of(borrow expr: GenExpr): string { return expr.symbol; }
+    public fun symbol_of(borrow expr: GenExpr): string {
+        return expr.symbol;
+    }
 
     // Looks up a signature view anywhere in the pre-generation compilation.
     public fun find_symbol(borrow id: string): Option<GenSymbol> {
         for (let s in this.snapshot.symbols) {
-            if s.id == id { return Option.Some(s); }
-            switch (s.function) { Some(f) => { if f.id == id || f.overload == id { return Option.Some(s); } } None => {} }
+            if s.id == id {
+                return Option.Some(s);
+            }
+            switch (s.function) {
+                Some(f) => {
+                    if f.id == id || f.overload == id {
+                        return Option.Some(s);
+                    }
+                }
+                None => {}
+            }
         }
         return Option.None;
     }
 
     // Errors found before generation within declarations selected by this generator's triggers.
-    public fun compilation_errors(): List<GenCompilationError> { return this.snapshot.compilation_errors; }
+    public fun compilation_errors(): List<GenCompilationError> {
+        return this.snapshot.compilation_errors;
+    }
 
     // Classes and structs implementing an interface, including inherited interface relations.
     public fun implementations_of(borrow id: string): List<GenSymbol> {
         let out = List<GenSymbol>();
         for (let s in this.subtypes_of(id)) {
-            if s.kind == "class" || s.kind == "struct" { out.push(s); }
+            if s.kind == "class" || s.kind == "struct" {
+                out.push(s);
+            }
         }
         return out;
     }
@@ -246,6 +308,7 @@ public class GenContext {
     }
 
     // `dream.toml` `[[generators]].additional_files`, read by the compiler.
+    /// Returns the files listed in `[[generators]].additional_files` in `dream.toml`.
     public fun additional_files(): List<GenFile> {
         return this.snapshot.files;
     }
@@ -270,13 +333,25 @@ public class GenContext {
     }
 
     // Declared tools with the versions and fingerprints used in this compilation.
-    public fun tools(): List<GenToolInfo> { return this.snapshot.tools; }
+    public fun tools(): List<GenToolInfo> {
+        return this.snapshot.tools;
+    }
 
     // Compiler-collected feedback from the previous phase.
-    public fun tool_results(): List<GenToolResult> { return this.snapshot.tool_results; }
+    /// Returns tool results from the previous generation round.
+    public fun tool_results(): List<GenToolResult> {
+        return this.snapshot.tool_results;
+    }
 
     // Requests a declared tool; the compiler reruns this generator with its results.
-    public fun run_tool(id: string, tool: string, args: List<string>, inputs: List<string>, outputs: List<string>): void {
+    /// Requests a declared tool. The generator runs again with the result in the next phase.
+    public fun run_tool(
+        id: string,
+        tool: string,
+        args: List<string>,
+        inputs: List<string>,
+        outputs: List<string>
+    ): void {
         let out = JsonValue.dict();
         out.set("kind", JsonValue.from_string("tool_run"));
         out.set("id", JsonValue.from_string(id));
@@ -311,7 +386,12 @@ public class GenContext {
     }
 
     // Emits a non-Dream file with source mappings under this generator's directory.
-    public fun emit_artifact(path: string, contents: string, borrow map: GenSourceMap, publish: bool = false): void {
+    public fun emit_artifact(
+        path: string,
+        contents: string,
+        borrow map: GenSourceMap,
+        publish: bool = false
+    ): void {
         let out = JsonValue.dict();
         out.set("kind", JsonValue.from_string("artifact"));
         out.set("path", JsonValue.from_string(path));
@@ -335,11 +415,15 @@ public class GenContext {
 
     // Extensions keep their declaring module, including its internal visibility and name scope.
     public fun emit_extend(borrow decl: GenDecl, body: string): void {
-        if !this.extends.contains(decl.module_name) { this.extends.set(decl.module_name, StringBuilder()); }
+        if !this.extends.contains(decl.module_name) {
+            this.extends.set(decl.module_name, StringBuilder());
+        }
         let source = this.extends.get(decl.module_name).unwrap();
         source.append("extend " + decl.self_type() + " {\n");
         source.append(body);
-        if !body.ends_with("\n") { source.append("\n"); }
+        if !body.ends_with("\n") {
+            source.append("\n");
+        }
         source.append("}\n\n");
     }
 
@@ -406,13 +490,21 @@ public class GenContext {
     }
 
     // Writes the result for the compiler; the harness returns this as the exit code.
+    /// Writes the generator result and returns its exit status.
     public async fun finish(): int {
         let extensions = this.extends.entries();
-        extensions.sort_by((a, b) => { return a.key.compare(b.key); });
+        extensions.sort_by(
+            (a, b) => {
+                return a.key.compare(b.key);
+            }
+        );
         for (let entry in extensions) {
             let path = "extends.dream";
             let header = "";
-            if !entry.key.is_empty() { path = "extends/" + entry.key.replace(".", "/") + ".dream"; header = "module " + entry.key + ";\n\n"; }
+            if !entry.key.is_empty() {
+                path = "extends/" + entry.key.replace(".", "/") + ".dream";
+                header = "module " + entry.key + ";\n\n";
+            }
             this.emit_file(path, header + entry.value.to_string());
         }
         let root = JsonValue.dict();
@@ -427,7 +519,9 @@ public class GenContext {
                 return 0;
             }
             Err(e) => {
-                System.println("cannot write generator result " + this.result_path + ": " + e.message());
+                System.println(
+                    "cannot write generator result " + this.result_path + ": " + e.message()
+                );
                 return 3;
             }
         }
@@ -472,6 +566,8 @@ fun gen_decl_carries(borrow d: GenDecl, borrow id: string): bool {
 
 fun gen_json_strings(borrow strings: List<string>): JsonValue {
     let out = JsonValue.array();
-    for (let s in strings) { out.push(JsonValue.from_string(s)); }
+    for (let s in strings) {
+        out.push(JsonValue.from_string(s));
+    }
     return out;
 }

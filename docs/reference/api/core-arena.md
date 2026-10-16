@@ -8,11 +8,15 @@ A manually freed value handle for mixed unmanaged allocations. Initial capacity 
 
 ## `Arena`
 
+Copies alias one manually owned state. Reset/free invalidates every allocation; dropping this value does not free anything, and individual allocations must never be freed.
+
 ```dream
 public struct Arena
 ```
 
 ## `constructor`
+
+Creates an arena with the requested initial byte capacity. Call `free` when finished.
 
 ```dream
 public constructor(initial_capacity: usize = 4096)
@@ -20,7 +24,7 @@ public constructor(initial_capacity: usize = 4096)
 
 ## `alloc`
 
-Counts elements. Returned storage is uninitialized.
+Allocates storage for `count` values of `T`. Initialize values before reading them.
 
 ```dream
 public fun alloc<T: unmanaged>(count: usize): RawPtr<T>
@@ -28,7 +32,7 @@ public fun alloc<T: unmanaged>(count: usize): RawPtr<T>
 
 ## `alloc_zeroed`
 
-Counts elements and zeroes their storage. Zeroed bytes must represent valid T values before reading.
+Allocates zero-filled storage for `count` values. The arena owns it until `reset` or `free`.
 
 ```dream
 public fun alloc_zeroed<T: unmanaged>(count: usize): RawPtr<T>
@@ -36,7 +40,7 @@ public fun alloc_zeroed<T: unmanaged>(count: usize): RawPtr<T>
 
 ## `reset`
 
-Invalidates all previous allocations and rewinds every block for reuse.
+Discards all arena allocations for reuse. All pointers obtained from this arena become invalid.
 
 ```dream
 public fun reset(): void
@@ -44,7 +48,7 @@ public fun reset(): void
 
 ## `free`
 
-Releases manually owned storage and clears this handle. Other copies become invalid.
+Releases the arena and all its storage. All copies and allocated pointers become invalid.
 
 ```dream
 public fun free(): void

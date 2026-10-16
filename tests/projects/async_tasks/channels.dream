@@ -36,9 +36,13 @@ async fun channels(): void {
     let unbounded = Channel.unbounded<int>();
     let unbounded_sender = unbounded.sender;
     let unbounded_receiver = unbounded.receiver;
-    for (let i = 0; i < 100; i = i + 1) { unbounded_sender.try_send(i).unwrap(); }
+    for (let i = 0; i < 100; i = i + 1) {
+        unbounded_sender.try_send(i).unwrap();
+    }
     unbounded_sender.close();
-    for (let i = 0; i < 100; i = i + 1) { Assert.eq(unbounded_receiver.receive().await.unwrap().unwrap(), i); }
+    for (let i = 0; i < 100; i = i + 1) {
+        Assert.eq(unbounded_receiver.receive().await.unwrap().unwrap(), i);
+    }
     Assert.is_true(unbounded_receiver.receive().await.unwrap().is_none());
 
     let shared_queue = Channel.shared_bounded<string>(2).unwrap();
@@ -47,11 +51,15 @@ async fun channels(): void {
     for (let producer_id = 0; producer_id < 4; producer_id = producer_id + 1) {
         let worker_sender = shared_queue.sender;
         let base = producer_id * 50;
-        let worker = Task.spawn_async(async () => {
-            for (let i = 0; i < 50; i = i + 1) { worker_sender.send((base + i).to_string()).await.unwrap(); }
-            worker_sender.close();
-            return 50;
-        });
+        let worker = Task.spawn_async(
+            async () => {
+                for (let i = 0; i < 50; i = i + 1) {
+                    worker_sender.send((base + i).to_string()).await.unwrap();
+                }
+                worker_sender.close();
+                return 50;
+            }
+        );
         workers[producer_id] = worker;
         Promise.start(worker);
     }
@@ -59,7 +67,9 @@ async fun channels(): void {
     let count = 0;
     while true {
         let item = owner_receiver.receive().await.unwrap();
-        if item.is_none() { break; }
+        if item.is_none() {
+            break;
+        }
         let value = int.parse(item.unwrap()).unwrap();
         Assert.is_true(value >= 0 && value < 200);
         Assert.is_false(seen[value]);
@@ -67,5 +77,7 @@ async fun channels(): void {
         count = count + 1;
     }
     Assert.eq(count, 200);
-    for (let i = 0; i < workers.length; i = i + 1) { Assert.eq(workers[i].await, 50); }
+    for (let i = 0; i < workers.length; i = i + 1) {
+        Assert.eq(workers[i].await, 50);
+    }
 }

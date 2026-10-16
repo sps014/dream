@@ -6,7 +6,9 @@ import system.json;
 
 // A `dream.toml` `additional_files` entry.
 public class GenFile {
+    /// Request or resource path.
     public path: string;
+    /// Text contents of the file.
     public contents: string;
 
     // Creates the snapshot model from the supplied values.

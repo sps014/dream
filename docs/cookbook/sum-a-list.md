@@ -16,7 +16,7 @@ fun main() {
     for (let n in xs) {
         total = total + n;
     }
-    System.println(total);   // 60
+    System.println(total); // 60
 }
 ```
 

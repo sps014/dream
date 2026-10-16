@@ -6,8 +6,13 @@ let ya_dropped: int = 0;
 
 class YaResource {
     public value: int;
-    public constructor() { this.value = 1; }
-    fun del() { ya_dropped++; }
+    public constructor() {
+        this.value = 1;
+    }
+
+    fun del() {
+        ya_dropped++;
+    }
 }
 
 async fun ya_numbers(count: int): AsyncIterable<int> {
@@ -30,22 +35,29 @@ interface YaSource<T> {
     async borrow fun values(): AsyncIterable<T>;
 }
 
-class YaValues<T> : YaSource<T> {
+class YaValues<T>: YaSource<T> {
     value: T;
-    public constructor(value: T) { this.value = value; }
+    public constructor(value: T) {
+        this.value = value;
+    }
+
     public async fun values(): AsyncIterable<T> {
         Time.sleep(1).await;
         yield this.value;
     }
 }
 
-async fun ya_empty(): AsyncIterable<string> { yield break; }
+async fun ya_empty(): AsyncIterable<string> {
+    yield break;
+}
 
 async fun ya_consume(cursor: AsyncIterator<int>): void {
     await for (let value in cursor) {}
 }
 
-fun ya_cancel<T>(future: Future<T>): void { Promise.cancel(future); }
+fun ya_cancel<T>(future: Future<T>): void {
+    Promise.cancel(future);
+}
 
 @test
 async fun yield_async_iterators(): void {
@@ -53,8 +65,12 @@ async fun yield_async_iterators(): void {
     let xs = ya_numbers(3);
     Assert.eq(ya_started, 0);
     let total = 0;
-    await for (let value in xs) { total += value; }
-    await for (let value in xs) { total += value; }
+    await for (let value in xs) {
+        total += value;
+    }
+    await for (let value in xs) {
+        total += value;
+    }
     Assert.eq(total, 12);
     Assert.eq(ya_started, 2);
     let a = xs.iterator();
@@ -66,13 +82,21 @@ async fun yield_async_iterators(): void {
     a.close();
     Assert.is_true(a.next().await.is_none());
     b.close();
-    await for (let value in YaValues<string>("ok").values()) { Assert.eq_str(value, "ok"); }
+    await for (let value in YaValues<string>("ok").values()) {
+        Assert.eq_str(value, "ok");
+    }
     let source: YaSource<string> = YaValues<string>("interface");
-    await for (let value in source.values()) { Assert.eq_str(value, "interface"); }
-    await for (let value in ya_empty()) { Assert.is_true(false); }
+    await for (let value in source.values()) {
+        Assert.eq_str(value, "interface");
+    }
+    await for (let value in ya_empty()) {
+        Assert.is_true(false);
+    }
     ya_dropped = 0;
     let cursor = ya_resources().iterator();
-    await for (let value in cursor) { break; }
+    await for (let value in cursor) {
+        break;
+    }
     Assert.eq(ya_dropped, 1);
     Assert.is_true(cursor.next().await.is_none());
     let cursor2 = ya_resources().iterator();

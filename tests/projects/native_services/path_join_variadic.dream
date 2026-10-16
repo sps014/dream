@@ -1,7 +1,6 @@
 import system.testing;
 // `Path.join` takes two or more segments (trailing arguments pack into the variadic slot);
 // empty segments are skipped and existing separators are not doubled.
-
 import system;
 import system.io;
 

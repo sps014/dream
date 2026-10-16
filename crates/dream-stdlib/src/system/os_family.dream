@@ -1,9 +1,11 @@
 module system;
 
 // Operating-system family (native hosts).
-
 public enum OsFamily {
+    /// A Unix-like operating system.
     Unix,
+    /// The Windows operating system.
     Windows,
+    /// An operating system that is not recognized by this API.
     Unknown,
 }

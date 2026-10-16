@@ -1,7 +1,7 @@
 module system.crypto;
 
 // Cryptographic operation failure implementing `Error` (currently `AesGcm`/`AesGcmKey`).
-public class CryptoError : Error {
+public class CryptoError: Error {
     _code: string;
     _message: string;
 

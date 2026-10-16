@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 class c272_Mixed {
     public b1: bool;
     public i1: int;

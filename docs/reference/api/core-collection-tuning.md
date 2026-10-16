@@ -38,6 +38,8 @@ public fun hash_load_factor_num(): int
 
 ## `hash_load_factor_denom`
 
+Denominator of the maximum occupied fraction used when sizing hash collections.
+
 ```dream
 public fun hash_load_factor_denom(): int
 ```

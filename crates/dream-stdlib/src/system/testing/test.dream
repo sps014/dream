@@ -4,6 +4,7 @@ module system.testing;
 // `RUN <name>` before its body and `PASS <name>` after it. An `Assert.*` failure, a panic or a
 // trap ends the process, so the last `RUN` line names the case that was running.
 public static class Test {
+    /// Runs a named test body and records its success or failure.
     public static fun run(name: string, body: fun(): void): void {
         System.println("RUN " + name);
         Test.measure(name, body);
@@ -15,12 +16,18 @@ public static class Test {
         Test.measure(name, body);
     }
 
+    /// Runs a named asynchronous test and records its success or failure.
     public static async fun run_async(name: string, body: fun(): Future<void>): void {
         System.println("RUN " + name);
         Test.measure_async(name, body).await;
     }
 
-    public static async fun run_async_with_timeout(name: string, timeout_ms: int, body: fun(): Future<void>): void {
+    /// Runs a named asynchronous test, failing if it exceeds `timeout_ms` milliseconds.
+    public static async fun run_async_with_timeout(
+        name: string,
+        timeout_ms: int,
+        body: fun(): Future<void>
+    ): void {
         System.println("RUN " + name + " timeout=" + timeout_ms);
         Test.measure_async(name, body).await;
     }

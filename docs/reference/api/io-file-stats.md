@@ -4,9 +4,9 @@
 
 Read the [usage guide](../stdlib/file.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class FileStats`
+## `FileStats`
 
-Metadata from a single `stat` of a filesystem path. Times are UTC epoch milliseconds. `mode` is Unix `st_mode` (0 on Windows and in the browser memfs). `kind` is 0 file, 1 directory, 2 symlink, 3 other. `File.stat` follows symlinks, so `kind == 2` is uncommon.
+File size, timestamps, mode, and entry kind returned by `File.stat`. Timestamps use UTC epoch milliseconds. `File.stat` follows symbolic links.
 
 ```dream
 public class FileStats
@@ -14,11 +14,15 @@ public class FileStats
 
 ## `size`
 
+File size in bytes.
+
 ```dream
 public get size(): long
 ```
 
 ## `mtime_millis`
+
+Last modification time in UTC epoch milliseconds.
 
 ```dream
 public get mtime_millis(): long
@@ -26,11 +30,15 @@ public get mtime_millis(): long
 
 ## `ctime_millis`
 
+Last metadata-change time in UTC epoch milliseconds.
+
 ```dream
 public get ctime_millis(): long
 ```
 
 ## `atime_millis`
+
+Last access time in UTC epoch milliseconds.
 
 ```dream
 public get atime_millis(): long
@@ -38,11 +46,15 @@ public get atime_millis(): long
 
 ## `mode`
 
+Unix file mode, or zero on platforms without Unix modes.
+
 ```dream
 public get mode(): int
 ```
 
 ## `kind`
+
+File kind: 0 for a file, 1 for a directory, 2 for a symlink, and 3 for other entries.
 
 ```dream
 public get kind(): int
@@ -50,17 +62,23 @@ public get kind(): int
 
 ## `is_file`
 
+Returns whether the entry is a regular file.
+
 ```dream
 public get is_file(): bool
 ```
 
 ## `is_dir`
 
+Returns whether the path refers to a directory.
+
 ```dream
 public get is_dir(): bool
 ```
 
 ## `is_symlink`
+
+Returns whether the entry is a symbolic link.
 
 ```dream
 public get is_symlink(): bool

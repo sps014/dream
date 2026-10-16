@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public struct GeneratorAttribute`
+## `GeneratorAttribute`
 
 Marks `fun name(ctx: GenContext)` as a source generator (`system.codegen`). The function name is the generator name.
 
@@ -10,15 +10,15 @@ Marks `fun name(ctx: GenContext)` as a source generator (`system.codegen`). The 
 public struct GeneratorAttribute
 ```
 
-## `public struct IncrementalAttribute`
+## `IncrementalAttribute`
 
-Declares a generator pure over its snapshot, so the compiler may replay a cached result instead of running it.
+Declares that a generator depends only on its input snapshot, allowing unchanged results to be reused.
 
 ```dream
 public struct IncrementalAttribute
 ```
 
-## `public struct OnAttributeAttribute`
+## `OnAttributeAttribute`
 
 Runs the generator when a declaration carries one of the named `@attribute` types.
 
@@ -26,19 +26,23 @@ Runs the generator when a declaration carries one of the named `@attribute` type
 public struct OnAttributeAttribute
 ```
 
-## `public declaration: DeclarationPath`
+## `declaration`
+
+Declaration associated with this entry.
 
 ```dream
 public declaration: DeclarationPath
 ```
 
-## `public additional_declarations: List<DeclarationPath>`
+## `additional_declarations`
+
+Additional declarations made available to the generator.
 
 ```dream
 public additional_declarations: List<DeclarationPath>
 ```
 
-## `public struct OnCallAttribute`
+## `OnCallAttribute`
 
 Runs the generator for call sites of the named functions or methods (`Type.method`).
 
@@ -46,19 +50,23 @@ Runs the generator for call sites of the named functions or methods (`Type.metho
 public struct OnCallAttribute
 ```
 
-## `public declaration: DeclarationPath`
+## `declaration`
+
+Declaration associated with this entry.
 
 ```dream
 public declaration: DeclarationPath
 ```
 
-## `public additional_declarations: List<DeclarationPath>`
+## `additional_declarations`
+
+Additional declarations made available to the generator.
 
 ```dream
 public additional_declarations: List<DeclarationPath>
 ```
 
-## `public struct SyntaxBlockAttribute`
+## `SyntaxBlockAttribute`
 
 Makes the generator expand `name { ... }` syntax blocks, where `name` is the generator's own name.
 
@@ -66,15 +74,17 @@ Makes the generator expand `name { ... }` syntax blocks, where `name` is the gen
 public struct SyntaxBlockAttribute
 ```
 
-## `public struct UsesToolAttribute`
+## `UsesToolAttribute`
 
-Declares a pinned compiler-run tool that this generator may request.
+Declares a pinned external tool that the generator may request.
 
 ```dream
 public struct UsesToolAttribute
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string

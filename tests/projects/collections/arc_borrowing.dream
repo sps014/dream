@@ -3,14 +3,22 @@ import system.testing;
 import system.collections;
 
 let arc_borrowing_drops = 0;
+
 class ArcBorrowingItem {
     public value: string;
-    public constructor(value: string) { this.value = value; }
-    del() { arc_borrowing_drops = arc_borrowing_drops + 1; }
+    public constructor(value: string) {
+        this.value = value;
+    }
+    del() {
+        arc_borrowing_drops = arc_borrowing_drops + 1;
+    }
 }
+
 struct ArcBorrowingRecord {
     public item: ArcBorrowingItem;
-    public constructor(item: ArcBorrowingItem) { this.item = item; }
+    public constructor(item: ArcBorrowingItem) {
+        this.item = item;
+    }
 }
 
 fun arc_removal_roundtrip(): void {
@@ -37,13 +45,17 @@ fun arc_removal_roundtrip(): void {
 
 @noinline
 fun arc_inferred_select(read: string, kept: string): string {
-    if read.length == 0 { return kept; }
+    if read.length == 0 {
+        return kept;
+    }
     return kept;
 }
 
 @noinline
 fun arc_inferred_length(values: string[], depth: int): int {
-    if depth == 0 { return values[0].length; }
+    if depth == 0 {
+        return values[0].length;
+    }
     return arc_inferred_length(values, depth - 1);
 }
 
@@ -59,7 +71,13 @@ fun arc_borrowing(): void {
     Assert.eq(arc_borrowing_drops, 4);
     let queue = Queue<string>();
     queue.enqueue("front" + 7.to_string());
-    Assert.eq(switch (queue.peek()) { Some(s) => s.length, None => 0 }, 6);
+    Assert.eq(
+        switch (queue.peek()) {
+            Some(s) => s.length,
+            None => 0
+        },
+        6
+    );
     let snapshot = queue.peek().unwrap();
     queue.clear();
     Assert.eq_str(snapshot, "front7");

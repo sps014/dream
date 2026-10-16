@@ -42,10 +42,10 @@ class Vector2 {
 fun main(): void {
     let a = Vector2(1, 2);
     let b = Vector2(3, 4);
-    let c = a + b;        // Vector2(4, 6)
-    let d = -a;            // Vector2(-1, -2)
-    let same = a == a;     // true
-    let diff = a != b;     // true — `!=` reuses `operator ==`, negated
+    let c = a + b; // Vector2(4, 6)
+    let d = -a; // Vector2(-1, -2)
+    let same = a == a; // true
+    let diff = a != b; // true — `!=` reuses `operator ==`, negated
 }
 ```
 
@@ -104,10 +104,10 @@ class Money {
 
 fun main(): void {
     let m = Meters(2.5);
-    let f = (float)m;          // explicit cast required
+    let f = (float)m; // explicit cast required
 
     let money = Money(150);
-    let cents: int = money;    // implicit conversion at a typed `let` binding
+    let cents: int = money; // implicit conversion at a typed `let` binding
 }
 ```
 

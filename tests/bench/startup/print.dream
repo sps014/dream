@@ -1,1 +1,5 @@
-import system; fun main(): void { System.println("hello"); }
+import system;
+
+fun main(): void {
+    System.println("hello");
+}

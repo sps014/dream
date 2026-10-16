@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum OsFamily`
+## `OsFamily`
 
 Operating-system family (native hosts).
 
@@ -14,17 +14,23 @@ public enum OsFamily
 
 ## `Unix`
 
+A Unix-like operating system.
+
 ```dream
 Unix
 ```
 
 ## `Windows`
 
+The Windows operating system.
+
 ```dream
 Windows
 ```
 
 ## `Unknown`
+
+An operating system that is not recognized by this API.
 
 ```dream
 Unknown

@@ -7,7 +7,7 @@ A generator is an ordinary Dream function compiled into a small cached executabl
 1. **Replace** custom syntax — `quote { … }` or `html { … }` become ordinary Dream expressions at call sites. Use this when the braced body is a domain-specific shape the main parser does not understand.
 2. **Emit** new Dream source — for example `@json` adds `to_json` / `from_json` to your types. Use this when call sites stay ordinary Dream and the generated code is methods or helpers.
 
-API details live in `[system.codegen](../stdlib/codegen.md)`. The shipped `@json` derive is itself a Dream generator in `system.json`; see [JSON](../stdlib/json.md).
+API details live in [system.codegen](../stdlib/codegen.md). The shipped `@json` derive is itself a Dream generator in `system.json`; see [JSON](../stdlib/json.md).
 
 ## Your first generator: `quote`
 
@@ -17,17 +17,19 @@ API details live in `[system.codegen](../stdlib/codegen.md)`. The shipped `@json
 import system;
 
 fun main() {
-    System.println(quote { Hello generators });
+    System.println(
+        quote { Hello generators }
+    );
 }
 ```
 
 ```bash
-dream run sample/generators/quote/app.dream
+dream run app.dream
 ```
 
 Expected stdout: `Hello generators`
 
-Full sample: `[sample/generators/quote/](https://github.com/sps014/dream/tree/main/sample/generators/quote)`.
+Full sample: [sample/generators/quote/](https://github.com/sps014/dream/tree/main/sample/generators/quote).
 
 ### Register the generator
 
@@ -116,12 +118,12 @@ fun main() {
 ```
 
 ```bash
-dream run sample/generators/html/app.dream
+dream run app.dream
 ```
 
 HTML is **not** a language builtin. The sample's `gen.dream` calls `HtmlCompiler` (in `parser.dream`) from its generator body, so the complexity stays in helper modules.
 
-Full sample: `[sample/generators/html/](https://github.com/sps014/dream/tree/main/sample/generators/html)`.
+Full sample: [sample/generators/html/](https://github.com/sps014/dream/tree/main/sample/generators/html).
 
 
 | File           | Role                                                          |
@@ -143,7 +145,7 @@ public struct route {
 }
 
 @route("/users")
-public fun list_users(): void { }
+public fun list_users(): void {}
 ```
 
 Inside a generator, read attributes as typed values: `decl.has<route>()`, `decl.attribute<route>()` (an `Option<route>` with `path` filled in), and `attributes_of<A>()` for repeated attributes.
@@ -188,7 +190,7 @@ class Point {
 }
 ```
 
-Full sample: `[sample/generators/dto/](https://github.com/sps014/dream/tree/main/sample/generators/dto)`.
+Full sample: [sample/generators/dto/](https://github.com/sps014/dream/tree/main/sample/generators/dto).
 
 The declaration model is typed:
 
@@ -203,9 +205,10 @@ The declaration model is typed:
 `declof(path)` evaluates to the identity string of a type, function, field, method, or variant. Use it to compare against model identities, such as `GenCallSite.callee` or `GenTypeRef.is_decl(id)`, without spelling them by hand:
 
 ```dream
-let serialize = declof(Json.serialize);   // "system.json::Json.serialize"
+let serialize = declof(Json.serialize); // "system.json::Json.serialize"
 for (let call in ctx.call_sites()) {
-    if call.callee == serialize { /* ... */ }
+    if call.callee == serialize { /* ... */
+    }
 }
 ```
 
@@ -217,7 +220,7 @@ Emitted files are written to `.dream/generated/<entry>/<generator>/` next to you
 
 ## Building source with `CodeBuilder`
 
-When a generator emits multi-line Dream source, use `[CodeBuilder](../stdlib/codegen.md#codebuilder)` instead of manual indent strings:
+When a generator emits multi-line Dream source, use [CodeBuilder](../stdlib/codegen.md#codebuilder) instead of manual indent strings:
 
 ```dream
 import system.codegen;
@@ -234,7 +237,7 @@ let body = b.to_string();
 ## Caching and speed
 
 - **Executables** are built once per generator module and compiler, and cached under `~/.dream/cache/generators/exe/`. The cache key is location-independent, so moving a project keeps its hits.
-- `**@incremental` results** are replayed when the generator executable and its input snapshot are unchanged, and are still validated like a fresh run.
+- **Incremental results:** `@incremental` results are replayed when the generator executable and its input snapshot are unchanged, and are still validated like a fresh run.
 - **Parallelism:** independent generator builds and runs execute in parallel; `DREAM_GEN_JOBS=N` caps the worker count.
 - **Prewarm:** `dream generate --prewarm` builds every standard-library generator executable ahead of time. `dreamer toolchain install` runs it for you, so the first `@json` build doesn't pay the generator build cost.
 
@@ -255,7 +258,7 @@ dream generate --prewarm                         # build std generator executabl
 
 ## Debugging a generator
 
-A generator is a normal Dream program, so you can set breakpoints in it, including in stdlib generators such as `json_derive`. The executable is built with debug info, and stdlib sources are written to disk so breakpoints bind.
+A generator is a normal Dream program, so you can set breakpoints in it, including in stdlib generators such as `json_derive`. Breakpoints also work in standard-library generators such as `json_derive`.
 
 - **VS Code:** a **▶ Debug generator** code lens appears above each `@generator` function. It launches the generator on the snapshot of the program that triggers it. The *Dream: Debug generator* launch-configuration snippet does the same from `launch.json` (`"generator": "<name>"`, optional `"snapshot": "<path>"`).
 - **CLI / other DAP clients:** `dream debug-adapter --generator <name> app.dream` serves DAP over stdio for that generator. Add `--snapshot <file or --capture dir>` to debug a captured input instead of rebuilding it.
@@ -271,15 +274,15 @@ If a generator crashes, the build reports the generator name and writes a crash 
 4. Declare attributes as `@attribute(AttributeTarget.X) public struct name { … }`.
 5. Register via `[[generators]]` in `dream.toml` or an `import` of the generator module.
 6. Mark pure generators `@incremental`.
-7. Add a sample under `sample/generators/` or a golden test under `tests/cases/`.
+7. Add tests in your project for successful generation, invalid input, and diagnostics.
 
 ## See also
 
-- `[system.codegen](../stdlib/codegen.md)` — `CodeBuilder`, `GenContext`, declaration model
+- [system.codegen](../stdlib/codegen.md) — `CodeBuilder`, `GenContext`, declaration model
 - [JSON](../stdlib/json.md) — `@json` derive
-- `[sample/generators/quote/](https://github.com/sps014/dream/tree/main/sample/generators/quote)`
-- `[sample/generators/html/](https://github.com/sps014/dream/tree/main/sample/generators/html)`
-- `[sample/generators/dto/](https://github.com/sps014/dream/tree/main/sample/generators/dto)`
+- [sample/generators/quote/](https://github.com/sps014/dream/tree/main/sample/generators/quote)
+- [sample/generators/html/](https://github.com/sps014/dream/tree/main/sample/generators/html)
+- [sample/generators/dto/](https://github.com/sps014/dream/tree/main/sample/generators/dto)
 
 
 ## Attribute contracts and enum arguments
@@ -338,10 +341,9 @@ identities and source locations. `GenExpr.ty`, `symbol`, `overload`, `type_args`
 `TypeRefKind.Unknown`; an unresolved symbol is the empty string. A missing constant means
 that no exact scalar value was inferred.
 
-The compiler performs this analysis with scratch diagnostics and without HIR emission.
-It runs only when a generator applies. `ctx.compilation_errors()` exposes errors restricted
-to the generator's selected declarations. Normal analysis runs again after generated output
-has been merged, so references to generated code can succeed then.
+`ctx.compilation_errors()` reports errors in the generator's selected declarations.
+References to code that the generator has yet to produce may be unresolved in this view;
+they are checked again after the generated output is added.
 
 Use `ctx.referenced_decls()`, `ctx.referenced_functions()`, `ctx.find_decl(id)`, and
 `ctx.find_function(id)` to inspect dependencies. The closure is deterministic and limited

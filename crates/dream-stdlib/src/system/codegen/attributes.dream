@@ -4,7 +4,8 @@ module system.codegen;
 @attribute(AttributeTarget.Function)
 public struct GeneratorAttribute {}
 
-/// Declares a generator pure over its snapshot, so the compiler may replay a cached result instead of running it.
+/// Declares that a generator depends only on its input snapshot, allowing unchanged results to
+/// be reused.
 @attribute(AttributeTarget.Function)
 public struct IncrementalAttribute {}
 
@@ -12,7 +13,9 @@ public struct IncrementalAttribute {}
 @repeatable
 @attribute(AttributeTarget.Function)
 public struct OnAttributeAttribute {
+    /// Declaration associated with this entry.
     public declaration: DeclarationPath;
+    /// Additional declarations made available to the generator.
     public additional_declarations: List<DeclarationPath>;
 }
 
@@ -20,7 +23,9 @@ public struct OnAttributeAttribute {
 @repeatable
 @attribute(AttributeTarget.Function)
 public struct OnCallAttribute {
+    /// Declaration associated with this entry.
     public declaration: DeclarationPath;
+    /// Additional declarations made available to the generator.
     public additional_declarations: List<DeclarationPath>;
 }
 
@@ -28,9 +33,10 @@ public struct OnCallAttribute {
 @attribute(AttributeTarget.Function)
 public struct SyntaxBlockAttribute {}
 
-/// Declares a pinned compiler-run tool that this generator may request.
+/// Declares a pinned external tool that the generator may request.
 @repeatable
 @attribute(AttributeTarget.Function)
 public struct UsesToolAttribute {
+    /// Name identifying this entry.
     public name: string;
 }

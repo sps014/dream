@@ -9,7 +9,7 @@ Read the [structured concurrency guide](../language/structured-concurrency.md) f
 Endpoint factories for a queue that can transfer shared values across workers.
 
 ```dream
-public class SharedChannelEndpoints<T : shared>
+public class SharedChannelEndpoints<T: shared>
 ```
 
 ## `sender`
@@ -33,7 +33,7 @@ public get receiver(): SharedReceiver<T>
 A shared producer; clone creates an independent endpoint and ordinary aliases share closure.
 
 ```dream
-shared public class SharedSender<T : shared>
+shared public class SharedSender<T: shared>
 ```
 
 ## `clone`
@@ -57,7 +57,10 @@ public fun try_send(value: T): Result<bool, ChannelError>
 Waits for capacity using cross-worker notifications and inherited cancellation.
 
 ```dream
-public fun send(value: T, token: Option<CancellationToken> = Option.None): Future<Result<bool, ChannelError>>
+public fun send(
+    value: T,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<bool, ChannelError>>
 ```
 
 ## `close`
@@ -73,7 +76,7 @@ public fun close(): void
 A shared consumer; queued values remain available after the last producer closes.
 
 ```dream
-shared public class SharedReceiver<T : shared>
+shared public class SharedReceiver<T: shared>
 ```
 
 ## `clone`
@@ -97,7 +100,9 @@ public fun try_receive(): Result<Option<T>, ChannelError>
 Waits for a value or drained EOF using cross-worker notifications.
 
 ```dream
-public fun receive(token: Option<CancellationToken> = Option.None): Future<Result<Option<T>, ChannelError>>
+public fun receive(
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Option<T>, ChannelError>>
 ```
 
 ## `close`

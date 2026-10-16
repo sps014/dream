@@ -46,3 +46,32 @@ class InventoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DocumentationContractTests(unittest.TestCase):
+    def test_doc_contract_takes_precedence_over_implementation_notes(self):
+        source = "// Storage details belong in source.\n/// Stores values in insertion order.\n@inline\npublic class Values {}"
+        self.assertEqual(declarations(source)[0]["description"], "Stores values in insertion order.")
+
+    def test_wrapped_signatures_have_the_same_key(self):
+        from api_inventory import signature_key
+        self.assertEqual(signature_key('public fun send(value: string, count: int): bool'),
+                         signature_key('public fun send(\n    value: string,\n    count: int\n): bool'))
+
+    def test_string_default_whitespace_remains_significant(self):
+        from api_inventory import signature_key
+        self.assertNotEqual(signature_key('fun f(text: string = "a b")'),
+                            signature_key('fun f(text: string = "ab")'))
+
+    def test_wrapped_attributes_keep_their_doc_comment(self):
+        source = '/// Available on functions and methods.\n@attribute(\n    AttributeTarget.Function,\n    AttributeTarget.Method\n)\npublic struct Marker {}'
+        self.assertEqual(declarations(source)[0]["description"],
+                         "Available on functions and methods.")
+
+    def test_whitespace_only_string_defaults_remain_significant(self):
+        from api_inventory import signature_key
+        self.assertNotEqual(signature_key('fun f(text: string = " ")'),
+                            signature_key('fun f(text: string = "")'))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -4,7 +4,7 @@
 
 For behavior and native target requirements, see [Native Web APIs](../../web-apis/index.md).
 
-## `public class UploadedFile`
+## `UploadedFile`
 
 One `multipart/form-data` file part (`@file`).
 
@@ -12,25 +12,33 @@ One `multipart/form-data` file part (`@file`).
 public class UploadedFile
 ```
 
-## `public filename: string`
+## `filename`
+
+Original filename reported with the upload.
 
 ```dream
 public filename: string
 ```
 
-## `public content_type: string`
+## `content_type`
+
+Media type of the response body.
 
 ```dream
 public content_type: string
 ```
 
-## `public bytes: byte[]`
+## `bytes`
+
+Contents as a byte array.
 
 ```dream
 public bytes: byte[]
 ```
 
-## `public constructor`
+## `constructor`
+
+Creates a `UploadedFile` with `filename`, `content_type`, `bytes`.
 
 ```dream
 public constructor(filename: string, content_type: string, bytes: byte[])

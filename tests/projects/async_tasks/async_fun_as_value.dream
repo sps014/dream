@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 async fun c32_delayed_triple(n: int): int {
     Time.sleep(1).await;
     return n * 3;

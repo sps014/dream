@@ -4,9 +4,9 @@
 
 Read the [usage guide](../stdlib/formatting.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Fmt`
+## `Fmt`
 
-`{{` / `}}` escape literal braces.
+`.NET`/Python-style positional string formatting: `{0}`, `{1}`, ... substitute `args[i]` (via `to_string`), and `{i:.N}` additionally renders a `double`/`float` argument with exactly `N` fixed decimal digits. `{{` / `}}` escape literal braces.
 
 ```dream
 public static class Fmt

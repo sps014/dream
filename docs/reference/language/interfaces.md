@@ -22,14 +22,24 @@ interface Animal {
 A class implements interfaces by listing them after a colon, defining every method with a matching signature:
 
 ```dream
-class Cat : Animal {
-    public fun speak(): string { return "meow"; }
-    public fun legs(): int { return 4; }
+class Cat: Animal {
+    public fun speak(): string {
+        return "meow";
+    }
+
+    public fun legs(): int {
+        return 4;
+    }
 }
 
-class Dog : Animal {
-    public fun speak(): string { return "woof"; }
-    public fun legs(): int { return 2; }
+class Dog: Animal {
+    public fun speak(): string {
+        return "woof";
+    }
+
+    public fun legs(): int {
+        return 2;
+    }
 }
 ```
 
@@ -43,20 +53,20 @@ The static type becomes the interface, but the value remembers its concrete clas
 
 ```dream
 fun describe(a: Animal): void {
-    System.println(a.speak());   // runs Cat.speak or Dog.speak
+    System.println(a.speak()); // runs Cat.speak or Dog.speak
     System.println(a.legs());
 }
 
-describe(Cat());   // meow / 4
-describe(Dog());   // woof / 2
+describe(Cat()); // meow / 4
+describe(Dog()); // woof / 2
 ```
 
 You can store an interface value explicitly, with or without a cast:
 
 ```dream
 let c = Cat();
-let a: Animal = c;     // implicit upcast
-let b = (Animal)c;     // explicit upcast — same value
+let a: Animal = c; // implicit upcast
+let b = (Animal)c; // explicit upcast — same value
 ```
 
 An interface is an abstract contract, so instantiating it (`Animal()`) is an error.
@@ -71,13 +81,19 @@ interface Collection<T> {
     fun iterator(): Iterator<T>;
 }
 
-interface IndexedCollection<T> : Collection<T> {
+interface IndexedCollection<T>: Collection<T> {
     fun get(index: int): T;
 }
 
-interface Readable { fun read(): int; }
-interface Writable { fun write(v: int): void; }
-interface ReadWrite : Readable + Writable {
+interface Readable {
+    fun read(): int;
+}
+
+interface Writable {
+    fun write(v: int): void;
+}
+
+interface ReadWrite: Readable + Writable {
     fun flush(): void;
 }
 ```
@@ -116,19 +132,26 @@ A default can call the interface's other methods on `this`, which still go to th
 ```dream
 interface Greeter {
     fun name(): string;
-    fun greet(): string {           // default body
+    fun greet(): string { // default body
         return "Hello, I am " + this.name();
     }
 }
 
-class Person : Greeter {
-    public fun name(): string { return "Ada"; }
-    // inherits the default greet()
+class Person: Greeter {
+    public fun name(): string {
+        return "Ada";
+    }
+// inherits the default greet()
 }
 
-class Robot : Greeter {
-    public fun name(): string { return "R2"; }
-    public fun greet(): string { return "BEEP " + this.name(); }   // overrides
+class Robot: Greeter {
+    public fun name(): string {
+        return "R2";
+    }
+
+    public fun greet(): string {
+        return "BEEP " + this.name();
+    } // overrides
 }
 ```
 
@@ -151,7 +174,7 @@ It works for any target type, unboxing value types held in an `object`:
 ```dream
 let a: Animal = Cat();
 if a is Cat cat {
-    System.println(cat.speak());   // `cat` aliases the same object
+    System.println(cat.speak()); // `cat` aliases the same object
 }
 ```
 
@@ -167,10 +190,14 @@ The bound name exists only inside the taken branch.
 An `extend` block can carry an `implements` clause, making an **existing** type — even a primitive — satisfy an interface:
 
 ```dream
-extend int : Comparable<int> {
+extend int: Comparable<int> {
     public fun compare(other: int): int {
-        if this < other { return 0 - 1; }
-        if this > other { return 1; }
+        if this < other {
+            return 0 - 1;
+        }
+        if this > other {
+            return 1;
+        }
         return 0;
     }
 }
@@ -190,10 +217,15 @@ interface Container<T> {
     get length(): int;
 }
 
-class Box<T> : Container<T> {
+class Box<T>: Container<T> {
     public value: T;
-    public fun get(): T { return this.value; }
-    public get length(): int { return 1; }
+    public fun get(): T {
+        return this.value;
+    }
+
+    public get length(): int {
+        return 1;
+    }
 }
 ```
 
@@ -207,8 +239,8 @@ fun describe(c: Container<int>): void {
 }
 
 let b = Box<int>(7);
-describe(b);                   // implicit upcast Box<int> -> Container<int>
-let d = (Container<int>)b;     // explicit upcast to a generic interface
+describe(b); // implicit upcast Box<int> -> Container<int>
+let d = (Container<int>)b; // explicit upcast to a generic interface
 ```
 
 ### Async interface methods
@@ -221,7 +253,7 @@ interface Fetcher {
     async fun fetch(): int;
 }
 
-class Remote : Fetcher {
+class Remote: Fetcher {
     public base: int;
     public async fun fetch(): int {
         Time.sleep(10).await;
@@ -230,7 +262,7 @@ class Remote : Fetcher {
 }
 
 async fun run(f: Fetcher): void {
-    let v = f.fetch().await;   // await the Future<int>
+    let v = f.fetch().await; // await the Future<int>
     System.println(v);
 }
 ```
@@ -242,8 +274,13 @@ An `async` interface method must be implemented by an `async` method (and non-as
 Two generic interfaces ship in bootstrap `system.core` (no import):
 
 ```dream
-interface Equatable<T> { fun equals(other: T): bool; }
-interface Comparable<T> { fun compare(other: T): int; }
+interface Equatable<T> {
+    fun equals(other: T): bool;
+}
+
+interface Comparable<T> {
+    fun compare(other: T): int;
+}
 ```
 
 A type implements them against itself (`class Money : Comparable<Money>, Equatable<Money>`).
@@ -260,7 +297,7 @@ When the concrete type is known, calls are direct.
 Assigning a value struct to a bare interface variable boxes it so the call can go to the right method at runtime:
 
 ```dream
-let a: Shape = Rect(3, 4);   // boxed; a.area() runs the Rect implementation
+let a: Shape = Rect(3, 4); // boxed; a.area() runs the Rect implementation
 ```
 
 ## See also

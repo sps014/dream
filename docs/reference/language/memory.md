@@ -47,8 +47,8 @@ Every heap object tracks how many names still point at it.
 
 ```dream
 fun make_list(): int[] {
-    let arr = [1, 2, 3];   // allocated, count = 1
-    return arr;            // handed to the caller
+    let arr = [1, 2, 3]; // allocated, count = 1
+    return arr; // handed to the caller
 }
 
 fun main() {

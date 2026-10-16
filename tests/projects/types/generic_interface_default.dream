@@ -4,28 +4,39 @@ import system.testing;
 // keeps it generic (T is the class's own parameter, monomorphized per instantiation); `IntBox` binds
 // it to `int`. `firstOr`'s signature uses the type parameter (`fallback: T`), so it exercises the
 // signature substitution; `count` does not.
-
 import system;
+
 interface ce6_Container<T> {
     fun get(): T;
     public fun firstOr(fallback: T): T {
         return this.get();
     }
+
     public fun count(): int {
         return 1;
     }
 }
 
-class ce6_Box<T> : ce6_Container<T> {
+class ce6_Box<T>: ce6_Container<T> {
     public value: T;
-    public constructor(value: T) { this.value = value; }
-    public fun get(): T { return this.value; }
+    public constructor(value: T) {
+        this.value = value;
+    }
+
+    public fun get(): T {
+        return this.value;
+    }
 }
 
-class ce6_IntBox : ce6_Container<int> {
+class ce6_IntBox: ce6_Container<int> {
     public value: int;
-    public constructor(value: int) { this.value = value; }
-    public fun get(): int { return this.value; }
+    public constructor(value: int) {
+        this.value = value;
+    }
+
+    public fun get(): int {
+        return this.value;
+    }
 }
 
 @test

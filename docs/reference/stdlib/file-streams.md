@@ -16,7 +16,9 @@ fun main(): Result<bool, IoError> {
     let file = FileHandle.open("input.txt", "r")?;
     while true {
         let line = file.read_line()?;
-        if line.is_none() { break; }
+        if line.is_none() {
+            break;
+        }
     }
     return file.close();
 }

@@ -1,7 +1,7 @@
 module system.io;
 
 // Filesystem / path failure implementing `Error`.
-public class IoError : Error {
+public class IoError: Error {
     // Path involved in the failure (may be empty for non-path errors).
     public path: string;
     _code: string;

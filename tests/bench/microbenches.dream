@@ -16,7 +16,6 @@ import system.text;
 //   slice on both sides (C# `Substring` copies); `*_span` rows are stack views (`AsSpan`).
 // - `regex_find` uses the PCRE2 runtime; C# uses the interpreted `Regex`, not a compiled one.
 // - `json_*` is `@json` codegen; C# uses System.Text.Json source generation.
-
 let measuring: bool = true;
 
 // Heap sink so -O3/LTO cannot delete timed loops that it would otherwise
@@ -26,6 +25,7 @@ class BenchSink {
     public constructor() {
         this.v = 0;
     }
+
     public fun add(x: int): int {
         // Sink only: the total is not the measurement, and it wraps across the suite.
         this.v = this.v + x;
@@ -37,7 +37,9 @@ let bench_sink = BenchSink();
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
-let counter_names = "weak_register,weak_invalidate,region_objects,retain,release,enqueue,ready_alloc".split(',');
+let counter_names = "weak_register,weak_invalidate,region_objects,retain,release,enqueue,ready_alloc".split(
+    ','
+);
 let counter_last = Buffer.alloc<long>(8);
 
 fun counters_field(): string {
@@ -63,12 +65,13 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
     }
     let per = nanos / (long)iters;
     System.println(
-        "bench " + name
-            + " ns_total=" + nanos.to_string()
-            + " iters=" + iters.to_string()
-            + " ns_per_op=" + per.to_string()
-            + " checksum=" + checksum.to_string()
-            + counters
+        "bench "
+            + name
+            + " ns_total="
+            + nanos.to_string()
+            + " iters="
+            + iters.to_string()
+            + " ns_per_op=" + per.to_string() + " checksum=" + checksum.to_string() + counters
     );
 }
 
@@ -354,8 +357,12 @@ fun bench_set_probe(iters: int): void {
     let acc = 0;
     i = 0;
     while i < iters {
-        if set.contains(i) { acc = acc + 1; }
-        if set.remove(i) { acc = acc + 1; }
+        if set.contains(i) {
+            acc = acc + 1;
+        }
+        if set.remove(i) {
+            acc = acc + 1;
+        }
         i = i + 1;
     }
     sw.stop();
@@ -367,7 +374,9 @@ fun bench_set_clear_reuse(iters: int): void {
     let set = Set<int>(1024);
     let rounds = 64;
     let per = iters / rounds;
-    if per < 1 { per = 1; }
+    if per < 1 {
+        per = 1;
+    }
     let sw = Stopwatch();
     let r = 0;
     while r < rounds {
@@ -465,7 +474,14 @@ class BenchUser {
     public tags: string[];
     public scores: int[];
 
-    public constructor(name: string, age: int, active: bool, address: BenchAddress, tags: string[], scores: int[]) {
+    public constructor(
+        name: string,
+        age: int,
+        active: bool,
+        address: BenchAddress,
+        tags: string[],
+        scores: int[]
+    ) {
         this.name = name;
         this.age = age;
         this.active = active;
@@ -618,7 +634,6 @@ fun bench_string_builder(iters: int): void {
 // Compute kernels — pure FP/int work, no ARC in the inner loops. These
 // measure the optimizer + codegen (autovec, ABC, LICM), not stdlib.
 // =====================================================================
-
 class Body {
     public x: double;
     public y: double;
@@ -628,7 +643,15 @@ class Body {
     public vz: double;
     public mass: double;
 
-    public constructor(x: double, y: double, z: double, vx: double, vy: double, vz: double, mass: double) {
+    public constructor(
+        x: double,
+        y: double,
+        z: double,
+        vx: double,
+        vy: double,
+        vz: double,
+        mass: double
+    ) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -856,7 +879,6 @@ fun bench_sieve(iters: int): void {
 // =====================================================================
 // Call / dispatch / recursion.
 // =====================================================================
-
 fun fib(n: int): int {
     if n < 2 {
         return n;
@@ -894,25 +916,25 @@ interface BenchOp {
     fun apply(x: int): int;
 }
 
-class AddOp : BenchOp {
+class AddOp: BenchOp {
     public fun apply(x: int): int {
         return x + 3;
     }
 }
 
-class MulOp : BenchOp {
+class MulOp: BenchOp {
     public fun apply(x: int): int {
         return x * 3;
     }
 }
 
-class SubOp : BenchOp {
+class SubOp: BenchOp {
     public fun apply(x: int): int {
         return x - 3;
     }
 }
 
-class XorOp : BenchOp {
+class XorOp: BenchOp {
     public fun apply(x: int): int {
         return x ^ 3;
     }
@@ -962,7 +984,6 @@ fun bench_iface_dispatch(iters: int): void {
 // =====================================================================
 // ARC / allocator reality at scale.
 // =====================================================================
-
 @allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
@@ -1006,14 +1027,20 @@ fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     let i = 0;
     while i < iters {
         switch (make_tree(12)) {
-            Some(root) => { acc = acc + 1; }
-            None       => { acc = acc - 1; }
+            Some(root) => {
+                acc = acc + 1;
+            }
+            None => {
+                acc = acc - 1;
+            }
         }
         i = i + 1;
     }
     sw.stop();
     let label = "binary_trees";
-    if reclaim { label = "binary_trees_reclaim"; }
+    if reclaim {
+        label = "binary_trees_reclaim";
+    }
     report(label, sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
@@ -1054,7 +1081,9 @@ fun bench_linked_walk(iters: int): void {
                     acc = acc + node.value;
                     curr = node.next;
                 }
-                None => { done = true; }
+                None => {
+                    done = true;
+                }
             }
         }
         i = i + 1;
@@ -1099,8 +1128,12 @@ fun bench_weak_tree(iters: int): void {
     while i < iters {
         let root = make_weak_tree(10);
         switch (root.left) {
-            Some(l) => { acc = acc + 1; }
-            None    => { acc = acc - 1; }
+            Some(l) => {
+                acc = acc + 1;
+            }
+            None => {
+                acc = acc - 1;
+            }
         }
         i = i + 1;
     }
@@ -1184,12 +1217,20 @@ fun bench_sum_options(iters: int): void {
     let i = 0;
     while i < iters {
         switch (opts[i & 7]) {
-            Some(v) => { acc = acc + v; }
-            None    => { acc = acc - 1; }
+            Some(v) => {
+                acc = acc + v;
+            }
+            None => {
+                acc = acc - 1;
+            }
         }
         switch (opts[(i + 3) & 7]) {
-            Some(v) => { acc = acc + v; }
-            None    => { acc = acc + 1; }
+            Some(v) => {
+                acc = acc + v;
+            }
+            None => {
+                acc = acc + 1;
+            }
         }
         i = i + 1;
     }

@@ -4,10 +4,12 @@ import system;
 import system.collections;
 import system.json;
 
+/// Builds generated source text and records its source locations.
 public class ArtifactBuilder {
     buf: StringBuilder;
     current_line: int;
     current_column: int;
+    /// Locations mapping generated text back to source declarations.
     public source_map: GenSourceMap;
 
     // Creates an empty builder.
@@ -34,7 +36,9 @@ public class ArtifactBuilder {
 
     // Appends text mapped to the given snapshot node identity.
     public fun mapped(text: string, target: string): void {
-        if text.is_empty() { return; }
+        if text.is_empty() {
+            return;
+        }
         let line = this.current_line;
         let column = this.current_column;
         this.append(text);

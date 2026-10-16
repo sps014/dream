@@ -1,8 +1,8 @@
 import system.testing;
 // `Buffer.realloc<T>`/`Buffer.free<T>` (`@unsafe`): manual, non-ARC control over an array's backing
 // block via the allocator's `$realloc`/`$free`.
-
 import system;
+
 @unsafe
 fun c57_grow_and_shrink(): void {
     let xs = Buffer.alloc<int>(3);
@@ -12,21 +12,21 @@ fun c57_grow_and_shrink(): void {
 
     // Grow: the overlapping prefix survives, the new tail is zero-initialized.
     xs = Buffer.realloc<int>(xs, 5);
-    c57_verify_observation((xs.length).to_string());   // 5
-    c57_verify_observation((xs[0]).to_string());       // 10
-    c57_verify_observation((xs[1]).to_string());       // 20
-    c57_verify_observation((xs[2]).to_string());       // 30
-    c57_verify_observation((xs[3]).to_string());       // 0
-    c57_verify_observation((xs[4]).to_string());       // 0
+    c57_verify_observation((xs.length).to_string()); // 5
+    c57_verify_observation((xs[0]).to_string()); // 10
+    c57_verify_observation((xs[1]).to_string()); // 20
+    c57_verify_observation((xs[2]).to_string()); // 30
+    c57_verify_observation((xs[3]).to_string()); // 0
+    c57_verify_observation((xs[4]).to_string()); // 0
 
     xs[3] = 40;
     xs[4] = 50;
 
     // Shrink: the surviving prefix is unchanged.
     xs = Buffer.realloc<int>(xs, 2);
-    c57_verify_observation((xs.length).to_string());   // 2
-    c57_verify_observation((xs[0]).to_string());       // 10
-    c57_verify_observation((xs[1]).to_string());       // 20
+    c57_verify_observation((xs.length).to_string()); // 2
+    c57_verify_observation((xs[0]).to_string()); // 10
+    c57_verify_observation((xs[1]).to_string()); // 20
 
     // Manual free: bypasses reference counting entirely.
     Buffer.free<int>(xs);

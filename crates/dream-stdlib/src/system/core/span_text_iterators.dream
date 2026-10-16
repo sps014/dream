@@ -68,6 +68,7 @@ public ref struct StringLines {
         this._current = rest.slice(0, 0);
     }
 
+    /// Advances to the next segment; returns false at the end.
     public fun move_next(): bool {
         let r = this.rest;
         if r._length == 0 {
@@ -88,6 +89,7 @@ public ref struct StringLines {
         return true;
     }
 
+    /// View of the segment selected by the last successful `move_next`.
     public get current(): ReadOnlySpan<char> {
         return this._current;
     }
@@ -95,10 +97,11 @@ public ref struct StringLines {
 
 // A `Map`/`Set` key that can be found by a `ReadOnlySpan<char>` without building a `string`.
 public interface StringKey {
+    /// Returns whether this value equals the supplied text view.
     fun matches_span(borrow other: ReadOnlySpan<char>): bool;
 }
 
-extend string : StringKey {
+extend string: StringKey {
     // A view of the whole string.
     public fun span(): ReadOnlySpan<char> {
         return ReadOnlySpan<char>.from_text(this, 0, this.length);
@@ -115,9 +118,19 @@ extend string : StringKey {
         }
         let s = start;
         let e = end;
-        if s < 0 { s = 0; } else if s > n { s = n; }
-        if e < 0 { e = 0; } else if e > n { e = n; }
-        if e < s { e = s; }
+        if s < 0 {
+            s = 0;
+        } else if s > n {
+            s = n;
+        }
+        if e < 0 {
+            e = 0;
+        } else if e > n {
+            e = n;
+        }
+        if e < s {
+            e = s;
+        }
         return ReadOnlySpan<char>.from_text(this, s, e - s);
     }
 
@@ -125,31 +138,75 @@ extend string : StringKey {
         return this.matches_span(other);
     }
 
+    /// Returns whether this value equals the supplied text view.
     public fun matches_span(borrow other: ReadOnlySpan<char>): bool {
         return other.equals(this);
     }
 
+    /// Tests equality of the supplied text ranges.
     @intrinsic(Intrinsic.StringViewEq)
-    public static extern fun view_eq(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+    public static extern fun view_eq(
+        borrow a: string,
+        ao: int,
+        an: int,
+        borrow b: string,
+        bo: int,
+        bn: int
+    ): int;
 
+    /// Compares the supplied text ranges in lexical order.
     @intrinsic(Intrinsic.StringViewCompare)
-    public static extern fun view_compare(borrow a: string, ao: int, an: int, borrow b: string, bo: int, bn: int): int;
+    public static extern fun view_compare(
+        borrow a: string,
+        ao: int,
+        an: int,
+        borrow b: string,
+        bo: int,
+        bn: int
+    ): int;
 
+    /// Returns a hash of the specified text range.
     @intrinsic(Intrinsic.StringViewHash)
     public static extern fun view_hash(borrow s: string, off: int, n: int): int;
 
+    /// Finds the first matching text range at or after `from`, or returns -1.
     @intrinsic(Intrinsic.StringViewFind)
-    public static extern fun view_find(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int, from: int): int;
+    public static extern fun view_find(
+        borrow h: string,
+        ho: int,
+        hn: int,
+        borrow nd: string,
+        no: int,
+        nn: int,
+        from: int
+    ): int;
 
+    /// Finds the last matching text range, or returns -1.
     @intrinsic(Intrinsic.StringViewRfind)
-    public static extern fun view_rfind(borrow h: string, ho: int, hn: int, borrow nd: string, no: int, nn: int): int;
+    public static extern fun view_rfind(
+        borrow h: string,
+        ho: int,
+        hn: int,
+        borrow nd: string,
+        no: int,
+        nn: int
+    ): int;
 
+    /// Finds character `c` at or after `from`, or returns -1.
     @intrinsic(Intrinsic.StringViewFindChar)
-    public static extern fun view_find_char(borrow s: string, off: int, n: int, from: int, c: int): int;
+    public static extern fun view_find_char(
+        borrow s: string,
+        off: int,
+        n: int,
+        from: int,
+        c: int
+    ): int;
 
+    /// Finds the last occurrence of character `c`, or returns -1.
     @intrinsic(Intrinsic.StringViewRfindChar)
     public static extern fun view_rfind_char(borrow s: string, off: int, n: int, c: int): int;
 
+    /// Counts occurrences of character `c` in the specified text range.
     @intrinsic(Intrinsic.StringViewCountChar)
     public static extern fun view_count_char(borrow s: string, off: int, n: int, c: int): int;
 }

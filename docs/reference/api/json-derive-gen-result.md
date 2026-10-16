@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class JsonGenOutput`
+## `JsonGenOutput`
 
 Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` name the type / field the error is reported at.
 
@@ -12,31 +12,41 @@ Outcome of a `@json` source-generator expand pass. Optional `error_type` / `erro
 public class JsonGenOutput
 ```
 
-## `ok: bool`
+## `ok`
+
+Whether the operation succeeded.
 
 ```dream
 public ok: bool
 ```
 
-## `source: string`
+## `source`
+
+Generated Dream source text for this JSON result type.
 
 ```dream
 public source: string
 ```
 
-## `error: string`
+## `error`
+
+Error message reported by the operation.
 
 ```dream
 public error: string
 ```
 
-## `error_type: string`
+## `error_type`
+
+Dream type name of the error payload.
 
 ```dream
 public error_type: string
 ```
 
-## `error_field: string`
+## `error_field`
+
+Name of the field used to represent the error payload.
 
 ```dream
 public error_field: string

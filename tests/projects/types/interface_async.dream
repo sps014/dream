@@ -2,24 +2,30 @@ import system.testing;
 // Async interface methods: calling an `async` method through an interface-typed receiver
 // dispatches dynamically to the concrete async implementation, which returns a `Future<T>` the
 // caller `await`s.
-
 import system;
+
 interface cff_Fetcher {
     async fun fetch(): int;
 }
 
-class cff_Remote : cff_Fetcher {
+class cff_Remote: cff_Fetcher {
     public base: int;
-    public constructor(base: int) { this.base = base; }
+    public constructor(base: int) {
+        this.base = base;
+    }
+
     public async fun fetch(): int {
         Time.sleep(10).await;
         return this.base + 1;
     }
 }
 
-class cff_Cached : cff_Fetcher {
+class cff_Cached: cff_Fetcher {
     public value: int;
-    public constructor(value: int) { this.value = value; }
+    public constructor(value: int) {
+        this.value = value;
+    }
+
     public async fun fetch(): int {
         return this.value;
     }

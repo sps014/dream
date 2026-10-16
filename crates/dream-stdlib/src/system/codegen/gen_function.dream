@@ -6,21 +6,46 @@ import system.json;
 
 // A method, or a top-level function.
 public class GenFunction {
+    /// Stable identifier of this entry.
     public id: string;
+    /// Identifier distinguishing this function's overload.
     public overload: string;
+    /// Name identifying this entry.
     public name: string;
+    /// Whether the member belongs to the type rather than an instance.
     public is_static: bool;
+    /// Whether this function returns an asynchronous result.
     public is_async: bool;
+    /// Declared access level of this symbol.
     public visibility: string;
+    /// Names of the declared type parameters, in order.
     public generics: List<string>;
+    /// Function parameters in declaration order.
     public params: List<GenParam>;
+    /// Declared return type of the function.
     public ret: GenTypeRef;
+    /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
+    /// Source location associated with this entry.
     public location: GenLocation;
+    /// Function body, when source is available.
     public body: Option<GenBody>;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(id: string, name: string, is_static: bool, is_async: bool, visibility: string, generics: List<string>, params: List<GenParam>, ret: GenTypeRef, attributes: List<GenAttribute>, location: GenLocation, body: Option<GenBody>, overload: string) {
+    public constructor(
+        id: string,
+        name: string,
+        is_static: bool,
+        is_async: bool,
+        visibility: string,
+        generics: List<string>,
+        params: List<GenParam>,
+        ret: GenTypeRef,
+        attributes: List<GenAttribute>,
+        location: GenLocation,
+        body: Option<GenBody>,
+        overload: string
+    ) {
         this.id = id;
         this.overload = overload;
         this.name = name;

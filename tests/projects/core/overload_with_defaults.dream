@@ -3,8 +3,8 @@ import system.testing;
 // int (with a defaulted multiplier) and one taking a string. Calls resolve by argument type, and
 // omitted trailing arguments fall back to their defaults. An exact-arity call is preferred over a
 // defaulted one.
-
 import system;
+
 fun c199_scale(n: int, by: int = 2): int {
     return n * by;
 }
@@ -16,7 +16,7 @@ fun c199_scale(s: string): string {
 @test
 @timeout(180000)
 fun overload_with_defaults(): void {
-    Assert.eq_str((c199_scale(5)).to_string(), "10");        // int overload, default by=2 -> 10
-    Assert.eq_str((c199_scale(5, 3)).to_string(), "15");     // int overload, explicit by=3 -> 15
-    Assert.eq_str((c199_scale("ab")).to_string(), "abab");     // string overload -> "abab"
+    Assert.eq_str((c199_scale(5)).to_string(), "10"); // int overload, default by=2 -> 10
+    Assert.eq_str((c199_scale(5, 3)).to_string(), "15"); // int overload, explicit by=3 -> 15
+    Assert.eq_str((c199_scale("ab")).to_string(), "abab"); // string overload -> "abab"
 }

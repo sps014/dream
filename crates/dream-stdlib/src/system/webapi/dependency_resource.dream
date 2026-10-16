@@ -3,20 +3,34 @@ module system.webapi;
 /// A dependency value and its asynchronous release operation.
 @allow_cycle
 public class DependencyResource<T> {
+    /// Value carried by this entry.
     public value: T;
+    /// Asynchronous cleanup action, given the cancellation token.
     public cleanup: fun(CancellationToken): Future<void>;
-    public constructor(value: T, cleanup: fun(CancellationToken): Future<void>) { this.value = value; this.cleanup = cleanup; }
+    /// Creates a `DependencyResource` with `value`, `cleanup`.
+    public constructor(value: T, cleanup: fun(CancellationToken): Future<void>) {
+        this.value = value;
+        this.cleanup = cleanup;
+    }
 }
 
 /// Generated, type-checked dependency replacement selection for one application.
 public class DependencyOverrides {
     internal providers: Map<string, string>;
-    public constructor(providers: Map<string, string>) { this.providers = Map<string, string>(); for (let entry in providers.entries()) { this.providers.set(entry.key, entry.value); } }
+    /// Creates a `DependencyOverrides` with `providers`.
+    public constructor(providers: Map<string, string>) {
+        this.providers = Map<string, string>();
+        for (let entry in providers.entries()) {
+            this.providers.set(entry.key, entry.value);
+        }
+    }
 }
 
 /// A typed reference box keeps cached primitive values out of the erased object representation.
 @allow_cycle
 internal class DependencyValue<T> {
     internal value: T;
-    internal constructor(value: T) { this.value = value; }
+    internal constructor(value: T) {
+        this.value = value;
+    }
 }

@@ -1,6 +1,5 @@
 import system.testing;
 // try_acquire / try_acquire_for on Lock and Semaphore (single-threaded).
-
 import system;
 
 @test

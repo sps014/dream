@@ -2,9 +2,9 @@
 
 **Import:** `import system.codegen;`
 
-## `public async fun finish`
+## `finish`
 
-Writes the result for the compiler; the harness returns this as the exit code.
+Writes the generator result and returns its exit status.
 
 ```dream
 public async fun finish(): int

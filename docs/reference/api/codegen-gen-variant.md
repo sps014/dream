@@ -2,37 +2,47 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenVariant`
+## `GenVariant`
+
+A choice declared by an enum or discriminated union.
 
 ```dream
 public class GenVariant
 ```
 
-## `public id: string`
+## `id`
+
+Stable identifier of this entry.
 
 ```dream
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public fields: List<GenField>`
+## `fields`
+
+Fields of this type, in declaration order.
 
 ```dream
 public fields: List<GenField>
 ```
 
-## `public location: GenLocation`
+## `location`
+
+Source location associated with this entry.
 
 ```dream
 public location: GenLocation
 ```
 
-## `public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

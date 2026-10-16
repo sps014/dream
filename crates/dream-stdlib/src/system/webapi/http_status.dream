@@ -2,43 +2,54 @@ module system.webapi;
 
 // HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).
 public class HttpStatus {
+    /// HTTP status code.
     public code: int;
+    /// Human-readable explanation of the result or failure.
     public message: string;
 
+    /// Creates a `HttpStatus` with `code`, `message`.
     public constructor(code: int, message: string = "") {
         this.code = code;
         this.message = message;
     }
 
+    /// Creates a 400 Bad Request status.
     public static fun bad_request(): HttpStatus {
         return HttpStatus(400, "Bad Request");
     }
 
+    /// Creates a 401 Unauthorized status.
     public static fun unauthorized(): HttpStatus {
         return HttpStatus(401, "Unauthorized");
     }
 
+    /// Creates a 403 Forbidden status.
     public static fun forbidden(): HttpStatus {
         return HttpStatus(403, "Forbidden");
     }
 
+    /// Creates a 404 Not Found response.
     public static fun not_found(): HttpStatus {
         return HttpStatus(404, "Not Found");
     }
 
+    /// Creates a 409 Conflict status.
     public static fun conflict(): HttpStatus {
         return HttpStatus(409, "Conflict");
     }
 
+    /// Creates a 422 Unprocessable Entity status.
     public static fun unprocessable(): HttpStatus {
         return HttpStatus(422, "Unprocessable Entity");
     }
 
+    /// Creates a 429 Too Many Requests status.
     public static fun too_many(): HttpStatus {
         return HttpStatus(429, "Too Many Requests");
     }
 
-    public static fun internal(): HttpStatus {
+    /// Creates a 500 Internal Server Error status.
+    public static fun internal (): HttpStatus {
         return HttpStatus(500, "Internal Server Error");
     }
 }

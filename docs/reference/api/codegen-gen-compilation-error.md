@@ -2,25 +2,31 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenCompilationError`
+## `GenCompilationError`
+
+A diagnostic associated with a declaration in the generator's input.
 
 ```dream
 public class GenCompilationError
 ```
 
-## `public target: string`
+## `target`
+
+Target declaration or build target associated with this result.
 
 ```dream
 public target: string
 ```
 
-## `public message: string`
+## `message`
+
+Human-readable explanation of the result or failure.
 
 ```dream
 public message: string
 ```
 
-## `public constructor(borrow v: JsonValue)`
+## `constructor`
 
 Decodes a pre-generation error restricted to this generator's triggered declarations.
 

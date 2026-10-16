@@ -15,6 +15,7 @@ class Routes {
         yield SseEvent("ready", Option.Some("update"), Option.Some("2"), Option.Some(1000));
     }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

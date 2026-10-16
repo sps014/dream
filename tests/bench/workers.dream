@@ -18,11 +18,19 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
         let releases = Debug.runtime_counter(4);
         let ready = Debug.runtime_counter(6);
         let jobs = Debug.runtime_counter(9);
-        counters = " counters=allocs:" + (allocations - last_allocations).to_string()
-            + ",retain:" + (retains - last_retains).to_string()
-            + ",release:" + (releases - last_releases).to_string()
-            + ",ready_alloc:" + (ready - last_ready).to_string()
-            + ",worker_job_alloc:" + (jobs - last_jobs).to_string();
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string()
+            + ",release:"
+            + (releases - last_releases)
+            .to_string()
+            + ",ready_alloc:"
+            + (ready - last_ready)
+            .to_string() + ",worker_job_alloc:" + (jobs - last_jobs)
+            .to_string();
         last_allocations = allocations;
         last_retains = retains;
         last_releases = releases;
@@ -30,9 +38,17 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
         last_jobs = jobs;
     }
     if measuring {
-        System.println("bench " + name + " ns_total=" + nanos.to_string()
-            + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
-            + " checksum=" + checksum.to_string() + counters);
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters)
+                .to_string() + " checksum=" + checksum.to_string() + counters
+        );
     }
     sink = sink + checksum;
 }
@@ -48,6 +64,7 @@ async fun pool_jobs(size: int, iters: int): int {
     pool.close().await.unwrap();
     return total;
 }
+
 @noinline
 async fun sessions(iters: int): int {
     let total = 0;
@@ -58,6 +75,7 @@ async fun sessions(iters: int): int {
     }
     return total;
 }
+
 @noinline
 async fun spawned_jobs(iters: int): int {
     let total = 0;
@@ -67,46 +85,67 @@ async fun spawned_jobs(iters: int): int {
     }
     return total;
 }
+
 @noinline
 async fun scoped_jobs(size: int, iters: int): int {
     let total = 0;
     for (let i = 0; i < iters; i = i + 1) {
-        total = total + Task.scope<int, string>(async (scope) => {
-            let jobs = List<TaskHandle<int, string>>(size);
-            for (let j = 0; j < size; j = j + 1) {
-                let value = j & 15;
-                jobs.push(scope.spawn_parallel<int>(() => value * value));
+        total = total + Task.scope<int, string>(
+            async (scope) => {
+                let jobs = List<TaskHandle<int, string>>(size);
+                for (let j = 0; j < size; j = j + 1) {
+                    let value = j & 15;
+                    jobs.push(scope.spawn_parallel<int>(() => value * value));
+                }
+                let sum = 0;
+                for (let j = 0; j < jobs.length; j = j + 1) {
+                    sum = sum + jobs[j].join().await?;
+                }
+                return Result.Ok(sum);
             }
-            let sum = 0;
-            for (let j = 0; j < jobs.length; j = j + 1) {
-                sum = sum + jobs[j].join().await?;
-            }
-            return Result.Ok(sum);
-        }).await.unwrap();
+        ).await.unwrap();
     }
     return total;
 }
+
 async fun run_suite(): void {
-    let sw = Stopwatch(); let v = pool_jobs(1, 1000).await; sw.stop();
+    let sw = Stopwatch();
+    let v = pool_jobs(1, 1000).await;
+    sw.stop();
     report("worker_pool_1", sw.elapsed_nanos, 1000, v);
-    sw = Stopwatch(); v = pool_jobs(8, 1000).await; sw.stop();
+    sw = Stopwatch();
+    v = pool_jobs(8, 1000).await;
+    sw.stop();
     report("worker_pool_8", sw.elapsed_nanos, 1000, v);
-    sw = Stopwatch(); v = pool_jobs(64, 1024).await; sw.stop();
+    sw = Stopwatch();
+    v = pool_jobs(64, 1024).await;
+    sw.stop();
     report("worker_pool_64", sw.elapsed_nanos, 1024, v);
-    sw = Stopwatch(); v = sessions(100).await; sw.stop();
+    sw = Stopwatch();
+    v = sessions(100).await;
+    sw.stop();
     report("worker_sessions", sw.elapsed_nanos, 100, v);
-    sw = Stopwatch(); v = spawned_jobs(1000).await; sw.stop();
+    sw = Stopwatch();
+    v = spawned_jobs(1000).await;
+    sw.stop();
     report("task_spawn", sw.elapsed_nanos, 1000, v);
-    sw = Stopwatch(); v = scoped_jobs(16, 100).await; sw.stop();
+    sw = Stopwatch();
+    v = scoped_jobs(16, 100).await;
+    sw.stop();
     report("task_scope_16", sw.elapsed_nanos, 100, v);
-    sw = Stopwatch(); v = scoped_jobs(64, 25).await; sw.stop();
+    sw = Stopwatch();
+    v = scoped_jobs(64, 25).await;
+    sw.stop();
     report("task_scope_64", sw.elapsed_nanos, 25, v);
 }
+
 async fun main(): void {
     measuring = false;
     run_suite().await;
     measuring = true;
     let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
-    for (let p = 0; p < passes; p = p + 1) { run_suite().await; }
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite().await;
+    }
     System.println("sink " + sink.to_string());
 }

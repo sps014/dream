@@ -1,6 +1,5 @@
 import system.testing;
 // `s[i] = c` via `@set_indexer` on `extend string` (in-place UTF-8 write).
-
 import system;
 import system.text;
 

@@ -3,13 +3,24 @@ import system.collections;
 
 fun fill(borrow map: Map<int, int>, count: int): void {
     let i = 0;
-    while i < count { map[i] = i; i = i + 1; }
+    while i < count {
+        map[i] = i;
+        i = i + 1;
+    }
 }
 
 fun report(borrow name: string, nanos: long, iters: int, checksum: int): void {
-    System.println("bench " + name + " ns_total=" + nanos.to_string()
-        + " iters=" + iters.to_string() + " ns_per_op=" + (nanos / (long)iters).to_string()
-        + " checksum=" + checksum.to_string());
+    System.println(
+        "bench "
+            + name
+            + " ns_total="
+            + nanos.to_string()
+            + " iters="
+            + iters.to_string()
+            + " ns_per_op="
+            + (nanos / (long)iters)
+            .to_string() + " checksum=" + checksum.to_string()
+    );
 }
 
 fun main(): void {
@@ -35,21 +46,33 @@ fun main(): void {
     let batch = 256;
     let maps = List<Map<int, int>>(batch);
     let i = 0;
-    while i < batch { maps.push(Map<int, int>(1024)); i = i + 1; }
+    while i < batch {
+        maps.push(Map<int, int>(1024));
+        i = i + 1;
+    }
     let clear_nanos = 0L;
     r = 0;
     while r < rounds {
         i = 0;
-        while i < batch { fill(maps[i], 1024); i = i + 1; }
+        while i < batch {
+            fill(maps[i], 1024);
+            i = i + 1;
+        }
         let sw = Stopwatch();
         i = 0;
-        while i < batch { maps[i].clear(); i = i + 1; }
+        while i < batch {
+            maps[i].clear();
+            i = i + 1;
+        }
         sw.stop();
         clear_nanos = clear_nanos + sw.elapsed_nanos;
         r = r + 1;
     }
     checksum = 0;
     i = 0;
-    while i < batch { checksum = checksum + maps[i].length; i = i + 1; }
+    while i < batch {
+        checksum = checksum + maps[i].length;
+        i = i + 1;
+    }
     report("map_clear_reserved_batch", clear_nanos, rounds * batch, checksum);
 }

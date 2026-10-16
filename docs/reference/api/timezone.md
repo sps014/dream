@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `struct TimeZone`
+## `TimeZone`
 
 An IANA timezone identifier (e.g. `"America/New_York"`, `"Europe/London"`), resolving UTC offsets from the host's timezone database — including historical DST rules, unlike a plain fixed offset. Use with `DateTime.now_in`/`DateTime.of_zoned`/`DateTime.to_zone`.
 

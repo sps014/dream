@@ -7,7 +7,7 @@
 A generic open-addressing hash set.
 
 ```dream
-public class Set<T> : Collection<T>
+public class Set<T>: Collection<T>
 ```
 
 ## `constructor`
@@ -63,12 +63,12 @@ public fun contains(borrow value: T): bool
 True when the set holds the `string` equal to `value`, without building a `string`.
 
 ```dream
-public fun contains(borrow value: ReadOnlySpan<char>): bool where T : StringKey
+public fun contains(borrow value: ReadOnlySpan<char>): bool where T: StringKey
 ```
 
 ## `add_all`
 
-Adds every element of `items` (duplicates are ignored, exactly like repeated `add` calls). Also what the `{e1, e2, ...}` set-literal syntax lowers to via `from_array`, so a literal with N elements costs one call, not N.
+Adds every element of `items`, ignoring duplicates.
 
 ```dream
 public fun add_all(borrow items: T[]): void
@@ -76,7 +76,7 @@ public fun add_all(borrow items: T[]): void
 
 ## `from_array`
 
-Builds a set containing exactly the (deduplicated) elements of `items`. The `{e1, e2, ...}` set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
+Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2, 3}` create sets in the same way.
 
 ```dream
 public static fun from_array(borrow items: T[]): Set<T>
@@ -92,8 +92,10 @@ public fun remove(borrow value: T): bool
 
 ## `remove`
 
+Removes `value`; returns whether it was present.
+
 ```dream
-public fun remove(borrow value: T): bool where T : unmanaged
+public fun remove(borrow value: T): bool where T: unmanaged
 ```
 
 ## `is_empty`
@@ -114,8 +116,10 @@ public fun clear(): void
 
 ## `clear`
 
+Removes all entries while keeping storage for reuse.
+
 ```dream
-public fun clear(): void where T : unmanaged
+public fun clear(): void where T: unmanaged
 ```
 
 ## `to_array`
@@ -175,6 +179,8 @@ public fun iterator(): SetIterator<T>
 ```
 
 ## `to_string`
+
+Returns a text representation of this value.
 
 ```dream
 public override fun to_string(): string

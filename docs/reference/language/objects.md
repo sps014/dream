@@ -7,10 +7,10 @@ Use `object` when a value may have different types, such as a number, text, or a
 Assigning to an `object` variable automatically **boxes** the value. To read it back, cast with the concrete type; a mismatch [panics](panics.md) at runtime (the program prints a message and halts) rather than silently reinterpreting the wrong bytes:
 
 ```dream
-let o: object = 42;       // boxing an int
-let s: object = "hello";  // boxing a string
+let o: object = 42; // boxing an int
+let s: object = "hello"; // boxing a string
 
-let n = (int)o;    // 42, if o holds an int
+let n = (int)o; // 42, if o holds an int
 ```
 
 ## The `is` operator
@@ -40,9 +40,9 @@ On a non-`object` variable, `is` is resolved at compile time — a matching bran
 ```dream
 fun describe(o: object): void {
     if o is int n {
-        System.println(n + 1);   // `n` is an int, unboxed from `o`
+        System.println(n + 1); // `n` is an int, unboxed from `o`
     } else if (o is string s) {
-        System.println(s);       // `s` is a string
+        System.println(s); // `s` is a string
     }
 }
 ```
@@ -54,8 +54,8 @@ The bound name is visible only inside the taken branch, and works for any target
 Every value responds to `to_string()` (returns `string`) and `hash_code()` (returns `int`), including values stored in an `object`:
 
 ```dream
-let s = (42).to_string();       // "42"
-let h = "hello".hash_code();    // some stable integer
+let s = (42).to_string(); // "42"
+let h = "hello".hash_code(); // some stable integer
 ```
 
 ### Overriding them on a class

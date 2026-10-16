@@ -5,6 +5,8 @@ public static class Path {
     // Joins path segments left-to-right with the platform separator, avoiding double separators
     // and skipping empty segments. Two-argument calls compile exactly as before; three or more
     // trailing arguments pack into `more` automatically (no spread operator at the call site).
+    /// Joins path segments with the platform separator, skipping empty segments and avoiding
+    /// duplicate separators. Supply additional segments as trailing arguments.
     public static fun join(a: string, b: string, ...more: string[]): string {
         let sb = StringBuilder(a.length + b.length + 16);
         let have = Path._append_segment(sb, false, a);
@@ -141,7 +143,7 @@ public static class Path {
                 if i > start {
                     let part = path.substring(start, i);
                     if part == "." {
-                        // skip
+                    // skip
                     } else if (part == "..") {
                         if parts.length > 0 {
                             let last = parts.get(parts.length - 1);

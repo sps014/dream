@@ -52,5 +52,10 @@ fun c227_verify_observation(borrow value: string): void {
 fun string_span_equality(): void {
     c227_cursor = 0;
     c227_body();
-    Assert.eq(c227_cursor, ("true\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nleft\nright\ntrue\nleft\nright\nfalse\n").length);
+    Assert.eq(
+        c227_cursor,
+        (
+            "true\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nleft\nright\ntrue\nleft\nright\nfalse\n"
+        ).length
+    );
 }

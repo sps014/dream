@@ -2,6 +2,7 @@ import system.testing;
 // Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
 // `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
 import system;
+
 class c2a4_Node {
     public value: int;
     public weak parent: Option<c2a4_Node>;
@@ -19,8 +20,12 @@ fun c2a4_attach_weak_parent(child: c2a4_Node) {
     let parent = c2a4_Node(99);
     child.parent = Option.Some(parent);
     switch (child.parent) {
-        Some(p) => { c2a4_verify_observation(("inside: parent.value=" + p.value.to_string()).to_string()); }
-        None => { c2a4_verify_observation(("inside: parent is None (unexpected)").to_string()); }
+        Some(p) => {
+            c2a4_verify_observation(("inside: parent.value=" + p.value.to_string()).to_string());
+        }
+        None => {
+            c2a4_verify_observation(("inside: parent is None (unexpected)").to_string());
+        }
     }
 }
 
@@ -28,8 +33,12 @@ fun c2a4_body() {
     let child = c2a4_Node(1);
     c2a4_attach_weak_parent(child);
     switch (child.parent) {
-        Some(p) => { c2a4_verify_observation(("after: parent.value=" + p.value.to_string()).to_string()); }
-        None => { c2a4_verify_observation(("after: parent is None").to_string()); }
+        Some(p) => {
+            c2a4_verify_observation(("after: parent.value=" + p.value.to_string()).to_string());
+        }
+        None => {
+            c2a4_verify_observation(("after: parent is None").to_string());
+        }
     }
 
     // Reassigning a `weak` field to a *live* referent must still work like an ordinary read: it does
@@ -37,8 +46,12 @@ fun c2a4_body() {
     let other = c2a4_Node(2);
     child.parent = Option.Some(other);
     switch (child.parent) {
-        Some(p) => { c2a4_verify_observation(("live: parent.value=" + p.value.to_string()).to_string()); }
-        None => { c2a4_verify_observation(("live: parent is None (unexpected)").to_string()); }
+        Some(p) => {
+            c2a4_verify_observation(("live: parent.value=" + p.value.to_string()).to_string());
+        }
+        None => {
+            c2a4_verify_observation(("live: parent is None (unexpected)").to_string());
+        }
     }
 }
 
@@ -59,5 +72,8 @@ fun c2a4_verify_observation(borrow value: string): void {
 fun weak_field_runtime(): void {
     c2a4_cursor = 0;
     c2a4_body();
-    Assert.eq(c2a4_cursor, ("inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n").length);
+    Assert.eq(
+        c2a4_cursor,
+        ("inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n").length
+    );
 }

@@ -6,23 +6,34 @@ import system.json;
 
 // Signature views allow program-wide queries without including unrelated function bodies.
 public class GenSymbol {
+    /// Concrete uses of this generic symbol.
     public instances: List<GenSymbolInstance>;
+    /// Stable identifier of this entry.
     public id: string;
+    /// Category of this entry.
     public kind: string;
+    /// Declaration associated with this entry.
     public declaration: Option<GenDecl>;
+    /// Function declaration associated with this entry, when available.
     public function: Option<GenFunction>;
 
     // Decodes a declaration or function symbol from the compilation snapshot.
     public constructor(borrow v: JsonValue) {
         this.instances = List<GenSymbolInstance>();
-        for (let instance in gen_items(v, "instances")) { this.instances.push(GenSymbolInstance(instance)); }
+        for (let instance in gen_items(v, "instances")) {
+            this.instances.push(GenSymbolInstance(instance));
+        }
         this.id = gen_str(v, "id");
         this.kind = gen_str(v, "kind");
         this.declaration = Option.None;
         this.function = Option.None;
         let decl = gen_obj(v, "declaration");
-        if !decl.is_null() { this.declaration = Option.Some(gen_decl(decl)); }
+        if !decl.is_null() {
+            this.declaration = Option.Some(gen_decl(decl));
+        }
         let f = gen_obj(v, "function");
-        if !f.is_null() { this.function = Option.Some(gen_function(f)); }
+        if !f.is_null() {
+            this.function = Option.Some(gen_function(f));
+        }
     }
 }

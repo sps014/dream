@@ -212,6 +212,7 @@ nav:
     - Workspaces: reference/tooling/workspaces.md
     - Toolchain: reference/tooling/toolchain.md
     - Editor setup: reference/tooling/editor.md
+    - Formatting: reference/tooling/formatting.md
     - Publishing: reference/tooling/publishing.md
     - Registries: reference/tooling/registries.md
     - Command reference: reference/tooling/commands.md
@@ -247,6 +248,7 @@ nav:
   - Greet by name: cookbook/greet.md
   - Sum a list: cookbook/sum-a-list.md
   - Quote generator: cookbook/quote-generator.md
+  - Download a file: cookbook/download-file.md
   - Native JSON API: cookbook/webapi.md
 - Contributors:
   - Overview: internals/README.md

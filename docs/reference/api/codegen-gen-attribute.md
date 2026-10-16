@@ -2,7 +2,7 @@
 
 **Import:** `import system.codegen;`
 
-## `public class GenAttribute`
+## `GenAttribute`
 
 One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a node); the positional readers below are what decoders are built from.
 
@@ -10,7 +10,7 @@ One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<
 public class GenAttribute
 ```
 
-## `public id: string`
+## `id`
 
 `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
 
@@ -18,19 +18,23 @@ public class GenAttribute
 public id: string
 ```
 
-## `public name: string`
+## `name`
+
+Name identifying this entry.
 
 ```dream
 public name: string
 ```
 
-## `public args: List<GenAttrArg>`
+## `args`
+
+Arguments supplied to the attribute, in declaration order.
 
 ```dream
 public args: List<GenAttrArg>
 ```
 
-## `public constructor(id: string, name: string, args: List<GenAttrArg>)`
+## `constructor`
 
 Creates the snapshot model from the supplied values.
 

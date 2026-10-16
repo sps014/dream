@@ -8,10 +8,17 @@ fun incremental_utf8(): void {
     for (let split = 0; split <= bytes.length; split = split + 1) {
         let first = Buffer.alloc<byte>(split);
         let second = Buffer.alloc<byte>(bytes.length - split);
-        for (let i = 0; i < split; i = i + 1) { first[i] = bytes[i]; }
-        for (let i = split; i < bytes.length; i = i + 1) { second[i - split] = bytes[i]; }
+        for (let i = 0; i < split; i = i + 1) {
+            first[i] = bytes[i];
+        }
+        for (let i = split; i < bytes.length; i = i + 1) {
+            second[i - split] = bytes[i];
+        }
         let decoder = Utf8Decoder();
-        let decoded = decoder.decode_chunk(first).unwrap() + decoder.decode_chunk(second).unwrap() + decoder.finish().unwrap();
+        let decoded = decoder.decode_chunk(first)
+            .unwrap() + decoder.decode_chunk(second)
+            .unwrap() + decoder.finish()
+            .unwrap();
         Assert.eq_str(decoded, "Aé😀日本語");
         Assert.is_true(decoder.decode_chunk([]).is_err());
     }
@@ -30,7 +37,9 @@ fun incremental_utf8(): void {
     Assert.eq_str(Encoding.uri_decode_component("日本語").unwrap(), "日本語");
     Assert.is_true(Utf8Decoder().decode_chunk([(byte)224, (byte)128, (byte)128]).is_err());
     Assert.is_true(Utf8Decoder().decode_chunk([(byte)237, (byte)160, (byte)128]).is_err());
-    Assert.is_true(Utf8Decoder().decode_chunk([(byte)244, (byte)144, (byte)128, (byte)128]).is_err());
+    Assert.is_true(
+        Utf8Decoder().decode_chunk([(byte)244, (byte)144, (byte)128, (byte)128]).is_err()
+    );
     Assert.is_true(Encoding.uri_decode_component("%ff").is_err());
     Assert.is_true(Encoding.uri_decode_component("%a").is_err());
 }

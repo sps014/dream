@@ -9,7 +9,7 @@ Read the [process guide](../stdlib/process.md) for launch settings, cancellation
 A borrowed child output pipe; cancellation preserves bytes already consumed by the host.
 
 ```dream
-public class ProcessReader : AsyncReader
+public class ProcessReader: AsyncReader
 ```
 
 ## `read_async`
@@ -17,7 +17,10 @@ public class ProcessReader : AsyncReader
 Reads at most max_bytes; a successful empty read for a positive size means EOF.
 
 ```dream
-public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
+public async unique fun read_async(
+    max_bytes: int,
+    token: Option<CancellationToken> = Option.None
+): Result<byte[], IoError>
 ```
 
 ## `read_line`
@@ -25,7 +28,10 @@ public async unique fun read_async(max_bytes: int, token: Option<CancellationTok
 Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.
 
 ```dream
-public unique fun read_line(max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None): Future<Result<Option<string>, IoError>>
+public unique fun read_line(
+    max_bytes: int = 1048576,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Option<string>, IoError>>
 ```
 
 ## `ProcessWriter`
@@ -33,7 +39,7 @@ public unique fun read_line(max_bytes: int = 1048576, token: Option<Cancellation
 A borrowed child input pipe implementing partial async writes.
 
 ```dream
-public class ProcessWriter : AsyncWriter
+public class ProcessWriter: AsyncWriter
 ```
 
 ## `write_async`
@@ -41,7 +47,10 @@ public class ProcessWriter : AsyncWriter
 Writes bytes with partial progress; closing stdin delivers EOF to the child.
 
 ```dream
-public async unique fun write_async(data: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>
+public async unique fun write_async(
+    data: byte[],
+    token: Option<CancellationToken> = Option.None
+): Result<int, IoError>
 ```
 
 ## `flush_async`
@@ -49,5 +58,7 @@ public async unique fun write_async(data: byte[], token: Option<CancellationToke
 Confirms cancellation and ownership; the process pipe has no guest-side output buffer.
 
 ```dream
-public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public async unique fun flush_async(
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```

@@ -6,15 +6,21 @@ Declare a provider function and inject its value with `@dep(provider)`.
 import system;
 import system.webapi;
 
-fun request_key(@header("X-Key") key: string): Result<string, HttpStatus> {
-    if key.is_empty() { return Result.Err(HttpStatus.unauthorized()); }
+fun request_key(@header("X-Key")key: string): Result<string, HttpStatus> {
+    if key.is_empty() {
+        return Result.Err(HttpStatus.unauthorized());
+    }
     return Result.Ok(key);
 }
+
 @router("")
 class Routes {
     @get("/key")
-    public static fun key(@dep(request_key) value: string): string { return value; }
+    public static fun key(@dep(request_key)value: string): string {
+        return value;
+    }
 }
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();

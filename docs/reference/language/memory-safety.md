@@ -37,18 +37,26 @@ class Counter {
     count: int;
 
     // Inferred borrow — reads only.
-    public fun value(): int { return this.count; }
+    public fun value(): int {
+        return this.count;
+    }
 
     // Inferred unique — writes this.count.
-    public fun increment(): void { this.count = this.count + 1; }
+    public fun increment(): void {
+        this.count = this.count + 1;
+    }
 }
 ```
 
 Pin explicitly when needed:
 
 ```dream
-borrow fun audit_only(): void { ... }     // compiler rejects mutations
-unique fun must_mutate(): void { ... }    // always allowed
+borrow fun audit_only(): void {
+    ...
+} // compiler rejects mutations
+unique fun must_mutate(): void {
+    ...
+} // always allowed
 ```
 
 Interface implementors must match the interface's declared mode.
@@ -61,15 +69,15 @@ Mutating the collection while a view is live is a compile error:
 ```dream
 let xs = List<int>();
 let cur = xs.iterator();
-xs.push(2);                    // ✗ error: mutates while 'cur' is live
-cur.next();                    // would read stale data
+xs.push(2); // ✗ error: mutates while 'cur' is live
+cur.next(); // would read stale data
 ```
 
 Fix: finish with the cursor first, then mutate:
 
 ```dream
 cur.next();
-xs.push(2);                    // ✓ legal — cursor no longer referenced
+xs.push(2); // ✓ legal — cursor no longer referenced
 ```
 
 This works through field chains (`this.items.iterator()`), local aliases, and cross-function calls (methods returning views of their parameters propagate the borrow).
@@ -82,17 +90,32 @@ Classes whose strong field layouts can form cycles require `@allow_cycle`. The a
 
 ```dream
 // Direct self-reference
-class Node { next: Option<Node>; }                        // ✗ cycle
+class Node {
+    next: Option<Node>;
+} // ✗ cycle
 
 // Indirect via two classes
-class A { b: B; }  class B { a: A; }                      // ✗ cycle
+class A {
+    b: B;
+}
+
+class B {
+    a: A;
+} // ✗ cycle
 
 // Via tuples
-class Data { r: (Data, int); }                            // ✗ cycle
+class Data {
+    r: (Data, int);
+} // ✗ cycle
 
 // Via reference-holding value structs
-struct Holder { d: Data; }
-class C { h: Holder; }                                    // ✗ detected
+struct Holder {
+    d: Data;
+}
+
+class C {
+    h: Holder;
+} // ✗ detected
 ```
 
 ### Interface-typed fields (conservative)
@@ -105,7 +128,7 @@ Mark one direction as non-owning:
 
 ```dream
 class Node {
-    weak next: Option<Node>;       // weak: does not keep target alive
+    weak next: Option<Node>; // weak: does not keep target alive
 }
 ```
 
@@ -136,7 +159,9 @@ public class Engine {
             }
         };
     }
-    public fun do_tick(): void { /* ... */ }
+
+    public fun do_tick(): void { /* ... */
+    }
 }
 ```
 
@@ -160,7 +185,7 @@ No compile error, no leak.
 Use `Buffer.clear(arr)` / `Buffer.truncate(arr, n)` to release elements immediately:
 
 ```dream
-Buffer.clear(this.entries);          // release all managed elements now
+Buffer.clear(this.entries); // release all managed elements now
 this.count = 0;
 ```
 
@@ -187,7 +212,7 @@ have completed. Pinned immortal singletons are excluded from the live count.
 let before = Debug.live_objects;
 churn();
 let after = Debug.live_objects;
-System.println((after - before).to_string());   // expect "0"
+System.println((after - before).to_string()); // expect "0"
 ```
 
 Release builds opt in via `DREAM_DEBUG_LEAKS=1`.

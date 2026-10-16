@@ -23,7 +23,7 @@ public static get supported(): bool
 An owned TCP byte stream supporting one simultaneous read and one simultaneous write.
 
 ```dream
-public class TcpStream : AsyncReader, AsyncWriter
+public class TcpStream: AsyncReader, AsyncWriter
 ```
 
 ## `connect`
@@ -31,7 +31,12 @@ public class TcpStream : AsyncReader, AsyncWriter
 Connects with a deadline in milliseconds; zero disables the deadline.
 
 ```dream
-public static async fun connect(host: string, port: int, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<TcpStream, IoError>
+public static async fun connect(
+    host: string,
+    port: int,
+    timeout_ms: int = 0,
+    token: Option<CancellationToken> = Option.None
+): Result<TcpStream, IoError>
 ```
 
 ## `local_host`
@@ -71,7 +76,10 @@ public get peer_port(): int
 Reads up to 16 MiB; positive-size empty success denotes peer EOF.
 
 ```dream
-public async unique fun read_async(max_bytes: int, token: Option<CancellationToken> = Option.None): Result<byte[], IoError>
+public async unique fun read_async(
+    max_bytes: int,
+    token: Option<CancellationToken> = Option.None
+): Result<byte[], IoError>
 ```
 
 ## `read_with_timeout`
@@ -79,7 +87,11 @@ public async unique fun read_async(max_bytes: int, token: Option<CancellationTok
 Reads with a per-operation deadline; a concurrent read returns EBUSY.
 
 ```dream
-public fun read_with_timeout(max_bytes: int, timeout_ms: int, token: Option<CancellationToken> = Option.None): Future<Result<byte[], IoError>>
+public fun read_with_timeout(
+    max_bytes: int,
+    timeout_ms: int,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<byte[], IoError>>
 ```
 
 ## `write_async`
@@ -87,7 +99,10 @@ public fun read_with_timeout(max_bytes: int, timeout_ms: int, token: Option<Canc
 Writes a partial byte count; cancellation preserves completed side effects.
 
 ```dream
-public async unique fun write_async(bytes: byte[], token: Option<CancellationToken> = Option.None): Result<int, IoError>
+public async unique fun write_async(
+    bytes: byte[],
+    token: Option<CancellationToken> = Option.None
+): Result<int, IoError>
 ```
 
 ## `write_all_async`
@@ -95,7 +110,10 @@ public async unique fun write_async(bytes: byte[], token: Option<CancellationTok
 Retries partial writes until every byte has been accepted; does not roll back failures.
 
 ```dream
-public async fun write_all_async(bytes: byte[], token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public async fun write_all_async(
+    bytes: byte[],
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `flush_async`
@@ -103,7 +121,9 @@ public async fun write_all_async(bytes: byte[], token: Option<CancellationToken>
 TCP writes are unbuffered by this wrapper; validates openness and cancellation.
 
 ```dream
-public async unique fun flush_async(token: Option<CancellationToken> = Option.None): Result<bool, IoError>
+public async unique fun flush_async(
+    token: Option<CancellationToken> = Option.None
+): Result<bool, IoError>
 ```
 
 ## `shutdown_write`
@@ -143,7 +163,11 @@ public class TcpListener
 Binds a listener; port zero selects an ephemeral port reported by local_port.
 
 ```dream
-public static async fun bind(host: string, port: int, token: Option<CancellationToken> = Option.None): Result<TcpListener, IoError>
+public static async fun bind(
+    host: string,
+    port: int,
+    token: Option<CancellationToken> = Option.None
+): Result<TcpListener, IoError>
 ```
 
 ## `local_host`
@@ -167,7 +191,10 @@ public get local_port(): int
 Accepts a connection with optional deadline and inherited cancellation.
 
 ```dream
-public async fun accept(timeout_ms: int = 0, token: Option<CancellationToken> = Option.None): Result<TcpStream, IoError>
+public async fun accept(
+    timeout_ms: int = 0,
+    token: Option<CancellationToken> = Option.None
+): Result<TcpStream, IoError>
 ```
 
 ## `close`

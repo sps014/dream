@@ -3,16 +3,28 @@
 module ticker;
 import system.interop;
 
-
 import system;
 
-@c extern fun ticker_new(name: string): CPtr;
-@c extern fun ticker_free(t: CPtr): void;
-@c extern fun ticker_name(t: CPtr): string;
-@c extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
-@c extern fun ticker_run(t: CPtr, ticks: int): int;
-@c extern fun ticker_label(t: CPtr, tick: int): Option<string>;
-@c extern fun checksum(data: byte[], len: usize): int;
+@c
+extern fun ticker_new(name: string): CPtr;
+
+@c
+extern fun ticker_free(t: CPtr): void;
+
+@c
+extern fun ticker_name(t: CPtr): string;
+
+@c
+extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
+
+@c
+extern fun ticker_run(t: CPtr, ticks: int): int;
+
+@c
+extern fun ticker_label(t: CPtr, tick: int): Option<string>;
+
+@c
+extern fun checksum(data: byte[], len: usize): int;
 
 @allow_cycle
 public class Ticker {

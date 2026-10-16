@@ -5,8 +5,13 @@ import system;
 
 struct c290_P {
     public a: int[];
-    public constructor(a: int[]) { this.a = a; }
-    public get n(): int { return this.a.length; }
+    public constructor(a: int[]) {
+        this.a = a;
+    }
+
+    public get n(): int {
+        return this.a.length;
+    }
 }
 
 fun c290_body(): void {

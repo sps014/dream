@@ -4,12 +4,12 @@
 
 Read the [usage guide](../stdlib/collections/stack.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class Stack<T> : Collection<T>`
+## `Stack`
 
 LIFO stack backed by `List<T>`.
 
 ```dream
-public class Stack<T> : Collection<T>
+public class Stack<T>: Collection<T>
 ```
 
 ## `constructor`

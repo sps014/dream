@@ -4,12 +4,12 @@
 
 Read the [usage guide](../stdlib/collections.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class QueueIterator<T> : Iterator<T>`
+## `QueueIterator`
 
 Cursor produced by `Queue.iterator()`.
 
 ```dream
-public class QueueIterator<T> : Iterator<T>
+public class QueueIterator<T>: Iterator<T>
 ```
 
 ## `next`

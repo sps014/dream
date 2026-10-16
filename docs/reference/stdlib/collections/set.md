@@ -9,7 +9,9 @@ import system;
 import system.collections;
 
 fun main() {
-    let names: Set<string> = {"Ada", "Sam"};
+    let names: Set<string> = {
+        "Ada", "Sam"
+    };
     names.add("Ada");
     System.println(names.length);
     System.println(names.contains("Sam"));

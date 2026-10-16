@@ -7,10 +7,10 @@
 CSV syntax, encoding, size-limit, or underlying I/O failure with byte-oriented provenance.
 
 ```dream
-public class CsvError : Error
+public class CsvError: Error
 ```
 
-## `public record: long`
+## `record`
 
 One-based logical record number associated with the error.
 
@@ -18,7 +18,7 @@ One-based logical record number associated with the error.
 public record: long
 ```
 
-## `public offset: long`
+## `offset`
 
 Zero-based absolute byte offset reached before the failure.
 

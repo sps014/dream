@@ -3,7 +3,9 @@ import system.testing;
 // `stdcall` only changes the convention on 32-bit x86 Windows; everywhere else it is the C default.
 import system;
 
-@c("c", "strlen") @c_call(CCallConv.Stdcall) extern fun c5b_strlen(s: string): usize;
+@c("c", "strlen")
+@c_call(CCallConv.Stdcall)
+extern fun c5b_strlen(s: string): usize;
 
 @test
 @timeout(180000)

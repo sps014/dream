@@ -4,7 +4,9 @@ import system.collections;
 
 fun c8d_body(): void {
     let xs = List<int>(8);
-    for (let i = 0; i < 8; i = i + 1) { xs.push(i); }
+    for (let i = 0; i < 8; i = i + 1) {
+        xs.push(i);
+    }
     let view = xs.as_span();
     xs.push_all(view.to_array());
     xs.reserve(4096).unwrap();

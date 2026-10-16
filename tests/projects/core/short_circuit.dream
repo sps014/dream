@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun c1f5_side(): bool {
     c1f5_verify_observation((99).to_string());
     return true;

@@ -2,7 +2,6 @@ import system.testing;
 // Switch-arm payload bindings and for-each elements are bound by lowering, not by a `let`, so a
 // capturing lambda must still receive them through a `CaptureCell` (here alongside a second
 // capture, so they travel in the multi-capture env array) and read them after the arm / iteration.
-
 import system;
 import system.collections;
 
@@ -32,10 +31,14 @@ fun c7c_body() {
     let fs: List<fun(): void> = List<fun(): void>();
     switch (c7c_make(true)) {
         Ok(named) => {
-            fs.push(() => {
-                counter.count = counter.count + 1;
-                c7c_verify_observation((named.name + " " + counter.count.to_string()).to_string());
-            });
+            fs.push(
+                () => {
+                    counter.count = counter.count + 1;
+                    c7c_verify_observation(
+                        (named.name + " " + counter.count.to_string()).to_string()
+                    );
+                }
+            );
         },
         Err(e) => c7c_verify_observation((e).to_string()),
     }
@@ -53,10 +56,14 @@ fun c7c_body() {
     list.push(c7c_Named("x"));
     list.push(c7c_Named("y"));
     for (let item in list) {
-        fs.push(() => {
-            counter.count = counter.count + 1;
-            c7c_verify_observation(("list " + item.name + " " + counter.count.to_string()).to_string());
-        });
+        fs.push(
+            () => {
+                counter.count = counter.count + 1;
+                c7c_verify_observation(
+                    ("list " + item.name + " " + counter.count.to_string()).to_string()
+                );
+            }
+        );
     }
     for (let f in fs) {
         f();

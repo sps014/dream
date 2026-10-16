@@ -2,7 +2,9 @@ module system.collections;
 
 // One key/value entry (value type — no heap allocation of the pair itself).
 public struct KeyValuePair<K, V> {
+    /// Key associated with this entry.
     public key: K;
+    /// Value carried by this entry.
     public value: V;
 
     // Builds a pair from `key` and `value`.

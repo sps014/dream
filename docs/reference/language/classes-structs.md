@@ -10,9 +10,9 @@ A `class` lives on the heap, and a variable holds a *reference* to it. Assigning
 class Point(x: int, y: int);
 
 let p1 = Point(3, 4);
-let p2 = p1;    // shares the same object
+let p2 = p1; // shares the same object
 p2.x = 10;
-System.println(p1.x);  // 10
+System.println(p1.x); // 10
 ```
 
 Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](memory.md).
@@ -46,9 +46,9 @@ class Point {
     }
 }
 
-let a = Point();      // (0, 0)
-let b = Point(3, 4);  // (3, 4)
-let c = Point(5);     // (5, 5)
+let a = Point(); // (0, 0)
+let b = Point(3, 4); // (3, 4)
+let c = Point(5); // (5, 5)
 ```
 
 ## Structs are value types
@@ -59,9 +59,9 @@ A `struct` is stored inline (on the stack, inside an array, or inside another ob
 struct Vec2(x: int, y: int);
 
 let v1 = Vec2(3, 4);
-let v2 = v1;    // full copy
+let v2 = v1; // full copy
 v2.x = 10;
-System.println(v1.x);  // 3 (unaffected)
+System.println(v1.x); // 3 (unaffected)
 ```
 
 Structs need no heap allocation and no automatic reference tracking, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
@@ -111,9 +111,11 @@ Separately, the type itself is **file-private by default** and needs `public` (o
 module utils.math;
 
 public class Counter {
-    count: int;                 // private: only Counter's methods
-    internal step: int;         // visible anywhere in module utils.math
-    public fun value(): int { return this.count; }
+    count: int; // private: only Counter's methods
+    internal step: int; // visible anywhere in module utils.math
+    public fun value(): int {
+        return this.count;
+    }
 }
 ```
 
@@ -126,7 +128,9 @@ Declare methods with `fun`; each receives an implicit `this`:
 ```dream
 class Counter {
     count: int;
-    public fun increment(): void { this.count = this.count + 1; }
+    public fun increment(): void {
+        this.count = this.count + 1;
+    }
 }
 ```
 
@@ -148,7 +152,9 @@ class Temperature {
 }
 
 class App {
-    public static get version(): int { return 1; }
+    public static get version(): int {
+        return 1;
+    }
 }
 ```
 
@@ -160,13 +166,23 @@ Opt into `obj[i]` / `obj[i] = v` with indexers. Opt into `for let x in obj` with
 
 ```dream
 class Grid {
-    public fun this[index: int]: int { ... }
-    public fun this[index: int] = value: int { ... }
-    public fun iterator(): GridIter { ... }
+    public fun this[index: int]: int {
+        ...
+    }
+
+    public fun this[index: int] = value: int {
+        ...
+    }
+
+    public fun iterator(): GridIter {
+        ...
+    }
 }
 
 class GridIter {
-    public fun next(): Option<int> { ... }
+    public fun next(): Option<int> {
+        ...
+    }
 }
 ```
 
@@ -177,10 +193,16 @@ A method named `get` / `set` is ordinary and does **not** enable bracket sugar. 
 Prefix a `class`, `struct`, or `enum` with `sealed` to forbid `extend` blocks from adding methods, locking the method surface to what the type declares:
 
 ```dream
-sealed class Token { public kind: int; }
+sealed class Token {
+    public kind: int;
+}
 
 // error: Cannot extend sealed type 'Token'
-extend Token { public fun describe(): string { return "token"; } }
+extend Token {
+    public fun describe(): string {
+        return "token";
+    }
+}
 ```
 
 `sealed` combines with `public` in either order (`public sealed class ...`). It only blocks user `extend` blocks — a sealed type may still implement interfaces (including their defaults) and derive `@json`.
@@ -196,7 +218,7 @@ public static class Util {
     }
 }
 
-System.println(Util.twice(3));   // 6
+System.println(Util.twice(3)); // 6
 ```
 
 A static class cannot have instance fields, instance methods, constructors, or an `implements` clause. Members must be marked `static`. It cannot be instantiated (`Util()`), used as a type (`let x: Util`, `List<Util>`), or grow instance methods via `extend`.
@@ -217,8 +239,11 @@ A type is **`shared`** (and may be captured by a [`Task`](tasks.md) body, or sto
 ```dream
 shared class Counter {
     public value: int;
-    public label: string;   // legal — string is shared
-    public constructor() { this.value = 0; this.label = ""; }
+    public label: string; // legal — string is shared
+    public constructor() {
+        this.value = 0;
+        this.label = "";
+    }
 
     public fun increment(): void {
         lock (this) {
@@ -231,18 +256,23 @@ shared class Counter {
 **The closed-graph field rule:** every field of a `shared class` must be either `shared`, or a **managed heap reference** — another ordinary class, an array (`int[]`, `Job[]`), `List<T>`, a union like `Option<Plain>` — whose whole reachable graph then joins this object's shared region. Such fields use the same `lock` discipline as every other field; there are no per-field access rules. What is rejected is anything that would smuggle an *untracked* reference in: a value struct embedding a non-shared class field, or a generic argument that could be one.
 
 ```dream
-class Plain { public x: int; }
+class Plain {
+    public x: int;
+}
 
 shared class Holder {
     // legal: managed heap references — the graph below `h` is part of the shared object
     public p: Option<Plain>;
     public xs: int[];
 
-    public constructor() { this.p = Option.None; this.xs = []; }
+    public constructor() {
+        this.p = Option.None;
+        this.xs = [];
+    }
 }
 
 struct Wrap {
-    public p: Plain;   // value struct embedding a non-shared class
+    public p: Plain; // value struct embedding a non-shared class
 }
 
 shared class Bad {

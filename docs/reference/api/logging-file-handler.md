@@ -4,12 +4,12 @@
 
 Read the [usage guide](../stdlib/logging.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class FileHandler : LogHandler`
+## `FileHandler`
 
 Appends formatted lines to a file (synchronous host write).
 
 ```dream
-public class FileHandler : LogHandler
+public class FileHandler: LogHandler
 ```
 
 ## `constructor`

@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+
 @json
 class c11a_Address {
     public city: string;
@@ -16,7 +17,11 @@ class c11a_Bag {
     public names: Option<string[]>;
     public places: Option<c11a_Address[]>;
 
-    public constructor(tags: Option<int[]>, names: Option<string[]>, places: Option<c11a_Address[]>) {
+    public constructor(
+        tags: Option<int[]>,
+        names: Option<string[]>,
+        places: Option<c11a_Address[]>
+    ) {
         this.tags = tags;
         this.names = names;
         this.places = places;
@@ -36,7 +41,10 @@ fun json_optional_arrays(): void {
 
     let b1 = c11a_Bag(Option.Some(tags), Option.Some(names), Option.Some(places));
     let t1 = Json.serialize(b1);
-    Assert.eq_str((t1).to_string(), "{\"tags\":[1,2],\"names\":[\"a\"],\"places\":[{\"city\":\"NYC\"}]}");
+    Assert.eq_str(
+        (t1).to_string(),
+        "{\"tags\":[1,2],\"names\":[\"a\"],\"places\":[{\"city\":\"NYC\"}]}"
+    );
     let r1 = Json.deserialize<c11a_Bag>(t1).unwrap_or(b1);
     Assert.eq_str(((r1.tags ?? Buffer.alloc<int>(0)).length).to_string(), "2");
     Assert.eq_str(((r1.names ?? Buffer.alloc<string>(0))[0]).to_string(), "a");

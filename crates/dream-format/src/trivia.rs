@@ -43,19 +43,42 @@ impl Printer {
     }
 
     pub(super) fn emit_trailing_trivia(&mut self, token: &SyntaxToken) {
-        for t in &token.trailing_trivia {
-            match t.kind {
+        let mut previous_line = self
+            .line_index
+            .line_of(token.position.end.saturating_sub(1));
+        for trivia in &token.trailing_trivia {
+            let start_line = self.line_index.line_of(trivia.position.start);
+            let standalone = start_line > previous_line;
+            if standalone {
+                self.layout.break_line();
+                if start_line > previous_line + 1
+                    && token.kind != TokenKind::CurlyOpenBracketToken
+                    && !self.layout.has_pending_blank()
+                {
+                    self.layout.blank_line();
+                }
+                let indent = self.plain_indent()
+                    + usize::from(token.kind == TokenKind::CurlyOpenBracketToken);
+                self.layout.write_indent(indent);
+            } else {
+                self.layout.space();
+            }
+            match trivia.kind {
                 TokenKind::LineCommentToken => {
-                    self.layout.space();
-                    self.layout.text(t.text.trim_end());
+                    self.layout.text(trivia.text.trim_end());
                     self.layout.break_line();
                 }
                 TokenKind::BlockCommentToken => {
-                    self.layout.space();
-                    self.write_block_comment(&t.text);
+                    self.write_block_comment(&trivia.text);
+                    if standalone {
+                        self.layout.break_line();
+                    }
                 }
                 _ => {}
             }
+            previous_line = self
+                .line_index
+                .line_of(trivia.position.end.saturating_sub(1));
         }
     }
 

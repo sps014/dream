@@ -19,7 +19,9 @@ fun identity<T>(value: T): T {
 System.println(identity<int>(42));
 System.println(identity<string>("hello"));
 
-fun pair_first<A, B>(a: A, b: B): A { return a; }
+fun pair_first<A, B>(a: A, b: B): A {
+    return a;
+}
 ```
 
 ### First-class functions
@@ -27,14 +29,16 @@ fun pair_first<A, B>(a: A, b: B): A { return a; }
 A function name is a value; its type is written `fun(ParamTypes): ReturnType`. Store functions in variables, pass them, and call them like any other:
 
 ```dream
-fun twice(x: int): int { return x * 2; }
+fun twice(x: int): int {
+    return x * 2;
+}
 
 fun apply(f: fun(int): int, value: int): int {
     return f(value);
 }
 
 let g: fun(int): int = twice;
-System.println(g(5));            // 10
+System.println(g(5)); // 10
 System.println(apply(twice, 8)); // 16
 ```
 
@@ -45,20 +49,20 @@ A [generic function used as a first-class value](generics.md#generic-functions-a
 An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional when the lambda is used in a `fun(...)`-typed context (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`): omitted parameter types and the return type are taken from that context. When every parameter is explicitly annotated, the return type can instead be inferred from the body — so `let f = (x: int) => x * 2;` works without a surrounding `fun(...)` annotation. A lambda with any untyped parameter and no `fun(...)` context is rejected.
 
 ```dream
-let add: fun(int, int): int = (x, y) => x + y;   // x, y inferred as int from the `let` annotation
-System.println(add(2, 3));   // 5
+let add: fun(int, int): int = (x, y) => x + y; // x, y inferred as int from the `let` annotation
+System.println(add(2, 3)); // 5
 
 let square: fun(int): int = (x) => {
     let r = x * x;
     return r;
 };
-System.println(square(5));   // 25
+System.println(square(5)); // 25
 
 let nums: List<int> = List<int>();
 nums.push(3);
 nums.push(1);
 nums.push(2);
-nums.sort_by((a, b) => a - b);   // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
+nums.sort_by((a, b) => a - b); // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
 A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with an error asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which work for each concrete type you use — from a `fun(...)` context or by binding a generic item and using it at each site.
@@ -73,8 +77,8 @@ async fun main(): void {
         Time.sleep(1).await;
         return x * 2;
     };
-    let n = twice(21).await;   // twice(21) : Future<int>
-    System.println(n);                // 42
+    let n = twice(21).await; // twice(21) : Future<int>
+    System.println(n); // 42
 }
 ```
 
@@ -86,24 +90,24 @@ A lambda's body may also reference variables from an enclosing function; this is
 
 ```dream
 fun make_adder(n: int): fun(int): int {
-    return (x) => x + n;   // `x` inferred from the return type; captures the parameter `n`
+    return (x) => x + n; // `x` inferred from the return type; captures the parameter `n`
 }
 
 let add5: fun(int): int = make_adder(5);
-System.println(add5(10));   // 15
-System.println(add5(20));   // 25
+System.println(add5(10)); // 15
+System.println(add5(20)); // 25
 
 fun make_counter(): fun(): int {
     let count: int = 0;
     return () => {
-        count = count + 1;   // mutates the enclosing `let` — visible next call, and to `count`
-        return count;        // itself if it's still in scope when this returns
+        count = count + 1; // mutates the enclosing `let` — visible next call, and to `count`
+        return count; // itself if it's still in scope when this returns
     };
 }
 
 let inc: fun(): int = make_counter();
-System.println(inc());   // 1
-System.println(inc());   // 2
+System.println(inc()); // 1
+System.println(inc()); // 2
 ```
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
@@ -119,8 +123,8 @@ Capturing more than one variable, and reaching past an immediate parent lambda t
 ```dream
 let a: int = 1;
 let b: int = 2;
-let f: fun(): int = () => a + b;   // captures both `a` and `b`
-System.println(f());   // 3
+let f: fun(): int = () => a + b; // captures both `a` and `b`
+System.println(f()); // 3
 
 fun make(a: int, b: int): fun(): fun(): int {
     let c: int = 100;
@@ -136,8 +140,8 @@ fun make(a: int, b: int): fun(): fun(): int {
 
 let l1: fun(): fun(): int = make(1, 2);
 let l2: fun(): int = l1();
-System.println(l2());   // 104
-System.println(l2());   // 105
+System.println(l2()); // 104
+System.println(l2()); // 105
 ```
 
 ### Overloading

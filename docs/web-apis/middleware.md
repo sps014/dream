@@ -11,13 +11,28 @@ async fun request_id(ctx: RequestContext, next: Next): HttpOutgoing {
     let response = next.call().await;
     return response.set_header("X-Request-ID", ctx.get("request_id").unwrap_or(""));
 }
+
 @router("")
-class Routes { @get("/hello") public static fun hello(): string { return "hello"; } }
+class Routes {
+    @get("/hello")
+    public static fun hello(): string {
+        return "hello";
+    }
+}
+
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();
     app.use(Middleware(request_id)).unwrap();
-    app.use(CORS(CorsOptions(allow_origins: "https://example.com", allow_methods: "GET,POST", allow_headers: "Authorization,Content-Type"))).unwrap();
+    app.use(
+        CORS(
+            CorsOptions(
+                allow_origins: "https://example.com",
+                allow_methods: "GET,POST",
+                allow_headers: "Authorization,Content-Type"
+            )
+        )
+    ).unwrap();
     app.run("127.0.0.1", 8000).await.unwrap();
 }
 ```

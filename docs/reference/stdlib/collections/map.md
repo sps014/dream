@@ -9,7 +9,9 @@ import system;
 import system.collections;
 
 fun main() {
-    let scores: Map<string, int> = {"Ada": 95};
+    let scores: Map<string, int> = {
+        "Ada": 95
+    };
     scores.set("Sam", 80);
     switch (scores.get("Lee")) {
         Some(score) => System.println(score),

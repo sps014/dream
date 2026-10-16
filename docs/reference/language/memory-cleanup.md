@@ -14,8 +14,8 @@ Sometimes that “right then” is a bad moment: you drop last year’s UI tree 
 
 ```dream
 defer {
-    old_root = new_tree();   // old tree is no longer needed
-    paint(new_tree);         // do this before a huge cleanup hitch
+    old_root = new_tree(); // old tree is no longer needed
+    paint(new_tree); // do this before a huge cleanup hitch
 } // `del` / free of the old tree runs here
 ```
 
@@ -29,15 +29,24 @@ Braces are required.
 `await` is not allowed inside `defer`.
 
 ```dream
+import system;
+
 class Tracked {
     public id: int;
-    del() { System.println(this.id); }
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.println(this.id);
+    }
 }
 
 fun main() {
     defer {
         let x = Tracked(1);
-        System.println(x.id);  // last use of `x` — `del` waits
+        System.println(x.id); // last use of `x` — `del` waits
         System.println(999);
     } // now prints 1
 }
@@ -49,6 +58,6 @@ fun main() {
 - `defer(q) { … }` — `q` is a `uint` (plain `256` is fine). That many objects are cleaned at this `}`. `defer(0)` means “don’t clean on this `}`” — useful around a game loop so inner `defer(256)` slices can spread cleanup across frames.
 - Nested `defer` share one cleanup list. While you are still inside some `defer`, leftover work can wait for the next one, but the list is capped (16 384 objects) so memory cannot grow without bound.
 - When you compile for the browser or Node, memory is freed as soon as the last use ends. `dream run` may wait until the end of the block.
-- On native, a last-ref **string** that the compiler releases is queued like other last-refs (the free waits for `}`). Helpers such as in-place concat still free string temps immediately.
+- On native, releasing the last reference to a string can also defer its cleanup until `}`. Temporary strings may be reclaimed earlier.
 
-A timing sample (UI tree swap + particles): `dream --release run sample/defer_destroy_bench.dream`.
+Use a small cleanup budget around frame-by-frame work only after measuring pauses in your application. Keep the deferred region short so unused objects do not accumulate.

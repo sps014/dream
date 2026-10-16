@@ -7,23 +7,50 @@ import system;
 import system.webapi;
 import system.webapi.auth;
 
-class Accounts : AuthAccounts {
+class Accounts: AuthAccounts {
     hash: string;
-    public constructor(hash: string) { this.hash = hash; }
+    public constructor(hash: string) {
+        this.hash = hash;
+    }
+
     public async unique fun find_login(login: string): Result<AuthAccount, AuthError> {
-        if login != "demo" { return Result.Err(AuthError("EAUTH", "unknown account")); }
+        if login != "demo" {
+            return Result.Err(AuthError("EAUTH", "unknown account"));
+        }
         return Result.Ok(AuthAccount("demo-user", this.hash, "read"));
     }
-    public async unique fun link_identity(issuer: string, subject: string, email: string, email_verified: bool): Result<AuthAccount, AuthError> {
-        return Result.Err(AuthError("EAUTH", "external account linking requires application policy"));
+
+    public async unique fun link_identity(
+        issuer: string,
+        subject: string,
+        email: string,
+        email_verified: bool
+    ): Result<AuthAccount, AuthError> {
+        return Result.Err(
+            AuthError("EAUTH", "external account linking requires application policy")
+        );
     }
 }
 
 async fun main(): void {
     let key = System.env("API_JWT_KEY").unwrap();
-    let auth = AuthService(JwtOptions("https://api.example.com", "example-api", key, key, "HS256"), Accounts(""), MemoryAuthStore());
-    auth.add_provider(OidcOptions("company", System.env("OIDC_ISSUER").unwrap(), System.env("OIDC_CLIENT_ID").unwrap(), "https://api.example.com/auth/oidc/company/callback", System.env_or("OIDC_CLIENT_SECRET", ""))).unwrap();
-    let app = WebApp(); app.include_router(auth.router().unwrap()).unwrap(); app.use(auth.middleware()).unwrap();
+    let auth = AuthService(
+        JwtOptions("https://api.example.com", "example-api", key, key, "HS256"),
+        Accounts(""),
+        MemoryAuthStore()
+    );
+    auth.add_provider(
+        OidcOptions(
+            "company",
+            System.env("OIDC_ISSUER").unwrap(),
+            System.env("OIDC_CLIENT_ID").unwrap(),
+            "https://api.example.com/auth/oidc/company/callback",
+            System.env_or("OIDC_CLIENT_SECRET", "")
+        )
+    ).unwrap();
+    let app = WebApp();
+    app.include_router(auth.router().unwrap()).unwrap();
+    app.use(auth.middleware()).unwrap();
     app.run("127.0.0.1", 8000).await.unwrap();
 }
 ```

@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun cdb_fib(n: int): int {
     if n <= 1 {
         return n;
@@ -12,8 +13,7 @@ fun cdb_add3(a: int, b: int, c: int): int {
 }
 
 fun cdb_body(): void {
-
-    let a= cdb_fib;
+    let a = cdb_fib;
     a(5);
     cdb_verify_observation((cdb_fib(5)).to_string());
     cdb_verify_observation((cdb_fib(7)).to_string());

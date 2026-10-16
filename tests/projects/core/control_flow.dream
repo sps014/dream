@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+
 fun ca2_body(): void {
     let x = 10;
 
@@ -11,7 +12,7 @@ fun ca2_body(): void {
 
     if x < 5 {
         ca2_verify_observation((0).to_string());
-    } else if (x == 10 ) {
+    } else if (x == 10) {
         ca2_verify_observation((2).to_string());
     } else {
         ca2_verify_observation((0).to_string());
@@ -23,7 +24,7 @@ fun ca2_body(): void {
         i = i + 1;
     }
 
-    for (let j = 0; j < 3; j = j + 1 ) {
+    for (let j = 0; j < 3; j = j + 1) {
         if j == 1 {
             continue;
         }

@@ -16,7 +16,8 @@ if score >= 90 {
 }
 
 if ok return;
-if flag System.print("yes\n"); else System.print("no\n");
+if flag System.print("yes\n");
+else System.print("no\n");
 ```
 
 For selecting a *value*, the ternary `cond ? a : b` is often cleaner — see [Operators](operators.md).
@@ -73,7 +74,7 @@ for (let value in xs) {
 
 ```dream
 for (let c in "abc") {
-    System.println(c);   // 'a', 'b', 'c'
+    System.println(c); // 'a', 'b', 'c'
 }
 
 fun sum(xs: Collection<int>): int {
@@ -94,7 +95,7 @@ Lazy sequences can be written with [`yield`](iterators.md). Use `await for (let 
 ```dream
 for (let i = 0; i < 10; i = i + 1) {
     if i % 2 == 0 {
-        continue;   // skip even numbers
+        continue; // skip even numbers
     }
     System.println(i);
 }
@@ -108,7 +109,7 @@ Integer arithmetic wraps by default. `checked { ... }` runs its statements with 
 ```dream
 fun buffer_bytes(count: int, size: int): int {
     checked {
-        return count * size;   // panics instead of returning a wrapped size
+        return count * size; // panics instead of returning a wrapped size
     }
 }
 ```
@@ -128,7 +129,8 @@ A label switch has **no fallthrough** — each `case` runs only its own block. A
 
 ```dream
 switch (code) {
-    case 1, 2:
+    case 1,
+    2:
         System.print("low\n");
     case 3:
         System.print("three\n");
@@ -140,12 +142,19 @@ switch (code) {
 Labels must be constants (integers, strings, booleans, or enum members) that match the subject's type. Duplicate labels are an error. Enums work naturally:
 
 ```dream
-enum Color { Red, Green, Blue }
+enum Color {
+    Red,
+    Green,
+    Blue
+}
 
 switch (c) {
-    case Color.Red:   System.print("red\n");
-    case Color.Green: System.print("green\n");
-    default:          System.print("other\n");
+    case Color.Red:
+        System.print("red\n");
+    case Color.Green:
+        System.print("green\n");
+    default:
+        System.print("other\n");
 }
 ```
 
@@ -168,10 +177,10 @@ Give a loop a label so `break`/`continue` can target an outer loop from inside a
 outer: for (let i = 0; i < 3; i = i + 1) {
     for (let j = 0; j < 3; j = j + 1) {
         if j == 1 {
-            continue outer;   // next iteration of the outer loop
+            continue outer; // next iteration of the outer loop
         }
         if i == 2 {
-            break outer;      // exit both loops
+            break outer; // exit both loops
         }
         System.println(i * 10 + j);
     }

@@ -1,7 +1,6 @@
 import system.testing;
 // A lambda that calls a captured `fun` value: the callee is read through its capture cell,
 // including `void` callees used as statements and expression bodies.
-
 import system;
 import system.collections;
 
@@ -23,7 +22,9 @@ fun c7a_wrap_value(get: fun(): int): fun(): int {
 fun c7a_body(): void {
     let fired = List<fun(string): void>();
     fired.push(c7a_wrap_bool((on: bool) => c7a_verify_observation(("flag " + on).to_string())));
-    fired.push(c7a_wrap_pair((a: int, b: int) => c7a_verify_observation(("pair " + (a + b)).to_string())));
+    fired.push(
+        c7a_wrap_pair((a: int, b: int) => c7a_verify_observation(("pair " + (a + b)).to_string()))
+    );
     fired.get(0)("1");
     fired.get(0)("0");
     fired.get(1)("20\n22");

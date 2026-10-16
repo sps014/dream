@@ -2,26 +2,34 @@ module system.text;
 
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
 // PCRE2-compatible engine. Invalid patterns compile to a dead engine that never matches.
-
 @intrinsic(Intrinsic.RegexCompile)
 static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usize;
+
 @intrinsic(Intrinsic.RegexFree)
 static extern fun regex_free(h: usize): void;
+
 @intrinsic(Intrinsic.RegexFind)
 static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
+
 @intrinsic(Intrinsic.RegexTest)
 static extern fun regex_test(h: usize, borrow input: string): int;
+
 @intrinsic(Intrinsic.RegexFindAll)
 static extern fun regex_find_all(h: usize, borrow input: string): int[];
+
 @intrinsic(Intrinsic.RegexGroupCount)
 static extern fun regex_group_count(h: usize): int;
+
 @intrinsic(Intrinsic.RegexNameCount)
 static extern fun regex_name_count(h: usize): int;
+
 @intrinsic(Intrinsic.RegexNameAt)
 static extern fun regex_name_at(h: usize, i: int): string;
+
 @intrinsic(Intrinsic.RegexNameNumber)
 static extern fun regex_name_number(h: usize, i: int): int;
 
+/// A compiled regular expression. An invalid pattern never matches.
 public class Regex {
     engine: usize;
     global: bool;
@@ -29,6 +37,7 @@ public class Regex {
     group_names: string[];
     group_name_numbers: int[];
 
+    /// Compiles `pattern` with optional matching flags. Invalid patterns never match.
     public constructor(pattern: string, flags: RegexFlags = 0) {
         this.global = flags.has(RegexFlags.Global);
         this.engine = regex_compile(pattern, flags);
@@ -57,10 +66,13 @@ public class Regex {
         return Option.Some(RegexMatch(g, this.ngroup));
     }
 
+    /// Returns whether the regular expression matches anywhere in `input`.
     public fun test(borrow input: string): bool {
         return regex_test(this.engine, input) != 0;
     }
 
+    /// Replaces matching text. Replaces every match with `Global`; otherwise replaces only the
+    /// first.
     public fun replace(input: string, replacement: string): string {
         let n = input.length;
         let sb = StringBuilder();
@@ -102,12 +114,17 @@ public class Regex {
         if pos < n {
             sb.append_utf8_slice(input, pos * 2, (n - pos) * 2);
         } else if (pos == n) {
-            // keep tail empty
+        // keep tail empty
         }
         return sb.build();
     }
 
-    fun write_replacement(sb: StringBuilder, replacement: string, input: string, m: RegexMatch): void {
+    fun write_replacement(
+        sb: StringBuilder,
+        replacement: string,
+        input: string,
+        m: RegexMatch
+    ): void {
         let i = 0;
         let rn = replacement.length;
         while i < rn {
@@ -177,6 +194,8 @@ public class Regex {
         return "";
     }
 
+    /// Returns complete matches with `Global`, or the first match followed by its capture
+    /// groups otherwise. Returns an empty array when unmatched.
     public fun match(input: string): string[] {
         if this.global {
             let offsets = regex_find_all(this.engine, input);
@@ -195,6 +214,8 @@ public class Regex {
         };
     }
 
+    /// Returns the first match and its named and numbered capture groups, or `None` when
+    /// unmatched.
     public fun match_info(input: string): Option<RegexMatchInfo> {
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {

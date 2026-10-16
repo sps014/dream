@@ -4,7 +4,9 @@
 
 See [model validation](../../web-apis/validation.md) for strict decoding, constraints, defaults, and callbacks.
 
-## `public fun validation_derive`
+## `validation_derive`
+
+Generates validation and schema support for annotated declarations.
 
 ```dream
 public fun validation_derive(ctx: GenContext): void

@@ -4,7 +4,7 @@
 
 Read the [usage guide](../stdlib/logging.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `enum LogLevel`
+## `LogLevel`
 
 Severity levels ordered from most to least verbose.
 
@@ -14,11 +14,15 @@ public enum LogLevel
 
 ## `Trace`
 
+Very detailed diagnostic messages.
+
 ```dream
 Trace
 ```
 
 ## `Debug`
+
+Diagnostic messages useful during development.
 
 ```dream
 Debug
@@ -26,17 +30,23 @@ Debug
 
 ## `Info`
 
+Messages describing normal operation.
+
 ```dream
 Info
 ```
 
 ## `Warn`
 
+Warnings about recoverable problems.
+
 ```dream
 Warn
 ```
 
 ## `Error`
+
+Messages reporting failures.
 
 ```dream
 Error

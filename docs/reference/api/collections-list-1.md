@@ -4,10 +4,10 @@
 
 ## `List`
 
-Growable random-access sequence backed by a resizable buffer.  Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
+A growable, ordered sequence with zero-based indexed access. Adding elements may increase its capacity.
 
 ```dream
-public class List<T> : IndexedCollection<T>
+public class List<T>: IndexedCollection<T>
 ```
 
 ## `constructor`
@@ -68,7 +68,7 @@ public fun push(value: T): void
 
 ## `push_all`
 
-Appends every element of `items`, ensuring capacity once then copying via `Span`.
+Appends every element of `items` in order.
 
 ```dream
 public fun push_all(borrow items: T[]): void
@@ -76,7 +76,7 @@ public fun push_all(borrow items: T[]): void
 
 ## `from_array`
 
-Builds a list containing exactly the elements of `items`, in order. The `[e1, e2, ...]` list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
+Creates a list containing the elements of `items` in order. List literals such as `[1, 2, 3]` create lists in the same way.
 
 ```dream
 public static fun from_array(borrow items: T[]): List<T>
@@ -84,7 +84,7 @@ public static fun from_array(borrow items: T[]): List<T>
 
 ## `take_array`
 
-Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when capacity is larger than `count` so the result's `.length` is the live element count.
+Returns the elements as an array and leaves the list empty. The returned array has exactly the previous list length.
 
 ```dream
 public fun take_array(): T[]
@@ -107,6 +107,8 @@ public fun this[index: int] = value: T
 ```
 
 ## `set`
+
+Replaces the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun set(index: int, value: T): void
@@ -186,7 +188,7 @@ public fun join(sep: string): string
 
 ## `clear`
 
-Empties the list while keeping the backing buffer. Live slots are overwritten with a zero value so reference fields inside value-struct elements (and class elements) release immediately; capacity is unchanged (no capacity-sized `Buffer.alloc`).
+Removes all elements and releases the references they held. Capacity is unchanged.
 
 ```dream
 public fun clear(): void

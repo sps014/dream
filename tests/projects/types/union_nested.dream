@@ -4,6 +4,7 @@ import system.testing;
 
 // `Option<T>` comes from the standard library prelude.
 import system;
+
 enum c27a_Pair {
     Both(left: Option<int>, right: Option<int>),
     Neither,
@@ -13,11 +14,11 @@ enum c27a_Pair {
 // exhaustiveness (v1 does not enumerate inner variants); `Neither` is covered explicitly.
 fun c27a_classify(p: c27a_Pair): string {
     return switch (p) {
-        Both(Some(0), None)    => "zero-left, empty-right",
+        Both(Some(0), None) => "zero-left, empty-right",
         Both(Some(x), Some(y)) => "two values",
-        Both(None, None)       => "both empty",
-        Neither                => "neither",
-        _                      => "other",
+        Both(None, None) => "both empty",
+        Neither => "neither",
+        _ => "other",
     };
 }
 
@@ -50,5 +51,8 @@ fun c27a_verify_observation(borrow value: string): void {
 fun union_nested(): void {
     c27a_cursor = 0;
     c27a_body();
-    Assert.eq(c27a_cursor, ("zero-left, empty-right\ntwo values\nboth empty\nneither\nother\n").length);
+    Assert.eq(
+        c27a_cursor,
+        ("zero-left, empty-right\ntwo values\nboth empty\nneither\nother\n").length
+    );
 }

@@ -2,10 +2,15 @@ module system.webapi;
 
 /// Headers and routing fields for one owned inbound HTTP request.
 public class HttpIncoming {
+    /// Identifier of the active HTTP request.
     public req_id: int;
+    /// HTTP request method.
     public method: string;
+    /// Request or resource path.
     public path: string;
+    /// Query string supplied with the request.
     public query: string;
+    /// HTTP headers associated with this message.
     public headers: HttpHeaders;
     multipart: Option<JsonValue>;
     internal cancellation_token: Option<CancellationToken>;
@@ -14,46 +19,100 @@ public class HttpIncoming {
         this.method = metadata.get_or("method", JsonValue.none()).as_string().unwrap_or("");
         this.path = metadata.get_or("path", JsonValue.none()).as_string().unwrap_or("");
         this.query = metadata.get_or("query", JsonValue.none()).as_string().unwrap_or("");
-        this.headers = HttpHeaders(); this.multipart = Option.None; this.cancellation_token = Option.None;
-        for (let pair in metadata.get_or("headers", JsonValue.none()).as_array().unwrap_or(List<JsonValue>())) {
+        this.headers = HttpHeaders();
+        this.multipart = Option.None;
+        this.cancellation_token = Option.None;
+        for (let pair in metadata.get_or("headers", JsonValue.none())
+            .as_array()
+            .unwrap_or(List<JsonValue>())) {
             let values = pair.as_array().unwrap_or(List<JsonValue>());
-            if values.length == 2 { this.headers.append(values.get(0).as_string().unwrap_or(""), values.get(1).as_string().unwrap_or("")); }
+            if values.length == 2 {
+                this.headers.append(
+                    values.get(0).as_string().unwrap_or(""),
+                    values.get(1).as_string().unwrap_or("")
+                );
+            }
         }
     }
-    @native @runtime("httpServerReleaseRequest")
+
+    @native
+    @runtime("httpServerReleaseRequest")
     static extern fun release_host(id: int): void;
-    del() { if this.req_id > 0 { HttpIncoming.release_host(this.req_id); } }
+    del() {
+        if this.req_id > 0 {
+            HttpIncoming.release_host(this.req_id);
+        }
+    }
+
     /// Returns the first decoded query value with this name.
     public fun query_param(name: string): Option<string> {
         let url = Url.parse("http://localhost/?" + this.query);
-        if url.is_err() { return Option.None; }
+        if url.is_err() {
+            return Option.None;
+        }
         return url.unwrap().query.get(name);
     }
+
     /// Returns the first matching request header.
-    public fun header(name: string): Option<string> { return this.headers.get(name); }
+    public fun header(name: string): Option<string> {
+        return this.headers.get(name);
+    }
+
     /// Returns a named cookie, without decoding its value.
-    public fun cookie(name: string): Option<string> { return WebRouting.cookie_value(this.headers.get("Cookie").unwrap_or(""), name); }
+    public fun cookie(name: string): Option<string> {
+        return WebRouting.cookie_value(this.headers.get("Cookie").unwrap_or(""), name);
+    }
+
     fun resolve_token(token: Option<CancellationToken>): Option<CancellationToken> {
         let effective = CancellationToken.resolve(token);
-        if effective.is_some() { return effective; }
+        if effective.is_some() {
+            return effective;
+        }
         return this.cancellation_token;
     }
+
     /// Reads the bounded request body as bytes, with inherited cancellation.
     @native
-    public fun read_body_bytes(token: Option<CancellationToken> = Option.None): Future<Result<byte[], IoError>> { return HttpIncoming.read_owned(this, this.resolve_token(token)); }
-    static async fun read_owned(incoming: HttpIncoming, token: Option<CancellationToken>): Result<byte[], IoError> {
-        return WebOperation.submit(WebOperation.request("read_body", incoming.req_id), [], token).await;
+    public fun read_body_bytes(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<byte[], IoError>> {
+        return HttpIncoming.read_owned(this, this.resolve_token(token));
     }
+
+    static async fun read_owned(
+        incoming: HttpIncoming,
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
+        return WebOperation.submit(WebOperation.request("read_body", incoming.req_id), [], token)
+            .await;
+    }
+
     /// Reads the bounded request body as UTF-8 text.
     @native
-    public async fun read_body_text(token: Option<CancellationToken> = Option.None): Result<string, IoError> {
-        let lifetime = [this]; return Result.Ok(Encoding.utf8_decode(lifetime[0].read_body_bytes(token).await?));
+    public async fun read_body_text(
+        token: Option<CancellationToken> = Option.None
+    ): Result<string, IoError> {
+        let lifetime = [this];
+        return Result.Ok(Encoding.utf8_decode(lifetime[0].read_body_bytes(token).await?));
     }
-    internal fun multipart_parts(token: Option<CancellationToken>): Future<Result<JsonValue, IoError>> { return HttpIncoming.multipart_owned(this, this.resolve_token(token)); }
-    static async fun multipart_owned(incoming: HttpIncoming, token: Option<CancellationToken>): Result<JsonValue, IoError> {
+
+    internal fun multipart_parts(
+        token: Option<CancellationToken>
+    ): Future<Result<JsonValue, IoError>> {
+        return HttpIncoming.multipart_owned(this, this.resolve_token(token));
+    }
+
+    static async fun multipart_owned(
+        incoming: HttpIncoming,
+        token: Option<CancellationToken>
+    ): Result<JsonValue, IoError> {
         let lifetime = [incoming];
         if lifetime[0].multipart.is_none() {
-            let bytes = WebOperation.submit(WebOperation.request("multipart", lifetime[0].req_id), [], token).await?;
+            let bytes = WebOperation.submit(
+                WebOperation.request("multipart", lifetime[0].req_id),
+                [],
+                token
+            ).await?;
             lifetime[0].multipart = Option.Some(WebOperation.parse(bytes)?);
         }
         return Result.Ok(lifetime[0].multipart.unwrap());

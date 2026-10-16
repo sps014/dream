@@ -8,6 +8,7 @@ import system.json;
 // The `@json` derive: `to_json` / `write_json` / `from_json` for every `@json` type, plus the
 // `Json` collection adapters that `Json.serialize/deserialize/from_value` calls on collection
 // types need. One generated file, `json.dream`.
+/// Adds JSON serialization and deserialization methods for types annotated with `@json`.
 @generator
 @incremental
 @on_attribute(JsonAttribute)
@@ -26,7 +27,8 @@ public fun json_derive(ctx: GenContext): void {
         if !d.has<JsonAttribute>() {
             continue;
         }
-        json_names.push(d.name); declarations.push(d);
+        json_names.push(d.name);
+        declarations.push(d);
         if d.kind == DeclKind.Union {
             let variants = List<JsonVariantSpec>();
             for (let v in d.variants) {
@@ -34,12 +36,18 @@ public fun json_derive(ctx: GenContext): void {
             }
             types.push(JsonTypeSpec.union_type(d.name, d.generics, variants));
         } else if d.kind == DeclKind.Class || d.kind == DeclKind.Struct {
-            let spec = JsonTypeSpec.class_type(d.name, d.generics, json_fields(d.fields, d.generics));
+            let spec = JsonTypeSpec.class_type(
+                d.name,
+                d.generics,
+                json_fields(d.fields, d.generics)
+            );
             let how = construction(d);
             if how == Construction.Impossible {
                 ctx.error_at(
                     d.id,
-                    "@json type '" + d.name + "' needs a constructor taking every field in declaration order, or a zero-argument constructor"
+                    "@json type '"
+                        + d.name
+                        + "' needs a constructor taking every field in declaration order, or a zero-argument constructor"
                 );
                 return;
             }
@@ -62,13 +70,21 @@ public fun json_derive(ctx: GenContext): void {
     let i = 0;
     while i < types.length {
         let result = JsonGenerator.members(types.get(i), json_names, jsonable);
-        if !result.ok { ctx.error_at(error_target(ctx, result), first_line(result.error)); return; }
-        ctx.emit_extend(declarations.get(i), result.source); i++;
+        if !result.ok {
+            ctx.error_at(error_target(ctx, result), first_line(result.error));
+            return;
+        }
+        ctx.emit_extend(declarations.get(i), result.source);
+        i++;
     }
     let collections_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
-    if !collections_result.ok { ctx.error(first_line(collections_result.error)); return; }
-    if !collections_result.source.is_empty() { ctx.emit_file("json.dream", collections_result.source); }
-
+    if !collections_result.ok {
+        ctx.error(first_line(collections_result.error));
+        return;
+    }
+    if !collections_result.source.is_empty() {
+        ctx.emit_file("json.dream", collections_result.source);
+    }
 }
 
 enum Construction {
@@ -131,7 +147,9 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
         let map_value_inner = "";
         let map_ctor = "";
         let kind = ty.collection();
-        if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap) && ty.arg(0).is_primitive(Primitive.String) {
+        if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap)
+            && ty.arg(0)
+            .is_primitive(Primitive.String) {
             map_value_inner = ty.arg(1).source_name();
             map_ctor = ty.name;
         }
@@ -147,18 +165,20 @@ fun json_fields(borrow fields: List<GenField>, borrow generics: List<string>): L
                 is_type_param = true;
             }
         }
-        out.push(JsonFieldSpec(
-            f.name,
-            ty.source_name(),
-            f.has<JsonIgnoreAttribute>(),
-            property,
-            option_inner,
-            is_type_param,
-            map_value_inner,
-            map_ctor,
-            seq_elem_inner,
-            seq_kind
-        ));
+        out.push(
+            JsonFieldSpec(
+                f.name,
+                ty.source_name(),
+                f.has<JsonIgnoreAttribute>(),
+                property,
+                option_inner,
+                is_type_param,
+                map_value_inner,
+                map_ctor,
+                seq_elem_inner,
+                seq_kind
+            )
+        );
     }
     return out;
 }
@@ -201,7 +221,12 @@ fun error_target(ctx: GenContext, borrow failure: JsonGenOutput): string {
 
 fun json_elem_supported(borrow name: string, borrow jsonable: List<string>): bool {
     let p = primitive_named(name);
-    if p == Primitive.Int || p == Primitive.Long || p == Primitive.String || p == Primitive.Bool || p == Primitive.Double || p == Primitive.Float {
+    if p
+        == Primitive.Int
+        || p
+        == Primitive.Long
+        || p
+        == Primitive.String || p == Primitive.Bool || p == Primitive.Double || p == Primitive.Float {
         return true;
     }
     if name == nameof(JsonValue) {
@@ -217,27 +242,50 @@ fun json_elem_supported(borrow name: string, borrow jsonable: List<string>): boo
 
 // Adapter order: array, list, map, set, sorted map.
 fun kind_rank(kind: CollectionKind): int {
-    if kind == CollectionKind.Array { return 0; }
-    if kind == CollectionKind.List { return 1; }
-    if kind == CollectionKind.Map { return 2; }
-    if kind == CollectionKind.Set { return 3; }
+    if kind == CollectionKind.Array {
+        return 0;
+    }
+    if kind == CollectionKind.List {
+        return 1;
+    }
+    if kind == CollectionKind.Map {
+        return 2;
+    }
+    if kind == CollectionKind.Set {
+        return 3;
+    }
     return 4;
 }
 
 // Orders specs by (kind, elem, value, self, suffix) so the generated adapters are stable.
 fun spec_compare(borrow a: JsonCollectionSpec, borrow b: JsonCollectionSpec): int {
     let c = kind_rank(a.kind) - kind_rank(b.kind);
-    if c != 0 { return c; }
+    if c != 0 {
+        return c;
+    }
     c = a.elem_type.compare(b.elem_type);
-    if c != 0 { return c; }
+    if c != 0 {
+        return c;
+    }
     c = a.value_type.compare(b.value_type);
-    if c != 0 { return c; }
+    if c != 0 {
+        return c;
+    }
     c = a.self_ty.compare(b.self_ty);
-    if c != 0 { return c; }
+    if c != 0 {
+        return c;
+    }
     return a.fn_suffix.compare(b.fn_suffix);
 }
 
-fun insert_spec(kind: CollectionKind, elem_type: string, value_type: string, borrow ty: GenTypeRef, borrow jsonable: List<string>, out: List<JsonCollectionSpec>): void {
+fun insert_spec(
+    kind: CollectionKind,
+    elem_type: string,
+    value_type: string,
+    borrow ty: GenTypeRef,
+    borrow jsonable: List<string>,
+    out: List<JsonCollectionSpec>
+): void {
     let checked = elem_type;
     if kind == CollectionKind.Map || kind == CollectionKind.SortedMap {
         checked = value_type;
@@ -245,7 +293,13 @@ fun insert_spec(kind: CollectionKind, elem_type: string, value_type: string, bor
     if !json_elem_supported(checked, jsonable) {
         return;
     }
-    let spec = JsonCollectionSpec(kind, elem_type, value_type, ty.display, ty.mangled.replace("[]", "__arr"));
+    let spec = JsonCollectionSpec(
+        kind,
+        elem_type,
+        value_type,
+        ty.display,
+        ty.mangled.replace("[]", "__arr")
+    );
     let i = 0;
     while i < out.length {
         let c = spec_compare(spec, out.get(i));
@@ -261,14 +315,20 @@ fun insert_spec(kind: CollectionKind, elem_type: string, value_type: string, bor
     out.push(spec);
 }
 
-fun collect_collections(borrow ty: GenTypeRef, borrow jsonable: List<string>, out: List<JsonCollectionSpec>): void {
+fun collect_collections(
+    borrow ty: GenTypeRef,
+    borrow jsonable: List<string>,
+    out: List<JsonCollectionSpec>
+): void {
     let kind = ty.collection();
     if kind == CollectionKind.Array || kind == CollectionKind.List || kind == CollectionKind.Set {
         insert_spec(kind, ty.arg(0).mangled, "", ty, jsonable, out);
         collect_collections(ty.arg(0), jsonable, out);
         return;
     }
-    if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap) && ty.arg(0).is_primitive(Primitive.String) {
+    if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap)
+        && ty.arg(0)
+        .is_primitive(Primitive.String) {
         insert_spec(kind, "", ty.arg(1).mangled, ty, jsonable, out);
         collect_collections(ty.arg(1), jsonable, out);
         return;

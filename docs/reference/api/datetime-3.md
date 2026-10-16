@@ -16,7 +16,7 @@ public override fun to_string(): string
 
 ## `parse`
 
-Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z / ±HH:MM]`).
+Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
 
 ```dream
 public static fun parse(text: string): Result<DateTime, ParseError>

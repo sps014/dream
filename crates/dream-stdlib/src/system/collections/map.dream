@@ -2,13 +2,14 @@ module system.collections;
 
 // A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 @allow_cycle
-public class Map<K, V> : Collection<KeyValuePair<K, V>> {
+public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
     count: int;
     used: int;
     cap: int;
     epoch: int;
 
+    /// Creates an empty map, reserving space based on `capacity` (8 by default).
     public constructor(capacity: int = 8) {
         let c = hash_capacity_for(capacity);
         this.cap = c;
@@ -21,11 +22,21 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     // Reserves additional live entries, accounting for load factor and reclaiming tombstones.
     public fun reserve(additional: int): Result<bool, CapacityError> {
         let need = (long)this.count + (long)additional;
-        let required = ((need + 1L) * (long)hash_load_factor_denom() + (long)hash_load_factor_num() - 1L) / (long)hash_load_factor_num();
-        if additional < 0 || required > 268435456L { return Result.Err(CapacityError()); }
+        let required = (
+            (need + 1L) * (long)hash_load_factor_denom() + (long)hash_load_factor_num() - 1L
+        ) / (long)hash_load_factor_num();
+        if additional < 0 || required > 268435456L {
+            return Result.Err(CapacityError());
+        }
         let capacity = hash_capacity_for((int)required);
-        if capacity < this.cap { capacity = this.cap; }
-        if capacity > this.cap || ((long)this.used + (long)additional) * (long)hash_load_factor_denom() >= (long)this.cap * (long)hash_load_factor_num() { this.rehash(capacity); }
+        if capacity < this.cap {
+            capacity = this.cap;
+        }
+        if capacity > this.cap
+            || ((long)this.used + (long)additional)
+            * (long)hash_load_factor_denom() >= (long)this.cap * (long)hash_load_factor_num() {
+            this.rehash(capacity);
+        }
         return Result.Ok(true);
     }
 
@@ -42,10 +53,12 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.epoch = e;
     }
 
+    /// Number of elements currently stored.
     public get length(): int {
         return this.count;
     }
 
+    /// Number of elements that fit before storage must grow.
     @inline
     public get capacity(): int {
         return this.cap;
@@ -86,7 +99,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     @inline
-    fun find_span(borrow key: ReadOnlySpan<char>): int where K : StringKey {
+    fun find_span(borrow key: ReadOnlySpan<char>): int where K: StringKey {
         let slots = this.slots;
         let cap = this.cap;
         let epoch = this.epoch;
@@ -164,7 +177,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Built-in string hashing cannot observe a temporary share or run a mutation callback.
-    fun rehash(new_cap: int): void where K : StringKey {
+    fun rehash(new_cap: int): void where K: StringKey {
         let old = this.slots;
         let old_cap = this.cap;
         this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
@@ -218,15 +231,19 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
+    /// Inserts `key` and `value`, replacing the value if the key is already present.
     @inline
     public fun set(key: K, value: V): void {
         this[key] = value;
     }
 
+    /// Returns whether `key` is present.
     public fun contains(borrow key: K): bool {
         return this.find(key) >= 0;
     }
 
+    /// Inserts corresponding entries from `keys` and `values`; the arrays must have equal
+    /// lengths.
     public fun set_all(borrow keys: K[], borrow values: V[]): void {
         let n = keys.length;
         if values.length < n {
@@ -239,6 +256,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         }
     }
 
+    /// Creates a map from corresponding keys and values; the arrays must have equal lengths.
     public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V> {
         let result = Map<K, V>(keys.length);
         result.set_all(keys, values);
@@ -256,7 +274,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
     }
 
     // Value for the `string` key equal to `key`, without building a `string`.
-    public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K : StringKey {
+    public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey {
         let i = this.find_span(key);
         if i >= 0 {
             return Option.Some(this.slots[i].value);
@@ -264,7 +282,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return Option.None;
     }
 
-    public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K : StringKey {
+    /// Returns the value for `key`, or `fallback` when absent.
+    public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K: StringKey {
         let i = this.find_span(key);
         if i >= 0 {
             return this.slots[i].value;
@@ -272,7 +291,8 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return fallback;
     }
 
-    public fun contains(borrow key: ReadOnlySpan<char>): bool where K : StringKey {
+    /// Returns whether `key` is present.
+    public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey {
         return this.find_span(key) >= 0;
     }
 
@@ -286,6 +306,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.slots[i].value;
     }
 
+    /// Returns the value for `key`, or `fallback` when absent.
     @inline
     public fun get_or(borrow key: K, fallback: V): V {
         let i = this.find(key);
@@ -295,6 +316,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return fallback;
     }
 
+    /// Returns the existing value, or inserts and returns the result of `factory` when absent.
     public fun get_or_insert(key: K, borrow factory: fun(): V): V {
         let i = this.find(key);
         if i >= 0 {
@@ -305,12 +327,14 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return value;
     }
 
+    /// Copies entries from `other`, replacing values with matching keys.
     public fun merge(borrow other: Map<K, V>): void {
         for (let pair in other) {
             this.set(pair.key, pair.value);
         }
     }
 
+    /// Returns a new list of key/value pairs.
     public fun entries(): List<KeyValuePair<K, V>> {
         let result = List<KeyValuePair<K, V>>(this.count);
         let i = 0;
@@ -323,6 +347,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
+    /// Removes `key` and its value; returns whether the key was present.
     public fun remove(borrow key: K): bool {
         let i = this.find(key);
         if i >= 0 {
@@ -337,11 +362,13 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return false;
     }
 
+    /// Returns whether there are no elements.
     @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
+    /// Removes all entries while keeping storage for reuse.
     @inline
     public fun clear(): void {
         let c = this.cap;
@@ -361,13 +388,15 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         this.bump_epoch();
     }
 
+    /// Removes all entries while keeping storage for reuse.
     @inline
-    public fun clear(): void where K : unmanaged, V : unmanaged {
+    public fun clear(): void where K: unmanaged, V: unmanaged {
         this.count = 0;
         this.used = 0;
         this.bump_epoch();
     }
 
+    /// Returns a new array containing the keys.
     public fun keys(): K[] {
         let result = Buffer.alloc<K>(this.count);
         let i = 0;
@@ -382,6 +411,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
+    /// Returns a new array containing the values.
     public fun values(): V[] {
         let result = Buffer.alloc<V>(this.count);
         let i = 0;
@@ -396,6 +426,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return result;
     }
 
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
     public fun iterator(): MapIterator<K, V> {
         return MapIterator<K, V>(this);
     }
@@ -412,6 +443,7 @@ public class Map<K, V> : Collection<KeyValuePair<K, V>> {
         return this.slots[i].value;
     }
 
+    /// Returns a text representation of this value.
     public override fun to_string(): string {
         let sb = StringBuilder();
         sb.append("{");

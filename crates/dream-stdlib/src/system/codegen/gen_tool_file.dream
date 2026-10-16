@@ -4,13 +4,19 @@ import system;
 import system.collections;
 import system.json;
 
+/// A file produced by a tool requested during generation.
 public class GenToolFile {
+    /// Request or resource path.
     public path: string;
+    /// Text contents of the file.
     public contents: string;
+    /// Whether the message contains binary data.
     public binary: bool;
+    /// Hash of the refresh token; the raw refresh token is not stored.
     public hash: string;
 
     // Decodes compiler-collected tool metadata from a snapshot.
+    /// Reads a tool-output file description from its JSON representation.
     public constructor(borrow v: JsonValue) {
         this.path = gen_str(v, "path");
         this.contents = gen_str(v, "contents");

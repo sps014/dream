@@ -63,8 +63,9 @@ public class Utf8Decoder {
                 this.lower = 128;
                 this.upper = 191;
                 if this.remaining == 0 {
-                    if this.scalar <= 65535 { output.append_char((char)this.scalar); }
-                    else {
+                    if this.scalar <= 65535 {
+                        output.append_char((char)this.scalar);
+                    } else {
                         let value = this.scalar - 65536;
                         output.append_char((char)(55296 + value / 1024));
                         output.append_char((char)(56320 + value % 1024));
@@ -78,13 +79,21 @@ public class Utf8Decoder {
             } else if next >= 224 && next <= 239 {
                 this.scalar = next - 224;
                 this.remaining = 2;
-                if next == 224 { this.lower = 160; }
-                if next == 237 { this.upper = 159; }
+                if next == 224 {
+                    this.lower = 160;
+                }
+                if next == 237 {
+                    this.upper = 159;
+                }
             } else if next >= 240 && next <= 244 {
                 this.scalar = next - 240;
                 this.remaining = 3;
-                if next == 240 { this.lower = 144; }
-                if next == 244 { this.upper = 143; }
+                if next == 240 {
+                    this.lower = 144;
+                }
+                if next == 244 {
+                    this.upper = 143;
+                }
             } else {
                 this.invalid()?;
                 output.append_char((char)65533);

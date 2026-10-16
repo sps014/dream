@@ -8,13 +8,15 @@ A non-owning address for unmanaged values. Copies never retain storage. Allocati
 
 ## `RawPtr`
 
+An address carries no owning token or length. Reads require initialized storage of T; copies remain valid only as long as the underlying allocation does.
+
 ```dream
 public struct RawPtr<T: unmanaged>
 ```
 
 ## `null`
 
-Constructs address zero without allocating storage.
+Returns a null pointer with address zero.
 
 ```dream
 public static fun null(): RawPtr<T>
@@ -22,7 +24,7 @@ public static fun null(): RawPtr<T>
 
 ## `is_null`
 
-Tests whether the address is zero.
+Returns whether the pointer address is zero.
 
 ```dream
 public fun is_null(): bool
@@ -30,7 +32,7 @@ public fun is_null(): bool
 
 ## `address`
 
-Returns the target-width integer address.
+Returns the numeric address without dereferencing it.
 
 ```dream
 public fun address(): usize
@@ -38,7 +40,7 @@ public fun address(): usize
 
 ## `operator`
 
-Equality compares addresses.
+Returns whether both pointers have the same numeric address.
 
 ```dream
 public fun operator ==(other: RawPtr<T>): bool
@@ -46,7 +48,7 @@ public fun operator ==(other: RawPtr<T>): bool
 
 ## `from_address`
 
-Wraps an address; the caller supplies its validity, alignment and lifetime.
+Creates a pointer from an address. The caller must ensure alignment, validity, and lifetime before dereferencing.
 
 ```dream
 public static fun from_address(address: usize): RawPtr<T>
@@ -54,7 +56,7 @@ public static fun from_address(address: usize): RawPtr<T>
 
 ## `cast`
 
-Reinterprets the address without changing storage or ownership.
+Reinterprets the address as `U`; the caller must ensure the new alignment and layout are valid.
 
 ```dream
 public fun cast<U: unmanaged>(): RawPtr<U>
@@ -62,7 +64,7 @@ public fun cast<U: unmanaged>(): RawPtr<U>
 
 ## `offset`
 
-Offsets count elements; negative offsets are permitted within live storage.
+Moves by `elements` values of `T`. The caller must keep the resulting pointer within valid storage before dereferencing.
 
 ```dream
 public fun offset(elements: isize): RawPtr<T>
@@ -70,7 +72,7 @@ public fun offset(elements: isize): RawPtr<T>
 
 ## `byte_offset`
 
-Offsets count bytes. Align the resulting address before typed access.
+Moves the address by `bytes`. The caller must ensure alignment and valid storage before dereferencing.
 
 ```dream
 public fun byte_offset(bytes: isize): RawPtr<T>
@@ -78,7 +80,7 @@ public fun byte_offset(bytes: isize): RawPtr<T>
 
 ## `read`
 
-Reads one initialized value; the returned value is an independent copy.
+Reads an initialized `T` from the address. The address must be valid and aligned.
 
 ```dream
 public fun read(): T
@@ -86,7 +88,7 @@ public fun read(): T
 
 ## `write`
 
-Writes one unmanaged value without ARC.
+Writes `value` to the address. The destination must be valid, writable, and aligned for `T`.
 
 ```dream
 public fun write(value: T): void
@@ -94,7 +96,7 @@ public fun write(value: T): void
 
 ## `this`
 
-Unchecked indexing with a signed element offset.
+Accesses the value at element offset `index`. The caller must ensure valid, aligned storage and initialize it before reading.
 
 ```dream
 public fun this[index: isize]: T
@@ -102,7 +104,7 @@ public fun this[index: isize]: T
 
 ## `this`
 
-Unchecked indexing with a signed element offset.
+Accesses the value at element offset `index`. The caller must ensure valid, aligned storage and initialize it before reading.
 
 ```dream
 public fun this[index: isize] = value: T
@@ -110,7 +112,7 @@ public fun this[index: isize] = value: T
 
 ## `alloc`
 
-Counts elements. Returned storage is uninitialized.
+Allocates uninitialized storage for `count` values of `T`. Initialize it before reading and release the base pointer with `free` when finished.
 
 ```dream
 public static fun alloc(count: usize): RawPtr<T>
@@ -118,7 +120,7 @@ public static fun alloc(count: usize): RawPtr<T>
 
 ## `alloc_zeroed`
 
-Counts elements and zeroes their storage. Zeroed bytes must represent valid T values before reading.
+Allocates zero-filled storage for `count` values. The caller must release the allocation when finished.
 
 ```dream
 public static fun alloc_zeroed(count: usize): RawPtr<T>
@@ -126,7 +128,7 @@ public static fun alloc_zeroed(count: usize): RawPtr<T>
 
 ## `alloc_aligned`
 
-Alignment must be a nonzero power of two, at least alignof(T). Counts elements.
+Allocates storage for `count` values with the requested power-of-two alignment. Release it with `free`.
 
 ```dream
 public static fun alloc_aligned(count: usize, alignment: usize): RawPtr<T>
@@ -134,7 +136,7 @@ public static fun alloc_aligned(count: usize, alignment: usize): RawPtr<T>
 
 ## `realloc`
 
-Preserves the overlapping byte prefix and alignment. The grown tail is uninitialized. Assign the returned pointer before using it.
+Resizes an independently allocated base pointer, preserving the common prefix. Use the returned pointer and discard all old aliases.
 
 ```dream
 public fun realloc(new_count: usize): RawPtr<T>
@@ -142,7 +144,7 @@ public fun realloc(new_count: usize): RawPtr<T>
 
 ## `free`
 
-Releases manually owned storage and clears this handle. Other copies become invalid.
+Releases this allocation. Every other pointer into the allocation becomes invalid.
 
 ```dream
 public fun free(): void
@@ -150,7 +152,7 @@ public fun free(): void
 
 ## `copy_to`
 
-Counts elements; ranges must not overlap.
+Copies `count` initialized values into `dst`. Both ranges must be valid and must not overlap.
 
 ```dream
 public fun copy_to(dst: RawPtr<T>, count: usize): void
@@ -158,7 +160,7 @@ public fun copy_to(dst: RawPtr<T>, count: usize): void
 
 ## `move_to`
 
-Counts elements; overlapping ranges are supported.
+Copies `count` initialized values into `dst`, allowing overlapping ranges. Both ranges must be valid.
 
 ```dream
 public fun move_to(dst: RawPtr<T>, count: usize): void
@@ -166,7 +168,7 @@ public fun move_to(dst: RawPtr<T>, count: usize): void
 
 ## `fill_bytes`
 
-Fills byte_count bytes, independently of the element type.
+Fills `byte_count` writable bytes with `value`. The caller must ensure the range is valid.
 
 ```dream
 public fun fill_bytes(value: byte, byte_count: usize): void

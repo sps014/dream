@@ -5,7 +5,7 @@ module system.collections;
 // Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
 // `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
 @allow_cycle
-public class Queue<T> : Collection<T> {
+public class Queue<T>: Collection<T> {
     items: T[];
     head: int;
     count: int;
@@ -23,17 +23,25 @@ public class Queue<T> : Collection<T> {
     }
 
     // Current element capacity of the ring buffer.
-    public get capacity(): int { return this.items.length; }
+    public get capacity(): int {
+        return this.items.length;
+    }
 
     // Reserves room for additional elements while preserving FIFO order and length.
     public fun reserve(additional: int): Result<bool, CapacityError> {
         let need = (long)this.count + (long)additional;
-        if additional < 0 || need > 2147483647L { return Result.Err(CapacityError()); }
-        if need > (long)this.items.length { this.reallocate((int)need); }
+        if additional < 0 || need > 2147483647L {
+            return Result.Err(CapacityError());
+        }
+        if need >(long)this.items.length {
+            this.reallocate((int)need);
+        }
         return Result.Ok(true);
     }
 
-    fun grow(): void { this.reallocate(grow_capacity(this.items.length, this.items.length + 1)); }
+    fun grow(): void {
+        this.reallocate(grow_capacity(this.items.length, this.items.length + 1));
+    }
 
     fun reallocate(new_cap: int): void {
         let old_cap = this.items.length;
@@ -100,7 +108,7 @@ public class Queue<T> : Collection<T> {
     }
 
     // Unmanaged: no RC to release — rewind only.
-    public fun clear(): void where T : unmanaged {
+    public fun clear(): void where T: unmanaged {
         this.head = 0;
         this.count = 0;
     }

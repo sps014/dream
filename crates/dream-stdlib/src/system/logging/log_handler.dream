@@ -2,5 +2,6 @@ module system.logging;
 
 // Sink that receives log records.
 public interface LogHandler {
+    /// Processes one log record.
     fun emit(record: LogRecord): void;
 }

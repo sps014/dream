@@ -4,12 +4,12 @@
 
 Read the [usage guide](../stdlib/collections/sorted-map.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `class SortedMap<K : Comparable<K>, V>`
+## `SortedMap`
 
 An ordered map backed by parallel sorted arrays (binary search + shift on insert/remove). O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order doesn't matter — it has O(1) average insert/lookup.
 
 ```dream
-public class SortedMap<K : Comparable<K>, V>
+public class SortedMap<K: Comparable<K>, V>
 ```
 
 ## `constructor`
@@ -53,6 +53,8 @@ public fun this[key: K] = value: V
 ```
 
 ## `set`
+
+Inserts `key` and `value`, replacing the value if the key is already present.
 
 ```dream
 public fun set(key: K, value: V): void

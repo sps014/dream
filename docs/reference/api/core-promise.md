@@ -4,7 +4,7 @@ No import is needed.
 
 Read the [usage guide](../stdlib/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `static class Promise`
+## `Promise`
 
 Promise utilities for async tasks.
 
@@ -14,7 +14,7 @@ public static class Promise
 
 ## `all_host`
 
-Intrinsic behind `Promise.all`; use `Promise.all` with a `Future<T>[]` for typed results and cancellation checks.
+Waits for every future and returns their results in input order.
 
 ```dream
 public static extern async fun all_host<T>(borrow promises: T[]): T[]
@@ -22,7 +22,7 @@ public static extern async fun all_host<T>(borrow promises: T[]): T[]
 
 ## `any_host`
 
-Intrinsic behind `Promise.any`; use `Promise.any` with a `Future<T>[]` for typed results and cancellation checks.
+Waits for the first successful future and returns its result.
 
 ```dream
 public static extern async fun any_host<T>(borrow promises: T[]): T
@@ -30,7 +30,7 @@ public static extern async fun any_host<T>(borrow promises: T[]): T
 
 ## `race_host`
 
-Intrinsic behind `Promise.race`; use `Promise.race` with a `Future<T>[]` for typed results and cancellation checks.
+Returns the result of the first future to complete.
 
 ```dream
 public static extern async fun race_host<T>(borrow promises: T[]): T
@@ -41,7 +41,10 @@ public static extern async fun race_host<T>(borrow promises: T[]): T
 Waits for all promises in the array to resolve.
 
 ```dream
-public static async fun all<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T[]
+public static async fun all<T>(
+    borrow promises: Future<T>[],
+    token: Option<CancellationToken> = Option.None
+): T[]
 ```
 
 ## `any`
@@ -49,7 +52,10 @@ public static async fun all<T>(borrow promises: Future<T>[], token: Option<Cance
 Waits for any promise in the array to resolve.
 
 ```dream
-public static async fun any<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T
+public static async fun any<T>(
+    borrow promises: Future<T>[],
+    token: Option<CancellationToken> = Option.None
+): T
 ```
 
 ## `race`
@@ -57,12 +63,15 @@ public static async fun any<T>(borrow promises: Future<T>[], token: Option<Cance
 Returns the first promise to resolve or reject.
 
 ```dream
-public static async fun race<T>(borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None): T
+public static async fun race<T>(
+    borrow promises: Future<T>[],
+    token: Option<CancellationToken> = Option.None
+): T
 ```
 
 ## `cancel`
 
-Cancels a future (marks it cancelled and unlinks pending timers). The future it is awaiting is cancelled too when nothing else holds it. Best-effort for in-flight native host HTTP; cooperative `CancellationToken` is preferred for app logic. Takes the future as `object` (futures are heap refs) so this can be a plain intrinsic.
+Requests cancellation of a future and of its awaited work when no other owner needs it. Cancellation of an in-flight network request is best effort; use `CancellationToken` for cooperative application cancellation.
 
 ```dream
 public static extern fun cancel(borrow future: object): void

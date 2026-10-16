@@ -7,7 +7,10 @@ import system;
 @timeout(180000)
 fun object_array_literal() {
     let mixed: object[] = [1, "s", true];
-    Assert.eq_str((mixed[0].to_string() + "," + mixed[1].to_string() + "," + mixed[2].to_string()).to_string(), "1,s,true");
+    Assert.eq_str(
+        (mixed[0].to_string() + "," + mixed[1].to_string() + "," + mixed[2].to_string()).to_string(),
+        "1,s,true"
+    );
 
     let strings: object[] = ["a", "b"];
     Assert.eq_str((strings.length.to_string()).to_string(), "2");
@@ -15,7 +18,9 @@ fun object_array_literal() {
     let list: List<object> = [1, "two"];
     Assert.eq_str((list.length.to_string()).to_string(), "2");
 
-    let map: Map<string, object> = { "a": 1, "b": "s" };
+    let map: Map<string, object> = {
+        "a": 1, "b": "s"
+    };
     Assert.eq_str((map.length.to_string()).to_string(), "2");
 
     // Numeric widening through the same path still applies.

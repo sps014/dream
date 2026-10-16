@@ -78,14 +78,18 @@ jobs:
             exit 0
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          git worktree add --detach target/bench-baseline "$BASE_SHA"
-          (cd target/bench-baseline && CARGO_TARGET_DIR="$PWD/target" \
+          baseline_tree="$(mktemp -d "$RUNNER_TEMP/dream-bench-baseline.XXXXXX")/source"
+          git worktree add --detach "$baseline_tree" "$BASE_SHA"
+          (cd "$baseline_tree" && CARGO_TARGET_DIR="$PWD/target" \
             cargo build --locked --release -p dream -p dream-host)
+          echo "dream=$baseline_tree/target/release/dream" >> "$GITHUB_OUTPUT"
           echo "available=true" >> "$GITHUB_OUTPUT"
       # Paired Dream-only rounds on one runner: the C# comparison stays informational, but a
       # non-overlapping slowdown past the 10% budget against the base revision fails the job.
       - name: Gate micro and macro against the base revision
         if: ${{ !cancelled() && steps.baseline.outputs.available == 'true' }}
+        env:
+          BASELINE_DREAM: ${{ steps.baseline.outputs.dream }}
         shell: bash
         run: |
           failed=0
@@ -94,7 +98,7 @@ jobs:
             mkdir -p "$output"
             python3 scripts/bench.py --target native --suite "$suite" \
               --arms baseline current --current-dream target/release/dream \
-              --baseline-dream target/bench-baseline/target/release/dream \
+              --baseline-dream "$BASELINE_DREAM" \
               --warmup 2 --rounds 12 --passes 5 --fail-on-regression --out "$output" \
               2>&1 | tee "$output/comparison.txt" || failed=1
           done

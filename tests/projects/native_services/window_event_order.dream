@@ -1,0 +1,38 @@
+import system.testing;
+import system;
+import system.window;
+
+@test
+@timeout(180000)
+fun window_event_order(): void {
+    let window = Window.headless(WindowDesc.of("events", 320, 200));
+    window.simulate(WindowEvent.Text("hé"));
+    window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Q, "a", KeyModifiers.Shift, false)));
+    window.simulate(WindowEvent.FileDropped("/tmp/level.map"));
+    window.simulate(WindowEvent.GamepadConnected(3));
+    let frame = window.poll();
+    Assert.eq(frame.events.length, 4);
+    let seen = "";
+    for (let event in frame.events) {
+        switch (event) {
+            WindowEvent.Text(text) => {
+                seen = seen + "text:" + text + ";";
+            }
+            WindowEvent.KeyDown(key) => {
+                Assert.is_true(key.code == KeyCode.Q);
+                Assert.is_true((key.modifiers & KeyModifiers.Shift) != KeyModifiers.None);
+                seen = seen + "key:" + key.key + ";";
+            }
+            WindowEvent.FileDropped(path) => {
+                seen = seen + "file:" + path + ";";
+            }
+            WindowEvent.GamepadConnected(slot) => {
+                seen = seen + "pad:" + slot.to_string() + ";";
+            }
+            _ => {
+                seen = seen + "other;";
+            }
+        }
+    }
+    Assert.eq(seen, "text:hé;key:a;file:/tmp/level.map;pad:3;");
+}

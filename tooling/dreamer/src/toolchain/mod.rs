@@ -1,88 +1,37 @@
-//! Pinned host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`). LLVM is
-//! not one: a release ships the minimal LLVM it needs in `lib/dream/llvm`.
+//! Pinned host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`), driven by
+//! the shared `dream_abi::toolchain::PINNED_TOOLS` table. A tool without archives (LLVM, which a
+//! release ships in `lib/dream/llvm`) reports its install hint instead.
 
-mod catalog;
 mod install;
+mod slang_layout;
 
-pub use catalog::ZIG_VERSION;
-pub use dream_abi::toolchain::BINARYEN_VERSION;
 pub use install::{install, list, uninstall};
 
 use anyhow::{Result, bail};
+use dream_abi::toolchain::{PINNED_TOOLS, PinnedTool};
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Component {
-    Cc,
-    Binaryen,
-}
-
-impl Component {
-    pub fn parse_name(name: &str) -> Result<Self> {
-        match name {
-            "cc" | "zig" => Ok(Self::Cc),
-            "binaryen" => Ok(Self::Binaryen),
-            other => bail!("unknown toolchain component '{other}' (expected `cc` or `binaryen`)"),
-        }
-    }
-
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Cc => "cc",
-            Self::Binaryen => "binaryen",
-        }
-    }
-
-    pub fn all() -> [Self; 2] {
-        [Self::Cc, Self::Binaryen]
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HostOs {
-    Linux,
-    Macos,
-    Windows,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HostArch {
-    X64,
-    Arm64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Host {
-    pub os: HostOs,
-    pub arch: HostArch,
-}
-
-impl Host {
-    pub fn install_sh_triple(self) -> &'static str {
-        match (self.os, self.arch) {
-            (HostOs::Linux, HostArch::X64) => "linux-x64",
-            (HostOs::Linux, HostArch::Arm64) => "linux-arm64",
-            (HostOs::Macos, HostArch::X64) => "macos-x64",
-            (HostOs::Macos, HostArch::Arm64) => "macos-arm64",
-            (HostOs::Windows, HostArch::X64) => "windows-x64",
-            (HostOs::Windows, HostArch::Arm64) => "windows-arm64",
+pub fn parse_tool(name: &str) -> Result<&'static PinnedTool> {
+    match dream_abi::toolchain::pinned_tool(name) {
+        Some(tool) => Ok(tool),
+        None => {
+            let known: Vec<_> = PINNED_TOOLS.iter().map(|t| t.name).collect();
+            bail!(
+                "unknown toolchain component '{name}' (expected one of: {})",
+                known.join(", ")
+            )
         }
     }
 }
 
-pub fn detect_host() -> Result<Host> {
-    let os = match std::env::consts::OS {
-        "linux" => HostOs::Linux,
-        "macos" => HostOs::Macos,
-        "windows" => HostOs::Windows,
-        other => bail!("unsupported OS for toolchain install: {other}"),
-    };
-    let arch = match std::env::consts::ARCH {
-        "x86_64" => HostArch::X64,
-        "aarch64" => HostArch::Arm64,
-        other => bail!("unsupported arch for toolchain install: {other}"),
-    };
-    Ok(Host { os, arch })
+pub fn host_key() -> Result<&'static str> {
+    dream_abi::toolchain::current_host_key().ok_or_else(|| {
+        anyhow::anyhow!(
+            "unsupported host for toolchain install: {}-{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )
+    })
 }
 
 /// `~/.dream`, or `DREAM_HOME`'s prefix when that is not a Cargo `target/` dir / `bin/`.
@@ -135,44 +84,39 @@ pub fn toolchains_dir() -> PathBuf {
     dream_prefix().join("toolchains")
 }
 
-pub fn zig_dir() -> PathBuf {
-    toolchains_dir().join(format!("zig-{ZIG_VERSION}"))
+pub fn tool_dir(tool: &PinnedTool) -> PathBuf {
+    toolchains_dir().join(tool.install_dir())
 }
 
-pub fn zig_binary() -> PathBuf {
-    let dir = zig_dir();
+pub fn tool_binary(tool: &PinnedTool) -> PathBuf {
+    let path = tool_dir(tool).join(tool.primary_executable());
     if cfg!(windows) {
-        dir.join("zig.exe")
+        path.with_extension("exe")
     } else {
-        dir.join("zig")
+        path
     }
 }
 
-pub fn binaryen_dir() -> PathBuf {
-    toolchains_dir().join(format!("binaryen-{BINARYEN_VERSION}"))
-}
-
-pub fn binaryen_binary() -> PathBuf {
-    binaryen_dir().join("bin").join(if cfg!(windows) {
-        "wasm-opt.exe"
-    } else {
-        "wasm-opt"
+/// Every executable is present, so an install missing a built tool (such as an interrupted
+/// `dream-slang-layout` build) is redone.
+pub fn is_installed(tool: &PinnedTool) -> bool {
+    tool.executables.iter().all(|executable| {
+        let path = tool_dir(tool).join(executable);
+        if cfg!(windows) {
+            path.with_extension("exe")
+        } else {
+            path
+        }
+        .is_file()
     })
 }
 
-pub fn is_installed(component: Component) -> bool {
-    match component {
-        Component::Cc => zig_binary().is_file(),
-        Component::Binaryen => binaryen_binary().is_file(),
-    }
-}
-
-/// Every component with a pinned artifact for this host.
-pub fn available_components() -> Result<Vec<Component>> {
-    let host = detect_host()?;
-    Ok(Component::all()
-        .into_iter()
-        .filter(|c| catalog::artifact_for(*c, host).is_ok())
+/// Tools a bare `dreamer toolchain install` downloads for this host.
+pub fn default_tools() -> Result<Vec<&'static PinnedTool>> {
+    let host = host_key()?;
+    Ok(PINNED_TOOLS
+        .iter()
+        .filter(|t| t.default_install && t.archive(host).is_some())
         .collect())
 }
 
@@ -186,25 +130,17 @@ mod tests {
 
     #[test]
     fn parse_component_aliases() {
-        assert_eq!(Component::parse_name("cc").unwrap(), Component::Cc);
-        assert_eq!(Component::parse_name("zig").unwrap(), Component::Cc);
-        assert_eq!(
-            Component::parse_name("binaryen").unwrap(),
-            Component::Binaryen
-        );
-        assert!(Component::parse_name("llvm").is_err());
-        assert!(Component::parse_name("gcc").is_err());
+        assert_eq!(parse_tool("cc").unwrap().name, "zig");
+        assert_eq!(parse_tool("zig").unwrap().name, "zig");
+        assert_eq!(parse_tool("binaryen").unwrap().name, "binaryen");
+        assert_eq!(parse_tool("slang").unwrap().name, "slang");
+        assert!(parse_tool("llvm").unwrap().archives.is_empty());
+        assert!(parse_tool("gcc").is_err());
     }
 
     #[test]
-    fn detect_host_matches_build() {
-        let h = detect_host().unwrap();
-        match std::env::consts::OS {
-            "linux" => assert_eq!(h.os, HostOs::Linux),
-            "macos" => assert_eq!(h.os, HostOs::Macos),
-            "windows" => assert_eq!(h.os, HostOs::Windows),
-            _ => {}
-        }
+    fn every_supported_host_has_a_key() {
+        assert!(host_key().is_ok());
     }
 
     #[test]

@@ -1,0 +1,28 @@
+module system.gpu;
+
+// The host handle of one GPU resource. Resource classes keep theirs in one of these, and
+// command encoders keep every handle their commands name, so a resource whose last user
+// reference is gone stays alive until its commands are submitted. The host then keeps it
+// until the GPU finished with it. It holds no references, so it never forms a cycle.
+internal class GpuOwnedHandle {
+    internal handle: int;
+    owned: bool;
+
+    // `owned` is false for handles another object releases, such as a surface's frame
+    // targets.
+    internal constructor(handle: int, owned: bool) {
+        this.handle = handle;
+        this.owned = owned;
+    }
+
+    internal fun release(): void {
+        if this.handle > 0 && this.owned {
+            GpuHost.release(this.handle);
+        }
+        this.handle = 0;
+    }
+
+    del() {
+        this.release();
+    }
+}

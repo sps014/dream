@@ -118,6 +118,25 @@ impl<'a> Analyzer<'a> {
                     );
                 }
             }
+            // Generator-only externs are never called at run time, so no host ABI applies.
+            let crosses_host_abi = (function.is_extern
+                && dream_abi::attributes::generator_only_paths(&function.attributes).is_none())
+                || dream_abi::attributes::has_export_attr(&function.attributes);
+            if crosses_host_abi
+                && function
+                    .parameters
+                    .iter()
+                    .map(|p| &p.type_)
+                    .chain(function.return_type.as_ref())
+                    .any(|t| matches!(t, Type::Float16(_)))
+            {
+                diagnostics.report_error(
+                    "extern and @export functions cannot take or return 'float16': host and C \
+                     ABIs have no portable binary16 type; widen to 'float'"
+                        .to_string(),
+                    Some(function.name.position),
+                );
+            }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&function.file_path);
@@ -146,6 +165,7 @@ impl<'a> Analyzer<'a> {
                     generic_param_names(&function.generic_parameters),
                 );
                 self.generic_functions.insert(def, function);
+                self.note_generator_function(function, def);
                 continue;
             }
             if function.visibility.is_public() {
@@ -160,6 +180,7 @@ impl<'a> Analyzer<'a> {
                 function.file_path.as_deref(),
             );
             info.declaring_module = self.module_of(function.file_path.as_ref());
+            self.note_generator_function(function, info.identity.0);
             if dream_abi::attributes::has_test_attr(&function.attributes) {
                 self.validate_test_function(function, diagnostics);
             }

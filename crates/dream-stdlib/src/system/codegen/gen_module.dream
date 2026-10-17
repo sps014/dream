@@ -1,0 +1,58 @@
+module system.codegen;
+
+import system;
+import system.collections;
+import system.json;
+
+/// A user module whose `module` declaration carries one of the generator's trigger attributes.
+/// Module attributes hold settings that apply to every declaration in the module; combine them
+/// with per-declaration attributes through `GenContext.module_of`.
+public class GenModule {
+    /// Stable identifier of the module (`module:<path>`). Pass it to `GenContext.error_at` to
+    /// report a diagnostic at the module declaration.
+    public id: string;
+
+    /// Dotted module path, for example `shaders.lighting`.
+    public name: string;
+
+    /// Project-relative path of the file whose `module` declaration carries the first trigger
+    /// attribute.
+    public file: string;
+
+    /// Location of that `module` declaration.
+    public location: GenLocation;
+
+    /// Attributes on the module's declarations, in file order. When several files declare the
+    /// same module, their attributes are combined.
+    public attributes: List<GenAttribute>;
+
+    // Creates the snapshot model from the supplied values.
+    public constructor(
+        id: string,
+        name: string,
+        file: string,
+        location: GenLocation,
+        attributes: List<GenAttribute>
+    ) {
+        this.id = id;
+        this.name = name;
+        this.file = file;
+        this.location = location;
+        this.attributes = attributes;
+    }
+
+    /// Decodes the first attribute of type `A` on the module, or `None` when it has none.
+    public fun attribute<A>(): Option<A> {
+        return GenAttributes.decode<A>(this.attributes);
+    }
+
+    /// Decodes every attribute of type `A` on the module, in source order.
+    public fun attributes_of<A>(): List<A> {
+        return GenAttributes.decode_all<A>(this.attributes);
+    }
+
+    /// Returns whether the module carries an attribute of type `A`.
+    public fun has<A>(): bool {
+        return GenAttributes.has(this.attributes, GenAttributes.id<A>());
+    }
+}

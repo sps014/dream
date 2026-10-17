@@ -717,6 +717,7 @@ impl<'a> Analyzer<'a> {
         let _ = self.function_table.add_function(name.clone(), info);
         self.pending_lambdas
             .insert(def, (func_ref, self.current_generic_bindings.clone()));
+        self.inherit_generator_context(def);
 
         let func_ty_params: Vec<Type> = func_ref
             .parameters

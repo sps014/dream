@@ -1,0 +1,17 @@
+import system.testing;
+import system;
+import system.codegen;
+
+// Generator-only externs never cross a host ABI, so float16 signatures are allowed.
+@attribute(AttributeTarget.Function)
+public struct GpuProbeShaderAttribute {}
+
+@generator_only(GpuProbeShaderAttribute)
+public extern fun gpu_probe_half_sin(x: float16): float16;
+
+@test
+@timeout(180000)
+fun gpu_generator_only_float16(): void {
+    let h: float16 = 1.5h;
+    Assert.eq((float)h, 1.5f);
+}

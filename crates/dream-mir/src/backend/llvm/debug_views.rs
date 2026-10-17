@@ -51,7 +51,7 @@ impl<'a> Lcx<'a> {
     pub(super) fn di_scalar(&mut self, ty: TypeId) -> MdRef {
         let bits = native_scalar_size(&self.cx, ty).0.max(1) * 8;
         match self.cx.interner.kind(ty) {
-            TyKind::Prim(p @ (PrimTy::Float | PrimTy::Double)) => {
+            TyKind::Prim(p @ (PrimTy::Float16 | PrimTy::Float | PrimTy::Double)) => {
                 self.di_basic(p.name(), bits, "DW_ATE_float")
             }
             TyKind::Prim(PrimTy::Bool) => self.di_basic("bool", bits, "DW_ATE_boolean"),

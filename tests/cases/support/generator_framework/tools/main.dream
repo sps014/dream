@@ -1,0 +1,10 @@
+import system;
+import gen;
+
+@compiled
+fun marker(): void {}
+
+fun main(): void {
+    System.println(tool_summary());
+    System.println(Assets.bytes("blob").length);
+}

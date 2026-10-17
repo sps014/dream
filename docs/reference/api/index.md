@@ -33,6 +33,7 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.core](system-core.md)
 - [system.crypto](system-crypto.md)
 - [system.encoding](system-encoding.md)
+- [system.gpu](system-gpu.md)
 - [system.io](system-io.md)
 - [system.json](system-json.md)
 - [system.logging](system-logging.md)
@@ -44,5 +45,6 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.task](system-task.md)
 - [system.testing](system-testing.md)
 - [system.text](system-text.md)
+- [system.window](system-window.md)
 
 - [C/C++ attribute declarations](system-interop.md)

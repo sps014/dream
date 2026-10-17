@@ -1,0 +1,151 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+// Dream types to Slang types. An empty result means the type cannot be used in a shader.
+internal static class SlangTypes {
+    internal static fun scalar(borrow ty: GenTypeRef): string {
+        if ty.primitive() == Primitive.Int {
+            return "int";
+        } else if ty.primitive() == Primitive.UInt {
+            return "uint";
+        } else if ty.primitive() == Primitive.Float {
+            return "float";
+        } else if ty.primitive() == Primitive.Float16 {
+            return "half";
+        } else if ty.primitive() == Primitive.Double {
+            return "double";
+        } else if ty.primitive() == Primitive.Bool {
+            return "bool";
+        } else if ty.primitive() == Primitive.Long {
+            return "int64_t";
+        } else if ty.primitive() == Primitive.ULong {
+            return "uint64_t";
+        } else {
+            return "";
+        }
+    }
+
+    // `coop` is the parameter's `@coop_shape`, which fixes cooperative vector lengths.
+    internal static fun of(borrow ty: GenTypeRef, borrow coop: List<int>): string {
+        if ty.kind == TypeRefKind.Primitive {
+            return SlangTypes.scalar(ty);
+        }
+        if ty.kind != TypeRefKind.Named {
+            return "";
+        }
+        let decl = ty.decl;
+        if !decl.starts_with("system.gpu::") {
+            if decl.starts_with("system.") || ty.decl.is_empty() {
+                return "";
+            }
+            return Names.ident(SlangTypes.local_name(ty));
+        }
+        let name = decl.substring(12, decl.length);
+        if name == "GpuVec2" {
+            return "float2";
+        }
+        if name == "GpuVec3" {
+            return "float3";
+        }
+        if name == "GpuVec4" {
+            return "float4";
+        }
+        if name == "GpuIVec2" {
+            return "int2";
+        }
+        if name == "GpuIVec3" {
+            return "int3";
+        }
+        if name == "GpuUVec4" {
+            return "uint4";
+        }
+        if name == "GpuMat4" {
+            return "float4x4";
+        }
+        if name == "GpuRay" {
+            return "RayDesc";
+        }
+        if name == "GpuRayFlags" {
+            return "uint";
+        }
+        if name == "GpuTriangleHit" {
+            return "BuiltInTriangleIntersectionAttributes";
+        }
+        if name == "GpuTexture" {
+            return "Texture2D<float4>";
+        }
+        if name == "GpuSampler" {
+            return "SamplerState";
+        }
+        if name == "GpuAccelerationStructure" {
+            return "RaytracingAccelerationStructure";
+        }
+        if name == "GpuMlpWeights" {
+            return "ByteAddressBuffer";
+        }
+        let inner = SlangTypes.of(ty.arg(0), List<int>());
+        if name == "GpuDiffPair" && !inner.is_empty() {
+            return "DifferentialPair<" + inner + ">";
+        }
+        if name == "GpuHandle" && !inner.is_empty() {
+            return "DescriptorHandle<" + inner + ">";
+        }
+        if name == "GpuStorageTexture" && !inner.is_empty() {
+            return "RWTexture2D<" + inner + ">";
+        }
+        if name == "GpuCoopVec" && !inner.is_empty() && coop.length == 1 {
+            return "CoopVec<" + inner + ", " + coop[0].to_string() + ">";
+        }
+        if name == "GpuBuffer" {
+            let element = SlangTypes.of(ty.arg(0), coop);
+            if element.is_empty() {
+                return "";
+            }
+            return "StructuredBuffer<" + element + ">";
+        }
+        return "";
+    }
+
+    // A user declaration's name without its module qualification.
+    internal static fun local_name(borrow ty: GenTypeRef): string {
+        let parts = ty.name.split(':');
+        return parts[parts.length - 1];
+    }
+
+    // The integer type an atomic buffer element is stored as: float bits live in `uint`.
+    internal static fun atomic_element(borrow ty: GenTypeRef): string {
+        if ty.is_primitive(Primitive.Float) {
+            return "uint";
+        }
+        return SlangTypes.scalar(ty);
+    }
+
+    // Whether a value of this type is one of the vector or matrix types whose `==` compares
+    // component-wise in Slang.
+    internal static fun is_vector(borrow ty: GenTypeRef): bool {
+        let d = ty.decl;
+        return d
+            == "system.gpu::GpuVec2"
+            || d
+            == "system.gpu::GpuVec3"
+            || d
+            == "system.gpu::GpuVec4"
+            || d
+            == "system.gpu::GpuIVec2"
+            || d
+            == "system.gpu::GpuIVec3" || d == "system.gpu::GpuUVec4" || d == "system.gpu::GpuMat4";
+    }
+
+    // A struct or enum declared in user code.
+    internal static fun is_user(borrow ty: GenTypeRef): bool {
+        return ty.kind
+            == TypeRefKind.Named && !ty.decl.is_empty() && !ty.decl.starts_with("system.");
+    }
+
+    internal static fun is_named(borrow ty: GenTypeRef, borrow name: string): bool {
+        return ty.decl == "system.gpu::" + name;
+    }
+}

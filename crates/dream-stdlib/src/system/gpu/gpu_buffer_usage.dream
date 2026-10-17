@@ -1,0 +1,9 @@
+module system.gpu;
+
+// Bit mask passed to `gpuBufferCreate`. Every buffer can also be copied to and from.
+internal enum GpuBufferUsage {
+    Storage = 1,
+    Vertex = 2,
+    Index = 4,
+    Indirect = 8,
+}

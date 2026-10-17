@@ -224,12 +224,13 @@ enum ToolchainCmd {
     },
     /// Download pinned build tools for this OS/arch. `dream` installs missing tools when needed.
     Install {
-        /// `cc` (Zig) or `binaryen` (WASM optimizer). Omit to install every component.
+        /// A pinned tool: `cc` (Zig), `binaryen` (WASM optimizer) or `slang` (shader compiler).
+        /// Omit to install `cc` and `binaryen`.
         component: Option<String>,
     },
     /// Show which toolchain components are installed.
     List,
-    /// Remove a component (`cc` or `binaryen`).
+    /// Remove an installed pinned tool (`cc`, `binaryen` or `slang`).
     Uninstall { component: String },
 }
 

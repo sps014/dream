@@ -1,0 +1,28 @@
+Subject: [PATCH] vulkan: leave unbound acceleration structure slots unwritten without nullDescriptor
+
+A program layout can hold acceleration structure slots that the bound pipeline's
+shaders never use (module-scope parameters of other entry points). Without the
+nullDescriptor feature (MoltenVK) slang-rhi asserted while writing a null descriptor
+there; release builds already skipped the write. Vulkan only requires valid
+descriptors for statically used bindings, so skipping the write is correct in every
+build. Upstreamable.
+
+---
+--- a/src/vulkan/vk-shader-object.cpp
++++ b/src/vulkan/vk-shader-object.cpp
+@@ -112,12 +112,11 @@
+ )
+ {
+     // The Vulkan spec states: If the nullDescriptor feature is not enabled, each element of
+-    // pAccelerationStructures must not be VK_NULL_HANDLE
++    // pAccelerationStructures must not be VK_NULL_HANDLE. Leave the slot unwritten instead:
++    // that is valid for bindings the pipeline's shaders never use, such as the module-scope
++    // acceleration structure of another entry point in the same program layout.
+     if (!as && !device->m_api.m_extendedFeatures.robustness2Features.nullDescriptor)
+-    {
+-        SLANG_RHI_ASSERT_FAILURE("nullDescriptor feature is not available on the device");
+         return;
+-    }
+ 
+     VkWriteDescriptorSetAccelerationStructureKHR writeAS = {};
+     writeAS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;

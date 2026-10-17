@@ -1,0 +1,82 @@
+module system.gpu;
+
+/// A vector of two `float`s, laid out like a GPU `float2`.
+///
+/// Use it on the CPU and in shaders alike: in buffers, as shader inputs and outputs, and
+/// for texture coordinates. Arithmetic works component by component, and a `float`
+/// operand applies to every component.
+public struct GpuVec2 {
+    /// The first component.
+    public x: float;
+
+    /// The second component.
+    public y: float;
+
+    /// Creates the vector `(x, y)`.
+    public static fun of(x: float, y: float): GpuVec2 {
+        let v = GpuVec2();
+        v.x = x;
+        v.y = y;
+        return v;
+    }
+
+    /// Creates a vector with both components equal to `value`.
+    public static fun splat(value: float): GpuVec2 {
+        return GpuVec2.of(value, value);
+    }
+
+    /// Adds component by component.
+    fun operator +(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x + other.x, this.y + other.y);
+    }
+
+    /// Subtracts component by component.
+    fun operator -(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x - other.x, this.y - other.y);
+    }
+
+    /// Multiplies component by component.
+    fun operator *(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x * other.x, this.y * other.y);
+    }
+
+    /// Multiplies every component by `scale`.
+    fun operator *(scale: float): GpuVec2 {
+        return GpuVec2.of(this.x * scale, this.y * scale);
+    }
+
+    /// Divides component by component.
+    fun operator /(other: GpuVec2): GpuVec2 {
+        return GpuVec2.of(this.x / other.x, this.y / other.y);
+    }
+
+    /// Divides every component by `divisor`.
+    fun operator /(divisor: float): GpuVec2 {
+        return GpuVec2.of(this.x / divisor, this.y / divisor);
+    }
+
+    /// Negates every component.
+    fun operator -(): GpuVec2 {
+        return GpuVec2.of(-this.x, -this.y);
+    }
+
+    /// True when both components are equal.
+    fun operator ==(other: GpuVec2): bool {
+        return this.x == other.x && this.y == other.y;
+    }
+
+    /// The dot product: `x * other.x + y * other.y`.
+    public fun dot(other: GpuVec2): float {
+        return this.x * other.x + this.y * other.y;
+    }
+
+    /// The vector's Euclidean length.
+    public fun length(): float {
+        return (float)Math.sqrt((double)this.dot(this));
+    }
+
+    /// The vector scaled to length `1`. A zero vector gives non-finite components.
+    public fun normalize(): GpuVec2 {
+        return this / this.length();
+    }
+}

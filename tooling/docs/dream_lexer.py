@@ -71,8 +71,8 @@ class DreamLexer(RegexLexer):
             (r"\b(true|false|null)\b", Keyword.Constant),
             (r"\bthis\b", Name.Builtin.Pseudo),
             (words(_builtin_types, prefix=r"\b", suffix=r"\b"), Keyword.Type),
-            (r"\b\d+\.\d+[dDfF]?\b", Number.Float),
-            (r"\b\d+[dDfF]\b", Number.Float),
+            (r"\b\d+\.\d+[dDfFhH]?\b", Number.Float),
+            (r"\b\d+[dDfFhH]\b", Number.Float),
             (r"\b0[xX][0-9a-fA-F]+\b", Number.Hex),
             (r"\b\d+\b", Number.Integer),
             # CapWords are type names (classes, enums, generics).

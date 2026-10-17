@@ -1,0 +1,144 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// `slangc` diagnostics mapped back to Dream. Slang prints `error[E30015]: message` followed by
+// a ` --> file.slang:line:column` location; errors inside the generated Slang file are reported
+// through the artifact's source map at the Dream node that produced the code.
+internal class SlangDiag {
+    internal severity: string;
+    internal message: string;
+    internal file: string;
+    internal line: int;
+    internal column: int;
+
+    internal constructor(severity: string, message: string) {
+        this.severity = severity;
+        this.message = message;
+        this.file = "";
+        this.line = 0;
+        this.column = 0;
+    }
+
+    internal static fun parse(borrow text: string): List<SlangDiag> {
+        let out = List<SlangDiag>();
+        for (let raw in text.split('\n')) {
+            let line = raw.trim();
+            let severity = "";
+            if line.starts_with("error") {
+                severity = "error";
+            } else if line.starts_with("warning") {
+                severity = "warning";
+            }
+            if !severity.is_empty() {
+                switch (line.index_of(':')) {
+                    Some(colon) => {
+                        out.push(
+                            SlangDiag(severity, line.substring(colon + 1, line.length).trim())
+                        );
+                    }
+                    None => {}
+                }
+                continue;
+            }
+            if line.starts_with("-->") && !out.is_empty() {
+                let last = out[out.length - 1];
+                if last.line == 0 {
+                    SlangDiag.locate(last, line.substring(3, line.length).trim());
+                }
+            }
+        }
+        return out;
+    }
+
+    // `file.slang:12:5`
+    static fun locate(d: SlangDiag, borrow location: string): void {
+        let parts = location.split(':');
+        if parts.length < 3 {
+            return;
+        }
+        let file = parts[0];
+        let i = 1;
+        while i < parts.length - 2 {
+            file = file + ":" + parts[i];
+            i = i + 1;
+        }
+        d.file = file;
+        d.line = int.parse(parts[parts.length - 2]).unwrap_or(0);
+        d.column = int.parse(parts[parts.length - 1]).unwrap_or(0);
+    }
+
+    // The downstream compiler Slang could not load (`dxc`, `fxc`, `nvrtc`, `metal`), if any.
+    internal static fun missing_compiler(borrow text: string): string {
+        let marker = "failed to load downstream compiler '";
+        switch (text.index_of(marker)) {
+            Some(start) => {
+                let rest = text.substring(start + marker.length, text.length);
+                switch (rest.index_of("'")) {
+                    Some(end) => {
+                        return rest.substring(0, end);
+                    }
+                    None => {}
+                }
+            }
+            None => {}
+        }
+        return "";
+    }
+
+    internal static fun compiler_hint(borrow compiler: string): string {
+        if compiler == "dxc" {
+            return "the DirectX Shader Compiler (dxc)";
+        }
+        if compiler == "fxc" {
+            return "the Windows-only Direct3D 11 shader compiler (fxc, from d3dcompiler)";
+        }
+        if compiler == "nvrtc" {
+            return "NVRTC from the CUDA toolkit";
+        }
+        return "'" + compiler + "'";
+    }
+
+    // Reports a failed `slangc` run. Errors in the module's Slang file go through its source
+    // map; `reported` keeps one report per location and message across targets.
+    internal static fun report(
+        ctx: GenContext,
+        borrow result: GenToolResult,
+        borrow artifact: string,
+        borrow target: string,
+        reported: List<string>
+    ): void {
+        let any = false;
+        for (let d in SlangDiag.parse(result.stderr + "\n" + result.stdout)) {
+            if d.severity != "error" {
+                continue;
+            }
+            any = true;
+            let key = d.line.to_string() + ":" + d.column.to_string() + ":" + d.message;
+            if reported.contains(key) {
+                continue;
+            }
+            reported.push(key);
+            let message = d.message + " (slangc, target " + target + ")";
+            if d.line > 0 && d.file.ends_with(artifact) {
+                ctx.error_in_artifact(artifact, d.line, d.column, message);
+            } else {
+                ctx.error(message);
+            }
+        }
+        if !any {
+            let detail = result.stderr.trim();
+            if detail.is_empty() {
+                detail = "exit code " + result.exit.to_string();
+            }
+            let key = "?:" + detail;
+            if !reported.contains(key) {
+                reported.push(key);
+                ctx.error("slangc failed for target " + target + ": " + detail);
+            }
+        }
+    }
+}

@@ -24,7 +24,7 @@ Look up a command here. For a walkthrough, use the guides linked from the [Dream
 | `dreamer publish [--registry <url>] [--token <tok>] [-p <name>]` | Package source (`dream.toml` + `src/`) and publish it to a registry (≤10 MiB). Rejects path-only dependencies. |
 | `dreamer search <query>` | Search the registry by name / description / keywords. |
 | `dreamer tree [-p <name>]` | Print the resolved dependency tree from `dream.lock`. |
-| `dreamer toolchain install [llvm\|cc\|wasi-sdk]` | Download pinned host toolchains into `~/.dream/toolchains/`: `llvm` (the code generator every build needs), `cc` (Zig, the native linker driver when there is no system `cc`), `wasi-sdk` (wasm32 runtime and linker). With no argument, installs every component available for the host. |
+| `dreamer toolchain install [cc\|binaryen\|slang]` | Download pinned host toolchains into `~/.dream/toolchains/`: `cc` (Zig, the native linker driver when there is no system `cc`), `binaryen` (the WebAssembly optimizer), `slang` (the shader compiler generators can run). With no argument, installs `cc` and `binaryen`. LLVM ships with Dream releases. |
 | `dreamer toolchain doctor [--target <target-triple>] [--json]` | Print resolved compiler/linker paths, SDK arguments, capability libraries and configuration hash. Missing requirements produce a failure exit code; diagnosis never installs components. |
 | `dreamer toolchain list` | Show which of those components are installed. |
 | `dreamer toolchain uninstall <component>` | Remove that component. |

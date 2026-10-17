@@ -1,0 +1,13 @@
+module system.gpu;
+
+/// Connects a field or parameter of a shader's input or output struct to a value the GPU
+/// itself produces or consumes.
+///
+/// `@builtin("position")` on a vertex shader output is the clip-space position; on a
+/// fragment shader input it is the pixel's window position. Other names are
+/// `"front_facing"`, `"sample_index"` and `"frag_depth"`. Unknown names are build errors.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct BuiltinAttribute {
+    /// The built-in value's name, such as `"position"`.
+    public name: string;
+}

@@ -1,0 +1,18 @@
+module system.gpu;
+
+/// A ray tracing index over geometry. A bottom-level structure holds one mesh; a top-level
+/// structure holds placed instances of bottom-level ones and is what shaders trace rays
+/// against. Build them with `GpuDevice.build_bottom_level` and `build_top_level`.
+public class GpuAccelerationStructure {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+
+    internal constructor(device_id: int, handle: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+}

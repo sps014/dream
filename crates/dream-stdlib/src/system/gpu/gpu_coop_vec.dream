@@ -1,0 +1,37 @@
+module system.gpu;
+
+import system.codegen;
+
+/// A short vector that a subgroup of threads multiplies with `GpuMlpWeights` cooperatively,
+/// on tensor hardware where the target has it. Used for small neural networks in shaders.
+///
+/// Its length is fixed when the shader is built: from `@coop_shape` on parameters and
+/// fields, from the constant passed to `zeros`, or from the layer that produced it. `T` is
+/// usually `float16`. `GpuTarget.Metal` and `WebGpu` cannot run cooperative vectors; using
+/// them with only those targets is a build error.
+@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+public struct GpuCoopVec<T> {
+    /// A vector of `length` zeros; `length` must be a constant.
+    public static extern fun zeros(length: int): GpuCoopVec<T>;
+
+    /// Each element replaced by the larger of it and zero, the usual activation between layers.
+    public static extern fun relu(v: GpuCoopVec<T>): GpuCoopVec<T>;
+
+    /// The number of elements.
+    public extern fun length(): int;
+
+    /// Reads element `index`.
+    public extern fun this[index: int]: T;
+
+    /// Writes element `index`.
+    public extern fun this[index: int] = value: T;
+
+    /// Adds element by element.
+    extern fun operator +(other: GpuCoopVec<T>): GpuCoopVec<T>;
+
+    /// Subtracts element by element.
+    extern fun operator -(other: GpuCoopVec<T>): GpuCoopVec<T>;
+
+    /// Multiplies element by element.
+    extern fun operator *(other: GpuCoopVec<T>): GpuCoopVec<T>;
+}

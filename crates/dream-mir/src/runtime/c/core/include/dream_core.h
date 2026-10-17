@@ -1484,6 +1484,8 @@ dream_ptr dream_byte_to_string(int32_t v);
 dream_ptr dream_bool_to_string(int32_t v);
 dream_ptr dream_char_to_string(int32_t v);
 dream_ptr dream_float_to_string(float v);
+/* Shortest round-trip text of a binary16 value passed widened to float. */
+dream_ptr dream_float16_to_string(float v);
 dream_ptr dream_double_to_string(double v);
 void dream_sb_push_double(dream_ptr sb, double v);
 dream_ptr string_clone_range(dream_ptr ptr, int32_t start, int32_t end);

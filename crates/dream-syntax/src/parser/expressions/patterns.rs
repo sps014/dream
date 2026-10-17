@@ -157,8 +157,9 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Classifies a `NumberToken` into its concrete numeric [`Type`], stripping any type suffix
     /// from the token's text so downstream stages see only the numeric value. Recognized suffixes
-    /// (case-insensitive): `f` (float), `d` (double), `L` (long), `u` (uint), `uL`/`Lu` (ulong),
-    /// `b` (byte). A bare literal with a decimal point is `float`, otherwise `int`.
+    /// (case-insensitive): `h` (float16), `f` (float), `d` (double), `L` (long), `u` (uint),
+    /// `uL`/`Lu` (ulong), `b` (byte). A bare literal with a decimal point is `float`, otherwise
+    /// `int`.
     pub(crate) fn classify_number_literal(mut token: SyntaxToken) -> Type {
         let text = token.text.clone();
         let Some((body, suffix)) = crate::number::split_numeric_literal(&text) else {
@@ -172,6 +173,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             "u" => Type::UInt(token),
             "d" => Type::Double(token),
             "f" => Type::Float(token),
+            "h" => Type::Float16(token),
             _ => {
                 if crate::number::numeric_body_is_float(body) {
                     Type::Float(token)
@@ -233,6 +235,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Type::Float(mut t) => {
                             t.text = format!("-{}", t.text);
                             Type::Float(t)
+                        }
+                        Type::Float16(mut t) => {
+                            t.text = format!("-{}", t.text);
+                            Type::Float16(t)
                         }
                         Type::Double(mut t) => {
                             t.text = format!("-{}", t.text);

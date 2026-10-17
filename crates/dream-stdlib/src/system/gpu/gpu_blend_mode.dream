@@ -1,0 +1,13 @@
+module system.gpu;
+
+/// How a fragment shader's color combines with the color already in the target.
+public enum GpuBlendMode {
+    /// The new color replaces the old one.
+    Replace = 0,
+    /// Standard transparency: the new color is mixed in by its alpha.
+    Alpha = 1,
+    /// Transparency for colors already multiplied by their alpha.
+    Premultiplied = 2,
+    /// The new color is added to the old one, for glows and particles.
+    Additive = 3,
+}

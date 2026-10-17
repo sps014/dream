@@ -62,7 +62,7 @@ pub fn rt_dir(config: &ToolchainConfig, flavor: &str, opt: OptLevel, need: Runti
         None => RtDir::Cache(
             config
                 .native_rt_cache_root()
-                .join(format!("llvm-{}", super::LLVM_VERSION))
+                .join(format!("llvm-{}", dream_abi::toolchain::LLVM_VERSION))
                 .join(rel),
         ),
     }

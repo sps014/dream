@@ -34,6 +34,14 @@ Content fingerprint identifying this version of the tool.
 public fingerprint: string
 ```
 
+## `available`
+
+Whether the tool was found on this machine. Requesting an unavailable tool with `GenContext.run_tool` fails with the reason it could not be found, so a generator can skip a step that only an optional tool performs.
+
+```dream
+public available: bool
+```
+
 ## `constructor`
 
 Reads an available tool description from its JSON representation.

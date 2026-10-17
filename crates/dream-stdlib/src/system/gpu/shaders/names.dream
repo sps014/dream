@@ -1,0 +1,64 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+
+let shader_reserved_words: List<string> = List<string>();
+
+// Dream identifiers that collide with Slang keywords, built-in types or the intrinsics the
+// translation calls get a trailing underscore; everything else keeps its Dream spelling.
+internal static class Names {
+    internal static fun ident(name: string): string {
+        if shader_reserved_words.is_empty() {
+            for (let w in Names.reserved()) {
+                shader_reserved_words.push(w);
+            }
+        }
+        if name.starts_with("dream_") || shader_reserved_words.contains(name) {
+            return name + "_";
+        }
+        return name;
+    }
+
+    static fun reserved(): List<string> {
+        let words = "in out inout uniform static const var let extern volatile groupshared shared "
+            + "precise nointerpolation linear centroid sample row_major column_major packoffset "
+            + "register cbuffer tbuffer struct class interface enum typedef typealias namespace "
+            + "using import module implementing extension associatedtype property subscript "
+            + "half float double int uint bool vector matrix sampler texture string void "
+            + "point line triangle lineadj triangleadj discard return if else for while do "
+            + "switch case default break continue true false this This export internal public "
+            + "private sizeof alignof is as new throw try catch "
+            + "Texture2D SamplerState RayDesc RayQuery CoopVec CoopMat Atomic "
+            + "sin cos tan asin acos atan atan2 exp exp2 log log2 pow sqrt rsqrt abs sign "
+            + "floor ceil round frac min max clamp saturate lerp step smoothstep mad reflect "
+            + "refract ddx ddy fwidth dot cross length normalize transpose mul all any asfloat "
+            + "asuint diffPair fwd_diff bwd_diff linalg main";
+        let out = List<string>();
+        for (let w in words.split(' ')) {
+            if !w.is_empty() {
+                out.push(w);
+            }
+        }
+        return out;
+    }
+
+    // `trace_step` -> `TraceStep`, for generated wrapper class names.
+    internal static fun pascal(name: string): string {
+        let out = StringBuilder();
+        let upper = true;
+        for (let c in name) {
+            if c == '_' {
+                upper = true;
+                continue;
+            }
+            if upper {
+                out.append(c.to_string().to_upper());
+                upper = false;
+            } else {
+                out.append(c.to_string());
+            }
+        }
+        return out.to_string();
+    }
+}

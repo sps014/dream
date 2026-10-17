@@ -19,8 +19,12 @@ dream-host-data = { path = "../dream-host-data", optional = true }
 
 dream-host-io = { path = "../dream-host-io", optional = true }
 
+dream-host-window = { path = "../dream-host-window", optional = true }
+
+dream-host-gpu = { path = "../dream-host-gpu", optional = true }
+
 [features]
-default = ["core", "unicode", "crypto", "process", "timezone", "net", "cli", "data", "io"]
+default = ["core", "unicode", "crypto", "process", "timezone", "net", "cli", "data", "io", "window", "gpu"]
 core = ["dep:dream-host-core"]
 unicode = ["core", "dep:dream-host-unicode"]
 crypto = ["core", "dep:dream-host-crypto"]
@@ -30,3 +34,5 @@ net = ["core", "dep:dream-host-net"]
 cli = ["core", "dep:dream-host-cli"]
 data = ["core", "dep:dream-host-data"]
 io = ["core", "dep:dream-host-io"]
+window = ["core", "dep:dream-host-window"]
+gpu = ["core", "dep:dream-host-gpu"]

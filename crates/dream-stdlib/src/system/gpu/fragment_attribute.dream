@@ -1,0 +1,10 @@
+module system.gpu;
+
+/// Marks a function as a fragment shader, which runs once per covered pixel and returns
+/// its color.
+///
+/// Its parameter is usually the struct the vertex shader returns; fields marked
+/// `@location(n)` arrive interpolated across the triangle. The shader becomes
+/// `GpuShaders.<name>`, which `GpuDevice.render_pipeline` accepts.
+@attribute(AttributeTarget.Function)
+public struct FragmentAttribute {}

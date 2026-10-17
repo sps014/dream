@@ -1,0 +1,29 @@
+module system.gpu;
+
+/// How a texture stores each pixel.
+public enum GpuTextureFormat {
+    /// Four 8-bit channels, read as `0.0` to `1.0`.
+    Rgba8Unorm = 0,
+    /// Four 8-bit channels in the sRGB color space; reads convert to linear color.
+    Rgba8UnormSrgb = 1,
+    /// Four 8-bit channels in blue, green, red, alpha order, common for window surfaces.
+    Bgra8Unorm = 2,
+    /// `Bgra8Unorm` in the sRGB color space.
+    Bgra8UnormSrgb = 3,
+    /// One 8-bit channel, read as `0.0` to `1.0`.
+    R8Unorm = 4,
+    /// One 32-bit float channel.
+    R32Float = 5,
+    /// Two 32-bit float channels.
+    Rg32Float = 6,
+    /// Four 16-bit float channels.
+    Rgba16Float = 7,
+    /// Four 32-bit float channels.
+    Rgba32Float = 8,
+    /// One 32-bit unsigned integer channel.
+    R32Uint = 9,
+    /// A 32-bit float depth buffer.
+    Depth32Float = 10,
+    /// A depth buffer of at least 24 bits plus an 8-bit stencil.
+    Depth24PlusStencil8 = 11,
+}

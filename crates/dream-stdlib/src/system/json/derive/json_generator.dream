@@ -82,6 +82,9 @@ public static class JsonGenerator {
         if primitive_named(ftype) == Primitive.Float {
             return "0.0f";
         }
+        if primitive_named(ftype) == Primitive.Float16 {
+            return "0.0h";
+        }
         if primitive_named(ftype) == Primitive.Double {
             return "0.0";
         }
@@ -127,7 +130,8 @@ public static class JsonGenerator {
         if primitive_named(elem_type) == Primitive.Double {
             return "JsonValue.number(" + access + ")";
         }
-        if primitive_named(elem_type) == Primitive.Float {
+        if primitive_named(elem_type)
+            == Primitive.Float || primitive_named(elem_type) == Primitive.Float16 {
             return "JsonValue.number((double)" + access + ")";
         }
         if primitive_named(elem_type) == Primitive.Bool {
@@ -162,6 +166,9 @@ public static class JsonGenerator {
         }
         if primitive_named(elem_type) == Primitive.Float {
             return "(float)" + jexpr + ".as_double().unwrap_or(0.0d)";
+        }
+        if primitive_named(elem_type) == Primitive.Float16 {
+            return "(float16)" + jexpr + ".as_double().unwrap_or(0.0d)";
         }
         if primitive_named(elem_type) == Primitive.Bool {
             return jexpr + ".as_bool().unwrap_or(false)";
@@ -199,6 +206,8 @@ public static class JsonGenerator {
             || primitive_named(elem_type)
             == Primitive.Float
             || primitive_named(elem_type)
+            == Primitive.Float16
+            || primitive_named(elem_type)
             == Primitive.Bool || primitive_named(elem_type) == Primitive.String {
             return true;
         }
@@ -235,6 +244,11 @@ public static class JsonGenerator {
         }
         if primitive_named(elem_type) == Primitive.Float {
             cb.line("Json.write_number(" + sb + ", (double)" + access + ");");
+            return true;
+        }
+        // `float16` text is the shortest decimal that reads back as the same value.
+        if primitive_named(elem_type) == Primitive.Float16 {
+            cb.line(sb + ".append(" + access + ".to_string());");
             return true;
         }
         if primitive_named(elem_type) == Primitive.Bool {
@@ -827,6 +841,9 @@ public static class JsonGenerator {
         if primitive_named(elem_type) == Primitive.Float {
             return "(float)p.parse_double()";
         }
+        if primitive_named(elem_type) == Primitive.Float16 {
+            return "(float16)p.parse_double()";
+        }
         if primitive_named(elem_type) == Primitive.Bool {
             return "p.parse_bool()";
         }
@@ -1261,7 +1278,7 @@ public static class JsonGenerator {
                             + fname
                             + "' has unsupported optional type '"
                             + ftype
-                            + "' (only `Option<string>`, `Option<int/long/double/float/bool>`, `Option<@json class>`, and `Option<T[]>` of those are supported)"
+                            + "' (only `Option<string>`, `Option<int/long/double/float/float16/bool>`, `Option<@json class>`, and `Option<T[]>` of those are supported)"
                             + JsonGenerator.missing_hint(base, jsonable),
                         t.name,
                         fname
@@ -1708,7 +1725,9 @@ public static class JsonGenerator {
                 || primitive
                 == Primitive.Double
                 || primitive
-                == Primitive.Float || primitive == Primitive.Bool || primitive == Primitive.String {
+                == Primitive.Float
+                || primitive
+                == Primitive.Float16 || primitive == Primitive.Bool || primitive == Primitive.String {
                 let value = "__json_" + fname;
                 let converted = JsonGenerator.json_from_expr(ftype, value, json_names);
                 // Missing scalar fields need only their scalar default, not an owned null node.

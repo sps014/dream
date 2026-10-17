@@ -1,0 +1,205 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// The GPU features each entry point needs, found from the declarations its body and helpers use.
+// Each feature is recorded as a Slang capability name in the bundle; a feature that one of the
+// entry's targets lacks is a build error at its first use.
+internal static class Capabilities {
+    internal static fun check(
+        ctx: GenContext,
+        entry: ShaderEntry,
+        borrow nodes: List<ShaderNode>
+    ): void {
+        let found = List<string>();
+        let at = List<string>();
+        if entry.is_ray_tracing() {
+            found.push("raytracing");
+            at.push(entry.function.id);
+        }
+        for (let p in entry.params) {
+            Capabilities.from_type(p.ty, entry.function.id, found, at);
+        }
+        for (let n in nodes) {
+            Capabilities.from_type(n.ty, n.id, found, at);
+            let key = Builtins.key_of(n);
+            if key.is_empty() {
+                continue;
+            }
+            let feature = "";
+            if key.starts_with("trace_ray") || key == "call_shader" || key == "report_hit" {
+                feature = "raytracing";
+            } else if key.starts_with("subgroup_") {
+                feature = "subgroup_basic";
+            } else if key.starts_with("GpuRayQuery.") {
+                feature = "rayquery";
+            } else if key.starts_with("GpuAtomic.") && n.children.length > 1 {
+                let element = n.child(1).ty.arg(0);
+                if element.is_primitive(Primitive.Long) || element.is_primitive(Primitive.ULong) {
+                    feature = "atomic64";
+                }
+            } else if key == "workgroup_count" {
+                feature = "workgroup_count";
+            }
+            let input = Builtins.input_of(key);
+            if !input.is_empty() {
+                entry.add_builtin(input);
+            }
+            if !feature.is_empty() && !found.contains(feature) {
+                found.push(feature);
+                at.push(n.id);
+            }
+        }
+        let i = 0;
+        while i < found.length {
+            let feature = found[i];
+            if feature != "workgroup_count" {
+                entry.add_capability(feature);
+            }
+            Capabilities.require(ctx, entry, feature, at[i]);
+            i = i + 1;
+        }
+        entry.capabilities.sort_by(
+            (a, b) => {
+                return a.compare(b);
+            }
+        );
+    }
+
+    static fun from_type(
+        borrow ty: GenTypeRef,
+        borrow id: string,
+        found: List<string>,
+        at: List<string>
+    ): void {
+        let feature = "";
+        if ty.is_primitive(Primitive.Float16) {
+            feature = "half";
+        } else if SlangTypes.is_named(ty, "GpuHandle") {
+            feature = "descriptor_handle";
+        } else if SlangTypes.is_named(ty, "GpuCoopVec") || SlangTypes.is_named(ty, "GpuMlpWeights") {
+            feature = "cooperative_vector";
+        } else if SlangTypes.is_named(ty, "GpuCoopMat") {
+            feature = "cooperative_matrix";
+        } else if SlangTypes.is_named(ty, "GpuRayQuery") {
+            feature = "rayquery";
+        }
+        if !feature.is_empty() && !found.contains(feature) {
+            found.push(feature);
+            at.push(id);
+        }
+        for (let arg in ty.args) {
+            Capabilities.from_type(arg, id, found, at);
+        }
+    }
+
+    internal static fun label(borrow feature: string): string {
+        if feature == "raytracing" {
+            return "ray tracing";
+        }
+        if feature == "rayquery" {
+            return "ray queries";
+        }
+        if feature == "descriptor_handle" {
+            return "bindless resources (GpuHandle)";
+        }
+        if feature == "subgroup_basic" {
+            return "subgroup operations";
+        }
+        if feature == "cooperative_vector" {
+            return "cooperative vectors";
+        }
+        if feature == "cooperative_matrix" {
+            return "cooperative matrices";
+        }
+        if feature == "half" {
+            return "float16";
+        }
+        if feature == "atomic64" {
+            return "64-bit atomics";
+        }
+        return "workgroup_count()";
+    }
+
+    // Targets whose Slang backend provides the feature.
+    internal static fun support(borrow feature: string): List<GpuTarget> {
+        let out = List<GpuTarget>();
+        for (let t in Targets.all()) {
+            let ok = false;
+            if feature == "raytracing" {
+                ok = t == GpuTarget.Dx12 || t == GpuTarget.Vulkan;
+            } else if feature
+                == "rayquery" || feature == "descriptor_handle" || feature == "atomic64" {
+                ok = t
+                    == GpuTarget.Dx12
+                    || t == GpuTarget.Vulkan || t == GpuTarget.Metal || t == GpuTarget.Cuda;
+            } else if feature == "cooperative_vector" {
+                ok = t == GpuTarget.Dx12 || t == GpuTarget.Vulkan || t == GpuTarget.Cuda;
+            } else if feature == "cooperative_matrix" {
+                ok = t == GpuTarget.Vulkan || t == GpuTarget.Cuda;
+            } else if feature == "workgroup_count" {
+                ok = t != GpuTarget.Metal && t != GpuTarget.WebGpu;
+            } else {
+                ok = t != GpuTarget.Dx11;
+            }
+            if ok {
+                out.push(t);
+            }
+        }
+        return out;
+    }
+
+    static fun require(
+        ctx: GenContext,
+        borrow entry: ShaderEntry,
+        borrow feature: string,
+        borrow at: string
+    ): void {
+        let support = Capabilities.support(feature);
+        let usable = List<GpuTarget>();
+        let declared = false;
+        for (let t in support) {
+            if entry.targets.contains(t) {
+                usable.push(t);
+            }
+            if entry.declared.contains(t) {
+                declared = true;
+            }
+        }
+        if entry.targets.is_empty() {
+            return;
+        }
+        if usable.is_empty() {
+            if declared {
+                ctx.error_at(
+                    at,
+                    Capabilities.label(feature)
+                        + " needs "
+                        + Targets.list(support)
+                        + ", which a " + Targets.platform(ctx.target) + " build cannot load"
+                );
+            } else {
+                ctx.error_at(
+                    at,
+                    Capabilities.label(feature)
+                        + " needs " + Targets.list(support) + "; add one to @gpu_targets"
+                );
+            }
+            return;
+        }
+        for (let t in entry.targets) {
+            if !support.contains(t) {
+                ctx.error_at(
+                    at,
+                    Capabilities.label(feature)
+                        + " is not available with "
+                        + Targets.spelling(t)
+                        + "; give '" + entry.name() + "' its own @gpu_targets without it"
+                );
+            }
+        }
+    }
+}

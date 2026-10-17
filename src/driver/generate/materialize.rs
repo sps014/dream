@@ -26,7 +26,10 @@ pub fn materialize(
     artifacts: &[GeneratedArtifact],
 ) -> Vec<(PathBuf, String)> {
     let out = located(entry_dir, files);
-    let mut persisted = out.clone();
+    let mut persisted: Vec<(PathBuf, Vec<u8>)> = out
+        .iter()
+        .map(|(path, text)| (path.clone(), text.clone().into_bytes()))
+        .collect();
     for artifact in artifacts {
         persisted.push((
             entry_dir.join(&artifact.generator).join(&artifact.path),
@@ -37,12 +40,12 @@ pub fn materialize(
         if let Ok(json) = serde_json::to_string(&run.result) {
             persisted.push((
                 entry_dir.join(&run.registered.name).join("outputs.json"),
-                json,
+                json.into_bytes(),
             ));
         }
     }
     for (path, text) in &persisted {
-        let unchanged = std::fs::read_to_string(path).is_ok_and(|old| old == *text);
+        let unchanged = std::fs::read(path).is_ok_and(|old| old == *text);
         if !unchanged {
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);

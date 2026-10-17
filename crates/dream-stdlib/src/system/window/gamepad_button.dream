@@ -1,0 +1,38 @@
+module system.window;
+
+/// A button on a standard-layout gamepad.
+///
+/// The four face buttons are named by position, so `South` is A on an Xbox
+/// controller and Cross on a PlayStation controller.
+public enum GamepadButton {
+    /// The bottom face button (Xbox A, PlayStation Cross).
+    South = 0,
+    /// The right face button (Xbox B, PlayStation Circle).
+    East = 1,
+    /// The left face button (Xbox X, PlayStation Square).
+    West = 2,
+    /// The top face button (Xbox Y, PlayStation Triangle).
+    North = 3,
+    /// The left shoulder button.
+    LeftBumper = 4,
+    /// The right shoulder button.
+    RightBumper = 5,
+    /// The Back, View, Select or Share button.
+    Back = 6,
+    /// The Start, Menu or Options button.
+    Start = 7,
+    /// The central logo button. Some browsers and operating systems keep it for themselves.
+    Guide = 8,
+    /// Pressing the left stick.
+    LeftThumb = 9,
+    /// Pressing the right stick.
+    RightThumb = 10,
+    /// Up on the directional pad.
+    DpadUp = 11,
+    /// Right on the directional pad.
+    DpadRight = 12,
+    /// Down on the directional pad.
+    DpadDown = 13,
+    /// Left on the directional pad.
+    DpadLeft = 14,
+}

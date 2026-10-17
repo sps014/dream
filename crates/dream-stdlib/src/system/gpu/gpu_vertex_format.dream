@@ -1,0 +1,19 @@
+module system.gpu;
+
+/// The type of one vertex attribute in a vertex buffer.
+public enum GpuVertexFormat {
+    /// One `float`.
+    Float32 = 0,
+    /// Two `float`s, read as `GpuVec2`.
+    Float32x2 = 1,
+    /// Three `float`s, read as `GpuVec3`.
+    Float32x3 = 2,
+    /// Four `float`s, read as `GpuVec4`.
+    Float32x4 = 3,
+    /// One `int`.
+    Sint32 = 4,
+    /// One `uint`.
+    Uint32 = 5,
+    /// Four bytes read as a `GpuVec4` from `0.0` to `1.0`, common for packed colors.
+    Unorm8x4 = 6,
+}

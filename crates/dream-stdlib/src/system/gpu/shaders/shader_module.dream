@@ -1,0 +1,84 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// The shaders of one Dream module. Each module becomes one Slang file, one bundle asset and
+// one generated `GpuShaders` class.
+internal class ShaderModule {
+    internal name: string;
+    internal entries: List<ShaderEntry>;
+
+    // `@gpu` helpers and every user function the entries reach, callees first.
+    internal helpers: List<GenFunction>;
+
+    // User structs and enums the shaders use, dependencies first.
+    internal types: List<GenDecl>;
+
+    // User types returned by a fragment shader: their `@location` fields are render targets.
+    internal fragment_outputs: List<string>;
+
+    internal constructor(name: string) {
+        this.name = name;
+        this.entries = List<ShaderEntry>();
+        this.helpers = List<GenFunction>();
+        this.types = List<GenDecl>();
+        this.fragment_outputs = List<string>();
+    }
+
+    // File stem of the module's artifacts: `app.render` becomes `app_render`; the unnamed root
+    // module is `main`.
+    internal fun stem(): string {
+        if this.name.is_empty() {
+            return "main";
+        }
+        return this.name.replace(".", "_");
+    }
+
+    internal fun asset(): string {
+        return "gpu_shaders." + this.stem();
+    }
+
+    // Every target some entry is compiled for, in `GpuTarget` order.
+    internal fun targets(): List<GpuTarget> {
+        let out = List<GpuTarget>();
+        for (let t in Targets.all()) {
+            for (let e in this.entries) {
+                if e.has_target(t) && !out.contains(t) {
+                    out.push(t);
+                }
+            }
+        }
+        return out;
+    }
+
+    internal fun entries_for(target: GpuTarget): List<ShaderEntry> {
+        let out = List<ShaderEntry>();
+        for (let e in this.entries) {
+            if e.has_target(target) {
+                out.push(e);
+            }
+        }
+        return out;
+    }
+
+    internal fun has_helper(borrow id: string): bool {
+        for (let h in this.helpers) {
+            if h.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal fun has_type(borrow id: string): bool {
+        for (let t in this.types) {
+            if t.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+}

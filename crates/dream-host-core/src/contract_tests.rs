@@ -12,6 +12,8 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-cli/src/exports.rs"),
     include_str!("../../dream-host-data/src/exports.rs"),
     include_str!("../../dream-host-io/src/exports.rs"),
+    include_str!("../../dream-host-window/src/exports.rs"),
+    include_str!("../../dream-host-gpu/src/exports.rs"),
 ];
 
 fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
@@ -103,6 +105,8 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Cli, vec![HOST_SOURCES[5]]),
         (HostCapability::Data, vec![HOST_SOURCES[6]]),
         (HostCapability::Io, vec![HOST_SOURCES[7]]),
+        (HostCapability::Window, vec![HOST_SOURCES[8]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[9]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -135,6 +139,8 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/console_process.js"),
     include_str!("../../../runtime/src/hosts/process_service.js"),
     include_str!("../../../runtime/src/hosts/datetime_text.js"),
+    include_str!("../../../runtime/src/hosts/window.js"),
+    include_str!("../../../runtime/src/hosts/gpu.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
 

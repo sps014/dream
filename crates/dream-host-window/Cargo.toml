@@ -1,0 +1,29 @@
+[package]
+name = "dream-host-window"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "dream_host_window"
+# The rlib lets the main-thread harness test drive the host without a guest.
+crate-type = ["cdylib", "rlib"]
+
+[[test]]
+name = "main_thread"
+path = "tests/main_thread.rs"
+# GLFW must run on the process main thread; libtest runs every test on a worker thread.
+harness = false
+
+[dependencies]
+dream-host-core = { path = "../dream-host-core" }
+dream-host-abi = { path = "../dream-host-abi" }
+# GLFW 3.4 is built from the crate's vendored sources, so builds never download binaries.
+glfw = { version = "0.63", default-features = false, features = ["src-build", "raw-window-handle-v0-6"] }
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+glfw = { version = "0.63", default-features = false, features = ["src-build", "raw-window-handle-v0-6", "x11"] }

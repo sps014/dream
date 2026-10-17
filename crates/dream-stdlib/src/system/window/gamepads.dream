@@ -1,0 +1,29 @@
+module system.window;
+
+/// The gamepads connected as of one `Window.poll`, ordered by slot.
+public class Gamepads {
+    pads: List<Gamepad>;
+
+    internal constructor(pads: List<Gamepad>) {
+        this.pads = pads;
+    }
+
+    /// The number of connected gamepads.
+    public get length(): int {
+        return this.pads.length;
+    }
+
+    /// The connected gamepad with the lowest slot, or `None` when none is connected.
+    public fun first(): Option<Gamepad> {
+        return this.at(0);
+    }
+
+    /// The connected gamepad at `index`, counting from `0` in slot order, or `None`
+    /// when `index` is negative or not less than `length`.
+    public fun at(index: int): Option<Gamepad> {
+        if index < 0 || index >= this.pads.length {
+            return Option.None;
+        }
+        return Option.Some(this.pads[index]);
+    }
+}

@@ -1,0 +1,139 @@
+module system.gpu;
+
+import system.codegen;
+
+/// An image in GPU memory that shaders sample and render passes draw into.
+///
+/// Create one with `GpuDevice.texture`. A window frame's `GpuFrame.target` is also a
+/// texture. Inside shaders, `sample`, `sample_level`, `sample_compare`, `load` and `size`
+/// read it.
+public class GpuTexture {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+    texture_width: int;
+    texture_height: int;
+    texture_format: GpuTextureFormat;
+
+    internal constructor(
+        device_id: int,
+        handle: int,
+        width: int,
+        height: int,
+        format: GpuTextureFormat,
+        owned: bool
+    ) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, owned);
+        this.texture_width = width;
+        this.texture_height = height;
+        this.texture_format = format;
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+
+    /// Width in texels.
+    public get width(): int {
+        return this.texture_width;
+    }
+
+    /// Height in texels.
+    public get height(): int {
+        return this.texture_height;
+    }
+
+    /// How each texel is stored.
+    public get format(): GpuTextureFormat {
+        return this.texture_format;
+    }
+
+    /// Replaces the texels of mip level `mip` with `data`, tightly packed rows from top to
+    /// bottom in the texture's format.
+    public fun write(mip: int, data: byte[]): Result<bool, GpuError> {
+        if this.handle == 0 {
+            return Result.Err(GpuError.InvalidResource("the texture was destroyed"));
+        }
+        if GpuHost.texture_write(this.handle, mip, 0, data) != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(true);
+    }
+
+    /// Downloads mip level `mip` as tightly packed rows from top to bottom. It waits for
+    /// submitted GPU work that writes the texture.
+    public async fun read(mip: int): Result<byte[], GpuError> {
+        if this.handle == 0 {
+            return Result.Err(GpuError.InvalidResource("the texture was destroyed"));
+        }
+        let bytes = GpuHost.texture_read(this.handle, mip, 0).await;
+        if bytes.length == 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(bytes);
+    }
+
+    /// Releases the GPU memory once submitted work that uses it has finished. Window frame
+    /// targets belong to their surface and are not released.
+    public fun destroy(): void {
+        this.owner.release();
+    }
+
+    /// Samples the texture at `uv`, where `(0, 0)` is the top-left corner and `(1, 1)` the
+    /// bottom-right, filtered by `sampler`. The mip level follows the on-screen size, which
+    /// only fragment shaders know.
+    @generator_only(FragmentAttribute, GpuAttribute)
+    public extern fun sample(sampler: GpuSampler, uv: GpuVec2): GpuVec4;
+
+    /// Samples the texture at `uv` from mip level `level`; fractional levels blend two
+    /// levels when the sampler filters mipmaps linearly.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun sample_level(sampler: GpuSampler, uv: GpuVec2, level: float): GpuVec4;
+
+    /// Compares `reference` with the depth texture at `uv` using the comparison sampler's
+    /// `GpuCompare`, and returns the filtered fraction of texels that passed. Used for
+    /// shadow maps.
+    @generator_only(FragmentAttribute, GpuAttribute)
+    public extern fun sample_compare(sampler: GpuSampler, uv: GpuVec2, reference: float): float;
+
+    /// Reads the texel at integer `coordinate` of mip level `level`, without filtering.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun load(coordinate: GpuIVec2, level: int): GpuVec4;
+
+    /// The size in texels of mip level `level`.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun size(level: int): GpuIVec2;
+}

@@ -1,0 +1,11 @@
+module system.gpu;
+
+/// What a sampler reads for coordinates outside `0.0` to `1.0`.
+public enum GpuAddressMode {
+    /// Repeats the edge texels.
+    ClampToEdge = 0,
+    /// Tiles the texture.
+    Repeat = 1,
+    /// Tiles the texture, mirroring every other copy.
+    MirrorRepeat = 2,
+}

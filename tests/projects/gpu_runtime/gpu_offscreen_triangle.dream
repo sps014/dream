@@ -1,0 +1,154 @@
+module gpu_offscreen_triangle;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun triangle_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun triangle_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_offscreen_triangle on " + triangle_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_offscreen_triangle on " + triangle_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail(
+                "gpu_offscreen_triangle on " + triangle_label(backend) + ": " + e.message()
+            );
+        }
+    }
+    return Option.None;
+}
+
+fun triangle_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+public struct TriangleVarying {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public color: GpuVec4;
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@vertex
+fun offscreen_vertex(scale: float): TriangleVarying {
+    let x = -0.5f;
+    let y = -0.5f;
+    if vertex_id() == 1 {
+        x = 0.5f;
+    } else if vertex_id() == 2 {
+        x = 0.0f;
+        y = 0.5f;
+    }
+    let result = TriangleVarying();
+    result.position = GpuVec4.of(x * scale, y * scale, 0.0f, 1.0f);
+    result.color = GpuVec4.of(1.0f, 0.5f, 0.0f, 1.0f);
+    return result;
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@fragment
+fun offscreen_fragment(input: TriangleVarying, tint: GpuVec4): GpuVec4 {
+    return input.color * tint;
+}
+
+// The RGBA8 pixel at column `x`, row `y` (row 0 is the top) of a tightly packed image.
+fun pixel(bytes: byte[], width: int, x: int, y: int): int[] {
+    let at = (y * width + x) * 4;
+    return [(int)bytes[at], (int)bytes[at + 1], (int)bytes[at + 2], (int)bytes[at + 3]];
+}
+
+fun assert_pixel(actual: int[], r: int, g: int, b: int, a: int, what: string): void {
+    let expected = [r, g, b, a];
+    for (let i = 0; i < 4; i = i + 1) {
+        let diff = actual[i] - expected[i];
+        if diff < -2 || diff > 2 {
+            Assert.fail(
+                what + ": expected " + expected.to_string() + ", got " + actual.to_string()
+            );
+        }
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_offscreen_triangle(): void {
+    let size = 64;
+    for (let backend in GpuShaders.backends()) {
+        switch (triangle_device(backend).await) {
+            Some(device) => {
+                let label = triangle_label(backend);
+                let target = triangle_ok(
+                    device.texture(
+                        GpuTextureDesc.of(size, size, GpuTextureFormat.Rgba8Unorm)
+                            .render_target(true)
+                    ),
+                    "target"
+                );
+                let pipeline = triangle_ok(
+                    device.render_pipeline(
+                        GpuShaders.offscreen_vertex,
+                        GpuShaders.offscreen_fragment,
+                        GpuRenderPipelineDesc.defaults(GpuTextureFormat.Rgba8Unorm)
+                    ),
+                    "pipeline on " + label
+                );
+
+                let encoder = device.command_encoder();
+                let pass = encoder.begin_render_pass(
+                    GpuRenderPassDesc.color(
+                        target,
+                        GpuLoad.Clear(GpuVec4.of(0.0f, 0.0f, 1.0f, 1.0f))
+                    )
+                );
+                pass.set_pipeline(pipeline);
+                pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
+                pass.bind_value(
+                    GpuShaders.offscreen_fragment.tint,
+                    GpuVec4.of(1.0f, 0.4f, 1.0f, 1.0f)
+                );
+                pass.draw(3);
+                pass.end();
+                triangle_ok(device.submit(encoder.finish()).await, "draw on " + label);
+
+                let bytes = triangle_ok(target.read(0).await, "read on " + label);
+                Assert.eq(bytes.length, size * size * 4);
+                // The scaled triangle spans x in [-0.75, 0.75] at its base: the centre is
+                // covered, the top corners keep the clear color.
+                assert_pixel(pixel(bytes, size, 32, 36), 255, 51, 0, 255, label + " centre");
+                assert_pixel(pixel(bytes, size, 1, 1), 0, 0, 255, 255, label + " top-left");
+                assert_pixel(pixel(bytes, size, 62, 1), 0, 0, 255, 255, label + " top-right");
+                // The base sits near the bottom: row 52 is inside, its outer corners outside.
+                assert_pixel(pixel(bytes, size, 32, 52), 255, 51, 0, 255, label + " base");
+                assert_pixel(pixel(bytes, size, 2, 62), 0, 0, 255, 255, label + " bottom-left");
+            }
+            None => {}
+        }
+    }
+}

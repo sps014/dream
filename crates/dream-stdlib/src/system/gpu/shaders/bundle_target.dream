@@ -1,0 +1,30 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+
+// One target's section of a shader bundle: its code format, recorded layout, and the code and
+// parameter table of every entry compiled for it.
+internal class BundleTarget {
+    internal name: string;
+    internal code_format: string;
+    internal layout: byte[];
+    internal entries: List<ShaderEntry>;
+    internal codes: List<byte[]>;
+    internal params: List<List<Reflection>>;
+
+    internal constructor(name: string, code_format: string, layout: byte[]) {
+        this.name = name;
+        this.code_format = code_format;
+        this.layout = layout;
+        this.entries = List<ShaderEntry>();
+        this.codes = List<byte[]>();
+        this.params = List<List<Reflection>>();
+    }
+
+    internal fun add(entry: ShaderEntry, code: byte[], params: List<Reflection>): void {
+        this.entries.push(entry);
+        this.codes.push(code);
+        this.params.push(params);
+    }
+}

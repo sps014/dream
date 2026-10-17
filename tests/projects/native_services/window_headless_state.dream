@@ -1,0 +1,38 @@
+import system.testing;
+import system;
+import system.window;
+
+@test
+@timeout(180000)
+fun window_headless_state(): void {
+    let window = Window.headless(WindowDesc.of("state", 320, 200).fullscreen(true).vsync(false));
+    Assert.is_true(window.is_open);
+    Assert.is_true(window.is_fullscreen);
+    Assert.eq(window.title, "state");
+    Assert.eq(window.size.width, 320);
+    Assert.eq(window.scale_factor, 1.0f);
+    window.set_title("renamed");
+    window.set_fullscreen(false);
+    window.set_cursor_mode(CursorMode.Captured);
+    window.set_cursor_icon(CursorIcon.Crosshair);
+    window.set_size(640, 480);
+    Assert.eq(window.title, "renamed");
+    Assert.is_false(window.is_fullscreen);
+    Assert.is_true(window.cursor_mode == CursorMode.Captured);
+    Assert.eq(window.pixel_size.height, 480);
+    window.simulate(WindowEvent.Resized(WindowSize(800, 600)));
+    let frame = window.poll();
+    Assert.eq(window.size.width, 800);
+    Assert.eq(frame.delta_seconds, 0.0f);
+    Assert.is_true(frame.time_seconds >= 0.0);
+    Assert.eq(frame.gamepads.length, 0);
+    Assert.is_true(frame.gamepads.first().is_none());
+    Assert.is_true(window.poll().delta_seconds >= 0.0f);
+
+    window.simulate(WindowEvent.CloseRequested);
+    let closing = window.poll();
+    Assert.eq(closing.events.length, 1);
+    Assert.is_false(window.is_open);
+    window.close();
+    Assert.is_false(window.is_open);
+}

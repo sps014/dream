@@ -340,6 +340,33 @@ mod tests {
     }
 
     #[test]
+    fn window_host_joins_only_programs_that_import_it() {
+        let without = assemble_selective_runtime(&[], JsRuntimeTarget::Web).unwrap();
+        assert!(!without.contains("makeWindowHost(getInstance)"));
+        let live = vec![("Dream".into(), "windowPoll".into())];
+        let with = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
+        assert!(with.contains("Object.assign(parts, makeWindowHost(getInstance));"));
+    }
+
+    #[test]
+    fn gpu_host_joins_only_programs_that_import_it() {
+        let without = assemble_selective_runtime(&[], JsRuntimeTarget::Web).unwrap();
+        assert!(!without.contains("makeGpuHost(getInstance)"));
+        assert!(!without.contains("function gpuParseBundle("));
+        let live = vec![
+            ("Dream".into(), "gpuDeviceCreate".into()),
+            ("Dream".into(), "gpuSubmit".into()),
+        ];
+        let with = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
+        assert!(with.contains("Object.assign(parts, makeGpuHost(getInstance));"));
+        assert!(with.contains("function gpuParseBundle("));
+        assert!(with.contains("function gpuRecordCommands("));
+        assert!(!with.contains("makeWindowHost(getInstance)"));
+        let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
+        assert_eq!(chunk_for_field(&manifest, "gpuSurfaceAcquire"), Some("gpu"));
+    }
+
+    #[test]
     fn selective_runtime_is_deterministic() {
         let live = vec![
             ("Dream".into(), "jsGlobal".into()),
@@ -357,6 +384,8 @@ mod tests {
         assert_eq!(chunk_for_field(&manifest, "fileRead"), Some("fs"));
         assert_eq!(chunk_for_field(&manifest, "dirList"), Some("fs"));
         assert_eq!(chunk_for_field(&manifest, "delayMs"), Some("datetime_text"));
+        assert_eq!(chunk_for_field(&manifest, "windowPoll"), Some("window"));
+        assert_eq!(chunk_for_field(&manifest, "windowCanvas"), Some("window"));
         assert_eq!(chunk_for_field(&manifest, "delay"), None);
         assert_eq!(chunk_for_field(&manifest, "print_int"), None);
     }

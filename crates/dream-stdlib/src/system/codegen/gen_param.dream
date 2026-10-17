@@ -12,13 +12,18 @@ public class GenParam {
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
 
+    /// Whether this is a `ref` parameter, so assignments to it in the body are visible to the
+    /// caller.
+    public is_ref: bool;
+
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>) {
+    public constructor(name: string, ty: GenTypeRef, is_ref: bool, attributes: List<GenAttribute>) {
         this.name = name;
         this.ty = ty;
+        this.is_ref = is_ref;
         this.attributes = attributes;
     }
 

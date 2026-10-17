@@ -68,6 +68,7 @@ impl<'a> Analyzer<'a> {
                 arg_is_ref.push(true);
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
+                        self.record_generator_type(param, t.clone());
                         arg_hirs.push(hir);
                         params_types.push(self.type_ctx.lower(&t));
                     }

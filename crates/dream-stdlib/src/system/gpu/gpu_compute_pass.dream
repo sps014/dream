@@ -1,0 +1,35 @@
+module system.gpu;
+
+/// A compute pass being recorded by `GpuCommandEncoder.begin_compute_pass`. Generated
+/// `GpuShaders.<name>.encode` calls record dispatches into it; dispatches in one pass run in
+/// order, each seeing the previous ones' writes.
+public class GpuComputePass {
+    internal encoder: GpuCommandEncoder;
+    ended: bool;
+
+    internal constructor(encoder: GpuCommandEncoder) {
+        this.encoder = encoder;
+        this.ended = false;
+    }
+
+    internal fun dispatch(pipeline: int, groups: GpuIVec3, args: GpuArgs): void {
+        if this.ended {
+            this.encoder.fail(GpuError.Validation("dispatch was recorded after the pass ended"));
+            return;
+        }
+        this.encoder.op(GpuOp.SetPipeline);
+        this.encoder.words.push(pipeline);
+        this.encoder.bind_args(GpuStage.Compute, args);
+        this.encoder.op(GpuOp.Dispatch);
+        this.encoder.words.push_all([groups.x, groups.y, groups.z]);
+    }
+
+    /// Ends the pass. Ending it twice does nothing.
+    public fun end(): void {
+        if !this.ended {
+            this.ended = true;
+            this.encoder.op(GpuOp.EndPass);
+            this.encoder.in_pass = false;
+        }
+    }
+}

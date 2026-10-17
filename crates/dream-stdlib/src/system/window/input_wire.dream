@@ -1,0 +1,117 @@
+module system.window;
+
+// Decodes the `float[]` record stream that native and browser window hosts return from a poll.
+// Each record is `[kind, length, payload...]`; text payloads are UTF-16 code units, which f32
+// represents exactly. Unknown kinds are skipped by length so hosts can add records first.
+internal static class InputWire {
+    internal static fun decode(
+        borrow wire: float[],
+        tracker: InputTracker,
+        events: List<WindowEvent>
+    ): void {
+        let pos = 0;
+        let text = "";
+        while pos + 1 < wire.length {
+            let kind = (int)wire[pos];
+            let length = (int)wire[pos + 1];
+            let at = pos + 2;
+            if length < 0 || at + length > wire.length {
+                break;
+            }
+            pos = at + length;
+            if kind == 8 {
+                text = text + InputWire.text(wire, at, length);
+                continue;
+            }
+            if text.length > 0 {
+                events.push(WindowEvent.Text(text));
+                text = "";
+            }
+            InputWire.record(kind, wire, at, length, tracker, events);
+        }
+        if text.length > 0 {
+            events.push(WindowEvent.Text(text));
+        }
+    }
+
+    static fun record(
+        kind: int,
+        borrow wire: float[],
+        at: int,
+        length: int,
+        tracker: InputTracker,
+        events: List<WindowEvent>
+    ): void {
+        if kind == 1 && length >= 2 {
+            events.push(WindowEvent.Resized(WindowSize((int)wire[at], (int)wire[at + 1])));
+        } else if kind == 2 && length >= 2 {
+            events.push(WindowEvent.Moved((int)wire[at], (int)wire[at + 1]));
+        } else if kind == 3 {
+            events.push(WindowEvent.Focused);
+        } else if kind == 4 {
+            events.push(WindowEvent.Unfocused);
+        } else if kind == 5 {
+            events.push(WindowEvent.CloseRequested);
+        } else if (kind == 6 || kind == 7) && length >= 3 {
+            let modifiers: KeyModifiers = (int)wire[at + 1] & 63;
+            let key = KeyEvent(
+                InputWire.key_code((int)wire[at]),
+                InputWire.text(wire, at + 3, length - 3),
+                modifiers,
+                kind == 6 && wire[at + 2] != 0.0f
+            );
+            if kind == 6 {
+                events.push(WindowEvent.KeyDown(key));
+            } else {
+                events.push(WindowEvent.KeyUp(key));
+            }
+        } else if kind == 9 && length >= 2 {
+            events.push(WindowEvent.MouseMove(WindowVector(wire[at], wire[at + 1])));
+        } else if (kind == 10 || kind == 11) && length >= 1 {
+            let index = (int)wire[at];
+            if index >= 0 && index < InputTracker.BUTTON_COUNT {
+                let button: MouseButton = index;
+                if kind == 10 {
+                    events.push(WindowEvent.MouseDown(button));
+                } else {
+                    events.push(WindowEvent.MouseUp(button));
+                }
+            }
+        } else if kind == 12 && length >= 2 {
+            events.push(WindowEvent.Scroll(WindowVector(wire[at], wire[at + 1])));
+        } else if kind == 13 && length >= 1 {
+            let slot = (int)wire[at];
+            tracker.connect_pad(slot, InputWire.text(wire, at + 1, length - 1));
+            events.push(WindowEvent.GamepadConnected(slot));
+        } else if kind == 14 && length >= 1 {
+            events.push(WindowEvent.GamepadDisconnected((int)wire[at]));
+        } else if kind == 15 {
+            events.push(WindowEvent.FileDropped(InputWire.text(wire, at, length)));
+        } else if kind == 16 && length >= 2 + InputTracker.AXIS_COUNT {
+            let axes = Buffer.alloc<float>(InputTracker.AXIS_COUNT);
+            for (let i = 0; i < InputTracker.AXIS_COUNT; i = i + 1) {
+                axes[i] = wire[at + 2 + i];
+            }
+            tracker.sample_pad((int)wire[at], (int)wire[at + 1], axes);
+        }
+    }
+
+    static fun key_code(value: int): KeyCode {
+        if value <= 0 || value >= InputTracker.KEY_COUNT {
+            return KeyCode.Unknown;
+        }
+        let code: KeyCode = value;
+        return code;
+    }
+
+    static fun text(borrow wire: float[], at: int, length: int): string {
+        if length <= 0 {
+            return "";
+        }
+        let result = string.alloc(length);
+        for (let i = 0; i < length; i = i + 1) {
+            string.set(result, i, (char)((int)wire[at + i]));
+        }
+        return result;
+    }
+}

@@ -1,0 +1,36 @@
+module system.gpu;
+
+/// The shaders that handle rays hitting one kind of geometry: a `@closest_hit` shader, plus
+/// optionally an `@any_hit` shader and, for custom shapes, an `@intersection` shader.
+///
+/// Start from `GpuHitGroup.closest` and add the optional shaders.
+public class GpuHitGroup {
+    internal closest_hit: GpuStageDescriptor;
+    internal any_hit: Option<GpuStageDescriptor>;
+    internal intersection: Option<GpuStageDescriptor>;
+
+    constructor(closest_hit: GpuStageDescriptor) {
+        this.closest_hit = closest_hit;
+        this.any_hit = Option.None;
+        this.intersection = Option.None;
+    }
+
+    /// A hit group that runs `shader`, a `@closest_hit` shader's `GpuShaders` entry,
+    /// for the nearest hit.
+    public static fun closest(shader: GpuStageShader): GpuHitGroup {
+        return GpuHitGroup(shader.descriptor());
+    }
+
+    /// Adds an `@any_hit` shader, and returns this hit group.
+    public fun with_any_hit(shader: GpuStageShader): GpuHitGroup {
+        this.any_hit = Option.Some(shader.descriptor());
+        return this;
+    }
+
+    /// Adds an `@intersection` shader for custom shapes built with `GpuGeometry.boxes`, and
+    /// returns this hit group.
+    public fun with_intersection(shader: GpuStageShader): GpuHitGroup {
+        this.intersection = Option.Some(shader.descriptor());
+        return this;
+    }
+}

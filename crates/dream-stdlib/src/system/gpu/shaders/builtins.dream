@@ -1,0 +1,264 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+let shader_builtin_table: Map<string, string> = Map<string, string>();
+
+// The Slang spelling of every `system.gpu` shader-side declaration. Keys are free function
+// names or `Type.member`; templates splice `$0`, `$1`, ... (arguments), `$*` (all arguments),
+// `$r` (the receiver) and `$T` (the Slang result type).
+internal static class Builtins {
+    internal static fun template(borrow key: string): Option<string> {
+        if shader_builtin_table.is_empty() {
+            Builtins.fill(shader_builtin_table);
+        }
+        return shader_builtin_table.get(key);
+    }
+
+    static fun fill(t: Map<string, string>): void {
+        // Thread and stage indexes are entry-point inputs copied into `static` globals, so
+        // helpers can read them too.
+        t["global_id"] = "int3(dream_global_id)";
+        t["local_id"] = "int3(dream_local_id)";
+        t["local_index"] = "int(dream_local_index)";
+        t["workgroup_id"] = "int3(dream_workgroup_id)";
+        t["workgroup_count"] = "int3(WorkgroupCount())";
+        t["workgroup_barrier"] = "GroupMemoryBarrierWithGroupSync()";
+        t["storage_barrier"] = "AllMemoryBarrierWithGroupSync()";
+        t["vertex_id"] = "int(dream_vertex_id)";
+        t["instance_id"] = "int(dream_instance_id)";
+        t["discard_fragment"] = "discard";
+
+        t["subgroup_size"] = "WaveGetLaneCount()";
+        t["subgroup_invocation_id"] = "WaveGetLaneIndex()";
+        t["subgroup_add"] = "WaveActiveSum($0)";
+        t["subgroup_min"] = "WaveActiveMin($0)";
+        t["subgroup_max"] = "WaveActiveMax($0)";
+        t["subgroup_prefix_add"] = "WavePrefixSum($0)";
+        // Bit-count forms are not available on every target; summing 0/1 is.
+        t["subgroup_prefix_count"] = "WavePrefixSum(($0) ? 1u : 0u)";
+        t["subgroup_count"] = "WaveActiveSum(($0) ? 1u : 0u)";
+        t["subgroup_ballot"] = "WaveActiveBallot($0)";
+        t["subgroup_broadcast"] = "WaveReadLaneAt($0, $1)";
+        t["subgroup_shuffle"] = "WaveShuffle($0, $1)";
+        t["subgroup_all"] = "WaveActiveAllTrue($0)";
+        t["subgroup_any"] = "WaveActiveAnyTrue($0)";
+        t["subgroup_elect"] = "WaveIsFirstLane()";
+
+        t["trace_ray"] = "TraceRay($0, $1, $2, 0, 1, 0, $3, $4)";
+        t["trace_ray_indexed"] = "TraceRay($0, $1, $2, uint($3), uint($4), uint($5), $6, $7)";
+        t["call_shader"] = "CallShader(uint($0), $1)";
+        t["dispatch_ray_index"] = "int3(DispatchRaysIndex())";
+        t["dispatch_ray_dimensions"] = "int3(DispatchRaysDimensions())";
+        t["world_ray_origin"] = "WorldRayOrigin()";
+        t["world_ray_direction"] = "WorldRayDirection()";
+        t["object_ray_origin"] = "ObjectRayOrigin()";
+        t["object_ray_direction"] = "ObjectRayDirection()";
+        t["ray_t_min"] = "RayTMin()";
+        t["ray_t_current"] = "RayTCurrent()";
+        t["hit_instance_id"] = "int(InstanceID())";
+        t["hit_primitive_index"] = "int(PrimitiveIndex())";
+        t["hit_kind"] = "int(HitKind())";
+        t["ignore_hit"] = "IgnoreHit()";
+        t["accept_hit_and_end_search"] = "AcceptHitAndEndSearch()";
+        t["report_hit"] = "ReportHit($0, uint($1), $2)";
+
+        for (let f in "sin cos tan asin acos atan atan2 exp exp2 log log2 pow sqrt rsqrt abs floor ceil round min max clamp saturate step smoothstep reflect refract ddx ddy fwidth".split(
+            ' '
+        )) {
+            t["GpuMath." + f] = f + "($*)";
+        }
+        t["GpuMath.sign"] = "$T(sign($0))";
+        t["GpuMath.fract"] = "frac($0)";
+        t["GpuMath.mix"] = "lerp($0, $1, $2)";
+        t["GpuMath.fma"] = "mad($0, $1, $2)";
+
+        for (let op in "add sub min max and or xor exchange".split(' ')) {
+            t["GpuAtomic." + op] = "$0[$1]." + op + "($2)";
+        }
+        t["GpuAtomic.compare_exchange"] = "$0[$1].compareExchange($2, $3)";
+        t["GpuAtomic.add_float"] = "dream_atomic_add_float($0, $1, $2)";
+
+        t["GpuVec2.of"] = "float2($*)";
+        t["GpuVec3.of"] = "float3($*)";
+        t["GpuVec4.of"] = "float4($*)";
+        t["GpuVec2.splat"] = "float2($0)";
+        t["GpuVec3.splat"] = "float3($0)";
+        t["GpuVec4.splat"] = "float4($0)";
+        t["GpuIVec2.of"] = "int2($*)";
+        t["GpuIVec3.of"] = "int3($*)";
+        t["GpuUVec4.of"] = "uint4($*)";
+        t["GpuMat4.of"] = "float4x4($*)";
+        t["GpuMat4.identity"] = "float4x4(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f)";
+        for (let v in "GpuVec2 GpuVec3 GpuVec4".split(' ')) {
+            t[v + ".dot"] = "dot($r, $0)";
+            t[v + ".length"] = "length($r)";
+            t[v + ".normalize"] = "normalize($r)";
+        }
+        t["GpuVec3.cross"] = "cross($r, $0)";
+        // GpuMat4 columns are Slang rows (`-matrix-layout-row-major` keeps the CPU layout).
+        t["GpuMat4.transpose"] = "transpose($r)";
+        t["GpuMat4.row"] = "transpose($r)[$0]";
+
+        t["GpuTexture.sample"] = "$r.Sample($0, $1)";
+        t["GpuTexture.sample_level"] = "$r.SampleLevel($0, $1, $2)";
+        t["GpuTexture.sample_compare"] = "$r.SampleCmp($0, $1, $2)";
+        t["GpuTexture.load"] = "$r.Load(int3($0, $1))";
+        t["GpuTexture.size"] = "dream_texture_size($r, $0)";
+        t["GpuHandle.get"] = "(*$r)";
+
+        t["GpuRay.of"] = "dream_ray($0, $1, $2, $3)";
+        t["GpuRayQuery.trace"] = "$r.TraceRayInline($0, 0, $1, $2)";
+        t["GpuRayQuery.proceed"] = "$r.Proceed()";
+        t["GpuRayQuery.commit_triangle"] = "$r.CommitNonOpaqueTriangleHit()";
+        t["GpuRayQuery.candidate_distance"] = "$r.CandidateTriangleRayT()";
+        t["GpuRayQuery.candidate_barycentrics"] = "$r.CandidateTriangleBarycentrics()";
+        t["GpuRayQuery.has_hit"] = "($r.CommittedStatus() == COMMITTED_TRIANGLE_HIT)";
+        t["GpuRayQuery.hit_distance"] = "$r.CommittedRayT()";
+        t["GpuRayQuery.hit_barycentrics"] = "$r.CommittedTriangleBarycentrics()";
+        t["GpuRayQuery.hit_instance_id"] = "int($r.CommittedInstanceID())";
+        t["GpuRayQuery.hit_primitive_index"] = "int($r.CommittedPrimitiveIndex())";
+
+        t["GpuDiffPair.of"] = "diffPair($0, $1)";
+        t["GpuDiffPair.constant"] = "diffPair($0)";
+        t["GpuDiffPair.value"] = "$r.p";
+        t["GpuDiffPair.derivative"] = "$r.d";
+        t["GpuDiff.forward"] = "fwd_diff($0)($1)";
+        t["GpuDiff.forward2"] = "fwd_diff($0)($1, $2)";
+        t["GpuDiff.forward3"] = "fwd_diff($0)($1, $2, $3)";
+        t["GpuDiff.backward"] = "bwd_diff($0)($1, $2)";
+        t["GpuDiff.backward2"] = "bwd_diff($0)($1, $2, $3)";
+        t["GpuDiff.backward3"] = "bwd_diff($0)($1, $2, $3, $4)";
+
+        t["GpuCoopVec.relu"] = "dream_coop_relu($0)";
+        t["GpuCoopVec.length"] = "$r.getCount()";
+        t["GpuCoopMat.multiply_add"] = "coopMatMulAdd<$E, false>($0, $1, $2)";
+        t["GpuCoopMat.store"] = "$r.Store<CoopMatMatrixLayout.RowMajor>($0, $1, $2)";
+    }
+
+    // The table key of a call to a `system.gpu` declaration, or "" for any other node. Generic
+    // static members can lack a resolved symbol, so the receiver's type name is used then.
+    internal static fun key_of(borrow n: ShaderNode): string {
+        if n.is_expr(ExprKind.FunctionCall) || n.is_statement(StmtKind.FunctionInvocation) {
+            if n.symbol.starts_with("system.gpu::") {
+                return n.symbol.substring(12, n.symbol.length);
+            }
+            return "";
+        }
+        if !n.is_expr(ExprKind.MethodCall) && !n.is_statement(StmtKind.MethodInvocation) {
+            return "";
+        }
+        if n.symbol.starts_with("system.gpu::") {
+            return n.symbol.substring(12, n.symbol.length);
+        }
+        if n.children.is_empty() {
+            return "";
+        }
+        let receiver = n.child(0);
+        if receiver.is_type_name() {
+            if Builtins.gpu_type(receiver.text) {
+                return receiver.text + "." + n.text;
+            }
+            return "";
+        }
+        if receiver.ty.decl.starts_with("system.gpu::") {
+            return receiver.ty.decl.substring(12, receiver.ty.decl.length) + "." + n.text;
+        }
+        return "";
+    }
+
+    internal static fun gpu_type(borrow name: string): bool {
+        return name
+            == "GpuMath"
+            || name
+            == "GpuAtomic"
+            || name
+            == "GpuDiff"
+            || name
+            == "GpuDiffPair"
+            || name
+            == "GpuCoopVec"
+            || name
+            == "GpuCoopMat"
+            || name
+            == "GpuRay"
+            || name
+            == "GpuRayQuery"
+            || name.starts_with("GpuVec")
+            || name.starts_with("GpuIVec") || name == "GpuUVec4" || name == "GpuMat4";
+    }
+
+    // Built-in entry-point inputs a call reads.
+    internal static fun input_of(borrow key: string): string {
+        if key
+            == "global_id"
+            || key
+            == "local_id"
+            || key
+            == "local_index" || key == "workgroup_id" || key == "vertex_id" || key == "instance_id" {
+            return key;
+        }
+        return "";
+    }
+
+    // Prelude helpers a call needs.
+    internal static fun helper_of(borrow key: string): string {
+        if key == "GpuAtomic.add_float" {
+            return "atomic_add_float";
+        }
+        if key
+            == "GpuRay.of"
+            || key == "GpuRayQuery.trace" || key == "trace_ray" || key == "trace_ray_indexed" {
+            return "ray";
+        }
+        if key == "GpuTexture.size" {
+            return "texture_size";
+        }
+        if key == "GpuCoopVec.relu" {
+            return "coop_relu";
+        }
+        return "";
+    }
+
+    // The `RAY_FLAG_*` constant of a `GpuRayFlags` member.
+    internal static fun ray_flag(borrow member: string): string {
+        let out = StringBuilder();
+        out.append("RAY_FLAG");
+        if member == "None" {
+            return "RAY_FLAG_NONE";
+        }
+        let i = 0;
+        for (let c in member) {
+            let s = c.to_string();
+            if s != s.to_lower() {
+                out.append("_");
+            }
+            out.append(s.to_upper());
+            i = i + 1;
+        }
+        return out.to_string();
+    }
+
+    // The numeric value of a `GpuRayFlags` member, for `RayQuery<flags>`.
+    internal static fun ray_flag_value(borrow member: string): int {
+        let names = "None ForceOpaque ForceNonOpaque AcceptFirstHitAndEndSearch SkipClosestHitShader CullBackFacingTriangles CullFrontFacingTriangles CullOpaque CullNonOpaque SkipTriangles SkipProceduralPrimitives".split(
+            ' '
+        );
+        let value = 0;
+        let i = 0;
+        while i < names.length {
+            if names[i] == member {
+                return value;
+            }
+            if value == 0 {
+                value = 1;
+            } else {
+                value = value * 2;
+            }
+            i = i + 1;
+        }
+        return 0;
+    }
+}

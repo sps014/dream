@@ -1,0 +1,415 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// The generated Dream side of one module's shaders: the bundle registration, a typed wrapper
+// class per shader, and the `GpuShaders` class that exposes them.
+internal static class Wrappers {
+    internal static fun source(borrow shader_module: ShaderModule): string {
+        let b = CodeBuilder();
+        if !shader_module.name.is_empty() {
+            b.line("module " + shader_module.name + ";");
+            b.line("");
+        }
+        b.line("import system;");
+        b.line("import system.collections;");
+        b.line("import system.gpu;");
+        b.line("");
+        let backends = List<string>();
+        for (let t in shader_module.targets()) {
+            backends.push(Targets.backend(t));
+        }
+        // Global initializers only reach public declarations, so each global calls a function
+        // of this file that builds it. Top-level variable names are program-wide, so they carry
+        // the module's stem.
+        let library = "gpu_shaders_" + shader_module.stem() + "_library";
+        b.line("let " + library + ": GpuShaderLibrary = gpu_shaders_register();");
+        for (let e in shader_module.entries) {
+            b.line(
+                "let "
+                    + Wrappers.global_name(shader_module, e)
+                    + ": " + Wrappers.class_name(e) + " = gpu_shader_make_" + e.name() + "();"
+            );
+        }
+        b.line("");
+        b.line("fun gpu_shaders_register(): GpuShaderLibrary {");
+        b.indent();
+        b.line("return GpuShaderLibrary.register(");
+        b.indent();
+        b.line("\"" + shader_module.name + "\",");
+        b.line("Assets.bytes(\"" + shader_module.asset() + "\"),");
+        b.line("[" + backends.join(", ") + "]");
+        b.dedent();
+        b.line(");");
+        b.dedent();
+        b.line("}");
+        for (let e in shader_module.entries) {
+            b.line("");
+            let class_name = Wrappers.class_name(e);
+            b.line("fun gpu_shader_make_" + e.name() + "(): " + class_name + " {");
+            b.indent();
+            b.line("return " + class_name + "(");
+            b.indent();
+            if e.is_compute() {
+                b.line(
+                    "GpuComputeShader("
+                        + library
+                        + ", \""
+                        + e.name()
+                        + "\", "
+                        + e.x.to_string() + ", " + e.y.to_string() + ", " + e.z.to_string() + ")"
+                );
+            } else {
+                b.line(
+                    "GpuStageDescriptor("
+                        + library
+                        + ", \""
+                        + e.name()
+                        + "\", "
+                        + Wrappers.stage(e)
+                        + ", ["
+                        + Wrappers.ints(Wrappers.inputs(e, shader_module))
+                        + "], [" + Wrappers.ints(Wrappers.outputs(e, shader_module)) + "])"
+                );
+            }
+            b.dedent();
+            b.line(");");
+            b.dedent();
+            b.line("}");
+        }
+        let visibility = "internal";
+        for (let e in shader_module.entries) {
+            if e.function.visibility == "public" {
+                visibility = "public";
+            }
+        }
+        b.line("");
+        b.line(
+            "/// The GPU shaders of this module, compiled ahead of time for every `@gpu_targets` entry"
+        );
+        b.line("/// this build can load.");
+        b.line(visibility + " static class GpuShaders {");
+        b.indent();
+        b.line("/// The backends this module has shader code for in this build.");
+        b.line("public static fun backends(): List<GpuBackend> {");
+        b.indent();
+        b.line("return " + library + ".backends.clone();");
+        b.dedent();
+        b.line("}");
+        for (let e in shader_module.entries) {
+            b.line("");
+            b.line("/// The " + e.attribute_name() + " shader `" + e.name() + "`.");
+            b.line(
+                Wrappers.visibility(e)
+                    + " static get " + e.name() + "(): " + Wrappers.class_name(e) + " {"
+            );
+            b.indent();
+            b.line("return " + Wrappers.global_name(shader_module, e) + ";");
+            b.dedent();
+            b.line("}");
+        }
+        b.dedent();
+        b.line("}");
+        for (let e in shader_module.entries) {
+            b.line("");
+            if e.is_compute() {
+                Wrappers.compute(b, e);
+            } else {
+                Wrappers.stage_wrapper(b, e);
+            }
+        }
+        return Wrappers.trim_lines(b.to_string());
+    }
+
+    // `CodeBuilder` indents empty lines; generated files keep them empty.
+    static fun trim_lines(borrow text: string): string {
+        let out = StringBuilder();
+        for (let line in text.split('\n')) {
+            if line.trim().is_empty() {
+                out.append("\n");
+            } else {
+                out.append(line + "\n");
+            }
+        }
+        let result = out.to_string();
+        while result.ends_with("\n\n") {
+            result = result.substring(0, result.length - 1);
+        }
+        return result;
+    }
+
+    static fun global_name(borrow shader_module: ShaderModule, borrow e: ShaderEntry): string {
+        return "gpu_shader_" + shader_module.stem() + "_" + e.name();
+    }
+
+    internal static fun class_name(borrow e: ShaderEntry): string {
+        return "GpuShaders" + Names.pascal(e.name());
+    }
+
+    static fun visibility(borrow e: ShaderEntry): string {
+        if e.function.visibility == "public" {
+            return "public";
+        }
+        return "internal";
+    }
+
+    static fun stage(borrow e: ShaderEntry): string {
+        let name = e.attribute_name().substring(1, e.attribute_name().length);
+        return "GpuStage." + Names.pascal(name);
+    }
+
+    static fun ints(borrow values: List<int>): string {
+        let parts = List<string>();
+        for (let v in values) {
+            parts.push(v.to_string());
+        }
+        return parts.join(", ");
+    }
+
+    // `@location` indexes the stage reads.
+    static fun inputs(borrow e: ShaderEntry, borrow shader_module: ShaderModule): List<int> {
+        let out = List<int>();
+        if !e.is_render() {
+            return out;
+        }
+        for (let p in e.params) {
+            if p.location >= 0 {
+                out.push(p.location);
+            }
+        }
+        for (let p in e.function.params) {
+            Wrappers.locations(p.ty, shader_module, out);
+        }
+        return out;
+    }
+
+    // `@location` indexes a vertex shader writes, or the render targets a fragment shader writes.
+    static fun outputs(borrow e: ShaderEntry, borrow shader_module: ShaderModule): List<int> {
+        let out = List<int>();
+        if e.stage == GpuStage.Fragment && !SlangTypes.is_user(e.function.ret) {
+            out.push(0);
+            return out;
+        }
+        if e.is_render() {
+            Wrappers.locations(e.function.ret, shader_module, out);
+        }
+        return out;
+    }
+
+    static fun locations(
+        borrow ty: GenTypeRef,
+        borrow shader_module: ShaderModule,
+        out: List<int>
+    ): void {
+        if ty.kind != TypeRefKind.Named || ty.decl.starts_with("system.") {
+            return;
+        }
+        for (let d in shader_module.types) {
+            if d.id == ty.decl {
+                for (let f in d.fields) {
+                    switch (f.attribute<LocationAttribute>()) {
+                        Some(l) => {
+                            out.push(l.index);
+                        }
+                        None => {}
+                    }
+                }
+            }
+        }
+    }
+
+    // Wrapper parameter names, renamed where they would shadow the method's own parameters.
+    static fun arg_name(borrow name: string): string {
+        if name
+            == "device"
+            || name
+            == "dispatch"
+            || name == "pass" || name == "pipeline" || name == "width" || name == "height" {
+            return name + "_arg";
+        }
+        return name;
+    }
+
+    // The CPU spelling of a parameter type. Cooperative vectors exist only on the GPU, so a
+    // buffer of them is passed as a buffer of their elements.
+    static fun cpu_type(borrow ty: GenTypeRef): string {
+        if SlangTypes.is_named(ty, "GpuBuffer") && SlangTypes.is_named(ty.arg(0), "GpuCoopVec") {
+            return "GpuBuffer<" + ty.arg(0).arg(0).source_name() + ">";
+        }
+        return ty.source_name();
+    }
+
+    // The method parameters after `fixed`, one per line.
+    static fun parameters(b: CodeBuilder, borrow fixed: List<string>, borrow e: ShaderEntry): void {
+        let all = List<string>();
+        for (let f in fixed) {
+            all.push(f);
+        }
+        for (let p in e.bindable()) {
+            all.push(Wrappers.arg_name(p.name) + ": " + Wrappers.cpu_type(p.ty));
+        }
+        b.indent();
+        let i = 0;
+        while i < all.length {
+            if i + 1 < all.length {
+                b.line(all[i] + ",");
+            } else {
+                b.line(all[i]);
+            }
+            i = i + 1;
+        }
+        b.dedent();
+    }
+
+    static fun args(borrow e: ShaderEntry): string {
+        let out = StringBuilder();
+        out.append("GpuArgs()");
+        for (let p in e.bindable()) {
+            out.append("." + ParamKinds.builder(p.kind) + "(" + Wrappers.arg_name(p.name) + ")");
+        }
+        return out.to_string();
+    }
+
+    static fun compute(b: CodeBuilder, borrow e: ShaderEntry): void {
+        let name = Wrappers.class_name(e);
+        let visibility = Wrappers.visibility(e);
+        b.line("/// The typed entry point of the `@compute` shader `" + e.name() + "`.");
+        b.line(visibility + " class " + name + " {");
+        b.indent();
+        b.line("shader: GpuComputeShader;");
+        b.line("");
+        b.line("internal constructor(shader: GpuComputeShader) {");
+        b.indent();
+        b.line("this.shader = shader;");
+        b.dedent();
+        b.line("}");
+        b.line("");
+        b.line(
+            "/// Runs `"
+                + e.name() + "` once over `dispatch` with the shader's parameters and waits"
+        );
+        b.line("/// until the GPU finished.");
+        b.line("public async fun dispatch(");
+        Wrappers.parameters(
+            b,
+            List<string>.from_array(["device: GpuDevice", "dispatch: GpuDispatch"]),
+            e
+        );
+        b.line("): Result<bool, GpuError> {");
+        b.indent();
+        b.line("return this.shader.dispatch(device, dispatch, " + Wrappers.args(e) + ").await;");
+        b.dedent();
+        b.line("}");
+        b.line("");
+        b.line(
+            "/// Records `" + e.name() + "` into `pass`; mistakes are reported when the encoder's"
+        );
+        b.line("/// commands are submitted.");
+        b.line("public fun encode(");
+        Wrappers.parameters(
+            b,
+            List<string>.from_array(
+                ["device: GpuDevice", "pass: GpuComputePass", "dispatch: GpuDispatch"]
+            ),
+            e
+        );
+        b.line("): void {");
+        b.indent();
+        b.line("this.shader.encode(device, pass, dispatch, " + Wrappers.args(e) + ");");
+        b.dedent();
+        b.line("}");
+        b.dedent();
+        b.line("}");
+    }
+
+    // The `GpuRenderPass` method that sets a parameter of this kind.
+    static fun bind_method(kind: int): string {
+        if kind == ParamKinds.value() {
+            return "bind_value";
+        }
+        if kind == ParamKinds.buffer() {
+            return "bind_buffer";
+        }
+        return "bind";
+    }
+
+    static fun stage_wrapper(b: CodeBuilder, borrow e: ShaderEntry): void {
+        let name = Wrappers.class_name(e);
+        b.line("/// The " + e.attribute_name() + " shader `" + e.name() + "`.");
+        b.line(Wrappers.visibility(e) + " class " + name + ": GpuStageShader {");
+        b.indent();
+        b.line("stage: GpuStageDescriptor;");
+        b.line("");
+        b.line("internal constructor(stage: GpuStageDescriptor) {");
+        b.indent();
+        b.line("this.stage = stage;");
+        b.dedent();
+        b.line("}");
+        b.line("");
+        b.line("/// The compiled shader stage.");
+        b.line("public fun descriptor(): GpuStageDescriptor {");
+        b.indent();
+        b.line("return this.stage;");
+        b.dedent();
+        b.line("}");
+        if e.stage == GpuStage.RayGeneration {
+            b.line("");
+            b.line(
+                "/// Runs `"
+                    + e.name() + "` on `pipeline` once per element of a `width` by `height` grid"
+            );
+            b.line("/// with the shader's parameters, and waits until the GPU finished.");
+            b.line("public async fun trace(");
+            Wrappers.parameters(
+                b,
+                List<string>.from_array(
+                    [
+                        "device: GpuDevice",
+                        "pipeline: GpuRayTracingPipeline",
+                        "width: int",
+                        "height: int"
+                    ]
+                ),
+                e
+            );
+            b.line("): Result<bool, GpuError> {");
+            b.indent();
+            b.line(
+                "return pipeline.trace(device, width, height, 1, " + Wrappers.args(e) + ").await;"
+            );
+            b.dedent();
+            b.line("}");
+            b.dedent();
+            b.line("}");
+            return;
+        }
+        let index = 0;
+        for (let p in e.bindable()) {
+            b.line("");
+            b.line(
+                "/// The `"
+                    + p.name
+                    + "` parameter; choose its value with `GpuRenderPass."
+                    + Wrappers.bind_method(p.kind) + "`."
+            );
+            let getter = p.name;
+            if getter == "descriptor" {
+                getter = "descriptor_slot";
+            }
+            b.line("public get " + getter + "(): GpuBindingSlot {");
+            b.indent();
+            b.line(
+                "return GpuBindingSlot("
+                    + Wrappers.stage(e) + ", " + index.to_string() + ", \"" + p.name + "\");"
+            );
+            b.dedent();
+            b.line("}");
+            index = index + 1;
+        }
+        b.dedent();
+        b.line("}");
+    }
+}

@@ -1,12 +1,12 @@
-use crate::toolchain::{self, Component};
+use crate::toolchain;
 use anyhow::Result;
 
 pub fn install(component: Option<String>) -> Result<()> {
-    let components = match component.as_deref() {
-        None => toolchain::available_components()?,
-        Some(name) => vec![Component::parse_name(name)?],
+    let tools = match component.as_deref() {
+        None => toolchain::default_tools()?,
+        Some(name) => vec![toolchain::parse_tool(name)?],
     };
-    toolchain::install(&components)?;
+    toolchain::install(&tools)?;
     prewarm_generators();
     Ok(())
 }
@@ -33,7 +33,7 @@ pub fn list() -> Result<()> {
 }
 
 pub fn uninstall(component: String) -> Result<()> {
-    toolchain::uninstall(Component::parse_name(&component)?)
+    toolchain::uninstall(toolchain::parse_tool(&component)?)
 }
 
 pub fn doctor(target: Option<&str>, json: bool) -> Result<()> {

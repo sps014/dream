@@ -288,7 +288,48 @@ impl<'a> Analyzer<'a> {
         kind: dream_syntax::nodes::ConstraintKind,
     ) -> bool {
         let ty = self.type_ctx.lower(concrete);
+        self.instantiate_value_fields(ty, &mut indexmap::IndexSet::new());
         self.type_id_satisfies_kind(ty, kind, &mut indexmap::IndexSet::new())
+    }
+
+    /// Registers every generic value-struct instance reachable through `ty`'s fields, such as
+    /// `GpuHandle<GpuTexture>` inside a user struct, so the kind check can see their fields.
+    fn instantiate_value_fields(
+        &mut self,
+        ty: dream_types::TypeId,
+        seen: &mut indexmap::IndexSet<dream_types::TypeId>,
+    ) {
+        use dream_types::TyKind;
+        if !seen.insert(ty) {
+            return;
+        }
+        match self.type_ctx.interner.kind(ty).clone() {
+            TyKind::Struct(def, args) if self.type_ctx.defs.is_value(def) => {
+                if !args.is_empty() && self.struct_info(ty).is_none() {
+                    let name = self.type_ctx.defs.get(def).name.clone();
+                    self.ensure_struct_instance(
+                        def,
+                        &name,
+                        args.to_vec(),
+                        &empty_span(),
+                        &mut DiagnosticBag::new(None),
+                    );
+                }
+                let fields: Vec<_> = self
+                    .struct_info(ty)
+                    .map(|info| info.fields.values().map(|field| field.ty).collect())
+                    .unwrap_or_default();
+                for field in fields {
+                    self.instantiate_value_fields(field, seen);
+                }
+            }
+            TyKind::Tuple(elems) => {
+                for elem in elems.iter() {
+                    self.instantiate_value_fields(*elem, seen);
+                }
+            }
+            _ => {}
+        }
     }
 
     pub(super) fn type_id_satisfies_kind(

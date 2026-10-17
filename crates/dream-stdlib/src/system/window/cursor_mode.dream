@@ -1,0 +1,13 @@
+module system.window;
+
+/// How the mouse cursor behaves over a window.
+public enum CursorMode {
+    /// The cursor is visible and moves freely.
+    Normal = 0,
+    /// The cursor is invisible while it is over the window but is not confined.
+    Hidden = 1,
+    /// The cursor is hidden and locked to the window, for first-person camera
+    /// controls. `MouseState.delta` keeps reporting movement without limit.
+    /// Browsers only grant the lock after a user gesture, such as a click on the canvas.
+    Captured = 2,
+}

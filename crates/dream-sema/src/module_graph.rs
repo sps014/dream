@@ -65,6 +65,8 @@ pub struct ConsumedBy {
     pub generator: String,
     pub file: String,
     pub span: dream_text::text_span::TextSpan,
+    /// The consuming generator's guidance (how to use the function instead), possibly empty.
+    pub help: String,
 }
 
 pub struct ModuleGraph<'a> {
@@ -240,11 +242,41 @@ impl<'a> ModuleGraph<'a> {
                 .flat_map(|f| f.program.extends.iter())
                 .collect(),
             globals: self
-                .files
-                .iter()
-                .flat_map(|f| f.program.globals.iter())
+                .initialization_order()
+                .into_iter()
+                .flat_map(|module| self.modules[module.0 as usize].files.iter())
+                .flat_map(|&file| self.files[file].program.globals.iter())
                 .collect(),
         }
+    }
+
+    /// Modules in global-initialization order: every module after the modules it imports, so a
+    /// global initializer can rely on the globals of its dependencies. Import cycles keep the
+    /// order in which the depth-first walk first reaches them.
+    fn initialization_order(&self) -> Vec<ModuleId> {
+        let mut order = Vec::with_capacity(self.modules.len());
+        let mut visited = vec![false; self.modules.len()];
+        for root in &self.modules {
+            if visited[root.id.0 as usize] {
+                continue;
+            }
+            visited[root.id.0 as usize] = true;
+            let mut stack = vec![(root.id, 0usize)];
+            while let Some((id, next)) = stack.last_mut() {
+                let module = &self.modules[id.0 as usize];
+                if let Some(&import) = module.imports.get(*next) {
+                    *next += 1;
+                    if !visited[import.0 as usize] {
+                        visited[import.0 as usize] = true;
+                        stack.push((import, 0));
+                    }
+                } else {
+                    order.push(*id);
+                    stack.pop();
+                }
+            }
+        }
+        order
     }
 
     pub fn configure_types(&self, types: &mut TypeCtx) {

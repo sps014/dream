@@ -1,0 +1,18 @@
+module system.gpu;
+
+/// A shader compilation target named in `@gpu_targets`. Each target produces one kind of
+/// GPU code, and the matching `GpuBackend` runs it.
+public enum GpuTarget {
+    /// DXIL for Direct3D 12, on Windows.
+    Dx12 = 1,
+    /// DXBC for Direct3D 11, on Windows. Building it needs a Windows build machine.
+    Dx11 = 2,
+    /// SPIR-V for Vulkan, on Windows and Linux.
+    Vulkan = 3,
+    /// A Metal library, on macOS.
+    Metal = 4,
+    /// PTX for CUDA, on Windows and Linux. Compute shaders only.
+    Cuda = 5,
+    /// WGSL for WebGPU, in browsers, Node and native programs. The default target.
+    WebGpu = 6,
+}

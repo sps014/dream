@@ -44,11 +44,11 @@ version suffix is accepted without weakening architecture, OS, environment, widt
 checks. A mismatch, malformed table, or missing runtime symbol reports `CompileError::Toolchain`
 with the exact `dream_rt.sigs` cache path, so stale artifacts are actionable rather than ICEs.
 
-Native Rust hosts live in `crates/dream-host-{core,unicode,crypto,process,timezone,net,cli,data,io}`, not in the compiler.
+Native Rust hosts live in `crates/dream-host-{core,unicode,crypto,process,timezone,net,cli,data,io,window}`, not in the compiler.
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
-`cargo build --workspace` builds the compiler and all nine native capability libraries:
+`cargo build --workspace` builds the compiler and all ten native capability libraries:
 `dream_host_core`,
-`dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, `dream_host_timezone`, `dream_host_net`, `dream_host_cli`, `dream_host_data`, and `dream_host_io` (with the
+`dream_host_unicode`, `dream_host_crypto`, `dream_host_process`, `dream_host_timezone`, `dream_host_net`, `dream_host_cli`, `dream_host_data`, `dream_host_io`, and `dream_host_window` (with the
 platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
 another host implementation: its independent capability features
 select these packages. The workspace contains only retained core services.
@@ -59,9 +59,10 @@ Guest callback binding and icon storage belong exclusively to the core library. 
 decoding/window helpers. Every other capability dynamically links core, with an adjacent-library
 loader path. Build-time `@c` library discovery stays in `execution/native/c_link.rs`.
 
-LLVM is pinned to one version (`LLVM_VERSION` in `src/execution/llvm/tools.rs`). `dream` resolves
-it from `DREAM_LLVM` (a `bin/` directory or its parent), then from `dreamer toolchain install llvm`
-under `~/.dream/toolchains/llvm-*`, and rejects any other major version. The installers
+LLVM is pinned to one version (`LLVM_VERSION` in `crates/dream-abi/src/toolchain.rs`). `dream` resolves
+it through the pinned-tool table: `DREAM_LLVM` (a `bin/` directory or its parent), then the release
+bundle's `lib/dream/llvm`, then `~/.dream/toolchains/llvm-<version>` (`scripts/fetch-dev-llvm.sh`),
+and rejects any other major version. The installers
 (`scripts/install.sh`, `install.ps1`, `use-toolchain.sh`) install it unless `DREAM_SKIP_LLVM=1`.
 No crate links against LLVM: the IR is text, and the tools run as subprocesses.
 

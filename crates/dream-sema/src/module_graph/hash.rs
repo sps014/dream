@@ -230,6 +230,7 @@ fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
                 | dream_syntax::nodes::Type::Char(token)
                 | dream_syntax::nodes::Type::Boolean(token)
                 | dream_syntax::nodes::Type::Float(token)
+                | dream_syntax::nodes::Type::Float16(token)
                 | dream_syntax::nodes::Type::Double(token)
                 | dream_syntax::nodes::Type::UInt(token)
                 | dream_syntax::nodes::Type::ULong(token)

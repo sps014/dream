@@ -1,0 +1,6 @@
+module system.gpu;
+
+/// Marks a field of a ray payload struct, the data a ray carries between `trace_ray` and
+/// the hit and miss shaders. Only marked fields travel with the ray, so keep payloads small.
+@attribute(AttributeTarget.Field)
+public struct RayPayloadAttribute {}

@@ -290,6 +290,9 @@ impl<'a> Analyzer<'a> {
                 continue;
             };
             let def = identity.0;
+            if self.is_generator_only_function(def) {
+                continue;
+            }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(func.file_path.as_deref()));
             let sym_name = self.function_table.emitted_name(&self.type_ctx, &identity);

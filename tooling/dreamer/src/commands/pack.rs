@@ -71,9 +71,11 @@ pub fn run(
         let mut products = Vec::new();
         runtime::copy(&bin_path, writer.root(), &spec)?;
         for capability in dream_abi::host_capability::HostCapability::ALL {
-            let name = capability.library_name(&spec);
-            if writer.root().join(&name).is_file() {
-                products.push(PathBuf::from(name));
+            let companions = capability.companion_library_names(&spec).iter().map(|n| n.to_string());
+            for name in std::iter::once(capability.library_name(&spec)).chain(companions) {
+                if writer.root().join(&name).is_file() {
+                    products.push(PathBuf::from(name));
+                }
             }
         }
         let out_name = if dream_triple.starts_with("windows-") {

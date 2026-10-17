@@ -15,10 +15,12 @@ pub enum HostCapability {
     Cli,
     Data,
     Io,
+    Window,
+    Gpu,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Core,
         Self::Unicode,
         Self::Crypto,
@@ -28,6 +30,8 @@ impl HostCapability {
         Self::Cli,
         Self::Data,
         Self::Io,
+        Self::Window,
+        Self::Gpu,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -41,6 +45,8 @@ impl HostCapability {
             Self::Cli => "cli",
             Self::Data => "data",
             Self::Io => "io",
+            Self::Window => "window",
+            Self::Gpu => "gpu",
         }
     }
 
@@ -55,6 +61,8 @@ impl HostCapability {
             Self::Cli => "dream_host_cli",
             Self::Data => "dream_host_data",
             Self::Io => "dream_host_io",
+            Self::Window => "dream_host_window",
+            Self::Gpu => "dream_host_gpu",
         }
     }
 
@@ -104,6 +112,17 @@ impl HostCapability {
             format!("lib{name}.dylib")
         } else {
             format!("lib{name}.so")
+        }
+    }
+
+    /// Shared libraries the capability library loads from its own directory at run time, so
+    /// they ship next to it: the GPU host's Dawn (WebGPU) runtime.
+    pub fn companion_library_names(self, target: &crate::target::TargetSpec) -> &'static [&'static str] {
+        match self {
+            Self::Gpu if target.is_windows() => &["dawn.dll"],
+            Self::Gpu if target.is_apple() => &["libdawn.dylib"],
+            Self::Gpu => &["libdawn.so"],
+            _ => &[],
         }
     }
 

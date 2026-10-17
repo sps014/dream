@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 env:
-  # Must match `LLVM_VERSION` in src/execution/llvm/tools.rs.
+  # Must match `LLVM_VERSION` in crates/dream-abi/src/toolchain.rs.
   LLVM_VERSION: "22.1.8"
 
 jobs:
@@ -73,7 +73,7 @@ jobs:
       - name: Check pinned version
         shell: bash
         run: |
-          grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" src/execution/llvm/tools.rs
+          grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" crates/dream-abi/src/toolchain.rs
 
       - uses: actions/cache@v4
         id: cache

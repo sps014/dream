@@ -75,7 +75,9 @@ pub(in super::super) fn copies(l: &mut Lcx<'_>, elem: TypeId) -> (String, String
     let future = fx.arg(1);
     let wide = matches!(
         fx.interner.kind(elem),
-        TyKind::Prim(PrimTy::Long | PrimTy::ULong | PrimTy::Float | PrimTy::Double)
+        TyKind::Prim(
+            PrimTy::Long | PrimTy::ULong | PrimTy::Float16 | PrimTy::Float | PrimTy::Double
+        )
     );
     let offset = if wide {
         fx.l.cx.target.abi().future.wide

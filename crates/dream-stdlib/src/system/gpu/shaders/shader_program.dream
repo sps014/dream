@@ -1,0 +1,275 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// Every GPU function of the program: entry points in declaration order, `@gpu` helpers, their
+// bodies, and the entries grouped by Dream shader_module.
+internal class ShaderProgram {
+    internal entries: List<ShaderEntry>;
+    internal functions: List<GenFunction>;
+    internal bodies: Map<string, List<ShaderNode>>;
+    internal modules: List<ShaderModule>;
+
+    internal constructor() {
+        this.entries = List<ShaderEntry>();
+        this.functions = List<GenFunction>();
+        this.bodies = Map<string, List<ShaderNode>>();
+        this.modules = List<ShaderModule>();
+    }
+
+    internal static fun collect(ctx: GenContext): ShaderProgram {
+        let program = ShaderProgram();
+        let found = List<ShaderEntry>();
+        for (let f in ctx.functions_with<ComputeAttribute>()) {
+            let e = ShaderEntry(f, GpuStage.Compute, ShaderProgram.module_name(f.id));
+            switch (f.attribute<ComputeAttribute>()) {
+                Some(size) => {
+                    e.x = size.x;
+                    e.y = size.y.unwrap_or(1);
+                    e.z = size.z.unwrap_or(1);
+                }
+                None => {}
+            }
+            found.push(e);
+        }
+        ShaderProgram.add_stage(found, ctx.functions_with<VertexAttribute>(), GpuStage.Vertex);
+        ShaderProgram.add_stage(found, ctx.functions_with<FragmentAttribute>(), GpuStage.Fragment);
+        ShaderProgram.add_stage(
+            found,
+            ctx.functions_with<RayGenerationAttribute>(),
+            GpuStage.RayGeneration
+        );
+        ShaderProgram.add_stage(
+            found,
+            ctx.functions_with<ClosestHitAttribute>(),
+            GpuStage.ClosestHit
+        );
+        ShaderProgram.add_stage(found, ctx.functions_with<AnyHitAttribute>(), GpuStage.AnyHit);
+        ShaderProgram.add_stage(found, ctx.functions_with<MissAttribute>(), GpuStage.Miss);
+        ShaderProgram.add_stage(
+            found,
+            ctx.functions_with<IntersectionAttribute>(),
+            GpuStage.Intersection
+        );
+        ShaderProgram.add_stage(found, ctx.functions_with<CallableAttribute>(), GpuStage.Callable);
+        found.sort_by(
+            (a, b) => {
+                return ShaderProgram.compare_location(a.function.location, b.function.location);
+            }
+        );
+        for (let e in found) {
+            if program.is_entry(e.function.id) {
+                ctx.error_at(e.function.id, "a function can carry only one shader stage attribute");
+                continue;
+            }
+            program.entries.push(e);
+            program.functions.push(e.function);
+            program.bodies[e.function.id] = e.body;
+        }
+        let helpers = ctx.functions_with<GpuAttribute>();
+        helpers.sort_by(
+            (a, b) => {
+                return ShaderProgram.compare_location(a.location, b.location);
+            }
+        );
+        for (let h in helpers) {
+            if program.is_entry(h.id) {
+                ctx.error_at(h.id, "@gpu marks helpers; a shader entry point does not need it");
+                continue;
+            }
+            program.functions.push(h);
+            program.bodies[h.id] = ShaderNode.body_of(h);
+        }
+        return program;
+    }
+
+    static fun add_stage(
+        found: List<ShaderEntry>,
+        borrow functions: List<GenFunction>,
+        stage: GpuStage
+    ): void {
+        for (let f in functions) {
+            found.push(ShaderEntry(f, stage, ShaderProgram.module_name(f.id)));
+        }
+    }
+
+    internal static fun module_name(borrow id: string): string {
+        switch (id.last_index_of("::")) {
+            Some(i) => {
+                return id.substring(0, i);
+            }
+            None => {
+                return "";
+            }
+        }
+    }
+
+    internal static fun compare_location(borrow a: GenLocation, borrow b: GenLocation): int {
+        let c = a.file.compare(b.file);
+        if c != 0 {
+            return c;
+        }
+        if a.line != b.line {
+            return a.line - b.line;
+        }
+        return a.column - b.column;
+    }
+
+    internal fun is_entry(borrow id: string): bool {
+        for (let e in this.entries) {
+            if e.function.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal fun is_user_function(borrow id: string): bool {
+        for (let f in this.functions) {
+            if f.id == id {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    internal fun function(borrow id: string): Option<GenFunction> {
+        for (let f in this.functions) {
+            if f.id == id {
+                return Option.Some(f);
+            }
+        }
+        return Option.None;
+    }
+
+    internal fun body(borrow id: string): List<ShaderNode> {
+        return this.bodies.get(id).unwrap_or(List<ShaderNode>());
+    }
+
+    // Every node of a function body, depth first.
+    internal fun nodes(borrow id: string): List<ShaderNode> {
+        let out = List<ShaderNode>();
+        for (let s in this.body(id)) {
+            out.push(s);
+            s.walk(out);
+        }
+        return out;
+    }
+
+    // Calls of, and references to, other GPU functions inside function `id`.
+    internal fun calls_from(borrow id: string): List<ShaderNode> {
+        let out = List<ShaderNode>();
+        for (let n in this.nodes(id)) {
+            let call = n.is_expr(ExprKind.FunctionCall)
+                || n.is_statement(StmtKind.FunctionInvocation)
+                || (n.is_expr(ExprKind.Identifier) && n.symbol_kind == "function");
+            if call && this.is_user_function(n.symbol) {
+                out.push(n);
+            }
+        }
+        return out;
+    }
+
+    // Functions reachable from `roots`, in program order.
+    internal fun reachable(borrow roots: List<string>): List<GenFunction> {
+        let seen = List<string>();
+        let queue = List<string>();
+        for (let r in roots) {
+            queue.push(r);
+        }
+        while !queue.is_empty() {
+            let id = queue.pop().unwrap();
+            if seen.contains(id) {
+                continue;
+            }
+            seen.push(id);
+            for (let call in this.calls_from(id)) {
+                queue.push(call.symbol);
+            }
+        }
+        let out = List<GenFunction>();
+        for (let f in this.functions) {
+            if seen.contains(f.id) && !roots.contains(f.id) {
+                out.push(f);
+            }
+        }
+        return out;
+    }
+
+    // Groups the entries by module and finds each module's helpers and user types.
+    internal fun group(ctx: GenContext): void {
+        for (let e in this.entries) {
+            let index = -1;
+            let i = 0;
+            while i < this.modules.length {
+                if this.modules[i].name == e.module_name {
+                    index = i;
+                }
+                i = i + 1;
+            }
+            if index < 0 {
+                this.modules.push(ShaderModule(e.module_name));
+                index = this.modules.length - 1;
+            }
+            this.modules[index].entries.push(e);
+        }
+        for (let m in this.modules) {
+            let roots = List<string>();
+            for (let e in m.entries) {
+                roots.push(e.function.id);
+                if e.stage == GpuStage.Fragment && SlangTypes.is_user(e.function.ret) {
+                    m.fragment_outputs.push(e.function.ret.decl);
+                }
+            }
+            m.helpers = this.reachable(roots);
+            for (let e in m.entries) {
+                this.add_types(ctx, m, e.function);
+            }
+            for (let h in m.helpers) {
+                this.add_types(ctx, m, h);
+            }
+        }
+    }
+
+    fun add_types(ctx: GenContext, m: ShaderModule, borrow f: GenFunction): void {
+        for (let p in f.params) {
+            ShaderProgram.add_type(ctx, m, p.ty);
+        }
+        ShaderProgram.add_type(ctx, m, f.ret);
+        for (let n in this.nodes(f.id)) {
+            ShaderProgram.add_type(ctx, m, n.ty);
+            for (let t in n.types) {
+                ShaderProgram.add_type(ctx, m, t);
+            }
+        }
+    }
+
+    // Adds a user struct or enum after the types its fields use.
+    static fun add_type(ctx: GenContext, m: ShaderModule, borrow ty: GenTypeRef): void {
+        for (let arg in ty.args) {
+            ShaderProgram.add_type(ctx, m, arg);
+        }
+        if ty.kind
+            != TypeRefKind.Named
+            || ty.decl.is_empty() || ty.decl.starts_with("system.") || m.has_type(ty.decl) {
+            return;
+        }
+        switch (ctx.find_decl(ty.decl)) {
+            Some(d) => {
+                if d.kind != DeclKind.Struct && d.kind != DeclKind.Enum {
+                    return;
+                }
+                for (let field in d.fields) {
+                    ShaderProgram.add_type(ctx, m, field.ty);
+                }
+                if !m.has_type(d.id) {
+                    m.types.push(d);
+                }
+            }
+            None => {}
+        }
+    }
+}

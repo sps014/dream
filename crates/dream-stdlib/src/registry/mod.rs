@@ -7,6 +7,8 @@ mod core;
 mod crypto;
 mod csv;
 mod encoding;
+mod gpu;
+mod gpu_shaders;
 mod interop;
 mod io;
 mod json;
@@ -26,6 +28,7 @@ mod validation_derive;
 mod webapi;
 mod webapi_auth;
 mod webapi_derive;
+mod window;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
 pub struct StdPackage {
@@ -73,4 +76,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     webapi::PACKAGE,
     webapi_auth::PACKAGE,
     webapi_derive::PACKAGE,
+    window::PACKAGE,
+    gpu::PACKAGE,
+    gpu_shaders::PACKAGE,
 ];

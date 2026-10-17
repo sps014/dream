@@ -1,0 +1,24 @@
+module system.gpu;
+
+/// The graphics API a `GpuDevice` runs on.
+///
+/// Only backends whose shader code is in this build can be selected; `GpuShaders.backends()`
+/// lists them. Asking for any other backend returns `GpuError.BackendNotCompiled` and never
+/// falls back to a different one.
+public enum GpuBackend {
+    /// Lets the host choose: the platform's native API when this build has shader code
+    /// for it, otherwise WebGPU.
+    Auto = 0,
+    /// Direct3D 12, on Windows.
+    Dx12 = 1,
+    /// Direct3D 11, on Windows.
+    Dx11 = 2,
+    /// Vulkan, on Windows and Linux.
+    Vulkan = 3,
+    /// Metal, on macOS.
+    Metal = 4,
+    /// CUDA, on NVIDIA GPUs under Windows and Linux. Runs compute shaders only.
+    Cuda = 5,
+    /// WebGPU: the browser's GPU API, or Dawn in native programs.
+    WebGpu = 6,
+}

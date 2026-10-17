@@ -1,0 +1,35 @@
+module system.gpu;
+
+import system.codegen;
+
+/// A bindless reference to a texture or sampler that can be stored in any buffer or struct,
+/// so one shader can pick among thousands of resources at run time.
+///
+/// Get one from `GpuDevice.handle`. Inside a shader, `get()` returns the resource, for
+/// example `material.albedo.get().sample(material.sampler.get(), uv)`. A handle stays valid
+/// while its resource is alive. Needs `GpuFeature.Bindless`, which `GpuTarget.Dx12`,
+/// `Vulkan`, `Metal` and `Cuda` provide.
+public struct GpuHandle<T> {
+    bits: ulong;
+
+    internal static fun of_bits(bits: ulong): GpuHandle<T> {
+        let h = GpuHandle<T>();
+        h.bits = bits;
+        return h;
+    }
+
+    /// The resource this handle refers to, inside a shader.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun get(): T;
+}

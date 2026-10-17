@@ -52,6 +52,7 @@ impl TypeCtx {
             Type::USize(_) => TyKind::Prim(crate::PrimTy::USize),
             Type::Byte(_) => TyKind::Prim(crate::PrimTy::Byte),
             Type::Float(_) => TyKind::Prim(crate::PrimTy::Float),
+            Type::Float16(_) => TyKind::Prim(crate::PrimTy::Float16),
             Type::Double(_) => TyKind::Prim(crate::PrimTy::Double),
             Type::Boolean(_) => TyKind::Prim(crate::PrimTy::Bool),
             Type::Char(_) => TyKind::Prim(crate::PrimTy::Char),

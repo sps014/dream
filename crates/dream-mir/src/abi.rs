@@ -140,6 +140,7 @@ mod abi_h_lockstep {
         assert_eq!(header_define(h, "TAG_FUTURE"), TAG_FUTURE as i64);
         assert_eq!(header_define(h, "TAG_FUNCBOX"), TAG_FUNCBOX as i64);
         assert_eq!(header_define(h, "TAG_CLOSURE_ENV"), TAG_CLOSURE_ENV as i64);
+        assert_eq!(header_define(h, "TAG_FLOAT16"), TAG_FLOAT16 as i64);
         assert_eq!(header_define(h, "TAG_STRUCT_BASE"), TAG_STRUCT_BASE as i64);
         assert_eq!(header_define(h, "TAG_SHARED"), TAG_SHARED as i64);
         assert_eq!(header_define(h, "TAG_VALUE_MASK"), TAG_VALUE_MASK as i64);
@@ -337,6 +338,7 @@ mod abi_h_lockstep {
         assert_eq!(js_num(js, "ISIZE"), TAG_ISIZE as i64);
         assert_eq!(js_num(js, "USIZE"), TAG_USIZE as i64);
         assert_eq!(js_num(js, "BYTE"), TAG_BYTE as i64);
+        assert_eq!(js_num(js, "FLOAT16"), TAG_FLOAT16 as i64);
         assert_eq!(js_num(js, "STRUCT_BASE"), TAG_STRUCT_BASE as i64);
         assert_eq!(js_assign(js, "HEAP_HEADER_SIZE"), HEAP_HEADER_SIZE as i64);
     }

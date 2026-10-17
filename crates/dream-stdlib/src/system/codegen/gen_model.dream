@@ -29,6 +29,9 @@ public fun primitive_named(name: string): Primitive {
     if name == "float" {
         return Primitive.Float;
     }
+    if name == "float16" {
+        return Primitive.Float16;
+    }
     if name == "double" {
         return Primitive.Double;
     }

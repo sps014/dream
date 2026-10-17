@@ -963,6 +963,8 @@ fn test_parse_suffixed_number_literals() {
         let b = 7u;
         let c = 9uL;
         let d = 255b;
+        let e = 1.5h;
+        let f: float16 = -2H;
     }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
@@ -980,6 +982,12 @@ fn test_parse_suffixed_number_literals() {
     );
     assert!(
         matches!(&body[3], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Byte(t)), _, _) if t.text == "255")
+    );
+    assert!(
+        matches!(&body[4], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Float16(t)), _, _) if t.text == "1.5")
+    );
+    assert!(
+        matches!(&body[5], StatementNode::Declaration(_, Some(Type::Float16(_)), _, _, _))
     );
 }
 

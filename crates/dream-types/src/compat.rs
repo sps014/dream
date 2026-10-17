@@ -6,8 +6,10 @@ use super::{PrimTy, TyKind, TypeId, TypeInterner};
 
 /// True if a value of numeric primitive `from` may implicitly widen to `to` without a cast. Mirrors
 /// the legacy `numeric_widen` lattice exactly: `byte -> int -> long -> float -> double`,
-/// `byte -> uint -> ulong`, plus the safe unsigned/float cross-edges. Same-width opposite-sign pairs
-/// are excluded, and `from == to` is false (identity, handled separately by callers).
+/// `byte -> uint -> ulong`, `float16 -> float -> double`, plus the safe unsigned/float cross-edges.
+/// Integers never widen to `float16` (its 11-bit significand loses most integers). Same-width
+/// opposite-sign pairs are excluded, and `from == to` is false (identity, handled separately by
+/// callers).
 pub fn numeric_widen(from: PrimTy, to: PrimTy) -> bool {
     use PrimTy::*;
     matches!(
@@ -40,6 +42,8 @@ pub fn numeric_widen(from: PrimTy, to: PrimTy) -> bool {
             | (ULong, Float)
             | (ULong, Double)
             | (Float, Double)
+            | (Float16, Float)
+            | (Float16, Double)
     )
 }
 

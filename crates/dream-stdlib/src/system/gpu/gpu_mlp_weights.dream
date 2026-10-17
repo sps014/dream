@@ -1,0 +1,43 @@
+module system.gpu;
+
+import system.codegen;
+
+/// One uploaded neural network layer: a weight matrix plus biases, stored in the device's
+/// fastest layout for cooperative vector math.
+///
+/// Create one with `GpuDevice.upload_mlp` and pass it to a shader parameter, giving its
+/// sizes with `@coop_shape(inputs, outputs)`. Inside the shader, `apply` evaluates the
+/// layer. Hardware acceleration needs `GpuFeature.CooperativeVectors`, which
+/// `GpuTarget.Vulkan`, `Dx12` and `Cuda` can provide.
+public class GpuMlpWeights<T: unmanaged> {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+    input_count: int;
+    output_count: int;
+
+    internal constructor(device_id: int, handle: int, inputs: int, outputs: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+        this.input_count = inputs;
+        this.output_count = outputs;
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+
+    /// The number of values the layer reads.
+    public get inputs(): int {
+        return this.input_count;
+    }
+
+    /// The number of values the layer produces.
+    public get outputs(): int {
+        return this.output_count;
+    }
+
+    /// Computes `weights * input + biases` inside a shader. `input` has `inputs` elements and
+    /// the result `outputs` elements.
+    @generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+    public extern fun apply(input: GpuCoopVec<T>): GpuCoopVec<T>;
+}

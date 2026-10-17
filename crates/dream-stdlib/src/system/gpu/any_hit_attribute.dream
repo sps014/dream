@@ -1,0 +1,7 @@
+module system.gpu;
+
+/// Marks an any-hit shader, which runs for every candidate intersection along a ray, in no
+/// particular order. Use it for alpha testing: call `ignore_hit()` to skip a candidate or
+/// `accept_hit_and_end_search()` to stop at it. Parameters match `@closest_hit`.
+@attribute(AttributeTarget.Function)
+public struct AnyHitAttribute {}

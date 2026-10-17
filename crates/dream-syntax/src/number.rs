@@ -175,9 +175,9 @@ fn suffix_from(rest: &str, allow_byte: bool, is_float: bool) -> Option<&str> {
     }
     let lower = rest.to_ascii_lowercase();
     let ok = if is_float {
-        matches!(lower.as_str(), "f" | "d")
+        matches!(lower.as_str(), "f" | "d" | "h")
     } else if allow_byte {
-        matches!(lower.as_str(), "b" | "u" | "l" | "ul" | "lu" | "f" | "d")
+        matches!(lower.as_str(), "b" | "u" | "l" | "ul" | "lu" | "f" | "d" | "h")
     } else {
         // Hex: `b`/`d`/`f` are digits, so only unsigned/long suffixes.
         matches!(lower.as_str(), "u" | "l" | "ul" | "lu")
@@ -245,5 +245,7 @@ mod tests {
         assert_eq!(split_numeric_literal("1e-3"), Some(("1e-3", "")));
         assert_eq!(split_numeric_literal("1.2e10d"), Some(("1.2e10", "d")));
         assert_eq!(split_numeric_literal("255b"), Some(("255", "b")));
+        assert_eq!(split_numeric_literal("1.5h"), Some(("1.5", "h")));
+        assert_eq!(split_numeric_literal("2H"), Some(("2", "H")));
     }
 }

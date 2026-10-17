@@ -1,0 +1,22 @@
+module system.gpu;
+
+/// A comparison between a new value and a stored one, used by depth tests and comparison
+/// samplers. The test passes when `new <op> stored` holds.
+public enum GpuCompare {
+    /// Never passes.
+    Never = 0,
+    /// Passes when the new value is smaller.
+    Less = 1,
+    /// Passes when the new value is smaller or equal.
+    LessEqual = 2,
+    /// Passes when the values are equal.
+    Equal = 3,
+    /// Passes when the new value is greater or equal.
+    GreaterEqual = 4,
+    /// Passes when the new value is greater.
+    Greater = 5,
+    /// Passes when the values differ.
+    NotEqual = 6,
+    /// Always passes.
+    Always = 7,
+}

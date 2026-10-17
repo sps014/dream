@@ -19,7 +19,7 @@ pub(super) fn ranges(runs: &[GenRun<'_>]) -> Vec<(String, String, TextSpan)> {
     runs.iter()
         .flat_map(|run| {
             run.result.outputs.iter().filter_map(|output| {
-                let Output::Consume { target } = output else {
+                let Output::Consume { target, .. } = output else {
                     return None;
                 };
                 run.spans.consumable.get(target)?;
@@ -49,9 +49,9 @@ pub(super) fn stabilize<'g>(
         let mut jobs = Vec::new();
         for run in &runs {
             let registered = run.registered;
-            let Some(previous) = run.result.phases.first() else {
+            if run.result.phases.is_empty() {
                 continue;
-            };
+            }
             let Ok(mut built) = inputs.snapshot(acc, attributes, registered) else {
                 continue;
             };
@@ -67,25 +67,15 @@ pub(super) fn stabilize<'g>(
             };
             built.snapshot.blocks.retain(|s| !excluded(&s.id));
             built.snapshot.calls.retain(|s| !excluded(&s.id));
-            let same = built.snapshot.blocks.iter().map(|s| &s.id).eq(previous
-                .snapshot
-                .blocks
-                .iter()
-                .map(|s| &s.id))
-                && built.snapshot.calls.iter().map(|s| &s.id).eq(previous
-                    .snapshot
-                    .calls
-                    .iter()
-                    .map(|s| &s.id));
-            if same {
+            let Ok(json) = serde_json::to_string(&built.snapshot) else {
+                continue;
+            };
+            if blake3::hash(json.as_bytes()).to_hex().as_str() == run.result.base_snapshot {
                 continue;
             }
             built
                 .sites
                 .retain(|id, _| built.snapshot.blocks.iter().any(|b| &b.id == id));
-            let Ok(json) = serde_json::to_string(&built.snapshot) else {
-                continue;
-            };
             jobs.push(Job {
                 registered,
                 built,
@@ -108,8 +98,9 @@ pub(super) fn stabilize<'g>(
                     result: GenResult {
                         version: SNAPSHOT_VERSION,
                         generator: job.registered.name.clone(),
+                        base_snapshot: blake3::hash(job.json.as_bytes()).to_hex().to_string(),
                         phases: vec![GenPhase {
-                            snapshot: job.built.snapshot,
+                            tool_results: Vec::new(),
                             outputs: Vec::new(),
                         }],
                         ..Default::default()

@@ -45,6 +45,7 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
     Some(match name {
         "int" => Type::Integer(token),
         "float" => Type::Float(token),
+        "float16" => Type::Float16(token),
         "double" => Type::Double(token),
         "string" => Type::String(token),
         "bool" => Type::Boolean(token),
@@ -63,9 +64,9 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
 /// `string` is included here because it is a first-class value type even though it is a heap
 /// reference; it is excluded from [`is_boxable_primitive`]. Single source of truth for the
 /// repeated `"int" | "float" | ...` lists that were previously copied across codegen modules.
-pub const PRIMITIVE_TYPE_NAMES: [&str; 12] = [
+pub const PRIMITIVE_TYPE_NAMES: [&str; 13] = [
     "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte", "isize",
-    "usize",
+    "usize", "float16",
 ];
 
 /// True for the scalar primitives that are boxed into a small tagged heap block when widened to
@@ -75,6 +76,7 @@ pub fn is_boxable_primitive(name: &str) -> bool {
         name,
         "int"
             | "float"
+            | "float16"
             | "double"
             | "bool"
             | "char"
@@ -92,7 +94,16 @@ pub fn is_boxable_primitive(name: &str) -> bool {
 pub fn is_numeric_primitive(name: &str) -> bool {
     matches!(
         name,
-        "int" | "float" | "double" | "long" | "uint" | "ulong" | "byte" | "isize" | "usize"
+        "int"
+            | "float"
+            | "float16"
+            | "double"
+            | "long"
+            | "uint"
+            | "ulong"
+            | "byte"
+            | "isize"
+            | "usize"
     )
 }
 
@@ -143,6 +154,8 @@ pub const FUTURE_TYPE: &str = "Future";
 pub enum Type {
     Integer(SyntaxToken),
     Float(SyntaxToken),
+    /// IEEE 754 binary16. A value type; widens implicitly to `float` and `double`.
+    Float16(SyntaxToken),
     Double(SyntaxToken),
     String(SyntaxToken),
     Boolean(SyntaxToken),
@@ -205,6 +218,7 @@ impl Type {
         match self {
             Type::Integer(_) => "int".to_string(),
             Type::Float(_) => "float".to_string(),
+            Type::Float16(_) => "float16".to_string(),
             Type::Double(_) => "double".to_string(),
             Type::String(_) => "string".to_string(),
             Type::Object(_) => "object".to_string(),
@@ -351,6 +365,7 @@ impl Type {
         match self {
             Type::Integer(token)
             | Type::Float(token)
+            | Type::Float16(token)
             | Type::Double(token)
             | Type::String(token)
             | Type::Boolean(token)
@@ -377,7 +392,7 @@ impl Type {
     pub fn get_line_str(&self) -> String {
         match self {
             Type::Integer(token) => token.position.get_point_str(),
-            Type::Float(token) => token.position.get_point_str(),
+            Type::Float(token) | Type::Float16(token) => token.position.get_point_str(),
             Type::Double(token) => token.position.get_point_str(),
             Type::String(token) => token.position.get_point_str(),
             Type::Object(token) => token.position.get_point_str(),

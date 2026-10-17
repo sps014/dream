@@ -1,0 +1,7 @@
+import system;
+import system.gpu;
+
+fun main(): void {
+    let id = global_id();
+    System.println(id.x);
+}

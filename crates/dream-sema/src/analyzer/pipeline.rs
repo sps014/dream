@@ -140,6 +140,7 @@ impl<'a> Analyzer<'a> {
                 if declaration.generic_parameters.is_some() {
                     self.generic_structs.insert(def, declaration);
                 }
+                self.note_generator_only(def, &declaration.attributes, Some(&file.path));
                 self.record_ide_definition(def, &declaration.name, Some(&file.path));
                 for field in &declaration.fields {
                     self.record_ide_member_definition(def, &field.name, Some(&file.path));
@@ -167,6 +168,7 @@ impl<'a> Analyzer<'a> {
                     &declaration.name.text,
                     generic_param_names(&declaration.generic_parameters),
                 );
+                self.note_generator_only(def, &declaration.attributes, Some(&file.path));
                 self.record_ide_definition(def, &declaration.name, Some(&file.path));
             }
         }
@@ -198,8 +200,10 @@ impl<'a> Analyzer<'a> {
         // HIR global slots are assigned incrementally inside `register_globals` (in declaration
         // order) so both later initializers and function bodies can resolve global identifiers.
         self.register_globals(node, diagnostics);
+        self.resolve_generator_grants(diagnostics);
         self.analyze_function_bodies(node, diagnostics)?;
         self.analyze_pending_instantiations(diagnostics)?;
+        self.report_generator_uses(diagnostics);
 
         if !diagnostics.has_errors() {
             self.validate_value_containment(diagnostics);

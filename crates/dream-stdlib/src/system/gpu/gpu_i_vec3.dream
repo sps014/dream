@@ -1,0 +1,43 @@
+module system.gpu;
+
+/// A vector of three `int`s, laid out like a GPU `int3`. Thread and workgroup ids such as
+/// `global_id()` use it, so components index buffers and compare with `int` counts directly.
+public struct GpuIVec3 {
+    /// The first component.
+    public x: int;
+
+    /// The second component.
+    public y: int;
+
+    /// The third component.
+    public z: int;
+
+    /// Creates the vector `(x, y, z)`.
+    public static fun of(x: int, y: int, z: int): GpuIVec3 {
+        let v = GpuIVec3();
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        return v;
+    }
+
+    /// The first two components, for example a pixel coordinate from a 2D dispatch.
+    public get xy(): GpuIVec2 {
+        return GpuIVec2.of(this.x, this.y);
+    }
+
+    /// Adds component by component.
+    fun operator +(other: GpuIVec3): GpuIVec3 {
+        return GpuIVec3.of(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+
+    /// Subtracts component by component.
+    fun operator -(other: GpuIVec3): GpuIVec3 {
+        return GpuIVec3.of(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+
+    /// True when all components are equal.
+    fun operator ==(other: GpuIVec3): bool {
+        return this.x == other.x && this.y == other.y && this.z == other.z;
+    }
+}

@@ -1,0 +1,308 @@
+module system.window;
+
+/// A window, or a browser canvas, that receives keyboard, mouse and gamepad input.
+///
+/// Create one with `Window.open` in native programs, `Window.canvas` in browsers, or
+/// `Window.headless` for tests and simulations without a display. Call `poll` once
+/// per frame: it pumps the platform's events and returns an `InputFrame`.
+///
+/// Native windows belong to the program's main thread, which is where `main` and its
+/// `async` code run. Calls from a `Task` worker fail or do nothing. In browsers the
+/// page only delivers input while the program waits, so a frame loop must `await`
+/// something every frame, such as presenting a GPU frame or `Time.delay(16)`.
+public class Window {
+    handle: int;
+    headless: bool;
+    open: bool;
+    window_title: string;
+    fullscreen: bool;
+    logical: WindowSize;
+    vsync: bool;
+    cursor: CursorMode;
+    simulated: List<WindowEvent>;
+    tracker: InputTracker;
+
+    constructor(handle: int, headless: bool, desc: WindowDesc) {
+        this.handle = handle;
+        this.headless = headless;
+        this.open = true;
+        this.window_title = desc.title;
+        this.fullscreen = desc.is_fullscreen;
+        this.logical = WindowSize(desc.width, desc.height);
+        this.vsync = desc.wants_vsync;
+        this.cursor = CursorMode.Normal;
+        this.simulated = List<WindowEvent>();
+        this.tracker = InputTracker();
+    }
+
+    @runtime("windowOpen")
+    static extern fun open_host(borrow title: string, width: int, height: int, flags: int): int;
+
+    @web
+    @runtime("windowCanvas")
+    static extern fun canvas_host(borrow id: string, flags: int): int;
+
+    @runtime("windowError")
+    static extern fun error_host(): string;
+
+    @runtime("windowClose")
+    static extern fun close_host(handle: int): void;
+
+    @runtime("windowPoll")
+    static extern fun poll_host(handle: int): float[];
+
+    @runtime("windowQuery")
+    static extern fun query_host(handle: int): float[];
+
+    @runtime("windowSetTitle")
+    static extern fun set_title_host(handle: int, borrow title: string): void;
+
+    @runtime("windowSetSize")
+    static extern fun set_size_host(handle: int, width: int, height: int): void;
+
+    @runtime("windowSetFullscreen")
+    static extern fun set_fullscreen_host(handle: int, enabled: bool): void;
+
+    @runtime("windowSetCursorMode")
+    static extern fun set_cursor_mode_host(handle: int, mode: int): void;
+
+    @runtime("windowSetCursorIcon")
+    static extern fun set_cursor_icon_host(handle: int, icon: int): void;
+
+    /// Opens a native window described by `desc` and shows it.
+    ///
+    /// In a browser this creates a `<canvas>` of the requested size at the end of the
+    /// page and uses the title as the page title. Under Node, on a machine without a
+    /// display, or when called from a `Task` worker, it returns a `WindowError`; see
+    /// `WindowError.code` for the reasons.
+    public static fun open(desc: WindowDesc): Result<Window, WindowError> {
+        if desc.width <= 0 || desc.height <= 0 {
+            return Result.Err(WindowError("EINVAL", "window width and height must be positive"));
+        }
+        let handle = Window.open_host(desc.title, desc.width, desc.height, desc.flags());
+        if handle <= 0 {
+            return Result.Err(Window.last_error());
+        }
+        return Result.Ok(Window(handle, false, desc));
+    }
+
+    /// Uses the page's `<canvas>` element whose `id` attribute is `id` as a window.
+    ///
+    /// The page keeps control of the canvas's layout size; the window follows it and
+    /// reports changes as `WindowEvent.Resized`. The canvas becomes focusable so it can
+    /// receive keyboard input after the user clicks it. Returns a `WindowError` with
+    /// code `ENOTFOUND` when no such canvas exists.
+    @web
+    public static fun canvas(id: string): Result<Window, WindowError> {
+        let handle = Window.canvas_host(id, 5);
+        if handle <= 0 {
+            return Result.Err(Window.last_error());
+        }
+        return Result.Ok(Window(handle, false, WindowDesc.of("", 1, 1)));
+    }
+
+    /// Creates a window that exists only in memory. It never appears on screen and
+    /// receives only the events passed to `simulate`, so tests, replays and servers can
+    /// run input-driven code on machines without a display. Its pixel size equals its
+    /// logical size, and simulated `Resized` events change both.
+    public static fun headless(desc: WindowDesc): Window {
+        return Window(0, true, desc);
+    }
+
+    static fun last_error(): WindowError {
+        let text = Window.error_host();
+        for (let i = 0; i < text.length; i = i + 1) {
+            if text.char_at(i) == '\n' {
+                return WindowError(
+                    string.substring_raw(text, 0, i),
+                    string.substring_raw(text, i + 1, text.length)
+                );
+            }
+        }
+        return WindowError("EWINDOW", text);
+    }
+
+    /// False once `close` was called or a poll delivered `WindowEvent.CloseRequested`.
+    /// After a close request the native window stays on screen until `close` is called
+    /// or the `Window` is released, so the current frame can still finish drawing.
+    public get is_open(): bool {
+        return this.open;
+    }
+
+    /// The title last set by `WindowDesc.of` or `set_title`. Canvas windows start with
+    /// an empty title.
+    public get title(): string {
+        return this.window_title;
+    }
+
+    /// True while the window covers a monitor in fullscreen mode.
+    public get is_fullscreen(): bool {
+        if this.handle > 0 {
+            return this.query(5) != 0.0f;
+        }
+        return this.fullscreen;
+    }
+
+    /// True while the window has keyboard focus.
+    public get is_focused(): bool {
+        if this.handle > 0 {
+            return this.query(6) != 0.0f;
+        }
+        return this.tracker.focused;
+    }
+
+    /// The content area's size in logical pixels, the units of `WindowDesc.of`,
+    /// `set_size` and mouse positions.
+    public get size(): WindowSize {
+        if this.handle > 0 {
+            return WindowSize((int)this.query(0), (int)this.query(1));
+        }
+        return this.logical;
+    }
+
+    /// The drawable area's size in physical pixels, the size a GPU surface needs.
+    /// It matches the size carried by the most recent `WindowEvent.Resized`.
+    public get pixel_size(): WindowSize {
+        if this.handle > 0 {
+            return WindowSize((int)this.query(2), (int)this.query(3));
+        }
+        return this.logical;
+    }
+
+    /// Physical pixels per logical pixel on the window's current monitor: `1.0` on
+    /// standard displays and `2.0` on most high-DPI displays.
+    public get scale_factor(): float {
+        if this.handle > 0 {
+            let scale = this.query(4);
+            if scale > 0.0f {
+                return scale;
+            }
+        }
+        return 1.0f;
+    }
+
+    /// The cursor mode last set with `set_cursor_mode`; starts as `CursorMode.Normal`.
+    public get cursor_mode(): CursorMode {
+        return this.cursor;
+    }
+
+    fun query(index: int): float {
+        let values = Window.query_host(this.handle);
+        if index < values.length {
+            return values[index];
+        }
+        return 0.0f;
+    }
+
+    /// Pumps the platform's pending events and returns everything that happened since
+    /// the previous poll. Call it once per frame. Events queued with `simulate` follow
+    /// the platform's events. A closed window still returns frames, with no platform
+    /// events.
+    public fun poll(): InputFrame {
+        this.tracker.begin();
+        let events = List<WindowEvent>();
+        if this.handle > 0 {
+            InputWire.decode(Window.poll_host(this.handle), this.tracker, events);
+        }
+        for (let i = 0; i < this.simulated.length; i = i + 1) {
+            events.push(this.simulated[i]);
+        }
+        this.simulated.clear();
+        for (let i = 0; i < events.length; i = i + 1) {
+            let event = events[i];
+            this.tracker.apply(event);
+            if this.headless {
+                switch (event) {
+                    Resized(size) => {
+                        this.logical = size;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if this.tracker.close_requested {
+            this.open = false;
+        }
+        return this.tracker.frame(events);
+    }
+
+    /// Queues `event` as if the platform had reported it. The next `poll` delivers it
+    /// after the platform's own events and updates the keyboard and mouse state from
+    /// it. Use it for automated tests, input replays and on-screen controls.
+    /// Simulated events never move the real cursor or resize the real window.
+    public fun simulate(event: WindowEvent): void {
+        this.simulated.push(event);
+    }
+
+    /// Closes the window and removes it from the screen. Closing twice does nothing.
+    public fun close(): void {
+        if this.handle > 0 {
+            Window.close_host(this.handle);
+            this.handle = 0;
+        }
+        this.open = false;
+    }
+
+    /// Changes the title bar text, or the page title for a window made by `open` in a browser.
+    public fun set_title(title: string): void {
+        if this.handle > 0 {
+            Window.set_title_host(this.handle, title);
+        }
+        this.window_title = title;
+    }
+
+    /// Resizes the content area to `width` by `height` logical pixels. A
+    /// `WindowEvent.Resized` follows once the platform applied the change. In browsers
+    /// this sets the canvas's CSS size, so page styles that fix the canvas size still
+    /// win. Non-positive sizes are ignored.
+    public fun set_size(width: int, height: int): void {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        if this.handle > 0 {
+            Window.set_size_host(this.handle, width, height);
+        } else if this.headless {
+            this.logical = WindowSize(width, height);
+        }
+    }
+
+    /// Enters or leaves fullscreen. Native windows cover the primary monitor at its
+    /// current video mode. Browsers only allow fullscreen during a user gesture, such
+    /// as a key or click handler's frame, and may refuse it.
+    public fun set_fullscreen(enabled: bool): void {
+        this.fullscreen = enabled;
+        if this.handle > 0 {
+            Window.set_fullscreen_host(this.handle, enabled);
+        }
+    }
+
+    /// Shows, hides or captures the cursor while it is over the window.
+    public fun set_cursor_mode(mode: CursorMode): void {
+        this.cursor = mode;
+        if this.handle > 0 {
+            Window.set_cursor_mode_host(this.handle, mode);
+        }
+    }
+
+    /// Changes the cursor's shape while it is over the window. Shapes the platform does
+    /// not provide fall back to the default arrow.
+    public fun set_cursor_icon(icon: CursorIcon): void {
+        if this.handle > 0 {
+            Window.set_cursor_icon_host(this.handle, icon);
+        }
+    }
+
+    // Host-side identity for capability hosts that attach to this window, such as GPU surfaces.
+    // Zero for headless and closed windows; see docs/internals/17-window-host.md.
+    internal get host_handle(): int {
+        return this.handle;
+    }
+
+    internal get vsync_hint(): bool {
+        return this.vsync;
+    }
+
+    del() {
+        this.close();
+    }
+}

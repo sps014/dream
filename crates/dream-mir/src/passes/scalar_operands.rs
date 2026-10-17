@@ -19,6 +19,7 @@ pub(super) fn operand_is_scalar(operand: &Operand, locals: &[bool]) -> bool {
                 | Const::Long(_)
                 | Const::Float(_)
                 | Const::F32(_)
+                | Const::F16(_)
                 | Const::Bool(_)
                 | Const::Char(_)
         ),

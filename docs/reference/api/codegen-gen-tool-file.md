@@ -20,7 +20,7 @@ public path: string
 
 ## `contents`
 
-Text contents of the file.
+File contents: text, or base64 when `binary` is true. Empty for an opaque output.
 
 ```dream
 public contents: string
@@ -28,7 +28,7 @@ public contents: string
 
 ## `binary`
 
-Whether the message contains binary data.
+Whether the file is not valid UTF-8 text, so `contents` holds base64.
 
 ```dream
 public binary: bool
@@ -36,10 +36,26 @@ public binary: bool
 
 ## `hash`
 
-Hash of the refresh token; the raw refresh token is not stored.
+BLAKE3 hash of the file bytes, as lowercase hex.
 
 ```dream
 public hash: string
+```
+
+## `size`
+
+Size of the file in bytes.
+
+```dream
+public size: int
+```
+
+## `opaque`
+
+Whether the file was requested as an opaque output. Its bytes are not in the snapshot; embed or publish it by referring to it as `tool:<request id>/<path>`.
+
+```dream
+public opaque: bool
 ```
 
 ## `constructor`

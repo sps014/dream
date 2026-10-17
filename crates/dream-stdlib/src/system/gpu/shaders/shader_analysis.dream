@@ -1,0 +1,171 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// Facts about shader parameters that both the Slang translation and the bundle need: which
+// buffers hold atomics, which parameters the shader writes, and which are stage inputs.
+internal static class ShaderAnalysis {
+    // `function id/parameter` of every buffer parameter used with `GpuAtomic`, directly or by
+    // passing it on to a helper that does; the buffer and every parameter it flows through use
+    // `Atomic<T>` elements so their Slang types agree.
+    internal static fun find_atomic_params(borrow program: ShaderProgram): List<string> {
+        let out = List<string>();
+        for (let f in program.functions) {
+            for (let n in program.nodes(f.id)) {
+                let key = Builtins.key_of(n);
+                if key.starts_with("GpuAtomic.")
+                    && n.children.length > 1 && n.child(1)
+                    .is_expr(ExprKind.Identifier) {
+                    let id = f.id + "/" + n.child(1).text;
+                    if !out.contains(id) {
+                        out.push(id);
+                    }
+                }
+            }
+        }
+        let changed = true;
+        while changed {
+            changed = false;
+            for (let f in program.functions) {
+                for (let call in program.calls_from(f.id)) {
+                    if call.symbol_kind != "function" || call.is_expr(ExprKind.Identifier) {
+                        continue;
+                    }
+                    switch (program.function(call.symbol)) {
+                        Some(callee) => {
+                            let i = 0;
+                            while i < call.children.length && i < callee.params.length {
+                                let arg = call.child(i);
+                                if arg.is_expr(ExprKind.Identifier) {
+                                    let caller_id = f.id + "/" + arg.text;
+                                    let callee_id = callee.id + "/" + callee.params[i].name;
+                                    if out.contains(caller_id) != out.contains(callee_id) {
+                                        if !out.contains(caller_id) {
+                                            out.push(caller_id);
+                                        }
+                                        if !out.contains(callee_id) {
+                                            out.push(callee_id);
+                                        }
+                                        changed = true;
+                                    }
+                                }
+                                i = i + 1;
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    // Whether the shader writes parameter `name` of `f`: stores into it, uses it atomically, or
+    // passes it to a helper that writes the matching parameter.
+    internal static fun writes(
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow name: string,
+        depth: int
+    ): bool {
+        if depth > 32 {
+            return false;
+        }
+        for (let n in program.nodes(f.id)) {
+            if n.is_statement(StmtKind.IndexAssignment)
+                && n.child(0)
+                .is_expr(ExprKind.Identifier) && n.child(0)
+                .text == name {
+                return true;
+            }
+            let key = Builtins.key_of(n);
+            if key.starts_with("GpuAtomic.") && n.children.length > 1 && n.child(1).text == name {
+                return true;
+            }
+            if key == "GpuCoopMat.store" && n.children.length > 1 && n.child(1).text == name {
+                return true;
+            }
+            let call = n.is_expr(ExprKind.FunctionCall)
+                || n.is_statement(StmtKind.FunctionInvocation);
+            if call && program.is_user_function(n.symbol) {
+                let callee = program.function(n.symbol).unwrap();
+                let i = 0;
+                while i < n.children.length && i < callee.params.length {
+                    if n.child(i)
+                        .is_expr(ExprKind.Identifier)
+                        && n.child(i)
+                        .text
+                        == name
+                        && ShaderAnalysis.writes(program, callee, callee.params[i].name, depth + 1) {
+                        return true;
+                    }
+                    i = i + 1;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Classifies every entry parameter and names its Slang global.
+    internal static fun prepare(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        entry: ShaderEntry
+    ): void {
+        let atomic = ShaderAnalysis.find_atomic_params(program);
+        for (let p in entry.params) {
+            if ShaderAnalysis.stage_input(ctx, entry, p) {
+                continue;
+            }
+            p.kind = ParamKinds.of(p.ty);
+            if p.is_value() {
+                p.global = Names.ident(p.name);
+            } else {
+                p.global = entry.name() + "_" + p.name;
+            }
+            p.atomic = atomic.contains(entry.function.id + "/" + p.name);
+            p.written = ShaderAnalysis.writes(program, entry.function, p.name, 0);
+        }
+    }
+
+    // Parameters the pipeline supplies: vertex attributes and interpolated values, ray payloads,
+    // hit attributes and callable data.
+    internal static fun stage_input(
+        ctx: GenContext,
+        borrow entry: ShaderEntry,
+        borrow p: ShaderParam
+    ): bool {
+        if p.is_ref || p.location >= 0 || !p.builtin.is_empty() {
+            return true;
+        }
+        if entry.is_render() {
+            return ShaderAnalysis.has_varyings(ctx, p.ty);
+        }
+        if entry.stage == GpuStage.ClosestHit || entry.stage == GpuStage.AnyHit {
+            return SlangTypes.is_named(p.ty, "GpuTriangleHit")
+                || (p.ty.kind == TypeRefKind.Named && !p.ty.decl.starts_with("system."));
+        }
+        return false;
+    }
+
+    // A user struct with `@location` or `@builtin` fields: a vertex or fragment stage interface.
+    internal static fun has_varyings(ctx: GenContext, borrow ty: GenTypeRef): bool {
+        if !SlangTypes.is_user(ty) {
+            return false;
+        }
+        switch (ctx.find_decl(ty.decl)) {
+            Some(d) => {
+                for (let f in d.fields) {
+                    if f.has<LocationAttribute>() || f.has<BuiltinAttribute>() {
+                        return true;
+                    }
+                }
+            }
+            None => {}
+        }
+        return false;
+    }
+}

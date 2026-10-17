@@ -123,23 +123,26 @@ pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
     out
 }
 
-/// The `js.box_*` bridge for a primitive, and whether a `float` widens to `double` first.
+/// The `js.box_*` bridge for a primitive, and whether a `float`/`float16` widens to `double` first.
 pub(crate) fn box_prim(p: PrimTy) -> (&'static str, bool) {
     match p {
         PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("box_int", false),
         PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("box_long", false),
-        PrimTy::Float | PrimTy::Double => ("box_double", matches!(p, PrimTy::Float)),
+        PrimTy::Float | PrimTy::Float16 | PrimTy::Double => {
+            ("box_double", !matches!(p, PrimTy::Double))
+        }
         PrimTy::Bool => ("box_bool", false),
         PrimTy::String => ("box_string", false),
     }
 }
 
-/// The `js.as_*` bridge for a primitive, and whether the `double` result narrows to `float`.
+/// The `js.as_*` bridge for a primitive, and whether the `double` result narrows to `float` or
+/// `float16`.
 pub(crate) fn unbox_prim(p: PrimTy) -> (&'static str, bool) {
     match p {
         PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", false),
         PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("as_long", false),
-        PrimTy::Float => ("as_double", true),
+        PrimTy::Float | PrimTy::Float16 => ("as_double", true),
         PrimTy::Double => ("as_double", false),
         PrimTy::Bool => ("as_bool", false),
         PrimTy::String => ("as_string", false),

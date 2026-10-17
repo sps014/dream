@@ -42,8 +42,10 @@ impl ToolchainConfig {
             runtime_c,
             home,
             bin: value("DREAM_BIN").map(PathBuf::from),
-            llvm: value("DREAM_LLVM").map(PathBuf::from),
-            wasm_opt: value("DREAM_WASM_OPT").map(PathBuf::from),
+            tool_overrides: dream_abi::toolchain::PINNED_TOOLS
+                .iter()
+                .filter_map(|tool| Some((tool.name.to_string(), PathBuf::from(value(tool.env)?))))
+                .collect(),
             toolchains,
             prefix: prefix.clone(),
             user_home,
@@ -54,7 +56,6 @@ impl ToolchainConfig {
                 .unwrap_or_default(),
             cc: value("DREAM_CC").or_else(|| value("CC")),
             cxx: value("DREAM_CXX").or_else(|| value("CXX")),
-            zig: value("DREAM_ZIG").map(PathBuf::from),
             targets: value("DREAM_TARGETS")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| prefix.join("targets")),

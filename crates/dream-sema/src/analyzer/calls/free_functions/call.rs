@@ -19,13 +19,6 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        if symbol_table.borrow().get_symbol(name).is_err()
-            && self.function_info(&name.text).is_err()
-            && self.report_consumed(name, diagnostics)
-        {
-            self.hir_fail();
-            return Ok(Type::Unknown);
-        }
         let mut function_name = name.text.clone();
         let nominal_def = self
             .type_ctx
@@ -236,6 +229,7 @@ impl<'a> Analyzer<'a> {
                 self.current_expected_type = saved_expected;
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
+                        self.record_generator_type(param, t.clone());
                         arg_hirs.push(hir);
                         params_types.push(self.type_ctx.lower(&t));
                     }

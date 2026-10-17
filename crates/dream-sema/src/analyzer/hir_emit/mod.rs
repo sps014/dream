@@ -141,7 +141,10 @@ impl<'a> Analyzer<'a> {
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
-        if function.is_extern || self.generator_facts.is_some() {
+        if function.is_extern
+            || self.generator_facts.is_some()
+            || self.generator_scope.analyzing_consumed()
+        {
             self.hir.collecting = false;
             return;
         }

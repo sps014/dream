@@ -1,0 +1,22 @@
+module system.window;
+
+/// Modifier keys and lock states held while a key event happened.
+///
+/// The choices are bit flags. Test one with `&`, for example
+/// `(key.modifiers & KeyModifiers.Shift) != KeyModifiers.None`.
+public enum KeyModifiers {
+    /// No modifier was held.
+    None = 0,
+    /// Either Shift key was held.
+    Shift = 1,
+    /// Either Control key was held.
+    Control = 2,
+    /// Either Alt (Option) key was held.
+    Alt = 4,
+    /// Either Meta key (Command on macOS, Windows key on Windows) was held.
+    Meta = 8,
+    /// Caps Lock was on.
+    CapsLock = 16,
+    /// Num Lock was on.
+    NumLock = 32,
+}

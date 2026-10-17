@@ -1,0 +1,57 @@
+Subject: [PATCH 1/1] metal: accept Metal Shading Language source as precompiled code
+
+Precompiled programs (Dream strict ahead-of-time loading) may carry MSL text
+instead of a metallib, because building a metallib needs Apple's 'metal' tool on
+the build host. Blobs without the 'MTLB' magic are compiled by the Metal
+framework with newLibraryWithSource. Upstreamable: Slang-compiled programs keep
+producing metallibs, so existing behaviour is unchanged.
+
+---
+--- a/src/metal/metal-shader-program.cpp
++++ b/src/metal/metal-shader-program.cpp
+@@ -3,6 +3,8 @@
+ #include "metal-shader-object-layout.h"
+ #include "metal-utils.h"
+ 
++#include <cstring>
++
+ namespace rhi::metal {
+ 
+ ShaderProgramImpl::ShaderProgramImpl(Device* device, const ShaderProgramDesc& desc)
+@@ -21,14 +23,28 @@
+     module.entryPointName = desc.entryPointName;
+     module.code = kernelCode;
+ 
+-    dispatch_data_t data = dispatch_data_create(
+-        kernelCode->getBufferPointer(),
+-        kernelCode->getBufferSize(),
+-        dispatch_get_main_queue(),
+-        NULL
+-    );
+-    NS::Error* error;
+-    module.library = NS::TransferPtr(device->m_device->newLibrary(data, &error));
++    // Precompiled programs may carry Metal Shading Language source instead of a metallib: building
++    // a metallib needs Apple's `metal` tool on the build host, while MSL is compiled by the Metal
++    // framework at pipeline creation like any other driver-level shader compile.
++    static const char kMetallibMagic[4] = {'M', 'T', 'L', 'B'};
++    bool isMetallib = kernelCode->getBufferSize() >= 4 &&
++                      std::memcmp(kernelCode->getBufferPointer(), kMetallibMagic, 4) == 0;
++    NS::Error* error = nullptr;
++    if (isMetallib)
++    {
++        dispatch_data_t data = dispatch_data_create(
++            kernelCode->getBufferPointer(),
++            kernelCode->getBufferSize(),
++            dispatch_get_main_queue(),
++            NULL
++        );
++        module.library = NS::TransferPtr(device->m_device->newLibrary(data, &error));
++    }
++    else
++    {
++        auto source = createStringView((void*)kernelCode->getBufferPointer(), kernelCode->getBufferSize());
++        module.library = NS::TransferPtr(device->m_device->newLibrary(source.get(), nullptr, &error));
++    }
+     if (!module.library)
+     {
+         const char* msg = error->localizedDescription()->utf8String();

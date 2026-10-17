@@ -342,7 +342,13 @@ impl<'a> Analyzer<'a> {
                     inner.position(),
                 ))
             }
-            // Syntax DSL blocks must be expanded by the generate pipeline before analysis.
+            // Syntax DSL blocks must be expanded by the generate pipeline before analysis, except
+            // inside a consumed body: its consuming generator owns that text and other generators
+            // never see it.
+            ExpressionNode::SyntaxBlock(_) if self.generator_scope.analyzing_consumed() => {
+                self.hir_none();
+                Ok(Type::Unknown)
+            }
             ExpressionNode::SyntaxBlock(block) => {
                 self.hir_none();
                 Err(report(
@@ -405,6 +411,7 @@ impl<'a> Analyzer<'a> {
             );
             return Ok(Type::Unknown);
         }
+        self.record_indexer_use(array_expr, &hook, &pretty_obj);
         let get_tok = synthetic_token(TokenKind::IdentifierToken, &hook.surface_name);
         let call =
             ExpressionNode::MethodCall(array_expr, get_tok, None, vec![(*index_expr).clone()]);
@@ -417,6 +424,7 @@ impl<'a> Analyzer<'a> {
         matches!(
             ty,
             Type::Integer(_)
+                | Type::Float16(_)
                 | Type::Float(_)
                 | Type::Double(_)
                 | Type::Boolean(_)
@@ -437,7 +445,9 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::Literal(Type::Integer(t)) | ExpressionNode::Literal(Type::Byte(t)) => {
                 t.text == "0"
             }
-            ExpressionNode::Literal(Type::Float(t)) | ExpressionNode::Literal(Type::Double(t)) => {
+            ExpressionNode::Literal(Type::Float16(t))
+            | ExpressionNode::Literal(Type::Float(t))
+            | ExpressionNode::Literal(Type::Double(t)) => {
                 matches!(t.text.as_str(), "0" | "0.0")
             }
             ExpressionNode::Literal(Type::Boolean(t)) => t.text == "false",

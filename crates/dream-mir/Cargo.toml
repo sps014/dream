@@ -13,6 +13,7 @@ dream-types = { path = "../dream-types" }
 dream-abi = { path = "../dream-abi" }
 dream-stdlib = { path = "../dream-stdlib" }
 dream-syntax = { path = "../dream-syntax" }
+half = "2"
 indexmap = "2"
 tracing = "0.1"
 wasmprinter = "0.252"

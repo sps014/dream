@@ -1,0 +1,12 @@
+module system.gpu;
+
+/// A render or ray tracing shader as the shader generator exposes it: `GpuShaders.<name>` for
+/// every `@vertex`, `@fragment`, `@ray_generation`, `@closest_hit`, `@any_hit`, `@miss`,
+/// `@intersection` and `@callable` shader. Pass it to `GpuDevice.render_pipeline`,
+/// `GpuDevice.ray_tracing_pipeline` or `GpuHitGroup`. The generated type also has one
+/// `GpuBindingSlot` property per resource parameter and, for ray generation shaders, a typed
+/// `trace` method.
+public interface GpuStageShader {
+    /// The compiled shader: its entry point name, stage and stage interface.
+    fun descriptor(): GpuStageDescriptor;
+}

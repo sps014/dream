@@ -1,0 +1,42 @@
+module system.gpu;
+
+/// Ray generation, miss, hit group and callable shaders linked into one ray tracing
+/// pipeline. Create one with `GpuDevice.ray_tracing_pipeline`; the ray generation shader's
+/// generated `GpuShaders` descriptor traces with it.
+public class GpuRayTracingPipeline {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+
+    internal constructor(device_id: int, handle: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+
+    // Runs the ray generation shader once per element of a `width` by `height` by `depth`
+    // grid with `args` as its parameters, and waits until the GPU finished.
+    internal async fun trace(
+        device: GpuDevice,
+        width: int,
+        height: int,
+        depth: int,
+        args: GpuArgs
+    ): Result<bool, GpuError> {
+        if this.device_id != device.id {
+            return Result.Err(GpuError.WrongDevice("ray tracing pipeline"));
+        }
+        let encoder = device.command_encoder();
+        encoder.op(GpuOp.BeginComputePass);
+        encoder.op(GpuOp.SetPipeline);
+        encoder.keep.push(this.owner);
+        encoder.words.push(this.handle);
+        encoder.bind_args(GpuStage.RayGeneration, args);
+        encoder.op(GpuOp.TraceRays);
+        encoder.words.push_all([width, height, depth]);
+        encoder.op(GpuOp.EndPass);
+        return device.submit(encoder.finish()).await;
+    }
+}

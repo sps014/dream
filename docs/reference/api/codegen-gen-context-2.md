@@ -2,6 +2,30 @@
 
 **Import:** `import system.codegen;`
 
+## `find_type`
+
+The index entry named `name`, if the program declares such a type.
+
+```dream
+public fun find_type(borrow name: string): Option<GenIndexEntry>
+```
+
+## `syntax_blocks`
+
+`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
+
+```dream
+public fun syntax_blocks(): List<GenSyntaxBlock>
+```
+
+## `call_sites`
+
+Calls of the functions named in this generator's `@on_call(...)`.
+
+```dream
+public fun call_sites(): List<GenCallSite>
+```
+
 ## `options`
 
 `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
@@ -60,7 +84,7 @@ public fun tool_results(): List<GenToolResult>
 
 ## `run_tool`
 
-Requests a declared tool. The generator runs again with the result in the next phase.
+Requests a declared tool. The generator runs again with the result in the next phase.  `id` names the request (no `/`); `inputs` are emitted artifact paths copied into the tool's scratch folder; `args` are passed as-is with that folder as the working directory. `outputs` are files whose contents the next phase reads through `tool_results()`. `opaque_outputs` are files the generator only sees as path, hash and size, for large or binary results it embeds (`emit_asset`) or publishes (`publish_tool_output`) as `tool:<id>/<path>` without reading them. All requests of a phase run in parallel; results keep request order.
 
 ```dream
 public fun run_tool(
@@ -68,13 +92,22 @@ public fun run_tool(
     tool: string,
     args: List<string>,
     inputs: List<string>,
-    outputs: List<string>
+    outputs: List<string>,
+    opaque_outputs: List<string>
 ): void
+```
+
+## `publish_tool_output`
+
+Copies a tool output, named `tool:<request id>/<path>`, to `path` next to the compiled program. Publishing the same path twice, or a path a compiler output uses, is an error.
+
+```dream
+public fun publish_tool_output(source: string, path: string): void
 ```
 
 ## `emit_asset`
 
-Embeds an artifact or tool output into every compilation target.
+Embeds an emitted artifact path, or a tool output named `tool:<request id>/<path>`, into every compilation target as the asset `name`, read at run time with `Assets.bytes(name)`.
 
 ```dream
 public fun emit_asset(name: string, source: string): void
@@ -90,10 +123,10 @@ public fun emit_asset(name: string, source: string, targets: List<string>): void
 
 ## `consume`
 
-Removes a selected or referenced user function from the compiled program.
+Takes over a selected or referenced top-level user function: it stays type-checked but is not compiled, and calling it from ordinary code is an error. `help` is shown under that error to say what to use instead, for example `dispatch it with Shaders.blur.dispatch(...)`.
 
 ```dream
-public fun consume(borrow f: GenFunction): void
+public fun consume(borrow f: GenFunction, help: string = ""): void
 ```
 
 ## `emit_artifact`
@@ -107,6 +140,14 @@ public fun emit_artifact(
     borrow map: GenSourceMap,
     publish: bool = false
 ): void
+```
+
+## `emit_artifact`
+
+Emits a binary file, such as packed GPU code, under this generator's directory. Binary artifacts have no source map; embed them with `emit_asset` or pass them to `run_tool` as inputs like text artifacts. With `publish`, the file is also copied beside the build output.
+
+```dream
+public fun emit_artifact(path: string, contents: byte[], publish: bool = false): void
 ```
 
 ## `error_in_artifact`
@@ -163,44 +204,4 @@ Reports an error at this model node or at the generator when no node is supplied
 
 ```dream
 public fun error(borrow decl: GenDecl, message: string): void
-```
-
-## `error`
-
-Reports an error at this model node or at the generator when no node is supplied.
-
-```dream
-public fun error(borrow field: GenField, message: string): void
-```
-
-## `error`
-
-Reports an error at this model node or at the generator when no node is supplied.
-
-```dream
-public fun error(borrow call: GenCallSite, message: string): void
-```
-
-## `warning`
-
-Reports a warning at this model node.
-
-```dream
-public fun warning(borrow decl: GenDecl, message: string): void
-```
-
-## `has_errors`
-
-Returns the requested model information.
-
-```dream
-public fun has_errors(): bool
-```
-
-## `log`
-
-A line shown with `dream -v` / `dream generate --explain`.
-
-```dream
-public fun log(message: string): void
 ```

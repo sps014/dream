@@ -1,0 +1,12 @@
+module system.gpu;
+
+/// Which triangles a render pipeline skips, judged by their winding order on screen.
+/// Counter-clockwise triangles face the viewer.
+public enum GpuCullMode {
+    /// Draws every triangle.
+    None = 0,
+    /// Skips triangles that face the viewer.
+    Front = 1,
+    /// Skips triangles that face away from the viewer.
+    Back = 2,
+}

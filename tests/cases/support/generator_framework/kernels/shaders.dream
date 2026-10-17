@@ -1,0 +1,22 @@
+@kernel(64)
+module shaders;
+
+import gen;
+
+@kernel(128)
+public fun saxpy(a: float, x: float): float {
+    let id = global_id();
+    let value = lane<float>().read();
+    return a * x + value;
+}
+
+@kernel(0)
+public fun accumulate(ref total: float, value: float): void {
+    total = total + value;
+}
+
+@kernel(0)
+public fun saxpy_grad(seed: float): float {
+    let gradient = seed;
+    return backward(saxpy, ref gradient);
+}

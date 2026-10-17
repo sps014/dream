@@ -1,0 +1,14 @@
+import system.testing;
+import system;
+
+struct SaftHolder {
+    public words: int[];
+}
+
+@test
+@timeout(180000)
+fun struct_array_field_to_string(): void {
+    let holder = SaftHolder();
+    holder.words = [1, 2];
+    Assert.eq(holder.to_string(), "SaftHolder { words: [1, 2] }");
+}

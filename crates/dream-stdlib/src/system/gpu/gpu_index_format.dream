@@ -1,0 +1,9 @@
+module system.gpu;
+
+/// The integer size of an index buffer's elements.
+public enum GpuIndexFormat {
+    /// 16-bit indexes, from a `GpuBuffer<ushort>`.
+    Uint16 = 0,
+    /// 32-bit indexes, from a `GpuBuffer<uint>`.
+    Uint32 = 1,
+}

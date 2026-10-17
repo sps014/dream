@@ -1,0 +1,226 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.crypto;
+import system.encoding;
+
+// Writes the binary shader bundle described in docs/internals/18-gpu-shader-bundle.md and its
+// readable JSON view. Identical blobs are stored once; every reference carries the blob's
+// SHA-256.
+internal class Bundle {
+    data: List<byte>;
+    hashes: List<string>;
+    offsets: List<int>;
+    sizes: List<int>;
+    digests: List<byte[]>;
+    header: List<byte>;
+    json: StringBuilder;
+
+    internal constructor() {
+        this.data = List<byte>();
+        this.hashes = List<string>();
+        this.offsets = List<int>();
+        this.sizes = List<int>();
+        this.digests = List<byte[]>();
+        this.header = List<byte>();
+        this.json = StringBuilder();
+    }
+
+    // `targets` must already be sorted by name.
+    internal static fun write(
+        borrow module_name: string,
+        borrow targets: List<BundleTarget>
+    ): Bundle {
+        let b = Bundle();
+        let section = List<byte>();
+        b.json.append("{\n");
+        b.json.append("  \"format\": \"DGPB\",\n");
+        b.json.append("  \"version\": 0,\n");
+        b.json.append("  \"module\": " + Bundle.quote(module_name) + ",\n");
+        b.json.append("  \"targets\": [");
+        let t = 0;
+        for (let target in targets) {
+            if t > 0 {
+                b.json.append(",");
+            }
+            b.json.append("\n    {\n");
+            Bundle.text_field(section, target.name);
+            Bundle.text_field(section, target.code_format);
+            let layout = b.blob(target.layout);
+            b.reference(section, layout);
+            b.json.append("      \"name\": " + Bundle.quote(target.name) + ",\n");
+            b.json.append("      \"code_format\": " + Bundle.quote(target.code_format) + ",\n");
+            b.json.append("      \"layout\": " + b.view(layout) + ",\n");
+            b.json.append("      \"entries\": [");
+            Bundle.u32(section, target.entries.length);
+            let i = 0;
+            while i < target.entries.length {
+                let entry = target.entries[i];
+                if i > 0 {
+                    b.json.append(",");
+                }
+                Bundle.text_field(section, entry.name());
+                Bundle.text_field(section, entry.stage_name());
+                let code = b.blob(target.codes[i]);
+                b.reference(section, code);
+                Bundle.u32(section, entry.x);
+                Bundle.u32(section, entry.y);
+                Bundle.u32(section, entry.z);
+                b.json.append("\n        {\n");
+                b.json.append("          \"name\": " + Bundle.quote(entry.name()) + ",\n");
+                b.json.append("          \"stage\": " + Bundle.quote(entry.stage_name()) + ",\n");
+                b.json.append("          \"code\": " + b.view(code) + ",\n");
+                b.json.append(
+                    "          \"thread_group_size\": ["
+                        + entry.x.to_string()
+                        + ", " + entry.y.to_string() + ", " + entry.z.to_string() + "],\n"
+                );
+                b.json.append("          \"params\": [");
+                let params = entry.bindable();
+                let reflections = target.params[i];
+                Bundle.u32(section, params.length);
+                let p = 0;
+                while p < params.length {
+                    let param = params[p];
+                    let r = reflections[p];
+                    Bundle.text_field(section, param.name);
+                    Bundle.u32(section, param.kind);
+                    Bundle.u32(section, param.flags());
+                    Bundle.u32(section, r.space);
+                    Bundle.u32(section, r.binding);
+                    Bundle.u32(section, r.offset);
+                    Bundle.u32(section, r.size);
+                    if p > 0 {
+                        b.json.append(",");
+                    }
+                    b.json.append(
+                        "\n            {\"name\": "
+                            + Bundle.quote(param.name)
+                            + ", \"kind\": "
+                            + param.kind.to_string()
+                            + ", \"flags\": "
+                            + param.flags()
+                            .to_string()
+                            + ", \"space\": "
+                            + r.space.to_string()
+                            + ", \"binding\": "
+                            + r.binding.to_string()
+                            + ", \"offset\": "
+                            + r.offset.to_string() + ", \"size\": " + r.size.to_string() + "}"
+                    );
+                    p = p + 1;
+                }
+                if params.length > 0 {
+                    b.json.append("\n          ");
+                }
+                b.json.append("],\n");
+                Bundle.u32(section, entry.capabilities.length);
+                b.json.append("          \"capabilities\": [");
+                let c = 0;
+                for (let capability in entry.capabilities) {
+                    Bundle.text_field(section, capability);
+                    if c > 0 {
+                        b.json.append(", ");
+                    }
+                    b.json.append(Bundle.quote(capability));
+                    c = c + 1;
+                }
+                b.json.append("]\n        }");
+                i = i + 1;
+            }
+            if target.entries.length > 0 {
+                b.json.append("\n      ");
+            }
+            b.json.append("]\n    }");
+            t = t + 1;
+        }
+        if targets.length > 0 {
+            b.json.append("\n  ");
+        }
+        b.json.append("]\n}\n");
+        for (let ch in "DGPB") {
+            b.header.push((byte)((int)ch));
+        }
+        Bundle.u32(b.header, 0);
+        Bundle.u32(b.header, 16 + section.length);
+        Bundle.u32(b.header, targets.length);
+        for (let x in section) {
+            b.header.push(x);
+        }
+        return b;
+    }
+
+    // The complete bundle bytes: header, then the data section.
+    internal fun bytes(): byte[] {
+        let out = List<byte>();
+        for (let x in this.header) {
+            out.push(x);
+        }
+        for (let x in this.data) {
+            out.push(x);
+        }
+        return out.take_array();
+    }
+
+    internal fun view_json(): string {
+        return this.json.to_string();
+    }
+
+    // Stores `bytes` once and returns its blob index.
+    fun blob(bytes: byte[]): int {
+        let digest = Sha256.hash(bytes);
+        let hex = Encoding.hex_encode(digest);
+        let i = 0;
+        while i < this.hashes.length {
+            if this.hashes[i] == hex && this.sizes[i] == bytes.length {
+                return i;
+            }
+            i = i + 1;
+        }
+        this.hashes.push(hex);
+        this.offsets.push(this.data.length);
+        this.sizes.push(bytes.length);
+        this.digests.push(digest);
+        for (let x in bytes) {
+            this.data.push(x);
+        }
+        return this.hashes.length - 1;
+    }
+
+    fun reference(out: List<byte>, index: int): void {
+        Bundle.u32(out, this.offsets[index]);
+        Bundle.u32(out, this.sizes[index]);
+        for (let x in this.digests[index]) {
+            out.push(x);
+        }
+    }
+
+    fun view(index: int): string {
+        return "{\"offset\": "
+            + this.offsets[index]
+            .to_string()
+            + ", \"size\": "
+            + this.sizes[index]
+            .to_string() + ", \"sha256\": \"" + this.hashes[index] + "\"}";
+    }
+
+    internal static fun u32(out: List<byte>, value: int): void {
+        out.push((byte)(value & 255));
+        out.push((byte)((value >> 8) & 255));
+        out.push((byte)((value >> 16) & 255));
+        out.push((byte)((value >> 24) & 255));
+    }
+
+    internal static fun text_field(out: List<byte>, borrow text: string): void {
+        let bytes = Encoding.utf8_encode(text);
+        Bundle.u32(out, bytes.length);
+        for (let x in bytes) {
+            out.push(x);
+        }
+    }
+
+    internal static fun quote(borrow text: string): string {
+        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+}

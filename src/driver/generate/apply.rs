@@ -37,8 +37,15 @@ pub struct GeneratedFile {
 pub struct GeneratedArtifact {
     pub generator: String,
     pub path: String,
-    pub contents: String,
+    pub contents: Vec<u8>,
     pub publish: bool,
+}
+
+/// A tool output copied next to the compiled program.
+#[derive(Debug, Clone)]
+pub struct PublishedOutput {
+    pub path: String,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Default)]
@@ -46,6 +53,7 @@ pub struct Applied {
     pub replacements: IndexMap<SiteKey, String>,
     pub files: Vec<GeneratedFile>,
     pub artifacts: Vec<GeneratedArtifact>,
+    pub published: Vec<PublishedOutput>,
     pub assets: IndexMap<String, (Vec<u8>, Vec<String>)>,
     pub consumed: IndexMap<String, dream_sema::module_graph::ConsumedBy>,
     /// Generators that reported an error; their unexpanded sites are not reported again.
@@ -118,6 +126,7 @@ pub fn apply(
                             path,
                             contents,
                             mappings,
+                            binary: false,
                             ..
                         } if path == &d.artifact && super::artifacts::valid_artifact_path(path) => {
                             Some((contents, mappings))
@@ -200,9 +209,13 @@ pub fn apply(
                     contents,
                     mappings,
                     publish,
+                    binary,
                 } => {
                     let key = format!("{}/{path}", registered.name);
+                    let bytes = super::artifacts::artifact_bytes(contents, *binary);
                     let valid = super::artifacts::valid_artifact_path(path)
+                        && bytes.is_some()
+                        && (!*binary || mappings.is_empty())
                         && mappings.iter().all(|m| {
                             super::artifacts::valid_mapping(m, contents)
                                 && run.spans.get(&m.target).is_some()
@@ -230,11 +243,11 @@ pub fn apply(
                     applied.artifacts.push(GeneratedArtifact {
                         generator: registered.name.clone(),
                         path: path.clone(),
-                        contents: contents.clone(),
+                        contents: bytes.unwrap_or_default(),
                         publish: *publish,
                     });
                 }
-                Output::Consume { target } => {
+                Output::Consume { target, help } => {
                     if let Some((file, span)) = run.spans.consumable.get(target) {
                         if let Some(prior) = applied.consumed.get(target) {
                             report(
@@ -255,6 +268,7 @@ pub fn apply(
                                     generator: registered.name.clone(),
                                     file: file.clone(),
                                     span: *span,
+                                    help: help.clone(),
                                 },
                             );
                         }
@@ -271,20 +285,8 @@ pub fn apply(
                         failed = true;
                     }
                 }
-                Output::ToolRun {
-                    id,
-                    tool,
-                    inputs,
-                    outputs,
-                    ..
-                } => {
-                    if id.is_empty()
-                        || !registered.tools.contains(tool)
-                        || !inputs
-                            .iter()
-                            .chain(outputs)
-                            .all(|p| super::artifacts::valid_relative_path(p))
-                    {
+                Output::ToolRun { .. } => {
+                    if !super::artifacts::valid_tool_request(output, &registered.tools) {
                         report(
                             diagnostics,
                             run,
@@ -300,27 +302,7 @@ pub fn apply(
                     source,
                     targets,
                 } => {
-                    let bytes = run
-                        .result
-                        .outputs
-                        .iter()
-                        .find_map(|o| match o {
-                            Output::Artifact { path, contents, .. }
-                                if path == source
-                                    && super::artifacts::valid_artifact_path(path) =>
-                            {
-                                Some(Ok(contents.as_bytes().to_vec()))
-                            }
-                            _ => None,
-                        })
-                        .or_else(|| {
-                            run.result
-                                .tool_results
-                                .iter()
-                                .flat_map(|r| &r.files)
-                                .find(|f| &f.path == source)
-                                .map(super::assets::file_bytes)
-                        });
+                    let bytes = source_bytes(&run.result, source);
                     match bytes {
                         Some(Ok(bytes))
                             if !name.is_empty() && !applied.assets.contains_key(name) =>
@@ -335,6 +317,38 @@ pub fn apply(
                                 run,
                                 true,
                                 format!("asset '{name}' has an invalid source or duplicate name"),
+                                "",
+                            );
+                            failed = true;
+                        }
+                    }
+                }
+                Output::Publish { path, source } => {
+                    let bytes = source
+                        .starts_with(super::assets::TOOL_SOURCE)
+                        .then(|| super::assets::tool_output(&run.result, source))
+                        .flatten();
+                    match bytes {
+                        Some(Ok(bytes))
+                            if super::artifacts::valid_artifact_path(path)
+                                && publish_owner
+                                    .insert(path.clone(), registered.name.clone())
+                                    .is_none() =>
+                        {
+                            applied.published.push(PublishedOutput {
+                                path: path.clone(),
+                                bytes,
+                            });
+                        }
+                        _ => {
+                            report(
+                                diagnostics,
+                                run,
+                                true,
+                                format!(
+                                    "generator '{}' published '{path}' from an unknown tool output or to an invalid or duplicate path",
+                                    registered.name
+                                ),
                                 "",
                             );
                             failed = true;
@@ -381,6 +395,25 @@ pub fn apply(
         }
     }
     applied
+}
+
+/// An emitted artifact path, or a tool output named `tool:<id>/<path>`.
+fn source_bytes(result: &GenResult, source: &str) -> Option<Result<Vec<u8>, String>> {
+    if source.starts_with(super::assets::TOOL_SOURCE) {
+        return super::assets::tool_output(result, source);
+    }
+    result.outputs.iter().find_map(|o| match o {
+        Output::Artifact {
+            path,
+            contents,
+            binary,
+            ..
+        } if path == source && super::artifacts::valid_artifact_path(path) => Some(
+            super::artifacts::artifact_bytes(contents, *binary)
+                .ok_or_else(|| format!("artifact '{path}' is not valid base64")),
+        ),
+        _ => None,
+    })
 }
 
 #[cfg(test)]
@@ -443,6 +476,49 @@ mod tests {
     }
 
     #[test]
+    fn binary_artifacts_embed_their_bytes_and_reject_source_maps() {
+        let generator = generator("packer");
+        let artifact = |path: &str, mappings: Vec<super::super::model::SourceMapping>| {
+            super::Output::Artifact {
+                path: path.into(),
+                contents: "AAEC/w==".into(),
+                mappings,
+                publish: false,
+                binary: true,
+            }
+        };
+        let run = run(
+            &generator,
+            vec![
+                artifact("code.bin", Vec::new()),
+                super::Output::Asset {
+                    name: "code".into(),
+                    source: "code.bin".into(),
+                    targets: Vec::new(),
+                },
+                artifact(
+                    "mapped.bin",
+                    vec![super::super::model::SourceMapping {
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 2,
+                        target: "::selected".into(),
+                    }],
+                ),
+            ],
+        );
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let applied = super::apply(&[run], std::path::Path::new("."), &mut diagnostics);
+        assert_eq!(applied.assets["code"].0, vec![0, 1, 2, 255]);
+        assert_eq!(applied.artifacts[0].contents, vec![0, 1, 2, 255]);
+        assert!(diagnostics.diagnostics.iter().any(|d| {
+            d.message
+                .contains("invalid or duplicate artifact 'mapped.bin'")
+        }));
+    }
+
+    #[test]
     fn consume_rights_and_conflicts_are_validated_after_serialization() {
         let first = generator("first");
         let second = generator("second");
@@ -450,6 +526,7 @@ mod tests {
             &first,
             vec![super::Output::Consume {
                 target: "::selected".into(),
+                help: String::new(),
             }],
         );
         let mut b = run(
@@ -457,9 +534,11 @@ mod tests {
             vec![
                 super::Output::Consume {
                     target: "::selected".into(),
+                    help: String::new(),
                 },
                 super::Output::Consume {
                     target: "system.core::other".into(),
+                    help: String::new(),
                 },
             ],
         );
@@ -489,6 +568,7 @@ mod tests {
             &generator,
             vec![super::Output::Consume {
                 target: "::selected".into(),
+                help: String::new(),
             }],
         );
         run.result.generator = "forged".into();
@@ -511,6 +591,7 @@ mod tests {
                 path: "source.txt".into(),
                 contents: "abc".into(),
                 publish: false,
+                binary: false,
                 mappings: vec![super::super::model::SourceMapping {
                     line: 1,
                     column: 1,

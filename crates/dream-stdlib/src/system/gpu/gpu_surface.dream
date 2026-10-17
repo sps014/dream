@@ -1,0 +1,110 @@
+module system.gpu;
+
+import system.window;
+
+/// The part of a window a `GpuDevice` draws frames into.
+///
+/// Create one with `GpuDevice.create_surface`. Each loop iteration, call `begin_frame`,
+/// draw, then `GpuFrame.present`. When the window reports `WindowEvent.Resized`, pass the
+/// new size to `resize` before the next frame.
+public class GpuSurface {
+    device: GpuDevice;
+    internal handle: int;
+    window: Window;
+    surface_format: GpuTextureFormat;
+    surface_width: int;
+    surface_height: int;
+
+    internal constructor(device: GpuDevice, handle: int, window: Window) {
+        this.device = device;
+        this.handle = handle;
+        this.window = window;
+        let info = GpuHost.surface_info(handle);
+        let formats = [
+            GpuTextureFormat.Rgba8Unorm,
+            GpuTextureFormat.Rgba8UnormSrgb,
+            GpuTextureFormat.Bgra8Unorm,
+            GpuTextureFormat.Bgra8UnormSrgb
+        ];
+        this.surface_format = GpuTextureFormat.Bgra8Unorm;
+        this.surface_width = 0;
+        this.surface_height = 0;
+        if info.length >= 3 {
+            for (let format in formats) {
+                let code: int = format;
+                if code == info[0] {
+                    this.surface_format = format;
+                }
+            }
+            this.surface_width = info[1];
+            this.surface_height = info[2];
+        }
+    }
+
+    /// The format of frame targets; pass it to `GpuRenderPipelineDesc.defaults`.
+    public get color_format(): GpuTextureFormat {
+        return this.surface_format;
+    }
+
+    /// Frame width in physical pixels.
+    public get width(): int {
+        return this.surface_width;
+    }
+
+    /// Frame height in physical pixels.
+    public get height(): int {
+        return this.surface_height;
+    }
+
+    /// Resizes later frames to `width` by `height` physical pixels, the size carried by
+    /// `WindowEvent.Resized`. Non-positive sizes, such as a minimized window's, are ignored.
+    public fun resize(width: int, height: int): Result<bool, GpuError> {
+        if width <= 0 || height <= 0 {
+            return Result.Ok(false);
+        }
+        if this.handle == 0 {
+            return Result.Err(GpuError.SurfaceLost("the surface was released"));
+        }
+        if GpuHost.surface_resize(this.handle, width, height) != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        this.surface_width = width;
+        this.surface_height = height;
+        return Result.Ok(true);
+    }
+
+    /// Waits for the next frame target and starts a frame that clears it to `clear`. With
+    /// vsync on, this is where the loop waits for the display.
+    public async fun begin_frame(clear: GpuVec4): Result<GpuFrame, GpuError> {
+        if this.handle == 0 || !this.window.is_open {
+            return Result.Err(GpuError.SurfaceLost("the window was closed"));
+        }
+        let target = GpuHost.surface_acquire(this.handle).await;
+        if target <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        let texture = GpuTexture(
+            this.device.id,
+            target,
+            this.surface_width,
+            this.surface_height,
+            this.surface_format,
+            false
+        );
+        return Result.Ok(GpuFrame(this.device, this, texture, clear));
+    }
+
+    internal async fun present(): Result<bool, GpuError> {
+        if GpuHost.surface_present(this.handle).await != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(true);
+    }
+
+    del() {
+        if this.handle > 0 {
+            GpuHost.release(this.handle);
+            this.handle = 0;
+        }
+    }
+}

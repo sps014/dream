@@ -301,13 +301,18 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// C's usual arithmetic conversions for a binary operator on two already-evaluated operands.
     fn common(&mut self, l: &V, r: &V) -> (Value, Value, bool, bool) {
         let float_rank = |t: &Ty| match t {
-            Ty::F64 => 2,
-            Ty::F32 => 1,
+            Ty::F64 => 3,
+            Ty::F32 => 2,
+            Ty::F16 => 1,
             _ => 0,
         };
         let (fl, fr) = (float_rank(l.ty()), float_rank(r.ty()));
         if fl > 0 || fr > 0 {
-            let t = if fl.max(fr) == 2 { Ty::F64 } else { Ty::F32 };
+            let t = match fl.max(fr) {
+                3 => Ty::F64,
+                2 => Ty::F32,
+                _ => Ty::F16,
+            };
             return (self.conv(l, &t), self.conv(r, &t), false, true);
         }
         let bits = |t: &Ty| t.int_bits().unwrap_or(64);

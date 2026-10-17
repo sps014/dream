@@ -1,0 +1,61 @@
+module gen;
+
+import system;
+import system.codegen;
+import system.collections;
+
+@attribute(AttributeTarget.Function)
+public struct CompiledAttribute {}
+
+// Runs a registry tool three times in one phase plus a project-pinned tool with an opaque output.
+@generator
+@on_attribute(CompiledAttribute)
+@uses_tool("slangc")
+@uses_tool("pinned")
+@incremental
+public fun compiled(ctx: GenContext): void {
+    if ctx.phase() == 0 {
+        ctx.emit_artifact("input.txt", "payload", GenSourceMap());
+        let inputs = List<string>();
+        inputs.push("input.txt");
+        for (let id in ["slow", "medium", "fast"]) {
+            let args = List<string>();
+            args.push(id);
+            let outputs = List<string>();
+            outputs.push(id + ".txt");
+            ctx.run_tool(id, "slangc", args, inputs, outputs, List<string>());
+        }
+        let readable = List<string>();
+        readable.push("pinned.txt");
+        let opaque = List<string>();
+        opaque.push("blob.bin");
+        ctx.run_tool("pinned", "pinned", List<string>(), inputs, readable, opaque);
+        return;
+    }
+    let summary = StringBuilder();
+    for (let result in ctx.tool_results()) {
+        if result.exit != 0 {
+            ctx.error(result.stderr);
+            return;
+        }
+        summary.append(result.id + "[");
+        for (let file in result.files) {
+            if file.opaque {
+                summary.append(
+                    file.path
+                        + " opaque "
+                        + file.size.to_string() + " " + file.contents.length.to_string()
+                );
+            } else {
+                summary.append(file.path + "=" + file.contents.trim());
+            }
+        }
+        summary.append("]");
+    }
+    ctx.emit_asset("blob", "tool:pinned/blob.bin");
+    ctx.publish_tool_output("tool:pinned/blob.bin", "published/blob.bin");
+    ctx.emit_file(
+        "tools.dream",
+        "public fun tool_summary(): string {\n    return \"" + summary.to_string() + "\";\n}\n"
+    );
+}

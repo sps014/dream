@@ -1,0 +1,290 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// `@gpu_targets` resolution and the `slangc` / `dream-slang-layout` requests per target.
+internal static class Targets {
+    internal static fun all(): List<GpuTarget> {
+        let out = List<GpuTarget>();
+        out.push(GpuTarget.Dx12);
+        out.push(GpuTarget.Dx11);
+        out.push(GpuTarget.Vulkan);
+        out.push(GpuTarget.Metal);
+        out.push(GpuTarget.Cuda);
+        out.push(GpuTarget.WebGpu);
+        return out;
+    }
+
+    // The bundle target name, which is also the `slangc -target` value.
+    internal static fun name(target: GpuTarget): string {
+        if target == GpuTarget.Dx12 {
+            return "dxil";
+        } else if target == GpuTarget.Dx11 {
+            return "dxbc";
+        } else if target == GpuTarget.Vulkan {
+            return "spirv";
+        } else if target == GpuTarget.Metal {
+            return "metal";
+        } else if target == GpuTarget.Cuda {
+            return "ptx";
+        } else {
+            return "wgsl";
+        }
+    }
+
+    internal static fun spelling(target: GpuTarget): string {
+        if target == GpuTarget.Dx12 {
+            return "GpuTarget.Dx12";
+        } else if target == GpuTarget.Dx11 {
+            return "GpuTarget.Dx11";
+        } else if target == GpuTarget.Vulkan {
+            return "GpuTarget.Vulkan";
+        } else if target == GpuTarget.Metal {
+            return "GpuTarget.Metal";
+        } else if target == GpuTarget.Cuda {
+            return "GpuTarget.Cuda";
+        } else {
+            return "GpuTarget.WebGpu";
+        }
+    }
+
+    internal static fun backend(target: GpuTarget): string {
+        return Targets.spelling(target).replace("GpuTarget.", "GpuBackend.");
+    }
+
+    // `GpuTarget.A, B or C` for diagnostics.
+    internal static fun list(borrow targets: List<GpuTarget>): string {
+        let out = StringBuilder();
+        let i = 0;
+        while i < targets.length {
+            if i > 0 {
+                if i == targets.length - 1 {
+                    out.append(" or ");
+                } else {
+                    out.append(", ");
+                }
+            }
+            if i == 0 {
+                out.append(Targets.spelling(targets[i]));
+            } else {
+                out.append(Targets.spelling(targets[i]).replace("GpuTarget.", ""));
+            }
+            i = i + 1;
+        }
+        return out.to_string();
+    }
+
+    internal static fun is_wasm(triple: string): bool {
+        return triple.starts_with("wasm32");
+    }
+
+    internal static fun platform(triple: string): string {
+        if Targets.is_wasm(triple) {
+            return "wasm32";
+        }
+        if triple.contains("apple") || triple.contains("darwin") || triple.contains("macos") {
+            return "macOS";
+        }
+        if triple.contains("windows") {
+            return "Windows";
+        }
+        return "Linux";
+    }
+
+    // Whether a build for `triple` can load code for `target`: wasm builds run WebGPU only;
+    // native builds run WebGPU through Dawn plus the platform's own APIs. macOS runs Vulkan
+    // through the Khronos loader and MoltenVK when they are installed.
+    internal static fun usable(triple: string, target: GpuTarget): bool {
+        if target == GpuTarget.WebGpu {
+            return true;
+        }
+        let platform = Targets.platform(triple);
+        if platform == "macOS" {
+            return target == GpuTarget.Metal || target == GpuTarget.Vulkan;
+        }
+        if platform == "Windows" {
+            return target != GpuTarget.Metal;
+        }
+        if platform == "Linux" {
+            return target == GpuTarget.Vulkan || target == GpuTarget.Cuda;
+        }
+        return false;
+    }
+
+    // Reads `@gpu_targets` for `entry`: its own attribute wins over its module's, and
+    // `GpuTarget.WebGpu` is the default. Reports a list that no target of this build can use.
+    internal static fun select(ctx: GenContext, entry: ShaderEntry): void {
+        let found = false;
+        switch (entry.function.attribute<GpuTargetsAttribute>()) {
+            Some(own) => {
+                entry.declared = own.targets;
+                entry.targets_at = entry.function.id;
+                found = true;
+            }
+            None => {}
+        }
+        if !found {
+            switch (ctx.module_of(entry.function)) {
+                Some(m) => {
+                    switch (m.attribute<GpuTargetsAttribute>()) {
+                        Some(defaults) => {
+                            entry.declared = defaults.targets;
+                            entry.targets_at = m.id;
+                            found = true;
+                        }
+                        None => {}
+                    }
+                }
+                None => {}
+            }
+        }
+        if !found {
+            entry.declared = List<GpuTarget>();
+            entry.declared.push(GpuTarget.WebGpu);
+        }
+        for (let t in Targets.all()) {
+            if entry.declared.contains(t) && Targets.usable(ctx.target, t) {
+                entry.targets.push(t);
+            }
+        }
+        if entry.declared.contains(GpuTarget.Cuda) && !entry.is_compute() {
+            ctx.error_at(
+                entry.function.id,
+                "GpuTarget.Cuda runs compute shaders only; give '"
+                    + entry.name() + "' its own @gpu_targets without GpuTarget.Cuda"
+            );
+        }
+        if entry.targets.is_empty() {
+            let platform = Targets.platform(ctx.target);
+            let hint = "GpuTarget.WebGpu";
+            if platform == "macOS" {
+                hint = "GpuTarget.Metal or GpuTarget.WebGpu";
+            }
+            ctx.error_at(
+                entry.targets_at,
+                "no @gpu_targets entry can run on " + platform + "; add " + hint
+            );
+        }
+    }
+
+    // The preprocessor symbol defined while compiling for `target`. Entries whose
+    // `@gpu_targets` exclude some of the module's targets are wrapped in a condition on it,
+    // because Slang's module loader checks every entry point against the compilation target.
+    internal static fun define(target: GpuTarget): string {
+        return "DREAM_TARGET_" + Targets.name(target).to_upper();
+    }
+
+    // Options every target shares; the layout recorder receives exactly the same ones.
+    internal static fun common(
+        borrow shader_module: ShaderModule,
+        target: GpuTarget,
+        slang_target: string
+    ): List<string> {
+        let args = List<string>();
+        args.push(shader_module.stem() + ".slang");
+        args.push("-matrix-layout-row-major");
+        args.push("-D" + Targets.define(target));
+        args.push("-target");
+        args.push(slang_target);
+        return args;
+    }
+
+    internal static fun slangc_id(
+        borrow shader_module: ShaderModule,
+        borrow kind: string,
+        borrow entry: ShaderEntry
+    ): string {
+        return shader_module.stem() + "." + kind + "." + entry.name();
+    }
+
+    internal static fun code_path(
+        borrow shader_module: ShaderModule,
+        borrow kind: string,
+        borrow entry: ShaderEntry
+    ): string {
+        return shader_module.stem() + "/" + kind + "/" + entry.name() + "." + kind;
+    }
+
+    internal static fun reflection_path(
+        borrow shader_module: ShaderModule,
+        borrow kind: string,
+        borrow entry: ShaderEntry
+    ): string {
+        return shader_module.stem() + "/" + kind + "/" + entry.name() + ".json";
+    }
+
+    internal static fun layout_id(borrow shader_module: ShaderModule, target: GpuTarget): string {
+        return shader_module.stem() + "." + Targets.name(target) + ".layout";
+    }
+
+    internal static fun layout_path(borrow shader_module: ShaderModule, target: GpuTarget): string {
+        return shader_module.stem() + "/" + Targets.name(target) + "/layout.bin";
+    }
+
+    // Requests one `slangc` run per entry point and target, plus one layout recording per
+    // target for native builds (wasm builds bind from the parameter table instead). Metal is compiled to a metallib when the build host has Apple's `metal`
+    // tool and to MSL source otherwise, so both are requested.
+    internal static fun request(
+        ctx: GenContext,
+        borrow shader_module: ShaderModule,
+        layouts: bool
+    ): void {
+        let inputs = List<string>();
+        inputs.push(shader_module.stem() + ".slang");
+        for (let target in shader_module.targets()) {
+            let kinds = List<string>();
+            kinds.push(Targets.name(target));
+            if target == GpuTarget.Metal {
+                kinds.push("metallib");
+            }
+            for (let kind in kinds) {
+                for (let entry in shader_module.entries_for(target)) {
+                    let args = Targets.common(shader_module, target, kind);
+                    args.push("-entry");
+                    args.push(entry.name());
+                    args.push("-stage");
+                    args.push(entry.stage_name());
+                    args.push("-o");
+                    args.push(Targets.code_path(shader_module, kind, entry));
+                    args.push("-reflection-json");
+                    args.push(Targets.reflection_path(shader_module, kind, entry));
+                    let outputs = List<string>();
+                    outputs.push(Targets.code_path(shader_module, kind, entry));
+                    outputs.push(Targets.reflection_path(shader_module, kind, entry));
+                    ctx.run_tool(
+                        Targets.slangc_id(shader_module, kind, entry),
+                        "slangc",
+                        args,
+                        inputs,
+                        outputs,
+                        List<string>()
+                    );
+                }
+            }
+            if layouts {
+                let args = Targets.common(shader_module, target, Targets.name(target));
+                for (let entry in shader_module.entries_for(target)) {
+                    args.push("-entry");
+                    args.push(entry.name());
+                    args.push("-stage");
+                    args.push(entry.stage_name());
+                }
+                args.push("-o");
+                args.push(Targets.layout_path(shader_module, target));
+                let outputs = List<string>();
+                outputs.push(Targets.layout_path(shader_module, target));
+                ctx.run_tool(
+                    Targets.layout_id(shader_module, target),
+                    "dream-slang-layout",
+                    args,
+                    inputs,
+                    outputs,
+                    List<string>()
+                );
+            }
+        }
+    }
+}

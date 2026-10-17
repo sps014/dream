@@ -84,6 +84,14 @@ Identifies float types.
 Float
 ```
 
+## `Float16`
+
+Identifies float16 (IEEE binary16) types.
+
+```dream
+Float16
+```
+
 ## `Double`
 
 Identifies double types.

@@ -1,0 +1,93 @@
+module system.window;
+
+/// The settings a new window is created with.
+///
+/// Start from `WindowDesc.of` and chain the settings you want to change:
+/// `WindowDesc.of("Game", 1280, 720).resizable(false).fullscreen(true)`.
+public class WindowDesc {
+    desc_title: string;
+    desc_width: int;
+    desc_height: int;
+    desc_resizable: bool;
+    desc_fullscreen: bool;
+    desc_vsync: bool;
+
+    constructor(title: string, width: int, height: int) {
+        this.desc_title = title;
+        this.desc_width = width;
+        this.desc_height = height;
+        this.desc_resizable = true;
+        this.desc_fullscreen = false;
+        this.desc_vsync = true;
+    }
+
+    /// Describes a resizable, windowed window with `title` and a content area of
+    /// `width` by `height` logical pixels. `Window.open` rejects non-positive sizes.
+    public static fun of(title: string, width: int, height: int): WindowDesc {
+        return WindowDesc(title, width, height);
+    }
+
+    /// Title shown in the title bar, or as the page title in a browser.
+    public get title(): string {
+        return this.desc_title;
+    }
+
+    /// Requested content width in logical pixels.
+    public get width(): int {
+        return this.desc_width;
+    }
+
+    /// Requested content height in logical pixels.
+    public get height(): int {
+        return this.desc_height;
+    }
+
+    /// Whether the user can resize the window. Defaults to `true`.
+    public get is_resizable(): bool {
+        return this.desc_resizable;
+    }
+
+    /// Whether the window starts fullscreen on the primary monitor. Defaults to `false`.
+    public get is_fullscreen(): bool {
+        return this.desc_fullscreen;
+    }
+
+    /// Whether a GPU surface created for this window waits for the display's vertical
+    /// refresh. Defaults to `true`. The window never draws by itself, so only GPU
+    /// surfaces read this hint.
+    public get wants_vsync(): bool {
+        return this.desc_vsync;
+    }
+
+    /// Sets whether the user can resize the window, and returns this description.
+    public fun resizable(value: bool): WindowDesc {
+        this.desc_resizable = value;
+        return this;
+    }
+
+    /// Sets whether the window starts fullscreen, and returns this description.
+    public fun fullscreen(value: bool): WindowDesc {
+        this.desc_fullscreen = value;
+        return this;
+    }
+
+    /// Sets the vertical-sync hint for GPU surfaces, and returns this description.
+    public fun vsync(value: bool): WindowDesc {
+        this.desc_vsync = value;
+        return this;
+    }
+
+    internal fun flags(): int {
+        let flags = 0;
+        if this.desc_resizable {
+            flags = flags | 1;
+        }
+        if this.desc_fullscreen {
+            flags = flags | 2;
+        }
+        if this.desc_vsync {
+            flags = flags | 4;
+        }
+        return flags;
+    }
+}

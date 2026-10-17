@@ -72,6 +72,41 @@ pub(super) const CASES: &[Case] = &[
     Case::error("raw_ptr_managed_violation", "unmanaged", true),
     Case::error("raw_ptr_unknown_element", "unknown type", true),
     Case::error("alignof_unknown_type", "alignof: unknown type", true),
+    Case::error(
+        "float16_implicit_narrowing",
+        "cannot convert from float to float16",
+        true,
+    ),
+    Case::error(
+        "float16_int_conversion",
+        "cannot convert from int to float16",
+        true,
+    ),
+    Case::error(
+        "float16_literal_overflow",
+        "literal 70000.0 does not fit in float16",
+        true,
+    ),
+    Case::error(
+        "float16_extern_boundary",
+        "extern and @export functions cannot take or return 'float16'",
+        true,
+    ),
+    Case::error(
+        "gpu_builtin_outside_shader",
+        "'global_id' is only available inside functions marked @compute or @gpu",
+        true,
+    ),
+    Case::error(
+        "gpu_buffer_index_outside_shader",
+        "'GpuBuffer<float>[]' is only available inside functions marked @compute",
+        true,
+    ),
+    Case::error(
+        "gpu_targets_invalid",
+        "'@gpu_targets' argument 2 must be a member of 'GpuTarget', got 'GpuTarget.OpenGl'",
+        true,
+    ),
     Case::error("arena_unsafe_violation", "call to '@unsafe'", true),
     Case::error("arena_alloc_unsafe_violation", "call to '@unsafe'", true),
     Case::error("raw_ptr_index_unsafe_violation", "call to '@unsafe'", true),

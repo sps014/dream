@@ -36,6 +36,7 @@ Primitive types are the built-in scalars: integers, floats, booleans, and charac
 | `isize` | Pointer width, signed | Same as `int` on wasm32, same as `long` on 64-bit native | No suffix; `(isize)42` |
 | `usize` | Pointer width, unsigned | Same as `uint` on wasm32, same as `ulong` on 64-bit native | No suffix; `(usize)42` |
 | `byte` | 8-bit unsigned | 0 to 255 | `255b` |
+| `float16` | 16-bit IEEE 754 (binary16) | ±65,504, ~3 significant digits | `1.5h` |
 | `float` | 32-bit IEEE 754 | About ±3.4 × 10³⁸, ~7 significant digits | `3.14f`, or bare `3.14` |
 | `double` | 64-bit IEEE 754 | About ±1.8 × 10³⁰⁸, ~15 significant digits | `3.14d` |
 | `bool` | — | `true` or `false` | `true` |
@@ -50,7 +51,8 @@ Suffixes are case-insensitive. Integer literals can also be written in hex (`0xF
 | `.compare(other)` | Every numeric type, `char` | `int` | Negative, zero, or positive as this value is less than, equal to, or greater than `other` |
 | `.min(other)` / `.max(other)` | Every numeric type | Same type | The smaller / larger of the two values |
 | `.clamp(lo, hi)` | Every integer type | Same type | This value constrained to the inclusive range `[lo, hi]` |
-| `.abs()` | `int`, `long`, `float`, `double` | Same type | Absolute value |
+| `.abs()` | `int`, `long`, `float16`, `float`, `double` | Same type | Absolute value |
+| `.is_nan()` / `.is_infinite()` | `float16` | `bool` | Whether the value is NaN / positive or negative infinity |
 | `.signum()` | `int`, `long` | Same type | `-1`, `0`, or `1` by sign |
 | `.pow(exp)` | `int` | `int` | This value raised to `exp`; an exponent of `0` or less gives `1` |
 | `.to_int()` | `bool` | `int` | `1` for true and `0` for false |
@@ -121,8 +123,9 @@ Inside `checked` blocks, the optimizer removes checks it can prove never fire �
 
 ## Floating point
 
-IEEE 754, in two widths:
+IEEE 754, in three widths:
 
+- `float16` — 16-bit half precision (`1.5h`). Compact storage for large arrays of approximate values such as machine-learning weights or color channels.
 - `float` — 32-bit (`3.14f`). An unsuffixed `3.14` is also `float` unless the expected type is `double`.
 - `double` — 64-bit. Use `3.14d` for an always-double literal, or a bare `3.14` / `0` when the expected type is `double`.
 
@@ -137,6 +140,50 @@ System.println((3.14f).abs()); // 3.14
 System.println((1.5f).min(2.0f)); // 1.5
 let d = double.parse("2.5").unwrap_or(0.0d);
 ```
+
+### Half precision: `float16`
+
+A `float16` keeps 11 significant bits (about 3 decimal digits) and holds finite values up to ±65,504. Values smaller than 6.1 × 10⁻⁵ are stored as subnormals, down to about 6 × 10⁻⁸.
+
+```dream
+let a: float16 = 1.5h;
+let b = (float16)0.25;
+let c = a * b + 2.0h; // 2.375
+let wide: float = c; // float16 widens to float and double implicitly
+
+System.println(c); // 2.375
+System.println((float16)0.1); // 0.1 (stored as 0.0999755859375)
+System.println(float16.max_value); // 65500
+```
+
+Conversions follow these rules:
+
+- `float16` widens implicitly to `float` and `double`.
+- Converting a `float` or `double` to `float16` needs a cast. The cast rounds to the nearest `float16`, choosing the even neighbor on a tie, and values beyond ±65,504 become infinity: `(float16)2049.0` is `2048`, and `(float16)70000.0` is infinity.
+- Converting between integers and `float16` needs a cast in both directions. Casting to an integer drops the fraction, and NaN becomes `0`.
+- A `float16` literal outside the finite range, such as `70000.0h`, is a compile error.
+
+Arithmetic and comparisons work like the other floating-point types. Each result is rounded to the nearest `float16`, so `2048.0h + 1.0h` is `2048`. Because the result of a binary operator has its left operand's type, put the wider operand first when mixing widths: `1.0f + a` is a `float`, while `a + 1.0f` is a compile error.
+
+Printing a `float16` (or converting it with `to_string`) produces the shortest decimal text that reads back as the same value, so `float16.parse(x.to_string())` always returns `x`. Infinity and NaN print as `inf`, `-inf`, and `nan`, and `float16.parse` accepts those words too.
+
+| Member | Value |
+|--------|-------|
+| `float16.max_value` | 65504, the largest finite value |
+| `float16.min_value` | -65504, the most negative finite value |
+| `float16.epsilon` | 0.0009765625 (2⁻¹⁰), the gap between 1 and the next `float16` |
+| `x.is_nan()` | `true` when `x` is NaN, for example `0.0h / 0.0h` |
+| `x.is_infinite()` | `true` when `x` is positive or negative infinity |
+
+```dream
+let parsed = float16.parse("0.125").unwrap_or(0.0h); // 0.125
+let zero = 0.0h;
+let nan = zero / zero;
+System.println(nan.is_nan()); // true
+System.println(((float16)1.0e10).is_infinite()); // true
+```
+
+`@json` classes encode `float16` fields as JSON numbers using the same shortest text, and decoding rounds the number to the nearest `float16`. `extern` and `@export` functions cannot take or return `float16`, because host and C interfaces have no portable 16-bit float type; widen to `float` at those boundaries.
 
 ## Booleans
 

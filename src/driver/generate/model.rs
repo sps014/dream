@@ -32,6 +32,8 @@ pub struct Snapshot {
     pub decls: Vec<Decl>,
     /// Top-level functions carrying a trigger attribute.
     pub functions: Vec<Function>,
+    /// User modules whose `module` declaration carries a trigger attribute.
+    pub modules: Vec<Module>,
     pub blocks: Vec<SyntaxSite>,
     pub calls: Vec<CallSite>,
 }
@@ -54,6 +56,16 @@ pub struct Location {
     pub file: String,
     pub line: u32,
     pub column: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Module {
+    /// `module:<path>`; shares the identity namespace of declarations and functions.
+    pub id: String,
+    pub name: String,
+    pub file: String,
+    pub attributes: Vec<Attr>,
+    pub location: Location,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -110,6 +122,8 @@ pub struct Function {
 pub struct Param {
     pub name: String,
     pub ty: TypeRef,
+    /// Mutations through a `ref` parameter are visible to the caller.
+    pub is_ref: bool,
     pub attributes: Vec<Attr>,
 }
 
@@ -171,32 +185,36 @@ pub struct GenResult {
     pub outputs: Vec<Output>,
     pub diagnostics: Vec<GenDiagnostic>,
     pub logs: Vec<String>,
+    /// BLAKE3 of the phase-0 snapshot JSON. Later phases are that snapshot plus the feedback
+    /// recorded in [`GenPhase::tool_results`], so no phase snapshot is stored.
+    pub base_snapshot: String,
     pub phases: Vec<GenPhase>,
-    pub tool_results: Vec<ToolResult>,
+    /// Tool output bytes, base64, keyed by their BLAKE3 hash and stored once.
+    pub blobs: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Output {
     /// Rewrites a syntax site to a Dream expression.
-    Replace {
-        site: String,
-        source: String,
-    },
+    Replace { site: String, source: String },
     /// A full Dream source file at a generator-relative virtual path.
-    File {
-        path: String,
-        source: String,
-    },
+    File { path: String, source: String },
     Consume {
         target: String,
+        /// Generator-specific guidance appended to the "consumed" diagnostic.
+        help: String,
     },
     Artifact {
         path: String,
+        /// UTF-8 text, or base64 bytes when `binary` is set.
         contents: String,
         mappings: Vec<SourceMapping>,
         #[serde(default)]
         publish: bool,
+        /// Binary artifacts carry no source mappings.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        binary: bool,
     },
     ToolRun {
         id: String,
@@ -204,7 +222,11 @@ pub enum Output {
         args: Vec<String>,
         inputs: Vec<String>,
         outputs: Vec<String>,
+        /// Outputs the generator sees only as path, hash and size.
+        opaque_outputs: Vec<String>,
     },
+    /// Copies a tool output (`tool:<id>/<path>`) next to the compiled program.
+    Publish { path: String, source: String },
     Asset {
         name: String,
         source: String,
@@ -239,6 +261,10 @@ pub struct ToolInfo {
     pub name: String,
     pub version: String,
     pub fingerprint: String,
+    /// False when the declared tool cannot be resolved on this machine; requesting it then
+    /// reports the resolution error.
+    #[serde(default)]
+    pub available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -253,9 +279,13 @@ pub struct ToolResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ToolFile {
     pub path: String,
+    /// Text, or base64 when `binary`; empty for opaque files and inside a transcript, where the
+    /// bytes live in [`GenResult::blobs`].
     pub contents: String,
     pub binary: bool,
     pub hash: String,
+    pub size: u64,
+    pub opaque: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -294,7 +324,8 @@ pub struct GenSpan {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GenPhase {
-    pub snapshot: Snapshot,
+    /// Feedback this phase's snapshot carried: the previous phase's tool results.
+    pub tool_results: Vec<ToolResult>,
     pub outputs: Vec<Output>,
 }
 

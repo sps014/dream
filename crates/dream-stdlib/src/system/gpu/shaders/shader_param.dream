@@ -1,0 +1,81 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+// One parameter of a shader entry point. Bindable parameters (resources and values) appear in
+// the bundle's parameter table in Dream order; stage inputs are passed by the pipeline instead.
+internal class ShaderParam {
+    internal name: string;
+    internal ty: GenTypeRef;
+
+    // `GpuArgKind` number, or 0 for a stage input.
+    internal kind: int;
+
+    internal readonly: bool;
+    internal written: bool;
+    internal is_ref: bool;
+
+    // Values backing `GpuBuffer` atomics are stored as `Atomic<T>` elements.
+    internal atomic: bool;
+
+    // Slang global holding a resource, or the field name inside the entry's uniform block.
+    internal global: string;
+
+    internal coop: List<int>;
+    internal location: int;
+    internal builtin: string;
+
+    internal constructor(borrow p: GenParam) {
+        this.name = p.name;
+        this.ty = p.ty;
+        this.kind = 0;
+        this.readonly = p.has<ReadonlyAttribute>();
+        this.written = false;
+        this.is_ref = p.is_ref;
+        this.atomic = false;
+        this.global = "";
+        this.coop = List<int>();
+        switch (p.attribute<CoopShapeAttribute>()) {
+            Some(shape) => {
+                this.coop = shape.dimensions;
+            }
+            None => {}
+        }
+        this.location = -1;
+        switch (p.attribute<LocationAttribute>()) {
+            Some(l) => {
+                this.location = l.index;
+            }
+            None => {}
+        }
+        this.builtin = "";
+        switch (p.attribute<BuiltinAttribute>()) {
+            Some(b) => {
+                this.builtin = b.name;
+            }
+            None => {}
+        }
+    }
+
+    internal fun bindable(): bool {
+        return this.kind != 0;
+    }
+
+    internal fun is_value(): bool {
+        return this.kind == ParamKinds.value();
+    }
+
+    // Bit 0: declared `@readonly`; bit 1: the shader writes it.
+    internal fun flags(): int {
+        let flags = 0;
+        if this.readonly {
+            flags = flags | 1;
+        }
+        if this.written {
+            flags = flags | 2;
+        }
+        return flags;
+    }
+}

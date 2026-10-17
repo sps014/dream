@@ -1,0 +1,41 @@
+module system.gpu;
+
+import system.codegen;
+
+/// A ray for `trace_ray` and `GpuRayQuery`: hits count only between distances `t_min` and
+/// `t_max` from `origin` along `direction`.
+@generator_only(
+    ComputeAttribute,
+    VertexAttribute,
+    FragmentAttribute,
+    GpuAttribute,
+    RayGenerationAttribute,
+    ClosestHitAttribute,
+    AnyHitAttribute,
+    MissAttribute,
+    IntersectionAttribute,
+    CallableAttribute
+)
+public struct GpuRay {
+    /// Where the ray starts.
+    public origin: GpuVec3;
+
+    /// The ray's direction; it need not have length `1`, and distances are measured in
+    /// multiples of it.
+    public direction: GpuVec3;
+
+    /// The nearest distance at which hits count, usually a small positive value that keeps
+    /// a surface from hitting itself.
+    public t_min: float;
+
+    /// The farthest distance at which hits count.
+    public t_max: float;
+
+    /// Creates a ray from `origin` along `direction` that counts hits from `t_min` to `t_max`.
+    public static extern fun of(
+        origin: GpuVec3,
+        direction: GpuVec3,
+        t_min: float,
+        t_max: float
+    ): GpuRay;
+}

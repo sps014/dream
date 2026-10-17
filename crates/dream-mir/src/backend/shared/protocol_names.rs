@@ -31,6 +31,7 @@ pub(crate) fn to_string_fn(cx: &Cx<'_>, ty: TypeId) -> String {
         TyKind::Prim(PrimTy::Bool) => "dream_bool_to_string".into(),
         TyKind::Prim(PrimTy::Char) => "dream_char_to_string".into(),
         TyKind::Prim(PrimTy::Float) => "dream_float_to_string".into(),
+        TyKind::Prim(PrimTy::Float16) => "dream_float16_to_string".into(),
         TyKind::Prim(PrimTy::Double) => "dream_double_to_string".into(),
         TyKind::Prim(PrimTy::String) => String::new(),
         TyKind::Enum(_) => "dream_int_to_string".into(),
@@ -59,7 +60,9 @@ pub(crate) fn hash_fn(cx: &Cx<'_>, ty: TypeId) -> HashFn {
     }
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::String) => HashFn::Call("dream_string_hash".into()),
-        TyKind::Prim(PrimTy::Float) => HashFn::Call("dream_bitcast_f32".into()),
+        TyKind::Prim(PrimTy::Float | PrimTy::Float16) => {
+            HashFn::Call("dream_bitcast_f32".into())
+        }
         TyKind::Prim(PrimTy::Double) => HashFn::Call("dream_hash_double".into()),
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => HashFn::Call("dream_hash_long".into()),
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) if cx.mir.layouts.target.ptr_size == 8 => {
@@ -81,6 +84,7 @@ pub(crate) fn runtime_tag(cx: &Cx<'_>, ty: TypeId) -> i32 {
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::Int) => crate::abi::TAG_INT,
         TyKind::Prim(PrimTy::Float) => crate::abi::TAG_FLOAT,
+        TyKind::Prim(PrimTy::Float16) => crate::abi::TAG_FLOAT16,
         TyKind::Prim(PrimTy::Double) => crate::abi::TAG_DOUBLE,
         TyKind::Prim(PrimTy::Bool) => crate::abi::TAG_BOOL,
         TyKind::Prim(PrimTy::String) => crate::abi::TAG_STRING,

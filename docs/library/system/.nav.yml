@@ -10,3 +10,4 @@ nav:
   - cli.md
   - application-utilities.md
   - raw-sockets-compression.md
+  - window.md

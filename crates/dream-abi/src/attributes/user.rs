@@ -11,6 +11,16 @@ pub fn decl_identity(module: &str, name: &str) -> String {
     format!("{module}::{name}")
 }
 
+/// The name an `@attribute` type is written with: `ShaderAttribute` is used as `@shader`.
+pub fn attribute_use_name(type_name: &str) -> String {
+    use heck::ToSnakeCase;
+    type_name
+        .strip_suffix("Attribute")
+        .filter(|name| !name.is_empty())
+        .map(str::to_snake_case)
+        .unwrap_or_else(|| type_name.to_string())
+}
+
 #[derive(Debug, Clone)]
 pub struct UserAttributeParam {
     pub name: String,

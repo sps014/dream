@@ -1,0 +1,641 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// Statements and expressions of one GPU function, written through a `SlangWriter` with every
+// node mapped back to its Dream source.
+internal class SlangBody {
+    internal ctx: GenContext;
+    internal program: ShaderProgram;
+    internal shader_module: ShaderModule;
+    internal w: SlangWriter;
+
+    // Dream local name -> Slang expression, for parameters and hoisted workgroup arrays.
+    internal names: Map<string, string>;
+
+    // Dream names of buffers whose elements are `Atomic<T>`, and of those holding float bits.
+    internal atomics: List<string>;
+
+    internal float_atomics: List<string>;
+    internal storage_textures: List<string>;
+
+    // Cooperative matrix locals by `CoopMatMatrixUse`.
+    internal coop_uses: Map<string, string>;
+
+    internal declaring: string;
+    internal function_id: string;
+    internal atomic_params: List<string>;
+
+    internal constructor(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        w: SlangWriter
+    ) {
+        this.ctx = ctx;
+        this.program = program;
+        this.shader_module = shader_module;
+        this.w = w;
+        this.names = Map<string, string>();
+        this.atomics = List<string>();
+        this.float_atomics = List<string>();
+        this.storage_textures = List<string>();
+        this.coop_uses = Map<string, string>();
+        this.declaring = "";
+        this.function_id = "";
+        this.atomic_params = ShaderAnalysis.find_atomic_params(this.program);
+    }
+
+    // Keys handled in code rather than by a `Builtins` template.
+    internal static fun special(borrow key: string): bool {
+        return key
+            == "workgroup_array"
+            || key
+            == "GpuRayQuery.of"
+            || key
+            == "GpuWorkgroupArray.length"
+            || key
+            == "GpuMlpWeights.apply"
+            || key == "GpuCoopVec.zeros" || key == "GpuCoopMat.zeros" || key == "GpuCoopMat.load";
+    }
+
+    internal fun begin(borrow id: string): void {
+        this.function_id = id;
+        this.names = Map<string, string>();
+        this.atomics = List<string>();
+        this.float_atomics = List<string>();
+        this.storage_textures = List<string>();
+        this.coop_uses = Map<string, string>();
+        for (let n in this.program.nodes(id)) {
+            if Builtins.key_of(n) == "GpuCoopMat.multiply_add" && n.children.length >= 4 {
+                if n.child(1).is_expr(ExprKind.Identifier) {
+                    this.coop_uses[n.child(1).text] = "MatrixA";
+                }
+                if n.child(2).is_expr(ExprKind.Identifier) {
+                    this.coop_uses[n.child(2).text] = "MatrixB";
+                }
+            }
+        }
+    }
+
+    internal fun note_param(
+        borrow f: GenFunction,
+        borrow name: string,
+        borrow ty: GenTypeRef
+    ): void {
+        if this.atomic_params.contains(f.id + "/" + name) {
+            this.atomics.push(name);
+            if ty.arg(0).is_primitive(Primitive.Float) {
+                this.float_atomics.push(name);
+            }
+        }
+        if SlangTypes.is_named(ty, "GpuStorageTexture") {
+            this.storage_textures.push(name);
+        }
+    }
+
+    // The Slang type of a parameter, including `Atomic<T>` elements and `@readonly` buffers.
+    internal fun param_type(
+        borrow f: GenFunction,
+        borrow name: string,
+        borrow ty: GenTypeRef,
+        readonly: bool,
+        borrow coop: List<int>
+    ): string {
+        if SlangTypes.is_named(ty, "GpuBuffer") {
+            if this.atomic_params.contains(f.id + "/" + name) {
+                return "RWStructuredBuffer<Atomic<" + SlangTypes.atomic_element(ty.arg(0)) + ">>";
+            }
+            let element = SlangTypes.of(ty.arg(0), coop);
+            if readonly {
+                return "StructuredBuffer<" + element + ">";
+            }
+            return "RWStructuredBuffer<" + element + ">";
+        }
+        return SlangTypes.of(ty, coop);
+    }
+
+    internal fun block(borrow statements: List<ShaderNode>): void {
+        let w = this.w;
+        w.line_of("{");
+        w.indent();
+        for (let s in statements) {
+            this.statement(s);
+        }
+        w.dedent();
+        w.line_of("}");
+    }
+
+    fun nested(borrow n: ShaderNode): void {
+        if n.is_statement(StmtKind.Block) {
+            this.block(n.children);
+        } else {
+            this.block(List<ShaderNode>.from_array([n]));
+        }
+    }
+
+    internal fun statement(borrow n: ShaderNode): void {
+        let w = this.w;
+        if !n.is_stmt {
+            w.open();
+            this.expr(n);
+            w.text(";");
+            w.close(n.id);
+            w.newline();
+            return;
+        }
+        if n.stmt == StmtKind.Block {
+            this.block(n.children);
+        } else if n.stmt == StmtKind.If {
+            this.if_statement(n);
+        } else if n.stmt == StmtKind.While {
+            w.open();
+            w.text("while (");
+            this.expr(n.child(0));
+            w.text(")");
+            w.close(n.id);
+            w.newline();
+            this.nested(n.child(1));
+        } else if n.stmt == StmtKind.DoWhile {
+            w.line_of("do");
+            this.nested(n.child(1));
+            w.open();
+            w.text("while (");
+            this.expr(n.child(0));
+            w.text(");");
+            w.close(n.id);
+            w.newline();
+        } else if n.stmt == StmtKind.For {
+            this.for_statement(n);
+        } else if n.stmt == StmtKind.ForEach {
+            let range = n.child(0);
+            let name = Names.ident(n.text);
+            let ty = SlangTypes.of(range.child(0).ty, List<int>());
+            if ty.is_empty() {
+                ty = "int";
+            }
+            let compare = " < ";
+            if range.op == "..=" {
+                compare = " <= ";
+            }
+            w.open();
+            w.text("for (" + ty + " " + name + " = ");
+            this.expr(range.child(0));
+            w.text("; " + name + compare);
+            this.expr(range.child(1));
+            w.text("; " + name + "++)");
+            w.close(n.id);
+            w.newline();
+            this.nested(n.child(1));
+        } else if n.stmt == StmtKind.Switch {
+            this.switch_statement(n);
+        } else if n.stmt
+            == StmtKind.Declaration
+            && n.children.length > 0 && Builtins.key_of(n.child(0)) == "workgroup_array" {
+            return;
+        } else {
+            w.open();
+            this.simple(n);
+            w.text(";");
+            w.close(n.id);
+            w.newline();
+        }
+    }
+
+    // A statement that fits on one line, without its `;`: also the parts of a `for` header.
+    fun simple(borrow n: ShaderNode): void {
+        let w = this.w;
+        if !n.is_stmt {
+            this.expr(n);
+            return;
+        }
+        if n.stmt == StmtKind.Declaration {
+            this.declaration(n);
+        } else if n.stmt == StmtKind.Assignment {
+            w.text(this.local(n.text) + " = ");
+            this.expr(n.child(0));
+        } else if n.stmt == StmtKind.IndexAssignment {
+            let target = n.child(0);
+            if this.is_atomic(target) {
+                this.expr(target);
+                w.text("[");
+                this.expr(n.child(1));
+                w.text("].store(");
+                if this.float_atomics.contains(target.text) {
+                    w.text("asuint(");
+                    this.expr(n.child(2));
+                    w.text(")");
+                } else {
+                    this.expr(n.child(2));
+                }
+                w.text(")");
+                return;
+            }
+            this.expr(target);
+            w.text("[");
+            this.index(target, n.child(1));
+            w.text("] = ");
+            this.expr(n.child(2));
+        } else if n.stmt == StmtKind.MemberAssignment {
+            this.member(n.child(0), n.text);
+            w.text(" = ");
+            this.expr(n.child(1));
+        } else if n.stmt == StmtKind.FunctionInvocation {
+            SlangCalls.call(this, n);
+        } else if n.stmt == StmtKind.MethodInvocation {
+            SlangCalls.call(this, n);
+        } else if n.stmt == StmtKind.Expression {
+            this.expr(n.child(0));
+        } else if n.stmt == StmtKind.Return {
+            w.text("return");
+            if !n.children.is_empty() {
+                w.text(" ");
+                this.expr(n.child(0));
+            }
+        } else if n.stmt == StmtKind.Break {
+            w.text("break");
+        } else if n.stmt == StmtKind.Continue {
+            w.text("continue");
+        } else {
+            this.ctx.error_at(n.id, "this statement is not supported in GPU shaders");
+        }
+    }
+
+    fun declaration(borrow n: ShaderNode): void {
+        let w = this.w;
+        let name = Names.ident(n.text);
+        if n.children.is_empty() {
+            let ty = "var";
+            if !n.types.is_empty() {
+                ty = SlangTypes.of(n.types[0], List<int>());
+            }
+            w.text(ty + " " + name);
+            return;
+        }
+        let init = n.child(0);
+        let key = Builtins.key_of(init);
+        if key == "GpuRayQuery.of" {
+            let flags = "0";
+            if init.children.length > 1 && init.child(1).is_expr(ExprKind.Member) {
+                flags = Builtins.ray_flag_value(init.child(1).text).to_string();
+            } else {
+                this.ctx.error_at(
+                    init.id,
+                    "GpuRayQuery.of needs a GpuRayFlags member such as GpuRayFlags.None"
+                );
+            }
+            w.text("RayQuery<" + flags + "> " + name);
+            return;
+        }
+        let ty = "var";
+        if n.op.starts_with("const") {
+            ty = "let";
+        }
+        if !n.types.is_empty() {
+            let explicit = SlangTypes.of(n.types[0], List<int>());
+            if !explicit.is_empty() {
+                ty = explicit;
+            }
+        }
+        w.text(ty + " " + name + " = ");
+        this.declaring = n.text;
+        this.expr(init);
+        this.declaring = "";
+    }
+
+    fun if_statement(borrow n: ShaderNode): void {
+        let w = this.w;
+        let i = 0;
+        let first = true;
+        while i < n.children.length {
+            let c = n.child(i);
+            if !c.is_stmt && i + 1 < n.children.length {
+                w.open();
+                if first {
+                    w.text("if (");
+                } else {
+                    w.text("else if (");
+                }
+                this.expr(c);
+                w.text(")");
+                w.close(c.id);
+                w.newline();
+                this.nested(n.child(i + 1));
+                first = false;
+                i = i + 2;
+            } else {
+                w.line_of("else");
+                this.nested(c);
+                i = i + 1;
+            }
+        }
+    }
+
+    fun for_statement(borrow n: ShaderNode): void {
+        let w = this.w;
+        let scope = n.child(0);
+        let init = -1;
+        let condition = -1;
+        let step = -1;
+        let i = 0;
+        while i < scope.children.length - 1 {
+            let c = scope.child(i);
+            if !c.is_stmt {
+                condition = i;
+            } else if condition < 0 && init < 0 && c.stmt == StmtKind.Declaration {
+                init = i;
+            } else {
+                step = i;
+            }
+            i = i + 1;
+        }
+        w.open();
+        w.text("for (");
+        if init >= 0 {
+            this.simple(scope.child(init));
+        }
+        w.text("; ");
+        if condition >= 0 {
+            this.expr(scope.child(condition));
+        }
+        w.text("; ");
+        if step >= 0 {
+            this.simple(scope.child(step));
+        }
+        w.text(")");
+        w.close(n.id);
+        w.newline();
+        this.nested(scope.child(scope.children.length - 1));
+    }
+
+    fun switch_statement(borrow n: ShaderNode): void {
+        let w = this.w;
+        w.open();
+        w.text("switch (");
+        this.expr(n.child(0));
+        w.text(")");
+        w.close(n.id);
+        w.newline();
+        w.line_of("{");
+        let labels = 0;
+        let i = 1;
+        while i < n.children.length {
+            let c = n.child(i);
+            if !c.is_stmt {
+                w.open();
+                w.text("case ");
+                this.expr(c);
+                w.text(":");
+                w.close(c.id);
+                w.newline();
+                labels = labels + 1;
+            } else {
+                if labels == 0 {
+                    w.line_of("default:");
+                }
+                w.indent();
+                this.nested(c);
+                w.line_of("break;");
+                w.dedent();
+                labels = 0;
+            }
+            i = i + 1;
+        }
+        w.line_of("}");
+    }
+
+    fun local(borrow name: string): string {
+        switch (this.names.get(name)) {
+            Some(mapped) => {
+                return mapped;
+            }
+            None => {
+                return Names.ident(name);
+            }
+        }
+    }
+
+    fun is_atomic(borrow target: ShaderNode): bool {
+        return target.is_expr(ExprKind.Identifier) && this.atomics.contains(target.text);
+    }
+
+    fun index(borrow target: ShaderNode, borrow index: ShaderNode): void {
+        if SlangTypes.is_named(target.ty, "GpuStorageTexture") {
+            this.w.text("uint2(");
+            this.expr(index);
+            this.w.text(")");
+            return;
+        }
+        this.expr(index);
+    }
+
+    // Wraps operands that are themselves operators, so precedence never depends on Slang's
+    // operator table.
+    fun operand(borrow n: ShaderNode): void {
+        let wrap = n.is_expr(ExprKind.Binary) || n.is_expr(ExprKind.Ternary);
+        if wrap {
+            this.w.text("(");
+        }
+        this.expr(n);
+        if wrap {
+            this.w.text(")");
+        }
+    }
+
+    internal fun expr(borrow n: ShaderNode): void {
+        let w = this.w;
+        w.open();
+        if n.expr == ExprKind.Literal {
+            w.text(SlangBody.literal(n));
+        } else if n.expr == ExprKind.Identifier {
+            if n.symbol_kind == "function" {
+                w.text(Names.ident(n.text));
+            } else {
+                w.text(this.local(n.text));
+            }
+        } else if n.expr == ExprKind.Parenthesized {
+            w.text("(");
+            this.expr(n.child(0));
+            w.text(")");
+        } else if n.expr == ExprKind.Binary {
+            this.binary(n);
+        } else if n.expr == ExprKind.Unary {
+            w.text(n.op);
+            this.operand(n.child(0));
+        } else if n.expr == ExprKind.IncDec {
+            let child = n.child(0);
+            let prefix = n.line < child.line || (n.line == child.line && n.column < child.column);
+            if prefix {
+                w.text(n.op);
+                this.expr(child);
+            } else {
+                this.expr(child);
+                w.text(n.op);
+            }
+        } else if n.expr == ExprKind.Ternary {
+            this.operand(n.child(0));
+            w.text(" ? ");
+            this.operand(n.child(1));
+            w.text(" : ");
+            this.operand(n.child(2));
+        } else if n.expr == ExprKind.Cast {
+            let ty = "";
+            if !n.types.is_empty() {
+                ty = SlangTypes.of(n.types[0], List<int>());
+            }
+            if ty.is_empty() {
+                this.expr(n.child(0));
+            } else {
+                w.text(ty + "(");
+                this.expr(n.child(0));
+                w.text(")");
+            }
+        } else if n.expr == ExprKind.Member {
+            this.member(n.child(0), n.text);
+        } else if n.expr == ExprKind.Index {
+            let target = n.child(0);
+            if this.is_atomic(target) {
+                if this.float_atomics.contains(target.text) {
+                    w.text("asfloat(");
+                }
+                this.expr(target);
+                w.text("[");
+                this.expr(n.child(1));
+                w.text("].load()");
+                if this.float_atomics.contains(target.text) {
+                    w.text(")");
+                }
+            } else {
+                this.expr(target);
+                w.text("[");
+                this.index(target, n.child(1));
+                w.text("]");
+            }
+        } else if n.expr == ExprKind.Ref {
+            this.expr(n.child(0));
+        } else if n.expr == ExprKind.FunctionCall {
+            SlangCalls.call(this, n);
+        } else if n.expr == ExprKind.MethodCall {
+            SlangCalls.call(this, n);
+        } else {
+            this.ctx.error_at(n.id, "this expression is not supported in GPU shaders");
+        }
+        w.close(n.id);
+    }
+
+    fun binary(borrow n: ShaderNode): void {
+        let w = this.w;
+        let left = n.child(0);
+        let right = n.child(1);
+        if n.op == "*" && SlangTypes.is_named(left.ty, "GpuMat4") {
+            // Dream matrices are column-major values stored as Slang rows, so `m * v` is
+            // `mul(v, m)` and `a * b` is `mul(b, a)`.
+            w.text("mul(");
+            this.expr(right);
+            w.text(", ");
+            this.expr(left);
+            w.text(")");
+            return;
+        }
+        if (n.op == "==" || n.op == "!=") && SlangTypes.is_vector(left.ty) {
+            if n.op == "==" {
+                w.text("all(");
+            } else {
+                w.text("any(");
+            }
+            this.operand(left);
+            w.text(" " + n.op + " ");
+            this.operand(right);
+            w.text(")");
+            return;
+        }
+        this.operand(left);
+        w.text(" " + n.op + " ");
+        this.operand(right);
+    }
+
+    fun member(borrow receiver: ShaderNode, borrow name: string): void {
+        let w = this.w;
+        if receiver.is_type_name() {
+            if receiver.text == "GpuRayFlags" {
+                w.text(Builtins.ray_flag(name));
+            } else {
+                w.text(Names.ident(receiver.text) + "." + Names.ident(name));
+            }
+            return;
+        }
+        let ty = receiver.ty;
+        if SlangTypes.is_named(ty, "GpuMat4") && name.starts_with("c") {
+            this.expr(receiver);
+            w.text("[" + name.substring(1, name.length) + "]");
+            return;
+        }
+        this.expr(receiver);
+        if SlangTypes.is_named(ty, "GpuRay") {
+            if name == "origin" {
+                w.text(".Origin");
+            } else if name == "direction" {
+                w.text(".Direction");
+            } else if name == "t_min" {
+                w.text(".TMin");
+            } else {
+                w.text(".TMax");
+            }
+            return;
+        }
+        if ty.decl.starts_with("system.gpu::") {
+            w.text("." + name);
+        } else {
+            w.text("." + Names.ident(name));
+        }
+    }
+
+    // Dream literal spelling to Slang: suffixes differ for unsigned, 64-bit and double values.
+    internal static fun literal(borrow n: ShaderNode): string {
+        let kind = n.literal_kind;
+        let text = n.literal.replace("_", "");
+        if kind == "bool" || kind == "int" {
+            return text;
+        }
+        let digits = text;
+        while digits.length > 0
+            && SlangBody.suffix_char(digits.substring(digits.length - 1, digits.length), digits) {
+            digits = digits.substring(0, digits.length - 1);
+        }
+        if kind == "uint" {
+            return digits + "u";
+        }
+        if kind == "long" {
+            return digits + "ll";
+        }
+        if kind == "ulong" {
+            return digits + "ull";
+        }
+        if !digits.contains(".") && !digits.contains("e") && !digits.contains("E") {
+            digits = digits + ".0";
+        }
+        if kind == "float16" {
+            return digits + "h";
+        }
+        if kind == "double" {
+            return digits + "l";
+        }
+        return digits + "f";
+    }
+
+    static fun suffix_char(borrow c: string, borrow text: string): bool {
+        if text.starts_with("0x") || text.starts_with("0X") {
+            return c == "u" || c == "U" || c == "l" || c == "L";
+        }
+        return c
+            == "u"
+            || c
+            == "U"
+            || c
+            == "l"
+            || c == "L" || c == "f" || c == "F" || c == "h" || c == "H" || c == "d" || c == "D";
+    }
+}

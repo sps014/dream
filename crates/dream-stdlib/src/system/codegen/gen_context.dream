@@ -4,6 +4,7 @@ import system;
 import system.io;
 import system.collections;
 import system.json;
+import system.encoding;
 
 // Snapshot format this package reads; the compiler writes the same number.
 fun gen_snapshot_version(): int {
@@ -115,6 +116,46 @@ public class GenContext {
             }
         }
         return out;
+    }
+
+    /// User modules whose `module` declaration carries `@A`, in source order.
+    public fun modules_with<A>(): List<GenModule> {
+        let id = GenAttributes.id<A>();
+        let out = List<GenModule>();
+        for (let m in this.snapshot.modules) {
+            if GenAttributes.has(m.attributes, id) {
+                out.push(m);
+            }
+        }
+        return out;
+    }
+
+    /// The trigger-carrying module that declares `decl`, so module-level settings can be merged
+    /// with the declaration's own attributes. `None` when its module carries no trigger.
+    public fun module_of(borrow decl: GenDecl): Option<GenModule> {
+        return this.find_module(decl.module_name);
+    }
+
+    /// The trigger-carrying module that declares function or method `f`, or `None` when its
+    /// module carries no trigger attribute.
+    public fun module_of(borrow f: GenFunction): Option<GenModule> {
+        switch (f.id.last_index_of("::")) {
+            Some(separator) => {
+                return this.find_module(f.id.substring(0, separator));
+            }
+            None => {
+                return Option.None;
+            }
+        }
+    }
+
+    fun find_module(borrow name: string): Option<GenModule> {
+        for (let m in this.snapshot.modules) {
+            if m.name == name {
+                return Option.Some(m);
+            }
+        }
+        return Option.None;
     }
 
     // Every declaration selected by this generator's `@on_attribute` triggers.
@@ -346,14 +387,22 @@ public class GenContext {
         return this.snapshot.tool_results;
     }
 
-    // Requests a declared tool; the compiler reruns this generator with its results.
     /// Requests a declared tool. The generator runs again with the result in the next phase.
+    ///
+    /// `id` names the request (no `/`); `inputs` are emitted artifact paths copied into the tool's
+    /// scratch folder; `args` are passed as-is with that folder as the working directory.
+    /// `outputs` are files whose contents the next phase reads through `tool_results()`.
+    /// `opaque_outputs` are files the generator only sees as path, hash and size, for large or
+    /// binary results it embeds (`emit_asset`) or publishes (`publish_tool_output`) as
+    /// `tool:<id>/<path>` without reading them. All requests of a phase run in parallel; results
+    /// keep request order.
     public fun run_tool(
         id: string,
         tool: string,
         args: List<string>,
         inputs: List<string>,
-        outputs: List<string>
+        outputs: List<string>,
+        opaque_outputs: List<string>
     ): void {
         let out = JsonValue.dict();
         out["kind"] = JsonValue.from_string("tool_run");
@@ -362,10 +411,22 @@ public class GenContext {
         out["args"] = gen_json_strings(args);
         out["inputs"] = gen_json_strings(inputs);
         out["outputs"] = gen_json_strings(outputs);
+        out["opaque_outputs"] = gen_json_strings(opaque_outputs);
         this.outputs.push(out);
     }
 
-    // Embeds an artifact or tool output into every compilation target.
+    /// Copies a tool output, named `tool:<request id>/<path>`, to `path` next to the compiled
+    /// program. Publishing the same path twice, or a path a compiler output uses, is an error.
+    public fun publish_tool_output(source: string, path: string): void {
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("publish");
+        out["path"] = JsonValue.from_string(path);
+        out["source"] = JsonValue.from_string(source);
+        this.outputs.push(out);
+    }
+
+    /// Embeds an emitted artifact path, or a tool output named `tool:<request id>/<path>`, into
+    /// every compilation target as the asset `name`, read at run time with `Assets.bytes(name)`.
     public fun emit_asset(name: string, source: string): void {
         this.emit_asset(name, source, List<string>());
     }
@@ -380,11 +441,14 @@ public class GenContext {
         this.outputs.push(out);
     }
 
-    // Removes a selected or referenced user function from the compiled program.
-    public fun consume(borrow f: GenFunction): void {
+    /// Takes over a selected or referenced top-level user function: it stays type-checked but
+    /// is not compiled, and calling it from ordinary code is an error. `help` is shown under that
+    /// error to say what to use instead, for example `dispatch it with Shaders.blur.dispatch(...)`.
+    public fun consume(borrow f: GenFunction, help: string = ""): void {
         let out = JsonValue.dict();
         out["kind"] = JsonValue.from_string("consume");
         out["target"] = JsonValue.from_string(f.id);
+        out["help"] = JsonValue.from_string(help);
         this.outputs.push(out);
     }
 
@@ -401,6 +465,21 @@ public class GenContext {
         out["contents"] = JsonValue.from_string(contents);
         out["mappings"] = map.mappings;
         out["publish"] = JsonValue.boolean(publish);
+        this.outputs.push(out);
+    }
+
+    /// Emits a binary file, such as packed GPU code, under this generator's directory. Binary
+    /// artifacts have no source map; embed them with `emit_asset` or pass them to `run_tool` as
+    /// inputs like text artifacts. With `publish`, the file is also copied beside the build
+    /// output.
+    public fun emit_artifact(path: string, contents: byte[], publish: bool = false): void {
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("artifact");
+        out["path"] = JsonValue.from_string(path);
+        out["contents"] = JsonValue.from_string(Encoding.base64_encode(contents));
+        out["mappings"] = JsonValue.array();
+        out["publish"] = JsonValue.boolean(publish);
+        out["binary"] = JsonValue.boolean(true);
         this.outputs.push(out);
     }
 

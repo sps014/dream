@@ -1,0 +1,24 @@
+module system.gpu;
+
+/// Finished GPU work from `GpuCommandEncoder.finish`, ready for `GpuDevice.submit`.
+public class GpuCommandBuffer {
+    internal device_id: int;
+    internal words: int[];
+    internal data: byte[];
+    internal error: Option<GpuError>;
+    keep: List<GpuOwnedHandle>;
+
+    internal constructor(
+        device_id: int,
+        words: int[],
+        data: byte[],
+        error: Option<GpuError>,
+        keep: List<GpuOwnedHandle>
+    ) {
+        this.device_id = device_id;
+        this.words = words;
+        this.data = data;
+        this.error = error;
+        this.keep = keep;
+    }
+}

@@ -92,7 +92,7 @@ pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str
         TyKind::Prim(p) => match p {
             PrimTy::String => (tag::STRING, 0, "i32.store"),
             PrimTy::Bool => (tag::BOOL, 0, "i32.store"),
-            PrimTy::Double | PrimTy::Float => (tag::DOUBLE, 0, "f64.store"),
+            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => (tag::DOUBLE, 0, "f64.store"),
             PrimTy::ISize => (tag::ISIZE, 0, "i32.store"),
             PrimTy::USize => (tag::USIZE, 0, "i32.store"),
             PrimTy::Long | PrimTy::ULong => (tag::LONG, 0, "i64.store"),

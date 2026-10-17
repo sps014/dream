@@ -1,0 +1,150 @@
+module gpu_ray_query;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun rays_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun rays_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println("SKIP gpu_ray_query on " + rays_label(backend) + ": " + reason);
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println("SKIP gpu_ray_query on " + rays_label(backend) + ": " + reason);
+        }
+        Err(e) => {
+            Assert.fail("gpu_ray_query on " + rays_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun rays_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+// One ray per cell of a `size` by `size` grid, straight down +z from z = -2 over the square
+// [-1, 1] x [-1, 1]; records the hit distance (-1 on a miss) and the instance id.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan)
+@compute(8, 8, 1)
+fun ray_query_grid(
+    scene: GpuAccelerationStructure,
+    distances: GpuBuffer<float>,
+    instances: GpuBuffer<int>,
+    size: int
+): void {
+    let cell = global_id();
+    if cell.x < size && cell.y < size {
+        let u = ((float)cell.x + 0.5f) / (float)size * 2.0f - 1.0f;
+        let v = 1.0f - ((float)cell.y + 0.5f) / (float)size * 2.0f;
+        let query = GpuRayQuery.of(GpuRayFlags.ForceOpaque);
+        query.trace(
+            scene,
+            255u,
+            GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.0f, 100.0f)
+        );
+        while query.proceed() {
+            query.commit_triangle();
+        }
+        let index = cell.y * size + cell.x;
+        if query.has_hit() {
+            distances[index] = query.hit_distance();
+            instances[index] = query.hit_instance_id();
+        } else {
+            distances[index] = -1.0f;
+            instances[index] = -1;
+        }
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_ray_query(): void {
+    let size = 8;
+    for (let backend in GpuShaders.backends()) {
+        if backend == GpuBackend.WebGpu {
+            continue;
+        }
+        switch (rays_device(backend).await) {
+            Some(device) => {
+                let label = rays_label(backend);
+                if !device.supports(GpuFeature.RayQuery) {
+                    System.println("SKIP gpu_ray_query on " + label + ": no ray query support");
+                    continue;
+                }
+                let positions = rays_ok(
+                    device.buffer_from(
+                        [
+                            GpuVec3.of(-0.5f, -0.5f, 0.0f),
+                            GpuVec3.of(0.5f, -0.5f, 0.0f),
+                            GpuVec3.of(0.0f, 0.5f, 0.0f)
+                        ]
+                    ),
+                    "positions"
+                );
+                let blas = rays_ok(
+                    device.build_bottom_level(GpuGeometry.triangles(positions)).await,
+                    "bottom level on " + label
+                );
+                // The instance moves the triangle to z = 1, three units in front of the rays.
+                let instance = GpuInstance.of(
+                    blas,
+                    GpuMat4.translation(GpuVec3.of(0.0f, 0.0f, 1.0f))
+                ).with_id(7);
+                let tlas = rays_ok(
+                    device.build_top_level([instance]).await,
+                    "top level on " + label
+                );
+
+                let distances = rays_ok(device.buffer_alloc<float>(size * size), "distances");
+                let ids = rays_ok(device.buffer_alloc<int>(size * size), "ids");
+                rays_ok(
+                    GpuShaders.ray_query_grid.dispatch(
+                        device,
+                        GpuDispatch.threads_2d(size, size),
+                        tlas,
+                        distances,
+                        ids,
+                        size
+                    ).await,
+                    "ray queries on " + label
+                );
+                let d = rays_ok(distances.read().await, "read distances");
+                let id = rays_ok(ids.read().await, "read ids");
+                let centre = 4 * size + 4;
+                Assert.approx((double)d[centre], 3.0, 0.0001);
+                Assert.eq(id[centre], 7);
+                Assert.eq(d[0], -1.0f);
+                Assert.eq(id[0], -1);
+                Assert.eq(d[size - 1], -1.0f);
+                let hits = 0;
+                for (let value in d) {
+                    if value > 0.0f {
+                        hits = hits + 1;
+                    }
+                }
+                // The triangle covers about an eighth of the grid's area.
+                Assert.is_true(hits >= 4 && hits <= 16);
+            }
+            None => {}
+        }
+    }
+}

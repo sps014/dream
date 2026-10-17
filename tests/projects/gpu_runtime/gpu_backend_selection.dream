@@ -1,0 +1,133 @@
+module gpu_backend_selection;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun selection_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun selection_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_backend_selection on " + selection_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_backend_selection on " + selection_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail(
+                "gpu_backend_selection on " + selection_label(backend) + ": " + e.message()
+            );
+        }
+    }
+    return Option.None;
+}
+
+fun selection_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(1, 1, 1)
+fun selection_marker(out: GpuBuffer<int>): void {
+    out[0] = 7;
+}
+
+// The plan's backend-selection example: try CUDA only when this build compiled it, and fall
+// back to `Auto` only after CUDA explicitly reported that it cannot run here.
+async fun open_device(): Result<GpuDevice, GpuError> {
+    let compiled = GpuShaders.backends();
+    if compiled.contains(GpuBackend.Cuda) {
+        switch (GpuDevice.create(GpuBackend.Cuda).await) {
+            Ok(device) => {
+                return Result.Ok(device);
+            }
+            Err(GpuError.BackendUnavailable(reason)) => {
+                System.println("CUDA unavailable: " + reason);
+            }
+            Err(e) => {
+                return Result.Err(e);
+            }
+        }
+    }
+    return GpuDevice.create(GpuBackend.Auto).await;
+}
+
+@test
+@timeout(180000)
+async fun gpu_backend_selection(): void {
+    let compiled = GpuShaders.backends();
+    Assert.is_true(compiled.contains(GpuBackend.WebGpu));
+    Assert.is_false(compiled.contains(GpuBackend.Auto));
+    Assert.is_false(compiled.contains(GpuBackend.Cuda));
+    Assert.is_false(compiled.contains(GpuBackend.Dx11));
+
+    // A backend without shader code in this build is an error, never a silent fallback.
+    for (let missing in [GpuBackend.Cuda, GpuBackend.Dx11]) {
+        switch (GpuDevice.create(missing).await) {
+            Ok(device) => {
+                Assert.fail(
+                    "opened " + selection_label(device.backend) + " for an uncompiled backend"
+                );
+            }
+            Err(GpuError.BackendNotCompiled(backend)) => {
+                Assert.is_true(backend == missing);
+            }
+            Err(e) => {
+                Assert.fail("expected BackendNotCompiled, got " + e.message());
+            }
+        }
+    }
+
+    // Every compiled backend either opens as itself or explains why it cannot run here.
+    for (let backend in compiled) {
+        switch (selection_device(backend).await) {
+            Some(device) => {
+                Assert.is_true(device.backend == backend);
+                let out = selection_ok(device.buffer_alloc<int>(1), "buffer");
+                selection_ok(
+                    GpuShaders.selection_marker.dispatch(device, GpuDispatch.groups(1, 1, 1), out)
+                        .await,
+                    "dispatch on " + selection_label(backend)
+                );
+                Assert.eq(selection_ok(out.read().await, "read")[0], 7);
+            }
+            None => {}
+        }
+    }
+
+    switch (open_device().await) {
+        Ok(device) => {
+            Assert.is_true(compiled.contains(device.backend));
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println("SKIP gpu_backend_selection Auto: " + reason);
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println("SKIP gpu_backend_selection Auto: " + reason);
+        }
+        Err(e) => {
+            Assert.fail("Auto: " + e.message());
+        }
+    }
+}

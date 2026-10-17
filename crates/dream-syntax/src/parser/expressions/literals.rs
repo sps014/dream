@@ -229,6 +229,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node_spans: std::collections::BTreeMap::new(),
             type_aliases: self.type_aliases.clone(),
             in_condition: false,
+            in_generator_only_type: false,
         };
         let expr = sub.parse_expression(0)?;
         if sub.current_token().kind != EndOfFileToken {

@@ -1,0 +1,23 @@
+module system.gpu;
+
+/// An optional GPU capability. Ask a device with `GpuDevice.supports`; pipelines that need a
+/// capability the device lacks fail with `GpuError.UnsupportedCapability`.
+public enum GpuFeature {
+    /// Ray tracing pipelines: `@ray_generation`, hit, miss, intersection and callable shaders.
+    RayTracing = 0,
+    /// Inline ray queries with `GpuRayQuery` in ordinary shaders.
+    RayQuery = 1,
+    /// Bindless resources through `GpuHandle`.
+    Bindless = 2,
+    /// Subgroup operations such as `subgroup_add`. On WebGPU this is the optional
+    /// `subgroups` feature, which the browser may not grant.
+    Subgroups = 3,
+    /// Hardware cooperative vectors (`GpuCoopVec`, `GpuMlpWeights`).
+    CooperativeVectors = 4,
+    /// Hardware cooperative matrices (`GpuCoopMat`).
+    CooperativeMatrices = 5,
+    /// `float16` arithmetic in shaders.
+    Float16 = 6,
+    /// 64-bit atomic operations on buffers.
+    Atomics64 = 7,
+}

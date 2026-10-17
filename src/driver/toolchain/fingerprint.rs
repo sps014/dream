@@ -20,7 +20,7 @@ impl ToolchainConfig {
                     &self.runtime_c,
                     &self.home,
                     &self.bin,
-                    &self.llvm,
+                    &self.tool_overrides,
                     &self.toolchains,
                     &self.prefix,
                     &self.exe,
@@ -33,8 +33,6 @@ impl ToolchainConfig {
                     &self.path,
                     &self.cc,
                     &self.cxx,
-                    &self.zig,
-                    &self.wasm_opt,
                     &self.targets,
                     &self.sysroot
                 )

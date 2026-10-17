@@ -362,7 +362,7 @@ impl Compiler {
         }
         for (path, contents) in &loaded.acc.published_artifacts {
             field("published-artifact", path.as_bytes());
-            field("published-contents", contents.as_bytes());
+            field("published-contents", contents);
         }
 
         let mut inputs = loaded.acc.resolution_inputs.clone();

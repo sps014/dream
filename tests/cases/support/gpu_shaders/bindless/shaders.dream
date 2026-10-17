@@ -1,0 +1,26 @@
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Metal)
+module shaders;
+
+import system.gpu;
+
+public struct Material {
+    public albedo: GpuHandle<GpuTexture>;
+    public sampler: GpuHandle<GpuSampler>;
+}
+
+public struct MaterialInput {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+
+    @location(1)
+    public material_index: int;
+}
+
+@fragment
+public fun shade_material(@readonly materials: GpuBuffer<Material>, input: MaterialInput): GpuVec4 {
+    let material = materials[input.material_index];
+    return material.albedo.get().sample(material.sampler.get(), input.uv);
+}

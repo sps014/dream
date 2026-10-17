@@ -1,0 +1,30 @@
+module shaders;
+
+import system.gpu;
+
+@gpu
+@differentiable
+fun loss(weight: float, input: float, target: float): float {
+    let prediction = weight * input;
+    let error = prediction - target;
+    return error * error;
+}
+
+@compute(64, 1, 1)
+public fun train_step(
+    @readonly inputs: GpuBuffer<float>,
+    @readonly targets: GpuBuffer<float>,
+    weights: GpuBuffer<float>,
+    gradients: GpuBuffer<float>,
+    n: int
+): void {
+    let i = global_id().x;
+    if i >= n {
+        return;
+    }
+    let w = GpuDiffPair.of(weights[0], 0.0f);
+    let x = GpuDiffPair.constant(inputs[i]);
+    let t = GpuDiffPair.constant(targets[i]);
+    GpuDiff.backward3(loss, ref w, ref x, ref t, 1.0f);
+    GpuAtomic.add_float(gradients, 0, w.derivative());
+}

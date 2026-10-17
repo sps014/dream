@@ -1,0 +1,6 @@
+module system.gpu;
+
+/// Marks a miss shader, which runs when a ray hits nothing. Its only parameter is `ref` to
+/// the ray's payload struct, which it fills in, for example with a sky color.
+@attribute(AttributeTarget.Function)
+public struct MissAttribute {}

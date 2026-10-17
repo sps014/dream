@@ -227,6 +227,7 @@ impl Builder<'_, '_> {
                 .filter(|p| p.name.text != "this")
                 .map(|p| Param {
                     name: p.name.text.clone(),
+                    is_ref: p.is_ref,
                     ty: type_ref(
                         if scope.is_empty() {
                             declaration_fact
@@ -270,7 +271,12 @@ fn function_carries(f: &FunctionNode<'_>, ids: &[String], registry: &UserAttribu
             .any(|p| carries(&p.attributes, ids, registry))
 }
 
-/// True when any declaration, member or top-level function carries one of `ids`.
+/// Module identities share the declaration namespace, so diagnostics can anchor on them.
+pub(super) fn module_identity(path: &str) -> String {
+    format!("module:{path}")
+}
+
+/// True when any declaration, member, top-level function or user module carries one of `ids`.
 pub fn program_carries(
     acc: &ProgramAccumulator<'_>,
     ids: &[String],
@@ -278,6 +284,15 @@ pub fn program_carries(
 ) -> bool {
     if ids.is_empty() {
         return false;
+    }
+    if acc.parsed_files.iter().any(|(file, program)| {
+        super::walk::is_user_file(Some(file))
+            && program
+                .module
+                .as_ref()
+                .is_some_and(|m| carries(&m.attributes, ids, registry))
+    }) {
+        return true;
     }
     let fields = |fs: &[StructFieldNode]| fs.iter().any(|f| carries(&f.attributes, ids, registry));
     acc.all_structs.iter().any(|s| {
@@ -350,7 +365,7 @@ pub(super) fn build_selected(
             .unwrap_or_default(),
         additional_files: read_additional_files(registered, facts.paths)?,
         #[cfg(feature = "native")]
-        tools: super::tools::describe(facts.config, &facts.paths.root, &registered.tools)?,
+        tools: super::tools::describe(facts.config, &facts.paths.root, &registered.tools),
         index: facts
             .index
             .types()
@@ -503,6 +518,33 @@ pub(super) fn build_selected(
                 snapshot.functions.push(func);
             }
         }
+        if !all {
+            for (file, program) in &acc.parsed_files {
+                let Some(decl) = program.module.as_ref() else {
+                    continue;
+                };
+                if !super::walk::is_user_file(Some(file))
+                    || !carries(&decl.attributes, ids, registry)
+                {
+                    continue;
+                }
+                let file = Some(file.as_str());
+                let attributes = b.attrs(&decl.attributes, file);
+                let id = module_identity(&decl.path.text);
+                if let Some(module) = snapshot.modules.iter_mut().find(|m| m.id == id) {
+                    module.attributes.extend(attributes);
+                    continue;
+                }
+                b.mark(&id, file, decl.path.position);
+                snapshot.modules.push(Module {
+                    location: b.location(file, decl.path.position),
+                    file: facts.paths.rel(file),
+                    name: decl.path.text.clone(),
+                    attributes,
+                    id,
+                });
+            }
+        }
     }
     let mut site_ids = IndexMap::new();
     if registered.syntax_block {
@@ -567,6 +609,7 @@ pub(super) fn build_selected(
 /// True when the snapshot gives the generator anything to do.
 pub fn has_inputs(snapshot: &Snapshot) -> bool {
     !snapshot.decls.is_empty()
+        || !snapshot.modules.is_empty()
         || !snapshot.functions.is_empty()
         || !snapshot.blocks.is_empty()
         || !snapshot.calls.is_empty()

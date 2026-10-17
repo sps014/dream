@@ -34,7 +34,7 @@ impl CScalar {
             PrimTy::USize => CScalar::USize,
             PrimTy::Float => CScalar::F32,
             PrimTy::Double => CScalar::F64,
-            PrimTy::String => return None,
+            PrimTy::Float16 | PrimTy::String => return None,
         })
     }
 

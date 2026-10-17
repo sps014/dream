@@ -1,0 +1,95 @@
+module system.primitives;
+
+/// The `float16` primitive: an IEEE 754 binary16 ("half precision") number with an 11-bit
+/// significand (about 3 decimal digits) and a finite range of ±65504. Write literals with the
+/// `h` suffix (`1.5h`). A `float16` widens implicitly to `float` and `double`; converting a
+/// `float`, `double`, or any integer to `float16` needs an explicit cast such as `(float16)x`,
+/// which rounds to the nearest representable value (ties to even) and overflows to infinity.
+extend float16: Comparable<float16> {
+    /// Orders this value against `other`: negative when less, zero when equal, positive when
+    /// greater. NaN compares equal to everything, so sort NaN-free data.
+    public fun compare(other: float16): int {
+        if this < other {
+            return 0 - 1;
+        }
+        if this > other {
+            return 1;
+        }
+        return 0;
+    }
+
+    /// Returns the absolute value. NaN stays NaN.
+    public fun abs(): float16 {
+        if this < 0.0h {
+            return 0.0h - this;
+        }
+        return this;
+    }
+
+    /// Returns the smaller of this value and `other`; `other` when either is NaN.
+    public fun min(other: float16): float16 {
+        if this < other {
+            return this;
+        }
+        return other;
+    }
+
+    /// Returns the larger of this value and `other`; `other` when either is NaN.
+    public fun max(other: float16): float16 {
+        if this > other {
+            return this;
+        }
+        return other;
+    }
+
+    /// Returns true when this value is NaN (not a number), for example the result of
+    /// `0.0h / 0.0h`.
+    public fun is_nan(): bool {
+        return this != this;
+    }
+
+    /// Returns true when this value is positive or negative infinity, for example the result of
+    /// `(float16)70000.0` or `1.0h / 0.0h`.
+    public fun is_infinite(): bool {
+        return this > float16.max_value || this < float16.min_value;
+    }
+
+    /// Parses decimal text such as `"0.125"`, `"-3"`, or `"6.1e-05"` and rounds it to the nearest
+    /// `float16`. Magnitudes of 65520 or more become infinity. Also accepts `"nan"`, `"inf"`,
+    /// `"+inf"`, and `"-inf"`, so every string produced by `to_string` parses back to the same
+    /// value.
+    /// Parsing stops at the first character that cannot continue the number; text with no digits
+    /// fails with a `ParseError`.
+    public static fun parse(borrow text: string): Result<float16, ParseError> {
+        let zero = 0.0h;
+        if text == "nan" {
+            return Result.Ok(zero / zero);
+        }
+        if text == "inf" || text == "+inf" {
+            return Result.Ok(1.0h / zero);
+        }
+        if text == "-inf" {
+            return Result.Ok(-1.0h / zero);
+        }
+        return switch (double.parse(text)) {
+            Ok(d) => Result.Ok((float16)d),
+            Err(e) => Result.Err(e),
+        };
+    }
+
+    /// The most negative finite `float16`, -65504.
+    public static get min_value(): float16 {
+        return -65504.0h;
+    }
+
+    /// The largest finite `float16`, 65504.
+    public static get max_value(): float16 {
+        return 65504.0h;
+    }
+
+    /// The gap between 1 and the next larger `float16`: 2^-10, or 0.0009765625. Values near 1
+    /// are spaced this far apart; the spacing scales with magnitude.
+    public static get epsilon(): float16 {
+        return 0.0009765625h;
+    }
+}

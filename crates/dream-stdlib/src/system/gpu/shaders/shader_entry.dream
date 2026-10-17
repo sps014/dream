@@ -1,0 +1,167 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// A shader entry point: one `@compute`, `@vertex`, `@fragment` or ray tracing stage function.
+internal class ShaderEntry {
+    internal function: GenFunction;
+    internal stage: GpuStage;
+    internal module_name: string;
+
+    // Targets the attribute asked for, and the node the request is reported at.
+    internal declared: List<GpuTarget>;
+
+    internal targets_at: string;
+
+    // `declared` reduced to what this build can load.
+    internal targets: List<GpuTarget>;
+
+    internal x: int;
+    internal y: int;
+    internal z: int;
+    internal params: List<ShaderParam>;
+    internal capabilities: List<string>;
+
+    // Built-in stage inputs (`global_id`, `vertex_id`, ...) the entry or its helpers read.
+    internal builtins: List<string>;
+
+    internal body: List<ShaderNode>;
+
+    internal constructor(borrow f: GenFunction, stage: GpuStage, module_name: string) {
+        this.function = f;
+        this.stage = stage;
+        this.module_name = module_name;
+        this.declared = List<GpuTarget>();
+        this.targets_at = f.id;
+        this.targets = List<GpuTarget>();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.params = List<ShaderParam>();
+        for (let p in f.params) {
+            this.params.push(ShaderParam(p));
+        }
+        this.capabilities = List<string>();
+        this.builtins = List<string>();
+        this.body = ShaderNode.body_of(f);
+    }
+
+    internal fun name(): string {
+        return this.function.name;
+    }
+
+    internal fun is_compute(): bool {
+        return this.stage == GpuStage.Compute;
+    }
+
+    internal fun is_render(): bool {
+        return this.stage == GpuStage.Vertex || this.stage == GpuStage.Fragment;
+    }
+
+    internal fun is_ray_tracing(): bool {
+        return !this.is_compute() && !this.is_render();
+    }
+
+    // The Slang `[shader(...)]` and bundle spelling of the stage.
+    internal fun stage_name(): string {
+        return ShaderEntry.stage_spelling(this.stage);
+    }
+
+    internal static fun stage_spelling(stage: GpuStage): string {
+        if stage == GpuStage.Compute {
+            return "compute";
+        } else if stage == GpuStage.Vertex {
+            return "vertex";
+        } else if stage == GpuStage.Fragment {
+            return "fragment";
+        } else if stage == GpuStage.RayGeneration {
+            return "raygeneration";
+        } else if stage == GpuStage.ClosestHit {
+            return "closesthit";
+        } else if stage == GpuStage.AnyHit {
+            return "anyhit";
+        } else if stage == GpuStage.Miss {
+            return "miss";
+        } else if stage == GpuStage.Intersection {
+            return "intersection";
+        } else {
+            return "callable";
+        }
+    }
+
+    // The attribute spelling used in diagnostics: `@compute`, `@closest_hit`, ...
+    internal fun attribute_name(): string {
+        if this.stage == GpuStage.Compute {
+            return "@compute";
+        } else if this.stage == GpuStage.Vertex {
+            return "@vertex";
+        } else if this.stage == GpuStage.Fragment {
+            return "@fragment";
+        } else if this.stage == GpuStage.RayGeneration {
+            return "@ray_generation";
+        } else if this.stage == GpuStage.ClosestHit {
+            return "@closest_hit";
+        } else if this.stage == GpuStage.AnyHit {
+            return "@any_hit";
+        } else if this.stage == GpuStage.Miss {
+            return "@miss";
+        } else if this.stage == GpuStage.Intersection {
+            return "@intersection";
+        } else {
+            return "@callable";
+        }
+    }
+
+    internal fun has_target(target: GpuTarget): bool {
+        return this.targets.contains(target);
+    }
+
+    internal fun bindable(): List<ShaderParam> {
+        let out = List<ShaderParam>();
+        for (let p in this.params) {
+            if p.bindable() {
+                out.push(p);
+            }
+        }
+        return out;
+    }
+
+    internal fun values(): List<ShaderParam> {
+        let out = List<ShaderParam>();
+        for (let p in this.params) {
+            if p.is_value() {
+                out.push(p);
+            }
+        }
+        return out;
+    }
+
+    internal fun param(name: string): Option<ShaderParam> {
+        for (let p in this.params) {
+            if p.name == name {
+                return Option.Some(p);
+            }
+        }
+        return Option.None;
+    }
+
+    // The Slang global holding the entry's value parameters.
+    internal fun uniform_block(): string {
+        return this.name() + "_params";
+    }
+
+    internal fun add_capability(name: string): void {
+        if !this.capabilities.contains(name) {
+            this.capabilities.push(name);
+        }
+    }
+
+    internal fun add_builtin(name: string): void {
+        if !this.builtins.contains(name) {
+            this.builtins.push(name);
+        }
+    }
+}

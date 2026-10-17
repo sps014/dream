@@ -106,6 +106,7 @@ fn fold_binary(op: BinOp, a: &Const, b: &Const, dest: Option<IntTy>) -> Option<C
         (Long(x), Long(y)) => fold_int(op, *x, *y, true, dest),
         (Float(x), Float(y)) => fold_float(op, *x, *y),
         (F32(x), F32(y)) => narrow_float(fold_float(op, *x as f64, *y as f64)?),
+        (F16(x), F16(y)) => narrow_half(fold_float(op, f16_value(*x), f16_value(*y))?),
         (Bool(x), Bool(y)) => fold_bool(op, *x, *y),
         _ => None,
     }
@@ -172,6 +173,20 @@ fn narrow_float(folded: Const) -> Option<Const> {
     })
 }
 
+/// Rounds an f64 fold result to [`Const::F16`]. Exact for `+ - * /`: f64 carries more than
+/// `2 * 11 + 2` significand bits, so rounding the f64 result once more matches a correctly rounded
+/// binary16 operation.
+fn narrow_half(folded: Const) -> Option<Const> {
+    Some(match folded {
+        Const::Float(v) => Const::F16(half::f16::from_f64(v).to_bits()),
+        other => other,
+    })
+}
+
+fn f16_value(bits: u16) -> f64 {
+    half::f16::from_bits(bits).to_f64()
+}
+
 fn fold_float(op: BinOp, x: f64, y: f64) -> Option<Const> {
     Some(match op {
         BinOp::Add => Const::Float(x + y),
@@ -224,6 +239,7 @@ fn fold_unary(op: UnOp, a: &Const, dest: Option<IntTy>) -> Option<Const> {
         }
         (UnOp::Neg, Const::Float(x)) => Const::Float(-x),
         (UnOp::Neg, Const::F32(x)) => Const::F32(-x),
+        (UnOp::Neg, Const::F16(x)) => Const::F16(x ^ 0x8000),
         (UnOp::Not, Const::Bool(x)) => Const::Bool(!x),
         _ => return None,
     })
@@ -362,6 +378,25 @@ mod tests {
         assert_eq!(
             fold(&bin(BinOp::Lt, Const::Long(-1), Const::Long(1)), None),
             None
+        );
+    }
+
+    #[test]
+    fn float16_folds_round_to_nearest_even() {
+        let h = |v: f64| Const::F16(half::f16::from_f64(v).to_bits());
+        assert_eq!(fold(&bin(BinOp::Add, h(2048.0), h(1.0)), None), Some(h(2048.0)));
+        assert_eq!(fold(&bin(BinOp::Add, h(2048.0), h(3.0)), None), Some(h(2052.0)));
+        assert_eq!(
+            fold(&bin(BinOp::Mul, h(65504.0), h(2.0)), None),
+            Some(Const::F16(half::f16::INFINITY.to_bits()))
+        );
+        assert_eq!(
+            fold(&bin(BinOp::Lt, h(1.0), h(1.5)), None),
+            Some(Const::Bool(true))
+        );
+        assert_eq!(
+            fold(&Rvalue::Unary(UnOp::Neg, Operand::Const(h(1.5))), None),
+            Some(h(-1.5))
         );
     }
 

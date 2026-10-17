@@ -6,6 +6,8 @@ import { makeFsHost } from "./hosts/fs.js";
 import { makeCryptoHost } from "./hosts/crypto.js";
 import { makeConsoleProcessHost } from "./hosts/console_process.js";
 import { makeDatetimeTextHost } from "./hosts/datetime_text.js";
+import { makeWindowHost } from "./hosts/window.js";
+import { makeGpuHost } from "./hosts/gpu.js";
 
 /**
  * Full built-in `Dream` host module (every optional chunk). Selective runtimes compose a subset
@@ -21,6 +23,8 @@ export function defaultDreamModule(getInstance) {
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
+    ...makeWindowHost(),
+    ...makeGpuHost(),
   };
 }
 
@@ -33,4 +37,6 @@ export {
   makeCryptoHost,
   makeConsoleProcessHost,
   makeDatetimeTextHost,
+  makeWindowHost,
+  makeGpuHost,
 };

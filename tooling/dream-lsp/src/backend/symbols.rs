@@ -268,6 +268,11 @@ impl Backend {
             });
         }
 
+        lenses.extend(consumed_lenses(
+            &self.consumed_for(&key, file_path.as_deref()),
+            &text,
+        ));
+
         Ok(Some(lenses))
     }
 }

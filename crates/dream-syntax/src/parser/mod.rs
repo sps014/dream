@@ -35,6 +35,8 @@ pub struct Parser<'a, 'b> {
     /// When true, `{` after an identifier is the statement block of `if`/`while`/`for`, not a
     /// syntax-block or set/map literal.
     in_condition: bool,
+    /// Members of a `@generator_only` type name no host symbol, like the type itself.
+    in_generator_only_type: bool,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
@@ -50,6 +52,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node_spans: std::collections::BTreeMap::new(),
             type_aliases: HashMap::new(),
             in_condition: false,
+            in_generator_only_type: false,
         }
     }
     //returns the new eof token

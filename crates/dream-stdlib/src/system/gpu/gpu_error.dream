@@ -1,0 +1,170 @@
+module system.gpu;
+
+/// Why a GPU operation failed.
+///
+/// Match on the variant to recover from specific failures, for example to try another
+/// backend after `BackendUnavailable`. `message()` gives a readable description and
+/// `code()` a stable machine code for logs.
+public enum GpuError {
+    /// No GPU or software adapter could be found, or the host refused to create a device.
+    NoDevice(reason: string),
+    /// The requested backend has no shader code in this build. Add its `GpuTarget` to
+    /// `@gpu_targets`, or check `GpuShaders.backends()` before asking for it.
+    BackendNotCompiled(backend: GpuBackend),
+    /// The requested backend's shader code is in this build, but this machine cannot run
+    /// it, for example CUDA without an NVIDIA driver. `reason` is the host's explanation.
+    BackendUnavailable(reason: string),
+    /// The device stopped working: a driver reset, a removed GPU, or a browser that
+    /// discarded the tab. Every resource made by the device is invalid; create a new
+    /// `GpuDevice` and recreate them.
+    DeviceLost(reason: string),
+    /// A resource was destroyed, or its size, format or usage does not fit the operation.
+    InvalidResource(reason: string),
+    /// A resource made by one `GpuDevice` was used with another.
+    WrongDevice(reason: string),
+    /// The device lacks a capability that a pipeline or call needs.
+    UnsupportedCapability(feature: GpuFeature),
+    /// The GPU API rejected a call, for example a pipeline whose vertex outputs do not
+    /// match its fragment inputs. `reason` is the API's validation message.
+    Validation(reason: string),
+    /// The GPU ran out of memory.
+    OutOfMemory(reason: string),
+    /// A window surface can no longer present, usually because its window closed.
+    SurfaceLost(reason: string),
+
+    /// A stable machine-readable code: `ENODEVICE`, `ENOTCOMPILED`, `EUNAVAILABLE`,
+    /// `EDEVICELOST`, `EINVALID`, `EWRONGDEVICE`, `EUNSUPPORTED`, `EVALIDATION`, `ENOMEM`
+    /// or `ESURFACE`.
+    public fun code(): string {
+        return switch (this) {
+            NoDevice(reason) => "ENODEVICE",
+            BackendNotCompiled(backend) => "ENOTCOMPILED",
+            BackendUnavailable(reason) => "EUNAVAILABLE",
+            DeviceLost(reason) => "EDEVICELOST",
+            InvalidResource(reason) => "EINVALID",
+            WrongDevice(reason) => "EWRONGDEVICE",
+            UnsupportedCapability(feature) => "EUNSUPPORTED",
+            Validation(reason) => "EVALIDATION",
+            OutOfMemory(reason) => "ENOMEM",
+            SurfaceLost(reason) => "ESURFACE",
+        };
+    }
+
+    /// A human-readable description that includes the host's own explanation when it gave one.
+    public fun message(): string {
+        return switch (this) {
+            NoDevice(reason) => "no GPU device: " + reason,
+            BackendNotCompiled(backend) => "GPU backend "
+                + gpu_backend_name(backend)
+                + " has no shader code in this build; add it to @gpu_targets",
+            BackendUnavailable(reason) => "GPU backend unavailable: " + reason,
+            DeviceLost(reason) => "GPU device lost: " + reason,
+            InvalidResource(reason) => "invalid GPU resource: " + reason,
+            WrongDevice(reason) => "GPU resource belongs to another device: " + reason,
+            UnsupportedCapability(feature) => "GPU device does not support "
+                + gpu_feature_name(feature),
+            Validation(reason) => "GPU validation failed: " + reason,
+            OutOfMemory(reason) => "GPU out of memory: " + reason,
+            SurfaceLost(reason) => "GPU surface lost: " + reason,
+        };
+    }
+}
+
+fun gpu_backend_name(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+internal fun gpu_backend_of(value: int): GpuBackend {
+    let all = [
+        GpuBackend.Auto,
+        GpuBackend.Dx12,
+        GpuBackend.Dx11,
+        GpuBackend.Vulkan,
+        GpuBackend.Metal,
+        GpuBackend.Cuda,
+        GpuBackend.WebGpu
+    ];
+    if value >= 0 && value < all.length {
+        return all[value];
+    }
+    return GpuBackend.Auto;
+}
+
+fun gpu_feature_name(feature: GpuFeature): string {
+    let names = [
+        "RayTracing",
+        "RayQuery",
+        "Bindless",
+        "Subgroups",
+        "CooperativeVectors",
+        "CooperativeMatrices",
+        "Float16",
+        "Atomics64"
+    ];
+    let index: int = feature;
+    return names[index];
+}
+
+fun gpu_feature_of(value: int): GpuFeature {
+    let all = [
+        GpuFeature.RayTracing,
+        GpuFeature.RayQuery,
+        GpuFeature.Bindless,
+        GpuFeature.Subgroups,
+        GpuFeature.CooperativeVectors,
+        GpuFeature.CooperativeMatrices,
+        GpuFeature.Float16,
+        GpuFeature.Atomics64
+    ];
+    if value >= 0 && value < all.length {
+        return all[value];
+    }
+    return GpuFeature.RayTracing;
+}
+
+// Host failures arrive as `CODE\ndetail`; the detail of ENOTCOMPILED and EUNSUPPORTED is
+// the backend or feature number.
+internal fun gpu_error_from_host(text: string): GpuError {
+    let code = text;
+    let detail = "";
+    for (let i = 0; i < text.length; i = i + 1) {
+        if text.char_at(i) == '\n' {
+            code = string.substring_raw(text, 0, i);
+            detail = string.substring_raw(text, i + 1, text.length);
+            break;
+        }
+    }
+    if code == "ENOTCOMPILED" {
+        return GpuError.BackendNotCompiled(gpu_backend_of(int.parse(detail).unwrap_or(0)));
+    }
+    if code == "EUNSUPPORTED" {
+        return GpuError.UnsupportedCapability(gpu_feature_of(int.parse(detail).unwrap_or(0)));
+    }
+    if code == "ENODEVICE" {
+        return GpuError.NoDevice(detail);
+    }
+    if code == "EUNAVAILABLE" {
+        return GpuError.BackendUnavailable(detail);
+    }
+    if code == "EDEVICELOST" {
+        return GpuError.DeviceLost(detail);
+    }
+    if code == "EINVALID" {
+        return GpuError.InvalidResource(detail);
+    }
+    if code == "EWRONGDEVICE" {
+        return GpuError.WrongDevice(detail);
+    }
+    if code == "ENOMEM" {
+        return GpuError.OutOfMemory(detail);
+    }
+    if code == "ESURFACE" {
+        return GpuError.SurfaceLost(detail);
+    }
+    if code == "EVALIDATION" {
+        return GpuError.Validation(detail);
+    }
+    return GpuError.Validation(text);
+}

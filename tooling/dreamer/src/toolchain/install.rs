@@ -1,16 +1,14 @@
-use super::catalog::{self, ArchiveKind, Artifact};
-use super::{
-    Component, Host, dream_prefix, is_installed, toolchains_dir, toolchains_env_path, zig_binary,
-};
+use super::{dream_prefix, is_installed, tool_binary, tool_dir, toolchains_dir, toolchains_env_path};
 use crate::fetch::cache_dir;
 use anyhow::{Context, Result, bail};
+use dream_abi::toolchain::{ArchiveKind, HostArchive, PINNED_TOOLS, PinnedTool};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub fn install(components: &[Component]) -> Result<()> {
-    let host = super::detect_host()?;
+pub fn install(tools: &[&'static PinnedTool]) -> Result<()> {
+    let host = super::host_key()?;
     fs::create_dir_all(toolchains_dir())?;
     let lock = File::options()
         .create(true)
@@ -19,17 +17,19 @@ pub fn install(components: &[Component]) -> Result<()> {
         .write(true)
         .open(toolchains_dir().join(".install.lock"))?;
     lock.lock()?;
-    for component in components {
-        catalog::ensure_host_supported(host)?;
-        if is_installed(*component) {
+    for tool in tools {
+        if is_installed(tool) {
             println!(
                 "{} already installed at {}",
-                component.id(),
-                catalog::dest_dir(*component).display()
+                tool.name,
+                tool_dir(tool).display()
             );
             continue;
         }
-        install_one(*component, host)?;
+        let Some(archive) = tool.archive(host) else {
+            bail!("{} has no download for {host}: {}", tool.name, tool.install_hint);
+        };
+        install_one(tool, archive)?;
     }
     write_toolchains_env()?;
     Ok(())
@@ -38,52 +38,62 @@ pub fn install(components: &[Component]) -> Result<()> {
 pub fn list() -> Result<()> {
     println!("prefix: {}", dream_prefix().display());
     println!("toolchains: {}", toolchains_dir().display());
-    for c in Component::all() {
-        let status = if is_installed(c) {
-            format!("installed ({})", catalog::dest_dir(c).display())
+    for tool in PINNED_TOOLS {
+        let status = if is_installed(tool) {
+            format!("installed ({})", tool_dir(tool).display())
+        } else if tool.archives.is_empty() {
+            format!("not installed ({})", tool.install_hint)
         } else {
             "not installed".to_string()
         };
-        println!("  {:<8} {}", c.id(), status);
+        println!("  {:<8} {:<10} {}", tool.name, tool.version, status);
     }
     Ok(())
 }
 
-pub fn uninstall(component: Component) -> Result<()> {
-    let dir = catalog::dest_dir(component);
+pub fn uninstall(tool: &PinnedTool) -> Result<()> {
+    let dir = tool_dir(tool);
     if dir.is_dir() {
         fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
         println!("removed {}", dir.display());
     } else {
-        println!("{} was not installed", component.id());
+        println!("{} was not installed", tool.name);
     }
     write_toolchains_env()?;
     Ok(())
 }
 
-fn install_one(component: Component, host: Host) -> Result<()> {
-    let artifact = catalog::artifact_for(component, host)?;
-    let dest = catalog::dest_dir(component);
-    println!("Downloading {} …", artifact.url);
-    let cache = download_verified(&artifact)?;
+fn archive_filename(archive: &HostArchive) -> &str {
+    archive.url.rsplit('/').next().unwrap_or(archive.url)
+}
+
+fn install_one(tool: &PinnedTool, archive: &HostArchive) -> Result<()> {
+    let dest = tool_dir(tool);
+    println!("Downloading {} …", archive.url);
+    let cache = download_verified(archive)?;
     println!("Extracting to {} …", dest.display());
-    extract_archive(&cache, artifact.kind, &dest)?;
-    if !is_installed(component) {
+    extract_archive(&cache, archive.kind, &dest)?;
+    if tool.name == "slang" {
+        println!("Building dream-slang-layout …");
+        super::slang_layout::build(&dest)?;
+    }
+    if !is_installed(tool) {
         bail!(
             "extracted {} but did not find the expected binary under {}",
-            artifact.filename,
+            archive_filename(archive),
             dest.display()
         );
     }
-    println!("Installed {} ({})", component.id(), dest.display());
+    println!("Installed {} {} ({})", tool.name, tool.version, dest.display());
     Ok(())
 }
 
-fn download_verified(artifact: &Artifact) -> Result<PathBuf> {
+fn download_verified(archive: &HostArchive) -> Result<PathBuf> {
     let cache = cache_dir().join("toolchains");
     fs::create_dir_all(&cache)?;
-    let path = cache.join(&artifact.filename);
-    let expected = format!("sha256:{}", artifact.sha256);
+    let filename = archive_filename(archive);
+    let path = cache.join(filename);
+    let expected = format!("sha256:{}", archive.sha256);
     if path.is_file() {
         let mut f = File::open(&path)?;
         if stream_sha256(&mut f)? == expected {
@@ -96,9 +106,9 @@ fn download_verified(artifact: &Artifact) -> Result<PathBuf> {
         .timeout(Duration::from_secs(600))
         .build();
     let resp = agent
-        .get(&artifact.url)
+        .get(archive.url)
         .call()
-        .with_context(|| format!("GET {}", artifact.url))?;
+        .with_context(|| format!("GET {}", archive.url))?;
     let mut reader = resp.into_reader();
     let tmp = path.with_extension("part");
     let mut file = File::create(&tmp)?;
@@ -108,8 +118,7 @@ fn download_verified(artifact: &Artifact) -> Result<PathBuf> {
     if actual != expected {
         let _ = fs::remove_file(&tmp);
         bail!(
-            "checksum mismatch for {}: expected {expected}, got {actual}",
-            artifact.filename
+            "checksum mismatch for {filename}: expected {expected}, got {actual}"
         );
     }
     fs::rename(&tmp, &path)?;
@@ -256,14 +265,24 @@ fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The path `DREAM_<TOOL>` takes for an installed tool, matching its override kind.
+fn override_value(tool: &PinnedTool) -> PathBuf {
+    match tool.override_kind {
+        dream_abi::toolchain::OverrideKind::Executable => tool_binary(tool),
+        dream_abi::toolchain::OverrideKind::Root => tool_dir(tool),
+    }
+}
+
 fn write_toolchains_env() -> Result<()> {
     let path = toolchains_env_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let mut body = String::from("# Written by `dreamer toolchain install`. Sourced from env.sh.\n");
-    if zig_binary().is_file() {
-        body.push_str(&format!("DREAM_ZIG={}\n", zig_binary().display()));
+    for tool in PINNED_TOOLS {
+        if is_installed(tool) {
+            body.push_str(&format!("{}={}\n", tool.env, override_value(tool).display()));
+        }
     }
     fs::write(&path, body)?;
     println!("Wrote {}", path.display());

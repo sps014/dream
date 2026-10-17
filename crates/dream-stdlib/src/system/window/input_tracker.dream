@@ -1,0 +1,234 @@
+module system.window;
+
+// Folds platform and simulated events into persistent level state plus per-frame edges.
+// Hosts deliver only events and gamepad samples; every target shares this one state machine.
+internal class InputTracker {
+    // Per key and mouse button: bit 1 down, bit 2 pressed this frame, bit 4 released this frame.
+    keys: byte[];
+
+    buttons: byte[];
+    cursor: WindowVector;
+    has_cursor: bool;
+    motion: WindowVector;
+    wheel: WindowVector;
+    pad_present: bool[];
+    pad_buttons: int[];
+    pad_previous: int[];
+    pad_axes: float[];
+    pad_names: List<string>;
+    start: long;
+    last: long;
+    polled: bool;
+    internal close_requested: bool;
+    internal focused: bool;
+
+    internal static get KEY_COUNT(): int {
+        return 119;
+    }
+
+    internal static get BUTTON_COUNT(): int {
+        return 5;
+    }
+
+    internal static get PAD_SLOTS(): int {
+        return 16;
+    }
+
+    internal static get AXIS_COUNT(): int {
+        return 6;
+    }
+
+    internal constructor() {
+        this.keys = Buffer.alloc<byte>(InputTracker.KEY_COUNT);
+        this.buttons = Buffer.alloc<byte>(InputTracker.BUTTON_COUNT);
+        this.cursor = WindowVector(0.0f, 0.0f);
+        this.has_cursor = false;
+        this.motion = WindowVector(0.0f, 0.0f);
+        this.wheel = WindowVector(0.0f, 0.0f);
+        this.pad_present = Buffer.alloc<bool>(InputTracker.PAD_SLOTS);
+        this.pad_buttons = Buffer.alloc<int>(InputTracker.PAD_SLOTS);
+        this.pad_previous = Buffer.alloc<int>(InputTracker.PAD_SLOTS);
+        this.pad_axes = Buffer.alloc<float>(InputTracker.PAD_SLOTS * InputTracker.AXIS_COUNT);
+        this.pad_names = List<string>();
+        for (let i = 0; i < InputTracker.PAD_SLOTS; i = i + 1) {
+            this.pad_names.push("");
+        }
+        this.start = InputTracker.now_nanos();
+        this.last = this.start;
+        this.polled = false;
+        this.close_requested = false;
+        this.focused = true;
+    }
+
+    @runtime("timeNowNanos")
+    static extern fun now_nanos(): long;
+
+    // Clears the previous frame's edges; levels and the cursor position carry over.
+    internal fun begin(): void {
+        InputTracker.clear_edges(this.keys);
+        InputTracker.clear_edges(this.buttons);
+        this.motion = WindowVector(0.0f, 0.0f);
+        this.wheel = WindowVector(0.0f, 0.0f);
+        for (let i = 0; i < InputTracker.PAD_SLOTS; i = i + 1) {
+            this.pad_previous[i] = this.pad_buttons[i];
+        }
+    }
+
+    internal fun connect_pad(slot: int, name: string): void {
+        if slot < 0 || slot >= InputTracker.PAD_SLOTS {
+            return;
+        }
+        this.pad_present[slot] = true;
+        this.pad_names[slot] = name;
+    }
+
+    internal fun sample_pad(slot: int, buttons: int, axes: float[]): void {
+        if slot < 0 || slot >= InputTracker.PAD_SLOTS {
+            return;
+        }
+        this.pad_present[slot] = true;
+        this.pad_buttons[slot] = buttons;
+        let base = slot * InputTracker.AXIS_COUNT;
+        for (let i = 0; i < InputTracker.AXIS_COUNT && i < axes.length; i = i + 1) {
+            this.pad_axes[base + i] = axes[i];
+        }
+    }
+
+    internal fun apply(event: WindowEvent): void {
+        switch (event) {
+            KeyDown(key) => {
+                if !key.repeat {
+                    InputTracker.press(this.keys, key.code);
+                }
+            }
+            KeyUp(key) => InputTracker.release(this.keys, key.code),
+            MouseDown(button) => InputTracker.press(this.buttons, button),
+            MouseUp(button) => InputTracker.release(this.buttons, button),
+            MouseMove(position) => {
+                if this.has_cursor {
+                    this.motion = WindowVector(
+                        this.motion.x + position.x - this.cursor.x,
+                        this.motion.y + position.y - this.cursor.y
+                    );
+                }
+                this.cursor = position;
+                this.has_cursor = true;
+            }
+            Scroll(delta) => {
+                this.wheel = WindowVector(this.wheel.x + delta.x, this.wheel.y + delta.y);
+            }
+            Focused => {
+                this.focused = true;
+            }
+            Unfocused => {
+                this.focused = false;
+                InputTracker.release_all(this.keys);
+                InputTracker.release_all(this.buttons);
+            }
+            CloseRequested => {
+                this.close_requested = true;
+            }
+            GamepadConnected(slot) => {
+                if slot >= 0 && slot < InputTracker.PAD_SLOTS {
+                    this.pad_present[slot] = true;
+                }
+            }
+            GamepadDisconnected(slot) => {
+                if slot >= 0 && slot < InputTracker.PAD_SLOTS {
+                    this.pad_present[slot] = false;
+                    this.pad_buttons[slot] = 0;
+                    this.pad_previous[slot] = 0;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    internal fun frame(events: List<WindowEvent>): InputFrame {
+        let now = InputTracker.now_nanos();
+        let delta = 0.0f;
+        if this.polled {
+            delta = (float)((double)(now - this.last) / 1000000000.0);
+        }
+        this.polled = true;
+        this.last = now;
+        let time = (double)(now - this.start) / 1000000000.0;
+        let mouse = MouseState(
+            InputTracker.copy(this.buttons),
+            this.cursor,
+            this.motion,
+            this.wheel
+        );
+        return InputFrame(
+            events,
+            KeyboardState(InputTracker.copy(this.keys)),
+            mouse,
+            Gamepads(this.connected_pads()),
+            delta,
+            time
+        );
+    }
+
+    fun connected_pads(): List<Gamepad> {
+        let pads = List<Gamepad>();
+        for (let slot = 0; slot < InputTracker.PAD_SLOTS; slot = slot + 1) {
+            if this.pad_present[slot] {
+                let axes = Buffer.alloc<float>(InputTracker.AXIS_COUNT);
+                let base = slot * InputTracker.AXIS_COUNT;
+                for (let i = 0; i < InputTracker.AXIS_COUNT; i = i + 1) {
+                    axes[i] = this.pad_axes[base + i];
+                }
+                pads.push(
+                    Gamepad(
+                        slot,
+                        this.pad_names[slot],
+                        this.pad_buttons[slot],
+                        this.pad_previous[slot],
+                        axes
+                    )
+                );
+            }
+        }
+        return pads;
+    }
+
+    static fun press(states: byte[], index: int): void {
+        if index < 0 || index >= states.length {
+            return;
+        }
+        let state = (int)states[index];
+        if (state & 1) == 0 {
+            states[index] = (byte)(state | 3);
+        }
+    }
+
+    static fun release(states: byte[], index: int): void {
+        if index < 0 || index >= states.length {
+            return;
+        }
+        let state = (int)states[index];
+        if (state & 1) != 0 {
+            states[index] = (byte)((state & 6) | 4);
+        }
+    }
+
+    static fun release_all(states: byte[]): void {
+        for (let i = 0; i < states.length; i = i + 1) {
+            InputTracker.release(states, i);
+        }
+    }
+
+    static fun clear_edges(states: byte[]): void {
+        for (let i = 0; i < states.length; i = i + 1) {
+            states[i] = (byte)((int)states[i] & 1);
+        }
+    }
+
+    static fun copy(states: byte[]): byte[] {
+        let out = Buffer.alloc<byte>(states.length);
+        for (let i = 0; i < states.length; i = i + 1) {
+            out[i] = states[i];
+        }
+        return out;
+    }
+}

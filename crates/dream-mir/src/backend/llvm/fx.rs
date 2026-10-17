@@ -81,6 +81,7 @@ pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
         MemTy::I64 => (Ty::I64, false),
         MemTy::Word => (word.clone(), false),
         MemTy::UWord => (word.clone(), true),
+        MemTy::F16 => (Ty::F16, false),
         MemTy::F32 => (Ty::F32, false),
         MemTy::F64 => (Ty::F64, false),
         MemTy::Ptr => (h.clone(), true),
@@ -90,6 +91,7 @@ pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
 fn natural_align(ty: &Ty) -> u32 {
     match ty {
         Ty::Int(b) => (b / 8).clamp(1, 8),
+        Ty::F16 => 2,
         Ty::F32 => 4,
         Ty::F64 | Ty::Ptr => 8,
         _ => 1,
@@ -164,7 +166,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     self.w.cast("trunc", &x.v, to.clone())
                 }
             }
-            (Ty::Int(a), Ty::F32 | Ty::F64) => {
+            (Ty::Int(a), Ty::F16 | Ty::F32 | Ty::F64) => {
                 let op = if x.unsigned || *a == 1 {
                     "uitofp"
                 } else {
@@ -172,7 +174,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 };
                 self.w.cast(op, &x.v, to.clone())
             }
-            (Ty::F32 | Ty::F64, Ty::Int(b)) => {
+            (Ty::F16 | Ty::F32 | Ty::F64, Ty::Int(b)) => {
                 let name = format!("llvm.fptosi.sat.i{b}.{}", float_suffix(&from));
                 let sig = self
                     .l
@@ -182,6 +184,8 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             (Ty::F32, Ty::F64) => self.w.cast("fpext", &x.v, Ty::F64),
             (Ty::F64, Ty::F32) => self.w.cast("fptrunc", &x.v, Ty::F32),
+            (Ty::F16, Ty::F32 | Ty::F64) => self.w.cast("fpext", &x.v, to.clone()),
+            (Ty::F32 | Ty::F64, Ty::F16) => self.w.cast("fptrunc", &x.v, Ty::F16),
             (Ty::Ptr, Ty::Int(64)) => self.w.cast("ptrtoint", &x.v, Ty::I64),
             (Ty::Ptr, Ty::Int(_)) => {
                 let wide = self.w.cast("ptrtoint", &x.v, Ty::I64);
@@ -226,7 +230,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         match x.ty() {
             Ty::Int(1) => x.v.clone(),
             Ty::Int(_) => self.w.icmp("ne", &x.v, &Value::zero(x.ty().clone())),
-            Ty::F32 | Ty::F64 => self.w.fcmp("une", &x.v, &Value::zero(x.ty().clone())),
+            Ty::F16 | Ty::F32 | Ty::F64 => self.w.fcmp("une", &x.v, &Value::zero(x.ty().clone())),
             Ty::Ptr => self.w.icmp("ne", &x.v, &Value::null()),
             other => crate::internal_error!("truthiness of {other}"),
         }
@@ -463,6 +467,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 
 fn float_suffix(t: &Ty) -> &'static str {
     match t {
+        Ty::F16 => "f16",
         Ty::F32 => "f32",
         _ => "f64",
     }

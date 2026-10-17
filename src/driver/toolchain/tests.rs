@@ -44,7 +44,10 @@ fn explicit_paths_and_compiler_precedence_are_captured() {
             PathBuf::from("/install/toolchains")
         ]
     );
-    assert_eq!(c.llvm, Some(PathBuf::from("/llvm/bin")));
+    assert_eq!(
+        c.tool_overrides.get("llvm"),
+        Some(&PathBuf::from("/llvm/bin"))
+    );
     assert_eq!(c.runtime_c, PathBuf::from("/runtime"));
     assert_eq!(c.cc, Some(OsString::from("dream-clang")));
     assert_eq!(c.cxx, Some(OsString::from("dream-clang++")));
@@ -66,7 +69,7 @@ fn empty_overrides_use_user_defaults_not_cargo_output_as_install_prefix() {
     );
     assert_eq!(c.prefix, PathBuf::from("/user/.dream"));
     assert_eq!(c.toolchains, vec![PathBuf::from("/user/.dream/toolchains")]);
-    assert!(c.llvm.is_none());
+    assert!(c.tool_overrides.is_empty());
     assert_eq!(c.cc, Some(OsString::from("clang")));
 }
 

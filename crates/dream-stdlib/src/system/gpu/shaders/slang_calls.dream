@@ -1,0 +1,223 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// Calls in shader bodies: `system.gpu` built-ins through their `Builtins` template, the few
+// that need code (cooperative types, MLP weights), user helpers and struct construction.
+internal static class SlangCalls {
+    internal static fun call(b: SlangBody, borrow n: ShaderNode): void {
+        let w = b.w;
+        let key = Builtins.key_of(n);
+        let free = n.is_expr(ExprKind.FunctionCall) || n.is_statement(StmtKind.FunctionInvocation);
+        let first = 0;
+        if !free {
+            first = 1;
+        }
+        if !key.is_empty() {
+            if SlangBody.special(key) {
+                SlangCalls.special_call(b, n, key, first);
+                return;
+            }
+            switch (Builtins.template(key)) {
+                Some(template) => {
+                    SlangCalls.expand(b, n, template, first);
+                }
+                None => {
+                    b.ctx.error_at(n.id, "'" + n.text + "' is not available in GPU shaders");
+                }
+            }
+            return;
+        }
+        if n.symbol_kind == "type" {
+            let ty = SlangTypes.of(n.ty, List<int>());
+            if n.children.is_empty() {
+                w.text("(" + ty + ")0");
+                return;
+            }
+            w.text(ty + "(");
+        } else {
+            w.text(Names.ident(n.text) + "(");
+        }
+        let i = first;
+        while i < n.children.length {
+            if i > first {
+                w.text(", ");
+            }
+            b.expr(n.child(i));
+            i = i + 1;
+        }
+        w.text(")");
+    }
+
+    internal static fun expand(
+        b: SlangBody,
+        borrow n: ShaderNode,
+        borrow template: string,
+        first: int
+    ): void {
+        let w = b.w;
+        let pending = StringBuilder();
+        let dollar = false;
+        for (let c in template) {
+            if !dollar {
+                if c == '$' {
+                    dollar = true;
+                } else {
+                    pending.append(c.to_string());
+                }
+                continue;
+            }
+            dollar = false;
+            w.text(pending.to_string());
+            pending = StringBuilder();
+            if c == 'r' {
+                b.expr(n.child(0));
+            } else if c == 'T' {
+                w.text(SlangTypes.of(n.ty, List<int>()));
+            } else if c == 'E' {
+                w.text(SlangTypes.of(n.ty.arg(0), List<int>()));
+            } else if c == '*' {
+                let j = first;
+                while j < n.children.length {
+                    if j > first {
+                        w.text(", ");
+                    }
+                    b.expr(n.child(j));
+                    j = j + 1;
+                }
+            } else {
+                let arg = ((int)c) - 48;
+                if first + arg < n.children.length {
+                    b.expr(n.child(first + arg));
+                }
+            }
+        }
+        w.text(pending.to_string());
+    }
+
+    internal static fun constant_arg(
+        b: SlangBody,
+        borrow n: ShaderNode,
+        index: int,
+        borrow what: string
+    ): string {
+        if index < n.children.length && n.child(index).has_constant {
+            return n.child(index).constant;
+        }
+        b.ctx.error_at(n.id, what + " must be a constant");
+        return "1";
+    }
+
+    internal static fun special_call(
+        b: SlangBody,
+        borrow n: ShaderNode,
+        borrow key: string,
+        first: int
+    ): void {
+        let w = b.w;
+        if key == "GpuWorkgroupArray.length" {
+            w.text("int(" + SlangCalls.length_of(b, n.child(0)) + ")");
+            return;
+        }
+        if key == "GpuCoopVec.zeros" {
+            let element = SlangTypes.of(n.ty.arg(0), List<int>());
+            w.text(
+                "CoopVec<"
+                    + element
+                    + ", "
+                    + SlangCalls.constant_arg(b, n, first, "the GpuCoopVec length")
+                    + ">(" + element + "(0))"
+            );
+            return;
+        }
+        if key == "GpuCoopMat.zeros" || key == "GpuCoopMat.load" {
+            let element = SlangTypes.of(n.ty.arg(0), List<int>());
+            let rows = first;
+            if key == "GpuCoopMat.load" {
+                rows = first + 3;
+            }
+            let usage = b.coop_uses.get(b.declaring).unwrap_or("MatrixAccumulator");
+            w.text(
+                "CoopMat<"
+                    + element
+                    + ", MemoryScope.Subgroup, "
+                    + SlangCalls.constant_arg(b, n, rows, "the matrix row count")
+                    + ", "
+                    + SlangCalls.constant_arg(b, n, rows + 1, "the matrix column count")
+                    + ", CoopMatMatrixUse." + usage + ">"
+            );
+            if key == "GpuCoopMat.zeros" {
+                w.text("(" + element + "(0))");
+                return;
+            }
+            w.text(".Load<CoopMatMatrixLayout.RowMajor>(");
+            b.expr(n.child(first));
+            w.text(", ");
+            b.expr(n.child(first + 1));
+            w.text(", ");
+            b.expr(n.child(first + 2));
+            w.text(")");
+            return;
+        }
+        if key == "GpuMlpWeights.apply" {
+            let receiver = n.child(0);
+            let shape = List<int>();
+            for (let e in b.shader_module.entries) {
+                if e.function.id == b.function_id {
+                    switch (e.param(receiver.text)) {
+                        Some(p) => {
+                            shape = p.coop;
+                        }
+                        None => {}
+                    }
+                }
+            }
+            if shape.length != 2 {
+                b.ctx.error_at(
+                    receiver.id,
+                    "GpuMlpWeights parameter '"
+                        + receiver.text + "' needs @coop_shape(inputs, outputs)"
+                );
+                shape = List<int>.from_array([1, 1]);
+            }
+            let element = SlangTypes.of(receiver.ty.arg(0), List<int>());
+            let component = "CoopVecComponentType::Float32";
+            let size = 4;
+            if element == "half" {
+                component = "CoopVecComponentType::Float16";
+                size = 2;
+            }
+            w.text("coopVecMatMul<" + element + ", " + shape[1].to_string() + ">(");
+            b.expr(n.child(1));
+            w.text(", " + component + ", ");
+            b.expr(receiver);
+            w.text(
+                ", 0, "
+                    + component
+                    + ", CoopVecMatrixLayout::RowMajor, false, "
+                    + (shape[0] * size)
+                    .to_string() + ")"
+            );
+            return;
+        }
+        b.ctx.error_at(
+            n.id,
+            "'" + n.text + "' can only initialize a local variable in GPU shaders"
+        );
+    }
+
+    internal static fun length_of(b: SlangBody, borrow array: ShaderNode): string {
+        for (let n in b.program.nodes(b.function_id)) {
+            if n.is_statement(StmtKind.Declaration) && n.text == array.text && n.children.length > 0 {
+                let init = n.child(0);
+                if init.children.length > 0 {
+                    return init.child(0).constant;
+                }
+            }
+        }
+        return "0";
+    }
+}

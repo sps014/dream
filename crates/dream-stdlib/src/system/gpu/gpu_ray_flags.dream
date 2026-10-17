@@ -1,0 +1,27 @@
+module system.gpu;
+
+/// Options for `trace_ray` and `GpuRayQuery`. Combine several with `|`.
+public enum GpuRayFlags {
+    /// No options.
+    None = 0,
+    /// Treats all geometry as opaque, so any-hit shaders do not run.
+    ForceOpaque = 1,
+    /// Treats all geometry as non-opaque, so any-hit shaders run for every candidate.
+    ForceNonOpaque = 2,
+    /// Stops at the first hit found instead of searching for the closest one, for shadow rays.
+    AcceptFirstHitAndEndSearch = 4,
+    /// Skips the closest-hit shader.
+    SkipClosestHitShader = 8,
+    /// Ignores triangles facing away from the ray.
+    CullBackFacingTriangles = 16,
+    /// Ignores triangles facing the ray.
+    CullFrontFacingTriangles = 32,
+    /// Ignores opaque geometry.
+    CullOpaque = 64,
+    /// Ignores non-opaque geometry.
+    CullNonOpaque = 128,
+    /// Ignores triangle geometry.
+    SkipTriangles = 256,
+    /// Ignores custom geometry tested by intersection shaders.
+    SkipProceduralPrimitives = 512,
+}

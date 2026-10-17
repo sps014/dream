@@ -32,10 +32,12 @@ impl Lowerer<'_> {
     }
 
     /// Selects the float constant width from the literal's static type: `float` lowers to a 32-bit
-    /// [`Const::F32`], `double` (and anything else) to a 64-bit [`Const::Float`].
+    /// [`Const::F32`], `float16` to a rounded-to-nearest-even [`Const::F16`], `double` (and anything
+    /// else) to a 64-bit [`Const::Float`].
     fn float_const(&self, ty: TypeId, v: f64) -> Const {
         match self.interner.kind(ty) {
             TyKind::Prim(PrimTy::Float) => Const::F32(v as f32),
+            TyKind::Prim(PrimTy::Float16) => Const::F16(half::f16::from_f64(v).to_bits()),
             _ => Const::Float(v),
         }
     }

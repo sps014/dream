@@ -1,0 +1,21 @@
+module system.gpu;
+
+/// Marks a function as a compute shader, an entry point the GPU runs once per thread.
+///
+/// `x`, `y` and `z` are the workgroup size: how many threads run together and can share
+/// workgroup memory. `y` and `z` default to `1`, so `@compute(64)` is a 64-thread line of
+/// threads. The shader generator checks the body against the shader rules, compiles it for
+/// every target listed in `@gpu_targets`, and makes it available as
+/// `GpuShaders.<name>.dispatch(device, ...)`. The function itself can no longer be called
+/// from CPU code.
+@attribute(AttributeTarget.Function)
+public struct ComputeAttribute {
+    /// Threads per workgroup along x.
+    public x: int;
+
+    /// Threads per workgroup along y; `1` when omitted.
+    public y: Option<int>;
+
+    /// Threads per workgroup along z; `1` when omitted.
+    public z: Option<int>;
+}

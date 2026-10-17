@@ -1,0 +1,94 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.json;
+
+// Where one bindable parameter lives in one target's code, read from `slangc -reflection-json`:
+// the descriptor set/space and binding (Metal: the buffer, texture or sampler index), and for
+// value parameters the byte range inside the entry's uniform block.
+internal class Reflection {
+    internal space: int;
+    internal binding: int;
+    internal offset: int;
+    internal size: int;
+    internal found: bool;
+
+    internal constructor() {
+        this.space = 0;
+        this.binding = 0;
+        this.offset = 0;
+        this.size = 0;
+        this.found = false;
+    }
+
+    // One `Reflection` per bindable parameter of `entry`, in parameter order. Parameters the
+    // reflection does not mention keep `found == false`.
+    internal static fun parse(borrow text: string, borrow entry: ShaderEntry): List<Reflection> {
+        let out = List<Reflection>();
+        let globals = JsonValue.array();
+        switch (Json.parse(text)) {
+            Ok(root) => {
+                globals = root.get_or("parameters", JsonValue.array());
+            }
+            Err(_) => {}
+        }
+        let items = globals.as_array().unwrap_or(List<JsonValue>());
+        for (let p in entry.bindable()) {
+            let r = Reflection();
+            let global = p.global;
+            if p.is_value() {
+                global = entry.uniform_block();
+            }
+            for (let g in items) {
+                if g.get_str_or("name", "") != global {
+                    continue;
+                }
+                let binding = Reflection.binding_of(g);
+                let kind = binding.get_str_or("kind", "");
+                if kind == "registerSpace" || kind == "subElementRegisterSpace" {
+                    r.space = binding.get_int_or("index", 0);
+                } else {
+                    r.binding = binding.get_int_or("index", 0);
+                    r.space = binding.get_int_or("space", 0);
+                }
+                r.found = true;
+                if p.is_value() {
+                    r.found = false;
+                    let fields = g.get_or("type", JsonValue.dict())
+                        .get_or("elementType", JsonValue.dict())
+                        .get_or("fields", JsonValue.array())
+                        .as_array()
+                        .unwrap_or(List<JsonValue>());
+                    for (let f in fields) {
+                        if f.get_str_or("name", "") == p.global {
+                            let layout = f.get_or("binding", JsonValue.dict());
+                            r.offset = layout.get_int_or("offset", 0);
+                            r.size = layout.get_int_or("size", 0);
+                            r.found = true;
+                        }
+                    }
+                }
+            }
+            out.push(r);
+        }
+        return out;
+    }
+
+    static fun binding_of(borrow g: JsonValue): JsonValue {
+        let single = g.get_or("binding", JsonValue.none());
+        if single.is_object() {
+            return single;
+        }
+        let many = g.get_or("bindings", JsonValue.array()).as_array().unwrap_or(List<JsonValue>());
+        for (let b in many) {
+            if b.get_str_or("kind", "") != "uniform" {
+                return b;
+            }
+        }
+        if !many.is_empty() {
+            return many[0];
+        }
+        return JsonValue.dict();
+    }
+}

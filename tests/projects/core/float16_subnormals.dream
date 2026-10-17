@@ -1,0 +1,23 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun float16_subnormals(): void {
+    let smallest = (float16)5.9604644775390625e-08d;
+    Assert.eq((double)smallest, 5.9604644775390625e-08d);
+    Assert.is_true(smallest > 0.0h);
+    Assert.eq(smallest / 2.0h, 0.0h);
+    Assert.eq((smallest * 3.0h) / 3.0h, smallest);
+    Assert.eq((float16)2.98023223876953125e-08d, 0.0h);
+    Assert.eq((float16)2.99e-08d, smallest);
+    Assert.eq((float16)8.940696716308594e-08d, (float16)1.1920928955078125e-07d);
+
+    let largest_subnormal = (float16)6.097555160522461e-05d;
+    let smallest_normal = (float16)6.103515625e-05d;
+    Assert.eq(smallest_normal - largest_subnormal, smallest);
+    Assert.eq(largest_subnormal + smallest, smallest_normal);
+    Assert.eq(smallest.to_string(), "6e-08");
+    Assert.eq(largest_subnormal.to_string(), "6.1e-05");
+    Assert.eq(smallest_normal.to_string(), "6.104e-05");
+}

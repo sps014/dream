@@ -1,0 +1,39 @@
+{
+  "format": "DGPB",
+  "version": 0,
+  "module": "shaders",
+  "targets": [
+    {
+      "name": "spirv",
+      "code_format": "spirv",
+      "layout": {"offset": 0, "size": 20274, "sha256": "0b9c56fd74a042ea61565af086462cea8b7335850915fcafc39f48544ba6a9c8"},
+      "entries": [
+        {
+          "name": "evaluate_mlp",
+          "stage": "compute",
+          "code": {"offset": 20274, "size": 2088, "sha256": "14590efebaa782f9d8313cf83a29144eb701b04928dab137b9a0d5cd030257fe"},
+          "thread_group_size": [32, 1, 1],
+          "params": [
+            {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "layer1", "kind": 7, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "features", "kind": 1, "flags": 1, "space": 0, "binding": 2, "offset": 0, "size": 0},
+            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0}
+          ],
+          "capabilities": ["cooperative_vector", "half"]
+        },
+        {
+          "name": "tile_multiply",
+          "stage": "compute",
+          "code": {"offset": 22362, "size": 1312, "sha256": "638cc221a5eee2a040fbf50003843a762246c104e1aa8d88957861f9eed98241"},
+          "thread_group_size": [32, 1, 1],
+          "params": [
+            {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 4, "offset": 0, "size": 0},
+            {"name": "b", "kind": 1, "flags": 1, "space": 0, "binding": 5, "offset": 0, "size": 0},
+            {"name": "c", "kind": 1, "flags": 2, "space": 0, "binding": 6, "offset": 0, "size": 0}
+          ],
+          "capabilities": ["cooperative_matrix", "half"]
+        }
+      ]
+    }
+  ]
+}

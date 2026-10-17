@@ -6,6 +6,8 @@ use std::fmt;
 pub enum Ty {
     Void,
     Int(u32),
+    /// IEEE binary16 (`half`).
+    F16,
     F32,
     F64,
     /// Opaque pointer (`ptr`, address space 0).
@@ -36,7 +38,7 @@ impl Ty {
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(self, Ty::F32 | Ty::F64)
+        matches!(self, Ty::F16 | Ty::F32 | Ty::F64)
     }
 
     pub fn int_bits(&self) -> Option<u32> {
@@ -56,6 +58,7 @@ impl fmt::Display for Ty {
         match self {
             Ty::Void => f.write_str("void"),
             Ty::Int(b) => write!(f, "i{b}"),
+            Ty::F16 => f.write_str("half"),
             Ty::F32 => f.write_str("float"),
             Ty::F64 => f.write_str("double"),
             Ty::Ptr => f.write_str("ptr"),

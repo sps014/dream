@@ -1,0 +1,115 @@
+use super::StdPackage;
+
+/// The `system.gpu.shaders` generator: translates `system.gpu` shaders to Slang, compiles them
+/// with the pinned `slangc`, and emits shader bundles plus typed `GpuShaders` wrappers.
+/// Registered through `system.gpu`'s `generators`; user programs never compile it.
+pub(super) const PACKAGE: StdPackage = StdPackage {
+    name: "system.gpu.shaders",
+    deps: &[
+        "system.core",
+        "system.primitives",
+        "system.collections",
+        "system.text",
+        "system",
+        "system.json",
+        "system.encoding",
+        "system.crypto",
+        "system.codegen",
+        "system.gpu",
+    ],
+    generators: &[],
+    files: &[
+        (
+            "<std>/system/gpu/shaders/builtins.dream",
+            include_str!("../system/gpu/shaders/builtins.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/bundle.dream",
+            include_str!("../system/gpu/shaders/bundle.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/bundle_target.dream",
+            include_str!("../system/gpu/shaders/bundle_target.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/capabilities.dream",
+            include_str!("../system/gpu/shaders/capabilities.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/gpu_shaders.dream",
+            include_str!("../system/gpu/shaders/gpu_shaders.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/names.dream",
+            include_str!("../system/gpu/shaders/names.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/param_kinds.dream",
+            include_str!("../system/gpu/shaders/param_kinds.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/reflection.dream",
+            include_str!("../system/gpu/shaders/reflection.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_analysis.dream",
+            include_str!("../system/gpu/shaders/shader_analysis.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_entry.dream",
+            include_str!("../system/gpu/shaders/shader_entry.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_module.dream",
+            include_str!("../system/gpu/shaders/shader_module.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_node.dream",
+            include_str!("../system/gpu/shaders/shader_node.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_param.dream",
+            include_str!("../system/gpu/shaders/shader_param.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_program.dream",
+            include_str!("../system/gpu/shaders/shader_program.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_body.dream",
+            include_str!("../system/gpu/shaders/slang_body.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_calls.dream",
+            include_str!("../system/gpu/shaders/slang_calls.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_diag.dream",
+            include_str!("../system/gpu/shaders/slang_diag.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_emit.dream",
+            include_str!("../system/gpu/shaders/slang_emit.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_types.dream",
+            include_str!("../system/gpu/shaders/slang_types.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/slang_writer.dream",
+            include_str!("../system/gpu/shaders/slang_writer.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/targets.dream",
+            include_str!("../system/gpu/shaders/targets.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/verify.dream",
+            include_str!("../system/gpu/shaders/verify.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/wrappers.dream",
+            include_str!("../system/gpu/shaders/wrappers.dream"),
+        ),
+    ],
+};

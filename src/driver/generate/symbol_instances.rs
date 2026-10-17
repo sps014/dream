@@ -37,13 +37,18 @@ pub(super) fn attach(symbols: &mut [SymbolView], facts: &ProgramFacts<'_>) {
                 function.is_static = method.is_static;
                 function.is_async = method.is_async;
                 function.ret = type_ref(&method.ret, facts.index, &[]);
+                let declared = function.params.clone();
                 function.params = method
                     .params
                     .iter()
-                    .map(|(name, ty)| Param {
-                        name: name.clone(),
-                        ty: type_ref(ty, facts.index, &[]),
-                        attributes: Vec::new(),
+                    .map(|(name, ty)| {
+                        let original = declared.iter().find(|p| &p.name == name);
+                        Param {
+                            name: name.clone(),
+                            ty: type_ref(ty, facts.index, &[]),
+                            is_ref: original.is_some_and(|p| p.is_ref),
+                            attributes: original.map(|p| p.attributes.clone()).unwrap_or_default(),
+                        }
                     })
                     .collect();
                 function

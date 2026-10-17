@@ -1,0 +1,165 @@
+module system.gpu;
+
+// The GPU host imports, implemented natively by dream-host-gpu and in browsers by gpu.js.
+// Native async imports complete through the scheduler's foreign-completion path
+// (`@async_host`). Handles are positive ints unique across every resource kind; 0 means
+// failure, and `gpuLastError` then describes it as `CODE\ndetail` (see `gpu_error_from_host`).
+// Descriptor arrays are flat int lists whose layouts are written next to the code that builds
+// them.
+internal static class GpuHost {
+    // `compiled` is a bit mask of the GpuBackend values with shader code in this build.
+    @async_host
+    @runtime("gpuDeviceCreate")
+    internal static extern async fun device_create(backend: int, compiled: int): int;
+
+    @runtime("gpuLastError")
+    internal static extern fun last_error(): string;
+
+    @runtime("gpuDeviceBackend")
+    internal static extern fun device_backend(device: int): int;
+
+    // Bit mask of supported GpuFeature values.
+    @runtime("gpuDeviceFeatures")
+    internal static extern fun device_features(device: int): int;
+
+    // 0 while the device works; otherwise the device is lost and `gpuLastError` says why.
+    @runtime("gpuDeviceCheck")
+    internal static extern fun device_check(device: int): int;
+
+    // Loads one generated shader bundle's code for the device's backend.
+    @runtime("gpuLibraryLoad")
+    internal static extern fun library_load(device: int, borrow bundle: byte[]): int;
+
+    // `usage` is a GpuBufferUsage bit mask.
+    @runtime("gpuBufferCreate")
+    internal static extern fun buffer_create(device: int, byte_size: int, usage: int): int;
+
+    @runtime("gpuBufferWrite")
+    internal static extern fun buffer_write(
+        buffer: int,
+        byte_offset: int,
+        borrow data: byte[]
+    ): int;
+
+    // Resolves once every submitted command that writes the buffer has finished. An empty
+    // result for a non-empty range is a failure.
+    @async_host
+    @runtime("gpuBufferRead")
+    internal static extern async fun buffer_read(
+        buffer: int,
+        byte_offset: int,
+        byte_size: int
+    ): byte[];
+
+    // [width, height, depth_or_layers, mip_levels, format, usage, sample_count]
+    @runtime("gpuTextureCreate")
+    internal static extern fun texture_create(device: int, borrow desc: int[]): int;
+
+    @runtime("gpuTextureWrite")
+    internal static extern fun texture_write(
+        texture: int,
+        mip: int,
+        layer: int,
+        borrow data: byte[]
+    ): int;
+
+    @async_host
+    @runtime("gpuTextureRead")
+    internal static extern async fun texture_read(texture: int, mip: int, layer: int): byte[];
+
+    // [min_filter, mag_filter, mip_filter, address_u, address_v, address_w, compare + 1 or 0,
+    //  max_anisotropy]
+    @runtime("gpuSamplerCreate")
+    internal static extern fun sampler_create(device: int, borrow desc: int[]): int;
+
+    // The bindless descriptor handle bits of a texture, storage texture, buffer or sampler.
+    @runtime("gpuDescriptorHandle")
+    internal static extern fun descriptor_handle(resource: int): ulong;
+
+    @runtime("gpuComputePipelineCreate")
+    internal static extern fun compute_pipeline_create(library: int, borrow entry: string): int;
+
+    // See GpuRenderPipelineDesc.encode for `desc`.
+    @runtime("gpuRenderPipelineCreate")
+    internal static extern fun render_pipeline_create(
+        vertex_library: int,
+        borrow vertex_entry: string,
+        fragment_library: int,
+        borrow fragment_entry: string,
+        borrow desc: int[]
+    ): int;
+
+    // `entries` are newline-separated entry point names; `libraries` holds each entry's
+    // library. See GpuDevice.ray_tracing_pipeline for `layout`.
+    @runtime("gpuRayTracingPipelineCreate")
+    internal static extern fun ray_tracing_pipeline_create(
+        device: int,
+        borrow libraries: int[],
+        borrow entries: string,
+        borrow layout: int[]
+    ): int;
+
+    // See GpuGeometry.encode for `geometry`.
+    @async_host
+    @runtime("gpuBottomLevelBuild")
+    internal static extern async fun bottom_level_build(device: int, borrow geometry: int[]): int;
+
+    // `instances` holds [blas, instance_id, mask, hit_group_offset, flags] per instance and
+    // `transforms` the matching 3x4 row-major object-to-world matrices.
+    @async_host
+    @runtime("gpuTopLevelBuild")
+    internal static extern async fun top_level_build(
+        device: int,
+        borrow instances: int[],
+        borrow transforms: float[]
+    ): int;
+
+    // `layout` is [inputs, outputs, element_bytes]; `weights` is row-major outputs x inputs
+    // followed by `outputs` biases. The host repacks them into the device's optimal layout.
+    @runtime("gpuMlpUpload")
+    internal static extern fun mlp_upload(
+        device: int,
+        borrow weights: byte[],
+        borrow layout: int[]
+    ): int;
+
+    // `window` is the window host's handle (Window.host_handle).
+    @runtime("gpuSurfaceCreate")
+    internal static extern fun surface_create(device: int, window: int, vsync: bool): int;
+
+    @runtime("gpuSurfaceResize")
+    internal static extern fun surface_resize(surface: int, width: int, height: int): int;
+
+    // [format, width, height]
+    @runtime("gpuSurfaceInfo")
+    internal static extern fun surface_info(surface: int): int[];
+
+    // The texture to draw this frame into.
+    @async_host
+    @runtime("gpuSurfaceAcquire")
+    internal static extern async fun surface_acquire(surface: int): int;
+
+    @async_host
+    @runtime("gpuSurfacePresent")
+    internal static extern async fun surface_present(surface: int): int;
+
+    // Runs an encoded command stream (see GpuOp); `data` holds the scalar argument bytes the
+    // stream references. Resolves to 0 when the GPU finished it.
+    @async_host
+    @runtime("gpuSubmit")
+    internal static extern async fun submit(
+        device: int,
+        borrow commands: int[],
+        borrow data: byte[]
+    ): int;
+
+    // Drops the program's reference; the host keeps the resource alive until submitted work
+    // that uses it has finished.
+    @runtime("gpuRelease")
+    internal static extern fun release(handle: int): void;
+
+    // The current host failure as a GpuError.
+    internal static fun error(): GpuError {
+        return gpu_error_from_host(GpuHost.last_error());
+    }
+}

@@ -392,5 +392,17 @@
     "page": "docs/library/text/simd.md",
     "block": 0,
     "mode": "compile"
+  },
+  {
+    "name": "window-game-loop",
+    "page": "docs/library/system/window.md",
+    "block": 0,
+    "mode": "compile"
+  },
+  {
+    "name": "window-headless",
+    "page": "docs/library/system/window.md",
+    "block": 2,
+    "stdout": "true\nfalse\ntrue\n"
   }
 ]

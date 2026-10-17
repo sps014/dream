@@ -1,0 +1,125 @@
+# Pinned inputs of the dream-host-gpu build (build.rs) and of the Milestone 0 probe. `sha256` is
+# what the upstream release publishes and what every download is verified against; `blake3` is
+# what Dream's tool registry records. `python3 aot_probe/build.py pin` re-derives every BLAKE3
+# from a fresh download. The host build reads only `include/` from the Slang archive: the
+# compiler library is never linked or loaded by the host.
+
+[slang]
+version = "2026.20"
+release = "https://github.com/shader-slang/slang/releases/tag/v2026.20"
+# The executable the generator runs (`.exe` on Windows); Dream pins tools by its file hash.
+tool = "bin/slangc"
+# BLAKE3 of bin/slangc from the macos-aarch64 archive (the form src/driver/generate/tools.rs pins).
+tool_blake3.macos-aarch64 = "7bfad33143541ca4c9c69ebdeb51cc1f53eef2bbab9f3e635e987b657867c6de"
+
+[slang.archives.macos-aarch64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-macos-aarch64.tar.gz"
+sha256 = "07fa8833fdbb343c3674c84fdd885910f495f3daaaa0c732b32980151e8b58c4"
+blake3 = "6d3b0ae193ea6c95fb33b7e5ab9be59fe497c9d78c5435d23c3cd91f73cfb19a"
+
+[slang.archives.macos-x86_64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-macos-x86_64.tar.gz"
+sha256 = "b4f01f615dc625f60c593d7d0a4bbd38e05dfa2a34bfd3973017c309d866feaa"
+blake3 = "b96b9e8190c03fee085e10cf3a2c1ea67540ca5e536ecc6b9db115f3c9a6be01"
+
+[slang.archives.linux-x86_64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-linux-x86_64.tar.gz"
+sha256 = "e863e568c204810d6e8bc31852f056aef6763c55ea9925db2db7affa060347c9"
+blake3 = "fd310a0c9a8cfa1622c428df0d570f016327bf831f0fe8ae78ac26576b41c0ad"
+
+[slang.archives.linux-aarch64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-linux-aarch64.tar.gz"
+sha256 = "b0345743e2153d8c2bd33f56fb5696bcef63fc03513f054a1ae1b8d3dd0152a9"
+blake3 = "9ed2490542354bdf72609502699eba6ba92b9aba6e1d8cd72f64ced50f2a4aa7"
+
+[slang.archives.windows-x86_64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-windows-x86_64.zip"
+sha256 = "e6dd32bbddf1720ebb4e679d55e9635ce792865a5bd84f3d2cd9af28647c0174"
+blake3 = "3331b837044e6a37a02c95ff67ee35892d9fdab89115802b5a9ce2fed83d9e1e"
+
+[slang.archives.windows-aarch64]
+url = "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-windows-aarch64.zip"
+sha256 = "4f18a7e76a59969bc9bf6ea596bd9e496a3c689af173990ae028b18f03e1ac1a"
+blake3 = "195e985b86837d7b4a1bdab864b63ac1fef9de20834427892c54da0cb4df7e05"
+
+# The commit Slang v2026.20 records for its external/slang-rhi submodule.
+[slang-rhi]
+commit = "b856e6350ea09f63a16a6c7497faa1d741fdd735"
+url = "https://github.com/shader-slang/slang-rhi/archive/b856e6350ea09f63a16a6c7497faa1d741fdd735.tar.gz"
+sha256 = "4c629dc48692fadfdb9dccaa035b18bf85573a1462094823f0078d7577f64c71"
+blake3 = "17ff165dc32c2c5735afecdea82f88cf680fd41fb85e56684899e615444d9e90"
+patches = [
+    "0001-metal-accept-msl-source-as-precompiled-code.patch",
+    "0002-vulkan-leave-unbound-acceleration-structure-slots-unwritten.patch",
+]
+
+# Prebuilt Dawn that slang-rhi's CMake pins for its WebGPU backend.
+[dawn]
+version = "138.0.7204.168"
+
+[dawn.archives.macos-aarch64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-macos-aarch64.zip"
+sha256 = "8a17471681a5158a2c6cf607c2201384030d5a02404aeb87fddedd4d087c6285"
+blake3 = "d963840c761be59ce16720e87c614add7cbc3a9afe12c9913df662b0c45f21a1"
+
+[dawn.archives.macos-x86_64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-macos-x86_64.zip"
+sha256 = "1727b4242c65d8be37b1225cb94eaf6d45dd2e715d6c07f83e380441fea8b936"
+blake3 = "b87017db05ad64f1e6d2bdcfa2245a8d584cb023a5ae19657e6b778fdddc742a"
+
+[dawn.archives.linux-x86_64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-linux-x86_64.zip"
+sha256 = "527216981b1e486ec03470ae5af1b7f8020fd2de042b4ace12b10281d08fe669"
+blake3 = "355f635735eef094730c52daf959979927a1635e5f66069de727b5839b7ab931"
+
+[dawn.archives.linux-aarch64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-linux-aarch64.zip"
+sha256 = "128a58d6ae967966af39003b05848d4ae59a7048a88a3b5374c94c73fbdba4b1"
+blake3 = "fac977128aeef8df40093ae2f8065403e1ae80b0eaf24e6677455b9a151b9d79"
+
+[dawn.archives.windows-x86_64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-windows-x86_64.zip"
+sha256 = "b4343ce0f44a99c1ca76c2c4ac4a0406f6cb0550d51522d45fad171f12e19e5c"
+blake3 = "9840e899546a35453aee3c4aa7c158bf270aac47946e66c6d465d1474d20fe2b"
+
+[dawn.archives.windows-aarch64]
+url = "https://github.com/shader-slang/webgpu-dawn-binaries/releases/download/v138.0.7204.168/webgpu-dawn-138.0.7204.168-windows-aarch64.zip"
+sha256 = "fd45fc360d1563b1b1d9c6411b4203e2e6de9e843a96d6a11612b73f27af8b3b"
+blake3 = "41e3d506c341906a92b4f50f55d82a277ce8aecb453c9a4d005fc7d10ecc742e"
+
+# Header-only inputs slang-rhi's CMake fetches; pinned here so the host build fetches nothing
+# on its own.
+[vulkan-headers]
+version = "1.4.347"
+url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.347.zip"
+sha256 = "ac260b9d0bacbdff95c6eda03f9af48a4d235eeba76b2bc55db26e970219687e"
+blake3 = "8fcbf8286d96bcfd1f20b83ea67721759fd2a14d45860f8259d42fa507d9033b"
+
+[metal-cpp]
+version = "macOS15.2_iOS18.2"
+url = "https://developer.apple.com/metal/cpp/files/metal-cpp_macOS15.2_iOS18.2.zip"
+sha256 = "3437e4abfbd3d45217f34772ef3502f31ba3358e5fb6ac9d0ca952a047bcfe25"
+blake3 = "986cb97f4b83bc6da2b2fee651c830a65f5dbe70ac12b2ad974e4a38606687fd"
+
+# Probe-only: lets the macOS probe reach slang-rhi's Vulkan backend without a system loader.
+[moltenvk]
+version = "1.4.2"
+url = "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar"
+sha256 = "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e"
+blake3 = "1aaf53162ad6292860f7419932440da7b95ad9ac006af7b648a444037b2039d3"
+
+# Probe-only: the Khronos Vulkan loader for macOS (Homebrew bottle). MoltenVK alone cannot
+# serve VK_KHR_portability_enumeration, which slang-rhi requests.
+[vulkan-loader]
+version = "1.4.363.0"
+url = "https://ghcr.io/v2/homebrew/core/vulkan-loader/blobs/sha256:6d5ee00d4104774f3ae56e5e9441a59a6a6f5d800f937f4e926a8f9e01ed046f"
+sha256 = "6d5ee00d4104774f3ae56e5e9441a59a6a6f5d800f937f4e926a8f9e01ed046f"
+blake3 = "326de999e2bd935999e2047e01318024a05f5df590c4a38466b5531a022afa8e"
+platform = "macos-aarch64 (arm64_tahoe bottle)"
+
+# WinPixEventRuntime, which slang-rhi's D3D12 backend links on Windows; pinned so the CMake
+# configure step downloads nothing on its own.
+[winpix]
+version = "1.0.240308001"
+url = "https://www.nuget.org/api/v2/package/WinPixEventRuntime/1.0.240308001"
+sha256 = "726acc93d6968e2146261a1e415521747d50ad69894c2b42b5d0d4c29fd66ec4"

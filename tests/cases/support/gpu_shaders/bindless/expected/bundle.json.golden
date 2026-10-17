@@ -1,0 +1,24 @@
+{
+  "format": "DGPB",
+  "version": 0,
+  "module": "shaders",
+  "targets": [
+    {
+      "name": "spirv",
+      "code_format": "spirv",
+      "layout": {"offset": 0, "size": 15855, "sha256": "294d7fa9fd1f78ef41f9d4d980d7ca641c466afdd803b8723aeaae4426281c60"},
+      "entries": [
+        {
+          "name": "shade_material",
+          "stage": "fragment",
+          "code": {"offset": 15855, "size": 1656, "sha256": "99d7c48ece6e3148095eed6f8c7832e370ee8e50bb659f3b5f16a590329d86ee"},
+          "thread_group_size": [0, 0, 0],
+          "params": [
+            {"name": "materials", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0}
+          ],
+          "capabilities": ["descriptor_handle"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+module gpu_compute_saxpy;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun saxpy_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun saxpy_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println("SKIP gpu_compute_saxpy on " + saxpy_label(backend) + ": " + reason);
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println("SKIP gpu_compute_saxpy on " + saxpy_label(backend) + ": " + reason);
+        }
+        Err(e) => {
+            Assert.fail("gpu_compute_saxpy on " + saxpy_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun saxpy_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64, 1, 1)
+fun saxpy(
+    @readonly x: GpuBuffer<float>,
+    @readonly y: GpuBuffer<float>,
+    out: GpuBuffer<float>,
+    a: float,
+    n: int
+): void {
+    let i = global_id().x;
+    if i < n {
+        out[i] = a * x[i] + y[i];
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_compute_saxpy(): void {
+    let n = 1000;
+    let xs = Array.alloc<float>(n);
+    let ys = Array.alloc<float>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        xs[i] = (float)i;
+        ys[i] = 0.5f * (float)i;
+    }
+    for (let backend in GpuShaders.backends()) {
+        switch (saxpy_device(backend).await) {
+            Some(device) => {
+                let label = saxpy_label(backend);
+                let x = saxpy_ok(device.buffer_from(xs), "x");
+                let y = saxpy_ok(device.buffer_from(ys), "y");
+                let out = saxpy_ok(device.buffer_alloc<float>(n), "out");
+
+                saxpy_ok(
+                    GpuShaders.saxpy.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        x,
+                        y,
+                        out,
+                        2.0f,
+                        n
+                    ).await,
+                    "saxpy on " + label
+                );
+
+                let values = saxpy_ok(out.read().await, "read on " + label);
+                Assert.eq(values.length, n);
+                for (let i = 0; i < n; i = i + 1) {
+                    Assert.eq(values[i], 2.5f * (float)i);
+                }
+
+                // A second dispatch reuses the cached pipeline and overwrites the result.
+                saxpy_ok(
+                    GpuShaders.saxpy.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        x,
+                        y,
+                        out,
+                        -1.0f,
+                        n
+                    ).await,
+                    "second saxpy on " + label
+                );
+                let again = saxpy_ok(out.read().await, "second read");
+                Assert.eq(again[10], -5.0f);
+            }
+            None => {}
+        }
+    }
+}

@@ -1,0 +1,142 @@
+module system.gpu;
+
+/// A 4x4 `float` matrix stored as four columns, laid out like a GPU `float4x4`, for
+/// transforms and cameras.
+///
+/// `m * v` transforms the column vector `v`, and `a * b` applies `b` first, then `a`. The
+/// projection helpers use a right-handed view space where the camera looks down negative z,
+/// and map depth to `0.0` (near) through `1.0` (far), the range every `GpuBackend` expects.
+/// Use it on the CPU and in shaders alike.
+public struct GpuMat4 {
+    /// The first column.
+    public c0: GpuVec4;
+
+    /// The second column.
+    public c1: GpuVec4;
+
+    /// The third column.
+    public c2: GpuVec4;
+
+    /// The fourth column, which holds the translation of an affine transform.
+    public c3: GpuVec4;
+
+    /// Creates a matrix from its four columns.
+    public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4 {
+        let m = GpuMat4();
+        m.c0 = c0;
+        m.c1 = c1;
+        m.c2 = c2;
+        m.c3 = c3;
+        return m;
+    }
+
+    /// The identity matrix, which leaves vectors unchanged.
+    public static fun identity(): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(1.0f, 0.0f, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, 1.0f, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, 1.0f, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+    }
+
+    /// A transform that moves points by `offset`.
+    public static fun translation(offset: GpuVec3): GpuMat4 {
+        let m = GpuMat4.identity();
+        m.c3 = GpuVec4.of(offset.x, offset.y, offset.z, 1.0f);
+        return m;
+    }
+
+    /// A transform that scales each axis by the matching component of `factors`.
+    public static fun scaling(factors: GpuVec3): GpuMat4 {
+        return GpuMat4.of(
+            GpuVec4.of(factors.x, 0.0f, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, factors.y, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, factors.z, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+    }
+
+    /// A rotation by `radians` around `axis`, counter-clockwise when looking from the tip of
+    /// the axis toward the origin. `axis` need not have length `1`.
+    public static fun rotation(axis: GpuVec3, radians: float): GpuMat4 {
+        let a = axis.normalize();
+        let c = (float)Math.cos((double)radians);
+        let s = (float)Math.sin((double)radians);
+        let t = 1.0f - c;
+        return GpuMat4.of(
+            GpuVec4.of(t * a.x * a.x + c, t * a.x * a.y + s * a.z, t * a.x * a.z - s * a.y, 0.0f),
+            GpuVec4.of(t * a.x * a.y - s * a.z, t * a.y * a.y + c, t * a.y * a.z + s * a.x, 0.0f),
+            GpuVec4.of(t * a.x * a.z + s * a.y, t * a.y * a.z - s * a.x, t * a.z * a.z + c, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+    }
+
+    /// A perspective projection with a vertical field of view of `fov_y_radians`, a
+    /// width-to-height `aspect` ratio, and clipping planes at distances `near` and `far`
+    /// in front of the camera. Both distances must be positive and `near` below `far`.
+    public static fun perspective(
+        fov_y_radians: float,
+        aspect: float,
+        near: float,
+        far: float
+    ): GpuMat4 {
+        let f = 1.0f / (float)Math.tan((double)(fov_y_radians * 0.5f));
+        let range = 1.0f / (near - far);
+        return GpuMat4.of(
+            GpuVec4.of(f / aspect, 0.0f, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, f, 0.0f, 0.0f),
+            GpuVec4.of(0.0f, 0.0f, far * range, -1.0f),
+            GpuVec4.of(0.0f, 0.0f, near * far * range, 0.0f)
+        );
+    }
+
+    /// A camera transform for an eye at `eye` looking at `target`, with `up` giving the
+    /// upward direction. `up` must not point along the viewing direction.
+    public static fun look_at(eye: GpuVec3, target: GpuVec3, up: GpuVec3): GpuMat4 {
+        let forward = (eye - target).normalize();
+        let right = up.cross(forward).normalize();
+        let camera_up = forward.cross(right);
+        return GpuMat4.of(
+            GpuVec4.of(right.x, camera_up.x, forward.x, 0.0f),
+            GpuVec4.of(right.y, camera_up.y, forward.y, 0.0f),
+            GpuVec4.of(right.z, camera_up.z, forward.z, 0.0f),
+            GpuVec4.of(-right.dot(eye), -camera_up.dot(eye), -forward.dot(eye), 1.0f)
+        );
+    }
+
+    /// The row at `index` (`0` to `3`) as a vector.
+    public fun row(index: int): GpuVec4 {
+        if index == 0 {
+            return GpuVec4.of(this.c0.x, this.c1.x, this.c2.x, this.c3.x);
+        }
+        if index == 1 {
+            return GpuVec4.of(this.c0.y, this.c1.y, this.c2.y, this.c3.y);
+        }
+        if index == 2 {
+            return GpuVec4.of(this.c0.z, this.c1.z, this.c2.z, this.c3.z);
+        }
+        return GpuVec4.of(this.c0.w, this.c1.w, this.c2.w, this.c3.w);
+    }
+
+    /// The matrix with rows and columns swapped.
+    public fun transpose(): GpuMat4 {
+        return GpuMat4.of(this.row(0), this.row(1), this.row(2), this.row(3));
+    }
+
+    /// Transforms the column vector `v`.
+    fun operator *(v: GpuVec4): GpuVec4 {
+        return this.c0 * v.x + this.c1 * v.y + this.c2 * v.z + this.c3 * v.w;
+    }
+
+    /// The product `this * other`, which applies `other` first.
+    fun operator *(other: GpuMat4): GpuMat4 {
+        return GpuMat4.of(this * other.c0, this * other.c1, this * other.c2, this * other.c3);
+    }
+
+    /// True when all sixteen elements are equal.
+    fun operator ==(other: GpuMat4): bool {
+        return this.c0
+            == other.c0 && this.c1 == other.c1 && this.c2 == other.c2 && this.c3 == other.c3;
+    }
+}

@@ -1,0 +1,33 @@
+module system.gpu;
+
+/// A vector of two `int`s, laid out like a GPU `int2`, for pixel coordinates and 2D sizes.
+public struct GpuIVec2 {
+    /// The first component.
+    public x: int;
+
+    /// The second component.
+    public y: int;
+
+    /// Creates the vector `(x, y)`.
+    public static fun of(x: int, y: int): GpuIVec2 {
+        let v = GpuIVec2();
+        v.x = x;
+        v.y = y;
+        return v;
+    }
+
+    /// Adds component by component.
+    fun operator +(other: GpuIVec2): GpuIVec2 {
+        return GpuIVec2.of(this.x + other.x, this.y + other.y);
+    }
+
+    /// Subtracts component by component.
+    fun operator -(other: GpuIVec2): GpuIVec2 {
+        return GpuIVec2.of(this.x - other.x, this.y - other.y);
+    }
+
+    /// True when both components are equal.
+    fun operator ==(other: GpuIVec2): bool {
+        return this.x == other.x && this.y == other.y;
+    }
+}

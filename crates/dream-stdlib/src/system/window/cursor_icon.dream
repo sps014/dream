@@ -1,0 +1,25 @@
+module system.window;
+
+/// A standard cursor shape provided by the platform.
+public enum CursorIcon {
+    /// The normal arrow.
+    Default = 0,
+    /// The text-selection I-beam.
+    Text = 1,
+    /// A crosshair for precise selection.
+    Crosshair = 2,
+    /// The pointing hand used over links and buttons.
+    Pointer = 3,
+    /// A left-right resize arrow.
+    ResizeHorizontal = 4,
+    /// An up-down resize arrow.
+    ResizeVertical = 5,
+    /// A diagonal resize arrow from top-left to bottom-right.
+    ResizeNwse = 6,
+    /// A diagonal resize arrow from top-right to bottom-left.
+    ResizeNesw = 7,
+    /// A four-way arrow for moving things.
+    Move = 8,
+    /// A "not allowed" sign.
+    NotAllowed = 9,
+}

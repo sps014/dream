@@ -149,6 +149,8 @@ impl<'a> Analyzer<'a> {
             // concrete names (e.g. `Option_U`) and emit the wrong calling convention for the
             // caller's monomorphized return type. Concrete instances are analyzed via
             // `instantiated_generics` after `register_generic_function_instance`.
+            self.note_generator_only(def, &method.attributes, method.file_path.as_deref());
+
             if method.generic_parameters.is_some() {
                 let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method);
                 self.type_ctx

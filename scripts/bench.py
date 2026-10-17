@@ -121,7 +121,7 @@ def tool_versions(args) -> dict:
             "DREAM_WASM_OPT", str(Path.home() / ".dream" / "toolchains" / f"binaryen-{version}" / "bin" / "wasm-opt"))))
         out["wasm_opt_sha256"] = bench_gate.digest(optimizer)
         out["wasm_opt_version"] = run([str(optimizer), "--version"]).strip()
-    tools = ROOT / "src/execution/llvm/tools.rs"
+    tools = ROOT / "crates/dream-abi/src/toolchain.rs"
     m = re.search(r'LLVM_VERSION[^"]*"([^"]+)"', tools.read_text()) if tools.exists() else None
     out["llvm"] = m.group(1) if m else "unknown"
     llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{out['llvm']}" / "bin")))
@@ -194,7 +194,7 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
         raise ValueError(f"{arm}: missing compiled artifact {artifact}")
     elapsed = time.monotonic() - started
     if args.diagnostics and args.target == "native":
-        version = re.search(r'LLVM_VERSION[^"\n]*"([^"]+)"', (ROOT / "src/execution/llvm/tools.rs").read_text()).group(1)
+        version = re.search(r'LLVM_VERSION[^"\n]*"([^"]+)"', (ROOT / "crates/dream-abi/src/toolchain.rs").read_text()).group(1)
         llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{version}" / "bin")))
         if (llvm / "bin").is_dir():
             llvm /= "bin"

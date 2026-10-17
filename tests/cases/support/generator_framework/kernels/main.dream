@@ -1,0 +1,6 @@
+import system;
+import shaders;
+
+fun main(): void {
+    System.println(kernel_facts());
+}

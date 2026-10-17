@@ -106,6 +106,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::SemicolonToken);
         } else {
             self.match_token(TokenKind::CurlyOpenBracketToken);
+            let outer_generator_only = std::mem::replace(
+                &mut self.in_generator_only_type,
+                attributes.iter().any(|a| a.name.text == "generator_only"),
+            );
 
             while self.current_token().kind != TokenKind::CurlyCloseBracketToken
                 && self.current_token().kind != TokenKind::EndOfFileToken
@@ -210,6 +214,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.ensure_progress(iter);
             }
 
+            self.in_generator_only_type = outer_generator_only;
             self.match_token(TokenKind::CurlyCloseBracketToken);
         }
 

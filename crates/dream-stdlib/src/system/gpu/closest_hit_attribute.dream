@@ -1,0 +1,9 @@
+module system.gpu;
+
+/// Marks a closest-hit shader, which runs once for the nearest surface a ray hit.
+///
+/// Its first parameter is `ref` to the ray's payload struct, which it fills in; its second
+/// receives the hit's attributes, such as `GpuTriangleHit` for triangle geometry. Use it
+/// in a `GpuHitGroup`.
+@attribute(AttributeTarget.Function)
+public struct ClosestHitAttribute {}

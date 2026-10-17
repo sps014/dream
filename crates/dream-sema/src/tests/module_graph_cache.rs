@@ -323,3 +323,28 @@ fn aliased_imports_prepare_dependency_interfaces_without_file_edges() {
     assert_eq!(before.modules[1].dependency_interfaces.len(), 1);
     assert_ne!(before.modules[1].cache_key(), after.modules[1].cache_key());
 }
+
+#[test]
+fn globals_initialize_after_the_modules_they_import() {
+    let arena = Bump::new();
+    let sources = [
+        ("main.dream", "let total: int = 1;"),
+        ("generated.dream", "let registered: int = 2;"),
+        ("lib.dream", "module lib; public let registry: int = 3;"),
+    ];
+    let inputs = sources
+        .iter()
+        .map(|(path, source)| (path.to_string(), source.to_string(), parse(&arena, source)))
+        .collect();
+    let mut edges = IndexMap::new();
+    edges.insert("main.dream".to_string(), vec!["lib.dream".to_string()]);
+    edges.insert("generated.dream".to_string(), vec!["lib.dream".to_string()]);
+    let graph = ModuleGraph::new(inputs, &edges);
+    let order: Vec<_> = graph
+        .view()
+        .globals
+        .iter()
+        .map(|g| g.name.text.as_str())
+        .collect();
+    assert_eq!(order, ["registry", "total", "registered"]);
+}

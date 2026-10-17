@@ -1,0 +1,68 @@
+module system.window;
+
+/// The mouse as of one `Window.poll`.
+///
+/// Button queries follow the same rules as `KeyboardState`: `is_down` is the level,
+/// `pressed` and `released` are true only in the frame where the button changed.
+public class MouseState {
+    // One byte per MouseButton: bit 1 is down, bit 2 pressed this frame, bit 4 released this frame.
+    buttons: byte[];
+
+    cursor: WindowVector;
+    motion: WindowVector;
+    wheel: WindowVector;
+
+    internal constructor(
+        buttons: byte[],
+        cursor: WindowVector,
+        motion: WindowVector,
+        wheel: WindowVector
+    ) {
+        this.buttons = buttons;
+        this.cursor = cursor;
+        this.motion = motion;
+        this.wheel = wheel;
+    }
+
+    /// The last cursor position in window coordinates. While the cursor mode is
+    /// `CursorMode.Captured` this is a virtual position that keeps moving without
+    /// bounds; use `delta` for camera controls.
+    public get position(): WindowVector {
+        return this.cursor;
+    }
+
+    /// How far the cursor moved during this frame, in window coordinates. The first
+    /// movement after the window opens reports no motion.
+    public get delta(): WindowVector {
+        return this.motion;
+    }
+
+    /// The total scroll during this frame. One wheel notch is `1.0`; positive `y`
+    /// scrolls up and positive `x` scrolls right.
+    public get scroll(): WindowVector {
+        return this.wheel;
+    }
+
+    /// True while `button` is held down.
+    public fun is_down(button: MouseButton): bool {
+        return this.has(button, 1);
+    }
+
+    /// True when `button` went down during this frame.
+    public fun pressed(button: MouseButton): bool {
+        return this.has(button, 2);
+    }
+
+    /// True when `button` was released during this frame.
+    public fun released(button: MouseButton): bool {
+        return this.has(button, 4);
+    }
+
+    fun has(button: MouseButton, mask: int): bool {
+        let index: int = button;
+        if index < 0 || index >= this.buttons.length {
+            return false;
+        }
+        return ((int)this.buttons[index] & mask) != 0;
+    }
+}

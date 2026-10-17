@@ -58,6 +58,30 @@ Top-level functions carrying `@A` (on the function or a parameter).
 public fun functions_with<A>(): List<GenFunction>
 ```
 
+## `modules_with`
+
+User modules whose `module` declaration carries `@A`, in source order.
+
+```dream
+public fun modules_with<A>(): List<GenModule>
+```
+
+## `module_of`
+
+The trigger-carrying module that declares `decl`, so module-level settings can be merged with the declaration's own attributes. `None` when its module carries no trigger.
+
+```dream
+public fun module_of(borrow decl: GenDecl): Option<GenModule>
+```
+
+## `module_of`
+
+The trigger-carrying module that declares function or method `f`, or `None` when its module carries no trigger attribute.
+
+```dream
+public fun module_of(borrow f: GenFunction): Option<GenModule>
+```
+
 ## `decls`
 
 Every declaration selected by this generator's `@on_attribute` triggers.
@@ -168,28 +192,4 @@ Every type in the program, by name and kind.
 
 ```dream
 public fun type_index(): List<GenIndexEntry>
-```
-
-## `find_type`
-
-The index entry named `name`, if the program declares such a type.
-
-```dream
-public fun find_type(borrow name: string): Option<GenIndexEntry>
-```
-
-## `syntax_blocks`
-
-`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
-
-```dream
-public fun syntax_blocks(): List<GenSyntaxBlock>
-```
-
-## `call_sites`
-
-Calls of the functions named in this generator's `@on_call(...)`.
-
-```dream
-public fun call_sites(): List<GenCallSite>
 ```

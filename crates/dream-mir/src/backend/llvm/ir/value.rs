@@ -58,6 +58,11 @@ impl Value {
         Self::new(Ty::F32, Repr::Float(v as f64))
     }
 
+    /// A `half` constant from its IEEE binary16 bits; every binary16 value is exact as a double.
+    pub fn f16(bits: u16) -> Self {
+        Self::new(Ty::F16, Repr::Float(half::f16::from_bits(bits).to_f64()))
+    }
+
     pub fn null() -> Self {
         Self::new(Ty::Ptr, Repr::Null)
     }
@@ -65,7 +70,7 @@ impl Value {
     pub fn zero(ty: Ty) -> Self {
         let repr = match &ty {
             Ty::Int(_) => Repr::Int(0),
-            Ty::F32 | Ty::F64 => Repr::Float(0.0),
+            Ty::F16 | Ty::F32 | Ty::F64 => Repr::Float(0.0),
             Ty::Ptr => Repr::Null,
             _ => Repr::Zero,
         };

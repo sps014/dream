@@ -1,0 +1,41 @@
+module system.gpu;
+
+// Every shader bundle the generator embedded, registered by generated module globals before
+// `main` runs so `GpuDevice.create` knows which backends this build can drive.
+let gpu_shader_libraries: List<GpuShaderLibrary> = List<GpuShaderLibrary>();
+
+// One generated shader bundle: the compiled code of one module's shaders for every backend
+// in `backends`. Devices load it lazily, once each.
+internal class GpuShaderLibrary {
+    internal name: string;
+    internal bundle: byte[];
+    internal backends: List<GpuBackend>;
+
+    constructor(name: string, bundle: byte[], backends: GpuBackend[]) {
+        this.name = name;
+        this.bundle = bundle;
+        this.backends = List<GpuBackend>.from_array(backends);
+    }
+
+    internal static fun register(
+        name: string,
+        bundle: byte[],
+        backends: GpuBackend[]
+    ): GpuShaderLibrary {
+        let library = GpuShaderLibrary(name, bundle, backends);
+        gpu_shader_libraries.push(library);
+        return library;
+    }
+
+    // Bit `1 << backend` for every backend some registered bundle carries code for.
+    internal static fun compiled_mask(): int {
+        let mask = 0;
+        for (let library in gpu_shader_libraries) {
+            for (let backend in library.backends) {
+                let bit: int = backend;
+                mask = mask | (1 << bit);
+            }
+        }
+        return mask;
+    }
+}

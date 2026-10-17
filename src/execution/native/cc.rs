@@ -60,12 +60,7 @@ pub fn resolve_existing_target_cc(
     if let Some(p) = config.program(config.cc.as_ref()) {
         return Ok(classify_program(p));
     }
-    if let Some(p) = config
-        .zig
-        .clone()
-        .filter(|p| p.is_file())
-        .or_else(|| find_toolchain_zig(config))
-    {
+    if let Some(p) = pinned_zig(config) {
         return Ok(Cc::Zig(p));
     }
     if spec.can_link_on_host()
@@ -82,11 +77,7 @@ pub fn resolve_target_cc(config: &ToolchainConfig, spec: &TargetSpec) -> Result<
     if spec.can_link_on_host() || config.cc.is_some() {
         return resolve_cc(config);
     }
-    config
-        .zig
-        .clone()
-        .filter(|p| p.is_file())
-        .or_else(|| find_toolchain_zig(config))
+    pinned_zig(config)
         .map(Cc::Zig)
         .map(Ok)
         .unwrap_or_else(|| auto_install_zig(config).map(Cc::Zig))
@@ -96,12 +87,7 @@ fn resolve_uncached(config: &ToolchainConfig) -> Result<Cc, String> {
     if let Some(p) = config.program(config.cc.as_ref()) {
         return Ok(classify_program(p));
     }
-    if let Some(p) = config.zig.clone()
-        && p.is_file()
-    {
-        return Ok(Cc::Zig(p));
-    }
-    if let Some(zig) = find_toolchain_zig(config) {
+    if let Some(zig) = pinned_zig(config) {
         return Ok(Cc::Zig(zig));
     }
     if let Some(p) = config.find_on_path("cc") {
@@ -146,7 +132,7 @@ fn auto_install_zig(config: &ToolchainConfig) -> Result<PathBuf, String> {
             "`dreamer toolchain install cc` failed; {MISSING_CC}"
         ));
     }
-    find_toolchain_zig(config).ok_or_else(|| MISSING_CC.to_string())
+    pinned_zig(config).ok_or_else(|| MISSING_CC.to_string())
 }
 
 /// A C compiler driver that links with the platform's own linker, for binaries the Zig toolchain
@@ -172,43 +158,17 @@ fn classify_program(p: PathBuf) -> Cc {
     }
 }
 
-fn find_toolchain_zig(config: &ToolchainConfig) -> Option<PathBuf> {
-    config.toolchains.iter().find_map(|root| zig_in_dir(root))
+/// `DREAM_ZIG`, else the pinned Zig under a toolchains root.
+fn pinned_zig(config: &ToolchainConfig) -> Option<PathBuf> {
+    let zig = dream_abi::toolchain::pinned_tool("zig")?;
+    config.locate_tool(zig).ok().map(|tool| tool.primary())
 }
 
 pub(crate) fn installed_zig(config: &ToolchainConfig) -> Option<PathBuf> {
     config
         .program(config.cc.as_ref())
         .filter(|path| matches!(classify_program(path.clone()), Cc::Zig(_)))
-        .or_else(|| {
-            config
-                .zig
-                .clone()
-                .filter(|p| p.is_file())
-                .or_else(|| find_toolchain_zig(config))
-        })
-}
-
-fn zig_in_dir(toolchains: &Path) -> Option<PathBuf> {
-    let name = if cfg!(windows) { "zig.exe" } else { "zig" };
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(rd) = std::fs::read_dir(toolchains) {
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir()
-                && p.file_name()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|n| n.starts_with("zig-"))
-            {
-                dirs.push(p);
-            }
-        }
-    }
-    dirs.sort();
-    dirs.into_iter()
-        .rev()
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
+        .or_else(|| pinned_zig(config))
 }
 
 #[cfg(test)]

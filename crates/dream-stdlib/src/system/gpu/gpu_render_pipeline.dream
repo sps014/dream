@@ -1,0 +1,18 @@
+module system.gpu;
+
+/// A vertex and fragment shader pair plus fixed-function settings, ready to draw with.
+/// Create one with `GpuDevice.render_pipeline` and select it with
+/// `GpuRenderPass.set_pipeline` or `GpuFrame.draw`.
+public class GpuRenderPipeline {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+
+    internal constructor(device_id: int, handle: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+}

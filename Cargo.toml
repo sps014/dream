@@ -78,7 +78,7 @@ native = ["dep:tempfile", "dep:rayon", "dep:depfile", "dep:image", "dep:object",
 libc = { version = "0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"], optional = true }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Isolation", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Threading"], optional = true }
 
 [dev-dependencies]
 rcgen = "0.14"
@@ -112,7 +112,7 @@ edition = "2024"
 
 [workspace]
 default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-unicode", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-cli",
-    "crates/dream-host-data", "crates/dream-host-io"]
+    "crates/dream-host-data", "crates/dream-host-io", "crates/dream-host-window", "crates/dream-host-gpu"]
 members = [
     ".",
     "crates/dream-text",
@@ -135,6 +135,8 @@ members = [
     "crates/dream-host-cli",
     "crates/dream-host-data",
     "crates/dream-host-io",
+    "crates/dream-host-window",
+    "crates/dream-host-gpu",
     "crates/dream-host-abi",
     "tooling/dream-lsp",
     "tooling/dreamer",

@@ -70,7 +70,7 @@ fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
 fn is_float(interner: &TypeInterner, ty: TypeId) -> bool {
     matches!(
         interner.kind(ty),
-        TyKind::Prim(PrimTy::Float | PrimTy::Double)
+        TyKind::Prim(PrimTy::Float16 | PrimTy::Float | PrimTy::Double)
     )
 }
 

@@ -1,0 +1,23 @@
+module system.gpu;
+
+/// The pipeline stage a shader runs in, as given by its attribute.
+public enum GpuStage {
+    /// A `@compute` shader.
+    Compute = 0,
+    /// A `@vertex` shader.
+    Vertex = 1,
+    /// A `@fragment` shader.
+    Fragment = 2,
+    /// A `@ray_generation` shader.
+    RayGeneration = 3,
+    /// A `@closest_hit` shader.
+    ClosestHit = 4,
+    /// An `@any_hit` shader.
+    AnyHit = 5,
+    /// A `@miss` shader.
+    Miss = 6,
+    /// An `@intersection` shader.
+    Intersection = 7,
+    /// A `@callable` shader.
+    Callable = 8,
+}

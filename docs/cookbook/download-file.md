@@ -17,12 +17,14 @@ Create `download.dream` and add the following three blocks in order.
 ```dream
 import system;
 import system.cli;
+import system.encoding;
 import system.io;
 import system.net;
 ```
 
-`system.cli` handles arguments, `system.net` handles HTTP, and `system.io` provides
-the file and stream APIs.
+`system.cli` handles arguments, `system.net` handles HTTP, `system.io` provides the
+file and stream APIs, and `system.encoding` turns error messages into bytes for
+standard error.
 
 ## 2. Download and close resources
 
@@ -96,9 +98,6 @@ Help and version requests return successfully without starting a download. Argum
 errors use exit status 2; transfer failures use 1; success uses 0.
 
 ```dream
-import system.io;
-import system.encoding;
-
 async fun main(): int {
     let command = Command("download")
         .version("1.0.0")

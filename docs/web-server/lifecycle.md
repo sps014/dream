@@ -25,7 +25,7 @@ async fun main(): void {
     app.include_router(Routes.router()).unwrap();
     app.lifespan(
         async (app: WebApp) => {
-            app.state.set("service", "ready");
+            app.state["service"] = "ready";
             return Result.Ok(true);
         },
         async (app: WebApp) => {

@@ -42,6 +42,8 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [OwnedAttribute](core-owned-attribute.md)
 - [ParseError](core-parse-error.md)
 - [Promise](core-promise.md)
+- [Range](core-range.md)
+- [RangeIterator](core-range-iterator.md)
 - [RawPtr](core-raw-ptr.md)
 - [ReadOnlySpan](core-read-only-span.md)
 - [RepeatableAttribute](core-repeatable-attribute.md)

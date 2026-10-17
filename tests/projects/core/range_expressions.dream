@@ -1,0 +1,142 @@
+import system.testing;
+import system.collections;
+
+fun range_bound(ref calls: int, value: int): int {
+    calls = calls * 10 + value;
+    return value;
+}
+
+@test
+fun range_expressions(): void {
+    let sum = 0;
+    let n = 5;
+    for let i in 0 .. n {
+        sum = sum + i;
+    }
+    Assert.eq(sum, 10);
+
+    sum = 0;
+    for (let i in -1 .. n - 1) {
+        sum = sum + i;
+    }
+    Assert.eq(sum, 5);
+
+    let visits = 0;
+    for let i in 5 .. 5 {
+        visits = visits + 1;
+    }
+    Assert.eq(visits, 0);
+
+    let reverse = 10 .. 5;
+    Assert.eq(reverse.length, 5);
+    Assert.is_true(reverse.contains(10));
+    Assert.is_true(reverse.contains(6));
+    Assert.is_false(reverse.contains(5));
+    Assert.is_false(reverse.contains(11));
+    sum = 0;
+    for let i in reverse {
+        sum = sum * 10 + (i - 5);
+    }
+    Assert.eq(sum, 54321);
+
+    let ascending = (0 .. 5).to_list();
+    let descending = (5 .. 0).to_list();
+    Assert.eq(ascending.length, 5);
+    Assert.eq(descending.length, 5);
+    for let i in 0 .. 5 {
+        Assert.eq(ascending[i], i);
+        Assert.eq(descending[i], 5 - i);
+    }
+
+    sum = 0;
+    for let i in 1 .. -2 {
+        sum = sum + i;
+    }
+    Assert.eq(sum, 0);
+    Assert.eq((0 .. -3).length, 3);
+
+    sum = 0;
+    for let i in 8 .. 0 {
+        if i == 7 {
+            continue;
+        }
+        if i == 4 {
+            break;
+        }
+        sum = sum + i;
+    }
+    Assert.eq(sum, 19);
+    sum = 0;
+    for let i in 0 .. 8 {
+        if i == 1 {
+            continue;
+        }
+        if i == 4 {
+            break;
+        }
+        sum = sum + i;
+    }
+    Assert.eq(sum, 5);
+
+    sum = 0;
+    for let i in 0 .. 3 {
+        for let j in 3 .. 0 {
+            sum = sum + i * j;
+        }
+    }
+    Assert.eq(sum, 18);
+
+    let stored = 2 .. 5;
+    Assert.eq(stored.start, 2);
+    Assert.eq(stored.end, 5);
+    Assert.eq(stored.length, 3);
+    Assert.is_false(stored.is_empty);
+    Assert.is_true(stored.contains(2));
+    Assert.is_true(stored.contains(4));
+    Assert.is_false(stored.contains(5));
+    Assert.is_false(stored.contains(1));
+    Assert.is_true((5 .. 5).is_empty);
+    Assert.is_false((5 .. 5).contains(5));
+    sum = 0;
+    for let value in stored {
+        sum = sum + value;
+    }
+    for let value in stored {
+        sum = sum + value;
+    }
+    Assert.eq(sum, 18);
+
+    let calls = 0;
+    sum = 0;
+    for let value in range_bound(ref calls, 1) .. range_bound(ref calls, 4) {
+        sum = sum + value;
+    }
+    Assert.eq(calls, 14);
+    Assert.eq(sum, 6);
+
+    let mutable = 0 .. 3;
+    visits = 0;
+    for let value in mutable {
+        mutable.end = 20;
+        visits = visits + 1;
+    }
+    Assert.eq(visits, 3);
+
+    let cursor = (3 .. 0).iterator();
+    Assert.eq(cursor.next().unwrap(), 3);
+    Assert.eq(cursor.next().unwrap(), 2);
+    Assert.eq(cursor.next().unwrap(), 1);
+    Assert.is_true(cursor.next().is_none());
+    Assert.is_true(cursor.next().is_none());
+
+    visits = 0;
+    for let value in 2147483646 .. 2147483647 {
+        Assert.eq(value, 2147483646);
+        visits = visits + 1;
+    }
+    for let value in -2147483647 .. (-2147483647 - 1) {
+        Assert.eq(value, -2147483647);
+        visits = visits + 1;
+    }
+    Assert.eq(visits, 2);
+}

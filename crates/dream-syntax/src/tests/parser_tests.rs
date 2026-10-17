@@ -2222,3 +2222,21 @@ fn character_literals_can_be_cast_to_integers() {
         StatementNode::Return(Some(ExpressionNode::Cast(..)))
     ));
 }
+
+#[test]
+fn exclusive_range_expressions() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun main(n: int): void { let r = 0..5; let s = -1..n-1; for let i in 0..n {} for (let j in -1..n-1) {} switch (n) { 0 .. 5 => {}, _ => {} } }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors(), "{diagnostics:?}");
+    let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, op, right), _, _) =
+        &program.functions[0].body[1]
+    else {
+        panic!("expected a range binding");
+    };
+    assert_eq!(op.kind, TokenKind::DotDotToken);
+    assert!(matches!(left, ExpressionNode::Unary(..)));
+    assert!(matches!(right, ExpressionNode::Binary(_, op, _) if op.kind == TokenKind::MinusToken));
+}

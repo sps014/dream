@@ -205,4 +205,4 @@ Higher rows bind tighter; use parentheses when in doubt.
 | | `<`, `<=`, `>`, `>=`, `==`, `!=`, `is` |
 | | `&&` |
 | | `\|\|` |
-| lowest | `??`, then `? :` |
+| lowest | `??`, then `..`, then `? :` |

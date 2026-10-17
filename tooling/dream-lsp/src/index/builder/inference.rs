@@ -159,6 +159,11 @@ impl Builder {
             }
             ExpressionNode::IsExpression(..) => Some(self.type_ctx.borrow().interner.bool()),
             ExpressionNode::Binary(left, op, right) => match op.kind {
+                TokenKind::DotDotToken => {
+                    let mut ctx = self.type_ctx.borrow_mut();
+                    let def = ctx.resolve(dream_types::DefKind::Struct, "Range")?;
+                    Some(ctx.instantiate(def, vec![]))
+                }
                 TokenKind::EqualEqualToken
                 | TokenKind::NotEqualToken
                 | TokenKind::GreaterThanToken

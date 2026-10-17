@@ -1,0 +1,12 @@
+module system.collections;
+
+extend Range {
+    /// Copies the range into a new list in iteration order. Panics if its length exceeds int.
+    public fun to_list(): List<int> {
+        let result = List<int>(this.length);
+        for let value in this {
+            result.push(value);
+        }
+        return result;
+    }
+}

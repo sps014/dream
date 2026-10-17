@@ -6,6 +6,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/collections/range_list.dream",
+            include_str!("../system/collections/range_list.dream"),
+        ),
+        (
             "<std>/system/collections/capacity_error.dream",
             include_str!("../system/collections/capacity_error.dream"),
         ),

@@ -1,0 +1,25 @@
+module system.core;
+
+/// A cursor over an exclusive integer range, moving toward its end.
+public class RangeIterator: Iterator<int> {
+    current: int;
+    end: int;
+    step: int;
+
+    /// Starts a cursor at `start`, stopping before `end` in either direction.
+    internal constructor(start: int, end: int) {
+        this.current = start;
+        this.end = end;
+        this.step = start <= end ? 1 : -1;
+    }
+
+    /// Returns the next integer, or `None` after reaching the excluded end.
+    public fun next(): Option<int> {
+        if this.current == this.end {
+            return Option.None;
+        }
+        let value = this.current;
+        this.current = this.current + this.step;
+        return Option.Some(value);
+    }
+}

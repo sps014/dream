@@ -297,3 +297,19 @@ class MyClass {
     assert_eq!(fun_token.leading_trivia.len(), 1);
     assert_eq!(fun_token.leading_trivia[0].text, "// Method comment");
 }
+
+#[test]
+fn exclusive_range_numbers() {
+    let mut lexer = Lexer::new("0..5 0.5..2 -1..n-1".to_string());
+    let mut diagnostics = DiagnosticBag::new(None);
+    let tokens = lexer.lex_all(&mut diagnostics);
+    assert!(!diagnostics.has_errors());
+    let texts: Vec<_> = tokens.iter().map(|t| t.text.as_str()).collect();
+    assert_eq!(
+        &texts[..12],
+        &[
+            "0", "..", "5", "0.5", "..", "2", "-", "1", "..", "n", "-", "1"
+        ]
+    );
+    assert_eq!(tokens[1].kind, TokenKind::DotDotToken);
+}

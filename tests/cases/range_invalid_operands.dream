@@ -1,0 +1,7 @@
+fun main(): void {
+    let fractional = 0.5..2;
+    let text = "a"..2;
+    let wide: long = 1L;
+    let wrong_width = wide..2;
+    let chained = 0..2..3;
+}

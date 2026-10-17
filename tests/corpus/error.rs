@@ -164,6 +164,7 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error("borrow_span_mutation", "error:", true),
+    Case::error("range_invalid_operands", "'..' requires int operands", true),
     Case::error(
         "buffer_realloc_unsafe_violation",
         "call to '@unsafe' function 'Buffer.realloc' is only allowed from another '@unsafe' function or method",

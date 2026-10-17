@@ -19,3 +19,5 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [SortedMap](collections-sorted-map.md)
 - [SortedMapIterator](collections-sorted-map-iterator.md)
 - [Stack](collections-stack.md)
+
+- [Range collection conversion](collections-range-list.md)

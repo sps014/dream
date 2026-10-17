@@ -6,6 +6,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/core/range.dream",
+            include_str!("../system/core/range.dream"),
+        ),
+        (
+            "<std>/system/core/range_iterator.dream",
+            include_str!("../system/core/range_iterator.dream"),
+        ),
+        (
             "<std>/system/core/char_span.dream",
             include_str!("../system/core/char_span.dream"),
         ),

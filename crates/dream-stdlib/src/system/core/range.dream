@@ -1,0 +1,46 @@
+module system.core;
+
+/// An exclusive integer range that counts toward its end, ascending or descending.
+public struct Range {
+    /// The first value, included unless the range is empty.
+    public start: int;
+
+    /// The stopping value, always excluded.
+    public end: int;
+
+    /// Creates a range from `start` toward the excluded `end`, with unit steps.
+    public constructor(start: int, end: int) {
+        this.start = start;
+        this.end = end;
+    }
+
+    /// The number of elements. Panics if the distance exceeds the maximum int (2147483647).
+    public get length(): int {
+        let distance = (long)this.end - (long)this.start;
+        if distance < 0 {
+            distance = -distance;
+        }
+        if distance > 2147483647L {
+            System.panic("Range length exceeds int maximum");
+        }
+        return (int)distance;
+    }
+
+    /// True when the start and end are equal.
+    public get is_empty(): bool {
+        return this.start == this.end;
+    }
+
+    /// True when `value` occurs before the excluded end in either direction.
+    public fun contains(value: int): bool {
+        if this.start < this.end {
+            return this.start <= value && value < this.end;
+        }
+        return this.end < value && value <= this.start;
+    }
+
+    /// Creates a fresh cursor that visits the range in unit steps toward its end.
+    public fun iterator(): RangeIterator {
+        return RangeIterator(this.start, this.end);
+    }
+}

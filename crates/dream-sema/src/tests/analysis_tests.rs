@@ -2482,3 +2482,15 @@ fn storage_type_predicate_cannot_be_forged() {
             .any(|d| d.message.contains("reserved for internal stdlib storage"))
     );
 }
+
+#[test]
+fn range_operator_rejects_a_user_range_type() {
+    let diagnostics = analyze_code(
+        "struct Range { public start: int; public end: int; } fun main(): void { let r = 0..5; }",
+    );
+    assert!(diagnostics.diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .message
+            .contains("'..' requires the standard library Range type")
+    }));
+}

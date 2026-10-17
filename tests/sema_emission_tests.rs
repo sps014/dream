@@ -2083,3 +2083,45 @@ fn test_js_to_value_struct_fills_in_place() {
         c
     );
 }
+
+#[test]
+fn range_foreach_emits_counted_loop_without_allocation() {
+    use dream::driver::compiler::Compiler;
+    use dream_mir::backend::Target;
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("range.dream");
+    let output = dir.path().join("range.ll");
+    std::fs::write(
+        &source,
+        "module range_emission; @export fun range_sum(start: int, end: int): int { let sum = 0; for let i in start..end { sum = sum + i; } return sum; }",
+    )
+    .unwrap();
+    Compiler::new(Target::native())
+        .with_release(true)
+        .compile(&source.display().to_string(), output.to_str().unwrap())
+        .unwrap();
+    let ir = std::fs::read_to_string(output).unwrap();
+    let wrapper = ir_func_body(&ir, "range_sum");
+    let target = wrapper
+        .lines()
+        .find(|line| line.contains("call i32 @"))
+        .and_then(|line| line.split_once('@'))
+        .and_then(|(_, call)| call.split('(').next())
+        .expect("export wrapper should call the range function");
+    let body = ir_func_body(&ir, target);
+    assert!(!body.is_empty(), "missing range_sum: {ir}");
+    assert!(has_back_edge(body), "missing counted loop: {body}");
+    for forbidden in [
+        "RangeIterator",
+        "dream_malloc",
+        "dream_alloc",
+        "dream_retain",
+        "dream_release",
+    ] {
+        assert!(
+            !body.contains(forbidden),
+            "range loop contains {forbidden}: {body}"
+        );
+    }
+}

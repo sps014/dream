@@ -2,6 +2,11 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::trap(
+        "range_length_overflow_trap",
+        "Range length exceeds int maximum",
+        true,
+    ),
+    Case::trap(
         "assert_eq_string_failure",
         "assert_eq failed: expected \"expected\" but got \"actual\"",
         true,

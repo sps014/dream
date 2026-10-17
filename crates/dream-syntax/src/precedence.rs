@@ -34,6 +34,7 @@ impl TokenKind {
             TokenKind::AmpersandAmpersandToken => 20,
             TokenKind::PipePipeToken => 10,
             TokenKind::QuestionQuestionToken => 8,
+            TokenKind::DotDotToken => 5,
 
             _ => 0,
         }

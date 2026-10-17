@@ -329,6 +329,18 @@ impl<'a> Analyzer<'a> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
         use dream_hir::{BinOp, HExpr, HExprKind, HStmt};
 
+        let iterable_id = self.type_ctx.lower(iterable_type);
+        if self.is_stdlib_range(iterable_id) {
+            return self.analyze_foreach_range(
+                element,
+                iterable_type,
+                iter_hir,
+                body,
+                ctx,
+                diagnostics,
+            );
+        }
+
         if let Some(acc) = self.stdlib_indexed_accessors(iterable_type, diagnostics) {
             return self.analyze_foreach_indexed(element, iter_hir, acc, body, ctx, diagnostics);
         }

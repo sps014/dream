@@ -39,6 +39,9 @@ impl<'a> Analyzer<'a> {
         // Don't leak an outer expected type (e.g. `double` from an assignment) into operands —
         // that would retarget `48` in `(int)c - 48` when the sum is later cast/added to double.
         let saved_expected = self.current_expected_type.take();
+        if opr.kind == TokenKind::DotDotToken {
+            self.current_expected_type = Some(Type::Integer(opr.clone()));
+        }
         let left_value =
             self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
         let left_hir = self.hir_take();
@@ -58,7 +61,11 @@ impl<'a> Analyzer<'a> {
         }
         // An unsuffixed integer literal on the right takes the left operand's integer type, so the
         // parser's `x++` / `x += 1` desugaring (`x = x + 1`) type-checks for `byte`/`uint`/`ulong`.
-        if matches!(right, ExpressionNode::Literal(Type::Integer(_))) && left_value.is_integer() {
+        if opr.kind == TokenKind::DotDotToken {
+            self.current_expected_type = Some(Type::Integer(opr.clone()));
+        } else if matches!(right, ExpressionNode::Literal(Type::Integer(_)))
+            && left_value.is_integer()
+        {
             self.current_expected_type = Some(left_value.clone());
         }
         let right_value =
@@ -70,6 +77,30 @@ impl<'a> Analyzer<'a> {
 
         if left_value.is_unknown() || right_value.is_unknown() {
             return Ok(Type::Unknown);
+        }
+
+        if opr.kind == TokenKind::DotDotToken {
+            let int = self.type_ctx.interner.int();
+            if self.type_ctx.lower(&left_value) != int || self.type_ctx.lower(&right_value) != int {
+                diagnostics
+                    .report_error("'..' requires int operands".to_string(), Some(opr.position));
+                return Ok(Type::Unknown);
+            }
+            let Some(range) = self
+                .type_ctx
+                .resolved_type("Range")
+                .filter(|&id| self.is_stdlib_range(id))
+            else {
+                diagnostics.report_error(
+                    "'..' requires the standard library Range type".to_string(),
+                    Some(opr.position),
+                );
+                return Ok(Type::Unknown);
+            };
+            let ty = self.type_ctx.syntax_type(range);
+            let ctor = self.unique_method_def(range, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
+            self.hir_set_new("Range", ctor, vec![left_hir, right_hir], &ty);
+            return Ok(ty);
         }
 
         // `a ?? b`: pure sugar for `a.unwrap_or(b)` on an `Option<T>` left operand — the same

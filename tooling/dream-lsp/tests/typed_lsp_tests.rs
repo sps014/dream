@@ -195,3 +195,26 @@ fn weak_bindings_show_their_public_optional_type() {
     assert_eq!(variable_type(source, "observer"), "Option<Engine>");
     assert_eq!(variable_type(source, "annotated"), "Option<Engine>");
 }
+
+#[test]
+fn range_expression_infers_range_and_its_members() {
+    let source =
+        "fun main(): void { let r = 0..5; let first = r.start; let inside = r.contains(2); }";
+    let index = Index::build(None, source);
+    for (name, expected) in [("r", "Range"), ("first", "int"), ("inside", "bool")] {
+        let ty = index
+            .decls
+            .iter()
+            .find(|decl| decl.kind == SymKind::Variable && decl.name == name)
+            .and_then(|decl| decl.ty.as_deref());
+        assert_eq!(ty, Some(expected), "inferred type of {name}");
+    }
+    let offset = source.find("r.start").unwrap() + 2;
+    let completions = index.completions(None, source, offset);
+    for member in ["start", "end", "length", "is_empty", "contains", "iterator"] {
+        assert!(
+            completions.iter().any(|item| item.0 == member),
+            "missing {member}"
+        );
+    }
+}

@@ -3701,6 +3701,19 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/collections/range_list.dream",
+    "package": "system.collections",
+    "page": "reference/api/collections-range-list.md",
+    "declarations": [
+      {
+        "signature": "public fun to_list(): List<int>",
+        "description": "Copies the range into a new list in iteration order. Panics if its length exceeds int.",
+        "line": 5,
+        "page": "reference/api/collections-range-list.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/collections/seq.dream",
     "package": "system.collections",
     "page": "reference/api/collections-seq.md",
@@ -5929,6 +5942,80 @@
         "description": "Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never executes. Takes the future as `object` (futures are heap refs) like `cancel`.",
         "line": 58,
         "page": "reference/api/core-promise.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/core/range.dream",
+    "package": "system.core",
+    "page": "reference/api/core-range.md",
+    "declarations": [
+      {
+        "signature": "public struct Range",
+        "description": "An exclusive integer range that counts toward its end, ascending or descending.",
+        "line": 4,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public start: int",
+        "description": "The first value, included unless the range is empty.",
+        "line": 6,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public end: int",
+        "description": "The stopping value, always excluded.",
+        "line": 9,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public constructor(start: int, end: int)",
+        "description": "Creates a range from `start` toward the excluded `end`, with unit steps.",
+        "line": 12,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public get length(): int",
+        "description": "The number of elements. Panics if the distance exceeds the maximum int (2147483647).",
+        "line": 18,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public get is_empty(): bool",
+        "description": "True when the start and end are equal.",
+        "line": 30,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public fun contains(value: int): bool",
+        "description": "True when `value` occurs before the excluded end in either direction.",
+        "line": 35,
+        "page": "reference/api/core-range.md"
+      },
+      {
+        "signature": "public fun iterator(): RangeIterator",
+        "description": "Creates a fresh cursor that visits the range in unit steps toward its end.",
+        "line": 43,
+        "page": "reference/api/core-range.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/core/range_iterator.dream",
+    "package": "system.core",
+    "page": "reference/api/core-range-iterator.md",
+    "declarations": [
+      {
+        "signature": "public class RangeIterator: Iterator<int>",
+        "description": "A cursor over an exclusive integer range, moving toward its end.",
+        "line": 4,
+        "page": "reference/api/core-range-iterator.md"
+      },
+      {
+        "signature": "public fun next(): Option<int>",
+        "description": "Returns the next integer, or `None` after reaching the excluded end.",
+        "line": 17,
+        "page": "reference/api/core-range-iterator.md"
       }
     ]
   },

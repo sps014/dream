@@ -55,6 +55,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("await_in_subexpr", "async_tasks", true),
     Case::project("bitwise_operators", "core", true),
     Case::project("bitwise_ops", "core", true),
+    Case::project("range_expressions", "core", true),
     Case::project("bool_parse", "core", true),
     Case::project("borrow_after_last_use", "ownership", true),
     Case::project("borrow_arg_rebind_same_line", "ownership", true),

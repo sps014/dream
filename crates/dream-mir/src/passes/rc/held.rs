@@ -488,6 +488,7 @@ fn terminator_hands_on(t: &Terminator) -> Option<u32> {
 /// `f` without RC ops on `locals`, so their liveness is that of their real reads.
 fn without_rc_on(f: &MirFunction, locals: &IndexSet<u32>) -> MirFunction {
     let mut g = MirFunction {
+        borrowed_result: f.borrowed_result,
         def: f.def,
         instance: f.instance.clone(),
         name: String::new(),

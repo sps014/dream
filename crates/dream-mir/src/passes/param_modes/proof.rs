@@ -1,3 +1,4 @@
+use crate::analysis::effects::{ModRef, ModRefTable, strong_children};
 use crate::{Callee, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
@@ -109,12 +110,16 @@ fn permitted(stmt: &Statement, f: &MirFunction, i: &TypeInterner, layouts: &Layo
             let store = match place {
                 Place::Local(_) => true,
                 Place::Index { base, .. } => {
-                    matches!(i.kind(f.local_ty(*base)), TyKind::Array(elem) if scalar(*elem, i))
+                    matches!(i.kind(f.local_ty(*base)), TyKind::Array(elem) if transparent(*elem, i, layouts, &mut IndexSet::new()))
                 }
                 Place::Field { base, field } => layouts
                     .get(f.local_ty(*base))
                     .and_then(|l| l.fields.get(*field))
-                    .is_some_and(|field| scalar(field.ty, i)),
+                    .is_some_and(|field| {
+                        !field.is_weak
+                            && !field.is_unowned
+                            && transparent(field.ty, i, layouts, &mut IndexSet::new())
+                    }),
                 _ => false,
             };
             store
@@ -145,8 +150,33 @@ fn permitted(stmt: &Statement, f: &MirFunction, i: &TypeInterner, layouts: &Layo
     }
 }
 
+fn may_reach(
+    ty: TypeId,
+    target: TypeId,
+    i: &TypeInterner,
+    layouts: &LayoutTable,
+    seen: &mut IndexSet<TypeId>,
+) -> bool {
+    if ty == target {
+        return true;
+    }
+    if scalar(ty, i) || !seen.insert(ty) {
+        return false;
+    }
+    strong_children(ty, i, layouts).is_none_or(|children| {
+        children
+            .into_iter()
+            .any(|child| may_reach(child, target, i, layouts, seen))
+    })
+}
+
 impl Proof {
-    pub(super) fn of(f: &MirFunction, i: &TypeInterner, layouts: &LayoutTable) -> Self {
+    pub(super) fn of(
+        f: &MirFunction,
+        i: &TypeInterner,
+        layouts: &LayoutTable,
+        effects: &ModRefTable,
+    ) -> Self {
         let safe = !f.is_async
             && f.locals
                 .iter()
@@ -196,6 +226,34 @@ impl Proof {
                 break;
             }
         }
+        // Releasing an overwritten occupant can invalidate an argument of its type, or any
+        // reference reachable through it. Missing summaries keep the owning ABI.
+        let summary = effects.call_def(f.def, &f.instance);
+        let released: Option<Vec<TypeId>> = match &summary {
+            ModRef::Top => None,
+            ModRef::Known(known) if known.any_slot => None,
+            ModRef::Known(known) => {
+                let mut types: Vec<_> = known.slots.iter().copied().collect();
+                for &(ty, field) in &known.fields {
+                    if let Some(field) = layouts.get(ty).and_then(|l| l.fields.get(field as usize))
+                    {
+                        types.push(field.ty);
+                    } else {
+                        types.extend(f.params.iter().map(|p| f.local_ty(*p)));
+                    }
+                }
+                Some(types)
+            }
+        };
+        for (index, p) in f.params.iter().enumerate() {
+            if released.as_ref().is_none_or(|types| {
+                types
+                    .iter()
+                    .any(|&ty| may_reach(ty, f.local_ty(*p), i, layouts, &mut IndexSet::new()))
+            }) {
+                parameters[index] = false;
+            }
+        }
         let mut calls = Vec::new();
         for block in &f.blocks {
             for stmt in &block.stmts {
@@ -204,6 +262,11 @@ impl Proof {
                 {
                     // Borrowed parameters have no owning slot for a replacement allocation.
                     parameters[index] = false;
+                }
+                if let Statement::Assign(Place::Field { .. } | Place::Index { .. }, rv) = stmt {
+                    for index in sources(rv, &aliases, f, i, layouts) {
+                        parameters[index] = false;
+                    }
                 }
                 let call = match stmt {
                     Statement::Call { callee, args }

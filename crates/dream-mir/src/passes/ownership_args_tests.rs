@@ -10,6 +10,7 @@ fn taken_globals_and_duplicate_projections_get_distinct_typed_tokens() {
     let mut f = FunctionBuilder::new("takes", ctx.interner.void());
     f.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(1),
             args: vec![],
             ret: ctx.interner.void(),
@@ -48,6 +49,7 @@ fn borrowed_global_arguments_need_no_temporary() {
     let mut f = FunctionBuilder::new("discard", ctx.interner.void());
     f.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(1),
             args: vec![],
             ret: ctx.interner.void(),

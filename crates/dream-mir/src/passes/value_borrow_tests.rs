@@ -136,6 +136,7 @@ fn owned_view(early_release: bool, opaque_call: bool, source_escape: bool) -> (M
     if opaque_call || source_escape {
         b.push(Statement::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: DefId::root(99),
                 args: vec![],
                 ret: types.void(),
@@ -223,6 +224,7 @@ fn publication_before_view_creation_keeps_owned_view_arc() {
         1,
         Statement::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: DefId::root(99),
                 args: vec![],
                 ret: types.void(),
@@ -306,6 +308,7 @@ fn named_copies_cannot_hide_opaque_forwarding() {
     let f = &mut mir.functions[0];
     f.blocks[0].stmts.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(99),
             args: vec![],
             ret: types.void(),

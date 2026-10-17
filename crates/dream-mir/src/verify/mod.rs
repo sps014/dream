@@ -4,6 +4,7 @@
 //! Explicit local tokens are balanced immediately after RC insertion. Final MIR keeps
 //! independent alias-death and region-provenance checks after optimizations erase transfers.
 
+pub(crate) mod borrowed_result;
 mod call_effects;
 mod operands;
 mod ownership;

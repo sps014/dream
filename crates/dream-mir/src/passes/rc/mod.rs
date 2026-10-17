@@ -7,6 +7,7 @@
 
 mod cursor;
 mod cursor_aliases;
+mod cursor_borrowed;
 mod cursor_effects;
 mod cursor_family;
 mod elision;
@@ -212,6 +213,7 @@ pub(crate) fn rvalue_reads_local(rvalue: &Rvalue, local: u32) -> bool {
 /// True if the rvalue is a *borrow* that must be retained when bound to an owning local.
 pub(crate) fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool {
     match rvalue {
+        Rvalue::Call { callee, .. } => callee.borrowed_result,
         Rvalue::Use(Operand::Copy(_))
         | Rvalue::Use(Operand::Const(crate::Const::Str(_)))
         | Rvalue::UnionField { .. } => true,

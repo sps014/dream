@@ -59,6 +59,8 @@ pub(super) struct Lcx<'a> {
     /// Internal functions returning a value struct through a trailing caller buffer instead of a
     /// heap box. Tables and itables point at their `__abi` wrapper, which keeps the box ABI.
     pub sret: IndexSet<String>,
+    /// Indirect callers receive an owned result from a borrowed-result getter.
+    pub borrowed_results: IndexSet<String>,
     pub future_infos: IndexSet<dream_types::TypeId>,
     pub future_copies: IndexSet<dream_types::TypeId>,
     /// Library functions taking the caller's panic location as a trailing hidden `ptr`
@@ -98,6 +100,7 @@ impl<'a> Lcx<'a> {
             m,
             own: IndexMap::new(),
             sret: IndexSet::new(),
+            borrowed_results: IndexSet::new(),
             future_infos: IndexSet::new(),
             future_copies: IndexSet::new(),
             tracked: IndexSet::new(),
@@ -363,7 +366,9 @@ impl<'a> Lcx<'a> {
     }
 
     pub fn has_abi_wrapper(&self, name: &str) -> bool {
-        self.sret.contains(name) || self.tracked.contains(name)
+        self.sret.contains(name)
+            || self.tracked.contains(name)
+            || self.borrowed_results.contains(name)
     }
 
     pub fn h(&self) -> Ty {

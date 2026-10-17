@@ -30,6 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 enum Src {
     Copy(u32),
     Field(u32, u32),
+    Index(u32),
     Union {
         base: u32,
         ty: TypeId,
@@ -41,7 +42,7 @@ enum Src {
 impl Src {
     fn base(self) -> u32 {
         match self {
-            Src::Copy(b) | Src::Field(b, _) | Src::Union { base: b, .. } => b,
+            Src::Copy(b) | Src::Field(b, _) | Src::Index(b) | Src::Union { base: b, .. } => b,
         }
     }
 }
@@ -69,6 +70,12 @@ fn family_source(
             if rc(*from) && rc(*to) =>
         {
             Some(Src::Field(base.0, *field as u32))
+        }
+        Rvalue::Use(Operand::Copy(Place::Index { base, .. })) => Some(Src::Index(base.0)),
+        Rvalue::Cast(Operand::Copy(Place::Index { base, .. }), from, to)
+            if rc(*from) && rc(*to) =>
+        {
+            Some(Src::Index(base.0))
         }
         Rvalue::UnionField {
             base: Operand::Copy(Place::Local(b)),
@@ -262,6 +269,7 @@ pub(crate) fn infer_cursor_families(
 }
 
 type FieldKeys = BTreeSet<(TypeId, u32)>;
+type TraversedSlots = (FieldKeys, BTreeSet<TypeId>, BTreeSet<TypeId>);
 
 struct FamilyCx<'a> {
     func: &'a MirFunction,
@@ -291,12 +299,12 @@ impl FamilyCx<'_> {
         if roots.is_empty() || !roots.iter().all(|&r| self.root_ok(r)) {
             return false;
         }
-        let Some((fields, unions)) = self.traversed() else {
+        let Some((fields, unions, elements)) = self.traversed() else {
             return false;
         };
         // Before RC insertion, implicit local cleanup is not a statement yet. Unrelated
         // destructors only matter if a local graph can run one; calls are checked in flight.
-        if self.modref.del().hits(&fields, &unions)
+        if self.stores_hit(self.modref.del(), &fields, &unions, &elements)
             && self.func.locals.iter().any(|local| {
                 self.modref
                     .may_run_del(local.ty, self.interner, self.layouts)
@@ -331,7 +339,7 @@ impl FamilyCx<'_> {
             let after_term = in_flight(&live);
             add_terminator_reads(&block.terminator, &mut live);
             if (after_term || in_flight(&live))
-                && !self.terminator_ok(&block.terminator, &fields, &unions)
+                && !self.terminator_ok(&block.terminator, &fields, &unions, &elements)
             {
                 return false;
             }
@@ -344,7 +352,9 @@ impl FamilyCx<'_> {
                 if !points_ok(&live) {
                     return false;
                 }
-                if (after || in_flight(&live)) && !self.stmt_ok(stmt, &roots, &fields, &unions) {
+                if (after || in_flight(&live))
+                    && !self.stmt_ok(stmt, &roots, &fields, &unions, &elements)
+                {
                     return false;
                 }
             }
@@ -393,9 +403,10 @@ impl FamilyCx<'_> {
 
     /// Traversed strong slots: `(base type, field)` for field loads, whole union types for
     /// payload loads. `None` if a load goes through a weak/unowned or unknown slot.
-    fn traversed(&self) -> Option<(FieldKeys, BTreeSet<TypeId>)> {
+    fn traversed(&self) -> Option<TraversedSlots> {
         let mut fields = BTreeSet::new();
         let mut unions = BTreeSet::new();
+        let mut elements = BTreeSet::new();
         for &m in &self.member_set {
             for s in &self.srcs[m as usize] {
                 match *s {
@@ -410,6 +421,17 @@ impl FamilyCx<'_> {
                             return None;
                         }
                         fields.insert((ty, field));
+                    }
+                    Src::Index(base) => {
+                        let dream_types::TyKind::Array(element) =
+                            self.interner.kind(self.func.locals[base as usize].ty)
+                        else {
+                            return None;
+                        };
+                        if self.interner.is_shared_type(*element) {
+                            return None;
+                        }
+                        elements.insert(*element);
                     }
                     Src::Union {
                         ty, variant, field, ..
@@ -428,7 +450,7 @@ impl FamilyCx<'_> {
                 }
             }
         }
-        Some((fields, unions))
+        Some((fields, unions, elements))
     }
 
     fn stores_hit(
@@ -436,8 +458,15 @@ impl FamilyCx<'_> {
         s: &ModRef,
         fields: &BTreeSet<(TypeId, u32)>,
         unions: &BTreeSet<TypeId>,
+        elements: &BTreeSet<TypeId>,
     ) -> bool {
-        s.hits(fields, unions) || (s.may_destroy() && self.modref.del().hits(fields, unions))
+        let hits = |effect: &ModRef| {
+            effect.hits(fields, unions)
+                || elements
+                    .iter()
+                    .any(|&element| effect.writes_element(element))
+        };
+        hits(s) || (s.may_destroy() && hits(self.modref.del()))
     }
 
     fn stmt_ok(
@@ -446,6 +475,7 @@ impl FamilyCx<'_> {
         roots: &BTreeSet<u32>,
         fields: &BTreeSet<(TypeId, u32)>,
         unions: &BTreeSet<TypeId>,
+        elements: &BTreeSet<TypeId>,
     ) -> bool {
         match stmt {
             Statement::Assign(Place::Local(l), _) if roots.contains(&l.0) => return false,
@@ -458,25 +488,30 @@ impl FamilyCx<'_> {
         if self
             .modref
             .statement_may_destroy(self.func, stmt, self.interner, self.layouts)
-            && self.stores_hit(self.modref.del(), fields, unions)
+            && self.stores_hit(self.modref.del(), fields, unions, elements)
         {
             return false;
         }
         let mut ok = true;
         stmt_effects(stmt, self.func, self.interner, |e| {
             let hit = match e {
-                Effect::None | Effect::SlotStore(_) | Effect::GlobalStore(_) => false,
+                Effect::None | Effect::GlobalStore(_) => false,
+                Effect::SlotStore(element) => elements.contains(&element),
                 Effect::Top => true,
                 Effect::ObserveOwnership => false,
                 Effect::Store(base, field) => {
                     let ty = self.func.locals[base.0 as usize].ty;
                     fields.contains(&(ty, field)) || unions.contains(&ty)
                 }
-                Effect::Call(callee) => self.stores_hit(&self.modref.call(callee), fields, unions),
-                Effect::Iface(id, slot) => {
-                    self.stores_hit(&self.modref.iface(id, slot), fields, unions)
+                Effect::Call(callee) => {
+                    self.stores_hit(&self.modref.call(callee), fields, unions, elements)
                 }
-                Effect::Ctor(def) => self.stores_hit(&self.modref.ctor(def), fields, unions),
+                Effect::Iface(id, slot) => {
+                    self.stores_hit(&self.modref.iface(id, slot), fields, unions, elements)
+                }
+                Effect::Ctor(def) => {
+                    self.stores_hit(&self.modref.ctor(def), fields, unions, elements)
+                }
             };
             ok &= !hit;
         });
@@ -488,10 +523,11 @@ impl FamilyCx<'_> {
         term: &Terminator,
         fields: &BTreeSet<(TypeId, u32)>,
         unions: &BTreeSet<TypeId>,
+        elements: &BTreeSet<TypeId>,
     ) -> bool {
         match term {
             Terminator::TailCall { callee, .. } => {
-                !self.stores_hit(&self.modref.call(callee), fields, unions)
+                !self.stores_hit(&self.modref.call(callee), fields, unions, elements)
             }
             Terminator::Await { .. } => false,
             _ => true,

@@ -201,6 +201,11 @@ pub(super) fn build_abi_wrapper<'a>(l: &mut Lcx<'a>, f: &'a MirFunction) {
         fx.w.ret(Some(&r.v));
     } else {
         let r = fx.call(&name, &args);
+        if f.borrowed_result
+            && let Some(r) = &r
+        {
+            fx.call(retain_sym(&fx.l.cx, f.ret), std::slice::from_ref(r));
+        }
         fx.w.ret(r.as_ref().map(|r| &r.v));
     }
     fx.finish();

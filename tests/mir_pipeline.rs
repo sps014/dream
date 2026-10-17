@@ -40,6 +40,7 @@ fn compile_sum_to() -> String {
     let var = |local: LocalId| HExpr::new(int, HExprKind::Var(Binding::Local(local)));
 
     let func = HFunction {
+        borrowed_result: false,
         def,
         name: "sum_to".into(),
         symbol: "sum_to".into(),

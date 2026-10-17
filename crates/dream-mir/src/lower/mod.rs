@@ -119,6 +119,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .collect();
     if !init_body.is_empty() {
         let init_fn = HFunction {
+            borrowed_result: false,
             def: DefId::root(u32::MAX),
             name: INIT_FN_NAME.to_string(),
             symbol: INIT_FN_NAME.to_string(),
@@ -133,6 +134,23 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         };
         let (stub, _) = lower_function_with(&init_fn, interner, &hir.layouts, &const_ints);
         functions.push(stub);
+    }
+    let borrowed: std::collections::BTreeSet<_> = hir
+        .functions
+        .iter()
+        .filter(|f| f.borrowed_result)
+        .map(|f| f.def)
+        .collect();
+    for f in functions.iter_mut().chain(&mut polls) {
+        f.borrowed_result &= borrowed_result_type(interner, f.ret);
+        for stmt in f.blocks.iter_mut().flat_map(|b| &mut b.stmts) {
+            if let Statement::Call { callee, .. }
+            | Statement::Assign(_, Rvalue::Call { callee, .. }) = stmt
+            {
+                callee.borrowed_result =
+                    borrowed.contains(&callee.def) && borrowed_result_type(interner, callee.ret);
+            }
+        }
     }
     for f in &mut functions {
         canonicalize_niche_unions(f, interner, &hir.layouts);
@@ -177,6 +195,13 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         object_methods: hir.object_methods.clone(),
         frame_objects: Default::default(),
     }
+}
+
+// A non-niche union getter can construct an envelope around its slot payload. That envelope
+// has its own +1 even when the payload is borrowed; only pointer-preserving results use +0.
+fn borrowed_result_type(interner: &TypeInterner, ty: TypeId) -> bool {
+    interner.is_rc_tracked(ty)
+        && (!matches!(interner.kind(ty), TyKind::Union(..)) || interner.is_niche_union(ty))
 }
 
 fn func_reads_type_name(f: &MirFunction) -> bool {
@@ -370,7 +395,9 @@ fn lower_sync_function(
     if !lo.b.is_terminated() {
         lo.b.terminate(Terminator::Return(None));
     }
-    lo.b.finish()
+    let mut f = lo.b.finish();
+    f.borrowed_result = func.borrowed_result && borrowed_result_type(interner, func.ret);
+    f
 }
 
 /// Lowers a complete async function body into a coroutine CFG for the poll state machine: the whole
@@ -822,6 +849,7 @@ mod tests {
 
         // fun f(x: int): int { if (x) { return 1; } return 0; }
         let func = HFunction {
+            borrowed_result: false,
             def,
             name: "f".into(),
             symbol: "f".into(),
@@ -859,5 +887,17 @@ mod tests {
                 .iter()
                 .any(|b| matches!(b.terminator, Terminator::Return(_)))
         );
+    }
+
+    #[test]
+    fn borrowed_result_abi_excludes_new_union_envelopes() {
+        let mut i = TypeInterner::new();
+        let array = i.array(i.string());
+        let envelope = i.union_ty(DefId::root(600), vec![i.js()]);
+        assert!(borrowed_result_type(&i, array));
+        assert!(!borrowed_result_type(&i, i.int()));
+        assert!(!borrowed_result_type(&i, envelope));
+        i.mark_niche_union(envelope);
+        assert!(borrowed_result_type(&i, envelope));
     }
 }

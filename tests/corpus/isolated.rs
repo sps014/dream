@@ -2,6 +2,18 @@ use super::Case;
 
 pub(super) const CASES: &[Case] = &[
     Case::isolated(
+        "arc_map_slot_walk_mutation",
+        "map old\ndrop map old\ndone\ndrop map new",
+        true,
+        "slot-walk value pairs must own snapshots across mutation of the map",
+    ),
+    Case::isolated(
+        "arc_index_cursor_reentrancy",
+        "old\ndrop old\ndrop new\narray\ndrop replacement\ndrop array\ndone",
+        true,
+        "slot overwrite through aliases and reentrant mutation must preserve destructor order",
+    ),
+    Case::isolated(
         "arc_acyclic_finalizer_reads",
         "7\n7\nafter",
         true,

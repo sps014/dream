@@ -42,6 +42,7 @@ fn inlines_small_callee() {
             Place::Local(r),
             Rvalue::Call {
                 callee: crate::Callee {
+                    borrowed_result: false,
                     def: callee_def,
                     args: vec![],
                     ret: int,
@@ -106,6 +107,7 @@ fn caller_of(
         Place::Local(r),
         Rvalue::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: callee_def,
                 args: vec![],
                 ret: int,
@@ -279,6 +281,7 @@ fn inlines_value_callee_with_owning_local() {
             Place::Local(r),
             Rvalue::Call {
                 callee: crate::Callee {
+                    borrowed_result: false,
                     def: callee_def,
                     args: vec![],
                     ret: int,
@@ -354,6 +357,7 @@ fn inlines_this_borrow_without_value_drop() {
             Place::Local(r),
             Rvalue::Call {
                 callee: crate::Callee {
+                    borrowed_result: false,
                     def: callee_def,
                     args: vec![],
                     ret: int,
@@ -401,6 +405,7 @@ fn skips_recursion() {
         Place::Local(t),
         Rvalue::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def,
                 args: vec![],
                 ret: int,
@@ -445,6 +450,7 @@ fn inlined_callee_lets_elision_cancel_rc_pair() {
         );
         b.push(Statement::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: callee_def,
                 args: vec![],
                 ret: void,
@@ -524,6 +530,7 @@ fn optimize_module_rc_after_inline_moves_returned_string() {
             Place::Local(x),
             Rvalue::Call {
                 callee: crate::Callee {
+                    borrowed_result: false,
                     def: make_def,
                     args: vec![],
                     ret: str_ty,
@@ -545,6 +552,7 @@ fn optimize_module_rc_after_inline_moves_returned_string() {
         b.set_def(main_def, vec![]);
         b.push(Statement::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: caller_def,
                 args: vec![],
                 ret: void,
@@ -623,6 +631,7 @@ fn inlined_value_this_stores_into_caller_storage() {
     let dest = caller.new_local(view, Some("value".into()));
     caller.push(Statement::Call {
         callee: crate::Callee {
+            borrowed_result: false,
             def: ctor_def,
             args: vec![],
             ret: ctx.interner.void(),
@@ -666,6 +675,7 @@ fn inlined_borrowed_value_parameter_does_not_drop_caller_fields() {
         Place::Local(result),
         Rvalue::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: callee_def,
                 args: vec![],
                 ret: ctx.interner.int(),

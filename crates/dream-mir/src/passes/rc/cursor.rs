@@ -45,7 +45,8 @@ pub(crate) fn infer_cursors(
                     def_count[d] += 1;
                 }
                 let rc = !params.contains(&dest.0)
-                    && interner.is_rc_tracked(func.locals[dest.0 as usize].ty);
+                    && interner.is_rc_tracked(func.locals[dest.0 as usize].ty)
+                    && !interner.is_shared_type(func.locals[dest.0 as usize].ty);
                 if rc && is_cursor_source(rvalue) {
                     candidates.insert(dest.0);
                 } else if rc && is_forwarding_copy(rvalue) {
@@ -148,6 +149,7 @@ pub(crate) fn infer_cursors(
         func,
         &effects,
         interner,
+        &super::cursor_borrowed::Context::new(interner, layouts, modref),
         &mut candidates,
         &mut escaped,
         &mut overwrite_escaped,
@@ -282,9 +284,12 @@ pub(crate) fn infer_cursors(
 
 fn snapshot_base(rvalue: &Rvalue) -> Option<u32> {
     match cursor_source_slot(rvalue) {
-        Some(SourceSlot::Field(b, _) | SourceSlot::IndexBase(b) | SourceSlot::UnionBase(b)) => {
-            Some(b)
-        }
+        Some(
+            SourceSlot::Field(b, _)
+            | SourceSlot::IndexBase(b)
+            | SourceSlot::Receiver(b)
+            | SourceSlot::UnionBase(b),
+        ) => Some(b),
         None => None,
     }
 }
@@ -313,7 +318,7 @@ fn borrow_field_snapshot(
         return false;
     };
     match slot {
-        SourceSlot::IndexBase(_) => false,
+        SourceSlot::IndexBase(_) | SourceSlot::Receiver(_) => false,
         SourceSlot::Field(base, _) => {
             !index_defined.contains(&base)
                 && (borrow_params.contains(&base) || locals[base as usize].is_cursor)
@@ -334,11 +339,19 @@ fn is_forwarding_copy(rvalue: &Rvalue) -> bool {
 }
 
 fn is_cursor_source(rvalue: &Rvalue) -> bool {
+    if let Rvalue::Call { callee, args } = rvalue {
+        return callee.borrowed_result
+            && matches!(args.first(), Some(Operand::Copy(Place::Local(_))));
+    }
     matches!(
         rvalue,
-        Rvalue::Use(Operand::Copy(Place::Field { .. }))
+        Rvalue::Use(Operand::Copy(Place::Field { .. } | Place::Index { .. }))
             | Rvalue::UnionField { .. }
-            | Rvalue::Cast(Operand::Copy(Place::Field { .. }), _, _)
+            | Rvalue::Cast(
+                Operand::Copy(Place::Field { .. } | Place::Index { .. }),
+                _,
+                _
+            )
     )
 }
 
@@ -349,6 +362,7 @@ fn is_cursor_source(rvalue: &Rvalue) -> bool {
 enum SourceSlot {
     Field(u32, u32),
     IndexBase(u32),
+    Receiver(u32),
     UnionBase(u32),
 }
 
@@ -362,6 +376,10 @@ fn cursor_source_slot(rvalue: &Rvalue) -> Option<SourceSlot> {
     };
     match rvalue {
         Rvalue::Use(op) | Rvalue::Cast(op, _, _) => field_or_index(op),
+        Rvalue::Call { callee, args } if callee.borrowed_result => match args.first() {
+            Some(Operand::Copy(Place::Local(base))) => Some(SourceSlot::Receiver(base.0)),
+            _ => None,
+        },
         Rvalue::UnionField { base, .. } => {
             let Operand::Copy(Place::Local(l)) = base else {
                 return None;
@@ -379,6 +397,7 @@ fn escape_slot_overwrite_readers(
     func: &MirFunction,
     effects: &crate::analysis::effects::ModRef,
     interner: &TypeInterner,
+    borrowed: &super::cursor_borrowed::Context<'_>,
     candidates: &mut IndexSet<u32>,
     escaped: &mut IndexSet<u32>,
     overwrite_escaped: &mut IndexSet<u32>,
@@ -386,7 +405,7 @@ fn escape_slot_overwrite_readers(
     let external_values = super::cursor_aliases::external_value_references(func);
     let mut stored_fields = std::collections::BTreeSet::new();
     let mut stored_reference_fields = std::collections::BTreeSet::new();
-    let mut stored_index_bases: IndexSet<u32> = IndexSet::new();
+    let mut stored_elements = std::collections::BTreeSet::new();
     let mut def_counts: Vec<u32> = vec![0; func.locals.len()];
     for block in &func.blocks {
         for stmt in &block.stmts {
@@ -400,7 +419,10 @@ fn escape_slot_overwrite_readers(
                     }
                 }
                 Statement::Assign(Place::Index { base, .. }, _) => {
-                    stored_index_bases.insert(base.0);
+                    if let dream_types::TyKind::Array(element) = interner.kind(func.local_ty(*base))
+                    {
+                        stored_elements.insert(*element);
+                    }
                 }
                 Statement::Assign(Place::Local(l), rv) if !is_null_init(rv) => {
                     def_counts[l.0 as usize] += 1;
@@ -439,15 +461,15 @@ fn escape_slot_overwrite_readers(
                     || effects.writes_field(field.0, field.1)
                     || overwritten_bases.contains(&base)
             }
-            SourceSlot::IndexBase(base) => {
-                // Loads and stores often materialize different temps for the same array
-                // (`t0 = arr; x = t0[i]` vs `t1 = arr; t1[i] = w`). Matching only the load's
-                // base would leave `x` a cursor across the store.
-                stored_index_bases.contains(&base)
-                    || overwritten_bases.contains(&base)
-                    || !stored_index_bases.is_empty()
-                    || super::cursor_effects::changes_elements(effects)
-            }
+            SourceSlot::IndexBase(base) => match interner.kind(func.local_ty(crate::Local(base))) {
+                dream_types::TyKind::Array(element) => {
+                    stored_elements.contains(element)
+                        || overwritten_bases.contains(&base)
+                        || effects.writes_element(*element)
+                }
+                _ => true,
+            },
+            SourceSlot::Receiver(base) => borrowed.invalidated(func, id, base),
             // A union local's whole value is its slot: any rebind frees the old payload.
             SourceSlot::UnionBase(base) => overwritten_bases.contains(&base),
         };
@@ -508,6 +530,7 @@ fn escape_cursors_outliving_base(
                     let base = match slot {
                         SourceSlot::Field(b, _)
                         | SourceSlot::IndexBase(b)
+                        | SourceSlot::Receiver(b)
                         | SourceSlot::UnionBase(b) => b,
                     };
                     (dest.0, base)

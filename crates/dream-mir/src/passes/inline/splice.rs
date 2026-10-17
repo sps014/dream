@@ -46,13 +46,14 @@ fn remap_local_decl(
 /// Performs the inline described by `site` into function `fi`.
 pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, interner: &TypeInterner) {
     // Clone the callee's shape before mutating the caller (they share `mir.functions`).
-    let (g_entry, g_params, g_locals, g_blocks) = {
+    let (g_entry, g_params, g_locals, g_blocks, g_borrowed_result) = {
         let g = &mir.functions[site.callee];
         (
             g.entry,
             g.params.clone(),
             g.locals.clone(),
             g.blocks.clone(),
+            g.borrowed_result,
         )
     };
 
@@ -178,13 +179,11 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
                             decl.is_ref = false;
                         }
                     }
-                    // RC insertion normalizes borrowed returns into owning locals. A call hands
-                    // that +1 to its destination; a borrowed copy into a container would retain
-                    // again and strand the callee's token. Nulling also prevents loop re-entry
-                    // from releasing the previous invocation's returned value.
+                    // Owning returns transfer a token. Slot getters carry +0 across the
+                    // inline boundary; the caller already protects or retains that alias.
                     let (rvalue, moved) = match o {
                         Operand::Copy(Place::Local(src))
-                            if interner.is_rc_tracked(f.local_ty(src)) =>
+                            if !g_borrowed_result && interner.is_rc_tracked(f.local_ty(src)) =>
                         {
                             (Rvalue::Move { src, cast: None }, Some(src))
                         }

@@ -1,5 +1,7 @@
 import system;
 import system.json;
+import system.io;
+import system.csv;
 
 let sink: int = 0;
 let measuring: bool = true;
@@ -72,6 +74,85 @@ fun numbers(iters: int): int {
     return total;
 }
 
+@noinline
+fun csv_read(iters: int): int {
+    let input = Encoding.utf8_encode("name,value,note\r\nalpha,42,\"a,b\"\r\n");
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let reader = CsvReader(MemoryStream(input));
+        while true {
+            let record = reader.read_record().unwrap();
+            if record.is_none() {
+                break;
+            }
+            total = total + record.unwrap()[0].length;
+        }
+    }
+    return total;
+}
+
+@noinline
+fun csv_write(iters: int): int {
+    let fields = ["alpha", "42", "a,b", "a\"b"];
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let stream = MemoryStream();
+        let writer = CsvWriter(stream);
+        writer.write_record(fields).unwrap();
+        writer.flush().unwrap();
+        total = total + (int)stream.length;
+    }
+    return total;
+}
+
+@json
+class BenchKnown {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+@noinline
+fun json_skip_unknown(iters: int): int {
+    let input = "{\"unknown\":[\"escaped\\ntext\",{\"nested\":\"ignored\"}],\"value\":17}";
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        total = total + Json.deserialize<BenchKnown>(input).unwrap().value;
+    }
+    return total;
+}
+
+@noinline
+fun json_numbers(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        total = total + Json.serialize(JsonValue.number((double)(i & 1023) / 10.0d)).length;
+    }
+    return total;
+}
+
+@noinline
+fun format_values(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        total = total + Fmt.format("row {0}: {1:.2} {{ok}}", [i, (double)i / 10.0d]).length;
+    }
+    return total;
+}
+
+@noinline
+fun split_limit(iters: int): int {
+    let input = "alpha,beta,gamma,delta,epsilon,zeta,eta,theta";
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let parts = input.split(",", 2);
+        total = total + parts.length + parts[1].length;
+    }
+    return total;
+}
+
 fun run_suite(): void {
     let sw = Stopwatch();
     let value = parse_strings(8, 2000, false);
@@ -93,6 +174,30 @@ fun run_suite(): void {
     value = numbers(20000);
     sw.stop();
     report("builder_double", sw.elapsed_nanos, 20000, value);
+    sw = Stopwatch();
+    value = csv_read(1000);
+    sw.stop();
+    report("csv_read", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = csv_write(1000);
+    sw.stop();
+    report("csv_write", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = json_numbers(1000);
+    sw.stop();
+    report("json_numbers", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = json_skip_unknown(1000);
+    sw.stop();
+    report("json_skip_unknown", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = format_values(1000);
+    sw.stop();
+    report("fmt", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = split_limit(1000);
+    sw.stop();
+    report("split_limit", sw.elapsed_nanos, 1000, value);
 }
 
 fun main(): void {

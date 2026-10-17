@@ -434,6 +434,7 @@ impl FnPrinter<'_> {
                     "new {} via {}({})",
                     self.cx.ty(*ty),
                     self.cx.callee(&Callee {
+                        borrowed_result: false,
                         def: c.def,
                         args: Vec::new(),
                         ret: *ty,

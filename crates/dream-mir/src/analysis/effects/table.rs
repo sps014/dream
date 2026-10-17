@@ -114,6 +114,8 @@ impl ModRefTable {
                         let borrowed_parameter =
                             f.params.contains(&crate::Local(index as u32)) && !local.is_take;
                         !local.is_ref
+                            && !local.is_cursor
+                            && !local.borrows_refs
                             && !borrowed_parameter
                             && *cleanup_types.entry(local.ty).or_insert_with(|| {
                                 table.may_run_del(local.ty, interner, &mir.layouts)

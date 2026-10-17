@@ -127,9 +127,10 @@ public fun get_or(borrow key: K, fallback: V): V
 ## `get_or_insert`
 
 Returns the existing value, or inserts and returns the result of `factory` when absent.
+The key is borrowed for the lookup and copied only on a miss.
 
 ```dream
-public fun get_or_insert(key: K, borrow factory: fun(): V): V
+public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V
 ```
 
 ## `merge`

@@ -2,6 +2,7 @@ module system.collections;
 
 // A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 @allow_cycle
+@slot_walk("capacity", "slot_entry", "slot_occupied")
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
     count: int;
@@ -160,6 +161,8 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
     }
 
+    // When `old` is uniquely owned, `hash_code` cannot observe it through `this` (already
+    // replaced), so slots move with `exchange` instead of key/value retains.
     fun rehash(new_cap: int): void {
         let old = this.slots;
         let old_cap = this.cap;
@@ -167,24 +170,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         this.cap = new_cap;
         this.count = 0;
         this.used = 0;
-        let i = 0;
-        while i < old_cap {
-            if old[i].state == this.epoch {
-                this.insert_no_grow(old[i].key, old[i].value, old[i].key.hash_code());
-            }
-            i = i + 1;
-        }
-    }
-
-    // Built-in string hashing cannot observe a temporary share or run a mutation callback.
-    fun rehash(new_cap: int): void where K: StringKey {
-        let old = this.slots;
-        let old_cap = this.cap;
-        this.slots = Buffer.alloc<MapSlot<K, V>>(new_cap);
-        this.cap = new_cap;
-        this.count = 0;
-        this.used = 0;
-        let can_transfer = CollectionStorage.string_keys<K>() && CollectionStorage.owners(old) == 1;
+        let can_transfer = CollectionStorage.owners(old) == 1;
         let i = 0;
         while i < old_cap {
             if old[i].state == this.epoch {
@@ -259,6 +245,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
 
     // Value for `key`, or `None` when absent.
     @inline
+    @borrowed_result
     public fun get(borrow key: K): Option<V> {
         let i = this.find(key);
         if i >= 0 {
@@ -268,6 +255,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     // Value for the `string` key equal to `key`, without building a `string`.
+    @borrowed_result
     public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey {
         let i = this.find_span(key);
         if i >= 0 {
@@ -311,7 +299,8 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     /// Returns the existing value, or inserts and returns the result of `factory` when absent.
-    public fun get_or_insert(key: K, borrow factory: fun(): V): V {
+    /// The key is borrowed for the lookup and copied only on a miss.
+    public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V {
         let i = this.find(key);
         if i >= 0 {
             return this.slots[i].value;
@@ -425,14 +414,22 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         return MapIterator<K, V>(this);
     }
 
+    /// Returns the key and value at an occupied slot; the caller checks occupancy first.
+    @inline
+    internal fun slot_entry(i: int): KeyValuePair<K, V> {
+        return KeyValuePair<K, V>(this.slot_key(i), this.slot_value(i));
+    }
+
     internal fun slot_occupied(i: int): bool {
         return this.slots[i].state == this.epoch;
     }
 
+    @borrowed_result
     internal fun slot_key(i: int): K {
         return this.slots[i].key;
     }
 
+    @borrowed_result
     internal fun slot_value(i: int): V {
         return this.slots[i].value;
     }

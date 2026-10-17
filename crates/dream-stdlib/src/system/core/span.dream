@@ -12,6 +12,7 @@ module system.core;
 /// A writable, bounds-checked view of a contiguous range in an array. Changes affect the
 /// original array. Spans keep their source alive, cannot be stored in heap objects, and cannot
 /// cross an `await`.
+@slot_walk("length", "at_unchecked", "")
 public ref struct Span<T> {
     internal array: T[];
 

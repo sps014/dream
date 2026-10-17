@@ -95,6 +95,7 @@ fn unknown_call_release_and_raw_store_refuse_caching() {
         let effect = match kind {
             0 => Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(99),
                     args: vec![],
                     ret: i.void(),

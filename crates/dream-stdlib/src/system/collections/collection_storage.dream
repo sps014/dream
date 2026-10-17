@@ -16,9 +16,6 @@ internal static class CollectionStorage {
     @intrinsic(Intrinsic.DebugGetRefCount)
     internal static extern fun owners(borrow array: object): int;
 
-    @intrinsic(Intrinsic.BufferIsString)
-    internal static extern fun string_keys<T>(): bool;
-
     @intrinsic(Intrinsic.BufferZero)
     internal static extern fun zero<T>(): T;
 }

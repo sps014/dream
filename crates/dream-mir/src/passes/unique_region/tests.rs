@@ -50,6 +50,7 @@ fn recursive_safety_resolves_entire_component_before_caching() {
             Place::Local(value),
             Rvalue::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: callee,
                     args: vec![],
                     ret: ty,
@@ -130,6 +131,7 @@ fn wraps_unique_call_that_only_news_del_free_class() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: alloc_def,
                 args: vec![],
                 ret: ty,
@@ -204,6 +206,7 @@ fn wraps_switch_join_of_unique_call() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: alloc_def,
                 args: vec![],
                 ret: ty,
@@ -278,6 +281,7 @@ fn does_not_wrap_scalar_call_result() {
         Place::Local(b),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: pred_def,
                 args: vec![],
                 ret: bool_ty,
@@ -344,6 +348,7 @@ fn does_not_wrap_switch_join_when_phi_used_after() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: alloc_def,
                 args: vec![],
                 ret: ty,
@@ -430,6 +435,7 @@ fn verifier_rejects_leave_before_payload_use() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: alloc_def,
                 args: vec![],
                 ret: ty,
@@ -488,6 +494,7 @@ fn make_tree_module_with(ctx: &mut TypeCtx, base_returns_param: bool, right_weak
     let mut layouts = LayoutTable::default();
     layouts.insert(ty, layout);
     let callee = |arg_ty: TypeId| Callee {
+        borrowed_result: false,
         def: make_def,
         args: vec![],
         ret: arg_ty,
@@ -790,6 +797,7 @@ fn verifier_accepts_pre_region_locals_used_after() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: alloc_def,
                 args: vec![],
                 ret: ty,

@@ -149,6 +149,42 @@ fun seq_chain(iters: int): int {
     return total;
 }
 
+@noinline
+fun map_foreach(iters: int): int {
+    let values = Map<int, string>();
+    for (let i = 0; i < 64; i++) {
+        values[i] = "value" + i;
+    }
+    let total = 0;
+    for (let r = 0; r < iters; r++) {
+        for (let entry in values) {
+            total += entry.key + entry.value.length;
+        }
+    }
+    return total;
+}
+
+@noinline
+fun set_queue_foreach(iters: int): int {
+    let set = Set<string>();
+    let queue = Queue<string>();
+    for (let i = 0; i < 64; i++) {
+        let value = "value" + i;
+        set.add(value);
+        queue.enqueue(value);
+    }
+    let total = 0;
+    for (let r = 0; r < iters; r++) {
+        for (let value in set) {
+            total += value.length;
+        }
+        for (let value in queue) {
+            total += value.length;
+        }
+    }
+    return total;
+}
+
 fun run_suite(): void {
     let sw = Stopwatch();
     let seq_value = seq_chain(100);
@@ -198,6 +234,14 @@ fun run_suite(): void {
     value = churn(100);
     sw.stop();
     report("map_set_churn", sw.elapsed_nanos, 100, value);
+    sw = Stopwatch();
+    value = map_foreach(1000);
+    sw.stop();
+    report("map_foreach", sw.elapsed_nanos, 1000, value);
+    sw = Stopwatch();
+    value = set_queue_foreach(1000);
+    sw.stop();
+    report("set_queue_foreach", sw.elapsed_nanos, 1000, value);
 }
 
 fun main(): void {

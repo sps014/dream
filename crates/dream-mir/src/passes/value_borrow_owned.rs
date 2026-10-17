@@ -113,6 +113,7 @@ pub(super) fn source_stays_alive(
     }
     let dependent_read = |l: Local| member(l) || (l != owner && aliases.contains(&l));
     let mut reads = MirFunction {
+        borrowed_result: f.borrowed_result,
         def: f.def,
         instance: f.instance.clone(),
         name: String::new(),

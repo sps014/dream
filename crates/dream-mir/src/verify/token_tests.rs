@@ -15,6 +15,7 @@ fn copy(l: Local) -> Operand {
 fn fresh(ty: TypeId) -> Rvalue {
     Rvalue::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(100),
             args: vec![],
             ret: ty,
@@ -120,6 +121,7 @@ fn duplicate_taken_arguments_each_consume_one_token() {
         }
         f.push(Statement::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: DefId::root(101),
                 args: vec![],
                 ret: ctx.interner.void(),

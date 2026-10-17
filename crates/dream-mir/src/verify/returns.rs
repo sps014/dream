@@ -251,6 +251,7 @@ pub(super) fn rvalue_sources(
         let mut actual = vec![Operand::Const(crate::Const::Null)];
         actual.extend(args.iter().cloned());
         let callee = Callee {
+            borrowed_result: false,
             def: ctor.def,
             args: vec![],
             ret: *ty,

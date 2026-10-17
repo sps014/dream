@@ -95,6 +95,7 @@ mod tests {
 
     fn callee(interner: &TypeInterner, ret: TypeId) -> Callee {
         Callee {
+            borrowed_result: false,
             def: DefId::root(1),
             args: vec![interner.int()],
             ret,

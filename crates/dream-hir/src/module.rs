@@ -211,6 +211,8 @@ pub struct HGlobal {
 
 #[derive(Debug, Clone)]
 pub struct HFunction {
+    /// Internal slot getter returning a +0 alias of its first argument.
+    pub borrowed_result: bool,
     pub def: DefId,
     /// Resolved emitted symbol; no backend stage derives identity from numeric type handles.
     pub symbol: String,

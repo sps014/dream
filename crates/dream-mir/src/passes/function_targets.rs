@@ -28,6 +28,12 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         .iter()
         .filter_map(|(d, key)| IntrinsicOp::from_key(key).map(|op| (*d, op)))
         .collect();
+    let borrowed_results: BTreeSet<_> = mir
+        .functions
+        .iter()
+        .filter(|f| f.borrowed_result)
+        .map(|f| f.def)
+        .collect();
     let escaped = escape::box_types(mir, interner);
     let fields = field_targets(mir, interner, &intrinsics, &escaped);
     let ctors: BTreeSet<_> = mir
@@ -98,6 +104,9 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
                     continue;
                 };
                 if !dom.dominates(db, BlockId(bi as u32)) || (db.0 as usize == bi && ds >= si) {
+                    continue;
+                }
+                if borrowed_results.contains(&t.callee.def) {
                     continue;
                 }
                 let mut callee = t.callee.clone();

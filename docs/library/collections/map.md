@@ -33,7 +33,7 @@ This prints `No score yet`.
 
 Create a map with `Map<K, V>()`, an optional initial capacity, or a typed map literal. `set(key, value)` adds a key or replaces its value. `map[key] = value` does the same.
 
-`get(key)` returns `Option<V>`. Indexed reading, `map[key]`, requires the key to exist and stops the program if it is missing. Use `get_or(key, fallback)` when you want a default. `get_or_insert(key, factory)` calls a no-argument function to create and store a value only when the key is missing.
+`get(key)` returns `Option<V>`. Indexed reading, `map[key]`, requires the key to exist and stops the program if it is missing. Use `get_or(key, fallback)` when you want a default. `get_or_insert(key, factory)` borrows the key for the lookup, and calls a no-argument function to create and store a value only when the key is missing (copying the key on that miss).
 
 | Member | Returns | Effect |
 | --- | --- | --- |

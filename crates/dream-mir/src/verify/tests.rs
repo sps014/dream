@@ -375,6 +375,7 @@ fn retained_or_passed_aliases_are_not_single_token() {
     f.assign(Place::Local(z), Rvalue::Use(copy(x)));
     f.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: dream_types::DefId::root(1),
             args: vec![],
             ret: ctx.interner.void(),

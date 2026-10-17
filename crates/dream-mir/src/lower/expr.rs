@@ -416,6 +416,7 @@ impl Lowerer<'_> {
 
     pub(super) fn lower_callee(&self, callee: &dream_hir::Callee) -> super::super::Callee {
         super::super::Callee {
+            borrowed_result: false,
             def: callee.def,
             args: callee.instance.clone(),
             ret: callee.ret,

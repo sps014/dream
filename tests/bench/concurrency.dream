@@ -6,16 +6,18 @@ async fun idle_child(release: CancellationSource): Result<bool, string> {
     return Result.Ok(true);
 }
 
-async fun main(): void {
+async fun run_suite(): long {
     let count = 2000;
     if System.args.length > 0 {
         count = int.parse(System.args[0]).unwrap_or(2000);
     }
     if count <= 0 {
-        return;
+        return 0L;
     }
     let started = Stopwatch();
     let before_allocations = Debug.total_allocations;
+    let before_retains = Debug.runtime_counter(3);
+    let before_releases = Debug.runtime_counter(4);
     let before_live = Debug.live_objects;
     let before_rss = System.memory_bytes;
     let peak_live = 0L;
@@ -48,13 +50,18 @@ async fun main(): void {
             + " guest_allocations="
             + allocations.to_string()
             + " suspended_guest_objects="
-            + peak_live.to_string() + " observed_rss_delta_bytes=" + peak_rss.to_string()
+            + peak_live.to_string()
+            + " observed_rss_delta_bytes="
+            + peak_rss.to_string()
+            + counter_delta(before_allocations, before_retains, before_releases)
     );
 
     let channel = Channel.bounded<int>(256).unwrap();
     let sender = channel.sender;
     let receiver = channel.receiver;
     let channel_allocations = Debug.total_allocations;
+    let channel_retains = Debug.runtime_counter(3);
+    let channel_releases = Debug.runtime_counter(4);
     let channel_time = Stopwatch();
     let checksum = 0L;
     for (let i = 0; i < count * 100; i = i + 1) {
@@ -73,6 +80,30 @@ async fun main(): void {
             .to_string()
             + " guest_allocations="
             + (Debug.total_allocations - channel_allocations)
-            .to_string() + " checksum=" + checksum.to_string()
+            .to_string()
+            + " checksum="
+            + checksum.to_string()
+            + counter_delta(channel_allocations, channel_retains, channel_releases)
     );
+    return checksum + (long)count;
+}
+
+fun counter_delta(allocations: long, retains: long, releases: long): string {
+    if System.env_or("DREAM_BENCH_COUNTERS", "") != "1" {
+        return "";
+    }
+    let a = Debug.total_allocations - allocations;
+    let r = Debug.runtime_counter(3) - retains;
+    let d = Debug.runtime_counter(4) - releases;
+    return " counters=allocs:"
+        + a.to_string() + ",retain:" + r.to_string() + ",release:" + d.to_string();
+}
+
+async fun main(): void {
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    let sink = 0L;
+    for (let pass = 0; pass < passes; pass++) {
+        sink = sink + run_suite().await;
+    }
+    System.println("sink " + sink.to_string());
 }

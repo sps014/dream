@@ -623,3 +623,99 @@ fn rc_golden_flat_record_readers_and_array_projection() {
         "{body}"
     );
 }
+
+#[test]
+fn rc_golden_index_scan_borrows_elements_but_overwrites_keep_snapshots() {
+    let ir = emit_arc_release(
+        r#"
+        @export fun index_scan(borrow values: string[]): int {
+            let total = 0;
+            for (let value in values) {
+                total = total + value.length;
+            }
+            return total;
+        }
+        @export fun index_overwrite(borrow values: string[], borrow replacement: string): int {
+            let value = values[0];
+            values[0] = replacement;
+            return value.length;
+        }
+    "#,
+    );
+    let functions = ir_func_defs(&ir);
+    let scan = &functions
+        .iter()
+        .find(|f| f.name.contains("index_5fscan"))
+        .expect("index scan implementation")
+        .body;
+    assert_eq!(count_in(scan, "@dream_retain("), 0, "{scan}");
+    assert_eq!(count_in(scan, "@dream_release("), 0, "{scan}");
+    let overwrite = &functions
+        .iter()
+        .find(|f| f.name.contains("index_5foverwrite"))
+        .expect("index overwrite implementation")
+        .body;
+    assert!(count_in(overwrite, "@dream_retain(") > 0, "{overwrite}");
+}
+
+#[test]
+fn rc_golden_stdlib_slot_walks_avoid_element_retains() {
+    use dream::driver::compiler::Compiler;
+    use dream_mir::backend::Target;
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("slots.dream");
+    let output = dir.path().join("slots.ll");
+    std::fs::write(
+        &source,
+        r#"
+        import system;
+        @export fun listscan(borrow values: List<string>): int {
+            let total = 0;
+            for (let value in values) {
+                total = total + value.length;
+            }
+            return total;
+        }
+        @export fun mapcontains(borrow values: Map<string, string>, borrow key: string): bool {
+            return values.contains(key);
+        }
+        @export fun mutatechildren(borrow values: List<Map<int, int>>): void {
+            for (let value in values) {
+                value[1] = 2;
+            }
+        }
+        @export fun mapscan(borrow values: Map<string, string>): int {
+            let total = 0;
+            for (let entry in values) {
+                total = total + entry.key.length + entry.value.length;
+            }
+            return total;
+        }
+    "#,
+    )
+    .unwrap();
+    Compiler::new(Target::native())
+        .with_release(true)
+        .compile(&source.display().to_string(), output.to_str().unwrap())
+        .unwrap();
+    let ir = std::fs::read_to_string(output).unwrap();
+    let functions = ir_func_defs(&ir);
+    for name in ["listscan", "mapcontains", "mapscan", "mutatechildren"] {
+        // Prefer the implementation body over the export trampoline (`entry` → call).
+        let f = functions
+            .iter()
+            .filter(|f| f.name.ends_with(name))
+            .max_by_key(|f| f.body.len())
+            .unwrap_or_else(|| panic!("missing {name}"));
+        assert_eq!(
+            count_in(&f.body, "@dream_retain("),
+            // Map mutation protects its backing array during stores and rehash. The
+            // outer List element needs no additional owning snapshot.
+            if name == "mutatechildren" { 1 } else { 0 },
+            "{}: {}",
+            f.name,
+            f.body
+        );
+        assert!(!f.body.contains("Iterator"), "{}: {}", f.name, f.body);
+    }
+}

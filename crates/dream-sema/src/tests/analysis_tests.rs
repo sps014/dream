@@ -2494,3 +2494,28 @@ fn range_operator_rejects_a_user_range_type() {
             .contains("'..' requires the standard library Range type")
     }));
 }
+
+#[test]
+fn ownership_protocol_attributes_cannot_be_forged() {
+    for (code, message) in [
+        (
+            "class Forged { @borrowed_result public fun read(): string { return \"x\"; } }",
+            "borrowed results are reserved",
+        ),
+        (
+            "@slot_walk(\"length\", \"read\", \"\") class Forged {}",
+            "slot walks are reserved",
+        ),
+    ] {
+        let diagnostics = analyze_code(code);
+        assert!(diagnostics.has_errors());
+        assert!(
+            diagnostics
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(message)),
+            "{:?}",
+            diagnostics.diagnostics
+        );
+    }
+}

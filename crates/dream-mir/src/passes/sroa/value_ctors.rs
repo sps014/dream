@@ -66,6 +66,7 @@ pub(super) fn expand(
             take_params.extend(ctor.take_params);
             statements.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: ctor.def,
                     args: Vec::new(),
                     ret: interner.void(),

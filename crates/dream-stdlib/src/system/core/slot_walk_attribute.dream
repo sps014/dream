@@ -1,0 +1,14 @@
+module system.core;
+
+/// Selects the internal stdlib accessors used for allocation-free slot traversal.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct)
+internal struct SlotWalkAttribute {
+    /// Integer count property, read again before every step.
+    public count: string;
+
+    /// Method that reads the element at a live slot.
+    public value: string;
+
+    /// Optional occupancy predicate; an empty name means every slot is live.
+    public live: string;
+}

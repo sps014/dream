@@ -305,8 +305,8 @@ fn field_of_index_load_owns() {
         func.locals[slots.0 as usize]
     );
     assert!(
-        !func.locals[entry.0 as usize].is_cursor && !func.locals[val.0 as usize].is_cursor,
-        "index occupant and its field must own: entry={} val={} {:?}",
+        func.locals[entry.0 as usize].is_cursor && !func.locals[val.0 as usize].is_cursor,
+        "index occupant may borrow; its field still owns: entry={} val={} {:?}",
         func.locals[entry.0 as usize].is_cursor,
         func.locals[val.0 as usize].is_cursor,
         func.blocks[0].stmts
@@ -413,6 +413,7 @@ fn cursor_escapes_when_base_dies_before_last_use() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -422,6 +423,7 @@ fn cursor_escapes_when_base_dies_before_last_use() {
     });
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -483,6 +485,7 @@ fn union_payload_escapes_when_scrutinee_dies() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -552,6 +555,7 @@ fn field_cursor_keeps_base_alive_until_last_use() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -666,6 +670,7 @@ fn union_hop_payload_is_not_cursor() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -741,4 +746,109 @@ fn stores_through_aliased_value_ref_parameters_keep_field_snapshots_owned() {
         &table,
     );
     assert!(!f.locals[snapshot.0 as usize].is_cursor);
+}
+
+#[test]
+fn indexed_cursor_invalidates_only_matching_element_slots() {
+    use crate::Mir;
+    use crate::analysis::effects::ModRefTable;
+    use dream_types::DefId;
+    use indexmap::IndexSet;
+
+    for same_element in [false, true] {
+        let mut ctx = TypeCtx::new();
+        let strings = ctx.interner.array(ctx.interner.string());
+        let other_element = if same_element {
+            ctx.interner.string()
+        } else {
+            strings
+        };
+        let other_array = ctx.interner.array(other_element);
+        let mut b = FunctionBuilder::new("scan", ctx.interner.void());
+        b.set_def(DefId::root(300), vec![]);
+        let array = b.new_param(strings, None);
+        let alias = b.new_param(other_array, None);
+        let snapshot = b.new_local(ctx.interner.string(), None);
+        let length = b.new_local(ctx.interner.int(), None);
+        b.assign(
+            Place::Local(snapshot),
+            Rvalue::Use(Operand::Copy(Place::index(
+                array,
+                Operand::Const(Const::Int(0)),
+            ))),
+        );
+        b.assign(
+            Place::index(alias, Operand::Const(Const::Int(1))),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        b.assign(
+            Place::Local(length),
+            Rvalue::StrLen(Operand::Copy(Place::Local(snapshot))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut mir = Mir {
+            functions: vec![b.finish()],
+            ..Mir::default()
+        };
+        let effects = ModRefTable::compute(&mir, &ctx.interner);
+        RcInsertion::run_with_layouts(
+            &mut mir.functions[0],
+            &ctx.interner,
+            &mir.layouts,
+            &IndexSet::new(),
+            &effects,
+        );
+        assert_eq!(
+            mir.functions[0].locals[snapshot.0 as usize].is_cursor,
+            !same_element
+        );
+    }
+}
+
+#[test]
+fn indexed_cursor_keeps_ownership_across_opaque_call_or_reallocation() {
+    for reallocate in [false, true] {
+        let mut ctx = TypeCtx::new();
+        let strings = ctx.interner.array(ctx.interner.string());
+        let mut b = FunctionBuilder::new("scan", ctx.interner.void());
+        let array = b.new_param(strings, None);
+        let snapshot = b.new_local(ctx.interner.string(), None);
+        let length = b.new_local(ctx.interner.int(), None);
+        b.assign(
+            Place::Local(snapshot),
+            Rvalue::Use(Operand::Copy(Place::index(
+                array,
+                Operand::Const(Const::Int(0)),
+            ))),
+        );
+        if reallocate {
+            b.assign(
+                Place::Local(array),
+                Rvalue::ArrayRealloc {
+                    array: Operand::Copy(Place::Local(array)),
+                    new_len: Operand::Const(Const::Int(2)),
+                    elem_ty: ctx.interner.string(),
+                },
+            );
+        } else {
+            b.push(Statement::Call {
+                callee: Callee {
+                    borrowed_result: false,
+                    def: dream_types::DefId::root(999),
+                    args: vec![],
+                    ret: ctx.interner.void(),
+                    take_params: vec![],
+                },
+                args: vec![],
+            });
+        }
+        b.assign(
+            Place::Local(length),
+            Rvalue::StrLen(Operand::Copy(Place::Local(snapshot))),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut f = b.finish();
+        RcInsertion.run(&mut f, &ctx.interner);
+        assert!(!f.locals[snapshot.0 as usize].is_cursor);
+    }
 }

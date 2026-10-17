@@ -24,6 +24,9 @@ pub(crate) fn boxes_into_object(interner: &TypeInterner, rv: &Rvalue) -> bool {
 
 /// Producers yield an owning result; slot extraction transfers an existing token.
 pub(crate) fn rvalue_owns_result(rv: &Rvalue) -> bool {
+    if let Rvalue::Call { callee, .. } = rv {
+        return !callee.borrowed_result;
+    }
     // Fewer than two parts never reaches `dream_concat_n`: one part lowers to the operand itself
     // and zero to an interned literal, neither of which is a reference this store may adopt.
     if let Rvalue::Concat(parts) = rv {

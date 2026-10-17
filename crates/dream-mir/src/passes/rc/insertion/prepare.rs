@@ -56,6 +56,7 @@ impl State {
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> Self {
         cursor::infer_cursors(func, interner, layouts, modref);
+        crate::verify::borrowed_result::prepare(func, interner, layouts, modref);
 
         let local_is_ref: Vec<bool> = func
             .locals

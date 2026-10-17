@@ -71,6 +71,7 @@ fn a_take_argument_is_refused() {
         run(|b, i, o, _| {
             b.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(40),
                     args: vec![],
                     ret: i.void(),

@@ -116,6 +116,8 @@ pub struct MirGlobal {
 
 #[derive(Debug)]
 pub struct MirFunction {
+    /// Returns a +0 alias anchored by the first borrowed parameter.
+    pub borrowed_result: bool,
     /// The nominal def this function (or generic instance) belongs to. The emitted symbol is derived
     /// from `(def, instance)` so call sites and headers agree and generic instances stay distinct.
     pub def: DefId,
@@ -709,6 +711,8 @@ pub struct NewCtor {
 /// `(def, args)`; `ret` is the concrete return type at this site.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Callee {
+    /// Direct-call result is +0 and must be retained by an owning destination.
+    pub borrowed_result: bool,
     pub def: DefId,
     pub args: Vec<TypeId>,
     pub ret: TypeId,
@@ -733,6 +737,7 @@ mod tests {
 
         // fun add(a: int, b: int): int { return a + b; }
         let func = HFunction {
+            borrowed_result: false,
             def,
             name: "add".into(),
             symbol: "add".into(),

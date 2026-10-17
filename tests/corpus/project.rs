@@ -24,6 +24,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("arc_same_arg_twice", "ownership", true),
     Case::project("arc_self_realloc_grow", "ownership", true),
     Case::project("arc_slot_overwrite_snapshot", "ownership", true),
+    Case::project("arc_slot_walk", "ownership", true),
     Case::project("arc_weak_forest", "ownership", true),
     Case::project("arithmetic", "core", true),
     Case::project("array_alloc", "collections", true),

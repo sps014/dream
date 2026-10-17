@@ -32,6 +32,10 @@ pub(super) fn rc_snapshots_of(
                     base: Operand::Copy(Place::Local(b)),
                     ..
                 } => b.0,
+                Rvalue::Call { callee, args } if callee.borrowed_result => match args.first() {
+                    Some(Operand::Copy(Place::Local(base))) => base.0,
+                    _ => continue,
+                },
                 _ => continue,
             };
             m.entry(base).or_default().push(dest.0);
@@ -60,6 +64,10 @@ pub(super) fn cursor_riders(func: &MirFunction) -> IndexMap<u32, Vec<u32>> {
                 base: Operand::Copy(Place::Local(b)),
                 ..
             } => b.0,
+            Rvalue::Call { callee, args } if callee.borrowed_result => match args.first() {
+                Some(Operand::Copy(Place::Local(base))) => base.0,
+                _ => continue,
+            },
             _ => continue,
         };
         if src != d.0 {

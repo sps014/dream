@@ -94,7 +94,7 @@ public fun take_array(): T[]
 
 ## `this`
 
-Element at `index`. Panics if `index` is out of range.
+Returns the element at `index`. Panics if `index` is out of range.
 
 ```dream
 public fun this[index: int]: T

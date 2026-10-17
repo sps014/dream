@@ -1,0 +1,115 @@
+import system;
+import system.webapi;
+import system.json;
+import system.logging;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string() + ",release:" + (releases - last_releases)
+            .to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters)
+                .to_string() + " checksum=" + checksum.to_string() + counters
+        );
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+async fun dispatches(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let state = Map<string, string>();
+        let leaf = Next(
+            async () => {
+                let url = Url.parse("http://localhost/items/42?id=42").unwrap();
+                let value = JsonValue.dict();
+                value["id"] = JsonValue.from_string(url.query.get("id").unwrap());
+                let response = HttpOutgoing.json_text(Json.serialize(value));
+                response.headers.set("X-Request-Id", "bench");
+                return response;
+            }
+        );
+        let inner = Next(
+            async () => {
+                state["layers"] = state.get("layers").unwrap_or("") + "x";
+                return leaf.call().await;
+            }
+        );
+        let middle = Next(
+            async () => {
+                state["layers"] = state.get("layers").unwrap_or("") + "x";
+                return inner.call().await;
+            }
+        );
+        let outer = Next(
+            async () => {
+                state["layers"] = state.get("layers").unwrap_or("") + "x";
+                return middle.call().await;
+            }
+        );
+        let response = outer.call().await;
+        total = total + response.status + response.body.length + state["layers"].length;
+    }
+    return total;
+}
+
+@noinline
+fun disabled_logging(iters: int): int {
+    let logger = Logger("bench");
+    logger.level = LogLevel.Error;
+    for (let i = 0; i < iters; i++) {
+        logger.debug("disabled message");
+    }
+    return iters;
+}
+
+async fun run_suite(): void {
+    let sw0 = Stopwatch();
+    let value0 = dispatches(1000).await;
+    sw0.stop();
+    report("webapi_next_3", sw0.elapsed_nanos, 1000, value0);
+    let sw1 = Stopwatch();
+    let value1 = disabled_logging(10000);
+    sw1.stop();
+    report("logging_disabled", sw1.elapsed_nanos, 10000, value1);
+}
+
+async fun main(): void {
+    measuring = false;
+    run_suite().await;
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite().await;
+    }
+    System.println("sink " + sink.to_string());
+}

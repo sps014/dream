@@ -232,6 +232,7 @@ fn does_not_number_string_reads_or_allocating_concatenation_across_mutation() {
         b.assign(Place::Local(first), expression());
         b.push(Statement::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: dream_types::DefId::root(99),
                 args: vec![],
                 ret: i.void(),

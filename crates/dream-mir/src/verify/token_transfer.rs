@@ -134,6 +134,9 @@ pub(super) fn statement(
                             })
                             .collect()
                     }
+                    Rvalue::Call { callee, .. } if callee.borrowed_result => {
+                        BTreeSet::from([Ticket::Borrow, Ticket::Null])
+                    }
                     Rvalue::UnionField { .. } => BTreeSet::from([Ticket::Borrow, Ticket::Null]),
                     _ => BTreeSet::from([Ticket::Owned(1), Ticket::Null]),
                 }

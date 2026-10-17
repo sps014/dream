@@ -1,6 +1,6 @@
 //! Flow-insensitive invalidation of borrowed snapshots before owning tokens are inserted.
 
-use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
+use crate::analysis::effects::{Effect, Known, ModRef, ModRefTable, stmt_effects};
 use crate::{Local, MirFunction, Place, Rvalue, Statement};
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
@@ -15,10 +15,20 @@ pub(super) fn invalidations(
     candidates: &IndexSet<u32>,
     forwarding: &IndexSet<u32>,
 ) -> ModRef {
+    if f.blocks
+        .iter()
+        .any(|b| matches!(b.terminator, crate::Terminator::Await { .. }))
+    {
+        return ModRef::Top;
+    }
     let mut effects = ModRef::default();
     for stmt in f.blocks.iter().flat_map(|block| &block.stmts) {
         stmt_effects(stmt, f, interner, |effect| {
             let summary = match effect {
+                Effect::SlotStore(element) => ModRef::Known(Known {
+                    slots: [element].into_iter().collect(),
+                    ..Known::default()
+                }),
                 Effect::Call(callee) => table.call(callee),
                 Effect::Iface(id, slot) => table.iface(id, slot),
                 Effect::Ctor(def) => table.ctor(def),
@@ -70,11 +80,4 @@ pub(super) fn invalidations(
         }
     }
     effects
-}
-
-pub(super) fn changes_elements(effects: &ModRef) -> bool {
-    match effects {
-        ModRef::Top => true,
-        ModRef::Known(known) => known.any_slot || !known.slots.is_empty(),
-    }
 }

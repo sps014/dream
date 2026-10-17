@@ -77,6 +77,14 @@ impl ModRef {
         }
     }
 
+    /// Dynamic indices share one slot key per element type, including aliases of an array.
+    pub(crate) fn writes_element(&self, element: TypeId) -> bool {
+        match self {
+            Self::Top => true,
+            Self::Known(known) => known.any_slot || known.slots.contains(&element),
+        }
+    }
+
     pub(crate) fn may_destroy(&self) -> bool {
         match self {
             Self::Top => true,

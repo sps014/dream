@@ -136,6 +136,7 @@ fn direct_callee_publication_is_checked_at_the_call_boundary() {
     caller.assign(Place::Local(value), new(ty));
     caller.push(Statement::Call {
         callee: crate::Callee {
+            borrowed_result: false,
             def,
             args: vec![],
             ret: ctx.interner.void(),

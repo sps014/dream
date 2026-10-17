@@ -178,6 +178,7 @@ public class JsonValue {
     }
 
     /// Returns the elements when this is an array, otherwise `None`.
+    @borrowed_result
     public fun as_array(): Option<List<JsonValue>> {
         if this.kind != 4 {
             return Option.None;
@@ -186,6 +187,7 @@ public class JsonValue {
     }
 
     /// Returns the entries when this is an object, otherwise `None`.
+    @borrowed_result
     public fun as_map(): Option<Map<string, JsonValue>> {
         if this.kind != 5 {
             return Option.None;

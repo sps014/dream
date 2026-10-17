@@ -61,6 +61,7 @@ fn owning_returns_transfer_into_every_destination() {
                 dest,
                 Rvalue::Call {
                     callee: crate::Callee {
+                        borrowed_result: false,
                         def: make_def,
                         args: vec![],
                         ret: ty,
@@ -151,6 +152,7 @@ fn non_owning_fields_keep_the_call_result_disposal_boundary() {
             Place::Field { base, field: 0 },
             Rvalue::Call {
                 callee: crate::Callee {
+                    borrowed_result: false,
                     def: make_def,
                     args: vec![],
                     ret: node,

@@ -1,6 +1,46 @@
 import system;
 import system.collections;
 
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string() + ",release:" + (releases - last_releases)
+            .to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters)
+                .to_string() + " checksum=" + checksum.to_string() + counters
+        );
+    }
+    sink = sink + checksum;
+}
+
 fun fill(borrow map: Map<int, int>, count: int): void {
     let i = 0;
     while i < count {
@@ -9,21 +49,7 @@ fun fill(borrow map: Map<int, int>, count: int): void {
     }
 }
 
-fun report(borrow name: string, nanos: long, iters: int, checksum: int): void {
-    System.println(
-        "bench "
-            + name
-            + " ns_total="
-            + nanos.to_string()
-            + " iters="
-            + iters.to_string()
-            + " ns_per_op="
-            + (nanos / (long)iters)
-            .to_string() + " checksum=" + checksum.to_string()
-    );
-}
-
-fun main(): void {
+fun run_suite(): void {
     let count = 4096;
     let rounds = 64;
     let map = Map<int, int>(count);
@@ -75,4 +101,15 @@ fun main(): void {
         i = i + 1;
     }
     report("map_clear_reserved_batch", clear_nanos, rounds * batch, checksum);
+}
+
+fun main(): void {
+    measuring = false;
+    run_suite();
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite();
+    }
+    System.println("sink " + sink.to_string());
 }

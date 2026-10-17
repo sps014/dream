@@ -1,6 +1,4 @@
-//! `for (let <element> in <seq>)` over a statically known stdlib `List<T>`, `Span<T>`, or
-//! `ReadOnlySpan<T>`, lowered to an index loop instead of an enumerator + `Option<T>` protocol.
-//! For the spans this is also what keeps iteration by-value: no enumerator object exists.
+//! Trusted stdlib slot walks avoid allocating an iterator and an Option for every element.
 
 use super::*;
 use crate::errors::SemanticError;
@@ -12,56 +10,58 @@ use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Stdlib generic sequences whose for-each is an index loop over `length` + `at_unchecked`.
-const INDEXED_SEQUENCES: &[&str] = &["List", "Span", "ReadOnlySpan"];
-
 /// Mangled accessors the index loop calls.
 pub(super) struct IndexedAccessors {
     seq: Type,
     element: Type,
     length: crate::function_table::FunctionIdentity,
     at: crate::function_table::FunctionIdentity,
+    live: Option<crate::function_table::FunctionIdentity>,
 }
 
 impl<'a> Analyzer<'a> {
-    /// The accessors for `ty` when it is one of the stdlib [`INDEXED_SEQUENCES`] (not a user type
-    /// of the same name).
+    /// Resolve the internal slot-walk contract on a trusted stdlib declaration.
     pub(super) fn stdlib_indexed_accessors(
         &mut self,
         ty: &Type,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<IndexedAccessors> {
         let id = self.type_ctx.lower(ty);
-        let dream_types::TyKind::Struct(def, args) = self.type_ctx.interner.kind(id).clone() else {
+        let dream_types::TyKind::Struct(def, _) = self.type_ctx.interner.kind(id).clone() else {
             return None;
         };
         let template = *self.generic_struct(def)?;
-        if !INDEXED_SEQUENCES.contains(&template.name.text.as_str())
-            || args.len() != 1
-            || !template
-                .file_path
-                .as_deref()
-                .is_some_and(dream_stdlib::is_std_source)
+        if !template
+            .file_path
+            .as_deref()
+            .is_some_and(dream_stdlib::is_std_source)
         {
             return None;
         }
+        let attrs = &template.attributes;
+        let count_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 0)?;
+        let value_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 1)?;
+        let live_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 2)
+            .filter(|name| !name.is_empty());
         let base = self.type_ctx.syntax_type(id);
         let (name, arguments) = Self::resolve_struct_parts(&base)?;
         self.ensure_type_instantiated(&name, &arguments, &empty_span(), diagnostics);
-        let length = self
-            .method_info(id, &getter_member_name("length"))
-            .ok()?
-            .identity;
-        let at = self.method_info(id, "at_unchecked").ok()?.identity;
-        let args: Vec<_> = args
-            .iter()
-            .map(|&arg| self.type_ctx.syntax_type(arg))
-            .collect();
+        let length_info = self.method_info(id, &getter_member_name(count_name)).ok()?;
+        let length = length_info.identity;
+        let at_info = self.method_info(id, value_name).ok()?;
+        let element = at_info.return_type.clone()?;
+        let at = at_info.identity;
+        let live = if let Some(name) = live_name {
+            Some(self.method_info(id, name).ok()?.identity)
+        } else {
+            None
+        };
         Some(IndexedAccessors {
             seq: ty.clone(),
-            element: args[0].clone(),
+            element,
             length,
             at,
+            live,
         })
     }
 
@@ -141,6 +141,35 @@ impl<'a> Analyzer<'a> {
                 });
             } else {
                 self.hir_fail();
+            }
+
+            if let Some(live) = &acc.live {
+                let bool_type = self.type_ctx.syntax_type(self.type_ctx.interner.bool());
+                self.hir_set_method_call(
+                    Some(self.hx_local(seq_l, seq_ty)),
+                    live,
+                    vec![Some(self.hx_local(idx_l, int))],
+                    &bool_type,
+                );
+                if let Some(occupied) = self.hir_take() {
+                    self.hir_push_stmt(HStmt::If {
+                        cond: self.hx_not(occupied),
+                        then_branch: vec![
+                            HStmt::Assign {
+                                place: dream_hir::HPlace::Local(idx_l),
+                                value: self.hx_bin(
+                                    BinOp::Add,
+                                    self.hx_local(idx_l, int),
+                                    self.hx_int(1),
+                                ),
+                            },
+                            HStmt::Continue(None),
+                        ],
+                        else_branch: vec![],
+                    });
+                } else {
+                    self.hir_fail();
+                }
             }
 
             self.hir_set_method_call(

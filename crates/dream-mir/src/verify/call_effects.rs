@@ -23,6 +23,7 @@ pub(super) fn effects(stmt: &Statement, summaries: &Returns) -> Option<(Vec<Oper
             let mut actual = vec![Operand::Const(Const::Null)];
             actual.extend(args.iter().cloned());
             let callee = crate::Callee {
+                borrowed_result: false,
                 def: ctor.def,
                 args: vec![],
                 ret: *ty,

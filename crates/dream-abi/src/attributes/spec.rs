@@ -107,8 +107,8 @@ pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
             "system.codegen"
         }
         "attribute" | "repeatable" | "export" | "intrinsic" | "inline" | "noinline" | "unsafe"
-        | "allow_cycle" | "consuming" | "owned" | "js" | "runtime" | "async_host" | "native"
-        | "node" | "web" => "system.core",
+        | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "owned" | "js"
+        | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
         _ => return None,
     })
 }

@@ -130,6 +130,7 @@ fn does_not_hoist_string_content_reads_or_allocating_binary_results() {
         });
         b.push(Statement::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: dream_types::DefId::root(99),
                 args: vec![],
                 ret: i.void(),

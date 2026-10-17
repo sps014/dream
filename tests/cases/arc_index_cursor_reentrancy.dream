@@ -1,0 +1,44 @@
+import system;
+
+class CursorItem {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+
+    del() {
+        System.println("drop " + this.name);
+    }
+}
+
+@noinline
+fun replace_cursor_item(borrow values: List<CursorItem>): void {
+    values[0] = CursorItem("new");
+}
+
+@noinline
+fun scan_cursor_items(borrow values: List<CursorItem>): void {
+    for (let value in values) {
+        replace_cursor_item(values);
+        System.println(value.name);
+    }
+}
+
+@noinline
+fun overwrite_index_alias(): void {
+    let values = [CursorItem("array")];
+    let alias = values;
+    let value = values[0];
+    alias[0] = CursorItem("replacement");
+    System.println(value.name);
+}
+
+fun main(): void {
+    let values = List<CursorItem>();
+    values.push(CursorItem("old"));
+    scan_cursor_items(values);
+    values.clear();
+    overwrite_index_alias();
+    System.println("done");
+}

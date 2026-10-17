@@ -83,6 +83,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             continue;
         }
         let snapshot = MirFunction {
+            borrowed_result: f.borrowed_result,
             def: f.def,
             symbol: f.symbol.clone(),
             instance: f.instance.clone(),

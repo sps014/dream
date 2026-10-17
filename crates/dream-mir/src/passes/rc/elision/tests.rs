@@ -47,6 +47,7 @@ fn does_not_elide_across_a_call() {
     let mut b = FunctionBuilder::new("f", i.void());
     let x = b.new_local(i.string(), Some("x".into()));
     let callee = crate::Callee {
+        borrowed_result: false,
         def: dream_types::DefId::root(0),
         args: vec![],
         ret: i.void(),
@@ -174,6 +175,7 @@ fn does_not_elide_diamond_with_call_in_arm() {
     let else_blk = b.new_block();
     let join = b.new_block();
     let callee = crate::Callee {
+        borrowed_result: false,
         def: dream_types::DefId::root(0),
         args: vec![],
         ret: i.void(),

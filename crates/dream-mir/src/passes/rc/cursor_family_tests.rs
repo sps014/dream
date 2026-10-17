@@ -137,6 +137,7 @@ fn walk(
 
 fn callee(def: DefId, ret: TypeId, arity: usize) -> Callee {
     Callee {
+        borrowed_result: false,
         def,
         args: vec![],
         ret,

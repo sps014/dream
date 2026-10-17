@@ -169,7 +169,8 @@ pub(super) fn check(f: &MirFunction, interner: &TypeInterner) -> Vec<Violation> 
         let si = block.stmts.len();
         match &block.terminator {
             Terminator::Return(value) | Terminator::AsyncComplete(value) => {
-                if interner.is_rc_tracked(f.ret)
+                if !f.borrowed_result
+                    && interner.is_rc_tracked(f.ret)
                     && let Some(Operand::Copy(Place::Local(l))) = value
                 {
                     flow.consume(&mut state, *l, bi, si);

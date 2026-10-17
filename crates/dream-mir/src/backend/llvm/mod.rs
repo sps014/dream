@@ -111,7 +111,10 @@ fn emit_llvm_module_unchecked(
         let sig = types::fn_ll_sig(interner, f, &l.h(), &l.word());
         let sret = body::returns_via_buffer(&l, f, &name);
         let tracked = source_loc::tracks_caller(&l, f, &name);
-        if sret || tracked {
+        if sret || tracked || f.borrowed_result {
+            if f.borrowed_result {
+                l.borrowed_results.insert(name.clone());
+            }
             let mut direct = sig.clone();
             if sret {
                 direct.fty.ret = Ty::Void;

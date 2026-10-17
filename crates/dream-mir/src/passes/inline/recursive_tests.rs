@@ -43,6 +43,7 @@ fn function(i: &TypeInterner) -> crate::MirFunction {
             Place::Local(result),
             Rvalue::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(1),
                     args: vec![],
                     ret: i.int(),

@@ -64,7 +64,10 @@ impl Targets {
                             }
                         })
                         .or_insert(*def);
-                    if let Some(f) = def.and_then(|def| by_def.get(&def)) {
+                    if let Some(f) = def
+                        .and_then(|def| by_def.get(&def))
+                        .filter(|f| !f.borrowed_result)
+                    {
                         out.by_class
                             .insert((imp.class_ty, *iface_id, slot), callee_of(f));
                     }
@@ -72,7 +75,10 @@ impl Targets {
             }
         }
         for (key, def) in definitions {
-            if let Some(f) = def.and_then(|def| by_def.get(&def)) {
+            if let Some(f) = def
+                .and_then(|def| by_def.get(&def))
+                .filter(|f| !f.borrowed_result)
+            {
                 out.unique.insert(key, callee_of(f));
             }
         }
@@ -92,6 +98,7 @@ impl Targets {
 
 fn callee_of(f: &MirFunction) -> Callee {
     Callee {
+        borrowed_result: f.borrowed_result,
         def: f.def,
         args: f.instance.clone(),
         ret: f.ret,

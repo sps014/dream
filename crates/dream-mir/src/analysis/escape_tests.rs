@@ -33,6 +33,7 @@ fn copy(l: Local) -> Operand {
 fn call(def: DefId, i: &TypeInterner, arg: Local) -> Statement {
     Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def,
             args: vec![],
             ret: i.void(),

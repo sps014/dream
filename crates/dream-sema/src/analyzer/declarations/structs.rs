@@ -16,6 +16,17 @@ impl<'a> Analyzer<'a> {
         // merged program (a stdlib `CPtr` parameter on a user overload) would otherwise key as
         // the poison type at registration but as the real struct when its body is emitted.
         for struct_decl in node.structs.iter() {
+            if dream_abi::attributes::has_named_attr(&struct_decl.attributes, "slot_walk")
+                && !struct_decl
+                    .file_path
+                    .as_deref()
+                    .is_some_and(dream_stdlib::is_std_source)
+            {
+                diagnostics.report_error(
+                    "slot walks are reserved for internal stdlib storage".into(),
+                    Some(struct_decl.name.position),
+                );
+            }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
             let def = self.type_ctx.register(

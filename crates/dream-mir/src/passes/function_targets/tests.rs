@@ -7,6 +7,7 @@ fn local(l: Local) -> Operand {
 }
 fn callee(def: u32, ret: TypeId) -> Callee {
     Callee {
+        borrowed_result: false,
         def: DefId::root(def),
         args: vec![],
         ret,

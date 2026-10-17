@@ -1,0 +1,124 @@
+import system;
+import system.testing;
+
+@noinline
+fun slot_walk_list_sum(borrow values: List<string>): int {
+    let sum = 0;
+    for (let value in values) {
+        sum = sum + value.length;
+    }
+    return sum;
+}
+
+@noinline
+fun slot_walk_map_sum(borrow values: Map<int, int>): int {
+    let sum = 0;
+    for (let entry in values) {
+        if entry.key == 2 {
+            continue;
+        }
+        sum = sum + entry.value;
+    }
+    return sum;
+}
+
+fun arc_slot_walk_has_no_iterator_allocations(): void {
+    let list = List<string>();
+    list.push("alpha" + 1);
+    list.push("beta" + 2);
+    let map = Map<int, int>();
+    map[1] = 11;
+    map[2] = 22;
+    map[3] = 33;
+    map.remove(3);
+    map[4] = 44;
+    let before = Debug.total_allocations;
+    let list_sum = slot_walk_list_sum(list);
+    let map_sum = slot_walk_map_sum(map);
+    let allocations = Debug.total_allocations - before;
+    Assert.eq(list_sum, 11);
+    Assert.eq(map_sum, 55);
+    Assert.eq(allocations, 0L);
+}
+
+fun arc_slot_walk_set_and_wrapped_queue(): void {
+    let set = Set<int>();
+    set.add(1);
+    set.add(2);
+    set.add(3);
+    set.remove(2);
+    let queue = Queue<int>();
+    for (let i = 0; i < 20; i++) {
+        queue.enqueue(i);
+    }
+    for (let i = 0; i < 12; i++) {
+        queue.dequeue();
+    }
+    for (let i = 20; i < 30; i++) {
+        queue.enqueue(i);
+    }
+    let before = Debug.total_allocations;
+    let set_sum = 0;
+    for (let value in set) {
+        set_sum = set_sum + value;
+    }
+    let queue_sum = 0;
+    for (let value in queue) {
+        if value % 2 == 0 {
+            continue;
+        }
+        queue_sum = queue_sum + value;
+    }
+    let allocations = Debug.total_allocations - before;
+    Assert.eq(set_sum, 4);
+    Assert.eq(queue_sum, 189);
+    Assert.eq(allocations, 0L);
+}
+
+@noinline
+fun slot_walk_owned_source(): string {
+    let values = List<string>();
+    values.push("owned" + 7);
+    for (let value in values) {
+        return value;
+    }
+    return "";
+}
+
+fun arc_slot_walk_return_owns_after_source_dies(): void {
+    let value = slot_walk_owned_source();
+    Assert.eq(value, "owned7");
+}
+
+@noinline
+fun slot_walk_owned_indexer(): int {
+    let values = List<string>();
+    values.push("held" + 42);
+    return values[0].length;
+}
+
+fun arc_map_set_rehash_preserves_entries(): void {
+    let map = Map<int, string>();
+    let set = Set<string>();
+    for (let i = 0; i < 200; i++) {
+        let value = "v" + i;
+        map[i] = value;
+        set.add(value);
+    }
+    Assert.eq(map.length, 200);
+    Assert.eq(set.length, 200);
+    Assert.eq(map[0], "v0");
+    Assert.eq(map[199], "v199");
+    Assert.is_true(set.contains("v0"));
+    Assert.is_true(set.contains("v199"));
+    Assert.is_false(set.contains("missing"));
+}
+
+@test
+fun arc_slot_walk(): void {
+    arc_slot_walk_has_no_iterator_allocations();
+    arc_slot_walk_set_and_wrapped_queue();
+    arc_slot_walk_return_owns_after_source_dies();
+    Assert.eq(slot_walk_owned_indexer(), 6);
+    arc_map_set_rehash_preserves_entries();
+}

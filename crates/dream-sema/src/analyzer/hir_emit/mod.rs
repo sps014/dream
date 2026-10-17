@@ -82,6 +82,7 @@ pub(super) struct HirEmit {
     /// onto the finished [`HFunction`] for debug-info line attribution.
     file: Option<String>,
     inline: dream_hir::InlineHint,
+    borrowed_result: bool,
     /// True when debug-info instrumentation is requested: statement analysis then interleaves
     /// [`HStmt::DebugLine`] markers so the backend can emit source-line hooks.
     debug_info: bool,
@@ -212,6 +213,8 @@ impl<'a> Analyzer<'a> {
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
         self.hir.file = function.file_path.as_ref().map(|f| f.to_string());
+        self.hir.borrowed_result =
+            dream_abi::attributes::has_named_attr(&function.attributes, "borrowed_result");
         self.hir.inline = if dream_abi::attributes::has_noinline_attr(&function.attributes) {
             dream_hir::InlineHint::Never
         } else if dream_abi::attributes::has_inline_attr(&function.attributes) {
@@ -528,6 +531,7 @@ impl<'a> Analyzer<'a> {
                     .unwrap_or(&self.hir.name);
                 let symbol = dream_types::function_symbol(module.as_deref(), name, &args);
                 self.hir.functions.push(HFunction {
+                    borrowed_result: self.hir.borrowed_result,
                     def,
                     symbol,
                     name: std::mem::take(&mut self.hir.name),

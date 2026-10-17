@@ -28,6 +28,7 @@ fn synthetic_addresses_do_not_infect_scalar_results() {
         Place::Local(called),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: DefId::root(1),
                 args: vec![],
                 ret: types.int(),

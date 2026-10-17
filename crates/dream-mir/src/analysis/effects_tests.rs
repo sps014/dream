@@ -70,6 +70,7 @@ fn interface_effects_reach_direct_callers_constructors_and_destructors() {
         if opaque {
             method.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(999),
                     args: vec![],
                     ret: void,
@@ -104,6 +105,7 @@ fn interface_effects_reach_direct_callers_constructors_and_destructors() {
             let h = b.new_param(holder, None);
             b.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(callee),
                     args: vec![],
                     ret: void,
@@ -193,6 +195,7 @@ fn interface_effects_reach_direct_callers_constructors_and_destructors() {
             }
             b.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(13),
                     args: vec![],
                     ret: void,
@@ -434,6 +437,7 @@ fn a_bounds_check_panic_keeps_its_caller_quiet() {
     b.set_def(DefId::root(10), vec![]);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: panic,
             args: vec![],
             ret: ctx.interner.void(),

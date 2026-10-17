@@ -23,6 +23,7 @@ fn last_use_temporary_value_call_kills_arg() {
         Place::Local(temp),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: make,
                 args: vec![],
                 ret: point,
@@ -33,6 +34,7 @@ fn last_use_temporary_value_call_kills_arg() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -79,6 +81,7 @@ fn last_use_constructed_value_temporary_kills_arg() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -219,6 +222,7 @@ fn value_moved_on_one_path_is_dropped_on_the_other() {
     b.switch_to(moved);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take_def,
             args: vec![],
             ret: ctx.interner.void(),
@@ -250,6 +254,7 @@ fn last_use_value_call_kills_arg() {
     let s = b.new_local(point, Some("s".into()));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take_def,
             args: vec![],
             ret: ctx.interner.void(),
@@ -281,6 +286,7 @@ fn still_live_value_call_retains_arg() {
     let s = b.new_local(point, Some("s".into()));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take_def,
             args: vec![],
             ret: ctx.interner.void(),
@@ -367,6 +373,7 @@ fn birth_borrow_falls_off_block_one_release_zero_retain() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -476,6 +483,7 @@ fn still_live_alias_retains() {
     let take = ctx.register(DefKind::Function, "take", vec![]);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -518,6 +526,7 @@ fn unbalanced_if_releases_on_kept_arm() {
     b.switch_to(then_blk);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -563,6 +572,7 @@ fn take_param_loop_header_does_not_share_retain() {
     b.switch_to(body);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -620,6 +630,7 @@ fn loop_carried_local_does_not_share_retain_on_entry() {
     b.switch_to(body);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -675,6 +686,7 @@ fn loop_live_local_does_not_move_into_sink() {
     b.switch_to(body);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -739,6 +751,7 @@ fn loop_rebind_string_releases_previous() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: make,
                 args: vec![],
                 ret: str_ty,
@@ -749,6 +762,7 @@ fn loop_rebind_string_releases_previous() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -792,6 +806,7 @@ fn rebind_evaluates_rhs_before_release() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: mutate,
                 args: vec![],
                 ret: ty,
@@ -895,6 +910,7 @@ fn ends_last_use_string_released_after_borrow_call() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: i.void(),
@@ -941,6 +957,7 @@ fn held_call_does_not_release_before_later_read() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: i.void(),
@@ -1005,6 +1022,7 @@ fn await_call_borrow_arg_not_released_before_await() {
         Place::Local(fut),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: read,
                 args: vec![],
                 ret: i.string(),
@@ -1130,6 +1148,7 @@ fn loop_field_store_of_take_param_releases_at_return() {
     );
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: peek,
             args: vec![],
             ret: ctx.interner.void(),
@@ -1630,6 +1649,7 @@ fn loop_string_index_store_is_per_iter_move() {
         Place::Local(s),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: make,
                 args: vec![],
                 ret: str_ty,
@@ -1784,6 +1804,7 @@ fn borrowed_value_passed_to_sink_takes_an_independent_owner() {
     let source = b.new_param(value, Some("source".into()));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: sink,
             args: vec![],
             ret: ctx.interner.void(),
@@ -1846,6 +1867,7 @@ fn borrowed_this_value_passed_to_sink_retains_without_killing_receiver() {
     let receiver = b.new_param(value, Some("this".into()));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: target,
             args: vec![],
             ret: ctx.interner.void(),
@@ -1887,6 +1909,7 @@ fn early_value_drop_clears_storage_and_cleans_up_the_other_exit() {
     b.switch_to(used);
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: target,
             args: vec![],
             ret: ctx.interner.void(),

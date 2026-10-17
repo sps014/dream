@@ -295,6 +295,7 @@ mod tests {
         let panic = DefId::root(900);
         f.blocks[0].stmts.push(Statement::Call {
             callee: crate::Callee {
+                borrowed_result: false,
                 def: panic,
                 args: vec![],
                 ret: i.void(),

@@ -156,6 +156,7 @@ impl FunctionBuilder {
 
     pub fn finish(self) -> MirFunction {
         MirFunction {
+            borrowed_result: false,
             def: self.def,
             symbol: self.symbol,
             instance: self.instance,

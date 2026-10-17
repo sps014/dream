@@ -31,7 +31,7 @@ pub(super) fn insert(
         let is_async_complete = matches!(func.blocks[bi].terminator, Terminator::AsyncComplete(_));
         let (skip, spill_from): (Option<u32>, Option<Operand>) = match &ret {
             Some(Operand::Copy(Place::Local(l))) if is_owned(l.0) => (Some(l.0), None),
-            Some(op) if ret_is_ref => (None, Some(op.clone())),
+            Some(op) if ret_is_ref && !func.borrowed_result => (None, Some(op.clone())),
             _ => (None, None),
         };
         let skip = if let Some(op) = spill_from {

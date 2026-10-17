@@ -1097,6 +1097,7 @@ fn indirect_call_demo() -> (dream_mir::Mir, dream_types::TypeInterner) {
     mb.assign(
         Place::Local(f),
         Rvalue::FuncRef(Callee {
+            borrowed_result: false,
             def: add_def,
             args: vec![],
             ret: int,

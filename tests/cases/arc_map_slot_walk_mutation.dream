@@ -1,0 +1,28 @@
+import system;
+
+class MapItem {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+
+    del() {
+        System.println("drop " + this.name);
+    }
+}
+
+@noinline
+fun overwrite_map_entry(borrow values: Map<int, MapItem>): void {
+    for (let entry in values) {
+        values[entry.key] = MapItem("map new");
+        System.println(entry.value.name);
+    }
+}
+
+fun main(): void {
+    let values = Map<int, MapItem>();
+    values[1] = MapItem("map old");
+    overwrite_map_entry(values);
+    System.println("done");
+}

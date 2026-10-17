@@ -79,6 +79,7 @@ fn diamond_shared_join_does_not_retain_on_unique_arm() {
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -175,6 +176,7 @@ fn loop_copy_inside_body_is_shared() {
     b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(x))));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: take,
             args: vec![],
             ret: ctx.interner.void(),
@@ -276,6 +278,7 @@ fn self_ref_field_call_is_not_container_move() {
         Place::Field { base: n, field: 0 },
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: step,
                 args: vec![],
                 ret: ty,
@@ -359,6 +362,7 @@ fn js_never_release_unique() {
         Place::Local(h),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: make,
                 args: vec![],
                 ret: i.js(),
@@ -470,6 +474,7 @@ fn borrow_call_last_use_is_ordinary_release() {
         Place::Local(y),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: iter,
                 args: vec![],
                 ret: ty,
@@ -505,6 +510,7 @@ fn call_result_last_use_is_ordinary_release() {
         Place::Local(x),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: get,
                 args: vec![],
                 ret: ty,

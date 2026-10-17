@@ -99,6 +99,14 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
     dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();
     let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
+    for f in mir.functions.iter_mut().chain(&mut mir.polls) {
+        crate::verify::borrowed_result::prepare(
+            f,
+            interner,
+            &layouts,
+            &crate::analysis::effects::ModRefTable::default(),
+        );
+    }
     let modref = crate::analysis::effects::ModRefTable::compute(mir, interner);
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);

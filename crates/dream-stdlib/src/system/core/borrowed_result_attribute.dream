@@ -1,0 +1,6 @@
+module system.core;
+
+/// Marks an internal slot getter whose result borrows from its first argument.
+/// Callers keep that argument alive and retain escaping results.
+@attribute(AttributeTarget.Method, AttributeTarget.StaticMethod)
+internal struct BorrowedResultAttribute {}

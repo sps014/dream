@@ -33,6 +33,7 @@ const PEEK: DefId = DefId::root(40);
 fn peek_call(t: &Types, x: Local) -> Statement {
     Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: PEEK,
             args: vec![],
             ret: t.i.void(),
@@ -242,6 +243,7 @@ fn snapshot_count_copied_out_then_retained_again_keeps_the_pair() {
     b.push(Statement::Retain(Operand::Copy(Place::Local(n))));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: PEEK,
             args: vec![],
             ret: t.i.void(),
@@ -338,6 +340,7 @@ fn array_record_field_borrows_only_while_the_array_slot_stays_intact() {
             ),
             3 => b.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(999),
                     args: vec![],
                     ret: t.i.void(),
@@ -414,6 +417,7 @@ fn call_replacing_the_owner_array_keeps_the_record_field_snapshot() {
     b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(41),
             args: vec![],
             ret: t.i.void(),

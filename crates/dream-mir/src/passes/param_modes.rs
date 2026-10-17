@@ -23,13 +23,14 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     if mir.profile.is_debug() {
         return false;
     }
+    let effects = crate::analysis::effects::ModRefTable::compute(mir, interner);
     let proofs: IndexMap<Key, _> = mir
         .functions
         .iter()
         .map(|f| {
             (
                 (f.def, f.instance.clone()),
-                proof::Proof::of(f, interner, &mir.layouts),
+                proof::Proof::of(f, interner, &mir.layouts, &effects),
             )
         })
         .collect();

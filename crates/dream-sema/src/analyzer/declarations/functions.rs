@@ -17,6 +17,20 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         use dream_abi::intrinsics::IntrinsicOp;
+        if dream_abi::attributes::has_named_attr(&function.attributes, "borrowed_result")
+            && (!function
+                .file_path
+                .as_deref()
+                .is_some_and(dream_stdlib::is_std_source)
+                || function.is_async
+                || function.is_extern)
+        {
+            diagnostics.report_error(
+                "borrowed results are reserved for synchronous internal stdlib slot getters".into(),
+                Some(function.name.position),
+            );
+        }
+
         if IntrinsicOp::from_attributes(&function.attributes)
             == Some(IntrinsicOp::CancellationRuntime)
             && !function

@@ -1,0 +1,111 @@
+import system;
+import system.io;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let last_allocations: long = 0;
+let last_retains: long = 0;
+let last_releases: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        let retains = Debug.runtime_counter(3);
+        let releases = Debug.runtime_counter(4);
+        counters = " counters=allocs:"
+            + (allocations - last_allocations)
+            .to_string()
+            + ",retain:"
+            + (retains - last_retains)
+            .to_string() + ",release:" + (releases - last_releases)
+            .to_string();
+        last_allocations = allocations;
+        last_retains = retains;
+        last_releases = releases;
+    }
+    if measuring {
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters)
+                .to_string() + " checksum=" + checksum.to_string() + counters
+        );
+    }
+    sink = sink + checksum;
+}
+
+@noinline
+fun buffered_lines(iters: int): int {
+    let bytes = Encoding.utf8_encode("alpha\r\nbeta\ngamma\nlast");
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let reader = BufferedReader(MemoryStream(bytes), 8);
+        while true {
+            let line = reader.read_line().unwrap();
+            if line.is_none() {
+                break;
+            }
+            total = total + line.unwrap().length;
+        }
+    }
+    return total;
+}
+
+@noinline
+fun buffered_writes(iters: int): int {
+    let bytes = Encoding.utf8_encode("alpha beta gamma delta");
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let stream = MemoryStream();
+        let writer = BufferedWriter(stream, 8);
+        writer.write_all(bytes).unwrap();
+        writer.finish().unwrap();
+        total = total + (int)stream.length;
+    }
+    return total;
+}
+
+@noinline
+fun file_reads(iters: int): int {
+    let path = System.env_or("DREAM_BENCH_IO_FILE", "tests/bench/io.dream");
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        let file = File.open(path).unwrap();
+        total = total + file.read_all().unwrap().length;
+        file.close().unwrap();
+    }
+    return total;
+}
+
+fun run_suite(): void {
+    let sw0 = Stopwatch();
+    let value0 = buffered_lines(1000);
+    sw0.stop();
+    report("buffered_read_line", sw0.elapsed_nanos, 1000, value0);
+    let sw1 = Stopwatch();
+    let value1 = buffered_writes(1000);
+    sw1.stop();
+    report("buffered_writer", sw1.elapsed_nanos, 1000, value1);
+    let sw2 = Stopwatch();
+    let value2 = file_reads(100);
+    sw2.stop();
+    report("file_read_all", sw2.elapsed_nanos, 100, value2);
+}
+
+fun main(): void {
+    measuring = false;
+    run_suite();
+    measuring = true;
+    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite();
+    }
+    System.println("sink " + sink.to_string());
+}

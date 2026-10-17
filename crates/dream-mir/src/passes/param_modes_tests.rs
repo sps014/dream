@@ -13,6 +13,7 @@ fn recursive(i: &mut TypeInterner, managed: bool) -> crate::MirFunction {
     b.push(Statement::SourceLine(1));
     b.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(1),
             args: vec![],
             ret: i.void(),
@@ -49,6 +50,7 @@ fn recursive_scalar_array_kernel_borrows_and_rewrites_callers() {
     let array = caller.new_take_param(mir.functions[0].locals[0].ty, None);
     caller.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: DefId::root(1),
             args: vec![],
             ret: i.void(),
@@ -127,6 +129,7 @@ fn unsafe_callee_rejection_propagates_through_recursive_component() {
     let mut mir = module(a);
     let edge = Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def: b.def,
             args: vec![],
             ret: i.void(),
@@ -159,6 +162,7 @@ fn string_reader_borrows_but_escaping_and_opaque_helpers_do_not() {
             ),
             2 => b.push(Statement::Call {
                 callee: Callee {
+                    borrowed_result: false,
                     def: DefId::root(999),
                     args: vec![],
                     ret: i.void(),
@@ -235,6 +239,7 @@ fn sink_dependency_rejects_only_the_forwarded_parameter() {
         Place::Local(alias),
         Rvalue::Call {
             callee: Callee {
+                borrowed_result: false,
                 def: DefId::root(21),
                 args: vec![],
                 ret: i.string(),
@@ -356,4 +361,31 @@ fn constructor_arguments_keep_the_same_abi_as_new_sites() {
     mir.functions.push(caller.finish());
     assert!(!param_modes::run(&mut mir, &i));
     assert!(mir.functions[0].locals[p.0 as usize].is_take);
+}
+
+#[test]
+fn managed_store_disqualifies_payload_but_not_unrelated_array_reader() {
+    let mut i = TypeInterner::new();
+    let array = i.array(i.string());
+    let slots = i.array(array);
+    let mut b = FunctionBuilder::new("store", i.void());
+    b.set_def(DefId::root(400), vec![]);
+    let destination = b.new_take_param(slots, None);
+    let payload = b.new_take_param(array, None);
+    let unrelated = b.new_take_param(slots, None);
+    let n = b.new_local(i.int(), None);
+    b.assign(
+        Place::index(destination, Operand::Const(Const::Int(0))),
+        Rvalue::Use(Operand::Copy(Place::Local(payload))),
+    );
+    b.assign(
+        Place::Local(n),
+        Rvalue::ArrayLen(Operand::Copy(Place::Local(unrelated))),
+    );
+    b.terminate(Terminator::Return(None));
+    let mut mir = module(b.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[destination.0 as usize].is_take);
+    assert!(mir.functions[0].locals[payload.0 as usize].is_take);
+    assert!(!mir.functions[0].locals[unrelated.0 as usize].is_take);
 }

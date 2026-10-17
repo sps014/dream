@@ -243,6 +243,7 @@ fn scalar_tail_returns_cannot_leave_owned_tokens_behind() {
         let def = ctx.register(DefKind::Function, "tail", vec![]);
         f.terminate(Terminator::TailCall {
             callee: crate::Callee {
+                borrowed_result: false,
                 def,
                 args: vec![],
                 ret: ctx.interner.void(),

@@ -455,6 +455,7 @@ mod tests {
         )))];
 
         let func = HFunction {
+            borrowed_result: false,
             def,
             name: "add".to_string(),
             symbol: "add".to_string(),

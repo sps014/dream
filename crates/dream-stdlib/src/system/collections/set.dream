@@ -2,6 +2,7 @@ module system.collections;
 
 // A generic open-addressing hash set.
 @allow_cycle
+@slot_walk("capacity", "slot_key", "slot_occupied")
 public class Set<T>: Collection<T> {
     keys: T[];
     states: int[];
@@ -145,6 +146,8 @@ public class Set<T>: Collection<T> {
         return added;
     }
 
+    // When `old_keys` is uniquely owned, `hash_code` cannot observe it through `this`
+    // (already replaced), so entries move with `exchange` instead of per-key retains.
     fun rehash(new_cap: int): void {
         let old_keys = this.keys;
         let old_states = this.states;
@@ -154,26 +157,7 @@ public class Set<T>: Collection<T> {
         this.cap = new_cap;
         this.count = 0;
         this.used = 0;
-        let i = 0;
-        while i < old_cap {
-            if old_states[i] == this.epoch {
-                this.insert_no_grow(old_keys[i], old_keys[i].hash_code());
-            }
-            i = i + 1;
-        }
-    }
-
-    fun rehash(new_cap: int): void where T: StringKey {
-        let old_keys = this.keys;
-        let old_states = this.states;
-        let old_cap = this.cap;
-        this.keys = Buffer.alloc<T>(new_cap);
-        this.states = Buffer.alloc<int>(new_cap);
-        this.cap = new_cap;
-        this.count = 0;
-        this.used = 0;
-        let can_transfer = CollectionStorage.string_keys<T>()
-            && CollectionStorage.owners(old_keys) == 1;
+        let can_transfer = CollectionStorage.owners(old_keys) == 1;
         let i = 0;
         while i < old_cap {
             if old_states[i] == this.epoch {
@@ -411,6 +395,7 @@ public class Set<T>: Collection<T> {
         return this.states[i] == this.epoch;
     }
 
+    @borrowed_result
     internal fun slot_key(i: int): T {
         return this.keys[i];
     }

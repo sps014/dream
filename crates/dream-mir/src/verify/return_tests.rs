@@ -10,6 +10,7 @@ fn copy(local: Local) -> Operand {
 fn call(def: DefId, ret: dream_types::TypeId, args: Vec<Operand>) -> Rvalue {
     Rvalue::Call {
         callee: Callee {
+            borrowed_result: false,
             def,
             ret,
             args: vec![],
@@ -135,6 +136,7 @@ fn call_side_effects_preserve_region_children_inserted_into_an_older_root() {
     caller.push(Statement::RegionEnter);
     caller.push(Statement::Call {
         callee: Callee {
+            borrowed_result: false,
             def,
             ret: ctx.interner.void(),
             args: vec![],

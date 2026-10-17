@@ -83,7 +83,7 @@ fun c0_verify_observation(borrow value: string): void {
     let wanted = "31\n31\n14\n0\n0\n0\n10\n9\n100\nSome(81)\ntrue\nSome(5)\n64,49,36,25,16,100,4,1,0\n49,36,25\n11\n[49, 36, 25, 16, 100, 4, 1, 0]\n0\n7\nSome(a)\nSome(b)\n3\n";
     let end = c0_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c0_cursor, end));
+    Assert.eq(actual, wanted.substring(c0_cursor, end));
     c0_cursor = end;
 }
 

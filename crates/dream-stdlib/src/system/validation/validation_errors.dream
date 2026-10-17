@@ -1,25 +1,5 @@
 module system.validation;
 
-/// One input failure; locations use JSON property names and decimal collection indices.
-@json
-public class ValidationIssue {
-    /// Path to the invalid value, from the outermost field to the failing item.
-    public location: List<string>;
-
-    /// Error code identifying the failure.
-    public code: string;
-
-    /// Human-readable explanation of the result or failure.
-    public message: string;
-
-    /// Creates a `ValidationIssue` with `location`, `code`, `message`.
-    public constructor(location: List<string>, code: string, message: string) {
-        this.location = location;
-        this.code = code;
-        this.message = message;
-    }
-}
-
 /// Deterministically ordered input errors without echoing sensitive submitted values.
 public class ValidationErrors {
     /// Validation failures, in discovery order.
@@ -49,13 +29,13 @@ public class ValidationErrors {
             for (let item in issue.location) {
                 location.push(JsonValue.from_string(item));
             }
-            entry.set("loc", location);
-            entry.set("type", JsonValue.from_string(issue.code));
-            entry.set("msg", JsonValue.from_string(issue.message));
+            entry["loc"] = location;
+            entry["type"] = JsonValue.from_string(issue.code);
+            entry["msg"] = JsonValue.from_string(issue.message);
             details.push(entry);
         }
         let result = JsonValue.dict();
-        result.set("detail", details);
+        result["detail"] = details;
         return result;
     }
 }

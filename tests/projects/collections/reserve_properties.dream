@@ -24,7 +24,7 @@ fun reserve_properties(): void {
             let value = round * 20 + i;
             list.push(value);
             queue.enqueue(value);
-            map.set(value, value);
+            map[value] = value;
             set.add(value);
             expected.push(value);
         }
@@ -35,10 +35,10 @@ fun reserve_properties(): void {
         Assert.eq(list.length, expected.length);
         Assert.eq(queue.length, expected.length);
         if round % 3 == 0 && expected.length > 0 {
-            let value = expected.get(0);
+            let value = expected[0];
             expected.remove_at(0);
             Assert.eq(queue.dequeue().unwrap(), value);
-            Assert.eq(list.get(0), value);
+            Assert.eq(list[0], value);
             list.remove_at(0);
             Assert.is_true(map.remove(value));
             Assert.is_true(set.remove(value));

@@ -14,25 +14,25 @@ class c95_P {
 fun compound_assign(): void {
     let x: int = 10;
     x += 5;
-    Assert.eq_str((x).to_string(), "15");
+    Assert.eq((x).to_string(), "15");
     x -= 3;
-    Assert.eq_str((x).to_string(), "12");
+    Assert.eq((x).to_string(), "12");
     x *= 2;
-    Assert.eq_str((x).to_string(), "24");
+    Assert.eq((x).to_string(), "24");
     x /= 4;
-    Assert.eq_str((x).to_string(), "6");
+    Assert.eq((x).to_string(), "6");
     x %= 4;
-    Assert.eq_str((x).to_string(), "2");
+    Assert.eq((x).to_string(), "2");
     x++;
-    Assert.eq_str((x).to_string(), "3");
+    Assert.eq((x).to_string(), "3");
     x--;
-    Assert.eq_str((x).to_string(), "2");
+    Assert.eq((x).to_string(), "2");
 
     let arr: int[] = [1, 2, 3];
     arr[1] += 10;
-    Assert.eq_str((arr[1]).to_string(), "12");
+    Assert.eq((arr[1]).to_string(), "12");
 
     let p = c95_P(5);
     p.v += 7;
-    Assert.eq_str((p.v).to_string(), "12");
+    Assert.eq((p.v).to_string(), "12");
 }

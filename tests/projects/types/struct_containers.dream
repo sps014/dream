@@ -58,7 +58,7 @@ fun c233_verify_observation(borrow value: string): void {
     let wanted = "1\n4\n100\n3\n5\n60\n15\n";
     let end = c233_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c233_cursor, end));
+    Assert.eq(actual, wanted.substring(c233_cursor, end));
     c233_cursor = end;
 }
 

@@ -6,7 +6,7 @@ async fun c3c_value(n: int): int {
 }
 
 async fun c3c_body(): void {
-    let pending = Buffer.alloc<Future<int>>(512);
+    let pending = Array.alloc<Future<int>>(512);
     for (let i = 0; i < pending.length; i = i + 1) {
         pending[i] = c3c_value(i);
         Promise.start(pending[i]);
@@ -29,7 +29,7 @@ fun c3c_verify_observation(borrow value: string): void {
     let wanted = "65536\n";
     let end = c3c_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c3c_cursor, end));
+    Assert.eq(actual, wanted.substring(c3c_cursor, end));
     c3c_cursor = end;
 }
 

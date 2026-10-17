@@ -94,11 +94,6 @@ public class SortedMap<K: Comparable<K>, V> {
         }
     }
 
-    /// Inserts `key` and `value`, replacing the value if the key is already present.
-    public fun set(key: K, value: V): void {
-        this[key] = value;
-    }
-
     // Value for `key`, or `None` when the key is absent.
     public fun get(borrow key: K): Option<V> {
         let idx = this.locate(key);

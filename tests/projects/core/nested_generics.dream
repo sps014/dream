@@ -23,9 +23,9 @@ class c16a_Pair<A, B> {
 @timeout(180000)
 fun nested_generics() {
     let b = c16a_Box<c16a_Box<int>>(c16a_Box<int>(7));
-    Assert.eq_str((b.v.v).to_string(), "7");
+    Assert.eq((b.v.v).to_string(), "7");
 
     let p = c16a_Pair<c16a_Box<int>, int>(c16a_Box<int>(99), 5);
-    Assert.eq_str((p.first.v).to_string(), "99");
-    Assert.eq_str((p.second).to_string(), "5");
+    Assert.eq((p.first.v).to_string(), "99");
+    Assert.eq((p.second).to_string(), "5");
 }

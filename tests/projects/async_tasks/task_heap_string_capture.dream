@@ -9,6 +9,6 @@ import system.task;
 async fun task_heap_string_capture(): void {
     let s = 42.to_string();
     let t = Task.spawn(() => s + "!").await;
-    Assert.eq_str((s).to_string(), "42");
-    Assert.eq_str((t).to_string(), "42!");
+    Assert.eq((s).to_string(), "42");
+    Assert.eq((t).to_string(), "42!");
 }

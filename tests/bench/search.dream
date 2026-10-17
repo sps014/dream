@@ -43,19 +43,19 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 
 @noinline
 fun search(hn: int, nn: int, iters: int, mode: int): int {
-    let h = string.alloc(hn);
-    let n = string.alloc(nn);
+    let h = " ".repeat(hn);
+    let n = " ".repeat(nn);
     for (let i = 0; i < hn; i = i + 1) {
-        string.set(h, i, mode == 2 ? (char)(97 + (i % 23)) : 'a');
+        h[i] = mode == 2 ? (char)(97 + (i % 23)) : 'a';
     }
     for (let i = 0; i < nn; i = i + 1) {
-        string.set(n, i, mode == 2 ? (char)(97 + (i % 23)) : 'a');
+        n[i] = mode == 2 ? (char)(97 + (i % 23)) : 'a';
     }
     if mode != 2 {
-        string.set(n, nn - 1, 'b');
+        n[nn - 1] = 'b';
     }
     if mode == 1 {
-        string.set(h, hn - 1, 'b');
+        h[hn - 1] = 'b';
     }
     let view = h.span();
     let total = 0;

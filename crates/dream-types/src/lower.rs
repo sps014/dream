@@ -196,10 +196,13 @@ impl TypeCtx {
 
     pub fn resolve(&self, kind: DefKind, name: &str) -> Option<DefId> {
         if let Some((path, name)) = name.rsplit_once("::") {
-            let module = self
-                .modules
-                .iter()
-                .find_map(|(&id, module)| (module == path).then_some(id))?;
+            let module = if path.is_empty() {
+                ModuleId::ROOT
+            } else {
+                self.modules
+                    .iter()
+                    .find_map(|(&id, module)| (module == path).then_some(id))?
+            };
             return self
                 .declarations
                 .get(&(module, kind, format!("{path}::{name}")))
@@ -447,6 +450,22 @@ mod tests {
         assert_eq!(ctx.lower(&syntax), instance);
         assert_ne!(local, foreign);
         ctx.set_scope(caller);
+        assert_eq!(ctx.lower(&syntax), instance);
+    }
+
+    #[test]
+    fn reconstructed_root_arguments_survive_a_foreign_name_collision() {
+        let mut ctx = TypeCtx::new();
+        let root = ctx.register(DefKind::Struct, "Weak", vec![]);
+        let root = ctx.instantiate(root, vec![]);
+        let library = ModuleId(1);
+        ctx.define_module(library, "library".to_string(), vec![]);
+        ctx.set_scope(library);
+        let foreign = ctx.register(DefKind::Struct, "Weak", vec!["T".to_string()]);
+        let instance = ctx.instantiate(foreign, vec![root]);
+        let syntax = ctx.syntax_type(instance);
+        assert_eq!(ctx.lower(&syntax), instance);
+        ctx.set_scope(ModuleId::ROOT);
         assert_eq!(ctx.lower(&syntax), instance);
     }
 

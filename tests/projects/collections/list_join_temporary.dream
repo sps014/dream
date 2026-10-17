@@ -36,7 +36,7 @@ fun c137_verify_observation(borrow value: string): void {
     let wanted = "a1,b2\na1;b2\na1,b2\na1;b2\na1,b2\na1;b2\na1+b2\na1+b2\n";
     let end = c137_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c137_cursor, end));
+    Assert.eq(actual, wanted.substring(c137_cursor, end));
     c137_cursor = end;
 }
 

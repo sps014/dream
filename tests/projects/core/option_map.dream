@@ -10,11 +10,11 @@ fun c181_double_int(n: int): int {
 fun option_map(): void {
     let some = Option.Some(21);
     let mapped = some.map(c181_double_int);
-    Assert.eq_str((mapped.unwrap_or(0)).to_string(), "42");
+    Assert.eq((mapped.unwrap_or(0)).to_string(), "42");
 
     let none: Option<int> = Option.None;
-    Assert.eq_str((none.map(c181_double_int).is_none()).to_string(), "true");
+    Assert.eq((none.map(c181_double_int).is_none()).to_string(), "true");
 
     let chained = Option.Some(10).map(c181_double_int);
-    Assert.eq_str((chained.unwrap_or(0)).to_string(), "20");
+    Assert.eq((chained.unwrap_or(0)).to_string(), "20");
 }

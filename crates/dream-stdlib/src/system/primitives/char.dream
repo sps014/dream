@@ -57,11 +57,6 @@ extend char: Comparable<char> {
         return this;
     }
 
-    // This character's numeric code point.
-    public fun to_int(): int {
-        return (int)this;
-    }
-
     // A new single-character string containing this character.
     public fun as_string(): string {
         let result = string.alloc(1);

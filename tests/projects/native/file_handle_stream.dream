@@ -11,7 +11,7 @@ async fun cd1_body(): void {
     // FileStream via File.open (OS-backed; no whole-file preload).
     let stream = File.open(path).unwrap();
     cd1_verify_observation((stream.read(5).unwrap()).to_string());
-    cd1_verify_observation((stream.position.unwrap()).to_string());
+    cd1_verify_observation((stream.tell().unwrap()).to_string());
     stream.seek(6L).unwrap();
     cd1_verify_observation((stream.read_all().unwrap()).to_string());
     stream.close().unwrap();
@@ -19,7 +19,7 @@ async fun cd1_body(): void {
     // FileHandle write mode (sync primary API).
     let write_path = "dream_file_handle_write.tmp";
     let writer = FileHandle.open(write_path, "w").unwrap();
-    let data = Buffer.alloc<byte>(3);
+    let data = Array.alloc<byte>(3);
     data[0] = (byte)65;
     data[1] = (byte)66;
     data[2] = (byte)67;
@@ -31,7 +31,7 @@ async fun cd1_body(): void {
     // Async variants still work.
     let reader = (FileHandle.open_async(path, "r").await).unwrap();
     let chunk = reader.read_async(5).await;
-    cd1_verify_observation((chunk.unwrap_or(Buffer.alloc<byte>(0)).length).to_string());
+    cd1_verify_observation((chunk.unwrap_or(Array.alloc<byte>(0)).length).to_string());
     reader.close().unwrap();
 
     File.delete(path).await;
@@ -45,7 +45,7 @@ fun cd1_verify_observation(borrow value: string): void {
     let wanted = "Dream\n5\nrocks\n\nABC\n5\n";
     let end = cd1_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cd1_cursor, end));
+    Assert.eq(actual, wanted.substring(cd1_cursor, end));
     cd1_cursor = end;
 }
 

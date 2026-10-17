@@ -1,6 +1,3 @@
-import system;
-
 fun main(): void {
-    let handle = Weak<int>(42);
-    System.println(handle.is_dead());
+    let weak handle = 42;
 }

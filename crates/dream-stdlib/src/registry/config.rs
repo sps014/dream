@@ -10,8 +10,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.encoding",
     ],
     generators: &[],
-    files: &[(
-        "<std>/system/config/config.dream",
-        include_str!("../system/config/config.dream"),
-    )],
+    files: &[
+        (
+            "<std>/system/config/config_error.dream",
+            include_str!("../system/config/config_error.dream"),
+        ),
+        (
+            "<std>/system/config/config.dream",
+            include_str!("../system/config/config.dream"),
+        ),
+        (
+            "<std>/system/config/config_builder.dream",
+            include_str!("../system/config/config_builder.dream"),
+        ),
+    ],
 };

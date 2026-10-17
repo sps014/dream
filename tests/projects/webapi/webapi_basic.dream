@@ -112,18 +112,18 @@ async fun webapi_basic(): void {
     request.headers.set("X-Key", "k");
     request.headers.set("Cookie", "session=abc");
     let response = client.send(request).await.unwrap();
-    Assert.eq_str(response.read_text().await.unwrap(), "12:4:abc:kk");
-    Assert.eq_str(response.headers.get("X-Global").unwrap(), "yes");
+    Assert.eq(response.read_text().await.unwrap(), "12:4:abc:kk");
+    Assert.eq(response.headers.get("X-Global").unwrap(), "yes");
     response.close();
     Assert.eq(webapi_dep_calls, 1);
-    Assert.eq_str(webapi_get(client, base, "/dependency/42", 200).await, "42");
-    Assert.eq_str(webapi_get(client, base, "/group/ok", 200).await, "groupa");
-    Assert.eq_str(webapi_get(client, base, "/onion", 200).await, "5,10ba");
+    Assert.eq(webapi_get(client, base, "/dependency/42", 200).await, "42");
+    Assert.eq(webapi_get(client, base, "/group/ok", 200).await, "groupa");
+    Assert.eq(webapi_get(client, base, "/onion", 200).await, "5,10ba");
     webapi_get(client, base, "/auth", 401).await;
-    Assert.eq_str(webapi_get(client, base, "/short", 403).await, "blocked");
+    Assert.eq(webapi_get(client, base, "/short", 403).await, "blocked");
     Assert.is_true(webapi_get(client, base, "/failure", 500).await.contains("failed"));
     Assert.is_true(webapi_get(client, base, "/missing", 404).await.contains("Not Found"));
-    Assert.eq_str(webapi_get(client, base, "/chunks", 200).await, "onetwo");
+    Assert.eq(webapi_get(client, base, "/chunks", 200).await, "onetwo");
     let binary = client.send(HttpRequest.get(Url.parse(base + "/binary").unwrap())).await.unwrap();
     let binary_bytes = binary.body.read_async(16).await.unwrap();
     Assert.eq(binary_bytes.length, 2);
@@ -143,7 +143,7 @@ async fun webapi_basic(): void {
     json_request.headers.set("Content-Type", "application/json");
     json_request.body = Encoding.utf8_encode("{\"name\":\"Dream\"}");
     let json_response = client.send(json_request).await.unwrap();
-    Assert.eq_str(json_response.read_text().await.unwrap(), "{\"name\":\"Dream\"}");
+    Assert.eq(json_response.read_text().await.unwrap(), "{\"name\":\"Dream\"}");
     json_response.close();
     let multipart = HttpRequest("POST", Url.parse(base + "/multipart").unwrap());
     multipart.headers.set("Content-Type", "multipart/form-data; boundary=dream");
@@ -151,14 +151,14 @@ async fun webapi_basic(): void {
         "--dream\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\ntitle\r\n--dream\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nbody\r\n--dream--\r\n"
     );
     let upload = client.send(multipart).await.unwrap();
-    Assert.eq_str(upload.read_text().await.unwrap(), "title:a.txt:body");
+    Assert.eq(upload.read_text().await.unwrap(), "title:a.txt:body");
     upload.close();
     let preflight = HttpRequest("OPTIONS", Url.parse(base + "/hello/1").unwrap());
     preflight.headers.set("Origin", "https://example.com");
     preflight.headers.set("Access-Control-Request-Method", "GET");
     let cors = client.send(preflight).await.unwrap();
     Assert.eq(cors.status, 200);
-    Assert.eq_str(cors.headers.get("Access-Control-Allow-Origin").unwrap(), "*");
+    Assert.eq(cors.headers.get("Access-Control-Allow-Origin").unwrap(), "*");
     cors.close();
     let openapi = webapi_get(client, base, "/openapi.json", 200).await;
     Assert.is_true(openapi.contains("text/event-stream"));
@@ -172,7 +172,7 @@ async fun webapi_basic(): void {
     socket.send_text("echo").await.unwrap();
     switch (socket.receive().await.unwrap()) {
         Text(text) => {
-            Assert.eq_str(text, "echo");
+            Assert.eq(text, "echo");
         },
         _ => {
             Assert.is_true(false);

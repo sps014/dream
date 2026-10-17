@@ -1,0 +1,3 @@
+module system.core;
+
+internal interface SpanCharacter {}

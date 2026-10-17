@@ -44,7 +44,7 @@ async fun webapi_auth_tokens(): void {
     let tokens = service.login("dream", "correct password").await.unwrap();
     Assert.eq(tokens.expires_in, 900);
     let principal = service.verify(tokens.access_token).await.unwrap();
-    Assert.eq_str(principal.subject, "1");
+    Assert.eq(principal.subject, "1");
     Assert.is_true(principal.has_scope("read"));
     let next = service.refresh(tokens.refresh_token).await.unwrap();
     Assert.is_true(service.verify(next.access_token).await.is_ok());

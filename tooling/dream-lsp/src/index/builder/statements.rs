@@ -3,17 +3,38 @@ use super::*;
 impl Builder {
     pub(crate) fn walk_stmt(&mut self, stmt: &StatementNode, scope: usize) {
         match stmt {
-            StatementNode::Declaration(name, ty, expr, _is_const) => {
-                let inferred = self.infer_type(expr, scope);
-                let type_str = ty
-                    .as_ref()
-                    .map(|t| t.display_name())
-                    .or_else(|| inferred.clone())
-                    .unwrap_or_else(|| "unknown".to_string());
-                let detail = type_str.clone();
-                let resolved_ty = ty.as_ref().map(|t| t.display_name()).or(inferred);
+            StatementNode::Declaration(name, ty, expr, _is_const, is_weak) => {
+                let weak_id = if *is_weak {
+                    let candidate = ty
+                        .as_ref()
+                        .map(|ty| self.type_ctx.borrow_mut().lower(ty))
+                        .or_else(|| self.infer_id(expr, scope, &[]));
+                    candidate.and_then(|candidate| {
+                        let mut ctx = self.type_ctx.borrow_mut();
+                        if let TyKind::Union(def, _) = ctx.interner.kind(candidate)
+                            && ctx.defs.name(*def) == "Option"
+                        {
+                            return Some(candidate);
+                        }
+                        let option = ctx.resolve(DefKind::Union, "Option")?;
+                        Some(ctx.instantiate(option, vec![candidate]))
+                    })
+                } else {
+                    None
+                };
+                let resolved_ty = weak_id
+                    .map(|id| self.display_id(id))
+                    .or_else(|| ty.as_ref().map(|ty| ty.display_name()))
+                    .or_else(|| self.infer_type(expr, scope));
+                let detail = resolved_ty.clone().unwrap_or_else(|| "unknown".to_string());
                 self.push_decl(name, SymKind::Variable, detail, scope, resolved_ty.clone());
-                self.record_binding_type(ty.as_ref(), expr, scope);
+                if let Some(id) = weak_id {
+                    if let Some(index) = self.decls.len().checked_sub(1) {
+                        self.inferred_types.insert(index, id);
+                    }
+                } else {
+                    self.record_binding_type(ty.as_ref(), expr, scope);
+                }
                 if let Some(t) = ty {
                     self.add_type_ref(t, scope);
                 } else if let Some(t_str) = resolved_ty {

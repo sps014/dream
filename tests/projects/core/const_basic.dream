@@ -6,5 +6,5 @@ import system;
 fun const_basic(): void {
     const pi: int = 3;
     let r: int = 2;
-    Assert.eq_str((pi * r * r).to_string(), "12");
+    Assert.eq((pi * r * r).to_string(), "12");
 }

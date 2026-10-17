@@ -1,0 +1,16 @@
+module system.webapi.auth;
+
+/// Local lookup and explicit external-identity linking are application policy.
+public interface AuthAccounts {
+    /// Looks up an account by login name; returns `AuthError` if authentication cannot proceed.
+    async unique fun find_login(login: string): Result<AuthAccount, AuthError>;
+
+    /// Resolves an external identity to a local account, returning an authentication error on
+    /// failure.
+    async unique fun link_identity(
+        issuer: string,
+        subject: string,
+        email: string,
+        email_verified: bool
+    ): Result<AuthAccount, AuthError>;
+}

@@ -54,10 +54,10 @@ public static class Encoding {
         let w = 0;
         let i = 0;
         while i < n {
-            let cp = text.char_at(i).to_int();
+            let cp = ((int)text.char_at(i));
             i = i + 1;
             if (cp >= 55296) && (cp <= 56319) && (i < n) {
-                let lo = text.char_at(i).to_int();
+                let lo = ((int)text.char_at(i));
                 if (lo >= 56320) && (lo <= 57343) {
                     cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
                     i = i + 1;

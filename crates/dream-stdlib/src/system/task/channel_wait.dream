@@ -1,0 +1,28 @@
+module system.task;
+
+// Removes an abandoned wait registration even when its async frame is dropped.
+internal class ChannelWait {
+    waiters: List<CancellationSource>;
+    internal source: CancellationSource;
+    closed: bool;
+
+    internal constructor(waiters: List<CancellationSource>) {
+        this.waiters = waiters;
+        this.source = CancellationSource();
+        this.closed = false;
+        this.waiters.push(this.source);
+    }
+
+    internal fun close(): void {
+        if !this.closed {
+            this.closed = true;
+            if !this.source.is_cancelled {
+                this.waiters.remove(this.source);
+            }
+        }
+    }
+
+    del() {
+        this.close();
+    }
+}

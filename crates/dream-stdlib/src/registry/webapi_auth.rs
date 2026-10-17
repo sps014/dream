@@ -13,12 +13,52 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/webapi/auth/auth_types.dream",
-            include_str!("../system/webapi/auth/auth_types.dream"),
+            "<std>/system/webapi/auth/auth_error.dream",
+            include_str!("../system/webapi/auth/auth_error.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_principal.dream",
+            include_str!("../system/webapi/auth/auth_principal.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_account.dream",
+            include_str!("../system/webapi/auth/auth_account.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_accounts.dream",
+            include_str!("../system/webapi/auth/auth_accounts.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_session.dream",
+            include_str!("../system/webapi/auth/auth_session.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/oidc_transaction.dream",
+            include_str!("../system/webapi/auth/oidc_transaction.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_session_store.dream",
+            include_str!("../system/webapi/auth/auth_session_store.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/jwt_options.dream",
+            include_str!("../system/webapi/auth/jwt_options.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/oidc_options.dream",
+            include_str!("../system/webapi/auth/oidc_options.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/auth_tokens.dream",
+            include_str!("../system/webapi/auth/auth_tokens.dream"),
         ),
         (
             "<std>/system/webapi/auth/auth_crypto.dream",
             include_str!("../system/webapi/auth/auth_crypto.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/password.dream",
+            include_str!("../system/webapi/auth/password.dream"),
         ),
         (
             "<std>/system/webapi/auth/memory_auth_store.dream",

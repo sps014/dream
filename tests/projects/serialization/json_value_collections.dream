@@ -43,7 +43,7 @@ fun c124_verify_observation(borrow value: string): void {
     let wanted = "[1,\"x\"]\n{\"n\":42}\n{\"a\":7}\n{\"id\":9,\"payload\":{\"deep\":{\"n\":[1,2]}}}\n{\"id\":9,\"payload\":{\"deep\":{\"n\":[1,2]}}}\n";
     let end = c124_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c124_cursor, end));
+    Assert.eq(actual, wanted.substring(c124_cursor, end));
     c124_cursor = end;
 }
 

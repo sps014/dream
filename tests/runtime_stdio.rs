@@ -32,7 +32,7 @@ fn chunked_output_preserves_streams_unicode_and_c_string_boundaries() {
     expected.extend_from_slice("😀".as_bytes());
     expected.extend_from_slice(&[0xed, 0xa0, 0x80, b'y', 0xed, 0xb0, 0x80]);
     expected.extend_from_slice("é".as_bytes());
-    for mode in ["stdout", "stderr", "console"] {
+    for mode in ["stdout", "stderr"] {
         let output = Command::new(&binary).arg(mode).output().unwrap();
         assert!(output.status.success());
         if mode == "stdout" {

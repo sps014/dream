@@ -9,7 +9,7 @@ fun c81_body(): void {
         xs.push(round);
         xs.push(round + 10);
         c81_verify_observation((xs.length).to_string());
-        c81_verify_observation((xs.get(0)).to_string());
+        c81_verify_observation((xs[0]).to_string());
         xs.clear();
         c81_verify_observation((xs.length).to_string());
         c81_verify_observation((xs.capacity).to_string());
@@ -17,12 +17,12 @@ fun c81_body(): void {
     }
 
     let m = Map<int, int>();
-    m.set(1, 10);
-    m.set(2, 20);
+    m[1] = 10;
+    m[2] = 20;
     c81_verify_observation((m.length).to_string());
     m.clear();
     c81_verify_observation((m.length).to_string());
-    m.set(3, 30);
+    m[3] = 30;
     c81_verify_observation((m.get(3).unwrap_or(0)).to_string());
 
     let s = Set<int>();
@@ -41,7 +41,7 @@ fun c81_body(): void {
     names.clear();
     c81_verify_observation((names.length).to_string());
     names.push("c");
-    c81_verify_observation((names.get(0)).to_string());
+    c81_verify_observation((names[0]).to_string());
 }
 
 let c81_cursor: int = 0;
@@ -51,7 +51,7 @@ fun c81_verify_observation(borrow value: string): void {
     let wanted = "2\n0\n0\n8\n2\n1\n0\n8\n2\n2\n0\n8\n2\n0\n30\n2\n0\ntrue\n2\n0\nc\n";
     let end = c81_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c81_cursor, end));
+    Assert.eq(actual, wanted.substring(c81_cursor, end));
     c81_cursor = end;
 }
 

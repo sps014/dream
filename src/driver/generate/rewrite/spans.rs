@@ -289,8 +289,8 @@ pub(super) fn shift_stmt<'a>(
             map.token(t),
             shift_expr(map, arena, v),
         ),
-        StatementNode::Declaration(t, ty, e, c) => {
-            StatementNode::Declaration(map.token(t), ty.clone(), shift_expr(map, arena, e), *c)
+        StatementNode::Declaration(t, ty, e, c, w) => {
+            StatementNode::Declaration(map.token(t), ty.clone(), shift_expr(map, arena, e), *c, *w)
         }
         StatementNode::TupleDeclaration {
             pattern,

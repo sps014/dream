@@ -65,7 +65,7 @@ fun c106_verify_observation(borrow value: string): void {
     let wanted = "meow\n4\nwoof\n2\nmeow\n43\n";
     let end = c106_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c106_cursor, end));
+    Assert.eq(actual, wanted.substring(c106_cursor, end));
     c106_cursor = end;
 }
 

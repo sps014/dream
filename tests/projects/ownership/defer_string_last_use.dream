@@ -7,7 +7,7 @@ import system;
 fun defer_string_last_use() {
     defer {
         let s = "ab" + "cd";
-        Assert.eq_str((s).to_string(), "abcd");
-        Assert.eq_str(("ok").to_string(), "ok");
+        Assert.eq((s).to_string(), "abcd");
+        Assert.eq(("ok").to_string(), "ok");
     }
 }

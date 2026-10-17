@@ -93,6 +93,19 @@ impl<'a> Analyzer<'a> {
                 let _ = param_table.add_symbol(cap_name, cap_ty);
             }
         }
+        if let Some(modifiers) =
+            function_def.and_then(|def| self.closure_binding_modifiers.get(&def))
+        {
+            for (name, is_weak, is_const) in modifiers {
+                if *is_weak {
+                    param_table.mark_weak(name.clone());
+                }
+                if *is_const {
+                    param_table.mark_const(name.clone());
+                }
+            }
+        }
+
         Ok(param_table)
     }
 
@@ -145,8 +158,15 @@ impl<'a> Analyzer<'a> {
             self.hir_mark_line(line as u32);
         }
         match statement {
-            StatementNode::Declaration(left, type_annotation, right, is_const) => self
-                .analyze_declaration(left, type_annotation, right, *is_const, &ctx, diagnostics)?,
+            StatementNode::Declaration(left, type_annotation, right, is_const, is_weak) => self
+                .analyze_declaration(
+                    left,
+                    type_annotation,
+                    right,
+                    (*is_const, *is_weak),
+                    &ctx,
+                    diagnostics,
+                )?,
             StatementNode::TupleDeclaration {
                 pattern,
                 ty,

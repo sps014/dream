@@ -27,10 +27,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/system.dream"),
         ),
         (
-            "<std>/system/stdio.dream",
-            include_str!("../system/stdio.dream"),
-        ),
-        (
             "<std>/system/random.dream",
             include_str!("../system/random.dream"),
         ),
@@ -43,24 +39,48 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/time.dream"),
         ),
         (
+            "<std>/system/timer_guard.dream",
+            include_str!("../system/timer_guard.dream"),
+        ),
+        (
             "<std>/system/stopwatch.dream",
             include_str!("../system/stopwatch.dream"),
         ),
         (
-            "<std>/system/datetime_ymd.dream",
-            include_str!("../system/datetime_ymd.dream"),
+            "<std>/system/date_time_ymd.dream",
+            include_str!("../system/date_time_ymd.dream"),
         ),
         (
-            "<std>/system/timezone.dream",
-            include_str!("../system/timezone.dream"),
+            "<std>/system/time_zone.dream",
+            include_str!("../system/time_zone.dream"),
         ),
         (
             "<std>/system/datetime.dream",
             include_str!("../system/datetime.dream"),
         ),
         (
+            "<std>/system/duration.dream",
+            include_str!("../system/duration.dream"),
+        ),
+        (
+            "<std>/system/date_time.dream",
+            include_str!("../system/date_time.dream"),
+        ),
+        (
             "<std>/system/debug.dream",
             include_str!("../system/debug.dream"),
+        ),
+        (
+            "<std>/system/c_ptr.dream",
+            include_str!("../system/c_ptr.dream"),
+        ),
+        (
+            "<std>/system/owned_c_ptr.dream",
+            include_str!("../system/owned_c_ptr.dream"),
+        ),
+        (
+            "<std>/system/native_callback.dream",
+            include_str!("../system/native_callback.dream"),
         ),
         (
             "<std>/system/ffi.dream",

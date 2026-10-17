@@ -41,7 +41,7 @@ let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
 let counter_names = "weak_register,weak_invalidate,region_objects,retain,release,enqueue,ready_alloc".split(
     ','
 );
-let counter_last = Buffer.alloc<long>(8);
+let counter_last = Array.alloc<long>(8);
 
 fun counters_field(): string {
     if counters_on == false {
@@ -164,7 +164,7 @@ fun bench_char_scan(iters: int): void {
         let n = s.length;
         let bo = 0;
         while bo < n {
-            let c = s.char_at(bo);
+            let c = s[bo];
             acc = acc + (int)c;
             bo = bo + 1;
         }
@@ -222,7 +222,7 @@ fun bench_substring_span(iters: int): void {
     while i < iters {
         let start = i & 7;
         let sub = s.span(start, start + 25 + (i & 3));
-        acc = acc + sub.length + (int)sub.char_at(0);
+        acc = acc + sub.length + (int)sub[0];
         i = i + 1;
     }
     sw.stop();
@@ -253,7 +253,7 @@ fun bench_map_get_span(iters: int): void {
     let map = Map<string, int>();
     let j = 0;
     while j < 8 {
-        map.set("k" + j.to_string(), j + 1);
+        map["k" + j.to_string()] = j + 1;
         j = j + 1;
     }
     let sw = Stopwatch();
@@ -310,7 +310,7 @@ fun bench_map_get_set(iters: int): void {
     let sw = Stopwatch();
     let i = 0;
     while i < iters {
-        map.set(i, i * 3);
+        map[i] = i * 3;
         i = i + 1;
     }
     let acc = 0;
@@ -336,7 +336,7 @@ fun bench_map_clear_reuse(iters: int): void {
     while r < rounds {
         let i = 0;
         while i < per {
-            map.set(i, i);
+            map[i] = i;
             i = i + 1;
         }
         map.clear();
@@ -399,7 +399,7 @@ fun bench_alloc_churn(iters: int): void {
     let acc = 0;
     let i = 0;
     while i < iters {
-        let buf = Buffer.alloc<int>(64);
+        let buf = Array.alloc<int>(64);
         buf[0] = i;
         acc = acc + buf[0];
         i = i + 1;
@@ -549,12 +549,12 @@ fun checksum_ints(borrow a: int[]): int {
 
 fun bench_arr_add(iters: int): void {
     let n = 256;
-    let a = Buffer.alloc<float>(n);
-    let b = Buffer.alloc<float>(n);
-    let c = Buffer.alloc<float>(n);
-    let ai = Buffer.alloc<int>(n);
-    let bi = Buffer.alloc<int>(n);
-    let ci = Buffer.alloc<int>(n);
+    let a = Array.alloc<float>(n);
+    let b = Array.alloc<float>(n);
+    let c = Array.alloc<float>(n);
+    let ai = Array.alloc<int>(n);
+    let bi = Array.alloc<int>(n);
+    let ci = Array.alloc<int>(n);
     let k = 0;
     while k < n {
         a[k] = (float)k;
@@ -585,9 +585,9 @@ fun bench_arr_add(iters: int): void {
 
 fun bench_vec_add(iters: int): void {
     let n = 256;
-    let a = Buffer.alloc<float>(n);
-    let b = Buffer.alloc<float>(n);
-    let c = Buffer.alloc<float>(n);
+    let a = Array.alloc<float>(n);
+    let b = Array.alloc<float>(n);
+    let c = Array.alloc<float>(n);
     let k = 0;
     while k < n {
         a[k] = (float)k;
@@ -758,9 +758,9 @@ const MAT_N: int = 64;
 // One op = one full N x N matrix multiply (i-k-j order, cache friendly).
 fun bench_matmul(iters: int): void {
     let n = MAT_N;
-    let a = Buffer.alloc<double>(n * n);
-    let b = Buffer.alloc<double>(n * n);
-    let c = Buffer.alloc<double>(n * n);
+    let a = Array.alloc<double>(n * n);
+    let b = Array.alloc<double>(n * n);
+    let c = Array.alloc<double>(n * n);
     let t = 0;
     while t < n * n {
         a[t] = (double)(t % 13);
@@ -821,7 +821,7 @@ fun qsort_range(a: int[], lo: int, hi: int): void {
 // One op = fill 512 slots from an LCG + full quicksort.
 fun bench_quicksort(iters: int): void {
     let n = 512;
-    let a = Buffer.alloc<int>(n);
+    let a = Array.alloc<int>(n);
     let seed = 123456789;
     let sw = Stopwatch();
     let r = 0;
@@ -844,7 +844,7 @@ fun bench_quicksort(iters: int): void {
 // One op = one sieve to 4096.
 fun bench_sieve(iters: int): void {
     let n = 4096;
-    let flags = Buffer.alloc<int>(n);
+    let flags = Array.alloc<int>(n);
     let sw = Stopwatch();
     let acc = 0;
     let r = 0;
@@ -1158,7 +1158,7 @@ fun bench_wordcount(iters: int): void {
     while i < iters {
         let k = 0;
         while k < count {
-            map.set(words[k], map.get_or(words[k], 0) + 1);
+            map[words[k]] = map.get_or(words[k], 0) + 1;
             k = k + 1;
         }
         i = i + 1;
@@ -1187,7 +1187,7 @@ fun bench_parse_ints(iters: int): void {
         let v = 0;
         let j = 0;
         while j < src.length {
-            v = v * 10 + ((int)src.char_at(j) - 48);
+            v = v * 10 + ((int)src[j] - 48);
             j = j + 1;
         }
         acc = acc + (long)v;

@@ -13,7 +13,7 @@ fun sio_saved_view(): int {
         if i == 0 {
             saved = source.span(0, 5);
         } else {
-            n = n + (int)saved.char_at(0);
+            n = n + (int)saved[0];
         }
         i = i + 1;
     }

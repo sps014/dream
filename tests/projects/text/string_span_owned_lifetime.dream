@@ -9,7 +9,7 @@ fun c22d_owned_views(borrow suffix: string): int {
     while i < 8 {
         let start = i & 7;
         let view = source.span(start, start + 25 + (i & 3));
-        sum = sum + view.length + (int)view.char_at(0);
+        sum = sum + view.length + (int)view[0];
         i = i + 1;
     }
     return sum;
@@ -32,7 +32,7 @@ fun c22d_loop_owner(): void {
         if i == 0 {
             saved = source.span(0, 5);
         } else {
-            c22d_verify_observation((saved.char_at(0)).to_string());
+            c22d_verify_observation((saved[0]).to_string());
         }
         i = i + 1;
     }
@@ -51,7 +51,7 @@ fun c22d_verify_observation(borrow value: string): void {
     let wanted = "1016\nhello\nchanged\nf\nf\n";
     let end = c22d_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c22d_cursor, end));
+    Assert.eq(actual, wanted.substring(c22d_cursor, end));
     c22d_cursor = end;
 }
 

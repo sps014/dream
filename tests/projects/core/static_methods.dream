@@ -27,8 +27,8 @@ class c207_Vec2 {
 @timeout(180000)
 fun static_methods(): void {
     let o = c207_Vec2.origin();
-    Assert.eq_str((o.sum()).to_string(), "0");
+    Assert.eq((o.sum()).to_string(), "0");
     let p = c207_Vec2.of(3, 4);
-    Assert.eq_str((p.sum()).to_string(), "7");
-    Assert.eq_str((int.parse("100").unwrap_or(0)).to_string(), "100");
+    Assert.eq((p.sum()).to_string(), "7");
+    Assert.eq((int.parse("100").unwrap_or(0)).to_string(), "100");
 }

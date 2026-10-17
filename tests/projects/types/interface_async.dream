@@ -54,7 +54,7 @@ fun cff_verify_observation(borrow value: string): void {
     let wanted = "42\n99\n";
     let end = cff_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cff_cursor, end));
+    Assert.eq(actual, wanted.substring(cff_cursor, end));
     cff_cursor = end;
 }
 

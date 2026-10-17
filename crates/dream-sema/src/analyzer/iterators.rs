@@ -73,6 +73,7 @@ impl<'a> Analyzer<'a> {
                     Some(param.type_.clone()),
                     ExpressionNode::Identifier(original.clone()),
                     true,
+                    false,
                 ));
             } else {
                 param.name = captured.clone();
@@ -81,6 +82,7 @@ impl<'a> Analyzer<'a> {
                 original,
                 Some(param.type_.clone()),
                 ExpressionNode::Identifier(captured),
+                false,
                 false,
             ));
         }
@@ -200,7 +202,7 @@ impl<'a> Analyzer<'a> {
             ))],
         );
         self.analyze_statement(
-            &StatementNode::Declaration(lease.clone(), None, ctor, false),
+            &StatementNode::Declaration(lease.clone(), None, ctor, false, false),
             ctx.parent_function,
             ctx.symbol_table,
             false,

@@ -6,6 +6,6 @@ import system;
 fun main(): void {
     let xs = [1, 2, 3, 4, 5];
     let mid = Span<int>.of(xs).slice(1, 2); // covers xs[1..3), i.e. indices 0..2 of the span
-    System.println(mid.get(1)); // 3, in range
-    System.println(mid.get(2)); // out of range for the span (even though xs[3] exists) - traps
+    System.println(mid[1]); // 3, in range
+    System.println(mid[2]); // out of range for the span (even though xs[3] exists) - traps
 }

@@ -14,6 +14,6 @@ async fun c32_run(f: fun(int): Future<int>, v: int): int {
 @timeout(180000)
 async fun async_fun_as_value(): void {
     let f: fun(int): Future<int> = c32_delayed_triple;
-    Assert.eq_str((f(7).await).to_string(), "21");
-    Assert.eq_str((c32_run(c32_delayed_triple, 4).await).to_string(), "12");
+    Assert.eq((f(7).await).to_string(), "21");
+    Assert.eq((c32_run(c32_delayed_triple, 4).await).to_string(), "12");
 }

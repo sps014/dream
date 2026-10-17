@@ -1,0 +1,37 @@
+module system.core;
+
+/// Declaration kinds accepted by an attribute.
+public enum AttributeTarget {
+    /// Identifies constructor declarations.
+    Constructor,
+    /// Identifies destructor declarations.
+    Destructor,
+    /// Identifies class declarations.
+    Class,
+    /// Identifies struct declarations.
+    Struct,
+    /// Identifies union declarations.
+    Union,
+    /// Identifies enum declarations.
+    Enum,
+    /// Identifies interface declarations.
+    Interface,
+    /// Identifies type declarations.
+    Type,
+    /// Identifies field declarations.
+    Field,
+    /// Identifies function declarations.
+    Function,
+    /// Identifies method declarations.
+    Method,
+    /// Identifies static method declarations.
+    StaticMethod,
+    /// Identifies extern function declarations.
+    ExternFunction,
+    /// Identifies interface method declarations.
+    InterfaceMethod,
+    /// Identifies module declarations.
+    Module,
+    /// Identifies parameter declarations.
+    Parameter,
+}

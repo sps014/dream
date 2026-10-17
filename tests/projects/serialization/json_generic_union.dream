@@ -58,7 +58,7 @@ fun c115_verify_observation(borrow value: string): void {
     let wanted = "{\"type\":\"Some\",\"_0\":{\"x\":3,\"y\":4}}\n3\n4\n{\"type\":\"None\"}\nnone\n";
     let end = c115_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c115_cursor, end));
+    Assert.eq(actual, wanted.substring(c115_cursor, end));
     c115_cursor = end;
 }
 

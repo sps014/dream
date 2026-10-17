@@ -6,9 +6,9 @@ import system;
 @timeout(180000)
 fun generic_lambda(): void {
     let id: fun(int): int = < T >(x: T) => x;
-    Assert.eq_str((id(42)).to_string(), "42");
+    Assert.eq((id(42)).to_string(), "42");
 
     let poly = < T >(x: T) => x;
     let as_string: fun(string): string = poly;
-    Assert.eq_str((as_string("hi")).to_string(), "hi");
+    Assert.eq((as_string("hi")).to_string(), "hi");
 }

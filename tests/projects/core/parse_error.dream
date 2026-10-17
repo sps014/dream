@@ -23,7 +23,7 @@ fun c1a8_verify_observation(borrow value: string): void {
     let wanted = "42\nEPARSE:cannot parse int: invalid digit\n1.5\n";
     let end = c1a8_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1a8_cursor, end));
+    Assert.eq(actual, wanted.substring(c1a8_cursor, end));
     c1a8_cursor = end;
 }
 

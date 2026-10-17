@@ -7,8 +7,8 @@ fun string_builder_block_recycle(): void {
     let sb = StringBuilder();
     sb.append("[");
     sb.append("x");
-    Assert.eq_str((sb.build()).to_string(), "[x");
+    Assert.eq((sb.build()).to_string(), "[x");
     let o: Option<string> = Option.Some("a");
     Assert.is_true(o.is_some());
-    Assert.eq_str(o.unwrap_or(""), "a");
+    Assert.eq(o.unwrap_or(""), "a");
 }

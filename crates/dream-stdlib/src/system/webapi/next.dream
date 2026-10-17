@@ -1,0 +1,22 @@
+module system.webapi;
+
+// Continues the middleware onion toward the route handler.
+@allow_cycle
+public class Next {
+    step: fun(): Future<HttpOutgoing>;
+
+    /// Creates a `Next` with `step`.
+    public constructor(step: fun(): Future<HttpOutgoing>) {
+        this.step = step;
+    }
+
+    /// Runs the next step in the middleware pipeline.
+    public fun call(): Future<HttpOutgoing> {
+        return Next.call_owned(this);
+    }
+
+    static async fun call_owned(next: Next): HttpOutgoing {
+        let step = next.step;
+        return step().await;
+    }
+}

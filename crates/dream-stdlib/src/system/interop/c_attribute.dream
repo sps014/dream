@@ -1,0 +1,11 @@
+module system.interop;
+
+/// Binds an extern function to a C ABI library/symbol: `@c("lib", "symbol")`. `@c("lib")` uses the Dream name as the symbol; bare `@c` also binds to the declaring package's `native/` sources. Native and portable WASM builds are supported; runtime annotations restrict availability.
+@attribute(AttributeTarget.ExternFunction)
+public struct CAttribute {
+    /// Optional native library containing the foreign symbol.
+    public library: Option<string>;
+
+    /// Identifier of the referenced symbol.
+    public symbol: Option<string>;
+}

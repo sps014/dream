@@ -267,7 +267,7 @@ fun fill_particles(n: int, id0: int): List<Particle> {
 fun rewrite_particles(borrow slots: List<Particle>, n: int, id0: int): void {
     let i = 0;
     while i < n {
-        slots.set(i, Particle(id0 + i));
+        slots[i] = Particle(id0 + i);
         i = i + 1;
     }
 }

@@ -92,7 +92,7 @@ pub(super) fn walk_statement(
                 raw_calls,
             );
         }
-        StatementNode::Declaration(name_tok, _, init, _) => {
+        StatementNode::Declaration(name_tok, _, init, _, _) => {
             // `let alias = this;` tracks the local as a `this` alias for receiver classification.
             if is_self_expr(init, aliases) {
                 aliases.push(name_tok.text.clone());

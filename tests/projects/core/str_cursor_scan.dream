@@ -18,7 +18,7 @@ fun c20d_sum_chars(s: string): int {
     let j = 0;
     let acc = 0;
     while j < n {
-        acc = acc + (int)s.char_at(j);
+        acc = acc + (int)s[j];
         j = j + 1;
     }
     return acc;
@@ -47,7 +47,7 @@ fun c20d_verify_observation(borrow value: string): void {
     let wanted = "195\n195\n195\n196\n";
     let end = c20d_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c20d_cursor, end));
+    Assert.eq(actual, wanted.substring(c20d_cursor, end));
     c20d_cursor = end;
 }
 

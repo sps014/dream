@@ -157,7 +157,15 @@ impl<'a> Analyzer<'a> {
                 // it into the guarded branch/body; the expression itself ignores the binding here.)
                 let left_type =
                     self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
-                self.check_type_not_static_class(right_type, diagnostics);
+                self.check_declared_type(
+                    right_type,
+                    &self
+                        .current_generic_bindings
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    diagnostics,
+                );
                 let left_hir = self.hir_take();
                 let left_id = left_hir
                     .as_ref()
@@ -362,6 +370,12 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
+        if let Some(name) = self.interface_protocol_method(obj_type, ProtocolRole::Get) {
+            let method = synthetic_token(TokenKind::IdentifierToken, &name);
+            let call =
+                ExpressionNode::MethodCall(array_expr, method, None, vec![index_expr.clone()]);
+            return self.analyze_expression(&call, parent_function, symbol_table, diagnostics);
+        }
         let pretty_obj = self.ty_display(obj_type);
         let (hook, info) = match self.resolve_hook_or_diagnose(
             obj_type,

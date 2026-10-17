@@ -14,36 +14,84 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/net/websocket.dream",
-            include_str!("../system/net/websocket.dream"),
+            "<std>/system/net/web_socket.dream",
+            include_str!("../system/net/web_socket.dream"),
         ),
         (
-            "<std>/system/net/websocket_message.dream",
-            include_str!("../system/net/websocket_message.dream"),
+            "<std>/system/net/web_socket_message.dream",
+            include_str!("../system/net/web_socket_message.dream"),
         ),
         (
             "<std>/system/net/socket_operation.dream",
             include_str!("../system/net/socket_operation.dream"),
         ),
         (
-            "<std>/system/net/tcp.dream",
-            include_str!("../system/net/tcp.dream"),
+            "<std>/system/net/socket_state.dream",
+            include_str!("../system/net/socket_state.dream"),
         ),
         (
-            "<std>/system/net/udp.dream",
-            include_str!("../system/net/udp.dream"),
+            "<std>/system/net/socket_capabilities.dream",
+            include_str!("../system/net/socket_capabilities.dream"),
         ),
         (
-            "<std>/system/net/http_types.dream",
-            include_str!("../system/net/http_types.dream"),
+            "<std>/system/net/tcp_stream.dream",
+            include_str!("../system/net/tcp_stream.dream"),
+        ),
+        (
+            "<std>/system/net/tcp_listener.dream",
+            include_str!("../system/net/tcp_listener.dream"),
+        ),
+        (
+            "<std>/system/net/udp_datagram.dream",
+            include_str!("../system/net/udp_datagram.dream"),
+        ),
+        (
+            "<std>/system/net/udp_socket.dream",
+            include_str!("../system/net/udp_socket.dream"),
+        ),
+        (
+            "<std>/system/net/http_error.dream",
+            include_str!("../system/net/http_error.dream"),
+        ),
+        (
+            "<std>/system/net/http_options.dream",
+            include_str!("../system/net/http_options.dream"),
+        ),
+        (
+            "<std>/system/net/http_headers.dream",
+            include_str!("../system/net/http_headers.dream"),
+        ),
+        (
+            "<std>/system/net/http_request.dream",
+            include_str!("../system/net/http_request.dream"),
+        ),
+        (
+            "<std>/system/net/http_capabilities.dream",
+            include_str!("../system/net/http_capabilities.dream"),
         ),
         (
             "<std>/system/net/http_client.dream",
             include_str!("../system/net/http_client.dream"),
         ),
         (
+            "<std>/system/net/http_operation.dream",
+            include_str!("../system/net/http_operation.dream"),
+        ),
+        (
+            "<std>/system/net/http_response.dream",
+            include_str!("../system/net/http_response.dream"),
+        ),
+        (
+            "<std>/system/net/http_body.dream",
+            include_str!("../system/net/http_body.dream"),
+        ),
+        (
             "<std>/system/net/url.dream",
             include_str!("../system/net/url.dream"),
+        ),
+        (
+            "<std>/system/net/url_query.dream",
+            include_str!("../system/net/url_query.dream"),
         ),
     ],
 };

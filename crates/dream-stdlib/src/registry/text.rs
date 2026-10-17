@@ -6,6 +6,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/text/invalid_encoding.dream",
+            include_str!("../system/text/invalid_encoding.dream"),
+        ),
+        (
             "<std>/system/text/utf8_decoder.dream",
             include_str!("../system/text/utf8_decoder.dream"),
         ),

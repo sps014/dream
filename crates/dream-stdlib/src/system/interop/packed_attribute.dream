@@ -1,0 +1,5 @@
+module system.interop;
+
+/// Packs a value struct with no padding for C ABI layout (`@packed`).
+@attribute(AttributeTarget.Struct)
+public struct PackedAttribute {}

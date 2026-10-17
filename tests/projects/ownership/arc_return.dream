@@ -18,5 +18,5 @@ fun c1d_create_node(v: int): c1d_Node {
 @timeout(180000)
 fun arc_return(): void {
     let n1 = c1d_create_node(10);
-    Assert.eq_str((n1.val).to_string(), "10");
+    Assert.eq((n1.val).to_string(), "10");
 }

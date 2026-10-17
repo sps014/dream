@@ -1,0 +1,21 @@
+module system.validation;
+
+/// One input failure; locations use JSON property names and decimal collection indices.
+@json
+public class ValidationIssue {
+    /// Path to the invalid value, from the outermost field to the failing item.
+    public location: List<string>;
+
+    /// Error code identifying the failure.
+    public code: string;
+
+    /// Human-readable explanation of the result or failure.
+    public message: string;
+
+    /// Creates a `ValidationIssue` with `location`, `code`, `message`.
+    public constructor(location: List<string>, code: string, message: string) {
+        this.location = location;
+        this.code = code;
+        this.message = message;
+    }
+}

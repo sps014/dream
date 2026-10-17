@@ -75,7 +75,7 @@ fun c265_verify_observation(borrow value: string): void {
     let wanted = "5\nerr: odd\nerr: odd\nfirst positive: 4\nnone\n11\n";
     let end = c265_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c265_cursor, end));
+    Assert.eq(actual, wanted.substring(c265_cursor, end));
     c265_cursor = end;
 }
 

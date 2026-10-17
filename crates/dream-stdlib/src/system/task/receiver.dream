@@ -1,0 +1,84 @@
+module system.task;
+
+// An independently closable consumer endpoint for a local async channel.
+@allow_cycle
+public class Receiver<T> {
+    state: ChannelState<T>;
+    closed: bool;
+
+    internal constructor(state: ChannelState<T>) {
+        this.state = state;
+        this.closed = false;
+        this.state.receivers = this.state.receivers + 1;
+    }
+
+    // Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.
+    public fun try_receive(): Result<Option<T>, ChannelError> {
+        if this.closed || this.state.receive_closed {
+            return Result.Err(ChannelError.Closed);
+        }
+        let item = this.state.queue.dequeue();
+        if item.is_some() {
+            this.state.wake_one(this.state.writable);
+            return Result.Ok(item);
+        }
+        if this.state.send_closed {
+            let end: Option<T> = Option.None;
+            return Result.Ok(end);
+        }
+        return Result.Err(ChannelError.Empty);
+    }
+
+    // Waits for an item; None means that all senders closed and the queue has drained.
+    public fun receive(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Option<T>, ChannelError>> {
+        let effective_token = CancellationToken.resolve(token);
+        return Receiver<T>.receive_owned(this, effective_token);
+    }
+
+    static async fun receive_owned(
+        receiver: Receiver<T>,
+        token: Option<CancellationToken>
+    ): Result<Option<T>, ChannelError> {
+        let effective_token = CancellationToken.resolve(token);
+        while true {
+            if CancellationToken.is_cancelled_opt(effective_token) {
+                return Result.Err(ChannelError.Cancelled);
+            }
+            let result = receiver.try_receive();
+            if result.is_ok() || result.unwrap_err() != ChannelError.Empty {
+                return result;
+            }
+            let waiting = ChannelWait(receiver.state.readable);
+            if effective_token.is_some() {
+                let finished = effective_token.unwrap()
+                    .wait(waiting.source.token.wait_cancelled())
+                    .await;
+                waiting.close();
+                if finished.is_err() {
+                    return Result.Err(ChannelError.Cancelled);
+                }
+            } else {
+                waiting.source.token.wait_cancelled().await;
+                waiting.close();
+            }
+        }
+    }
+
+    // Closes this endpoint; dropping the last receiver rejects and wakes pending sends.
+    public fun close(): void {
+        if this.closed {
+            return;
+        }
+        this.closed = true;
+        this.state.receivers = this.state.receivers - 1;
+        if this.state.receivers == 0 {
+            this.state.close_receives();
+        }
+    }
+
+    del() {
+        this.close();
+    }
+}

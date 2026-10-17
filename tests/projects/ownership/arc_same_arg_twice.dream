@@ -21,9 +21,9 @@ class c1e_Holder {
 }
 
 fun c1e_body(): void {
-    let xs = Buffer.alloc<int>(3);
+    let xs = Array.alloc<int>(3);
     c1e_verify_observation(("three=" + c1e_sum_lengths(xs, xs, xs).to_string()).to_string());
-    let ys = Buffer.alloc<int>(5);
+    let ys = Array.alloc<int>(5);
     c1e_verify_observation(("mixed=" + c1e_sum_lengths(ys, xs, ys).to_string()).to_string());
 
     let h = c1e_Holder(xs, xs);
@@ -31,11 +31,11 @@ fun c1e_body(): void {
 
     // Allocations after the calls: these walk the free list, so a double release above shows up
     // here rather than at the call itself.
-    let a = Buffer.alloc<int>(4);
+    let a = Array.alloc<int>(4);
     a[0] = 7;
-    let b = Buffer.alloc<int>(8);
+    let b = Array.alloc<int>(8);
     b[0] = 9;
-    let c = Buffer.alloc<int>(16);
+    let c = Array.alloc<int>(16);
     c1e_verify_observation(
         ("after=" + a[0].to_string() + "," + b[0].to_string() + "," + c.length.to_string())
             .to_string()
@@ -52,7 +52,7 @@ fun c1e_verify_observation(borrow value: string): void {
     let wanted = "three=9\nmixed=13\nctor=6\nafter=7,9,16\nstill=3,5\n";
     let end = c1e_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1e_cursor, end));
+    Assert.eq(actual, wanted.substring(c1e_cursor, end));
     c1e_cursor = end;
 }
 

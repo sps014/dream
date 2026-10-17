@@ -216,7 +216,7 @@ fn stmt_position(stmt: &StatementNode) -> Option<dream_text::text_span::TextSpan
         StatementNode::Assignment(t, _) => Some(t.position),
         StatementNode::IndexAssignment(e, _, _) => e.position(),
         StatementNode::MemberAssignment(e, _, _) => e.position(),
-        StatementNode::Declaration(t, _, _, _) => Some(t.position),
+        StatementNode::Declaration(t, _, _, _, _) => Some(t.position),
         StatementNode::TupleDeclaration { pattern, .. } => pattern.position(),
         StatementNode::FunctionInvocation(t, _, _) => Some(t.position),
         StatementNode::MethodInvocation(e, _, _, _) => e.position(),

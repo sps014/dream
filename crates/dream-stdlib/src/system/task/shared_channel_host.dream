@@ -1,0 +1,21 @@
+module system.task;
+
+internal static class SharedChannelHost {
+    @intrinsic(Intrinsic.DreamChannelEndpoint)
+    internal static extern fun endpoint(state: usize, sending: int): usize;
+
+    @intrinsic(Intrinsic.DreamChannelClose)
+    internal static extern fun close(endpoint: usize): void;
+
+    @intrinsic(Intrinsic.DreamChannelEndpointFree)
+    internal static extern fun free(endpoint: usize): void;
+
+    @intrinsic(Intrinsic.DreamChannelSend)
+    internal static extern fun send<T: shared>(endpoint: usize, borrow value: T[]): int;
+
+    @intrinsic(Intrinsic.DreamChannelReceive)
+    internal static extern fun receive<T: shared>(endpoint: usize): T[];
+
+    @intrinsic(Intrinsic.DreamChannelStatus)
+    internal static extern fun status(endpoint: usize): int;
+}

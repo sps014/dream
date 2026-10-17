@@ -64,7 +64,7 @@ public class StringBuilder {
 
     // Appends a Unicode scalar as one or two UTF-16 units.
     public fun append_char(c: char): void {
-        let cp = c.to_int();
+        let cp = ((int)c);
         if (cp < 0) || (cp > 1114111) {
             cp = 65533;
         }
@@ -107,7 +107,7 @@ public class StringBuilder {
         }
         let i = 0;
         while i < span.length {
-            this.append_char(span.get(i));
+            this.append_char(span[i]);
             i = i + 1;
         }
     }
@@ -196,7 +196,7 @@ public class StringBuilder {
         return string.from_builder(this.bytes, n, -1);
     }
 
-    /// Returns a text representation of this value.
+    /// Supplies text to object formatting. Use `build()` when finishing a builder.
     public override fun to_string(): string {
         return this.build();
     }

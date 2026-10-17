@@ -64,7 +64,7 @@ fun c1f3_verify_observation(borrow value: string): void {
     let wanted = "3\n103\nlock ok\nsemaphore ok\n";
     let end = c1f3_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1f3_cursor, end));
+    Assert.eq(actual, wanted.substring(c1f3_cursor, end));
     c1f3_cursor = end;
 }
 

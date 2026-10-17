@@ -22,10 +22,10 @@ class c97_P {
 @timeout(180000)
 fun concat_enum_name(): void {
     let c = c97_Color.Green;
-    Assert.eq_str((c.to_string()).to_string(), "Green"); // Green
-    Assert.eq_str(("c=" + c).to_string(), "c=Green"); // c=Green
-    Assert.eq_str(($"c={c}").to_string(), "c=Green"); // c=Green
-    Assert.eq_str(
+    Assert.eq((c.to_string()).to_string(), "Green"); // Green
+    Assert.eq(("c=" + c).to_string(), "c=Green"); // c=Green
+    Assert.eq(($"c={c}").to_string(), "c=Green"); // c=Green
+    Assert.eq(
         ("n=" + 42 + " b=" + true + " p=" + c97_P(3)).to_string(),
         "n=42 b=true p=c97_P { x: 3 }"
     ); // other types unaffected

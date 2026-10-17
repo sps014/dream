@@ -71,7 +71,7 @@ String-backed spans and arrays of matching UTF-16 elements hash like the equal `
 
 ```dream
 let ages = Map<string, int>();
-ages.set("ada", 36);
+ages["ada"] = 36;
 let text = "ada,grace";
 System.println(ages.get_or(text.span(0, 3), 0)); // 36
 ```
@@ -96,7 +96,7 @@ Both view `array[offset .. offset + length)`. Creating one with a range outside 
 | Call | `Span<T>` | `ReadOnlySpan<T>` |
 | --- | --- | --- |
 | `length` / `is_empty()` | yes | yes |
-| `sp[i]` / `get(i)` | yes | yes |
+| `sp[i]` | yes | yes |
 | `sp[i] = v` / `set(i, v)` / `fill(v)` / `copy_from(src)` | yes | no |
 | `slice(start, count)` / `slice(start)` | yes | yes |
 | `index_of(v)` / `contains(v)` / `sequence_equal(other)` | yes | yes |

@@ -44,7 +44,7 @@ fun c2f_verify_observation(borrow value: string): void {
     let wanted = "99\n6\n19\n";
     let end = c2f_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c2f_cursor, end));
+    Assert.eq(actual, wanted.substring(c2f_cursor, end));
     c2f_cursor = end;
 }
 

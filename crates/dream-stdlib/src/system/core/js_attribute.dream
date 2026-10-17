@@ -1,0 +1,12 @@
+module system.core;
+
+/// Binds an external function to a JavaScript export using `@js("module", "export")`. Available
+/// only on JavaScript platforms.
+@attribute(AttributeTarget.ExternFunction)
+public struct JsAttribute {
+    /// Fully qualified module containing the declaration.
+    public module_name: string;
+
+    /// Name exposed to callers of the foreign function.
+    public export_name: string;
+}

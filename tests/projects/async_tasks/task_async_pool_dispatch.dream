@@ -13,7 +13,7 @@ async fun task_async_pool_dispatch(): void {
     let pool = TaskPool(2);
     let a = pool.dispatch_async(async () => c248_fetchLike("x").await);
     let b = pool.dispatch_async(async () => c248_fetchLike("y").await);
-    Assert.eq_str((a.await.unwrap()).to_string(), "resp:x");
-    Assert.eq_str((b.await.unwrap()).to_string(), "resp:y");
+    Assert.eq((a.await.unwrap()).to_string(), "resp:x");
+    Assert.eq((b.await.unwrap()).to_string(), "resp:y");
     pool.close().await.unwrap();
 }

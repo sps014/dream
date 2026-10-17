@@ -1,0 +1,9 @@
+module system.text;
+
+// Policy for malformed or truncated UTF-8 input.
+public enum InvalidEncoding {
+    // Returns a parse error and permanently fails the decoder on invalid input.
+    Strict,
+    // Emits U+FFFD replacement characters for invalid input and continues decoding.
+    Replace,
+}

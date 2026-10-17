@@ -4,6 +4,6 @@ import system;
 @test
 @timeout(180000)
 fun ffi_null_reads(): void {
-    Assert.eq_str((Ffi.read_ptr(CPtr.null(), 0).is_null()).to_string(), "true");
-    Assert.eq_str((Ffi.read_cstring(CPtr.null()).is_none()).to_string(), "true");
+    Assert.eq((Ffi.read_ptr(CPtr.null(), 0).is_null()).to_string(), "true");
+    Assert.eq((Ffi.read_cstring(CPtr.null()).is_none()).to_string(), "true");
 }

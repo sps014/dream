@@ -1615,6 +1615,10 @@ dream_ptr string_builder_view(dream_ptr bytes, int32_t len);
 int32_t dream_char_at(dream_ptr ptr, int32_t i);
 int32_t dream_byte_at(dream_ptr ptr, int32_t i);
 
+dream_ptr dream_console_read(int32_t count);
+int32_t dream_console_write(int32_t stream, dream_ptr data);
+int32_t dream_console_flush(int32_t stream);
+
 #ifdef DREAM_WASM32
 #define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
 void cancellation_subscribe(dream_ptr future, uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationSubscribe");
@@ -1677,7 +1681,6 @@ dream_ptr processTempDir(void);
 dream_ptr processHomeDir(void);
 dream_ptr consoleReadLine(void);
 int32_t consoleReadKey(void);
-void consoleWriteStderr(dream_ptr text);
 
 void dream_host_bind_v2(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
                      void (*complete_foreign)(dream_ptr, dream_result));

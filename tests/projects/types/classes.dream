@@ -25,12 +25,12 @@ fun classes(): void {
     r.p1 = p1;
     r.p2 = p2;
 
-    Assert.eq_str((r.p1.x).to_string(), "10");
-    Assert.eq_str((r.p1.y).to_string(), "20");
-    Assert.eq_str((r.p2.x).to_string(), "30");
-    Assert.eq_str((r.p2.y).to_string(), "40");
+    Assert.eq((r.p1.x).to_string(), "10");
+    Assert.eq((r.p1.y).to_string(), "20");
+    Assert.eq((r.p2.x).to_string(), "30");
+    Assert.eq((r.p2.y).to_string(), "40");
 
     r.p1.x = 100;
-    Assert.eq_str((r.p1.x).to_string(), "100");
-    Assert.eq_str((p1.x).to_string(), "100"); // Should also be 100 since it's a reference
+    Assert.eq((r.p1.x).to_string(), "100");
+    Assert.eq((p1.x).to_string(), "100"); // Should also be 100 since it's a reference
 }

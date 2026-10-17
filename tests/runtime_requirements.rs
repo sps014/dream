@@ -102,7 +102,7 @@ fn local_native_callback_keeps_owner_without_c_imports_or_argument_capture() {
 #[test]
 fn opaque_runtime_intrinsics_keep_owner_and_cleanup_services() {
     let (_dir, ir, _) = compile(
-        "static class Runtime { @intrinsic(Intrinsic.StringClone) public static extern fun clone(borrow s: string): string; } fun main(): void { let copy = Runtime.clone(\"x\"); }",
+        "module system.core; static class Runtime { @intrinsic(Intrinsic.StringClone) public static extern fun clone(borrow s: string): string; } fun main(): void { let copy = Runtime.clone(\"x\"); }",
     );
     assert!(ir.contains("call void @dream_thread_attach"));
     assert!(ir.contains("call void @dream_process_capture_args"));

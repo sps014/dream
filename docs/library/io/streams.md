@@ -89,7 +89,7 @@ different file after the descriptor has been reused.
 
 File positions and lengths use `long`. `tell()` includes buffered read-ahead, so
 mixing line and byte reads preserves the logical position. Failed seeks preserve
-the position and any unread bytes. `FileStream.position` and `.length` return
+the position and any unread bytes. `FileStream.tell()` and `.length` return
 `Result<long, IoError>`; use `seek()` to change position.
 
 Async opens, reads, writes, and seeks use a bounded native executor or Node's
@@ -251,3 +251,36 @@ async fun main(): Result<bool, IoError> {
     return Result.Ok(bytes.length == 5);
 }
 ```
+
+## Standard input and output
+
+Import `system.io` to use `System.stdin` as a `Reader` and `System.stdout` or
+`System.stderr` as a `Writer`. Byte reads and writes report `IoError`; they leave the
+process descriptors open. Standard streams do not support seeking.
+
+```dream
+import system;
+import system.io;
+import system.encoding;
+
+fun main(): void {
+    let writer = BufferedWriter(System.stdout);
+    writer.write_all(Encoding.utf8_encode("Ready\n")).unwrap();
+    writer.finish().unwrap();
+
+    let reader = BufferedReader(System.stdin);
+    switch (reader.read_line().unwrap()) {
+        Some(line) => System.println(line),
+        None => {},
+    }
+}
+```
+
+`Streams.copy(System.stdin, destination)` copies incoming bytes into a writer.
+`Streams.copy(source, System.stdout)` copies from a reader to standard output;
+flush the output when the copy finishes. Reading standard input can block.
+
+`System.print` and `System.println` are console text shortcuts for writing to
+standard output. They flush their output, preserving order when mixed with
+`System.stdout.write`. `System.read_line` and `System.read_key` remain shortcuts
+for simple console input. Use `BufferedReader` and `Encoding` for text over a byte stream.

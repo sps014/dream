@@ -21,7 +21,7 @@ class c2a2_Widget {
 @test
 @timeout(180000)
 fun visibility_same_file(): void {
-    Assert.eq_str((c2a2_helper(21)).to_string(), "42");
+    Assert.eq((c2a2_helper(21)).to_string(), "42");
     let w = c2a2_Widget(5);
-    Assert.eq_str((w.value()).to_string(), "5");
+    Assert.eq((w.value()).to_string(), "5");
 }

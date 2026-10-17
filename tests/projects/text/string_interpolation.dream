@@ -8,14 +8,14 @@ fun string_interpolation(): void {
     let y = 2;
 
     // Basic holes with an arithmetic expression and a variable.
-    Assert.eq_str(($"{y+68} is {x}").to_string(), "70 is 5");
+    Assert.eq(($"{y+68} is {x}").to_string(), "70 is 5");
 
     // Expression inside a hole.
-    Assert.eq_str(($"sum = {x + y}").to_string(), "sum = 7");
+    Assert.eq(($"sum = {x + y}").to_string(), "sum = 7");
 
     // `{{` / `}}` escape to literal braces; the trailing hole is still interpolated.
-    Assert.eq_str(($"{{literal braces}} and {x}").to_string(), "{literal braces} and 5");
+    Assert.eq(($"{{literal braces}} and {x}").to_string(), "{literal braces} and 5");
 
     // Method call inside a hole, auto-converted via the to_string protocol.
-    Assert.eq_str(($"squared {x.pow(2)}").to_string(), "squared 25");
+    Assert.eq(($"squared {x.pow(2)}").to_string(), "squared 25");
 }

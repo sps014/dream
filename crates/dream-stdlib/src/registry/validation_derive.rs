@@ -16,8 +16,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/validation/derive/validation_derive.dream"),
         ),
         (
-            "<std>/system/validation/derive/validation_schema.dream",
-            include_str!("../system/validation/derive/validation_schema.dream"),
+            "<std>/system/validation/derive/validation_generator.dream",
+            include_str!("../system/validation/derive/validation_generator.dream"),
         ),
     ],
 };

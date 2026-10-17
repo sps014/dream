@@ -11,8 +11,16 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &["system.json.derive"],
     files: &[
         (
+            "<std>/system/json/json_kind.dream",
+            include_str!("../system/json/json_kind.dream"),
+        ),
+        (
             "<std>/system/json/json_value.dream",
             include_str!("../system/json/json_value.dream"),
+        ),
+        (
+            "<std>/system/json/json_storage.dream",
+            include_str!("../system/json/json_storage.dream"),
         ),
         (
             "<std>/system/json/json_parser.dream",
@@ -23,8 +31,16 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/json/json.dream"),
         ),
         (
-            "<std>/system/json/json_attributes.dream",
-            include_str!("../system/json/json_attributes.dream"),
+            "<std>/system/json/json_attribute.dream",
+            include_str!("../system/json/json_attribute.dream"),
+        ),
+        (
+            "<std>/system/json/property_name_attribute.dream",
+            include_str!("../system/json/property_name_attribute.dream"),
+        ),
+        (
+            "<std>/system/json/json_ignore_attribute.dream",
+            include_str!("../system/json/json_ignore_attribute.dream"),
         ),
     ],
 };

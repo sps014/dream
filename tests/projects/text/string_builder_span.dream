@@ -31,7 +31,7 @@ fun c213_verify_observation(borrow value: string): void {
     let wanted = "hello\nhello world|hello world|XXXXXXXXXXX\ntrue\n51 11\ntrue\n";
     let end = c213_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c213_cursor, end));
+    Assert.eq(actual, wanted.substring(c213_cursor, end));
     c213_cursor = end;
 }
 

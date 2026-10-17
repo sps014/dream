@@ -1,0 +1,17 @@
+module system.webapi;
+
+/// Declares an OAuth2 authorization-code scheme for a security dependency.
+@attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
+public struct OAuth2SchemeAttribute {
+    /// Stable identifier of this entry.
+    public id: string;
+
+    /// Endpoint where the user authorizes this application.
+    public authorization_url: string;
+
+    /// Provider endpoint used to exchange authorization codes for tokens.
+    public token_url: string;
+
+    /// Space-separated permissions granted to this account or token.
+    public scopes: Option<string>;
+}

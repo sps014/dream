@@ -27,7 +27,7 @@ public class GenAttribute {
         if i < 0 || i >= this.args.length {
             return "";
         }
-        return this.args.get(i).value;
+        return this.args[i].value;
     }
 
     // Returns the requested model information.

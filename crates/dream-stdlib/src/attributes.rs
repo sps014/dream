@@ -13,7 +13,7 @@ pub fn attribute_catalog() -> &'static UserAttributes {
         let mut modules = std::collections::BTreeMap::new();
         for package in crate::STD_PACKAGES {
             for &(path, source) in package.files {
-                if !source.contains("@attribute") && !source.contains("public enum ") {
+                if !source.contains("@attribute") && !source.contains(" enum ") {
                     continue;
                 }
                 let mut parser = dream_syntax::parser::Parser::new(

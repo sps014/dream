@@ -57,7 +57,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 async fun timer_burst(n: int, iters: int): int {
     let total = 0;
     for (let round = 0; round < iters; round = round + 1) {
-        let pending = Buffer.alloc<Future<Result<bool, CancelledError>>>(n);
+        let pending = Array.alloc<Future<Result<bool, CancelledError>>>(n);
         for (let i = 0; i < n; i = i + 1) {
             pending[i] = Time.sleep(0);
             Promise.start(pending[i]);

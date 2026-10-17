@@ -8,9 +8,9 @@ import system.text;
 
 fun c219_body() {
     let m = Map<string, int>();
-    m.set("alpha", 1);
-    m.set("beta", 2);
-    m.set("", 3);
+    m["alpha"] = 1;
+    m["beta"] = 2;
+    m[""] = 3;
 
     let a = "al" + "pha";
     c219_verify_observation((m.get_or(a, -1)).to_string());
@@ -18,12 +18,12 @@ fun c219_body() {
     let text = "xx beta yy";
     let slice = text.substring(3, 7);
     c219_verify_observation((m.get_or(slice, -1)).to_string());
-    m.set(slice, 20);
+    m[slice] = 20;
     c219_verify_observation((m.get_or("beta", -1)).to_string());
 
     let parts = "alpha,beta,,gamma".split(',');
     for (let p in parts) {
-        m.set(p, m.get_or(p, 0) + 100);
+        m[p] = m.get_or(p, 0) + 100;
     }
     c219_verify_observation((m.get_or("alpha", -1)).to_string());
     c219_verify_observation((m.get_or("beta", -1)).to_string());
@@ -37,21 +37,21 @@ fun c219_body() {
 
     let n = 7;
     c219_verify_observation((m.get_or($"key{n}", -1)).to_string());
-    m.set($"key{n}", 7);
+    m[$"key{n}"] = 7;
     c219_verify_observation((m.get_or("key" + n.to_string(), -1)).to_string());
 
     let acc = "";
     let i = 0;
     while i < 3 {
         acc = acc + "z";
-        m.set(acc, i);
+        m[acc] = i;
         i = i + 1;
     }
     c219_verify_observation((m.get_or("z", -1)).to_string());
     c219_verify_observation((m.get_or("zz", -1)).to_string());
     c219_verify_observation((m.get_or("zzz", -1)).to_string());
 
-    m.set("zzc", 9);
+    m["zzc"] = 9;
     let s = "ab" + "c";
     let before = m.get_or(s, -1);
     s[0] = 'z';
@@ -68,7 +68,7 @@ fun c219_verify_observation(borrow value: string): void {
     let wanted = "1\n2\n20\n101\n120\n103\n100\n100\n-1\n7\n0\n1\n2\n-1\n9\n9\n";
     let end = c219_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c219_cursor, end));
+    Assert.eq(actual, wanted.substring(c219_cursor, end));
     c219_cursor = end;
 }
 

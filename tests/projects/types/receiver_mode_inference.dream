@@ -8,7 +8,7 @@ public class c1c9_IntStack {
     count: int;
 
     public constructor() {
-        this.items = Buffer.alloc<int>(16);
+        this.items = Array.alloc<int>(16);
         this.count = 0;
     }
 
@@ -44,7 +44,7 @@ fun c1c9_verify_observation(borrow value: string): void {
     let wanted = "20\n2\n";
     let end = c1c9_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1c9_cursor, end));
+    Assert.eq(actual, wanted.substring(c1c9_cursor, end));
     c1c9_cursor = end;
 }
 

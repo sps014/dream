@@ -403,6 +403,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         matches!(
                             next_kind,
                             TokenKind::NumberToken
+                                | TokenKind::CharToken
                                 | TokenKind::StringToken
                                 | TokenKind::BooleanToken
                                 | TokenKind::IdentifierToken

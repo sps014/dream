@@ -1,0 +1,121 @@
+module system.net;
+
+internal class SocketState {
+    internal id: int;
+    internal metadata: JsonValue;
+
+    internal constructor(metadata: JsonValue) {
+        this.id = metadata.at("id").as_int().unwrap_or(0);
+        this.metadata = metadata;
+    }
+
+    @runtime("netSocketClose")
+    static extern fun close_host(id: int): void;
+
+    @runtime("netSocketControl")
+    static extern fun control_host(id: int, request: string): string;
+
+    internal fun close(): void {
+        if this.id > 0 {
+            SocketState.close_host(this.id);
+            this.id = 0;
+        }
+    }
+
+    del() {
+        this.close();
+    }
+
+    internal static fun request(action: string, id: int, timeout: int): JsonValue {
+        let request = JsonValue.dict();
+        request["action"] = JsonValue.from_string(action);
+        request["id"] = JsonValue.from_int(id);
+        request["timeout_ms"] = JsonValue.from_int(timeout);
+        return request;
+    }
+
+    internal static fun parse(bytes: byte[]): Result<JsonValue, IoError> {
+        let result = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
+        if result.is_err() {
+            return Result.Err(IoError.other("", "invalid socket metadata"));
+        }
+        return Result.Ok(result.unwrap());
+    }
+
+    internal static async fun open(
+        action: string,
+        host: string,
+        port: int,
+        timeout: int,
+        token: Option<CancellationToken>
+    ): Result<SocketState, IoError> {
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
+        if port < 0 || port > 65535 || timeout < 0 {
+            return Result.Err(IoError.invalid("", "invalid socket port or timeout"));
+        }
+        let request = SocketState.request(action, 0, timeout);
+        request["host"] = JsonValue.from_string(host);
+        request["port"] = JsonValue.from_int(port);
+        let operation = SocketOperation.start(request, []);
+        let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
+        if metadata.at("id").as_int().unwrap_or(0) <= 0 {
+            return Result.Err(IoError.other("", "invalid socket handle"));
+        }
+        let state = SocketState(metadata);
+        operation.claim();
+        operation.close();
+        return Result.Ok(state);
+    }
+
+    internal fun submit(
+        request: JsonValue,
+        bytes: byte[],
+        token: Option<CancellationToken>
+    ): Future<Result<byte[], IoError>> {
+        return SocketState.submit_owned(this, request, bytes, CancellationToken.resolve(token));
+    }
+
+    static async fun submit_owned(
+        state: SocketState,
+        request: JsonValue,
+        bytes: byte[],
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
+        if state.id <= 0 {
+            return Result.Err(IoError.closed("socket"));
+        }
+        CancellationToken.rejected(token, IoError.cancelled())?;
+        request["id"] = JsonValue.from_int(state.id);
+        let operation = SocketOperation.start(request, bytes);
+        let result = operation.wait(token).await;
+        operation.close();
+        return result;
+    }
+
+    internal fun control(action: string, value: JsonValue): Result<bool, IoError> {
+        if this.id <= 0 {
+            return Result.Err(IoError.closed("socket"));
+        }
+        let request = JsonValue.dict();
+        request["action"] = JsonValue.from_string(action);
+        request["value"] = value;
+        let parsed = Json.deserialize<JsonValue>(
+            SocketState.control_host(this.id, Json.serialize(request))
+        );
+        if parsed.is_err() {
+            return Result.Err(IoError.other("", "invalid socket control response"));
+        }
+        let result = parsed.unwrap();
+        if result["code"].is_some() {
+            return Result.Err(
+                IoError(
+                    "",
+                    result.at("code").as_string().unwrap_or("EIO"),
+                    result.at("message").as_string().unwrap_or("socket option failed")
+                )
+            );
+        }
+        return Result.Ok(true);
+    }
+}

@@ -23,7 +23,7 @@ fun cd3_verify_observation(borrow value: string): void {
     let wanted = "nonempty kept\nfalse\n";
     let end = cd3_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cd3_cursor, end));
+    Assert.eq(actual, wanted.substring(cd3_cursor, end));
     cd3_cursor = end;
 }
 

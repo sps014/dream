@@ -52,14 +52,6 @@ Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to s
 public fun this[key: K] = value: V
 ```
 
-## `set`
-
-Inserts `key` and `value`, replacing the value if the key is already present.
-
-```dream
-public fun set(key: K, value: V): void
-```
-
 ## `get`
 
 Value for `key`, or `None` when the key is absent.

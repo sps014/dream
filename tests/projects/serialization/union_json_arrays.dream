@@ -22,7 +22,7 @@ enum c277_Tags {
 }
 
 fun c277_body(): void {
-    let items = Buffer.alloc<string>(2);
+    let items = Array.alloc<string>(2);
     items[0] = "a";
     items[1] = "b";
     let m = c277_Tags.Many(items);
@@ -39,7 +39,7 @@ fun c277_body(): void {
         }
     }
 
-    let nums = Buffer.alloc<int>(3);
+    let nums = Array.alloc<int>(3);
     nums[0] = 1;
     nums[1] = 2;
     nums[2] = 3;
@@ -55,7 +55,7 @@ fun c277_body(): void {
         }
     }
 
-    let pts = Buffer.alloc<c277_Point>(1);
+    let pts = Array.alloc<c277_Point>(1);
     pts[0] = c277_Point(4, 5);
     let p = c277_Tags.Points(pts);
     c277_verify_observation((Json.serialize(p)).to_string());
@@ -78,7 +78,7 @@ fun c277_verify_observation(borrow value: string): void {
     let wanted = "{\"type\":\"Many\",\"_0\":[\"a\",\"b\"]}\n2\na\nb\n{\"type\":\"Counts\",\"_0\":[1,2,3]}\n6\n{\"type\":\"Points\",\"_0\":[{\"x\":4,\"y\":5}]}\n4\n5\n";
     let end = c277_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c277_cursor, end));
+    Assert.eq(actual, wanted.substring(c277_cursor, end));
     c277_cursor = end;
 }
 

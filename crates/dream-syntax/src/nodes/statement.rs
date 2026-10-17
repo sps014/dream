@@ -21,8 +21,8 @@ pub enum StatementNode<'a> {
         ExpressionNode<'a>,
     ),
     MemberAssignment(&'a ExpressionNode<'a>, SyntaxToken, ExpressionNode<'a>),
-    /// `let`/`const` declaration. The final `bool` marks `const` (immutable) bindings.
-    Declaration(SyntaxToken, Option<Type>, ExpressionNode<'a>, bool),
+    /// `let`/`const` declaration. The flags mark `const` (immutable) and `weak` bindings, respectively.
+    Declaration(SyntaxToken, Option<Type>, ExpressionNode<'a>, bool, bool),
     /// `let (a, b) = expr;` / `const (a, (b, c)) = expr;` — positional tuple destructure.
     /// `pattern` is a [`crate::nodes::PatternNode::Tuple`] of irrefutable bindings/`_`/nested tuples.
     TupleDeclaration {

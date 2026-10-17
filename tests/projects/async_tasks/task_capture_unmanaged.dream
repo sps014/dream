@@ -30,7 +30,7 @@ fun c24b_verify_observation(borrow value: string): void {
     let wanted = "result=ok\n";
     let end = c24b_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c24b_cursor, end));
+    Assert.eq(actual, wanted.substring(c24b_cursor, end));
     c24b_cursor = end;
 }
 

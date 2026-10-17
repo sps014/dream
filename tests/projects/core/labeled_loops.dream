@@ -22,7 +22,7 @@ fun c127_verify_observation(borrow value: string): void {
     let wanted = "0\n10\n";
     let end = c127_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c127_cursor, end));
+    Assert.eq(actual, wanted.substring(c127_cursor, end));
     c127_cursor = end;
 }
 

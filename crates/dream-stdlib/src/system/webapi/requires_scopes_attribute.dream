@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Requires space-separated permission scopes from a verified CurrentUser dependency.
+@attribute(AttributeTarget.StaticMethod)
+public struct RequiresScopesAttribute {
+    /// Space-separated permissions that the current user must have.
+    public scopes: string;
+}

@@ -25,6 +25,18 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    fn internal_access_allowed(
+        &self,
+        decl_file: Option<&Rc<str>>,
+        caller_file: Option<&Rc<str>>,
+    ) -> bool {
+        self.same_module(decl_file, caller_file)
+            || caller_file.is_some_and(|c| self.generated_files.contains(c))
+            // Embedded modules share compiler/runtime plumbing without exposing it to imports.
+            || (decl_file.is_some_and(|p| self.stdlib_files.contains(p))
+                && caller_file.is_some_and(|p| self.stdlib_files.contains(p)))
+    }
+
     /// File/module-level visibility test (Axis 1). `Public` is visible everywhere. `Internal` is
     /// visible from the declaring file itself, or from any other file that declares the *same*
     /// `module` path. Private (the default) is only visible from the declaring file. Synthesized
@@ -46,7 +58,7 @@ impl<'a> Analyzer<'a> {
             (Some(decl), Some(caller)) => {
                 decl.as_ref() == caller.as_ref()
                     || (visibility == Visibility::Internal
-                        && self.same_module(Some(decl), Some(caller)))
+                        && self.internal_access_allowed(Some(decl), Some(caller)))
             }
             _ => true,
         }
@@ -67,7 +79,8 @@ impl<'a> Analyzer<'a> {
         if in_declaring_type || visibility == Visibility::Public {
             return true;
         }
-        visibility == Visibility::Internal && self.same_module(decl_file.as_ref(), caller_file)
+        visibility == Visibility::Internal
+            && self.internal_access_allowed(decl_file.as_ref(), caller_file)
     }
 
     /// Reports a cross-file visibility violation for a top-level declaration referenced from
@@ -93,9 +106,8 @@ impl<'a> Analyzer<'a> {
         );
     }
 
-    /// Checks that a referenced enum/interface type is visible from `caller_file`, reporting an
-    /// error otherwise. Types absent from `type_visibility` (structs/classes, primitives, generics,
-    /// synthesized types) are handled elsewhere or always visible here.
+    /// Checks that a referenced nominal type is visible from `caller_file`. Primitives, generic
+    /// parameters, and synthesized types have no visibility entry.
     pub(in crate::analyzer) fn check_type_visible(
         &self,
         type_name: &str,

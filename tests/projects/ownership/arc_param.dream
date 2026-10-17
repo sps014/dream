@@ -28,6 +28,6 @@ fun arc_param() {
     let b = c1a_Box(21);
     let total = c1a_read_twice(b);
     // `b` must still be valid here after being passed through two function calls.
-    Assert.eq_str((b.value).to_string(), "21");
-    Assert.eq_str((total).to_string(), "42");
+    Assert.eq((b.value).to_string(), "21");
+    Assert.eq((total).to_string(), "42");
 }

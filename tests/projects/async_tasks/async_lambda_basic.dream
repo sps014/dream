@@ -12,6 +12,6 @@ async fun async_lambda_basic(): void {
         Time.sleep(1).await;
         return x * 2;
     };
-    Assert.eq_str((twice(21).await).to_string(), "42");
-    Assert.eq_str((c35_apply_async(async (n) => n + 100, 1).await).to_string(), "101");
+    Assert.eq((twice(21).await).to_string(), "42");
+    Assert.eq((c35_apply_async(async (n) => n + 100, 1).await).to_string(), "101");
 }

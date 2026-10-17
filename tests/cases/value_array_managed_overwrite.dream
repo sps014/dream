@@ -1,3 +1,5 @@
+module system.core;
+
 import system;
 
 class Note {
@@ -14,13 +16,13 @@ struct Entry {
 enum struct Slot { Empty, Value(Note) }
 
 fun exercise(): void {
-    let entries = Buffer.alloc<Entry>(2);
+    let entries = Array.alloc<Entry>(2);
     entries[0] = Entry(Note(11));
     entries[1] = Entry(Note(12));
     entries[0] = entries[0];
     Buffer.truncate(entries, 1);
     Buffer.clear(entries);
-    let slots = Buffer.alloc<Slot>(2);
+    let slots = Array.alloc<Slot>(2);
     slots[0] = Slot.Value(Note(21));
     slots[1] = Slot.Value(Note(22));
     slots[0] = slots[0];

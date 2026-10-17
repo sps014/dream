@@ -156,6 +156,8 @@ Save this as `inspect.dream`. Handle the parse result before reading arguments, 
 check help and version before starting the program's work.
 
 ```dream
+import system.io;
+import system.encoding;
 import system;
 import system.cli;
 
@@ -164,7 +166,8 @@ fun main(): int {
 
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_line(result.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 2;
     }
 

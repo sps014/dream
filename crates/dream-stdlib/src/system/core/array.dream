@@ -1,0 +1,34 @@
+module system.core;
+
+// `Array.alloc<T>(n)` — user-facing zero-initialized `T[]` allocation. Thin wrapper over the
+// lower-level `Buffer.alloc` intrinsic.
+/// Creates fixed-length arrays whose elements can be accessed with zero-based indices.
+public static class Array {
+    /// Creates an array of `len` default-initialized elements.
+    public static fun alloc<T>(len: int): T[] {
+        return Buffer.alloc<T>(len);
+    }
+
+    // A `T[]` of length `len` whose every slot holds `value` (evaluated once, shared).
+    public static fun repeat<T>(len: int, value: T): T[] {
+        let out = Buffer.alloc<T>(len);
+        let i = 0;
+        while i < len {
+            out[i] = value;
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // Like `repeat`, but calls `fill()` once per slot so each element can be a fresh value
+    // (`[v; n]` uses this whenever `v` itself constructs an array, giving distinct rows).
+    public static fun repeat_with<T>(len: int, fill: fun(): T): T[] {
+        let out = Buffer.alloc<T>(len);
+        let i = 0;
+        while i < len {
+            out[i] = fill();
+            i = i + 1;
+        }
+        return out;
+    }
+}

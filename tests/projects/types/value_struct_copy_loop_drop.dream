@@ -32,7 +32,7 @@ fun c290_verify_observation(borrow value: string): void {
     let wanted = "3\n";
     let end = c290_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c290_cursor, end));
+    Assert.eq(actual, wanted.substring(c290_cursor, end));
     c290_cursor = end;
 }
 

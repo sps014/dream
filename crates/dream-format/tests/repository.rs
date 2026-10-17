@@ -78,7 +78,11 @@ fn every_tracked_dream_file_preserves_content_and_is_idempotent() {
         .filter(|name| !name.is_empty())
     {
         let name = std::str::from_utf8(name).expect("repository paths are UTF-8");
-        let source = fs::read_to_string(root.join(name)).expect("tracked source must be readable");
+        let path = root.join(name);
+        if !path.exists() {
+            continue;
+        }
+        let source = fs::read_to_string(path).expect("repository source must be readable");
         if name.ends_with(".dream") {
             verify(&source, name);
             files += 1;

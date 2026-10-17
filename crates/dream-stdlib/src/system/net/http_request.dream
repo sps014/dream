@@ -1,0 +1,65 @@
+module system.net;
+
+// Mutable request description; sending snapshots URL, headers, options, and body bytes.
+public class HttpRequest {
+    // HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.
+    public method: string;
+
+    // Absolute http/https destination; credentials in URLs are rejected.
+    public url: Url;
+
+    // Request headers; browsers reject forbidden names instead of silently ignoring them.
+    public headers: HttpHeaders;
+
+    // Byte body copied for each send; GET and HEAD require an empty body.
+    public body: byte[];
+
+    // Creates a request with empty headers and body.
+    public constructor(method: string, url: Url) {
+        this.method = method;
+        this.url = url;
+        this.headers = HttpHeaders();
+        this.body = [];
+    }
+
+    // Creates a GET request.
+    public static fun get(url: Url): HttpRequest {
+        return HttpRequest("GET", url);
+    }
+
+    // Creates a POST request.
+    public static fun post(url: Url): HttpRequest {
+        return HttpRequest("POST", url);
+    }
+
+    // Creates a PUT request.
+    public static fun put(url: Url): HttpRequest {
+        return HttpRequest("PUT", url);
+    }
+
+    // Creates a PATCH request.
+    public static fun patch(url: Url): HttpRequest {
+        return HttpRequest("PATCH", url);
+    }
+
+    // Creates a DELETE request.
+    public static fun delete(url: Url): HttpRequest {
+        return HttpRequest("DELETE", url);
+    }
+
+    // Replaces the body with UTF-8 bytes; adds no content-type header implicitly.
+    public fun set_text(text: string): void {
+        this.body = Encoding.utf8_encode(text);
+    }
+
+    internal fun wire(options: HttpOptions): string {
+        let json = JsonValue.dict();
+        json["method"] = JsonValue.from_string(this.method);
+        json["url"] = JsonValue.from_string(this.url.to_string());
+        json["headers"] = this.headers.to_json();
+        json["timeout_ms"] = JsonValue.from_int(options.timeout_ms);
+        json["connect_timeout_ms"] = JsonValue.from_int(options.connect_timeout_ms);
+        json["max_redirects"] = JsonValue.from_int(options.max_redirects);
+        return Json.serialize(json);
+    }
+}

@@ -71,7 +71,7 @@ async fun webapi_auth_http(): void {
     request.headers.set("X-CSRF-Token", csrf);
     let allowed = client.send(request).await.unwrap();
     Assert.eq(allowed.status, 200);
-    Assert.eq_str(allowed.read_text().await.unwrap(), "1");
+    Assert.eq(allowed.read_text().await.unwrap(), "1");
     allowed.close();
     let bearer = HttpRequest.get(Url.parse(base + "/private").unwrap());
     bearer.headers.set("Authorization", "Bearer " + tokens.get_str("access_token").unwrap());

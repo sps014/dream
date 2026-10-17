@@ -26,8 +26,8 @@ impl<'a> Rewriter<'a, '_> {
             StatementNode::Assignment(n, e) => {
                 StatementNode::Assignment(n.clone(), self.expression(e)?)
             }
-            StatementNode::Declaration(n, ty, e, c) => {
-                StatementNode::Declaration(n.clone(), ty.clone(), self.expression(e)?, *c)
+            StatementNode::Declaration(n, ty, e, c, w) => {
+                StatementNode::Declaration(n.clone(), ty.clone(), self.expression(e)?, *c, *w)
             }
             StatementNode::TupleDeclaration {
                 pattern,

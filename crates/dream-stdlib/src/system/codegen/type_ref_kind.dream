@@ -1,0 +1,23 @@
+module system.codegen;
+import system;
+import system.collections;
+
+// What a `GenTypeRef` refers to.
+public enum TypeRefKind {
+    /// Identifies primitive types.
+    Primitive,
+    /// Identifies named types.
+    Named,
+    /// Identifies param types.
+    Param,
+    /// Identifies array types.
+    Array,
+    /// Identifies tuple types.
+    Tuple,
+    /// Identifies function types.
+    Function,
+    /// Identifies void types.
+    Void,
+    /// Identifies unknown types.
+    Unknown
+}

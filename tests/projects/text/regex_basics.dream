@@ -6,38 +6,38 @@ import system.text;
 @timeout(180000)
 fun regex_basics(): void {
     let digits = Regex("\\d+", RegexFlags.Global);
-    Assert.eq_str((digits.test("abc123")).to_string(), "true");
-    Assert.eq_str((digits.test("no digits here")).to_string(), "false");
+    Assert.eq((digits.test("abc123")).to_string(), "true");
+    Assert.eq((digits.test("no digits here")).to_string(), "false");
 
     let parts = digits.match("a1b22c333");
-    Assert.eq_str((parts.length).to_string(), "3");
-    Assert.eq_str((parts[0]).to_string(), "1");
-    Assert.eq_str((parts[1]).to_string(), "22");
-    Assert.eq_str((parts[2]).to_string(), "333");
+    Assert.eq((parts.length).to_string(), "3");
+    Assert.eq((parts[0]).to_string(), "1");
+    Assert.eq((parts[1]).to_string(), "22");
+    Assert.eq((parts[2]).to_string(), "333");
 
     let lazy = Regex("<.+?>");
-    Assert.eq_str((lazy.match("<a><b>")[0]).to_string(), "<a>");
+    Assert.eq((lazy.match("<a><b>")[0]).to_string(), "<a>");
 
     let greedy = Regex("<.+>");
-    Assert.eq_str((greedy.match("<a><b>")[0]).to_string(), "<a><b>");
+    Assert.eq((greedy.match("<a><b>")[0]).to_string(), "<a><b>");
 
     let counted = Regex("a{2,3}");
-    Assert.eq_str((counted.match("aaaa")[0]).to_string(), "aaa");
+    Assert.eq((counted.match("aaaa")[0]).to_string(), "aaa");
 
     let unbounded = Regex("a{2,}");
-    Assert.eq_str((unbounded.match("aaaaa")[0]).to_string(), "aaaaa");
+    Assert.eq((unbounded.match("aaaaa")[0]).to_string(), "aaaaa");
 
     let exact = Regex("a{3}");
-    Assert.eq_str((exact.test("aa")).to_string(), "false");
-    Assert.eq_str((exact.test("aaa")).to_string(), "true");
+    Assert.eq((exact.test("aa")).to_string(), "false");
+    Assert.eq((exact.test("aaa")).to_string(), "true");
 
     let dot_default = Regex("a.b");
-    Assert.eq_str((dot_default.test("a\nb")).to_string(), "false");
-    Assert.eq_str((dot_default.test("axb")).to_string(), "true");
+    Assert.eq((dot_default.test("a\nb")).to_string(), "false");
+    Assert.eq((dot_default.test("axb")).to_string(), "true");
 
     let dot_all = Regex("a.b", RegexFlags.DotAll);
-    Assert.eq_str((dot_all.test("a\nb")).to_string(), "true");
+    Assert.eq((dot_all.test("a\nb")).to_string(), "true");
 
     let empty = Regex("");
-    Assert.eq_str((empty.test("anything")).to_string(), "true");
+    Assert.eq((empty.test("anything")).to_string(), "true");
 }

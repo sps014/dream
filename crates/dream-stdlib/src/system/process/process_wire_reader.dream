@@ -16,7 +16,7 @@ internal class ProcessWireReader {
         let src = Span<byte>(this.data, start, len);
         let i = 0;
         while i < len {
-            string.set(result, i, (char)src.get(i));
+            string.set(result, i, (char)src[i]);
             i = i + 1;
         }
         return result;
@@ -50,7 +50,7 @@ internal class ProcessWireReader {
         let src = Span<byte>(this.data, start, take);
         let i = 0;
         while i < take {
-            out[i] = src.get(i);
+            out[i] = src[i];
             i = i + 1;
         }
         this.pos = start + take;

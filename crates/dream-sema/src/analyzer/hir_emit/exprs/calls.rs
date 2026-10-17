@@ -127,7 +127,7 @@ impl<'a> Analyzer<'a> {
         Self::boxed_type("RefBox", elem)
     }
 
-    fn boxed_type(base: &str, elem: &Type) -> Type {
+    pub(in crate::analyzer) fn boxed_type(base: &str, elem: &Type) -> Type {
         Type::Struct(
             crate::analyzer::synthetic_token(TokenKind::IdentifierToken, base),
             Some(vec![elem.clone()]),
@@ -158,7 +158,7 @@ impl<'a> Analyzer<'a> {
         self.hir_build_boxed_new("RefBox", Self::ref_box_type(elem_ty), elem_ty, value)
     }
 
-    fn hir_build_boxed_new(
+    pub(in crate::analyzer) fn hir_build_boxed_new(
         &mut self,
         base: &str,
         boxed_ty: Type,

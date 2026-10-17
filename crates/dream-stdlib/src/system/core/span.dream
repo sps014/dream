@@ -61,11 +61,6 @@ public ref struct Span<T> {
         return this.array[this.offset + index];
     }
 
-    /// Returns the element at `index`; an out-of-range index panics.
-    public fun get(index: int): T {
-        return this[index];
-    }
-
     // For-each access; the loop has already checked `index < length`, and the constructor
     // guarantees the range is inside `array`.
     @inline
@@ -79,11 +74,6 @@ public ref struct Span<T> {
             System.panic("Span index out of range");
         }
         this.array[this.offset + index] = value;
-    }
-
-    /// Replaces the element at `index`; an out-of-range index panics.
-    public fun set(index: int, value: T): void {
-        this[index] = value;
     }
 
     // A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested

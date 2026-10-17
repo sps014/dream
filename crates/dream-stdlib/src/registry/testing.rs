@@ -6,12 +6,20 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/testing/attributes.dream",
-            include_str!("../system/testing/attributes.dream"),
+            "<std>/system/testing/test_attribute.dream",
+            include_str!("../system/testing/test_attribute.dream"),
         ),
         (
-            "<std>/system/testing/fixture.dream",
-            include_str!("../system/testing/fixture.dream"),
+            "<std>/system/testing/timeout_attribute.dream",
+            include_str!("../system/testing/timeout_attribute.dream"),
+        ),
+        (
+            "<std>/system/testing/test_fixture.dream",
+            include_str!("../system/testing/test_fixture.dream"),
+        ),
+        (
+            "<std>/system/testing/fixtures.dream",
+            include_str!("../system/testing/fixtures.dream"),
         ),
         (
             "<std>/system/testing/assert.dream",

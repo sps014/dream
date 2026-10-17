@@ -10,6 +10,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/collections/capacity_error.dream"),
         ),
         (
+            "<std>/system/collections/collection_storage.dream",
+            include_str!("../system/collections/collection_storage.dream"),
+        ),
+        (
             "<std>/system/collections/list.dream",
             include_str!("../system/collections/list.dream"),
         ),
@@ -70,8 +74,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/collections/stack.dream"),
         ),
         (
-            "<std>/system/collections/collection_query.dream",
-            include_str!("../system/collections/collection_query.dream"),
+            "<std>/system/collections/collection_seq.dream",
+            include_str!("../system/collections/collection_seq.dream"),
         ),
         (
             "<std>/system/collections/seq.dream",

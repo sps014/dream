@@ -16,5 +16,5 @@ fun string_builder_int_extremes(): void {
     sb.append("|");
     sb.append_int(2147483647);
     sb.append("]");
-    Assert.eq_str((sb.build()).to_string(), "[-2147483648|-9223372036854775808|2147483647]");
+    Assert.eq((sb.build()).to_string(), "[-2147483648|-9223372036854775808|2147483647]");
 }

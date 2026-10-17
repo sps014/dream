@@ -24,7 +24,7 @@ fun c22e_verify_observation(borrow value: string): void {
     let wanted = "k,v=w\n2:no|separator\n2:a|b-c\n1:miss\n2:|x\n";
     let end = c22e_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c22e_cursor, end));
+    Assert.eq(actual, wanted.substring(c22e_cursor, end));
     c22e_cursor = end;
 }
 

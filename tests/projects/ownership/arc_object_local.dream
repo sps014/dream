@@ -14,5 +14,5 @@ class c18_Value {
 fun arc_object_local() {
     let erased: object = c18_Value(5);
     let value = (c18_Value)erased;
-    Assert.eq_str((value.n).to_string(), "5");
+    Assert.eq((value.n).to_string(), "5");
 }

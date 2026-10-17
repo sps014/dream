@@ -6,6 +6,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/core/char_span.dream",
+            include_str!("../system/core/char_span.dream"),
+        ),
+        (
+            "<std>/system/core/string.dream",
+            include_str!("../system/core/string.dream"),
+        ),
+        (
             "<std>/system/core/assets.dream",
             include_str!("../system/core/assets.dream"),
         ),
@@ -14,8 +22,76 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/intrinsic.dream"),
         ),
         (
-            "<std>/system/core/attributes.dream",
-            include_str!("../system/core/attributes.dream"),
+            "<std>/system/core/attribute_target.dream",
+            include_str!("../system/core/attribute_target.dream"),
+        ),
+        (
+            "<std>/system/core/declaration_path.dream",
+            include_str!("../system/core/declaration_path.dream"),
+        ),
+        (
+            "<std>/system/core/attribute_attribute.dream",
+            include_str!("../system/core/attribute_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/repeatable_attribute.dream",
+            include_str!("../system/core/repeatable_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/export_attribute.dream",
+            include_str!("../system/core/export_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/intrinsic_attribute.dream",
+            include_str!("../system/core/intrinsic_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/inline_attribute.dream",
+            include_str!("../system/core/inline_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/noinline_attribute.dream",
+            include_str!("../system/core/noinline_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/unsafe_attribute.dream",
+            include_str!("../system/core/unsafe_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/allow_cycle_attribute.dream",
+            include_str!("../system/core/allow_cycle_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/consuming_attribute.dream",
+            include_str!("../system/core/consuming_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/owned_attribute.dream",
+            include_str!("../system/core/owned_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/js_attribute.dream",
+            include_str!("../system/core/js_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/runtime_attribute.dream",
+            include_str!("../system/core/runtime_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/async_host_attribute.dream",
+            include_str!("../system/core/async_host_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/native_attribute.dream",
+            include_str!("../system/core/native_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/node_attribute.dream",
+            include_str!("../system/core/node_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/web_attribute.dream",
+            include_str!("../system/core/web_attribute.dream"),
         ),
         (
             "<std>/system/core/buffer.dream",
@@ -28,6 +104,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/span.dream",
             include_str!("../system/core/span.dream"),
+        ),
+        (
+            "<std>/system/core/span_character.dream",
+            include_str!("../system/core/span_character.dream"),
         ),
         (
             "<std>/system/core/read_only_span.dream",
@@ -50,8 +130,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/closure.dream"),
         ),
         (
-            "<std>/system/core/cell.dream",
-            include_str!("../system/core/cell.dream"),
+            "<std>/system/core/capture_cell.dream",
+            include_str!("../system/core/capture_cell.dream"),
         ),
         (
             "<std>/system/core/ref_box.dream",
@@ -72,6 +152,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/span_text_iterators.dream",
             include_str!("../system/core/span_text_iterators.dream"),
+        ),
+        (
+            "<std>/system/core/string_split.dream",
+            include_str!("../system/core/string_split.dream"),
+        ),
+        (
+            "<std>/system/core/string_lines.dream",
+            include_str!("../system/core/string_lines.dream"),
+        ),
+        (
+            "<std>/system/core/string_key.dream",
+            include_str!("../system/core/string_key.dream"),
         ),
         (
             "<std>/system/core/string_builder.dream",
@@ -114,16 +206,64 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/cancellation_token.dream"),
         ),
         (
+            "<std>/system/core/cancellation_registration.dream",
+            include_str!("../system/core/cancellation_registration.dream"),
+        ),
+        (
             "<std>/system/core/option.dream",
             include_str!("../system/core/option.dream"),
         ),
         (
-            "<std>/system/core/panic.dream",
-            include_str!("../system/core/panic.dream"),
+            "<std>/system/core/system.dream",
+            include_str!("../system/core/system.dream"),
         ),
         (
             "<std>/system/core/iterable.dream",
             include_str!("../system/core/iterable.dream"),
+        ),
+        (
+            "<std>/system/core/async_iterator.dream",
+            include_str!("../system/core/async_iterator.dream"),
+        ),
+        (
+            "<std>/system/core/async_iterable.dream",
+            include_str!("../system/core/async_iterable.dream"),
+        ),
+        (
+            "<std>/system/core/yield_signals.dream",
+            include_str!("../system/core/yield_signals.dream"),
+        ),
+        (
+            "<std>/system/core/yield_channel.dream",
+            include_str!("../system/core/yield_channel.dream"),
+        ),
+        (
+            "<std>/system/core/yield_cursor.dream",
+            include_str!("../system/core/yield_cursor.dream"),
+        ),
+        (
+            "<std>/system/core/yield_iterable.dream",
+            include_str!("../system/core/yield_iterable.dream"),
+        ),
+        (
+            "<std>/system/core/yield_async_cursor.dream",
+            include_str!("../system/core/yield_async_cursor.dream"),
+        ),
+        (
+            "<std>/system/core/yield_async_iterable.dream",
+            include_str!("../system/core/yield_async_iterable.dream"),
+        ),
+        (
+            "<std>/system/core/iterator_lease.dream",
+            include_str!("../system/core/iterator_lease.dream"),
+        ),
+        (
+            "<std>/system/core/async_iterator_lease.dream",
+            include_str!("../system/core/async_iterator_lease.dream"),
+        ),
+        (
+            "<std>/system/core/yield_advance_lease.dream",
+            include_str!("../system/core/yield_advance_lease.dream"),
         ),
         (
             "<std>/system/core/iterator.dream",
@@ -144,6 +284,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/array_collection.dream",
             include_str!("../system/core/array_collection.dream"),
+        ),
+        (
+            "<std>/system/core/array.dream",
+            include_str!("../system/core/array.dream"),
         ),
         (
             "<std>/system/core/result.dream",

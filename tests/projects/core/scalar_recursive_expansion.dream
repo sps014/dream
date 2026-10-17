@@ -51,7 +51,7 @@ fun c1ed_verify_observation(borrow value: string): void {
     let wanted = "-7\n0\n1\n55\n6765\n0\n-2\ntrue\ntrue\ntrue\n";
     let end = c1ed_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1ed_cursor, end));
+    Assert.eq(actual, wanted.substring(c1ed_cursor, end));
     c1ed_cursor = end;
 }
 

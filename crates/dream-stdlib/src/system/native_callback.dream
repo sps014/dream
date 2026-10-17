@@ -1,0 +1,28 @@
+module system;
+import system.interop;
+
+// A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may
+// call it for as long as this object is alive: keep it in a field while C holds the pointer.
+// Calls from threads Dream did not start trap.
+@allow_cycle
+public class NativeCallback<F> {
+    f: F;
+
+    /// Keeps a callback available to foreign code until `unregister` is called.
+    @intrinsic(Intrinsic.DreamCallbackRegister)
+    public static extern fun register(borrow callback: object): void;
+
+    /// Releases a previously registered callback after foreign code has stopped using it.
+    @intrinsic(Intrinsic.DreamCallbackUnregister)
+    public static extern fun unregister(borrow callback: object): void;
+
+    /// Creates a `NativeCallback` with `f`.
+    public constructor(f: F) {
+        this.f = f;
+        NativeCallback<F>.register(this);
+    }
+
+    del() {
+        NativeCallback<F>.unregister(this);
+    }
+}

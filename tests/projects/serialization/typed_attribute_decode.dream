@@ -28,7 +28,7 @@ fun typed_attribute_decode(): void {
     let attrs = List<GenAttribute>();
     attrs.push(GenAttribute(GenAttributes.id<DecodeProbeAttribute>(), "decode_probe", args));
     let first = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
-    Assert.eq_str(first.name, "example");
+    Assert.eq(first.name, "example");
     Assert.is_true(first.mode.is_none());
     args.push(GenAttrArg("enum", "DecodeProbeMode.Second", ""));
     let second = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
@@ -39,8 +39,8 @@ fun typed_attribute_decode(): void {
     let triggers = List<GenAttribute>();
     triggers.push(GenAttribute(GenAttributes.id<OnCallAttribute>(), "on_call", paths));
     let trigger = GenAttributes.decode<OnCallAttribute>(triggers).unwrap();
-    Assert.eq_str(trigger.declaration.text, "Json.serialize");
-    Assert.eq_str(trigger.declaration.symbol, "system.json::Json.serialize");
+    Assert.eq(trigger.declaration.text, "Json.serialize");
+    Assert.eq(trigger.declaration.symbol, "system.json::Json.serialize");
 
     let modes = List<GenAttrArg>();
     modes.push(GenAttrArg("enum", "DecodeProbeMode.First", ""));
@@ -49,5 +49,5 @@ fun typed_attribute_decode(): void {
     repeated.push(GenAttribute(GenAttributes.id<decode_modes>(), "decode_modes", modes));
     let decoded = GenAttributes.decode<decode_modes>(repeated).unwrap();
     Assert.eq(decoded.values.length, 2);
-    Assert.is_true(decoded.values.get(1) == DecodeProbeMode.Second);
+    Assert.is_true(decoded.values[1] == DecodeProbeMode.Second);
 }

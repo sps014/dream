@@ -33,7 +33,7 @@ fun ccf_verify_observation(borrow value: string): void {
     let wanted = "abc\nfalse\nabc\n";
     let end = ccf_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ccf_cursor, end));
+    Assert.eq(actual, wanted.substring(ccf_cursor, end));
     ccf_cursor = end;
 }
 

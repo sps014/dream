@@ -9,13 +9,13 @@ fun main(): void {
         i = i + 1;
     }
     System.println(xs.length);
-    System.println(xs.get(0));
-    System.println(xs.get(99));
+    System.println(xs[0]);
+    System.println(xs[99]);
 
     let sum = 0;
     let j = 0;
     while j < xs.length {
-        sum = sum + xs.get(j);
+        sum = sum + xs[j];
         j = j + 1;
     }
     System.println(sum);
@@ -27,7 +27,7 @@ fun main(): void {
         k = k + 1;
     }
     System.println(words.length);
-    System.print(words.get(19));
+    System.print(words[19]);
     System.print("\n");
     System.print(words.contains("x"));
     System.print("\n");
@@ -37,7 +37,7 @@ fun main(): void {
     let squares = Map<int, int>();
     let n = 0;
     while n < 64 {
-        squares.set(n, n * n);
+        squares[n] = n * n;
         n = n + 1;
     }
     System.println(squares.length);

@@ -28,10 +28,10 @@ public fun validation_derive(ctx: GenContext): void {
             continue;
         }
         let definitions = JsonValue.dict();
-        definitions.set(d.id, JsonValue.dict());
+        definitions[d.id] = JsonValue.dict();
         let schema = ValidationGenerator.model(d, ctx, definitions);
-        definitions.set(d.id, Json.deserialize<JsonValue>(Json.serialize(schema)).unwrap());
-        schema.set("definitions", definitions);
+        definitions[d.id] = Json.deserialize<JsonValue>(Json.serialize(schema)).unwrap();
+        schema["definitions"] = definitions;
         let out = CodeBuilder();
         let ty = d.self_type();
         out.line(

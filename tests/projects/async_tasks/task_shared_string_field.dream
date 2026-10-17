@@ -15,5 +15,5 @@ shared class c257_Named {
 @timeout(180000)
 async fun task_shared_string_field(): void {
     let n = c257_Named("hi");
-    Assert.eq_str((Task.spawn(() => n.label + "!").await).to_string(), "hi!");
+    Assert.eq((Task.spawn(() => n.label + "!").await).to_string(), "hi!");
 }

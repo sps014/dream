@@ -7,9 +7,9 @@ import system.io;
 @test
 @timeout(180000)
 fun path_join_variadic(): void {
-    Assert.eq_str((Path.join("a", "b")).to_string(), "a/b");
-    Assert.eq_str((Path.join("a", "b", "c", "d")).to_string(), "a/b/c/d");
-    Assert.eq_str((Path.join("root/", "sub", "file.txt")).to_string(), "root/sub/file.txt");
-    Assert.eq_str((Path.join("", "only")).to_string(), "only");
-    Assert.eq_str((Path.of(["x", "", "y"])).to_string(), "x/y");
+    Assert.eq((Path.join("a", "b")).to_string(), "a/b");
+    Assert.eq((Path.join("a", "b", "c", "d")).to_string(), "a/b/c/d");
+    Assert.eq((Path.join("root/", "sub", "file.txt")).to_string(), "root/sub/file.txt");
+    Assert.eq((Path.join("", "only")).to_string(), "only");
+    Assert.eq((Path.join("x", "", "y")).to_string(), "x/y");
 }

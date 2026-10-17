@@ -38,7 +38,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if is_ref {
                     let span = ty.get_span().unwrap_or_else(|| p.current_token().position);
                     Ok(Type::Struct(
-                        SyntaxToken::new(TokenKind::IdentifierToken, span, "RefBox".to_string()),
+                        SyntaxToken::new(TokenKind::RefToken, span, "RefBox".to_string()),
                         Some(vec![ty]),
                     ))
                 } else {

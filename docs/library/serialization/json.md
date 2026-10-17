@@ -110,7 +110,7 @@ let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>()
 ### Nested values
 
 ```dream
-switch (v.get("meta")) {
+switch (v["meta"]) {
     Some(meta) => {
         System.println(meta.get_int_or("id", 0));
     },

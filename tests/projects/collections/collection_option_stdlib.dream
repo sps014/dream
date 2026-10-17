@@ -35,7 +35,7 @@ fun c89_verify_observation(borrow value: string): void {
     let wanted = "2\n2\n42\n2\n1\n";
     let end = c89_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c89_cursor, end));
+    Assert.eq(actual, wanted.substring(c89_cursor, end));
     c89_cursor = end;
 }
 

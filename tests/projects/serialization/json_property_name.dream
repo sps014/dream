@@ -29,12 +29,12 @@ fun json_property_name(): void {
     let p = c11e_Product(42, "Widget", 9.5, ["sale", "new"]);
 
     let serialized = Json.serialize(p);
-    Assert.eq_str(
+    Assert.eq(
         (serialized).to_string(),
         "{\"id\":42,\"title\":\"Widget\",\"priceUsd\":9.5,\"tags\":[\"sale\",\"new\"]}"
     );
 
     let deserialized = Json.deserialize<c11e_Product>(serialized).unwrap_or(p);
-    Assert.eq_str((deserialized.name).to_string(), "Widget");
-    Assert.eq_str((deserialized.product_id).to_string(), "42");
+    Assert.eq((deserialized.name).to_string(), "Widget");
+    Assert.eq((deserialized.product_id).to_string(), "42");
 }

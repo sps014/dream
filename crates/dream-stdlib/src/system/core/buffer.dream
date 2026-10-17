@@ -6,7 +6,7 @@ module system.core;
 
 /// Allocates and manages fixed-length arrays. Prefer `List<T>` when the number of elements
 /// needs to grow.
-public static class Buffer {
+internal static class Buffer {
     // Storage initialization may contain internal null references; it is not a constructor API.
     @intrinsic(Intrinsic.BufferZero)
     internal static extern fun zero<T>(): T;

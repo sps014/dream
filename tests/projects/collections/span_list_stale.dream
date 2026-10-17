@@ -42,7 +42,7 @@ fun c200_verify_observation(borrow value: string): void {
     let wanted = "a1\nbb\n2 22\n78\n";
     let end = c200_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c200_cursor, end));
+    Assert.eq(actual, wanted.substring(c200_cursor, end));
     c200_cursor = end;
 }
 

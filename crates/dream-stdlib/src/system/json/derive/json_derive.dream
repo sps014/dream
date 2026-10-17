@@ -63,18 +63,18 @@ public fun json_derive(ctx: GenContext): void {
                 collect_collections(t, jsonable, collections);
             }
         } else if call.callee == serialize && !call.arg_types.is_empty() {
-            collect_collections(call.arg_types.get(0), jsonable, collections);
+            collect_collections(call.arg_types[0], jsonable, collections);
         }
     }
 
     let i = 0;
     while i < types.length {
-        let result = JsonGenerator.members(types.get(i), json_names, jsonable);
+        let result = JsonGenerator.members(types[i], json_names, jsonable);
         if !result.ok {
             ctx.error_at(error_target(ctx, result), first_line(result.error));
             return;
         }
-        ctx.emit_extend(declarations.get(i), result.source);
+        ctx.emit_extend(declarations[i], result.source);
         i++;
     }
     let collections_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
@@ -85,12 +85,6 @@ public fun json_derive(ctx: GenContext): void {
     if !collections_result.source.is_empty() {
         ctx.emit_file("json.dream", collections_result.source);
     }
-}
-
-enum Construction {
-    Fieldwise,
-    Assign,
-    Impossible,
 }
 
 // How `from_json` builds `d`: through a constructor whose parameters are the fields in declaration
@@ -110,7 +104,7 @@ fun construction(borrow d: GenDecl): Construction {
             let same = true;
             let i = 0;
             while i < m.params.length {
-                if m.params.get(i).ty.display != d.fields.get(i).ty.display {
+                if m.params[i].ty.display != d.fields[i].ty.display {
                     same = false;
                 }
                 i = i + 1;
@@ -302,7 +296,7 @@ fun insert_spec(
     );
     let i = 0;
     while i < out.length {
-        let c = spec_compare(spec, out.get(i));
+        let c = spec_compare(spec, out[i]);
         if c == 0 {
             return;
         }

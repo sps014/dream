@@ -35,7 +35,7 @@ fun ca3_verify_observation(borrow value: string): void {
     let wanted = "0\n";
     let end = ca3_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ca3_cursor, end));
+    Assert.eq(actual, wanted.substring(ca3_cursor, end));
     ca3_cursor = end;
 }
 

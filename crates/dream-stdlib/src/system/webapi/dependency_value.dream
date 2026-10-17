@@ -1,0 +1,11 @@
+module system.webapi;
+
+/// A typed reference box keeps cached primitive values out of the erased object representation.
+@allow_cycle
+internal class DependencyValue<T> {
+    internal value: T;
+
+    internal constructor(value: T) {
+        this.value = value;
+    }
+}

@@ -39,7 +39,7 @@ fun ca2_verify_observation(borrow value: string): void {
     let wanted = "1\n2\n0\n1\n2\n0\n2\n";
     let end = ca2_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ca2_cursor, end));
+    Assert.eq(actual, wanted.substring(ca2_cursor, end));
     ca2_cursor = end;
 }
 

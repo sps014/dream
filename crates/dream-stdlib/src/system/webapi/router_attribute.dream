@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Declares an explicitly mounted group of static HTTP handlers.
+@attribute(AttributeTarget.Class)
+public struct RouterAttribute {
+    /// Path prefix applied to every route in the group.
+    public prefix: string;
+}

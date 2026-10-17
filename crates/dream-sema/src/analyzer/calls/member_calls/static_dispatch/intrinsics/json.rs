@@ -39,7 +39,7 @@ impl<'a> Analyzer<'a> {
                 .unwrap_or_default();
             let value = arg_hirs.into_iter().next().flatten();
             if struct_name == "JsonValue" {
-                self.hir_set_type_method_call(json_ty, "_stringify", vec![value], &named("string"));
+                self.hir_set_type_method_call(json_ty, "stringify", vec![value], &named("string"));
                 return Ok(named("string"));
             }
             let sb_ty = named("StringBuilder");
@@ -203,7 +203,7 @@ impl<'a> Analyzer<'a> {
             }
 
             if struct_name == "JsonValue" {
-                self.hir_set_type_method_call(json_ty, "_parse", vec![text], &result_ty);
+                self.hir_set_type_method_call(json_ty, "parse", vec![text], &result_ty);
                 return Ok(result_ty);
             }
 
@@ -237,7 +237,7 @@ impl<'a> Analyzer<'a> {
                 return Ok(result_ty);
             }
 
-            self.hir_set_type_method_call(json_ty, "_parse", vec![text], &parse_result_ty);
+            self.hir_set_type_method_call(json_ty, "parse", vec![text], &parse_result_ty);
             let parse_hir = self.hir_take();
 
             let parse_result_id = self.type_ctx.lower(&parse_result_ty);

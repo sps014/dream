@@ -1,0 +1,42 @@
+module system;
+
+// A signed span of time stored as milliseconds.
+public struct Duration {
+    /// Duration in milliseconds.
+    public millis: long;
+
+    /// Creates a `Duration` with `millis`.
+    public constructor(millis: long) {
+        this.millis = millis;
+    }
+
+    /// Creates a duration from milliseconds.
+    public static fun from_millis(ms: long): Duration {
+        return Duration(ms);
+    }
+
+    /// Creates a duration from seconds.
+    public static fun from_seconds(seconds: long): Duration {
+        return Duration(seconds * 1000L);
+    }
+
+    /// Returns the duration in milliseconds.
+    public fun as_millis(): long {
+        return this.millis;
+    }
+
+    /// Returns the duration in whole seconds.
+    public fun as_seconds(): long {
+        return this.millis / 1000L;
+    }
+
+    /// Returns the sum of this duration and `other`.
+    public fun add(other: Duration): Duration {
+        return Duration(this.millis + other.millis);
+    }
+
+    /// Returns this duration minus `other`.
+    public fun sub(other: Duration): Duration {
+        return Duration(this.millis - other.millis);
+    }
+}

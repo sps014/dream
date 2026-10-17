@@ -1,11 +1,11 @@
 import system.testing;
 // Native bump used to mmap 4MiB chunks and still return a pointer for larger
-// payloads (HTTP bodies, `Buffer.alloc`), then memset walked off the mapping.
+// payloads (HTTP bodies, `Array.alloc`), then memset walked off the mapping.
 import system;
 
 fun cf1_body(): void {
     let n = 5000000;
-    let a = Buffer.alloc<byte>(n);
+    let a = Array.alloc<byte>(n);
     a[0] = (byte)1;
     a[n - 1] = (byte)2;
     cf1_verify_observation(((int)a[0]).to_string());
@@ -20,7 +20,7 @@ fun cf1_verify_observation(borrow value: string): void {
     let wanted = "1\n2\n5000000\n";
     let end = cf1_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cf1_cursor, end));
+    Assert.eq(actual, wanted.substring(cf1_cursor, end));
     cf1_cursor = end;
 }
 

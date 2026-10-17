@@ -55,7 +55,7 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         }
         let bytes = Buffer.alloc<byte>(count);
         for (let i = 0; i < count; i = i + 1) {
-            bytes[i] = this.data.get(this.cursor + i);
+            bytes[i] = this.data[this.cursor + i];
         }
         this.cursor = this.cursor + count;
         return Result.Ok(bytes);
@@ -76,7 +76,7 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         }
         for (let i = 0; i < bytes.length; i = i + 1) {
             if this.cursor < this.data.length {
-                this.data.set(this.cursor, bytes[i]);
+                this.data[this.cursor] = bytes[i];
             } else {
                 this.data.push(bytes[i]);
             }
@@ -101,7 +101,7 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         this.check_open()?;
         let bytes = Buffer.alloc<byte>(this.data.length);
         for (let i = 0; i < bytes.length; i = i + 1) {
-            bytes[i] = this.data.get(i);
+            bytes[i] = this.data[i];
         }
         return Result.Ok(bytes);
     }

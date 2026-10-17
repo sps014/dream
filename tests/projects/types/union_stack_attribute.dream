@@ -32,7 +32,7 @@ fun c27e_verify_observation(borrow value: string): void {
     let wanted = "ok:0\nfail:1:disk full\n";
     let end = c27e_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c27e_cursor, end));
+    Assert.eq(actual, wanted.substring(c27e_cursor, end));
     c27e_cursor = end;
 }
 

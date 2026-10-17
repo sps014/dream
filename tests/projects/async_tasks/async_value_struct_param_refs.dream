@@ -26,5 +26,5 @@ async fun async_value_struct_param_refs(): void {
     let fut = c40_use_named(a);
     a = c40_Named("gone", 2);
     let r = fut.await;
-    Assert.eq_str((r).to_string(), "hello:1");
+    Assert.eq((r).to_string(), "hello:1");
 }

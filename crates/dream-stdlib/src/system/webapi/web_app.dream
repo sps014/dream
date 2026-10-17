@@ -101,7 +101,7 @@ public class WebApp {
             return Result.Err(IoError.other("", "application configuration is frozen"));
         }
         for (let entry in overrides.providers.entries()) {
-            this.overrides.set(entry.key, entry.value);
+            this.overrides[entry.key] = entry.value;
         }
         return Result.Ok(true);
     }
@@ -122,7 +122,7 @@ public class WebApp {
     static async fun finish_lifespan(app: WebApp): void {
         while app.started_hooks > 0 {
             app.started_hooks--;
-            let stop = app.shutdown_hooks.get(app.started_hooks);
+            let stop = app.shutdown_hooks[app.started_hooks];
             stop(app).await;
         }
     }
@@ -219,9 +219,9 @@ public class WebApp {
         response: HttpOutgoing
     ): JsonValue {
         let request = WebOperation.request(action, req_id);
-        request.set("status", JsonValue.from_int(response.status));
+        request["status"] = JsonValue.from_int(response.status);
         let headers = response.headers.to_json();
-        request.set("headers", headers);
+        request["headers"] = headers;
         return request;
     }
 
@@ -234,7 +234,7 @@ public class WebApp {
         if index >= chain.length {
             return leaf().await;
         }
-        let middleware = chain.get(index);
+        let middleware = chain[index];
         let next = Next(
             async () => {
                 return WebApp.run_middleware(ctx, chain, index + 1, leaf).await;
@@ -339,7 +339,7 @@ public class WebApp {
             operation.claim();
             operation.close();
             let handler = WebApp.handle(app, req);
-            app.requests.set(req.req_id, handler);
+            app.requests[req.req_id] = handler;
             Promise.start(handler);
         }
     }
@@ -376,10 +376,10 @@ public class WebApp {
             app.started_hooks++;
         }
         let request = WebOperation.request("listen", 0);
-        request.set("host", JsonValue.from_string(host));
-        request.set("port", JsonValue.from_int(port));
-        request.set("cert", JsonValue.from_string(app.options.tls_cert_path));
-        request.set("key", JsonValue.from_string(app.options.tls_key_path));
+        request["host"] = JsonValue.from_string(host);
+        request["port"] = JsonValue.from_int(port);
+        request["cert"] = JsonValue.from_string(app.options.tls_cert_path);
+        request["key"] = JsonValue.from_string(app.options.tls_key_path);
         let operation = WebOperation.start(request, []);
         let result = operation.wait(effective).await;
         if result.is_err() {
@@ -439,48 +439,43 @@ public class WebApp {
             let components = Json.deserialize<JsonValue>(route.components)
                 .unwrap_or(JsonValue.dict());
             for (let key in components.get_or("schemas", JsonValue.none()).keys()) {
-                schemas.set(
-                    key,
-                    components.get_or("schemas", JsonValue.none()).get_or(key, JsonValue.none())
-                );
+                schemas[key] = components.get_or("schemas", JsonValue.none())
+                    .get_or(key, JsonValue.none());
             }
             for (let key in components.get_or("securitySchemes", JsonValue.none()).keys()) {
-                security.set(
-                    key,
-                    components.get_or("securitySchemes", JsonValue.none())
-                        .get_or(key, JsonValue.none())
-                );
+                security[key] = components.get_or("securitySchemes", JsonValue.none())
+                    .get_or(key, JsonValue.none());
             }
             let method = route.method.to_lower();
-            let mounted = paths.get(route.path).unwrap_or(JsonValue.dict());
-            mounted.set(method, all);
-            paths.set(route.path, mounted);
+            let mounted = paths[route.path].unwrap_or(JsonValue.dict());
+            mounted[method] = all;
+            paths[route.path] = mounted;
         }
         let document = Json.deserialize<JsonValue>(
             WebApp.openapi_document(this.options, Json.serialize(paths))
         ).unwrap();
         let components = JsonValue.dict();
-        components.set("schemas", schemas);
-        components.set("securitySchemes", security);
-        document.set("components", components);
+        components["schemas"] = schemas;
+        components["securitySchemes"] = security;
+        document["components"] = components;
         return Json.serialize(document);
     }
 
     internal static fun openapi_document(options: WebAppOptions, paths: string): string {
         let info = JsonValue.dict();
-        info.set("title", JsonValue.from_string(options.title));
-        info.set("version", JsonValue.from_string(options.version));
-        info.set("description", JsonValue.from_string(options.description));
+        info["title"] = JsonValue.from_string(options.title);
+        info["version"] = JsonValue.from_string(options.version);
+        info["description"] = JsonValue.from_string(options.description);
         if !options.summary.is_empty() {
-            info.set("x-summary", JsonValue.from_string(options.summary));
+            info["x-summary"] = JsonValue.from_string(options.summary);
         }
         if !options.terms_of_service.is_empty() {
-            info.set("termsOfService", JsonValue.from_string(options.terms_of_service));
+            info["termsOfService"] = JsonValue.from_string(options.terms_of_service);
         }
         let doc = JsonValue.dict();
-        doc.set("openapi", JsonValue.from_string("3.0.3"));
-        doc.set("info", info);
-        doc.set("paths", Json.deserialize<JsonValue>(paths).unwrap_or(JsonValue.dict()));
+        doc["openapi"] = JsonValue.from_string("3.0.3");
+        doc["info"] = info;
+        doc["paths"] = Json.deserialize<JsonValue>(paths).unwrap_or(JsonValue.dict());
         return Json.serialize(doc);
     }
 
@@ -498,25 +493,20 @@ public class WebApp {
 
     static fun swagger_html(options: WebAppOptions): string {
         let settings = JsonValue.dict();
-        settings.set("url", JsonValue.from_string(options.openapi_url));
-        settings.set("dom_id", JsonValue.from_string("#swagger-ui"));
-        settings.set("deepLinking", JsonValue.boolean(options.swagger.deep_linking));
-        settings.set(
-            "persistAuthorization",
-            JsonValue.boolean(options.swagger.persist_authorization)
-        );
-        settings.set("tryItOutEnabled", JsonValue.boolean(options.swagger.try_it_out_enabled));
+        settings["url"] = JsonValue.from_string(options.openapi_url);
+        settings["dom_id"] = JsonValue.from_string("#swagger-ui");
+        settings["deepLinking"] = JsonValue.boolean(options.swagger.deep_linking);
+        settings["persistAuthorization"] = JsonValue.boolean(options.swagger.persist_authorization);
+        settings["tryItOutEnabled"] = JsonValue.boolean(options.swagger.try_it_out_enabled);
         if !options.swagger.oauth_redirect_url.is_empty() {
-            settings.set(
-                "oauth2RedirectUrl",
-                JsonValue.from_string(options.swagger.oauth_redirect_url)
+            settings["oauth2RedirectUrl"] = JsonValue.from_string(
+                options.swagger.oauth_redirect_url
             );
         }
         let oauth = JsonValue.dict();
-        oauth.set("clientId", JsonValue.from_string(options.swagger.oauth_client_id));
-        oauth.set(
-            "usePkceWithAuthorizationCodeGrant",
-            JsonValue.boolean(options.swagger.oauth_use_pkce)
+        oauth["clientId"] = JsonValue.from_string(options.swagger.oauth_client_id);
+        oauth["usePkceWithAuthorizationCodeGrant"] = JsonValue.boolean(
+            options.swagger.oauth_use_pkce
         );
         return "<!DOCTYPE html><html><head><title>"
             + WebApp.html_escape(options.title)

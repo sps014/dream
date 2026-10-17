@@ -1,0 +1,128 @@
+module system.task;
+
+// A child result whose execution is owned by a scope, independent of this handle's lifetime.
+@allow_cycle
+public class TaskHandle<T, E> {
+    internal value: Option<Result<T, TaskFailure<E>>>;
+    internal completed: Option<CancellationSource>;
+
+    internal constructor() {
+        this.value = Option.None;
+        this.completed = Option.None;
+    }
+
+    // Waits for completion without cancelling or transferring ownership of the child.
+    public fun join(): Future<Result<T, TaskFailure<E>>> {
+        return TaskHandle<T, E>.join_owned(this);
+    }
+
+    static async fun join_owned(handle: TaskHandle<T, E>): Result<T, TaskFailure<E>> {
+        if handle.value.is_none() {
+            // Completion runs on this scheduler; installing the first waiter cannot race a poll.
+            if handle.completed.is_none() {
+                handle.completed = Option.Some(CancellationSource());
+            }
+            handle.completed.unwrap().token.wait_cancelled().await;
+        }
+        return handle.value.unwrap();
+    }
+
+    internal fun execute_parallel(
+        body: fun(): T,
+        scope: TaskScope<E>
+    ): Future<bool> where T: shared {
+        return TaskHandle<T, E>.parallel_owned(this, body, scope);
+    }
+
+    static async fun parallel_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): T,
+        scope: TaskScope<E>
+    ): bool where T: shared {
+        // The scope owns this wait: cancellation must settle the worker before exposing results.
+        let session = Task.start<T>(body);
+        let wire = session.receive().await;
+        let value = Bytes.fromWire<T>(wire);
+        session.hold();
+        let outcome: Result<T, TaskFailure<E>> = Result.Ok(value);
+        if scope.token.is_cancelled {
+            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            outcome = Result.Err(failure);
+        }
+        handle.value = Option.Some(outcome);
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
+        return true;
+    }
+
+    internal fun execute_pool(
+        body: fun(): T,
+        pool: TaskPool,
+        scope: TaskScope<E>
+    ): Future<bool> where T: shared {
+        return TaskHandle<T, E>.pool_owned(this, body, pool, scope);
+    }
+
+    static async fun pool_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): T,
+        pool: TaskPool,
+        scope: TaskScope<E>
+    ): bool where T: shared {
+        let result = pool.dispatch<T>(body, Option.Some(scope.token)).await;
+        let initial: TaskFailure<E> = TaskFailure.Cancelled;
+        let outcome: Result<T, TaskFailure<E>> = Result.Err(initial);
+        if result.is_err() {
+            let error = result.unwrap_err();
+            if !scope.token.is_cancelled {
+                scope.worker_failure = Option.Some(error);
+                scope.cancel();
+            }
+            let failure: TaskFailure<E> = TaskFailure.WorkerFailed(error);
+            if error == TaskPoolError.Cancelled && scope.token.is_cancelled {
+                failure = TaskFailure.Cancelled;
+            }
+            outcome = Result.Err(failure);
+        } else {
+            outcome = Result.Ok(result.unwrap());
+        }
+        handle.value = Option.Some(outcome);
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
+        return true;
+    }
+
+    internal fun execute(body: fun(): Future<Result<T, E>>, scope: TaskScope<E>): Future<bool> {
+        return TaskHandle<T, E>.execute_owned(this, body, scope);
+    }
+
+    static async fun execute_owned(
+        handle: TaskHandle<T, E>,
+        body: fun(): Future<Result<T, E>>,
+        scope: TaskScope<E>
+    ): bool {
+        let pending = body();
+        TaskScope<E>.attach_host(pending, scope.token);
+        let result = pending.await;
+        if result.is_err() {
+            let error = result.unwrap_err();
+            let cancelled = scope.token.is_cancelled;
+            scope.fail(error);
+            let failure: TaskFailure<E> = TaskFailure.Failed(error);
+            if cancelled {
+                failure = TaskFailure.Cancelled;
+            }
+            let outcome: Result<T, TaskFailure<E>> = Result.Err(failure);
+            handle.value = Option.Some(outcome);
+        } else {
+            let outcome: Result<T, TaskFailure<E>> = Result.Ok(result.unwrap());
+            handle.value = Option.Some(outcome);
+        }
+        if handle.completed.is_some() {
+            handle.completed.unwrap().cancel();
+        }
+        return true;
+    }
+}

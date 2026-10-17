@@ -277,7 +277,7 @@ fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
             while i < n {
                 let start = i & 7;
                 let view = source.span(start, start + 25 + (i & 3));
-                sum = sum + view.length + (int)view.char_at(0);
+                sum = sum + view.length + (int)view[0];
                 i = i + 1;
             }
             return sum;

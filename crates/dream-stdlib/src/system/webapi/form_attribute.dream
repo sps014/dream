@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Binds a form value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct FormAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}

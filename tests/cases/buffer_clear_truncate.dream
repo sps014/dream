@@ -1,3 +1,5 @@
+module system.core;
+
 // `Buffer.clear` and `Buffer.truncate` eagerly release managed elements through normal ARC
 // store semantics. After clearing, the heap returns to its pre-allocation state.
 
@@ -5,7 +7,7 @@ import system;
 import system.collections;
 
 fun churn(): void {
-    let buf = Buffer.alloc<string>(16);
+    let buf = Array.alloc<string>(16);
     buf[0] = "alpha";
     buf[1] = "beta";
     buf[2] = "gamma";

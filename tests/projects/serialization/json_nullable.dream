@@ -44,31 +44,31 @@ fun json_nullable(): void {
         36
     );
     let t1 = Json.serialize(p1);
-    Assert.eq_str(
+    Assert.eq(
         (t1).to_string(),
         "{\"name\":\"Ada\",\"nickname\":\"Countess\",\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"age\":36}"
     );
     let b1 = Json.deserialize<c118_Profile>(t1).unwrap_or(p1);
-    Assert.eq_str((b1.nickname ?? "<none>").to_string(), "Countess");
+    Assert.eq((b1.nickname ?? "<none>").to_string(), "Countess");
     let addr = b1.address;
-    Assert.eq_str((addr.is_none()).to_string(), "false");
+    Assert.eq((addr.is_none()).to_string(), "false");
 
     // None values serialize to JSON null and round-trip back to None.
     let no_name: Option<string> = Option.None;
     let no_addr: Option<c118_Address> = Option.None;
     let p2 = c118_Profile("Bob", no_name, no_addr, 20);
     let t2 = Json.serialize(p2);
-    Assert.eq_str(
+    Assert.eq(
         (t2).to_string(),
         "{\"name\":\"Bob\",\"nickname\":null,\"address\":null,\"age\":20}"
     );
     let b2 = Json.deserialize<c118_Profile>(t2).unwrap_or(p2);
-    Assert.eq_str((b2.nickname ?? "<none>").to_string(), "<none>");
-    Assert.eq_str((b2.address.is_none()).to_string(), "true");
+    Assert.eq((b2.nickname ?? "<none>").to_string(), "<none>");
+    Assert.eq((b2.address.is_none()).to_string(), "true");
 
     // A missing key and an explicit null both deserialize to None.
     let b3 = Json.deserialize<c118_Profile>("{\"name\":\"Cee\",\"nickname\":null,\"age\":7}")
         .unwrap_or(p1);
-    Assert.eq_str((b3.nickname ?? "<none>").to_string(), "<none>");
-    Assert.eq_str((b3.address.is_none()).to_string(), "true");
+    Assert.eq((b3.nickname ?? "<none>").to_string(), "<none>");
+    Assert.eq((b3.address.is_none()).to_string(), "true");
 }

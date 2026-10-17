@@ -1,6 +1,11 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::trap(
+        "assert_eq_string_failure",
+        "assert_eq failed: expected \"expected\" but got \"actual\"",
+        true,
+    ),
     Case::trap("raw_ptr_size_overflow", "raw memory: size overflow", true),
     Case::trap(
         "raw_ptr_alignment_trap",

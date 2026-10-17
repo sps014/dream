@@ -299,7 +299,7 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
             let next = this._buffer[this._offset];
             this._offset = this._offset + 1;
             if next == (byte)10 {
-                if bytes.length > 0 && bytes.get(bytes.length - 1) == (byte)13 {
+                if bytes.length > 0 && bytes[bytes.length - 1] == (byte)13 {
                     bytes.pop();
                 }
                 return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
@@ -355,91 +355,6 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         this._id = 0 - 1;
         if FileHandle.file_handle_close(id) < 0 {
             return Result.Err(IoError.other(this.path, "close failed"));
-        }
-        return Result.Ok(true);
-    }
-}
-
-// The host owns a second reference until blocking work ends; dropping this object never frees
-// buffers or descriptors still in use. No guest pointers cross into the blocking executor.
-class FileOperation {
-    id: usize;
-
-    constructor(id: usize) {
-        this.id = id;
-    }
-
-    del() {
-        FileOperation.release_host(this.id);
-    }
-
-    @runtime("fileOperationStart")
-    static extern fun start_host(
-        kind: int,
-        fd: int,
-        borrow path: string,
-        borrow mode: string,
-        count: int,
-        borrow data: byte[],
-        position: long
-    ): usize;
-
-    @runtime("fileOperationDone")
-    static extern fun done_host(id: usize): int;
-
-    @runtime("fileOperationResult")
-    static extern fun result_host(id: usize): long;
-
-    @runtime("fileOperationBytes")
-    static extern fun bytes_host(id: usize): byte[];
-
-    @runtime("fileOperationRelease")
-    static extern fun release_host(id: usize): void;
-
-    internal static fun start(
-        kind: int,
-        fd: int,
-        path: string,
-        mode: string,
-        count: int,
-        data: byte[],
-        position: long
-    ): Result<FileOperation, IoError> {
-        let id = FileOperation.start_host(kind, fd, path, mode, count, data, position);
-        if id == (usize)0 {
-            return Result.Err(IoError(path, "EBUSY", "file executor unavailable or saturated"));
-        }
-        return Result.Ok(FileOperation(id));
-    }
-
-    @async_host
-    @runtime("fileOperationWait")
-    static extern async fun wait_host(id: usize): int;
-
-    internal get done(): bool {
-        return FileOperation.done_host(this.id) != 0;
-    }
-
-    internal fun result(): long {
-        return FileOperation.result_host(this.id);
-    }
-
-    internal fun bytes(): byte[] {
-        return FileOperation.bytes_host(this.id);
-    }
-
-    internal async fun wait(token: Option<CancellationToken>): Result<bool, IoError> {
-        let effective_token = CancellationToken.resolve(token);
-        // A started child can outlive its awaiting parent; pin its receiver across suspension.
-        let lifetime = [this];
-        let pending = FileOperation.wait_host(lifetime[0].id);
-        if effective_token.is_some() {
-            let result = effective_token.unwrap().wait(pending).await;
-            if result.is_err() {
-                return Result.Err(IoError.cancelled());
-            }
-        } else {
-            pending.await;
         }
         return Result.Ok(true);
     }

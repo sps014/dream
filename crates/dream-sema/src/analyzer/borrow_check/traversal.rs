@@ -43,7 +43,7 @@ impl<'s> Extractor<'s> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn walk_stmt(&mut self, stmt: &StatementNode, class_fields: &[String]) {
         match stmt {
-            StatementNode::Declaration(name_tok, _, init, _) => {
+            StatementNode::Declaration(name_tok, _, init, _, _) => {
                 if is_self_expr(init, &self.aliases_this) {
                     self.aliases_this.push(name_tok.text.clone());
                 }

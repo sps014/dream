@@ -1,0 +1,24 @@
+module system.collections;
+
+internal static class CollectionStorage {
+    @intrinsic(Intrinsic.ArraySlotTake)
+    internal static extern fun take<T>(borrow array: T[], index: int): T;
+
+    // Slot permutation has no ownership transition, including nested managed value fields.
+    @intrinsic(Intrinsic.ArraySlotSwap)
+    internal static extern fun exchange<T>(
+        borrow array: T[],
+        left: int,
+        borrow other: T[],
+        right: int
+    ): void;
+
+    @intrinsic(Intrinsic.DebugGetRefCount)
+    internal static extern fun owners(borrow array: object): int;
+
+    @intrinsic(Intrinsic.BufferIsString)
+    internal static extern fun string_keys<T>(): bool;
+
+    @intrinsic(Intrinsic.BufferZero)
+    internal static extern fun zero<T>(): T;
+}

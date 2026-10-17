@@ -1,0 +1,11 @@
+module system.io;
+
+// Awaitable byte input with the same EOF and size rules as `Reader`.
+public interface AsyncReader {
+    // Reads up to `max_bytes` with cooperative cancellation.
+    // Cancellation does not restore bytes already consumed by the underlying operation.
+    async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError>;
+}

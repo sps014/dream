@@ -274,7 +274,75 @@ fn catalog() -> &'static UserAttributes {
         for (module, source) in [
             (
                 "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/attributes.dream"),
+                include_str!("../../../dream-stdlib/src/system/core/attribute_target.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/declaration_path.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/attribute_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/repeatable_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/export_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/intrinsic_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/inline_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/noinline_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/unsafe_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/allow_cycle_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/consuming_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/owned_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/js_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/runtime_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/async_host_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/native_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/node_attribute.dream"),
+            ),
+            (
+                "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/web_attribute.dream"),
             ),
             (
                 "system.core",
@@ -282,11 +350,43 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.interop",
-                include_str!("../../../dream-stdlib/src/system/interop/attributes.dream"),
+                include_str!("../../../dream-stdlib/src/system/interop/c_call_conv.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/marshal_kind.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/c_attribute.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/c_call_attribute.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/marshal_attribute.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/packed_attribute.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/cpp_attribute.dream"),
+            ),
+            (
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/cpp_name_attribute.dream"),
             ),
             (
                 "system.testing",
-                include_str!("../../../dream-stdlib/src/system/testing/attributes.dream"),
+                include_str!("../../../dream-stdlib/src/system/testing/test_attribute.dream"),
+            ),
+            (
+                "system.testing",
+                include_str!("../../../dream-stdlib/src/system/testing/timeout_attribute.dream"),
             ),
         ] {
             let file = format!("{module}-{}", structs.len());

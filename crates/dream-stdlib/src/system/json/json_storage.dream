@@ -1,0 +1,9 @@
+module system.json;
+
+internal static class JsonStorage {
+    @intrinsic(Intrinsic.StringJsonBoundary)
+    internal static extern fun boundary(borrow text: string, start: int): int;
+
+    @intrinsic(Intrinsic.StringCloneRange)
+    internal static extern fun clone_range(borrow text: string, start: int, end: int): string;
+}

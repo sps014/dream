@@ -62,14 +62,14 @@ fun interface_inheritance(): void {
     let xs = List<int>();
     xs.push(10);
     xs.push(20);
-    Assert.eq_str((c102_as_collection(xs)).to_string(), "2");
-    Assert.eq_str((c102_as_indexed(xs)).to_string(), "12");
+    Assert.eq((c102_as_collection(xs)).to_string(), "2");
+    Assert.eq((c102_as_indexed(xs)).to_string(), "12");
 
     let buf = c102_Store();
     c102_use_writable(buf);
-    Assert.eq_str((c102_use_readable(buf)).to_string(), "42");
+    Assert.eq((c102_use_readable(buf)).to_string(), "42");
     let rw: c102_ReadWrite = buf;
-    Assert.eq_str((rw.read()).to_string(), "42");
+    Assert.eq((rw.read()).to_string(), "42");
     rw.flush();
-    Assert.eq_str((rw.read()).to_string(), "0");
+    Assert.eq((rw.read()).to_string(), "0");
 }

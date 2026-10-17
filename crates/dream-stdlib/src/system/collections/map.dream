@@ -231,12 +231,6 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
     }
 
-    /// Inserts `key` and `value`, replacing the value if the key is already present.
-    @inline
-    public fun set(key: K, value: V): void {
-        this[key] = value;
-    }
-
     /// Returns whether `key` is present.
     public fun contains(borrow key: K): bool {
         return this.find(key) >= 0;
@@ -251,7 +245,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
         let i = 0;
         while i < n {
-            this.set(keys[i], values[i]);
+            this[keys[i]] = values[i];
             i = i + 1;
         }
     }
@@ -323,14 +317,14 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
             return this.slots[i].value;
         }
         let value = factory();
-        this.set(key, value);
+        this[key] = value;
         return value;
     }
 
     /// Copies entries from `other`, replacing values with matching keys.
     public fun merge(borrow other: Map<K, V>): void {
         for (let pair in other) {
-            this.set(pair.key, pair.value);
+            this[pair.key] = pair.value;
         }
     }
 

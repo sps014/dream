@@ -363,6 +363,9 @@ mod tests {
             })
             .collect();
         assert_eq!(awaits, vec![resume]);
-        assert!(!matches!(func.block(resume).terminator, Terminator::Unreachable));
+        assert!(!matches!(
+            func.block(resume).terminator,
+            Terminator::Unreachable
+        ));
     }
 }

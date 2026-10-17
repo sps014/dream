@@ -7,25 +7,25 @@ import system.collections;
 fun collections_capacity(): void {
     // List with default capacity
     let l1 = List<int>();
-    Assert.eq_str(("l1 cap: " + l1.capacity).to_string(), "l1 cap: 8"); // Should be 8
+    Assert.eq(("l1 cap: " + l1.capacity).to_string(), "l1 cap: 8"); // Should be 8
 
     // List with custom capacity
     let l2 = List<int>(32);
-    Assert.eq_str(("l2 cap: " + l2.capacity).to_string(), "l2 cap: 32"); // Should be 32
+    Assert.eq(("l2 cap: " + l2.capacity).to_string(), "l2 cap: 32"); // Should be 32
 
     // Map with default capacity
     let m1 = Map<string, int>();
-    Assert.eq_str(("m1 cap: " + m1.capacity).to_string(), "m1 cap: 8"); // Should be 8
+    Assert.eq(("m1 cap: " + m1.capacity).to_string(), "m1 cap: 8"); // Should be 8
 
     // Map with custom capacity (should round up to next power of 2)
     let m2 = Map<string, int>(100);
-    Assert.eq_str(("m2 cap: " + m2.capacity).to_string(), "m2 cap: 128"); // Should be 128
+    Assert.eq(("m2 cap: " + m2.capacity).to_string(), "m2 cap: 128"); // Should be 128
 
     // Set with default capacity
     let s1 = Set<int>();
-    Assert.eq_str(("s1 cap: " + s1.capacity).to_string(), "s1 cap: 8"); // Should be 8
+    Assert.eq(("s1 cap: " + s1.capacity).to_string(), "s1 cap: 8"); // Should be 8
 
     // Set with custom capacity
     let s2 = Set<int>(20);
-    Assert.eq_str(("s2 cap: " + s2.capacity).to_string(), "s2 cap: 32"); // Should be 32
+    Assert.eq(("s2 cap: " + s2.capacity).to_string(), "s2 cap: 32"); // Should be 32
 }

@@ -14,7 +14,7 @@ fun c172_body(): void {
     D = 2;
     c172_verify_observation(((int)D).to_string());
 
-    let arr = Buffer.alloc<float>(4);
+    let arr = Array.alloc<float>(4);
     for (let i = 0; i < arr.length; i = i + 1) {
         arr[i] = i;
     }
@@ -29,7 +29,7 @@ fun c172_verify_observation(borrow value: string): void {
     let wanted = "2\n2\n2\n0\n3\n";
     let end = c172_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c172_cursor, end));
+    Assert.eq(actual, wanted.substring(c172_cursor, end));
     c172_cursor = end;
 }
 

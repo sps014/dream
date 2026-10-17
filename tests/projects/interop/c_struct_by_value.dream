@@ -23,7 +23,7 @@ extern fun c62_lldiv(n: long, d: long): c62_LlDivT;
 @timeout(180000)
 fun c_struct_by_value(): void {
     let d = c62_div(17, 5);
-    Assert.eq_str((d.quot.to_string() + " r " + d.rem.to_string()).to_string(), "3 r 2");
+    Assert.eq((d.quot.to_string() + " r " + d.rem.to_string()).to_string(), "3 r 2");
     let l = c62_lldiv(10000000007L, -3L);
-    Assert.eq_str((l.quot.to_string() + " r " + l.rem.to_string()).to_string(), "-3333333335 r 2");
+    Assert.eq((l.quot.to_string() + " r " + l.rem.to_string()).to_string(), "-3333333335 r 2");
 }

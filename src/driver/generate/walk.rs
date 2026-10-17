@@ -144,7 +144,7 @@ pub(super) fn walk_stmt<'a, V: Visitor<'a>>(v: &mut V, stmt: &StatementNode<'a>)
         | StatementNode::Return(Some(e))
         | StatementNode::Yield(_, Some(e))
         | StatementNode::Assignment(_, e)
-        | StatementNode::Declaration(_, _, e, _) => walk_expr(v, e),
+        | StatementNode::Declaration(_, _, e, _, _) => walk_expr(v, e),
         StatementNode::TupleDeclaration { pattern, init, .. } => {
             walk_pattern(v, pattern);
             walk_expr(v, init);

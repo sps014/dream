@@ -8,12 +8,12 @@ import system.collections;
 @timeout(180000)
 fun map_indexer_missing(): void {
     let m = Map<string, int>();
-    m.set("a", 1);
-    Assert.eq_str((m["a"]).to_string(), "1");
-    Assert.eq_str((m.get("missing").unwrap_or(-7)).to_string(), "-7");
-    Assert.eq_str((m.get_or("missing", -9)).to_string(), "-9");
+    m["a"] = 1;
+    Assert.eq((m["a"]).to_string(), "1");
+    Assert.eq((m.get("missing").unwrap_or(-7)).to_string(), "-7");
+    Assert.eq((m.get_or("missing", -9)).to_string(), "-9");
     let sm = SortedMap<int, string>();
-    sm.set(1, "one");
-    Assert.eq_str((sm[1]).to_string(), "one");
-    Assert.eq_str((sm.get(2).unwrap_or("none")).to_string(), "none");
+    sm[1] = "one";
+    Assert.eq((sm[1]).to_string(), "one");
+    Assert.eq((sm.get(2).unwrap_or("none")).to_string(), "none");
 }

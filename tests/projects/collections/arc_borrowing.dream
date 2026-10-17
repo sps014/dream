@@ -32,7 +32,7 @@ fun arc_removal_roundtrip(): void {
     list.push(ArcBorrowingRecord(ArcBorrowingItem("replacement")));
     list.clear();
     Assert.eq(arc_borrowing_drops, 1);
-    Assert.eq_str(popped.item.value, "list");
+    Assert.eq(popped.item.value, "list");
     let queue = Queue<ArcBorrowingRecord>();
     queue.enqueue(ArcBorrowingRecord(ArcBorrowingItem("queue")));
     let removed = queue.dequeue().unwrap();
@@ -40,10 +40,10 @@ fun arc_removal_roundtrip(): void {
     queue.enqueue(ArcBorrowingRecord(ArcBorrowingItem("replacement")));
     queue.clear();
     Assert.eq(arc_borrowing_drops, 2);
-    Assert.eq_str(removed.item.value, "queue");
+    Assert.eq(removed.item.value, "queue");
     Assert.is_true(list.pop().is_none());
     Assert.is_true(queue.dequeue().is_none());
-    Assert.eq_str(popped.item.value, "list");
+    Assert.eq(popped.item.value, "list");
 }
 
 @noinline
@@ -83,7 +83,7 @@ fun arc_borrowing(): void {
     );
     let snapshot = queue.peek().unwrap();
     queue.clear();
-    Assert.eq_str(snapshot, "front7");
+    Assert.eq(snapshot, "front7");
     let map = Map<string, int>();
     map["k1"] = 7;
     let set = Set<string>();
@@ -95,12 +95,12 @@ fun arc_borrowing(): void {
     Assert.is_false(set.contains(text.span(0, 2)));
     let read = "read" + 7.to_string();
     let kept = "kept" + 8.to_string();
-    Assert.eq_str(arc_inferred_select(read, kept), "kept8");
-    Assert.eq_str(read, "read7");
-    Assert.eq_str(kept, "kept8");
+    Assert.eq(arc_inferred_select(read, kept), "kept8");
+    Assert.eq(read, "read7");
+    Assert.eq(kept, "kept8");
     let values = ["array" + 9.to_string()];
     Assert.eq(arc_inferred_length(values, 3), 6);
-    Assert.eq_str(values[0], "array9");
+    Assert.eq(values[0], "array9");
     Assert.eq(arc_inferred_destructor_read(ArcBorrowingItem("temporary")), 9);
     Assert.eq(arc_borrowing_drops, 5);
 }

@@ -14,5 +14,5 @@ async fun c241_work(): string {
 @test
 @timeout(180000)
 async fun task_async_body(): void {
-    Assert.eq_str((Task.spawn_async(c241_work).await).to_string(), "hi!");
+    Assert.eq((Task.spawn_async(c241_work).await).to_string(), "hi!");
 }

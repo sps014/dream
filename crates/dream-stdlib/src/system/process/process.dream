@@ -40,9 +40,9 @@ public static class Process {
         token: Option<CancellationToken> = Option.None
     ): Future<Result<ProcessOutput, ProcessError>> {
         let request = JsonValue.dict();
-        request.set("action", JsonValue.from_string("run"));
-        request.set("command", JsonValue.from_string(cmd));
-        request.set("options", options.wire());
+        request["action"] = JsonValue.from_string("run");
+        request["command"] = JsonValue.from_string(cmd);
+        request["options"] = options.wire();
         return Process.run_owned(
             request,
             Process.encode_args(args),
@@ -97,9 +97,9 @@ public static class Process {
         token: Option<CancellationToken> = Option.None
     ): Future<Result<ChildProcess, ProcessError>> {
         let request = JsonValue.dict();
-        request.set("action", JsonValue.from_string("spawn"));
-        request.set("command", JsonValue.from_string(cmd));
-        request.set("options", options.wire());
+        request["action"] = JsonValue.from_string("spawn");
+        request["command"] = JsonValue.from_string(cmd);
+        request["options"] = options.wire();
         return Process.spawn_owned(
             request,
             Process.encode_args(args),

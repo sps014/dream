@@ -1,0 +1,8 @@
+module system.core;
+
+/// Declares a `@name(...)` attribute type. Arguments are `AttributeTarget.*` placements (none = anywhere); fields are the argument schema.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct)
+public struct AttributeAttribute {
+    /// Declaration kinds to which this attribute may be applied.
+    public targets: AttributeTarget[];
+}

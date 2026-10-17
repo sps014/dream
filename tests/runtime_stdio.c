@@ -17,7 +17,6 @@ dream_ptr dream_str_from_utf8(const char *s) {
 }
 void print_string(dream_ptr s);
 void print_err_string(dream_ptr s);
-void consoleWriteStderr(dream_ptr s);
 
 int main(int argc, char **argv) {
     assert(argc == 2);
@@ -35,6 +34,6 @@ int main(int argc, char **argv) {
     dream_ptr s = (dream_ptr)(uintptr_t)&text;
     if (strcmp(argv[1], "stdout") == 0) { print_string(s); }
     else if (strcmp(argv[1], "stderr") == 0) { print_err_string(s); }
-    else { consoleWriteStderr(s); }
+    else { abort(); }
     return 0;
 }

@@ -1,7 +1,13 @@
 module system.core;
 
 /// Built-in operations available to declarations annotated with `@intrinsic`.
-public enum Intrinsic {
+internal enum Intrinsic {
+    /// Reads standard input bytes.
+    ConsoleRead,
+    /// Writes standard output or error bytes.
+    ConsoleWrite,
+    /// Flushes standard output or error.
+    ConsoleFlush,
     /// Identifies the asset bytes operation for an `@intrinsic` declaration.
     AssetBytes,
     /// Identifies the raw load operation for an `@intrinsic` declaration.

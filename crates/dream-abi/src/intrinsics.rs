@@ -284,6 +284,12 @@ pub enum IntrinsicOp {
     GenAttributeDecodeAll,
     /// `Buffer.alloc<T>(len)` — allocate a zero-initialized `T[]`.
     ArrayNew,
+    /// Byte input from the process standard input stream.
+    ConsoleRead,
+    /// Byte output to a process standard output stream.
+    ConsoleWrite,
+    /// Flush a process standard output stream.
+    ConsoleFlush,
     /// Internal zero-initialized storage value; never invokes a constructor.
     BufferZero,
     /// `Time.sleep(ms)` — async timer yielding `Future<void>`.
@@ -422,6 +428,9 @@ impl IntrinsicOp {
             ATTR_GEN_ATTRIBUTE_DECODE => IntrinsicOp::GenAttributeDecode,
             ATTR_GEN_ATTRIBUTE_DECODE_ALL => IntrinsicOp::GenAttributeDecodeAll,
             ATTR_ARRAY_NEW => IntrinsicOp::ArrayNew,
+            "dream_console_read" => IntrinsicOp::ConsoleRead,
+            "dream_console_write" => IntrinsicOp::ConsoleWrite,
+            "dream_console_flush" => IntrinsicOp::ConsoleFlush,
             ATTR_BUFFER_ZERO => IntrinsicOp::BufferZero,
             ATTR_SLEEP => IntrinsicOp::Sleep,
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,

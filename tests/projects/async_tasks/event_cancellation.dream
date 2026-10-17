@@ -18,10 +18,10 @@ fun detached_token_wait(): Future<Result<string, CancelledError>> {
 
 @test
 async fun event_cancellation(): void {
-    Assert.eq_str(detached_token_wait().await.unwrap(), "completed 日本語");
+    Assert.eq(detached_token_wait().await.unwrap(), "completed 日本語");
     let source = CancellationSource();
     for (let i = 0; i < 100; i = i + 1) {
-        Assert.eq_str(source.token.wait(event_value(0)).await.unwrap(), "completed 日本語");
+        Assert.eq(source.token.wait(event_value(0)).await.unwrap(), "completed 日本語");
     }
     Assert.is_true(source.token.wait_void(event_void()).await.unwrap());
     source.cancel();
@@ -38,8 +38,8 @@ async fun event_cancellation(): void {
     Promise.start(second);
     Time.delay(1).await;
     pending_source.cancel();
-    Assert.eq_str("first " + first.await.is_err(), "first true");
-    Assert.eq_str("second " + second.await.is_err(), "second true");
+    Assert.eq("first " + first.await.is_err(), "first true");
+    Assert.eq("second " + second.await.is_err(), "second true");
 
     let late_source = CancellationSource();
     let abandoned = late_source.token.wait_cancelled();
@@ -62,6 +62,6 @@ async fun event_cancellation(): void {
         }
     );
     Promise.start(worker);
-    Assert.eq_str("worker " + waiting.await.is_err(), "worker true");
+    Assert.eq("worker " + waiting.await.is_err(), "worker true");
     worker.await;
 }

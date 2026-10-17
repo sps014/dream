@@ -1,0 +1,12 @@
+module system.core;
+
+extend string {
+    /// Returns a fresh copy of `s` that can be changed independently.
+    @intrinsic(Intrinsic.StringClone)
+    public static extern fun clone(borrow s: string): string;
+
+    /// An empty string, useful for initializing or clearing text values.
+    public static get empty(): string {
+        return "";
+    }
+}

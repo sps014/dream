@@ -4,15 +4,15 @@ module system.core;
 public static class Promise {
     /// Waits for every future and returns their results in input order.
     @intrinsic(Intrinsic.PromiseAll)
-    public static extern async fun all_host<T>(borrow promises: T[]): T[];
+    internal static extern async fun all_host<T>(borrow promises: T[]): T[];
 
     /// Waits for the first successful future and returns its result.
     @intrinsic(Intrinsic.PromiseAny)
-    public static extern async fun any_host<T>(borrow promises: T[]): T;
+    internal static extern async fun any_host<T>(borrow promises: T[]): T;
 
     /// Returns the result of the first future to complete.
     @intrinsic(Intrinsic.PromiseRace)
-    public static extern async fun race_host<T>(borrow promises: T[]): T;
+    internal static extern async fun race_host<T>(borrow promises: T[]): T;
 
     // Waits for all promises in the array to resolve.
     public static async fun all<T>(

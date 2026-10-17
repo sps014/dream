@@ -38,7 +38,7 @@ fun c263_verify_observation(borrow value: string): void {
     let wanted = "America/New_York\n-300\n-240\n13\nEPARSE\nUTC\n0\ntrue\n";
     let end = c263_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c263_cursor, end));
+    Assert.eq(actual, wanted.substring(c263_cursor, end));
     c263_cursor = end;
 }
 

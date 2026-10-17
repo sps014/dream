@@ -5,11 +5,11 @@ import system.text;
 @test
 @timeout(180000)
 fun literal_methods(): void {
-    Assert.eq_str(("Hello, World".substring(0, 5)).to_string(), "Hello");
-    Assert.eq_str((15.clamp(0, 10)).to_string(), "10");
-    Assert.eq_str((true.to_int()).to_string(), "1");
-    Assert.eq_str(('A'.is_alpha()).to_string(), "true");
-    Assert.eq_str(([1, 2, 3].length).to_string(), "3");
+    Assert.eq(("Hello, World".substring(0, 5)).to_string(), "Hello");
+    Assert.eq((15.clamp(0, 10)).to_string(), "10");
+    Assert.eq((true.to_int()).to_string(), "1");
+    Assert.eq(('A'.is_alpha()).to_string(), "true");
+    Assert.eq(([1, 2, 3].length).to_string(), "3");
     let y = "hi";
-    Assert.eq_str(($"x{y}".byte_size()).to_string(), "6");
+    Assert.eq(($"x{y}".byte_size()).to_string(), "6");
 }

@@ -20,7 +20,7 @@ fun c21a_verify_observation(borrow value: string): void {
     let wanted = "HellO\nH\nO\n";
     let end = c21a_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c21a_cursor, end));
+    Assert.eq(actual, wanted.substring(c21a_cursor, end));
     c21a_cursor = end;
 }
 

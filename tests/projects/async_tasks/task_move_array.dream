@@ -9,5 +9,5 @@ import system.task;
 async fun task_move_array(): void {
     let nums = [1, 2, 3];
     let result = Task.spawn(() => nums.length);
-    Assert.eq_str((result.await).to_string(), "3");
+    Assert.eq((result.await).to_string(), "3");
 }

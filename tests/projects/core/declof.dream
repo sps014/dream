@@ -21,9 +21,9 @@ fun cae_helper(): int {
 @test
 @timeout(180000)
 fun declof(): void {
-    Assert.eq_str((declof(cae_User)).to_string(), "::cae_User");
-    Assert.eq_str((declof(cae_User.greet)).to_string(), "::cae_User.greet");
-    Assert.eq_str((declof(cae_helper)).to_string(), "::cae_helper");
-    Assert.eq_str((declof(Json.serialize)).to_string(), "system.json::Json.serialize");
-    Assert.eq_str((declof(List)).to_string(), "system.collections::List");
+    Assert.eq((declof(cae_User)).to_string(), "::cae_User");
+    Assert.eq((declof(cae_User.greet)).to_string(), "::cae_User.greet");
+    Assert.eq((declof(cae_helper)).to_string(), "::cae_helper");
+    Assert.eq((declof(Json.serialize)).to_string(), "system.json::Json.serialize");
+    Assert.eq((declof(List)).to_string(), "system.collections::List");
 }

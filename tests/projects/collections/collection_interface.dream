@@ -13,7 +13,7 @@ fun collection_interface(): void {
     xs.push(1);
     xs.push(2);
     xs.push(3);
-    Assert.eq_str((c83_describe(xs)).to_string(), "3:false");
-    Assert.eq_str((xs.length).to_string(), "3");
-    Assert.eq_str((xs.is_empty()).to_string(), "false");
+    Assert.eq((c83_describe(xs)).to_string(), "3:false");
+    Assert.eq((xs.length).to_string(), "3");
+    Assert.eq((xs.is_empty()).to_string(), "false");
 }

@@ -24,6 +24,6 @@ async fun c3f_shift(p: c3f_Point): c3f_Point {
 async fun async_value_struct_param(): void {
     let a = c3f_shift(c3f_Point(1, 2)).await;
     let b = c3f_shift(c3f_Point(3, 4)).await;
-    Assert.eq_str(("" + a.x + "," + a.y).to_string(), "2,3");
-    Assert.eq_str(("" + b.x + "," + b.y).to_string(), "4,5");
+    Assert.eq(("" + a.x + "," + a.y).to_string(), "2,3");
+    Assert.eq(("" + b.x + "," + b.y).to_string(), "4,5");
 }

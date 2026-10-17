@@ -20,7 +20,7 @@ fun c64_verify_observation(borrow value: string): void {
     let wanted = "cancelled before start\n";
     let end = c64_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c64_cursor, end));
+    Assert.eq(actual, wanted.substring(c64_cursor, end));
     c64_cursor = end;
 }
 

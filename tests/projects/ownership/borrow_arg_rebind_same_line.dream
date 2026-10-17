@@ -35,7 +35,7 @@ fun c52_verify_observation(borrow value: string): void {
     let wanted = "[[[abcdefghi]\nkey\n\"value\"\ntrue\n";
     let end = c52_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c52_cursor, end));
+    Assert.eq(actual, wanted.substring(c52_cursor, end));
     c52_cursor = end;
 }
 

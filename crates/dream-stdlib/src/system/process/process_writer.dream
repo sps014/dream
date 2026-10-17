@@ -1,0 +1,55 @@
+module system.process;
+
+// A borrowed child input pipe implementing partial async writes.
+public class ProcessWriter: AsyncWriter {
+    owner: ChildProcess;
+
+    internal constructor(owner: ChildProcess) {
+        this.owner = owner;
+    }
+
+    // Writes bytes with partial progress; closing stdin delivers EOF to the child.
+    public async unique fun write_async(
+        data: byte[],
+        token: Option<CancellationToken> = Option.None
+    ): Result<int, IoError> {
+        let lifetime = [this];
+        return ProcessWriter.write_owned(lifetime[0], data, CancellationToken.resolve(token)).await;
+    }
+
+    static async fun write_owned(
+        writer: ProcessWriter,
+        data: byte[],
+        token: Option<CancellationToken>
+    ): Result<int, IoError> {
+        CancellationToken.rejected(token, IoError.cancelled())?;
+        if writer.owner.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if data.length == 0 {
+            return Result.Ok(0);
+        }
+        let operation = ProcessOperation(
+            ProcessOperation.request("write", writer.owner.handle),
+            data
+        );
+        let result = operation.wait(token).await;
+        operation.close();
+        if result.is_err() {
+            let error = result.unwrap_err();
+            return Result.Err(IoError("", error.code(), error.message()));
+        }
+        return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(0));
+    }
+
+    // Confirms cancellation and ownership; the process pipe has no guest-side output buffer.
+    public async unique fun flush_async(
+        token: Option<CancellationToken> = Option.None
+    ): Result<bool, IoError> {
+        let effective_token = CancellationToken.resolve(token);
+        if this.owner.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        return CancellationToken.rejected(effective_token, IoError.cancelled());
+    }
+}

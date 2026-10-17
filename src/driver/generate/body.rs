@@ -223,7 +223,7 @@ impl<'a> Visitor<'a> for Builder<'_> {
             S::Assignment(t, _) => ("Assignment", Some(t)),
             S::IndexAssignment(..) => ("IndexAssignment", None),
             S::MemberAssignment(_, t, _) => ("MemberAssignment", Some(t)),
-            S::Declaration(t, _, _, _) => ("Declaration", Some(t)),
+            S::Declaration(t, _, _, _, _) => ("Declaration", Some(t)),
             S::TupleDeclaration { .. } => ("TupleDeclaration", None),
             S::FunctionInvocation(t, ..) => ("FunctionInvocation", Some(t)),
             S::MethodInvocation(_, t, ..) => ("MethodInvocation", Some(t)),
@@ -261,8 +261,17 @@ impl<'a> Visitor<'a> for Builder<'_> {
             S::Labeled(label, _) => {
                 self.stack.last_mut().expect("statement").node.text = label.clone()
             }
-            S::Declaration(_, _, _, constant)
-            | S::TupleDeclaration {
+            S::Declaration(_, _, _, constant, weak) => {
+                self.stack.last_mut().expect("statement").node.operator =
+                    match (*constant, *weak) {
+                        (false, false) => "let",
+                        (true, false) => "const",
+                        (false, true) => "let weak",
+                        (true, true) => "const weak",
+                    }
+                    .to_string();
+            }
+            S::TupleDeclaration {
                 is_const: constant, ..
             } => {
                 self.stack.last_mut().expect("statement").node.operator =
@@ -274,7 +283,7 @@ impl<'a> Visitor<'a> for Builder<'_> {
             self.stack.last_mut().expect("statement").node.text = t.text.clone();
         }
         match s {
-            S::Declaration(_, ty, _, _) | S::TupleDeclaration { ty, .. } => {
+            S::Declaration(_, ty, _, _, _) | S::TupleDeclaration { ty, .. } => {
                 self.types(ty.iter().cloned())
             }
             S::FunctionInvocation(_, ts, _) | S::MethodInvocation(_, _, ts, _) => {

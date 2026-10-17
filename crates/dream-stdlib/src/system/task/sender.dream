@@ -1,0 +1,82 @@
+module system.task;
+
+// An independently closable producer endpoint for a local async channel.
+@allow_cycle
+public class Sender<T> {
+    state: ChannelState<T>;
+    closed: bool;
+
+    internal constructor(state: ChannelState<T>) {
+        this.state = state;
+        this.closed = false;
+        this.state.senders = this.state.senders + 1;
+    }
+
+    // Attempts a send without suspension; Full and Closed are distinct errors.
+    public fun try_send(value: T): Result<bool, ChannelError> {
+        if this.closed || this.state.send_closed || this.state.receive_closed {
+            return Result.Err(ChannelError.Closed);
+        }
+        if this.state.capacity > 0 && this.state.queue.length >= this.state.capacity {
+            return Result.Err(ChannelError.Full);
+        }
+        this.state.queue.enqueue(value);
+        this.state.wake_one(this.state.readable);
+        return Result.Ok(true);
+    }
+
+    // Suspends for capacity and observes the inherited scope token unless explicitly overridden.
+    public fun send(
+        value: T,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<bool, ChannelError>> {
+        let effective_token = CancellationToken.resolve(token);
+        return Sender<T>.send_owned(this, value, effective_token);
+    }
+
+    static async fun send_owned(
+        sender: Sender<T>,
+        value: T,
+        token: Option<CancellationToken>
+    ): Result<bool, ChannelError> {
+        let effective_token = CancellationToken.resolve(token);
+        while true {
+            if CancellationToken.is_cancelled_opt(effective_token) {
+                return Result.Err(ChannelError.Cancelled);
+            }
+            let result = sender.try_send(value);
+            if result.is_ok() || result.unwrap_err() != ChannelError.Full {
+                return result;
+            }
+            let waiting = ChannelWait(sender.state.writable);
+            if effective_token.is_some() {
+                let finished = effective_token.unwrap()
+                    .wait(waiting.source.token.wait_cancelled())
+                    .await;
+                waiting.close();
+                if finished.is_err() {
+                    return Result.Err(ChannelError.Cancelled);
+                }
+            } else {
+                waiting.source.token.wait_cancelled().await;
+                waiting.close();
+            }
+        }
+    }
+
+    // Closes this endpoint idempotently; the last sender lets receivers drain then finish.
+    public fun close(): void {
+        if this.closed {
+            return;
+        }
+        this.closed = true;
+        this.state.senders = this.state.senders - 1;
+        if this.state.senders == 0 {
+            this.state.close_sends();
+        }
+    }
+
+    del() {
+        this.close();
+    }
+}

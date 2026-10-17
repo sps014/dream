@@ -25,9 +25,9 @@ fun c7a_body(): void {
     fired.push(
         c7a_wrap_pair((a: int, b: int) => c7a_verify_observation(("pair " + (a + b)).to_string()))
     );
-    fired.get(0)("1");
-    fired.get(0)("0");
-    fired.get(1)("20\n22");
+    fired[0]("1");
+    fired[0]("0");
+    fired[1]("20\n22");
     let doubled = c7a_wrap_value(() => 21);
     c7a_verify_observation((doubled()).to_string());
 }
@@ -39,7 +39,7 @@ fun c7a_verify_observation(borrow value: string): void {
     let wanted = "flag true\nflag false\npair 42\n42\n";
     let end = c7a_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c7a_cursor, end));
+    Assert.eq(actual, wanted.substring(c7a_cursor, end));
     c7a_cursor = end;
 }
 

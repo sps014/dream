@@ -1,0 +1,6 @@
+module system.codegen;
+
+/// Declares that a generator depends only on its input snapshot, allowing unchanged results to
+/// be reused.
+@attribute(AttributeTarget.Function)
+public struct IncrementalAttribute {}

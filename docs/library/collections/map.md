@@ -19,7 +19,7 @@ fun main() {
     let scores: Map<string, int> = {
         "Ada": 95
     };
-    scores.set("Sam", 80);
+    scores["Sam"] = 80;
     switch (scores.get("Lee")) {
         Some(score) => System.println(score),
         None => System.println("No score yet"),

@@ -20,9 +20,9 @@ struct c234_Point {
 fun struct_json(): void {
     let p = c234_Point(3, 4);
     let text = Json.serialize(p);
-    Assert.eq_str((text).to_string(), "{\"x\":3,\"y\":4}"); // {"x":3,"y":4}
+    Assert.eq((text).to_string(), "{\"x\":3,\"y\":4}"); // {"x":3,"y":4}
 
     let back = Json.deserialize<c234_Point>(text).unwrap_or(p);
-    Assert.eq_str((back.x).to_string(), "3"); // 3
-    Assert.eq_str((back.y).to_string(), "4"); // 4
+    Assert.eq((back.x).to_string(), "3"); // 3
+    Assert.eq((back.y).to_string(), "4"); // 4
 }

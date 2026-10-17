@@ -6,32 +6,32 @@ import system.text;
 @timeout(180000)
 fun regex_anchors_flags(): void {
     let anchored = Regex("^abc$");
-    Assert.eq_str((anchored.test("abc")).to_string(), "true");
-    Assert.eq_str((anchored.test("xabc")).to_string(), "false");
-    Assert.eq_str((anchored.test("abcx")).to_string(), "false");
+    Assert.eq((anchored.test("abc")).to_string(), "true");
+    Assert.eq((anchored.test("xabc")).to_string(), "false");
+    Assert.eq((anchored.test("abcx")).to_string(), "false");
 
     let multiline = Regex("^b", RegexFlags.Multiline | RegexFlags.Global);
-    Assert.eq_str((multiline.match("a\nb\nc").length).to_string(), "1");
+    Assert.eq((multiline.match("a\nb\nc").length).to_string(), "1");
 
     let single_line = Regex("^b", RegexFlags.Global);
-    Assert.eq_str((single_line.match("a\nb\nc").length).to_string(), "0");
+    Assert.eq((single_line.match("a\nb\nc").length).to_string(), "0");
 
     let word_boundary = Regex("\\bcat\\b");
-    Assert.eq_str((word_boundary.test("a cat sat")).to_string(), "true");
-    Assert.eq_str((word_boundary.test("category")).to_string(), "false");
+    Assert.eq((word_boundary.test("a cat sat")).to_string(), "true");
+    Assert.eq((word_boundary.test("category")).to_string(), "false");
 
     let non_word_boundary = Regex("\\Bcat");
-    Assert.eq_str((non_word_boundary.test("concatenate")).to_string(), "true");
-    Assert.eq_str((non_word_boundary.test("a cat")).to_string(), "false");
+    Assert.eq((non_word_boundary.test("concatenate")).to_string(), "true");
+    Assert.eq((non_word_boundary.test("a cat")).to_string(), "false");
 
     let case_insensitive = Regex("hello", RegexFlags.IgnoreCase);
-    Assert.eq_str((case_insensitive.test("HELLO world")).to_string(), "true");
-    Assert.eq_str((case_insensitive.test("goodbye")).to_string(), "false");
+    Assert.eq((case_insensitive.test("HELLO world")).to_string(), "true");
+    Assert.eq((case_insensitive.test("goodbye")).to_string(), "false");
 
     let case_sensitive = Regex("hello");
-    Assert.eq_str((case_sensitive.test("HELLO world")).to_string(), "false");
+    Assert.eq((case_sensitive.test("HELLO world")).to_string(), "false");
 
     let combined = Regex("[a-z]+", RegexFlags.Global | RegexFlags.IgnoreCase);
-    Assert.eq_str((combined.match("ABC def")[0]).to_string(), "ABC");
-    Assert.eq_str((combined.match("ABC def")[1]).to_string(), "def");
+    Assert.eq((combined.match("ABC def")[0]).to_string(), "ABC");
+    Assert.eq((combined.match("ABC def")[1]).to_string(), "def");
 }

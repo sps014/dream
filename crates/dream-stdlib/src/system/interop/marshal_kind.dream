@@ -1,0 +1,11 @@
+module system.interop;
+
+/// C string encoding or callback context placement.
+public enum MarshalKind {
+    /// Marshal text as a null-terminated narrow C string.
+    LpStr,
+    /// Marshal text as a null-terminated wide C string.
+    LpWStr,
+    /// Pass the callback context after the callback arguments.
+    UserDataLast
+}

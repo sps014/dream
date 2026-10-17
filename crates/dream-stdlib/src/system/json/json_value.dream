@@ -1,21 +1,5 @@
 module system.json;
 
-// Discriminant for `JsonValue.kind()`.
-public enum JsonKind {
-    /// A JSON null value.
-    Null,
-    /// A JSON boolean value.
-    Bool,
-    /// A JSON numeric value.
-    Number,
-    /// A JSON string value.
-    String,
-    /// An ordered JSON array of values.
-    Array,
-    /// A JSON object mapping property names to values.
-    Object,
-}
-
 // Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
 // represented by exact ownership metadata; recursive types are supported by ARC.
 //
@@ -231,7 +215,7 @@ public class JsonValue {
 
     /// Returns the named string property, or `None` if missing or not a string.
     public fun get_str(borrow key: string): Option<string> {
-        switch (this.get(key)) {
+        switch (this[key]) {
             Some(v) => {
                 return v.as_string();
             },
@@ -243,7 +227,7 @@ public class JsonValue {
 
     /// Returns the named integer property, or `None` if missing or not numeric.
     public fun get_int(borrow key: string): Option<int> {
-        switch (this.get(key)) {
+        switch (this[key]) {
             Some(v) => {
                 return v.as_int();
             },
@@ -255,7 +239,7 @@ public class JsonValue {
 
     /// Returns the named boolean property, or `None` if missing or not a boolean.
     public fun get_bool(borrow key: string): Option<bool> {
-        switch (this.get(key)) {
+        switch (this[key]) {
             Some(v) => {
                 return v.as_bool();
             },
@@ -277,7 +261,7 @@ public class JsonValue {
 
     /// Returns the named property, or `fallback` when absent or not an object.
     public fun get_or(borrow key: string, fallback: JsonValue): JsonValue {
-        return this.get(key).unwrap_or(fallback);
+        return this[key].unwrap_or(fallback);
     }
 
     /// Removes the named object property; returns whether it existed.
@@ -322,15 +306,10 @@ public class JsonValue {
         };
     }
 
-    /// Returns the named object property, or `None` if absent or not an object.
-    public fun get(borrow key: string): Option<JsonValue> {
-        return this[key];
-    }
-
     // The value for `key`. Panics when this is not an object or the key is absent — use
     // `get(key)` for absence-tolerant reads.
     public fun at(borrow key: string): JsonValue {
-        let at = this.get(key);
+        let at = this[key];
         if at.is_none() {
             System.panic("JsonValue key not found: " + key);
         }
@@ -351,12 +330,12 @@ public class JsonValue {
                                 } else {
                                     switch (keys.index_of(key)) {
                                         Some(idx) => {
-                                            vals.set(idx, value);
+                                            vals[idx] = value;
                                         },
                                         None => {},
                                     }
                                 }
-                                m.set(key, value);
+                                m[key] = value;
                             },
                             None => {},
                         }
@@ -368,11 +347,6 @@ public class JsonValue {
         }
     }
 
-    /// Sets the named property when this value is a JSON object.
-    public fun set(key: string, value: JsonValue): void {
-        this[key] = value;
-    }
-
     // The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
         switch (this.obj_keys) {
@@ -380,7 +354,7 @@ public class JsonValue {
                 if index < 0 || index >= keys.length {
                     return Option.None;
                 }
-                return Option.Some(keys.get(index));
+                return Option.Some(keys[index]);
             },
             None => {
                 return Option.None;
@@ -395,7 +369,7 @@ public class JsonValue {
                 if index < 0 || index >= vals.length {
                     return Option.None;
                 }
-                return Option.Some(vals.get(index));
+                return Option.Some(vals[index]);
             },
             None => {
                 return Option.None;
@@ -415,7 +389,7 @@ public class JsonValue {
                 if index < 0 || index >= items.length {
                     return Option.None;
                 }
-                return Option.Some(items.get(index));
+                return Option.Some(items[index]);
             },
             None => {
                 return Option.None;

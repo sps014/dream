@@ -39,7 +39,7 @@ public static class Bytes {
         let out = Buffer.alloc<byte>(n);
         let i = 0;
         while i < n {
-            out[i] = (byte)s.char_at(i).to_int();
+            out[i] = (byte)((int)s.char_at(i));
             i = i + 1;
         }
         return out;

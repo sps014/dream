@@ -11,12 +11,12 @@ async fun c65_sleeper(): int {
 async fun cancellation_basic(): void {
     let src = CancellationSource();
     let tok = src.token;
-    Assert.eq_str((tok.is_cancelled).to_string(), "false");
+    Assert.eq((tok.is_cancelled).to_string(), "false");
     src.cancel();
-    Assert.eq_str((tok.is_cancelled).to_string(), "true");
-    Assert.eq_str((tok.check().is_err()).to_string(), "true");
+    Assert.eq((tok.is_cancelled).to_string(), "true");
+    Assert.eq((tok.check().is_err()).to_string(), "true");
 
     let f = c65_sleeper();
     Promise.cancel(f);
-    Assert.eq_str(("cancelled").to_string(), "cancelled");
+    Assert.eq(("cancelled").to_string(), "cancelled");
 }

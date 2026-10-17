@@ -26,7 +26,7 @@ fun c26b_verify_observation(borrow value: string): void {
     let wanted = "9\n4\n";
     let end = c26b_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c26b_cursor, end));
+    Assert.eq(actual, wanted.substring(c26b_cursor, end));
     c26b_cursor = end;
 }
 

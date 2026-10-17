@@ -13,3 +13,6 @@ pub use packages::{
 pub use registry::{BOOTSTRAP_PACKAGES, STD_PACKAGES, StdPackage};
 pub use source_paths::{PACKAGES_DIR, STD_PATH_PREFIX, is_library_source, is_std_source};
 pub use symbols::{public_top_level_names, symbol_to_package};
+
+#[cfg(test)]
+mod layout_tests;

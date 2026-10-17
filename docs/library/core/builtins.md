@@ -10,7 +10,7 @@ api: reference/api/system-core.md
 
 Use these helpers for console input and output, basic calculations, time, and information about the running program. Console and system helpers need `import system;`; Math and primitive methods are available automatically.
 
-**Import:** `import system;` for console, env, and process helpers. `Math`, `Buffer`, and primitive methods need no import.
+**Import:** `import system;` for console, env, and process helpers. `Math`, `Array`, and primitive methods need no import.
 
 ```dream
 import system;
@@ -35,7 +35,7 @@ fun main() {
 | `System.read_int()` / `read_double()` / `read_bool()` | parse a line → `Result` |
 | `System.exit(code)` | stop the process |
 | `System.panic(message)` | print and halt — see [Panics](../../language/rules/panics.md) |
-| `System.stdin` / `stdout` / `stderr` | standard streams (`read_line` / `write_line`) |
+| `System.stdin` / `stdout` / `stderr` | byte streams implementing `Reader` / `Writer` (import `system.io`) |
 
 ## Platform and env
 
@@ -65,7 +65,7 @@ Example: `Math.sqrt(9.0)` → `3.0`. A negative input is NaN.
 ## Other
 
 - `.length` on strings, arrays, and collections.
-- `Buffer.alloc<T>(n)` — a zeroed fixed array. Prefer [List](../collections/index.md) when the size grows.
+- `Array.alloc<T>(n)` — a zeroed fixed array. Prefer [List](../collections/index.md) when the size grows.
 - Override `public override fun to_string()` so `print` and `+` show your type. See [object](../../language/types/objects.md).
 
 ## Waiting for cancellation

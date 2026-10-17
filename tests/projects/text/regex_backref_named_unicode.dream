@@ -53,7 +53,7 @@ fun c1dd_verify_observation(borrow value: string): void {
     let wanted = "true\nfalse\nthe the\n'hi'\n\"hi\"\n2026-08-09\n2026\n08\n09\nnone\nhost:user\nhéllo\nWörld\ntrue\n123\n123\ntrue\nfalse\n";
     let end = c1dd_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1dd_cursor, end));
+    Assert.eq(actual, wanted.substring(c1dd_cursor, end));
     c1dd_cursor = end;
 }
 

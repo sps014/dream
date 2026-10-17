@@ -8,6 +8,6 @@ fun casting(): void {
     let y: float = (float)x;
     let z: int = (int)y;
 
-    Assert.eq_str((y).to_string(), "10");
-    Assert.eq_str((z).to_string(), "10");
+    Assert.eq((y).to_string(), "10");
+    Assert.eq((z).to_string(), "10");
 }

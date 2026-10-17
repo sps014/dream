@@ -12,7 +12,7 @@ internal static class AuthCrypto {
             return Result.Err(AuthError("ECRYPTO", "invalid crypto completion"));
         }
         let value = result.unwrap();
-        if value.get("error").is_some() {
+        if value["error"].is_some() {
             return Result.Err(
                 AuthError(
                     "ECRYPTO",
@@ -27,7 +27,7 @@ internal static class AuthCrypto {
 
     internal static fun request(action: string): JsonValue {
         let value = JsonValue.dict();
-        value.set("action", JsonValue.from_string(action));
+        value["action"] = JsonValue.from_string(action);
         return value;
     }
 
@@ -55,39 +55,17 @@ internal static class AuthCrypto {
         payload: JsonValue
     ): Result<JsonValue, AuthError> {
         let request = AuthCrypto.request(action);
-        request.set("issuer", JsonValue.from_string(options.issuer));
-        request.set("audience", JsonValue.from_string(options.audience));
-        request.set("algorithm", JsonValue.from_string(options.algorithm));
+        request["issuer"] = JsonValue.from_string(options.issuer);
+        request["audience"] = JsonValue.from_string(options.audience);
+        request["algorithm"] = JsonValue.from_string(options.algorithm);
         let key = options.verification_key;
         if action == "sign" {
             key = options.signing_key;
-            request.set("claims", payload);
+            request["claims"] = payload;
         } else {
-            request.set("token", payload);
+            request["token"] = payload;
         }
-        request.set("key", JsonValue.from_string(key));
+        request["key"] = JsonValue.from_string(key);
         return AuthCrypto.call(request);
-    }
-}
-
-/// Argon2id password hashes in the interoperable PHC format.
-public static class Password {
-    /// Hashes `password` with Argon2id and returns a PHC-encoded hash, or an authentication
-    /// error.
-    @native
-    public static fun hash(password: string): Result<string, AuthError> {
-        let request = AuthCrypto.request("hash_password");
-        request.set("password", JsonValue.from_string(password));
-        return Result.Ok(AuthCrypto.call(request)?.as_string().unwrap_or(""));
-    }
-
-    /// Checks a password against its encoded hash, returning false on mismatch or an error if
-    /// verification fails.
-    @native
-    public static fun verify(password: string, hash: string): Result<bool, AuthError> {
-        let request = AuthCrypto.request("verify_password");
-        request.set("password", JsonValue.from_string(password));
-        request.set("hash", JsonValue.from_string(hash));
-        return Result.Ok(AuthCrypto.call(request)?.as_bool().unwrap_or(false));
     }
 }

@@ -1,33 +1,19 @@
 module system.core;
 
-// A weak handle to a class instance: holding it does NOT keep the target alive.
-//
-// Use it to break reference cycles that static analysis cannot see — most commonly a
-// callback stored on an object that must call back into that same object:
-//
-// ```dream
-// let wb = Weak<Engine>(engine);
-// engine.on_tick = () => {
-//     switch (wb.get()) {
-//         Some(e) => e.tick(),
-//         None => {},
-//     }
-// };
-// ```
-//
-// Capture the handle (`wb`) in closures, never the raw object — capturing the object
-// directly recreates the cycle.
-//
-// When the target is freed, the slot is marked dead automatically: `is_dead()` flips to
-// true and stays true. The registration is removed when either side dies (target free or
-// handle drop), so nothing dangles.
-public class Weak<T: class> {
+// Storage for weak locals. Captures share the handle without retaining its target.
+internal class Weak<T: class> {
     /// Registered slot-box pointer (raw; owned by the weak registry).
     slot: usize;
 
     /// Creates a `Weak` with `target_obj`.
-    public constructor(target_obj: T) {
-        this.slot = Weak.bind(target_obj);
+    public constructor(target_obj: Option<T>) {
+        this.slot = 0;
+        switch (target_obj) {
+            Some(target) => {
+                this.slot = Weak.bind(target);
+            },
+            None => {},
+        }
     }
 
     /// True once the tracked object has been freed.

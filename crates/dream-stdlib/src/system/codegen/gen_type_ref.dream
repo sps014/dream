@@ -106,7 +106,7 @@ public class GenTypeRef {
         if i < 0 || i >= this.args.length {
             return GenTypeRef.unknown();
         }
-        return this.args.get(i);
+        return this.args[i];
     }
 
     /// Renders a type using local declaration names in a scope that imports those declarations.

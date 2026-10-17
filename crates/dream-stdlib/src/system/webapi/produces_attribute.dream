@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Sets the content type of a yielded string or byte stream.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct ProducesAttribute {
+    /// Media type sent with the streamed response, such as `text/event-stream`.
+    public content_type: string;
+}

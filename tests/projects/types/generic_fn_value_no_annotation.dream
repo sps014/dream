@@ -11,7 +11,7 @@ fun ce4_natural_order<T: Comparable<T>>(a: T, b: T): int {
 @timeout(180000)
 fun generic_fn_value_no_annotation(): void {
     let f = ce4_natural_order;
-    Assert.eq_str((f(3, 1)).to_string(), "1");
+    Assert.eq((f(3, 1)).to_string(), "1");
     let g: fun(int, int): int = f;
-    Assert.eq_str((g(1, 2)).to_string(), "-1");
+    Assert.eq((g(1, 2)).to_string(), "-1");
 }

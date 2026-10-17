@@ -633,8 +633,14 @@ pub(super) const CASES: &[Case] = &[
         "uninstrumented ownership measurement",
     ),
     Case::isolated(
+        "stdio_pipe",
+        "piped λ\0tail",
+        true,
+        "process standard input and output piping",
+    ),
+    Case::isolated(
         "stdio_streams",
-        "hello-out",
+        "hello-out\nabc",
         true,
         "process input, output, or environment",
     ),

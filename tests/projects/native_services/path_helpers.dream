@@ -24,7 +24,7 @@ fun c1a9_verify_observation(borrow value: string): void {
     let wanted = "a.tar\na/b.md\na/c.txt\ntrue\ntrue\na,b,c\nc\ntrue\n";
     let end = c1a9_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1a9_cursor, end));
+    Assert.eq(actual, wanted.substring(c1a9_cursor, end));
     c1a9_cursor = end;
 }
 

@@ -1,0 +1,16 @@
+module system.core;
+
+/// A declaration reference supplied as an attribute argument.
+public struct DeclarationPath {
+    /// Source text represented by this entry.
+    public text: string;
+
+    /// Resolved declaration identifier, or an empty string when unresolved.
+    public symbol: string;
+
+    /// Creates a `DeclarationPath` with `text`, `symbol`.
+    public constructor(text: string, symbol: string) {
+        this.text = text;
+        this.symbol = symbol;
+    }
+}

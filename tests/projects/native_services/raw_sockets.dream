@@ -13,7 +13,7 @@ async fun socket_echo(listener: TcpListener): void {
         }
         input = input + Encoding.utf8_decode(bytes);
     }
-    Assert.eq_str(input, "hello");
+    Assert.eq(input, "hello");
     stream.write_all_async(Encoding.utf8_encode("reply")).await.unwrap();
     stream.shutdown_write().unwrap();
     stream.close().unwrap();
@@ -31,14 +31,14 @@ async fun raw_sockets(): void {
         .unwrap();
     client.set_nodelay(true).unwrap();
     client.write_all_async(Encoding.utf8_encode("hello")).await.unwrap();
-    Assert.eq_str(client.read_with_timeout(1, 5).await.unwrap_err().code(), "ETIMEOUT");
+    Assert.eq(client.read_with_timeout(1, 5).await.unwrap_err().code(), "ETIMEOUT");
     let source = CancellationSource();
     let pending = client.read_async(1, Option.Some(source.token));
     Promise.start(pending);
     Time.delay(5).await.unwrap();
-    Assert.eq_str(client.read_with_timeout(1, 100).await.unwrap_err().code(), "EBUSY");
+    Assert.eq(client.read_with_timeout(1, 100).await.unwrap_err().code(), "EBUSY");
     source.cancel();
-    Assert.eq_str(pending.await.unwrap_err().code(), "ECANCELLED");
+    Assert.eq(pending.await.unwrap_err().code(), "ECANCELLED");
     client.shutdown_write().unwrap();
     let response = "";
     while true {
@@ -48,7 +48,7 @@ async fun raw_sockets(): void {
         }
         response = response + Encoding.utf8_decode(bytes);
     }
-    Assert.eq_str(response, "reply");
+    Assert.eq(response, "reply");
     server.await;
     client.close().unwrap();
     client.close().unwrap();
@@ -57,7 +57,7 @@ async fun raw_sockets(): void {
     Promise.start(accepting);
     Time.delay(1).await.unwrap();
     listener.close().unwrap();
-    Assert.eq_str(accepting.await.unwrap_err().code(), "ECLOSED");
+    Assert.eq(accepting.await.unwrap_err().code(), "ECLOSED");
 
     let first = UdpSocket.bind("127.0.0.1", 0).await.unwrap();
     let second = UdpSocket.bind("127.0.0.1", 0).await.unwrap();
@@ -66,18 +66,18 @@ async fun raw_sockets(): void {
     Assert.is_true(first.set_ttl(0).is_err());
     first.send("127.0.0.1", second.local_port, Encoding.utf8_encode("abcdef")).await.unwrap();
     let message = second.receive(3, timeout_ms: 5000).await.unwrap();
-    Assert.eq_str(Encoding.utf8_decode(message.data), "abc");
+    Assert.eq(Encoding.utf8_decode(message.data), "abc");
     Assert.is_true(message.truncated);
     Assert.eq(message.port, first.local_port);
     first.send("127.0.0.1", second.local_port, []).await.unwrap();
     let empty = second.receive(timeout_ms: 5000).await.unwrap();
     Assert.eq(empty.data.length, 0);
     Assert.is_false(empty.truncated);
-    Assert.eq_str(second.receive(timeout_ms: 5).await.unwrap_err().code(), "ETIMEOUT");
+    Assert.eq(second.receive(timeout_ms: 5).await.unwrap_err().code(), "ETIMEOUT");
     let receive = second.receive();
     Promise.start(receive);
     Time.delay(1).await.unwrap();
     second.close().unwrap();
-    Assert.eq_str(receive.await.unwrap_err().code(), "ECLOSED");
+    Assert.eq(receive.await.unwrap_err().code(), "ECLOSED");
     first.close().unwrap();
 }

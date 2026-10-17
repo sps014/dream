@@ -9,7 +9,7 @@ async fun copy_one(path: string): Result<bool, IoError> {
     Assert.eq(count, bytes.length);
     file.seek_async(0L).await?;
     let read = file.read_async(4096).await?;
-    Assert.eq_str(Encoding.utf8_decode(read), "hello 日本語");
+    Assert.eq(Encoding.utf8_decode(read), "hello 日本語");
     Assert.eq(file.read_async(1).await?.length, 0);
     file.flush_async().await?;
     file.close()?;
@@ -50,13 +50,13 @@ async fun async_file_copy_and_read_ahead(): void {
     let source = FileHandle.open("async_copy_source.tmp", "w+").unwrap();
     source.write_all(Encoding.utf8_encode("first\r\nsecond\nlast")).unwrap();
     source.seek(0L).unwrap();
-    Assert.eq_str(source.read_line().unwrap().unwrap(), "first");
-    Assert.eq_str(Encoding.utf8_decode(source.read_async(6).await.unwrap()), "second");
+    Assert.eq(source.read_line().unwrap().unwrap(), "first");
+    Assert.eq(Encoding.utf8_decode(source.read_async(6).await.unwrap()), "second");
     source.seek_async(0L).await.unwrap();
     let destination = FileHandle.open_async("async_copy_destination.tmp", "w+").await.unwrap();
     Assert.eq(Streams.copy_async(source, destination, 3).await.unwrap(), 18L);
     destination.seek_async(0L).await.unwrap();
-    Assert.eq_str(
+    Assert.eq(
         Encoding.utf8_decode(destination.read_async(100).await.unwrap()),
         "first\r\nsecond\nlast"
     );

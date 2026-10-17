@@ -1,0 +1,53 @@
+module system.task;
+
+@allow_cycle
+internal class ChannelState<T> {
+    internal queue: Queue<T>;
+    internal capacity: int;
+    internal senders: int;
+    internal receivers: int;
+    internal send_closed: bool;
+    internal receive_closed: bool;
+    internal readable: List<CancellationSource>;
+    internal writable: List<CancellationSource>;
+
+    internal constructor(capacity: int) {
+        this.queue = Queue<T>();
+        this.capacity = capacity;
+        this.senders = 0;
+        this.receivers = 0;
+        this.send_closed = false;
+        this.receive_closed = false;
+        this.readable = List<CancellationSource>();
+        this.writable = List<CancellationSource>();
+    }
+
+    internal fun wake(waiters: List<CancellationSource>): void {
+        for (let i = 0; i < waiters.length; i = i + 1) {
+            waiters[i].cancel();
+        }
+        waiters.clear();
+    }
+
+    internal fun wake_one(waiters: List<CancellationSource>): void {
+        if waiters.length == 0 {
+            return;
+        }
+        let first = waiters[0];
+        waiters.remove_at(0);
+        first.cancel();
+    }
+
+    internal fun close_sends(): void {
+        this.send_closed = true;
+        this.wake(this.readable);
+        this.wake(this.writable);
+    }
+
+    internal fun close_receives(): void {
+        this.receive_closed = true;
+        this.queue.clear();
+        this.wake(this.readable);
+        this.wake(this.writable);
+    }
+}

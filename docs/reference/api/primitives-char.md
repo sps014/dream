@@ -52,14 +52,6 @@ The uppercase form of an ASCII lowercase letter; other characters are returned u
 public fun to_upper(): char
 ```
 
-## `to_int`
-
-This character's numeric code point.
-
-```dream
-public fun to_int(): int
-```
-
 ## `as_string`
 
 A new single-character string containing this character.

@@ -10,16 +10,16 @@ enum c281_Shape {
 @test
 @timeout(180000)
 fun union_to_string(): void {
-    Assert.eq_str((c281_Shape.Circle(5).to_string()).to_string(), "Circle(5)");
-    Assert.eq_str((c281_Shape.Rect(3, 4).to_string()).to_string(), "Rect(width: 3, height: 4)");
-    Assert.eq_str((c281_Shape.Empty.to_string()).to_string(), "Empty");
+    Assert.eq((c281_Shape.Circle(5).to_string()).to_string(), "Circle(5)");
+    Assert.eq((c281_Shape.Rect(3, 4).to_string()).to_string(), "Rect(width: 3, height: 4)");
+    Assert.eq((c281_Shape.Empty.to_string()).to_string(), "Empty");
 
     // Via the universal `object` type (tag dispatch through the object protocol).
     let o: object = c281_Shape.Circle(9);
-    Assert.eq_str((o.to_string()).to_string(), "Circle(9)");
+    Assert.eq((o.to_string()).to_string(), "Circle(9)");
 
     // Prelude unions participate too.
-    Assert.eq_str((Option.Some(42).to_string()).to_string(), "Some(42)");
+    Assert.eq((Option.Some(42).to_string()).to_string(), "Some(42)");
     let none: Option<int> = Option.None;
-    Assert.eq_str((none.to_string()).to_string(), "None");
+    Assert.eq((none.to_string()).to_string(), "None");
 }

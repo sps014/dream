@@ -31,17 +31,17 @@ fun method_group_basic(): void {
     let counter = c150_Counter(10);
 
     // Instance method group used directly where a `fun(int): int` value is expected.
-    Assert.eq_str((c150_apply(counter.addTo, 5)).to_string(), "15");
+    Assert.eq((c150_apply(counter.addTo, 5)).to_string(), "15");
 
     // Instance method group with no args/return, called through a `fun(): void` parameter.
     let inc: fun(): void = counter.increment;
     c150_run(inc);
     c150_run(inc);
-    Assert.eq_str((counter.value.to_string()).to_string(), "12");
+    Assert.eq((counter.value.to_string()).to_string(), "12");
 
     // Static method group.
     let sq: fun(int): int = c150_Counter.square;
-    Assert.eq_str((sq(6)).to_string(), "36");
+    Assert.eq((sq(6)).to_string(), "36");
 }
 
 extend c150_Counter {

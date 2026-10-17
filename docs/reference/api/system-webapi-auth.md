@@ -2,9 +2,17 @@
 
 Read the [Web APIs guide](../../web-server/index.md) for behavior and complete examples.
 
-- [Webapi Auth Auth Crypto](webapi-auth-auth-crypto.md)
-- [Webapi Auth Auth Service](webapi-auth-auth-service.md)
-- [Webapi Auth Auth Types 1](webapi-auth-auth-types-1.md)
-- [Webapi Auth Auth Types 2](webapi-auth-auth-types-2.md)
-- [Webapi Auth Auth Types 3](webapi-auth-auth-types-3.md)
-- [Webapi Auth Memory Auth Store](webapi-auth-memory-auth-store.md)
+- [AuthAccount](webapi-auth-auth-account.md)
+- [AuthAccounts](webapi-auth-auth-accounts.md)
+- [AuthError](webapi-auth-auth-error.md)
+- [AuthPrincipal](webapi-auth-auth-principal.md)
+- [Webapi Auth Auth Routes](webapi-auth-auth-routes.md)
+- [AuthService](webapi-auth-auth-service.md)
+- [AuthSession](webapi-auth-auth-session.md)
+- [AuthSessionStore](webapi-auth-auth-session-store.md)
+- [AuthTokens](webapi-auth-auth-tokens.md)
+- [JwtOptions](webapi-auth-jwt-options.md)
+- [MemoryAuthStore](webapi-auth-memory-auth-store.md)
+- [OidcOptions](webapi-auth-oidc-options.md)
+- [OidcTransaction](webapi-auth-oidc-transaction.md)
+- [Password](webapi-auth-password.md)

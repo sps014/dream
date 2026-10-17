@@ -46,7 +46,7 @@ import system.crypto; // Sha256, HmacSha256, SecureRandom
 import system.task; // Task, TaskPool (real threads)
 ```
 
-Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Buffer`, `Bytes`, `Span`, `RawPtr`, `Arena`, `Promise`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). Low-level `string.alloc` / `string.set` are also bootstrap; higher-level string helpers require `import system.text;` (or `import system;`, which depends on text).
+Always available without an import (bootstrap): `Option`, `Result`, `Error`, `ParseError`, `Array`, `Bytes`, `Span`, `RawPtr`, `Arena`, `Promise`, `Math`, `js`, comparison/`Collection` interfaces, and primitive `extend` methods (`int.parse`, `bool.parse`, …). String helpers require `import system.text;` (or `import system;`, which depends on text).
 
 There is no `import system.*;` wildcard — import each package you need (the editor offers an auto-import quick fix when you type an unresolved stdlib name).
 

@@ -28,11 +28,11 @@ fun new_integer_types() {
     Assert.eq((int)l, 410065408);
 
     let o: object = l;
-    Assert.eq_str(o.to_string(), "9000000000");
-    Assert.eq_str("v=" + ul, "v=18000000000");
+    Assert.eq(o.to_string(), "9000000000");
+    Assert.eq("v=" + ul, "v=18000000000");
     let arr: byte[] = [10b, 20b, 30b];
     Assert.eq(arr[2], 30b);
-    Assert.eq_str(arr.to_string(), "[10, 20, 30]");
+    Assert.eq(arr.to_string(), "[10, 20, 30]");
     Assert.eq((0L - 7L).abs(), 7L);
     Assert.eq(l.max(w), 9000000000L);
     Assert.eq(byte.parse("250").unwrap_or(0b), 250b);

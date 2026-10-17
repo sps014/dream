@@ -35,37 +35,13 @@ Three guarantees hold for any array, no matter how you track its contents:
 
 The practical consequence: if you hand-roll a container (`entries: string[]` plus a `count: int`), rewinding the counter **without clearing slots is safe**. Old elements stay until they are overwritten or the array is dropped. There is no error.
 
-Eager clear is optional.
-
-Two opt-ins exist for people writing performance-sensitive containers:
-
-- `Buffer.clear<T>(arr)` / `Buffer.truncate<T>(arr, n)` release elements eagerly (the same cleanup rules as replacing an array item). Use them when one long-lived container churns through many elements and peak memory matters more than microsecond-level cost.
-- Zeroing a vacated slot after moving an element out (`items[i] = Buffer.alloc<T>(1)[0]`, like [`List.pop`](../../library/collections/index.md)) reclaims immediately instead of at overwrite/drop.
-
-The genuinely unsafe tier stays behind [`@unsafe`](buffers.md#unsafe-manual-memory-management): `RawPtr<T>` and `Arena` manage unmanaged raw storage; `Buffer.realloc` and `Buffer.free` manually control array lifetime.
-
-## `Buffer` operations
-
-`Buffer` is available without an import. Operations marked `@unsafe` skip a check the compiler cannot prove, so the caller must uphold the stated condition.
-
-| Operation | Needs `@unsafe` | Effect |
-|-----------|-----------------|--------|
-| `Buffer.alloc<T>(len)` | No | A new zero-initialized `T[]` of length `len` |
-| `Buffer.clear<T>(arr)` | No | Resets every slot to its zero value, releasing what the slots held; the length is unchanged |
-| `Buffer.truncate<T>(arr, n)` | No | Resets only the slots from index `n` to the end |
-| `Buffer.get_unchecked<T>(arr, i)` | Yes | Reads `arr[i]` without a bounds check |
-| `Buffer.set_unchecked<T>(arr, i, value)` | Yes | Writes `arr[i]` without a bounds check |
-| `Buffer.elems_copy<T>(dst, dst_off, src, src_off, count)` | Yes | Copies `count` unmanaged elements; overlapping ranges are allowed |
-| `Buffer.elems_fill<T>(dst, dst_off, count)` | Yes | Zeroes `count` unmanaged elements starting at `dst_off` |
-| `Buffer.realloc<T>(arr, new_len)` | Yes | Resizes a singly-owned array, keeping the common prefix and zero-filling new slots; use only the returned array afterward |
-| `Buffer.free<T>(arr)` | Yes | Releases a singly-owned array immediately; neither it nor any alias may be used afterward |
-
-`elems_copy` and `elems_fill` accept only unmanaged element types (types that hold no references, such as numbers or structs of numbers), and neither checks that the ranges fit inside the arrays.
-
+Use `List<T>` when the logical size changes. Removing an element or calling `clear()`
+releases the list's ownership of its elements. When an array needs empty slots, choose
+an optional element type and assign `Option.None` to release a slot's previous value.
 
 ## `@unsafe`: manual memory management
 
-A handful of low-level primitives step outside ARC: `Buffer.realloc` / `Buffer.free` and [`RawPtr<T>`](../types/arrays.md#rawptrt-raw-memory-unsafe) manage a block's lifetime yourself.
+[`RawPtr<T>`](../types/arrays.md#rawptrt-raw-memory-unsafe) and `Arena` provide raw storage for unmanaged values. You manage the lifetime of this storage yourself.
 Every function or method that touches one of these must be marked `@unsafe`:
 
 ```dream

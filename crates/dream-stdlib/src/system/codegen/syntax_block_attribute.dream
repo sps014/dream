@@ -1,0 +1,5 @@
+module system.codegen;
+
+/// Makes the generator expand `name { ... }` syntax blocks, where `name` is the generator's own name.
+@attribute(AttributeTarget.Function)
+public struct SyntaxBlockAttribute {}

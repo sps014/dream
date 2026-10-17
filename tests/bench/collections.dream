@@ -43,7 +43,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 
 @noinline
 fun bulk(n: int, iters: int): int {
-    let input = Buffer.alloc<int>(n);
+    let input = Array.alloc<int>(n);
     for (let i = 0; i < n; i = i + 1) {
         input[i] = i;
     }
@@ -104,17 +104,17 @@ fun churn(iters: int): int {
         let m = Map<int, string>(8);
         let s = Set<int>(8);
         for (let i = 0; i < 5; i = i + 1) {
-            m.set(i * 8, "old");
+            m[i * 8] = "old";
             s.add(i * 8);
         }
-        m.set(32, "updated");
+        m[32] = "updated";
         s.add(32);
         for (let i = 0; i < 4; i = i + 1) {
             m.remove(i * 8);
             s.remove(i * 8);
         }
         for (let i = 0; i < 256; i = i + 1) {
-            m.set(i + 100, "new");
+            m[i + 100] = "new";
             s.add(i + 100);
             m.remove(i + 100);
             s.remove(i + 100);
@@ -124,8 +124,37 @@ fun churn(iters: int): int {
     return total;
 }
 
+fun seq_even(value: int): bool {
+    return value % 2 == 0;
+}
+
+fun seq_double(value: int): int {
+    return value * 2;
+}
+
+fun seq_add(total: int, value: int): int {
+    return total + value;
+}
+
+@noinline
+fun seq_chain(iters: int): int {
+    let input = List<int>();
+    for (let i = 0; i < 8192; i++) {
+        input.push(i);
+    }
+    let total = 0;
+    for (let i = 0; i < iters; i++) {
+        total += input.seq().filter(seq_even).map(seq_double).skip(4).take(32).reduce(0, seq_add);
+    }
+    return total;
+}
+
 fun run_suite(): void {
     let sw = Stopwatch();
+    let seq_value = seq_chain(100);
+    sw.stop();
+    report("seq_filter_map_take", sw.elapsed_nanos, 100, seq_value);
+    sw = Stopwatch();
     let value = bulk(8, 2000);
     sw.stop();
     report("list_bulk_8", sw.elapsed_nanos, 2000, value);

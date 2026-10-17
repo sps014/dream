@@ -16,10 +16,10 @@ public static class Json {
     public static extern fun from_value<T>(borrow value: JsonValue): T;
 
     // Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.
-    // Pass 0 to fall back to compact `_stringify`.
+    // Pass 0 to produce compact JSON text.
     public static fun serialize_pretty(borrow value: JsonValue, indent: int): string {
         if indent <= 0 {
-            return Json._stringify(value);
+            return Json.stringify(value);
         }
         let sb = StringBuilder();
         Json._json_stringify_pretty_into(sb, value, indent, 0);
@@ -27,14 +27,14 @@ public static class Json {
     }
 
     // Compact JSON text of a dynamic `JsonValue` tree (used by `serialize` for `JsonValue`).
-    public static fun _stringify(borrow value: JsonValue): string {
+    internal static fun stringify(borrow value: JsonValue): string {
         let sb = StringBuilder();
         Json._json_stringify_into(sb, value);
         return sb.build();
     }
 
     // Parses `text` into a dynamic `JsonValue` tree (used by `deserialize<JsonValue>`).
-    public static fun _parse(borrow text: string): Result<JsonValue, ParseError> {
+    internal static fun parse(borrow text: string): Result<JsonValue, ParseError> {
         if text.is_empty() {
             return Result.Err(ParseError.invalid("empty JSON input"));
         }
@@ -47,12 +47,12 @@ public static class Json {
     }
 
     // --- serialization helpers (also used by `@json` `write_json` methods) -------------------
-    public static fun write_string(borrow sb: StringBuilder, borrow s: string): void {
+    internal static fun write_string(borrow sb: StringBuilder, borrow s: string): void {
         Json._json_escape_into(sb, s);
     }
 
     /// Appends a JSON boolean to `sb`.
-    public static fun write_bool(borrow sb: StringBuilder, b: bool): void {
+    internal static fun write_bool(borrow sb: StringBuilder, b: bool): void {
         if b == true {
             sb.append("true");
         } else {
@@ -61,24 +61,19 @@ public static class Json {
     }
 
     /// Appends JSON null to `sb`.
-    public static fun write_null(borrow sb: StringBuilder): void {
+    internal static fun write_null(borrow sb: StringBuilder): void {
         sb.append("null");
     }
 
     // Appends an already-built dynamic value as compact JSON text. Generated `write_json` methods
     // use this for `JsonValue` fields and collection elements, which carry their own shape.
     /// Appends a dynamic JSON value to `sb` as compact JSON text.
-    public static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): void {
+    internal static fun write_value(borrow sb: StringBuilder, borrow v: JsonValue): void {
         Json._json_stringify_into(sb, v);
     }
 
-    /// Appends a JSON integer to `sb`.
-    public static fun write_int(borrow sb: StringBuilder, n: int): void {
-        sb.append_int(n);
-    }
-
     /// Appends a JSON number to `sb`.
-    public static fun write_number(borrow sb: StringBuilder, n: double): void {
+    internal static fun write_number(borrow sb: StringBuilder, n: double): void {
         sb.append(Json._json_number(n));
     }
 
@@ -113,7 +108,7 @@ public static class Json {
                 if i >= n {
                     scanning = false;
                 } else {
-                    let b = s.char_at(i).to_int();
+                    let b = ((int)s.char_at(i));
                     // Escape `"`, `\`, and ASCII controls; pass through the rest.
                     if (b < 32) || (b == 34) || (b == 92) {
                         scanning = false;
@@ -128,7 +123,7 @@ public static class Json {
             if i >= n {
                 break;
             }
-            let b = s.char_at(i).to_int();
+            let b = ((int)s.char_at(i));
             if b == 34 {
                 sb.append_char('\\');
                 sb.append_char('"');

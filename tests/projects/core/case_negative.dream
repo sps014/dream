@@ -20,7 +20,7 @@ fun c68_verify_observation(borrow value: string): void {
     let wanted = "neg\n";
     let end = c68_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c68_cursor, end));
+    Assert.eq(actual, wanted.substring(c68_cursor, end));
     c68_cursor = end;
 }
 

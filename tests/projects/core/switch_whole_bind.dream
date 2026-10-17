@@ -36,7 +36,7 @@ fun c23d_verify_observation(borrow value: string): void {
     let wanted = "5\n102\n";
     let end = c23d_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c23d_cursor, end));
+    Assert.eq(actual, wanted.substring(c23d_cursor, end));
     c23d_cursor = end;
 }
 

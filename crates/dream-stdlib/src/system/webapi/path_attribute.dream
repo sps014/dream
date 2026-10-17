@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Binds a path value, with an optional name override.
+@attribute(AttributeTarget.Parameter)
+public struct PathAttribute {
+    /// Optional input name; omitted means use the parameter name.
+    public name: Option<string>;
+}

@@ -1,0 +1,12 @@
+module system.interop;
+
+/// Binds a class, unmanaged struct, or external function to a C++ declaration. Supply a header
+/// relative to the package’s `native/include/` and an optional qualified C++ name.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct, AttributeTarget.ExternFunction)
+public struct CppAttribute {
+    /// Header file declaring the foreign symbol.
+    public header: string;
+
+    /// Name identifying this entry.
+    public name: Option<string>;
+}

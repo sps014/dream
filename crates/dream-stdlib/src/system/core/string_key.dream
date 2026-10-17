@@ -1,0 +1,7 @@
+module system.core;
+
+// A `Map`/`Set` key that can be found by a `ReadOnlySpan<char>` without building a `string`.
+public interface StringKey {
+    /// Returns whether this value equals the supplied text view.
+    fun matches_span(borrow other: ReadOnlySpan<char>): bool;
+}

@@ -43,7 +43,7 @@ fun c1d5_verify_observation(borrow value: string): void {
     let wanted = "7\n4\n3\n7\n";
     let end = c1d5_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1d5_cursor, end));
+    Assert.eq(actual, wanted.substring(c1d5_cursor, end));
     c1d5_cursor = end;
 }
 

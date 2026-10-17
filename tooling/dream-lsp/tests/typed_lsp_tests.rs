@@ -188,3 +188,10 @@ fn generic_method_instances_share_the_template_source() {
             .target
     ));
 }
+
+#[test]
+fn weak_bindings_show_their_public_optional_type() {
+    let source = "class Engine {} fun main(): void { let engine = Engine(); let weak observer = engine; const weak annotated: Option<Engine> = Option.None; }";
+    assert_eq!(variable_type(source, "observer"), "Option<Engine>");
+    assert_eq!(variable_type(source, "annotated"), "Option<Engine>");
+}

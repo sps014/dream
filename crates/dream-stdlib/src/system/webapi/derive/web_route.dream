@@ -1,0 +1,30 @@
+module system.webapi.derive;
+import system;
+import system.codegen;
+import system.webapi;
+import system.json;
+
+internal class WebRoute {
+    internal function: GenFunction;
+    internal method: string;
+    internal path: string;
+    internal uses: List<UseAttribute>;
+    internal websocket: bool;
+    internal index: int;
+
+    internal constructor(
+        function: GenFunction,
+        method: string,
+        path: string,
+        uses: List<UseAttribute>,
+        websocket: bool,
+        index: int
+    ) {
+        this.function = function;
+        this.method = method;
+        this.path = path;
+        this.uses = uses;
+        this.websocket = websocket;
+        this.index = index;
+    }
+}

@@ -453,8 +453,25 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::LetToken);
         }
 
+        let is_weak = self.current_token().kind == TokenKind::WeakToken;
+        if is_weak {
+            self.next_token();
+        } else if self.current_token().kind == TokenKind::UnownedToken {
+            let token = self.next_token();
+            self.diagnostics.report_error(
+                "'unowned' is only supported on fields; use 'weak' for locals".to_string(),
+                Some(token.position),
+            );
+        }
+
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             let pattern = self.parse_pattern()?;
+            if is_weak {
+                self.diagnostics.report_error(
+                    "'weak' cannot be used with tuple destructuring".to_string(),
+                    pattern.position(),
+                );
+            }
             if !pattern.is_irrefutable_let_pattern() {
                 self.diagnostics.report_error(
                     "let/const destructure only allows names, '_' and nested tuples; use switch for other patterns"
@@ -517,6 +534,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             type_annotation,
             expression,
             is_const,
+            is_weak,
         ))
     }
     /// Parses a return statement

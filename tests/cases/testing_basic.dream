@@ -20,6 +20,6 @@ fun main(): void {
     });
 
     Test.run("eq_str_passes", () => {
-        Assert.eq_str("hello", "hello");
+        Assert.eq("hello", "hello");
     });
 }

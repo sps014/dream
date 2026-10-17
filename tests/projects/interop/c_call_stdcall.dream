@@ -10,5 +10,5 @@ extern fun c5b_strlen(s: string): usize;
 @test
 @timeout(180000)
 fun c_call_stdcall(): void {
-    Assert.eq_str((c5b_strlen("stdcall").to_string()).to_string(), "7");
+    Assert.eq((c5b_strlen("stdcall").to_string()).to_string(), "7");
 }

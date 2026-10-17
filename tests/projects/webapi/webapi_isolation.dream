@@ -31,8 +31,8 @@ async fun webapi_isolation(): void {
     );
     let first = WebApp(options);
     let second = WebApp(WebAppOptions(title: "Second API", docs_url: "/documentation"));
-    first.state.set("name", "first");
-    second.state.set("name", "second");
+    first.state["name"] = "first";
+    second.state["name"] = "second";
     first.include_router(IsolatedRoutes.router()).unwrap();
     second.include_router(IsolatedRoutes.router(), "/v2").unwrap();
     let port1 = first.listen("127.0.0.1", 0).await.unwrap();
@@ -40,8 +40,8 @@ async fun webapi_isolation(): void {
     let base1 = "http://127.0.0.1:" + port1.to_string();
     let base2 = "http://127.0.0.1:" + port2.to_string();
     let client = HttpClient();
-    Assert.eq_str(webapi_get(client, base1, "/state", 200).await, "first");
-    Assert.eq_str(webapi_get(client, base2, "/v2/state", 200).await, "second");
+    Assert.eq(webapi_get(client, base1, "/state", 200).await, "first");
+    Assert.eq(webapi_get(client, base2, "/v2/state", 200).await, "second");
     webapi_get(client, base1, "/hidden", 404).await;
     webapi_get(client, base2, "/state", 404).await;
     Assert.is_true(!first.openapi().contains("/hidden"));
@@ -53,7 +53,7 @@ async fun webapi_isolation(): void {
     Assert.is_true(first.use(Middleware(webapi_global)).is_err());
     first.shutdown();
     first.wait().await;
-    Assert.eq_str(webapi_get(client, base2, "/v2/state", 200).await, "second");
+    Assert.eq(webapi_get(client, base2, "/v2/state", 200).await, "second");
     second.shutdown();
     second.wait().await;
     let duplicate = WebApp();

@@ -53,9 +53,9 @@ internal class WebOperation {
 
     internal static fun request(action: string, id: int): JsonValue {
         let request = JsonValue.dict();
-        request.set("action", JsonValue.from_string(action));
-        request.set("id", JsonValue.from_int(id));
-        request.set("timeout_ms", JsonValue.from_int(0));
+        request["action"] = JsonValue.from_string(action);
+        request["id"] = JsonValue.from_int(id);
+        request["timeout_ms"] = JsonValue.from_int(0);
         return request;
     }
 

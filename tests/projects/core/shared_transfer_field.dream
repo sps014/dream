@@ -66,7 +66,7 @@ fun c1f4_verify_observation(borrow value: string): void {
     let wanted = "1\nbuild\n0\n";
     let end = c1f4_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1f4_cursor, end));
+    Assert.eq(actual, wanted.substring(c1f4_cursor, end));
     c1f4_cursor = end;
 }
 

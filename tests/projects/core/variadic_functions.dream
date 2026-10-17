@@ -50,7 +50,7 @@ fun c298_verify_observation(borrow value: string): void {
     let wanted = "0\n1\n6\n10\n16\n0\na\nb\n2\n";
     let end = c298_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c298_cursor, end));
+    Assert.eq(actual, wanted.substring(c298_cursor, end));
     c298_cursor = end;
 }
 

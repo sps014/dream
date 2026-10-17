@@ -2,7 +2,7 @@
 
 No import is needed.
 
-Read the [span guide](../../language/types/spans.md) for usage and backing-storage semantics.
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `ReadOnlySpan`
 
@@ -66,14 +66,6 @@ Accesses the element at `index`; an out-of-range index panics.
 
 ```dream
 public fun this[index: int]: char where T: SpanCharacter
-```
-
-## `get`
-
-Returns the element at `index`; an out-of-range index panics.
-
-```dream
-public fun get(index: int): T
 ```
 
 ## `slice`

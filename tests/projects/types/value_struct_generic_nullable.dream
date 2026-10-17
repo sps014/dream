@@ -25,10 +25,10 @@ struct c291_Wrapper<T> {
 fun value_struct_generic_nullable(): void {
     let w = c291_Wrapper<c291_Point>(Option.Some(c291_Point(1)));
     let p: c291_Point = w.inner ?? c291_Point(-1);
-    Assert.eq_str((p.x).to_string(), "1");
+    Assert.eq((p.x).to_string(), "1");
 
     let no_point: Option<c291_Point> = Option.None;
     let empty = c291_Wrapper<c291_Point>(no_point);
     let q: c291_Point = empty.inner ?? c291_Point(-1);
-    Assert.eq_str((q.x).to_string(), "-1");
+    Assert.eq((q.x).to_string(), "-1");
 }

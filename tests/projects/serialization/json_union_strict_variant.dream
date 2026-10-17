@@ -39,7 +39,7 @@ fun c122_verify_observation(borrow value: string): void {
     let wanted = "{\"type\":\"Circle\",\"_0\":7}\nok:Circle(7)\nerr:unknown variant 'Triangle' for union 'c122_Shape'\nerr:EPARSE:unknown variant '' for union 'c122_Shape'\n";
     let end = c122_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c122_cursor, end));
+    Assert.eq(actual, wanted.substring(c122_cursor, end));
     c122_cursor = end;
 }
 

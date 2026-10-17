@@ -6,28 +6,88 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/task/shared_channel.dream",
-            include_str!("../system/task/shared_channel.dream"),
+            "<std>/system/task/shared_channel_state.dream",
+            include_str!("../system/task/shared_channel_state.dream"),
         ),
         (
-            "<std>/system/task/task_map.dream",
-            include_str!("../system/task/task_map.dream"),
+            "<std>/system/task/shared_channel_endpoints.dream",
+            include_str!("../system/task/shared_channel_endpoints.dream"),
+        ),
+        (
+            "<std>/system/task/shared_channel_host.dream",
+            include_str!("../system/task/shared_channel_host.dream"),
+        ),
+        (
+            "<std>/system/task/shared_channel_wait.dream",
+            include_str!("../system/task/shared_channel_wait.dream"),
+        ),
+        (
+            "<std>/system/task/shared_sender.dream",
+            include_str!("../system/task/shared_sender.dream"),
+        ),
+        (
+            "<std>/system/task/shared_receiver.dream",
+            include_str!("../system/task/shared_receiver.dream"),
+        ),
+        (
+            "<std>/system/task/task_map_state.dream",
+            include_str!("../system/task/task_map_state.dream"),
+        ),
+        (
+            "<std>/system/task/channel_error.dream",
+            include_str!("../system/task/channel_error.dream"),
         ),
         (
             "<std>/system/task/channel.dream",
             include_str!("../system/task/channel.dream"),
         ),
         (
+            "<std>/system/task/channel_endpoints.dream",
+            include_str!("../system/task/channel_endpoints.dream"),
+        ),
+        (
+            "<std>/system/task/channel_state.dream",
+            include_str!("../system/task/channel_state.dream"),
+        ),
+        (
+            "<std>/system/task/channel_wait.dream",
+            include_str!("../system/task/channel_wait.dream"),
+        ),
+        (
+            "<std>/system/task/sender.dream",
+            include_str!("../system/task/sender.dream"),
+        ),
+        (
+            "<std>/system/task/receiver.dream",
+            include_str!("../system/task/receiver.dream"),
+        ),
+        (
             "<std>/system/task/task_failure.dream",
             include_str!("../system/task/task_failure.dream"),
+        ),
+        (
+            "<std>/system/task/task_handle.dream",
+            include_str!("../system/task/task_handle.dream"),
         ),
         (
             "<std>/system/task/task_scope.dream",
             include_str!("../system/task/task_scope.dream"),
         ),
         (
+            "<std>/system/task/task_wait_guard.dream",
+            include_str!("../system/task/task_wait_guard.dream"),
+        ),
+        (
             "<std>/system/task/task.dream",
             include_str!("../system/task/task.dream"),
+        ),
+        (
+            "<std>/system/task/task_session.dream",
+            include_str!("../system/task/task_session.dream"),
+        ),
+        (
+            "<std>/system/task/task_pool_error.dream",
+            include_str!("../system/task/task_pool_error.dream"),
         ),
         (
             "<std>/system/task/task_pool.dream",

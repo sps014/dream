@@ -1,9 +1,11 @@
+module system.core;
+
 import system;
 
 @unsafe
 fun failAllocation(): void {
     System.println("before allocation");
-    let xs = Buffer.alloc<int>(1);
+    let xs = Array.alloc<int>(1);
     xs = Buffer.realloc<int>(xs, -1);
     System.println(xs.length);
 }

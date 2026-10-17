@@ -6,18 +6,18 @@ import system.text;
 @timeout(180000)
 fun string_methods(): void {
     let s = "Hello, World";
-    Assert.eq_str((s.length).to_string(), "12");
-    Assert.eq_str((s.substring(0, 5)).to_string(), "Hello");
-    Assert.eq_str((s.substring(7, 12)).to_string(), "World");
-    Assert.eq_str((s.to_lower()).to_string(), "hello, world");
-    Assert.eq_str((s.to_upper()).to_string(), "HELLO, WORLD");
-    Assert.eq_str((s.index_of('o').unwrap_or(0 - 1)).to_string(), "4");
-    Assert.eq_str((s.contains("World")).to_string(), "true");
-    Assert.eq_str((s.starts_with("Hell")).to_string(), "true");
-    Assert.eq_str((s.ends_with("rld")).to_string(), "true");
+    Assert.eq((s.length).to_string(), "12");
+    Assert.eq((s.substring(0, 5)).to_string(), "Hello");
+    Assert.eq((s.substring(7, 12)).to_string(), "World");
+    Assert.eq((s.to_lower()).to_string(), "hello, world");
+    Assert.eq((s.to_upper()).to_string(), "HELLO, WORLD");
+    Assert.eq((s.index_of('o').unwrap_or(0 - 1)).to_string(), "4");
+    Assert.eq((s.contains("World")).to_string(), "true");
+    Assert.eq((s.starts_with("Hell")).to_string(), "true");
+    Assert.eq((s.ends_with("rld")).to_string(), "true");
     let pad = "  trimmed  ";
-    Assert.eq_str((pad.trim()).to_string(), "trimmed");
+    Assert.eq((pad.trim()).to_string(), "trimmed");
     let ab = "ab";
-    Assert.eq_str((ab.repeat(3)).to_string(), "ababab");
-    Assert.eq_str((s.equals("Hello, World")).to_string(), "true");
+    Assert.eq((ab.repeat(3)).to_string(), "ababab");
+    Assert.eq((s.equals("Hello, World")).to_string(), "true");
 }

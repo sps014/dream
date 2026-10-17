@@ -1308,6 +1308,7 @@ dependencies = [
  "dream-abi",
  "dream-diagnostics",
  "dream-syntax",
+ "heck",
  "indexmap 2.14.0",
 ]
 

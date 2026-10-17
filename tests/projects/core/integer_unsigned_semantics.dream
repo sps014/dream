@@ -15,15 +15,15 @@ fun cfd_ulong_max(): ulong {
 @timeout(180000)
 fun integer_unsigned_semantics(): void {
     let u = cfd_uint_max();
-    Assert.eq_str((u > 1u).to_string(), "true");
-    Assert.eq_str((u / 2u).to_string(), "2147483647");
-    Assert.eq_str((u % 10u).to_string(), "5");
-    Assert.eq_str((u >> 28u).to_string(), "15");
-    Assert.eq_str((u + 1u == 0u).to_string(), "true");
+    Assert.eq((u > 1u).to_string(), "true");
+    Assert.eq((u / 2u).to_string(), "2147483647");
+    Assert.eq((u % 10u).to_string(), "5");
+    Assert.eq((u >> 28u).to_string(), "15");
+    Assert.eq((u + 1u == 0u).to_string(), "true");
 
     let l = cfd_ulong_max();
-    Assert.eq_str((l > 1uL).to_string(), "true");
-    Assert.eq_str((l / 2uL).to_string(), "9223372036854775807");
-    Assert.eq_str((l % 10uL).to_string(), "5");
-    Assert.eq_str((l >> 60uL).to_string(), "15");
+    Assert.eq((l > 1uL).to_string(), "true");
+    Assert.eq((l / 2uL).to_string(), "9223372036854775807");
+    Assert.eq((l % 10uL).to_string(), "5");
+    Assert.eq((l >> 60uL).to_string(), "15");
 }

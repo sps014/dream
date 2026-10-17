@@ -34,8 +34,8 @@ public class HttpIncoming {
             let values = pair.as_array().unwrap_or(List<JsonValue>());
             if values.length == 2 {
                 this.headers.append(
-                    values.get(0).as_string().unwrap_or(""),
-                    values.get(1).as_string().unwrap_or("")
+                    values[0].as_string().unwrap_or(""),
+                    values[1].as_string().unwrap_or("")
                 );
             }
         }

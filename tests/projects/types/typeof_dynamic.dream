@@ -31,29 +31,29 @@ fun typeof_dynamic() {
     let wide: object = dbl;
     let flag: object = true;
     let text: object = "hello";
-    Assert.eq_str((typeof(n)).to_string(), "int");
-    Assert.eq_str((typeof(big)).to_string(), "long");
-    Assert.eq_str((typeof(f)).to_string(), "float");
-    Assert.eq_str((typeof(wide)).to_string(), "double");
-    Assert.eq_str((typeof(flag)).to_string(), "bool");
-    Assert.eq_str((typeof(text)).to_string(), "string");
+    Assert.eq((typeof(n)).to_string(), "int");
+    Assert.eq((typeof(big)).to_string(), "long");
+    Assert.eq((typeof(f)).to_string(), "float");
+    Assert.eq((typeof(wide)).to_string(), "double");
+    Assert.eq((typeof(flag)).to_string(), "bool");
+    Assert.eq((typeof(text)).to_string(), "string");
 
     // Arrays share one runtime tag, so the element type is not recoverable.
     let arr: object = [1, 2, 3];
-    Assert.eq_str((typeof(arr)).to_string(), "array");
+    Assert.eq((typeof(arr)).to_string(), "array");
 
     // A class instance held as `object` reports its own name.
     let boxed: object = c270_Circle();
-    Assert.eq_str((typeof(boxed)).to_string(), "c270_Circle");
+    Assert.eq((typeof(boxed)).to_string(), "c270_Circle");
 
     // An interface-typed slot reports the implementing class.
     let s: c270_Shape = c270_Square();
-    Assert.eq_str((typeof(s)).to_string(), "c270_Square");
+    Assert.eq((typeof(s)).to_string(), "c270_Square");
 
     // A generic instantiation held as `object` reports its source spelling.
     let m: Map<string, int> = {
         "a": 1
     };
     let anymap: object = m;
-    Assert.eq_str((typeof(anymap)).to_string(), "Map<string, int>");
+    Assert.eq((typeof(anymap)).to_string(), "Map<string, int>");
 }

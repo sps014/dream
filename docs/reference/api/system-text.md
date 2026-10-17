@@ -3,6 +3,7 @@
 Choose the type or helper you need. For an introduction, read the [usage guide](../../library/text/string.md).
 
 - [Fmt](text-fmt.md)
+- [InvalidEncoding](text-invalid-encoding.md)
 - [Regex](text-regex.md)
 - [RegexFlags](text-regex-flags.md)
 - [RegexMatchInfo](text-regex-match-info.md)
@@ -10,5 +11,4 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [StringIterator](text-string-iterator.md)
 - [Unicode](text-unicode.md)
 - [UnicodeNormForm](text-unicode-norm-form.md)
-
-- [Incremental UTF-8](text-utf8-decoder.md)
+- [Utf8Decoder](text-utf8-decoder.md)

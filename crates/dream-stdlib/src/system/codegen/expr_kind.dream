@@ -1,0 +1,74 @@
+module system.codegen;
+import system;
+import system.collections;
+import system.json;
+
+/// Expression categories exposed to source generators.
+public enum ExprKind {
+    /// Identifies pattern expressions.
+    Pattern,
+    /// Identifies unknown expressions.
+    Unknown,
+    /// Identifies literal expressions.
+    Literal,
+    /// Identifies identifier expressions.
+    Identifier,
+    /// Identifies array expressions.
+    Array,
+    /// Identifies array repeat expressions.
+    ArrayRepeat,
+    /// Identifies tuple expressions.
+    Tuple,
+    /// Identifies set expressions.
+    Set,
+    /// Identifies map expressions.
+    Map,
+    /// Identifies binary expressions.
+    Binary,
+    /// Identifies unary expressions.
+    Unary,
+    /// Identifies inc dec expressions.
+    IncDec,
+    /// Identifies parenthesized expressions.
+    Parenthesized,
+    /// Identifies function call expressions.
+    FunctionCall,
+    /// Identifies call expressions.
+    Call,
+    /// Identifies index expressions.
+    Index,
+    /// Identifies cast expressions.
+    Cast,
+    /// Identifies size of expressions.
+    SizeOf,
+    /// Identifies align of expressions.
+    AlignOf,
+    /// Identifies name of expressions.
+    NameOf,
+    /// Identifies decl of expressions.
+    DeclOf,
+    /// Identifies type of expressions.
+    TypeOf,
+    /// Identifies member expressions.
+    Member,
+    /// Identifies is expressions.
+    Is,
+    /// Identifies method call expressions.
+    MethodCall,
+    /// Identifies ternary expressions.
+    Ternary,
+    /// Identifies await expressions.
+    Await,
+    /// Identifies switch expressions.
+    Switch,
+    /// Identifies try expressions.
+    Try,
+    /// Identifies lambda expressions.
+    Lambda,
+    /// Identifies named arg expressions.
+    NamedArg,
+    /// Identifies ref expressions.
+    Ref,
+    /// Identifies syntax block expressions.
+    SyntaxBlock
+}

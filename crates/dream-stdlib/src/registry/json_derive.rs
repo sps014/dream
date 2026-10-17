@@ -15,24 +15,24 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/json/derive/gen_field.dream",
-            include_str!("../system/json/derive/gen_field.dream"),
+            "<std>/system/json/derive/json_field_spec.dream",
+            include_str!("../system/json/derive/json_field_spec.dream"),
         ),
         (
-            "<std>/system/json/derive/gen_collection.dream",
-            include_str!("../system/json/derive/gen_collection.dream"),
+            "<std>/system/json/derive/json_collection_spec.dream",
+            include_str!("../system/json/derive/json_collection_spec.dream"),
         ),
         (
-            "<std>/system/json/derive/gen_variant.dream",
-            include_str!("../system/json/derive/gen_variant.dream"),
+            "<std>/system/json/derive/json_variant_spec.dream",
+            include_str!("../system/json/derive/json_variant_spec.dream"),
         ),
         (
-            "<std>/system/json/derive/gen_type.dream",
-            include_str!("../system/json/derive/gen_type.dream"),
+            "<std>/system/json/derive/json_type_spec.dream",
+            include_str!("../system/json/derive/json_type_spec.dream"),
         ),
         (
-            "<std>/system/json/derive/gen_result.dream",
-            include_str!("../system/json/derive/gen_result.dream"),
+            "<std>/system/json/derive/json_gen_output.dream",
+            include_str!("../system/json/derive/json_gen_output.dream"),
         ),
         (
             "<std>/system/json/derive/json_generator.dream",
@@ -41,6 +41,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/json/derive/json_derive.dream",
             include_str!("../system/json/derive/json_derive.dream"),
+        ),
+        (
+            "<std>/system/json/derive/construction.dream",
+            include_str!("../system/json/derive/construction.dream"),
         ),
     ],
 };

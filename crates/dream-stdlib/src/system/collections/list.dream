@@ -1,37 +1,5 @@
 module system.collections;
 
-internal static class CollectionStorage {
-    @intrinsic(Intrinsic.ArraySlotTake)
-    internal static extern fun take<T>(borrow array: T[], index: int): T;
-
-    // Slot permutation has no ownership transition, including nested managed value fields.
-    @intrinsic(Intrinsic.ArraySlotSwap)
-    internal static extern fun exchange<T>(
-        borrow array: T[],
-        left: int,
-        borrow other: T[],
-        right: int
-    ): void;
-
-    @intrinsic(Intrinsic.DebugGetRefCount)
-    internal static extern fun owners(borrow array: object): int;
-
-    @intrinsic(Intrinsic.BufferIsString)
-    internal static extern fun string_keys<T>(): bool;
-
-    @intrinsic(Intrinsic.BufferZero)
-    internal static extern fun zero<T>(): T;
-}
-
-// Dream standard `List<T>` (`import system.collections;`).
-
-// Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
-// so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
-// `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
-fun compare_ascending<T: Comparable<T>>(borrow a: T, borrow b: T): int {
-    return a.compare(b);
-}
-
 // Growable random-access sequence backed by a resizable buffer.
 //
 // Invariant: `0 <= count <= items.length`. Every mutation of `items`/`count` preserves it, which is
@@ -171,11 +139,6 @@ public class List<T>: IndexedCollection<T> {
         Buffer.set_unchecked<T>(this.items, index, value);
     }
 
-    /// Replaces the element at `index`; an out-of-range index panics.
-    public fun set(index: int, value: T): void {
-        this[index] = value;
-    }
-
     // Removes and returns the last element, or `None` if the list is empty.
     public fun pop(): Option<T> {
         if this.count == 0 {
@@ -266,7 +229,7 @@ public class List<T>: IndexedCollection<T> {
         }
         i = 0;
         while i < other.length {
-            result.push(other.get(i));
+            result.push(other[i]);
             i = i + 1;
         }
         return result;
@@ -501,4 +464,13 @@ public class List<T>: IndexedCollection<T> {
         sb.append("]");
         return sb.build();
     }
+}
+
+// Dream standard `List<T>` (`import system.collections;`).
+
+// Natural-order (ascending) comparator over any `Comparable` type. Kept as a free generic function
+// so `List<T : Comparable<T>>.sort()` can hand it to the single merge-sort implementation in
+// `sort_by` as a first-class value — the sort algorithm lives in exactly one place.
+fun compare_ascending<T: Comparable<T>>(borrow a: T, borrow b: T): int {
+    return a.compare(b);
 }

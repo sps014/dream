@@ -17,6 +17,6 @@ extend int {
 @timeout(180000)
 fun overload_methods(): void {
     let n: int = 5;
-    Assert.eq_str((n.combine(3)).to_string(), "8"); // 8    (int overload)
-    Assert.eq_str((n.combine("x")).to_string(), "105"); // 105  (string overload)
+    Assert.eq((n.combine(3)).to_string(), "8"); // 8    (int overload)
+    Assert.eq((n.combine("x")).to_string(), "105"); // 105  (string overload)
 }

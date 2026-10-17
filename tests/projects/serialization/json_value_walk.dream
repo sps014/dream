@@ -68,11 +68,11 @@ fun c125_body() {
         Ok(v) => {
             c125_walk("", v);
 
-            c125_verify_observation((v.get("missing").is_none()).to_string());
+            c125_verify_observation((v["missing"].is_none()).to_string());
             c125_verify_observation((v.get_int("name").is_none()).to_string());
             c125_verify_observation((v.get_str_or("name", "") == "ada").to_string());
 
-            switch (v.get("meta")) {
+            switch (v["meta"]) {
                 Some(meta) => {
                     c125_verify_observation((meta.get_int_or("id", 0)).to_string());
                 },
@@ -97,7 +97,7 @@ fun c125_verify_observation(borrow value: string): void {
     let wanted = "object\nname=string:ada\ntags=array\ntags[0]=number:1\ntags[1]=number:2\non=bool:true\nmeta=object\nmeta.id=number:9\ntrue\ntrue\ntrue\n9\n{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}\n";
     let end = c125_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c125_cursor, end));
+    Assert.eq(actual, wanted.substring(c125_cursor, end));
     c125_cursor = end;
 }
 

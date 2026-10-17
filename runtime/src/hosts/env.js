@@ -56,13 +56,52 @@ function nodeStderrWrite(s) {
 function defaultEnv(getInstance, options) {
   const utf8 = new TextDecoder("utf-8");
   const utf16 = new TextDecoder("utf-16le");
-  const writeOut = options.stdout || nodeStdoutWrite;
-  const writeErr = options.stderr || nodeStderrWrite;
-  const writeLine = options.stdout
-    ? (s) => options.stdout(s + "\n")
-    : (s) => console.log(s);
+  const stdoutBytes = new TextDecoder("utf-8", { ignoreBOM: true });
+  const stderrBytes = new TextDecoder("utf-8", { ignoreBOM: true });
+  const writeOutRaw = options.stdout || nodeStdoutWrite;
+  const writeErrRaw = options.stderr || nodeStderrWrite;
+  const writeOut = (text) => {
+    const pending = stdoutBytes.decode();
+    if (pending) writeOutRaw(pending);
+    writeOutRaw(text);
+  };
+  const writeErr = (text) => {
+    const pending = stderrBytes.decode();
+    if (pending) writeErrRaw(pending);
+    writeErrRaw(text);
+  };
+  const writeLine = (text) => writeOut(text + "\n");
 
   return {
+    console_read_bytes: (ptr, count) => {
+      const fs = getNodeFs();
+      if (!fs || count < 0) return -1;
+      try {
+        return fs.readSync(0, getInstance().bytes, ptr >>> 0, count, null);
+      } catch (_) { return -1; }
+    },
+    console_write_bytes: (stream, ptr, count) => {
+      if ((stream !== 1 && stream !== 2) || count < 0) return -1;
+      if (count === 0) return 0;
+      const bytes = getInstance().bytes.subarray(ptr >>> 0, (ptr >>> 0) + count);
+      const callback = stream === 2 ? options.stderr : options.stdout;
+      const fs = getNodeFs();
+      try {
+        if (!callback && fs) return fs.writeSync(stream, bytes, 0, count);
+        const decoder = stream === 2 ? stderrBytes : stdoutBytes;
+        const text = decoder.decode(bytes, { stream: true });
+        if (text) (stream === 2 ? writeErrRaw : writeOutRaw)(text);
+        return count;
+      } catch (_) { return -1; }
+    },
+    console_flush_stream: (stream) => {
+      if (stream !== 1 && stream !== 2) return -1;
+      try {
+        const text = (stream === 2 ? stderrBytes : stdoutBytes).decode();
+        if (text) (stream === 2 ? writeErrRaw : writeOutRaw)(text);
+        return 0;
+      } catch (_) { return -1; }
+    },
     write_text: (stream, ptr, size, encoding) => {
       const start = ptr >>> 0;
       const length = (size >>> 0) * (encoding === 1 ? 2 : 1);

@@ -1,0 +1,12 @@
+module system.collections;
+
+extend Collection<T> {
+    /// Starts a query sequence over a snapshot of this collection's elements.
+    public fun seq(): Seq<T> {
+        let items = List<T>();
+        for (let value in this) {
+            items.push(value);
+        }
+        return Seq<T>(items);
+    }
+}

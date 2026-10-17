@@ -60,7 +60,7 @@ fun c184_verify_observation(borrow value: string): void {
     let wanted = "-2147483648\n4\n-1589934592\n-2147483648\n4294967295\n42\n2147483646\n2193733020\n45\n-9000000000000000000\n16000000000000000000\n";
     let end = c184_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c184_cursor, end));
+    Assert.eq(actual, wanted.substring(c184_cursor, end));
     c184_cursor = end;
 }
 

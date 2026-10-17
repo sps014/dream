@@ -8,7 +8,7 @@ fun c6e_body(): void {
         Err(e) => c6e_verify_observation((e.message()).to_string()),
     }
     switch (char.parse("é")) {
-        Ok(v) => c6e_verify_observation((v.to_int()).to_string()),
+        Ok(v) => c6e_verify_observation((((int)v)).to_string()),
         Err(e) => c6e_verify_observation((e.code()).to_string()),
     }
     switch (char.parse("ab")) {
@@ -28,7 +28,7 @@ fun c6e_verify_observation(borrow value: string): void {
     let wanted = "A\n233\nEPARSE\nEPARSE\n";
     let end = c6e_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c6e_cursor, end));
+    Assert.eq(actual, wanted.substring(c6e_cursor, end));
     c6e_cursor = end;
 }
 

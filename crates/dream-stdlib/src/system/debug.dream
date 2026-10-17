@@ -4,19 +4,19 @@ module system;
 public static class Debug {
     /// Returns the allocator's free-list address for debugging.
     @intrinsic(Intrinsic.DebugGetFreeListHead)
-    public static extern fun host_free_list_head(): int;
+    internal static extern fun host_free_list_head(): int;
 
     /// Returns the current heap address for debugging.
     @intrinsic(Intrinsic.DebugGetHeapPtr)
-    public static extern fun host_heap_ptr(): int;
+    internal static extern fun host_heap_ptr(): int;
 
     /// Returns the number of currently live managed allocations.
     @intrinsic(Intrinsic.DebugGetLiveObjects)
-    public static extern fun host_live_objects(): long;
+    internal static extern fun host_live_objects(): long;
 
     /// Returns the total number of managed allocations made so far.
     @intrinsic(Intrinsic.DebugGetTotalAllocations)
-    public static extern fun host_total_allocations(): long;
+    internal static extern fun host_total_allocations(): long;
 
     /// Returns the current strong reference count of `o` for debugging.
     @intrinsic(Intrinsic.DebugGetRefCount)

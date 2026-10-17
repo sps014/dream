@@ -161,34 +161,3 @@ shared public class CancellationToken {
         return Result.Ok(true);
     }
 }
-
-// Registration ownership is independent of either race branch; dropping the owner detaches
-// the subscription and settles its signal even if its awaiting frame was cancelled.
-class CancellationRegistration {
-    id: usize;
-
-    internal constructor(id: usize) {
-        this.id = id;
-    }
-
-    del() {
-        this.close();
-    }
-
-    @intrinsic(Intrinsic.DreamCancellationSignal)
-    static extern fun signal_host(id: usize): Future<int>;
-
-    @intrinsic(Intrinsic.DreamCancellationUnregister)
-    static extern fun release_host(id: usize): void;
-
-    internal fun signal(): Future<int> {
-        return CancellationRegistration.signal_host(this.id);
-    }
-
-    internal fun close(): void {
-        if this.id != (usize)0 {
-            CancellationRegistration.release_host(this.id);
-            this.id = (usize)0;
-        }
-    }
-}

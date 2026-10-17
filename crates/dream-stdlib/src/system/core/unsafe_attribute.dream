@@ -1,0 +1,12 @@
+module system.core;
+
+/// Marks a function/method as unsafe. Calls are only allowed from other `@unsafe` contexts.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction,
+    AttributeTarget.Constructor,
+    AttributeTarget.Destructor
+)
+public struct UnsafeAttribute {}

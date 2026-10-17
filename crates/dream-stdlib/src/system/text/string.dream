@@ -18,8 +18,7 @@ extend string: Comparable<string>, Equatable<string> {
         return this.char_at(index);
     }
 
-    // Overwrites the character at the specified index (panics if out of range).
-    // Named `set_at` (not `set`) so it does not collide with static `string.set`.
+    /// Replaces the UTF-16 code unit at `index`; an invalid index panics.
     @inline
     public fun this[index: int] = value: char {
         // Force the same bounds panic as `char_at` / `s[i]` before the low-level write

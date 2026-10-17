@@ -4,8 +4,8 @@ import system;
 fun main(): void {
     let s = 4321.to_string();
     let i = s.length - 1;
-    System.println(s.char_at(i));
+    System.println(s[i]);
     i = i + 1;
-    System.println(s.char_at(i));
+    System.println(s[i]);
     System.println("after");
 }

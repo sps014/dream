@@ -157,40 +157,56 @@ Use `@allow_cycle` when a strong recursive layout is intentional, then break run
 
 Closures own their captured references. Cyclic callback ownership can leak; clear callbacks explicitly or use non-owning handles when a callback should not extend its target lifetime.
 
-## Weak handles
+## Weak locals and closure captures
 
-`Weak<T>` is a non-owning handle for breaking cycles that static analysis cannot prove away.
-It is distinct from a field marked `weak`:
+Use `let weak` when a local or callback should observe a class instance without keeping it alive.
+A read returns `Option<T>`: `Some` acquires a strong reference to a live target, and `None`
+means the target has been destroyed. `const weak` prevents rebinding.
 
 ```dream
 import system;
 
-public class Engine {
+class Engine {
     public on_tick: fun(): void;
     public running: bool;
 
+    public constructor() {
+        this.running = false;
+        this.on_tick = () => {};
+    }
+
     public fun start(): void {
-        let we = Weak<Engine>(this);
+        let weak observer = this;
         this.on_tick = () => {
-            switch (we.get()) {
+            switch (observer) {
                 Some(engine) => engine.do_tick(),
                 None => {},
             }
         };
     }
 
-    public fun do_tick(): void { /* ... */
+    public fun do_tick(): void {
+        this.running = true;
     }
 }
 ```
 
-- `Weak<T>(obj)` does not keep its target alive.
-- When the target drops, `is_dead()` flips to true automatically.
-- `get()` returns `Option<T>`, retaining a live target atomically. An `is_dead()`
-  check followed by a separate load cannot protect against concurrent destruction.
-- `T : class` requires a reference type; unmanaged scalar values cannot be weak targets.
-- `release()` empties the handle and is safe to call repeatedly.
-- Capture the handle in closures — not the raw object.
+The initializer must be a class instance or an `Option` containing a class instance.
+The callback captures the weak binding, so storing it on the engine does not keep the engine alive.
+Use the value returned by a single read when checking and accessing the target.
+
+Reassigning a mutable weak binding changes the observed target, including for closures sharing it:
+
+```dream
+let first = Engine();
+let second = Engine();
+let weak observer = first;
+observer = second;
+observer = Option<Engine>.None;
+```
+
+Assign `Option.None` to clear the binding. Weak locals cannot use tuple destructuring,
+and `unowned` is restricted to fields. Numbers, strings and value structs cannot be weak targets.
 
 ## Container safety
 
@@ -201,49 +217,6 @@ No compile error, no leak.
 
 ### Eager reclamation
 
-Use `Buffer.clear(arr)` / `Buffer.truncate(arr, n)` to release elements immediately:
-
-```dream
-Buffer.clear(this.entries); // release all managed elements now
-this.count = 0;
-```
-
-### Buffer.realloc shrinkage
-
-Shrinking via `Buffer.realloc` automatically releases dropped tail slots — truncation never strands retained elements.
-
-## Debugging retention
-
-Debug builds (including `-g`) always print heap counters at exit:
-
-```
-[dream] leak check: live=0 total_allocations=6
-```
-
-Use `Debug.live_objects` deltas to assert balance in tests:
-
-`Debug.live_objects` and `Debug.total_allocations` return `long` on native and wasm32.
-Their 64-bit counters use relaxed atomic operations. Concurrent snapshots are diagnostic
-observations rather than a synchronized view of every thread; check balances after workers
-have completed. Pinned immortal singletons are excluded from the live count.
-
-```dream
-let before = Debug.live_objects;
-churn();
-let after = Debug.live_objects;
-System.println((after - before).to_string()); // expect "0"
-```
-
-Release builds opt in via `DREAM_DEBUG_LEAKS=1`.
-
-## Known boundaries
-
-These are documented limitations, not silent unsoundness:
-
-| Boundary | Status |
-|---|---|
-| Cycles through `object`-typed loose references | Deferred: requires runtime type introspection |
-| JS↔Dream interop cycles | Interop boundary is weak-by-convention |
-| Data races across threads | Use a lock. Dream does not yet reject races for you |
-
-Every other pattern is either rejected at compile time or safely handled by ARC.
+Use `List.clear()` or remove entries from a list to release its stored references immediately.
+For arrays of optional references, assigning `Option.None` releases the previous slot value.
+Overwriting an array element also releases the previous value.

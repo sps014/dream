@@ -9,26 +9,26 @@ public class Command {
     public constructor(name: string) {
         this.error = "";
         this.definition = JsonValue.dict();
-        this.definition.set("name", JsonValue.from_string(name));
-        this.definition.set("args", JsonValue.array());
-        this.definition.set("subcommands", JsonValue.array());
+        this.definition["name"] = JsonValue.from_string(name);
+        this.definition["args"] = JsonValue.array();
+        this.definition["subcommands"] = JsonValue.array();
     }
 
     // Sets version output and enables --version/-V for this command and its descendants.
     public fun version(value: string): Command {
-        this.definition.set("version", JsonValue.from_string(value));
+        this.definition["version"] = JsonValue.from_string(value);
         return this;
     }
 
     // Sets text included in automatically generated help.
     public fun description(value: string): Command {
-        this.definition.set("description", JsonValue.from_string(value));
+        this.definition["description"] = JsonValue.from_string(value);
         return this;
     }
 
     // Requires one of the declared subcommands; --help and --version still return normal outcomes.
     public fun require_subcommand(required: bool = true): Command {
-        this.definition.set("require_subcommand", JsonValue.boolean(required));
+        this.definition["require_subcommand"] = JsonValue.boolean(required);
         return this;
     }
 
@@ -40,7 +40,7 @@ public class Command {
         description: string = ""
     ): Command {
         let argument = this.argument(name, "positional", "", required, description);
-        argument.set("multiple", JsonValue.boolean(multiple));
+        argument["multiple"] = JsonValue.boolean(multiple);
         return this;
     }
 
@@ -54,7 +54,7 @@ public class Command {
     ): Command {
         let argument = this.argument(name, "string", short, required, description);
         if !required {
-            argument.set("default_value", JsonValue.from_string(default_value));
+            argument["default_value"] = JsonValue.from_string(default_value);
         }
         return this;
     }
@@ -69,7 +69,7 @@ public class Command {
     ): Command {
         let argument = this.argument(name, "int", short, required, description);
         if !required {
-            argument.set("default_value", JsonValue.from_string(default_value.to_string()));
+            argument["default_value"] = JsonValue.from_string(default_value.to_string());
         }
         return this;
     }
@@ -86,7 +86,7 @@ public class Command {
         for (let i = 0; i < arguments.length; i = i + 1) {
             let argument = arguments.at(i).unwrap();
             if argument.at("name").as_string().unwrap_or("") == name {
-                argument.set("choices", Command.strings(values));
+                argument["choices"] = Command.strings(values);
                 return this;
             }
         }
@@ -115,25 +115,25 @@ public class Command {
             return Result.Err(CliError("EINVAL", this.error));
         }
         let request = JsonValue.dict();
-        request.set("command", this.definition);
-        request.set("args", Command.strings(arguments));
+        request["command"] = this.definition;
+        request["args"] = Command.strings(arguments);
         let decoded = Json.deserialize<JsonValue>(Command.parse_host(Json.serialize(request)));
         if decoded.is_err() {
             return Result.Err(CliError("EIO", "invalid CLI host response"));
         }
         let wire = decoded.unwrap();
-        if wire.get("kind").unwrap_or(JsonValue.none()).as_string().unwrap_or("") == "error" {
+        if wire["kind"].unwrap_or(JsonValue.none()).as_string().unwrap_or("") == "error" {
             return Result.Err(
                 CliError(
-                    wire.get("code").unwrap_or(JsonValue.none()).as_string().unwrap_or("EIO"),
-                    wire.get("message")
+                    wire["code"].unwrap_or(JsonValue.none()).as_string().unwrap_or("EIO"),
+                    wire["message"]
                         .unwrap_or(JsonValue.none())
                         .as_string()
                         .unwrap_or("CLI parsing failed")
                 )
             );
         }
-        let kind = wire.get("kind").unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+        let kind = wire["kind"].unwrap_or(JsonValue.none()).as_string().unwrap_or("");
         if kind != "values" && kind != "help" && kind != "version" {
             return Result.Err(CliError("EIO", "invalid CLI host outcome"));
         }
@@ -151,11 +151,11 @@ public class Command {
         description: string
     ): JsonValue {
         let argument = JsonValue.dict();
-        argument.set("name", JsonValue.from_string(name));
-        argument.set("kind", JsonValue.from_string(kind));
-        argument.set("short", JsonValue.from_string(short));
-        argument.set("required", JsonValue.boolean(required));
-        argument.set("description", JsonValue.from_string(description));
+        argument["name"] = JsonValue.from_string(name);
+        argument["kind"] = JsonValue.from_string(kind);
+        argument["short"] = JsonValue.from_string(short);
+        argument["required"] = JsonValue.boolean(required);
+        argument["description"] = JsonValue.from_string(description);
         this.definition.at("args").push(argument);
         return argument;
     }

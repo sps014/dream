@@ -1,0 +1,16 @@
+module system.webapi.auth;
+
+/// Authentication failures carry stable codes without credential values.
+public class AuthError {
+    /// Error code identifying the failure.
+    public code: string;
+
+    /// Human-readable explanation of the result or failure.
+    public message: string;
+
+    /// Creates a `AuthError` with `code`, `message`.
+    public constructor(code: string, message: string) {
+        this.code = code;
+        this.message = message;
+    }
+}

@@ -1,0 +1,5 @@
+class HiddenWeakTarget {}
+
+fun hidden(value: Weak<HiddenWeakTarget>): void {}
+
+fun main(): void {}

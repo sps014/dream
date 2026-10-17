@@ -15,14 +15,14 @@ async fun cd0_body(): void {
         Err(e) => cd0_verify_observation((e.message()).to_string()),
     }
 
-    let marker = Buffer.alloc<byte>(1);
+    let marker = Array.alloc<byte>(1);
     marker[0] = (byte)1;
     File.write_bytes(root + "/a.bin", marker).await;
 
-    let names = (File.list(root).await).unwrap_or(Buffer.alloc<string>(0));
+    let names = (File.list(root).await).unwrap_or(Array.alloc<string>(0));
     cd0_verify_observation((names.length).to_string());
-    cd0_verify_observation((names.get(0)).to_string());
-    cd0_verify_observation((names.get(1)).to_string());
+    cd0_verify_observation((names[0]).to_string());
+    cd0_verify_observation((names[1]).to_string());
 
     File.delete(root + "/a.bin").await;
     File.delete(root + "/nested/leaf").await;
@@ -38,7 +38,7 @@ fun cd0_verify_observation(borrow value: string): void {
     let wanted = "true\ntrue\n2\na.bin\nnested\ntrue\ntrue\n";
     let end = cd0_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cd0_cursor, end));
+    Assert.eq(actual, wanted.substring(cd0_cursor, end));
     cd0_cursor = end;
 }
 

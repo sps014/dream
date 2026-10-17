@@ -1,0 +1,14 @@
+module system.webapi;
+
+/// Applies a middleware function to a route or group in source order.
+@repeatable
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Class
+)
+public struct UseAttribute {
+    /// Middleware function to run for the annotated route or group.
+    public handler: DeclarationPath;
+}

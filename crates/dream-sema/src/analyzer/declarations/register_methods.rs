@@ -69,12 +69,19 @@ impl<'a> Analyzer<'a> {
             {
                 continue;
             }
+            let previous_file = std::mem::replace(
+                &mut diagnostics.file_path,
+                file_path_string(&method.file_path),
+            );
+            let mut parameters: Vec<_> = bindings.keys().cloned().collect();
+            parameters.extend(generic_param_names(&method.generic_parameters));
             if let Some(ret) = &method.return_type {
-                self.check_type_not_static_class(ret, diagnostics);
+                self.check_declared_type(ret, &parameters, diagnostics);
             }
             for p in &method.parameters {
-                self.check_type_not_static_class(&p.type_, diagnostics);
+                self.check_declared_type(&p.type_, &parameters, diagnostics);
             }
+            diagnostics.file_path = previous_file;
             let member_name = accessor_member_name(method);
             if method.where_constraints.is_empty() {
                 let key = (

@@ -40,7 +40,7 @@ async fun main(): void {
     System.println(echoed.unwrap_or("")); // "Dream"
 
     // List the current directory. `list` resolves with a `Result<string[], IoError>`.
-    let entries = (File.list(".").await).unwrap_or(Buffer.alloc<string>(0));
+    let entries = (File.list(".").await).unwrap_or(Array.alloc<string>(0));
     System.print("entries: ");
     System.println(entries.length);
 

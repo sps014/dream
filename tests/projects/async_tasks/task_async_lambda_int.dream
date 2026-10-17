@@ -6,7 +6,7 @@ import system.task;
 @timeout(180000)
 async fun task_async_lambda_int(): void {
     let n = 21;
-    Assert.eq_str(
+    Assert.eq(
         (
             (
                 Task.spawn_async(

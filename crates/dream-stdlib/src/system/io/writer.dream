@@ -1,0 +1,34 @@
+module system.io;
+
+// Byte output with partial writes and explicit flushing.
+public interface Writer {
+    // Accepts up to the supplied bytes and returns the number accepted.
+    // Empty input makes no progress; failures do not undo bytes already written.
+    unique fun write(data: byte[]): Result<int, IoError>;
+
+    // Delivers buffered output to the underlying destination and reports failures.
+    // Flushing does not imply durable storage or close the destination.
+    unique fun flush(): Result<bool, IoError>;
+
+    // Retries partial writes until all bytes are accepted; rejects zero or invalid progress.
+    // A failure leaves any completed writes in effect; this does not flush.
+    public fun write_all(data: byte[]): Result<bool, IoError> {
+        if data.length == 0 {
+            let count = this.write(data)?;
+            if count != 0 {
+                return Result.Err(IoError.other("", "writer made invalid progress"));
+            }
+            return Result.Ok(true);
+        }
+        let offset = 0;
+        while offset < data.length {
+            let remaining = Streams.slice(data, offset, data.length - offset);
+            let count = this.write(remaining)?;
+            if count <= 0 || count > remaining.length {
+                return Result.Err(IoError.other("", "writer made invalid progress"));
+            }
+            offset = offset + count;
+        }
+        return Result.Ok(true);
+    }
+}

@@ -1,6 +1,21 @@
-# Iterable and yield helpers
+# Iterable
 
-**Import:** `import system.core;`
+No import is needed.
 
-- [Declarations 1](core-iterable-1.md)
-- [Declarations 2](core-iterable-2.md)
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
+## `Iterable`
+
+A sequence that creates a fresh synchronous cursor for each traversal.
+
+```dream
+public interface Iterable<T>
+```
+
+## `iterator`
+
+Creates a cursor over the sequence. Close it when iteration ends early.
+
+```dream
+borrow fun iterator(): Iterator<T>
+```

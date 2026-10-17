@@ -151,7 +151,7 @@ public class Regex {
                     i = j;
                 } else if (next.is_digit()) {
                     let zero = '0';
-                    let g = next.to_int() - zero.to_int();
+                    let g = ((int)next) - ((int)zero);
                     sb.append(m.group_text(input, g));
                     i = i + 2;
                 } else {
@@ -177,7 +177,7 @@ public class Regex {
             if ch.is_digit() == false {
                 all_digits = false;
             } else {
-                v = v * 10 + (ch.to_int() - '0'.to_int());
+                v = v * 10 + (((int)ch) - ((int)'0'));
             }
             i = i + 1;
         }
@@ -250,7 +250,7 @@ public class Regex {
         let arr = Buffer.alloc<string>(list.length);
         let i = 0;
         while i < list.length {
-            arr[i] = list.get(i);
+            arr[i] = list[i];
             i = i + 1;
         }
         return arr;

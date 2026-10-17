@@ -10,8 +10,8 @@ extend WebGenerator {
             == nameof(HttpOutgoing)
             && f.params.length
             == 2
-            && f.params.get(0)
-            .ty.name == nameof(RequestContext) && f.params.get(1)
+            && f.params[0]
+            .ty.name == nameof(RequestContext) && f.params[1]
             .ty.name == nameof(Next);
     }
 

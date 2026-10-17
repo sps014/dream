@@ -1,0 +1,23 @@
+module system.net;
+
+// A transport, validation, cancellation, deadline, or capability failure; HTTP statuses are not errors.
+public class HttpError: Error {
+    error_code: string;
+    error_message: string;
+
+    // Creates a failure with a stable machine code and a human-readable description.
+    public constructor(code: string, message: string) {
+        this.error_code = code;
+        this.error_message = message;
+    }
+
+    // Stable category such as `EINVAL`, `ETIMEOUT`, `ECANCELLED`, `ECLOSED`, or `ENOTSUP`.
+    public fun code(): string {
+        return this.error_code;
+    }
+
+    // Human-readable failure detail; transport adapters omit request URLs from error messages.
+    public fun message(): string {
+        return this.error_message;
+    }
+}

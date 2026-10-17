@@ -96,6 +96,9 @@ Help and version requests return successfully without starting a download. Argum
 errors use exit status 2; transfer failures use 1; success uses 0.
 
 ```dream
+import system.io;
+import system.encoding;
+
 async fun main(): int {
     let command = Command("download")
         .version("1.0.0")
@@ -107,7 +110,8 @@ async fun main(): int {
 
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_line(result.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 2;
     }
 
@@ -123,14 +127,16 @@ async fun main(): int {
 
     let timeout = parsed.get_int("timeout").unwrap();
     if timeout < 0 {
-        System.stderr.write_line("timeout must be nonnegative");
+        System.stderr.write_all(Encoding.utf8_encode("timeout must be nonnegative" + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 2;
     }
 
     let output = parsed.get_string("output").unwrap();
     let copied = download(parsed.get_string("url").unwrap(), output, timeout).await;
     if copied.is_err() {
-        System.stderr.write_line(copied.unwrap_err());
+        System.stderr.write_all(Encoding.utf8_encode(copied.unwrap_err() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 1;
     }
     if parsed.get_bool("verbose").unwrap() {

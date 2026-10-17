@@ -1,0 +1,8 @@
+module system.validation;
+
+/// JSON encoded field default, applied only when the property is absent.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct DefaultJsonAttribute {
+    /// JSON text decoded as the field default when the property is absent.
+    public value: string;
+}

@@ -1,0 +1,17 @@
+module system.codegen;
+import system;
+import system.collections;
+
+// What a `GenDecl` declares.
+public enum DeclKind {
+    /// Identifies class declarations.
+    Class,
+    /// Identifies struct declarations.
+    Struct,
+    /// Identifies union declarations.
+    Union,
+    /// Identifies enum declarations.
+    Enum,
+    /// Identifies interface declarations.
+    Interface
+}

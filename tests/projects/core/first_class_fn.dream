@@ -40,7 +40,7 @@ fun cd5_verify_observation(borrow value: string): void {
     let wanted = "10\n15\n12\n18\n14\n";
     let end = cd5_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cd5_cursor, end));
+    Assert.eq(actual, wanted.substring(cd5_cursor, end));
     cd5_cursor = end;
 }
 

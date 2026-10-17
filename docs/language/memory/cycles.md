@@ -92,6 +92,33 @@ class Child {
 These fields have no strong cycle, so neither class needs `@allow_cycle`. A recursive
 strong child field still makes a class cycle-capable, even when actual instances form a tree.
 
+## Weak callback captures
+
+A callback stored on an object can capture a weak local to avoid owning that object.
+Read the binding with `switch` to handle a target that has already been destroyed:
+
+```dream
+class Counter {
+    public callback: fun(): int;
+    public value: int;
+
+    public constructor() {
+        this.value = 0;
+        const weak observer = this;
+        this.callback = () => {
+            return switch (observer) {
+                Some(counter) => counter.value,
+                None => -1,
+            };
+        };
+    }
+}
+```
+
+`const weak` keeps the binding pointed at its original target. Use `let weak` when it
+must be rebound. Both accept a class instance or `Option<T>` and read as `Option<T>`.
+Clearing a mutable weak binding with `Option.None` is visible to closures that capture it.
+
 ## Concurrency
 
 Published objects use atomic reference counts. A dedicated registry lock synchronizes

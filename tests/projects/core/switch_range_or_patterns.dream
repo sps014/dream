@@ -50,7 +50,7 @@ fun c23c_verify_observation(borrow value: string): void {
     let wanted = "A\nB\nC\nF\ntrue\nfalse\ntrue\nfalse\n";
     let end = c23c_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c23c_cursor, end));
+    Assert.eq(actual, wanted.substring(c23c_cursor, end));
     c23c_cursor = end;
 }
 

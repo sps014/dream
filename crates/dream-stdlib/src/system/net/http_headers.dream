@@ -1,0 +1,91 @@
+module system.net;
+
+// Case-insensitive header names with ordered repeated values. Validation occurs when sending.
+public class HttpHeaders {
+    names: List<string>;
+    values: List<string>;
+
+    // Creates an empty header collection.
+    public constructor() {
+        this.names = List<string>();
+        this.values = List<string>();
+    }
+
+    // Number of stored header pairs, including repeated names.
+    public get length(): int {
+        return this.names.length;
+    }
+
+    // Appends a value without replacing existing values for the same name.
+    public fun append(name: string, value: string): void {
+        this.names.push(name.to_lower());
+        this.values.push(value);
+    }
+
+    // Replaces all existing values for `name` with one value at the end of the collection.
+    public fun set(name: string, value: string): void {
+        this.remove(name);
+        this.append(name, value);
+    }
+
+    // Returns the first matching value, or `None` when absent.
+    public fun get(name: string): Option<string> {
+        let key = name.to_lower();
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            if this.names[i] == key {
+                return Option.Some(this.values[i]);
+            }
+        }
+        return Option.None;
+    }
+
+    // Copies every matching value in stored order; JS Fetch may already have combined repeated headers.
+    public fun get_all(name: string): string[] {
+        let key = name.to_lower();
+        let values = List<string>();
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            if this.names[i] == key {
+                values.push(this.values[i]);
+            }
+        }
+        return values.take_array();
+    }
+
+    // Removes all values with the given case-insensitive name.
+    public fun remove(name: string): void {
+        let key = name.to_lower();
+        let i = 0;
+        while i < this.names.length {
+            if this.names[i] == key {
+                this.names.remove_at(i);
+                this.values.remove_at(i);
+            } else {
+                i = i + 1;
+            }
+        }
+    }
+
+    /// Serializes header pairs in order, preserving repeated names.
+    public fun to_json(): JsonValue {
+        let pairs = JsonValue.array();
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            let pair = JsonValue.array();
+            pair.push(JsonValue.from_string(this.names[i]));
+            pair.push(JsonValue.from_string(this.values[i]));
+            pairs.push(pair);
+        }
+        return pairs;
+    }
+
+    internal static fun from_wire(pairs: JsonValue): HttpHeaders {
+        let headers = HttpHeaders();
+        for (let i = 0; i < pairs.length; i = i + 1) {
+            let pair = pairs.at(i).unwrap();
+            headers.append(
+                pair.at(0).unwrap().as_string().unwrap_or(""),
+                pair.at(1).unwrap().as_string().unwrap_or("")
+            );
+        }
+        return headers;
+    }
+}

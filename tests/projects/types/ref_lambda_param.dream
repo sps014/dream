@@ -10,12 +10,12 @@ fun ref_lambda_param(): void {
     };
     let a: int = 5;
     inc(ref a);
-    Assert.eq_str((a).to_string(), "6");
+    Assert.eq((a).to_string(), "6");
 
     let bump: fun(ref int): int = (ref n) => {
         n = n + 1;
         return n;
     };
-    Assert.eq_str((bump(ref a)).to_string(), "7");
-    Assert.eq_str((a).to_string(), "7");
+    Assert.eq((bump(ref a)).to_string(), "7");
+    Assert.eq((a).to_string(), "7");
 }

@@ -9,9 +9,9 @@ async fun c2e_delayedDouble(n: int): int {
 @test
 @timeout(180000)
 async fun async_basic(): void {
-    Assert.eq_str(("start").to_string(), "start");
+    Assert.eq(("start").to_string(), "start");
     let a = c2e_delayedDouble(10).await;
     let b = c2e_delayedDouble(a).await;
-    Assert.eq_str(("result = " + b).to_string(), "result = 40");
-    Assert.eq_str(("done").to_string(), "done");
+    Assert.eq(("result = " + b).to_string(), "result = 40");
+    Assert.eq(("done").to_string(), "done");
 }

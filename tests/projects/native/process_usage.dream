@@ -4,7 +4,7 @@ import system;
 @test
 @timeout(180000)
 fun process_usage(): void {
-    Assert.eq_str(
+    Assert.eq(
         (
             System.platform
                 == Platform.Native
@@ -12,6 +12,6 @@ fun process_usage(): void {
         ).to_string(),
         "true"
     );
-    Assert.eq_str((System.cpu_time_nanos >= 0L).to_string(), "true");
-    Assert.eq_str((System.memory_bytes > 0L).to_string(), "true");
+    Assert.eq((System.cpu_time_nanos >= 0L).to_string(), "true");
+    Assert.eq((System.memory_bytes > 0L).to_string(), "true");
 }

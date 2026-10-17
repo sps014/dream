@@ -1,0 +1,11 @@
+module system.webapi;
+
+/// Injects and memoizes a dependency function once per request.
+@attribute(AttributeTarget.Parameter)
+public struct DepAttribute {
+    /// Dependency function to evaluate for this parameter or replace for this application.
+    public provider: DeclarationPath;
+
+    /// Whether the dependency result is reused within this request; omitted means true.
+    public cache: Option<bool>;
+}

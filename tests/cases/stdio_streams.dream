@@ -1,7 +1,15 @@
-// System.stdout / System.stderr stream getters.
 import system;
+import system.io;
+import system.encoding;
 
 fun main(): void {
-    System.stdout.write_line("hello-out");
-    System.stderr.write_text("");
+    let output: Writer = System.stdout;
+    output.write_all(Encoding.utf8_encode("hello-out\n")).unwrap();
+    output.flush().unwrap();
+    System.print("a");
+    output.write_all(Encoding.utf8_encode("b")).unwrap();
+    System.print("c");
+    output.flush().unwrap();
+    System.stderr.write_all([]).unwrap();
+    System.stderr.flush().unwrap();
 }

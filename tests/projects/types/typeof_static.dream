@@ -27,32 +27,32 @@ fun typeof_static() {
     let b: bool = true;
     let c: char = 'z';
     let s: string = "hi";
-    Assert.eq_str((typeof(i)).to_string(), "int");
-    Assert.eq_str((typeof(l)).to_string(), "long");
-    Assert.eq_str((typeof(d)).to_string(), "double");
-    Assert.eq_str((typeof(b)).to_string(), "bool");
-    Assert.eq_str((typeof(c)).to_string(), "char");
-    Assert.eq_str((typeof(s)).to_string(), "string");
+    Assert.eq((typeof(i)).to_string(), "int");
+    Assert.eq((typeof(l)).to_string(), "long");
+    Assert.eq((typeof(d)).to_string(), "double");
+    Assert.eq((typeof(b)).to_string(), "bool");
+    Assert.eq((typeof(c)).to_string(), "char");
+    Assert.eq((typeof(s)).to_string(), "string");
 
     let nums: int[] = [1, 2, 3];
-    Assert.eq_str((typeof(nums)).to_string(), "int[]");
+    Assert.eq((typeof(nums)).to_string(), "int[]");
 
     let p: c271_Point = c271_Point(1, 2);
-    Assert.eq_str((typeof(p)).to_string(), "c271_Point");
+    Assert.eq((typeof(p)).to_string(), "c271_Point");
 
     let col: c271_Color = c271_Color.Green;
-    Assert.eq_str((typeof(col)).to_string(), "c271_Color");
+    Assert.eq((typeof(col)).to_string(), "c271_Color");
 
     // Generic instantiations report their source spelling, not the mangled symbol name.
     let m: Map<string, object> = {
         "ok": "ko"
     };
-    Assert.eq_str((typeof(m)).to_string(), "Map<string, object>");
+    Assert.eq((typeof(m)).to_string(), "Map<string, object>");
 
     let list: List<int> = [1, 2];
-    Assert.eq_str((typeof(list)).to_string(), "List<int>");
+    Assert.eq((typeof(list)).to_string(), "List<int>");
 
     // Expressions, not just variables.
-    Assert.eq_str((typeof(i + 1)).to_string(), "int");
-    Assert.eq_str((typeof(s.length)).to_string(), "int");
+    Assert.eq((typeof(i + 1)).to_string(), "int");
+    Assert.eq((typeof(s.length)).to_string(), "int");
 }

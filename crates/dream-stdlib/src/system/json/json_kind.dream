@@ -1,0 +1,17 @@
+module system.json;
+
+// Discriminant for `JsonValue.kind()`.
+public enum JsonKind {
+    /// A JSON null value.
+    Null,
+    /// A JSON boolean value.
+    Bool,
+    /// A JSON numeric value.
+    Number,
+    /// A JSON string value.
+    String,
+    /// An ordered JSON array of values.
+    Array,
+    /// A JSON object mapping property names to values.
+    Object,
+}

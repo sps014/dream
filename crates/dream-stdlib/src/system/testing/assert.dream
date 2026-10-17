@@ -32,12 +32,17 @@ public static class Assert {
         return result.unwrap();
     }
 
-    // Asserts that `actual == expected`.
+    /// Asserts that `actual == expected`. String failures quote the expected and actual values.
     @native
     @node
     public static fun eq<T>(actual: T, expected: T): void {
         if actual == expected {
             return;
+        }
+        if actual is string {
+            Assert.fail(
+                "assert_eq failed: expected \"" + expected + "\" but got \"" + actual + "\""
+            );
         }
         Assert.fail("assert_eq failed: " + actual + " != " + expected);
     }
@@ -85,18 +90,6 @@ public static class Assert {
         }
         Assert.fail(
             "assert_approx failed: " + actual + " !~ " + expected + " (epsilon " + epsilon + ")"
-        );
-    }
-
-    // Asserts that two strings have identical contents.
-    @native
-    @node
-    public static fun eq_str(actual: string, expected: string): void {
-        if actual == expected {
-            return;
-        }
-        Assert.fail(
-            "assert_eq_str failed: expected \"" + expected + "\" but got \"" + actual + "\""
         );
     }
 }

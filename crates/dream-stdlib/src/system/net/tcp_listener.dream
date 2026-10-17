@@ -1,0 +1,57 @@
+module system.net;
+
+// An owned TCP listener; accepted connections retain independent ownership.
+public class TcpListener {
+    state: SocketState;
+
+    internal constructor(state: SocketState) {
+        this.state = state;
+    }
+
+    // Binds a listener; port zero selects an ephemeral port reported by local_port.
+    public static async fun bind(
+        host: string,
+        port: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<TcpListener, IoError> {
+        return Result.Ok(TcpListener(SocketState.open("listen", host, port, 0, token).await?));
+    }
+
+    // Numeric interface address selected by the host.
+    public get local_host(): string {
+        return this.state.metadata.at("local_host").as_string().unwrap_or("");
+    }
+
+    // Actual bound port, including an automatically selected ephemeral port.
+    public get local_port(): int {
+        return this.state.metadata.at("local_port").as_int().unwrap_or(0);
+    }
+
+    // Accepts a connection with optional deadline and inherited cancellation.
+    public async fun accept(
+        timeout_ms: int = 0,
+        token: Option<CancellationToken> = Option.None
+    ): Result<TcpStream, IoError> {
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
+        let lifetime = [this];
+        let operation = SocketOperation.start(
+            SocketState.request("accept", lifetime[0].state.id, timeout_ms),
+            []
+        );
+        if lifetime[0].state.id <= 0 {
+            return Result.Err(IoError.closed("listener"));
+        }
+        let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
+        let state = SocketState(metadata);
+        operation.claim();
+        operation.close();
+        return Result.Ok(TcpStream(state));
+    }
+
+    // Closes this listener and cancels pending accepts, preserving accepted streams.
+    public fun close(): Result<bool, IoError> {
+        this.state.close();
+        return Result.Ok(true);
+    }
+}

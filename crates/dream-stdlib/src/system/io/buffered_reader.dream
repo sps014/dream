@@ -69,7 +69,7 @@ public class BufferedReader: Reader {
             let next = this.buffer[this.offset];
             this.offset = this.offset + 1;
             if next == (byte)10 {
-                if bytes.length > 0 && bytes.get(bytes.length - 1) == (byte)13 {
+                if bytes.length > 0 && bytes[bytes.length - 1] == (byte)13 {
                     bytes.pop();
                 }
                 return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));

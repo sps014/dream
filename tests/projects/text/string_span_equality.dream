@@ -42,7 +42,7 @@ fun c227_verify_observation(borrow value: string): void {
     let wanted = "true\ntrue\nfalse\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nleft\nright\ntrue\nleft\nright\nfalse\n";
     let end = c227_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c227_cursor, end));
+    Assert.eq(actual, wanted.substring(c227_cursor, end));
     c227_cursor = end;
 }
 

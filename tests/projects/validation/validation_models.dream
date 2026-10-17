@@ -52,11 +52,11 @@ class ValidatedEnvelope {
 fun validation_models(): void {
     let user = Validation.decode<ValidatedUser>("{\"name\":\"Dream\"}").unwrap();
     Assert.eq(user.age, 18);
-    Assert.eq_str(user.name, "Dream");
+    Assert.eq(user.name, "Dream");
     let invalid = Validation.decode<ValidatedUser>("{\"name\":3,\"age\":0,\"extra\":true}")
         .unwrap_err();
     Assert.eq(invalid.issues.length, 3);
-    Assert.eq_str(invalid.issues.get(0).location.get(0), "name");
+    Assert.eq(invalid.issues[0].location[0], "name");
     Assert.is_true(Validation.decode<ValidatedUser>("{\"name\":\"reserved\"}").is_err());
     Assert.is_true(Validation.validate(ValidatedUser("admin", 15)).is_err());
     Assert.is_true(Validation.decode<ValidatedUser>("{").is_err());
@@ -65,9 +65,9 @@ fun validation_models(): void {
     let nested = Validation.decode<ValidatedEnvelope>(
         "{\"user\":{\"name\":\"Dream\"},\"tags\":[true]}"
     ).unwrap_err();
-    Assert.eq_str(nested.issues.get(0).location.get(0), "tags");
-    Assert.eq_str(nested.issues.get(0).location.get(1), "0");
+    Assert.eq(nested.issues[0].location[0], "tags");
+    Assert.eq(nested.issues[0].location[1], "0");
     Assert.is_true(
-        Validation.schema<ValidatedUser>().at("properties").at("age").get("minimum").is_some()
+        Validation.schema<ValidatedUser>().at("properties").at("age")["minimum"].is_some()
     );
 }

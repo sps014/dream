@@ -40,5 +40,13 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             "<std>/system/webapi/derive/webapi_derive.dream",
             include_str!("../system/webapi/derive/webapi_derive.dream"),
         ),
+        (
+            "<std>/system/webapi/derive/web_route.dream",
+            include_str!("../system/webapi/derive/web_route.dream"),
+        ),
+        (
+            "<std>/system/webapi/derive/web_generator.dream",
+            include_str!("../system/webapi/derive/web_generator.dream"),
+        ),
     ],
 };

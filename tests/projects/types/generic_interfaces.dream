@@ -69,7 +69,7 @@ fun ce7_verify_observation(borrow value: string): void {
     let wanted = "7\n1\n10\n2\n7\n";
     let end = ce7_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ce7_cursor, end));
+    Assert.eq(actual, wanted.substring(ce7_cursor, end));
     ce7_cursor = end;
 }
 

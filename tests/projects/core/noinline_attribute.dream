@@ -18,5 +18,5 @@ fun c16d_run(n: int): int {
 @test
 @timeout(180000)
 fun noinline_attribute(): void {
-    Assert.eq_str((c16d_run(3)).to_string(), "9");
+    Assert.eq((c16d_run(3)).to_string(), "9");
 }

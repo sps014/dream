@@ -24,8 +24,8 @@ class c38_Worker {
 async fun async_method(): void {
     let w = c38_Worker(100);
     let r = w.compute(5).await;
-    Assert.eq_str((r).to_string(), "105");
+    Assert.eq((r).to_string(), "105");
 
     let t = w.twice(1).await;
-    Assert.eq_str((t).to_string(), "202");
+    Assert.eq((t).to_string(), "202");
 }

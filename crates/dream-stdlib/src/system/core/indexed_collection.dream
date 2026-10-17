@@ -6,11 +6,6 @@ public interface IndexedCollection<T>: Collection<T> {
     /// Accesses the element at `index`; an out-of-range index panics.
     fun this[index: int]: T;
 
-    /// Returns the element at `index`; an out-of-range index panics.
-    public fun get(index: int): T {
-        return this[index];
-    }
-
     // Element at index 0, or `None` when empty.
     public fun first(): Option<T> {
         if this.length == 0 {

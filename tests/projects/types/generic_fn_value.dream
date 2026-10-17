@@ -16,7 +16,7 @@ fun ce3_apply_cmp(cmp: fun(int, int): int, a: int, b: int): int {
 @timeout(180000)
 fun generic_fn_value(): void {
     let f: fun(int, int): int = ce3_natural_order;
-    Assert.eq_str((ce3_apply_cmp(f, 3, 9)).to_string(), "-1"); // -1
-    Assert.eq_str((ce3_apply_cmp(f, 9, 3)).to_string(), "1"); // 1
-    Assert.eq_str((ce3_apply_cmp(f, 4, 4)).to_string(), "0"); // 0
+    Assert.eq((ce3_apply_cmp(f, 3, 9)).to_string(), "-1"); // -1
+    Assert.eq((ce3_apply_cmp(f, 9, 3)).to_string(), "1"); // 1
+    Assert.eq((ce3_apply_cmp(f, 4, 4)).to_string(), "0"); // 0
 }

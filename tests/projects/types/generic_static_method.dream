@@ -25,8 +25,8 @@ class ce9_Pair<T> {
 @timeout(180000)
 fun generic_static_method(): void {
     let p = ce9_Pair<int>.of(3, 4);
-    Assert.eq_str((p.sum()).to_string(), "7");
+    Assert.eq((p.sum()).to_string(), "7");
 
     let q = ce9_Pair<int>.of(10, 20);
-    Assert.eq_str((q.sum()).to_string(), "30");
+    Assert.eq((q.sum()).to_string(), "30");
 }

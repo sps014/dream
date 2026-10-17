@@ -1,0 +1,5 @@
+module system.testing;
+
+/// Marks a top-level `fun name(): void` as a unit test discovered by `dream test` / `dreamer test`.
+@attribute(AttributeTarget.Function)
+public struct TestAttribute {}

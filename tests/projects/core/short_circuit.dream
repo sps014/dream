@@ -27,7 +27,7 @@ fun c1f5_verify_observation(borrow value: string): void {
     let wanted = "2\n0\n";
     let end = c1f5_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1f5_cursor, end));
+    Assert.eq(actual, wanted.substring(c1f5_cursor, end));
     c1f5_cursor = end;
 }
 

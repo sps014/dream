@@ -1,31 +1,8 @@
-# Web Router
+# WebRouter
 
 **Import:** `import system.webapi;`
 
-See the [Web APIs guide](../../web-server/index.md) for runnable examples, lifecycle, and error behavior.
-
-## `WebEndpoint`
-
-A compiled handler, path and its generated documentation.
-
-```dream
-public class WebEndpoint
-```
-
-## `constructor`
-
-Creates a `WebEndpoint` with `method`, `path`, `handler`, `paths`, `websocket`, `components`.
-
-```dream
-public constructor(
-    method: string,
-    path: string,
-    handler: fun(RequestContext, Map<string, string>): Future<HttpOutgoing>,
-    paths: string,
-    websocket: bool = false,
-    components: string = "{}"
-)
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `WebRouter`
 

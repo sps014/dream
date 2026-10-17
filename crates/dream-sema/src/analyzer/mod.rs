@@ -61,7 +61,7 @@ pub(super) fn statement_line(statement: &dream_syntax::nodes::StatementNode) -> 
             Some(keyword.position.line_no)
         }
         StatementNode::Assignment(tok, _)
-        | StatementNode::Declaration(tok, _, _, _)
+        | StatementNode::Declaration(tok, _, _, _, _)
         | StatementNode::FunctionInvocation(tok, _, _)
         | StatementNode::MethodInvocation(_, tok, _, _)
         | StatementNode::MemberAssignment(_, tok, _)
@@ -240,6 +240,7 @@ pub struct Analyzer<'a> {
     /// `expressions::lambda` to build the matching `Closure_env_<n>` class + construction site.
     closure_parents: indexmap::IndexMap<dream_types::DefId, dream_types::DefId>,
     closure_captures: HashMap<dream_types::DefId, Vec<(String, Type)>>,
+    closure_binding_modifiers: HashMap<dream_types::DefId, Vec<(String, bool, bool)>>,
     /// Resolved receiver modes (concrete owner and method slot -> Borrow/Unique) from the receiver-
     /// exclusivity pass. Populated by `classify_receiver_modes` after body analysis on clean
     /// programs; consulted by dispatch metadata and borrow-collision checking.
@@ -389,6 +390,7 @@ pub struct Analyzer<'a> {
     /// belong to the implicit, unnamed root module. Derived from the module graph.
     file_modules: HashMap<Rc<str>, Rc<str>>,
     generated_files: HashSet<Rc<str>>,
+    stdlib_files: HashSet<Rc<str>>,
     /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
     /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
     /// [`Self::analyze`] runs. Drained by `register_import_aliases` (see `declarations::imports`)
@@ -453,6 +455,7 @@ impl<'a> Analyzer<'a> {
             moved_locals: HashSet::new(),
             closure_parents: indexmap::IndexMap::new(),
             closure_captures: HashMap::new(),
+            closure_binding_modifiers: HashMap::new(),
             receiver_modes: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
             is_binding_aliases: Vec::new(),
@@ -506,6 +509,12 @@ impl<'a> Analyzer<'a> {
                 .generated_files
                 .iter()
                 .map(|path| Rc::from(path.as_str()))
+                .collect(),
+            stdlib_files: graph
+                .files
+                .iter()
+                .filter(|file| dream_stdlib::package_for_source(&file.path).is_some())
+                .map(|file| Rc::from(file.path.as_str()))
                 .collect(),
             aliased_imports: Vec::new(),
             globals: Vec::new(),

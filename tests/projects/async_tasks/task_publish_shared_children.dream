@@ -14,13 +14,13 @@ shared class c255_Named {
 @timeout(180000)
 async fun task_publish_shared_children(): void {
     let n = c255_Named("first" + " child");
-    Assert.eq_str((Task.spawn(() => n.label + "!").await).to_string(), "first child!");
+    Assert.eq((Task.spawn(() => n.label + "!").await).to_string(), "first child!");
     lock (n) {
         n.label = "second" + " child";
     }
-    Assert.eq_str((Task.spawn(() => n.label + "!").await).to_string(), "second child!");
+    Assert.eq((Task.spawn(() => n.label + "!").await).to_string(), "second child!");
     let labels = ["array" + " child", "closure" + " child"];
-    Assert.eq_str(
+    Assert.eq(
         (Task.spawn(() => labels[0] + ", " + labels[1]).await).to_string(),
         "array child, closure child"
     );

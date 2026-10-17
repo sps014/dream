@@ -141,10 +141,15 @@ impl<'a> Analyzer<'a> {
                 name: id.text.clone(),
             }
         };
-        let summary = self.ide_summary(&r);
-        self.record_ide_ref(id.position, target, summary);
         self.hir_set_var(&id.text);
-        Ok(r)
+        let result = if symbol_table.borrow().is_weak(&id.text) {
+            self.read_weak_local(&r).unwrap_or(Type::Unknown)
+        } else {
+            r
+        };
+        let summary = self.ide_summary(&result);
+        self.record_ide_ref(id.position, target, summary);
+        Ok(result)
     }
 
     /// The boxed `fun(...)` value of the function registered under `key`, invoked through

@@ -15,7 +15,7 @@ fun c260_format(n: double): void {
 fun c260_body(): void {
     let text = string.clone("\"hello😀\"");
     let parsed = Json.deserialize<JsonValue>(text).unwrap().as_string().unwrap();
-    string.set(text, 1, 'X');
+    text[1] = 'X';
     c260_verify_observation((parsed).to_string());
     let empty = Json.deserialize<JsonValue>("\"\"").unwrap().as_string().unwrap();
     c260_verify_observation((empty.length).to_string());
@@ -41,7 +41,7 @@ fun c260_verify_observation(borrow value: string): void {
     let wanted = "hello😀\n0\nline\nnext\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ninf\n-inf\nnan\n";
     let end = c260_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c260_cursor, end));
+    Assert.eq(actual, wanted.substring(c260_cursor, end));
     c260_cursor = end;
 }
 

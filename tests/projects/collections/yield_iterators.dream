@@ -126,7 +126,7 @@ fun yield_iterators(): void {
     for (let value in yi_generic<string>("hi")) {
         text = text + value;
     }
-    Assert.eq_str(text, "hihi");
+    Assert.eq(text, "hihi");
     for (let value in yi_empty()) {
         Assert.is_true(false);
     }
@@ -139,7 +139,7 @@ fun yield_iterators(): void {
         Assert.eq(value, 7);
     }
     for (let value in YiStatics.single<string>("ok")) {
-        Assert.eq_str(value, "ok");
+        Assert.eq(value, "ok");
     }
     let counter = YiCounter(3);
     let snapshots = counter.values();

@@ -2,7 +2,7 @@ import system.testing;
 import system;
 
 fun c29_body(): void {
-    // Zero-init fast path: lowers straight to Buffer.alloc (no fill loop).
+    // Zero-init fast path: lowers straight to Array.alloc (no fill loop).
     let zeros = [0; 4];
     c29_verify_observation((zeros.length).to_string());
     c29_verify_observation((zeros[0] + zeros[3]).to_string());
@@ -45,7 +45,7 @@ fun c29_verify_observation(borrow value: string): void {
     let wanted = "4\n0\n7\n7\n7\n10\n2\n3\n42\n0\ndream\n2\n";
     let end = c29_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c29_cursor, end));
+    Assert.eq(actual, wanted.substring(c29_cursor, end));
     c29_cursor = end;
 }
 

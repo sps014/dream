@@ -152,9 +152,7 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
                 Rvalue::Use(Operand::Const(Const::Null)),
             ));
         } else if interner.is_value_type(decl.ty) && f.locals[local.0 as usize].manual_drop {
-            f.blocks[site.block]
-                .stmts
-                .push(Statement::ValueKill(local));
+            f.blocks[site.block].stmts.push(Statement::ValueKill(local));
         }
     }
     f.blocks[site.block].terminator = Terminator::Goto(BlockId(block_base + g_entry.0));

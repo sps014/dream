@@ -70,7 +70,7 @@ impl<'a> Analyzer<'a> {
         left: &SyntaxToken,
         type_annotation: &Option<Type>,
         right: &ExpressionNode<'a>,
-        is_const: bool,
+        (is_const, is_weak): (bool, bool),
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
@@ -81,13 +81,18 @@ impl<'a> Analyzer<'a> {
         // their concrete types (e.g. `let cmp: fun(T, T): int` becomes `fun(int, int): int`), so the
         // published expected type, the initializer check, and the recorded variable type are all
         // concrete. Outside a generic body the bindings are empty and this just clones.
+        if let Some(annotation) = type_annotation {
+            let parameters = self
+                .current_generic_bindings
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+            self.check_declared_type(annotation, &parameters, diagnostics);
+        }
         let mono_annotation = type_annotation
             .as_ref()
             .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
         let type_annotation = &mono_annotation;
-        if let Some(t) = type_annotation {
-            self.check_type_not_static_class(t, diagnostics);
-        }
         // Empty array literals carry no element type, so the declaration must supply one via an
         // array-typed (`int[]`) or `List<T>` annotation (e.g. `let xs: int[] = [];` / `let xs:
         // List<int> = [];`). With a valid annotation the literal is handled on the normal path
@@ -130,6 +135,26 @@ impl<'a> Analyzer<'a> {
         } else {
             right_type
         };
+
+        if is_weak {
+            let (storage_type, value) = self.prepare_weak_local(
+                type_annotation.as_ref(),
+                &right_type,
+                value,
+                left,
+                diagnostics,
+            );
+            self.bind_or_discard_local(
+                left,
+                storage_type,
+                value,
+                is_const,
+                ctx.symbol_table,
+                diagnostics,
+            );
+            ctx.symbol_table.borrow_mut().mark_weak(left.text.clone());
+            return Ok(());
+        }
 
         let var_type = if let Some(t) = type_annotation {
             // A user-defined `@cast("implicit")` conversion is tried before the built-in
@@ -390,13 +415,32 @@ impl<'a> Analyzer<'a> {
             }
         };
         let saved_expected = self.current_expected_type.take();
-        self.current_expected_type = Some(l.clone());
+        let weak_target = if symbol_table.borrow().is_weak(&left.text) {
+            self.weak_storage_target(&l)
+        } else {
+            None
+        };
+        self.current_expected_type = Some(match &weak_target {
+            Some(target) => Self::optional_local_type(target),
+            None => l.clone(),
+        });
         let r = self
             .analyze_expression(right, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
-        let value = self.hir_take();
+        let mut value = self.hir_take();
         self.current_expected_type = saved_expected;
-        self.compare_data_type(&l, &r, &left.position, diagnostics)?;
+        if let Some(target) = weak_target {
+            let (_, weak_value) = self.prepare_weak_local(
+                Some(&Self::optional_local_type(&target)),
+                &r,
+                value,
+                left,
+                diagnostics,
+            );
+            value = weak_value;
+        } else {
+            self.compare_data_type(&l, &r, &left.position, diagnostics)?;
+        }
         self.record_capturing_fun_local(&left.text, &l, value.as_ref());
         // Rebinding clears a prior move (the name now owns a fresh value).
         self.unmark_moved_local(&left.text);

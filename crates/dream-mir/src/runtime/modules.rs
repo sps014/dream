@@ -152,10 +152,12 @@ const NATIVE_SYS_C: &[&str] = &[
     "env.c",
     "time.c",
     "stdio.c",
+    "stdio_streams.c",
     "math.c",
     "worker.c",
 ];
 const WASI_SYS_C: &[&str] = &[
+    "stdio_streams.c",
     "callback.c",
     "heap.c",
     "heap_ownership.c",

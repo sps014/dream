@@ -111,6 +111,13 @@ impl<'a> Analyzer<'a> {
             if self.crate_type != CrateType::Lib && function.name.text == ENTRY_NAME {
                 self.validate_entry_return_type(function, diagnostics);
             }
+            let parameters = generic_param_names(&function.generic_parameters);
+            if let Some(ret) = &function.return_type {
+                self.check_declared_type(ret, &parameters, diagnostics);
+            }
+            for p in &function.parameters {
+                self.check_declared_type(&p.type_, &parameters, diagnostics);
+            }
             if function.generic_parameters.is_some() {
                 if dream_abi::attributes::has_test_attr(&function.attributes) {
                     diagnostics.report_error(
@@ -139,12 +146,6 @@ impl<'a> Analyzer<'a> {
                 function.file_path.as_deref(),
             );
             info.declaring_module = self.module_of(function.file_path.as_ref());
-            if let Some(ret) = &function.return_type {
-                self.check_type_not_static_class(ret, diagnostics);
-            }
-            for p in &function.parameters {
-                self.check_type_not_static_class(&p.type_, diagnostics);
-            }
             if dream_abi::attributes::has_test_attr(&function.attributes) {
                 self.validate_test_function(function, diagnostics);
             }

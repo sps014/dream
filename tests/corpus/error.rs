@@ -751,9 +751,6 @@ pub(super) const CASES: &[Case] = &[
         "'hidden' is private to 'Gadget'",
         true,
     ),
-    Case::error(
-        "weak_unmanaged_rejected",
-        "does not satisfy the 'class' constraint",
-        true,
-    ),
+    Case::error("weak_unmanaged_rejected", "must target a class", true),
+    Case::error("weak_type_internal", "not 'public'", true),
 ];

@@ -1,0 +1,19 @@
+module system.codegen;
+import system;
+import system.collections;
+
+// Standard collection shapes a generator usually special-cases.
+public enum CollectionKind {
+    /// Identifies not collection types.
+    NotCollection,
+    /// Identifies list types.
+    List,
+    /// Identifies set types.
+    Set,
+    /// Identifies map types.
+    Map,
+    /// Identifies sorted map types.
+    SortedMap,
+    /// Identifies array types.
+    Array
+}

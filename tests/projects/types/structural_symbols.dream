@@ -20,8 +20,8 @@ fun c238__Dg0_3_foo_6_p3_int(): int {
 @test
 @timeout(180000)
 fun structural_symbols() {
-    Assert.eq_str((c238_foo<int>(10)).to_string(), "10");
-    Assert.eq_str((c238_foo__0()).to_string(), "20");
-    Assert.eq_str((c238_foo__12()).to_string(), "30");
-    Assert.eq_str((c238__Dg0_3_foo_6_p3_int()).to_string(), "40");
+    Assert.eq((c238_foo<int>(10)).to_string(), "10");
+    Assert.eq((c238_foo__0()).to_string(), "20");
+    Assert.eq((c238_foo__12()).to_string(), "30");
+    Assert.eq((c238__Dg0_3_foo_6_p3_int()).to_string(), "40");
 }

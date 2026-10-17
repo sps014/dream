@@ -43,8 +43,8 @@ internal class ProcessOperation {
 
     internal static fun request(action: string, handle: int): JsonValue {
         let request = JsonValue.dict();
-        request.set("action", JsonValue.from_string(action));
-        request.set("handle", JsonValue.number((double)handle));
+        request["action"] = JsonValue.from_string(action);
+        request["handle"] = JsonValue.number((double)handle);
         return request;
     }
 

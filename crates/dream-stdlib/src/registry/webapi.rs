@@ -23,8 +23,20 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/dependency_resource.dream"),
         ),
         (
+            "<std>/system/webapi/dependency_overrides.dream",
+            include_str!("../system/webapi/dependency_overrides.dream"),
+        ),
+        (
+            "<std>/system/webapi/dependency_value.dream",
+            include_str!("../system/webapi/dependency_value.dream"),
+        ),
+        (
             "<std>/system/webapi/swagger_options.dream",
             include_str!("../system/webapi/swagger_options.dream"),
+        ),
+        (
+            "<std>/system/webapi/web_endpoint.dream",
+            include_str!("../system/webapi/web_endpoint.dream"),
         ),
         (
             "<std>/system/webapi/web_router.dream",
@@ -33,6 +45,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/webapi/auth.dream",
             include_str!("../system/webapi/auth.dream"),
+        ),
+        (
+            "<std>/system/webapi/cors_options.dream",
+            include_str!("../system/webapi/cors_options.dream"),
         ),
         (
             "<std>/system/webapi/cors.dream",
@@ -51,16 +67,24 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/http_status.dream"),
         ),
         (
+            "<std>/system/webapi/request_context.dream",
+            include_str!("../system/webapi/request_context.dream"),
+        ),
+        (
+            "<std>/system/webapi/next.dream",
+            include_str!("../system/webapi/next.dream"),
+        ),
+        (
             "<std>/system/webapi/middleware.dream",
             include_str!("../system/webapi/middleware.dream"),
         ),
         (
-            "<std>/system/webapi/routing.dream",
-            include_str!("../system/webapi/routing.dream"),
+            "<std>/system/webapi/web_routing.dream",
+            include_str!("../system/webapi/web_routing.dream"),
         ),
         (
-            "<std>/system/webapi/server_ws.dream",
-            include_str!("../system/webapi/server_ws.dream"),
+            "<std>/system/webapi/server_web_socket.dream",
+            include_str!("../system/webapi/server_web_socket.dream"),
         ),
         (
             "<std>/system/webapi/sse_event.dream",
@@ -83,8 +107,104 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/web_operation.dream"),
         ),
         (
-            "<std>/system/webapi/webapi_attributes.dream",
-            include_str!("../system/webapi/webapi_attributes.dream"),
+            "<std>/system/webapi/get_attribute.dream",
+            include_str!("../system/webapi/get_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/post_attribute.dream",
+            include_str!("../system/webapi/post_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/put_attribute.dream",
+            include_str!("../system/webapi/put_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/patch_attribute.dream",
+            include_str!("../system/webapi/patch_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/delete_attribute.dream",
+            include_str!("../system/webapi/delete_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/head_attribute.dream",
+            include_str!("../system/webapi/head_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/options_attribute.dream",
+            include_str!("../system/webapi/options_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/websocket_attribute.dream",
+            include_str!("../system/webapi/websocket_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/router_attribute.dream",
+            include_str!("../system/webapi/router_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/use_attribute.dream",
+            include_str!("../system/webapi/use_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/dep_attribute.dream",
+            include_str!("../system/webapi/dep_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/dependency_override_attribute.dream",
+            include_str!("../system/webapi/dependency_override_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/produces_attribute.dream",
+            include_str!("../system/webapi/produces_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/body_attribute.dream",
+            include_str!("../system/webapi/body_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/path_attribute.dream",
+            include_str!("../system/webapi/path_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/query_attribute.dream",
+            include_str!("../system/webapi/query_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/header_attribute.dream",
+            include_str!("../system/webapi/header_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/cookie_attribute.dream",
+            include_str!("../system/webapi/cookie_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/form_attribute.dream",
+            include_str!("../system/webapi/form_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/file_attribute.dream",
+            include_str!("../system/webapi/file_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/security_scheme_attribute.dream",
+            include_str!("../system/webapi/security_scheme_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/requires_scopes_attribute.dream",
+            include_str!("../system/webapi/requires_scopes_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/operation_attribute.dream",
+            include_str!("../system/webapi/operation_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/response_attribute.dream",
+            include_str!("../system/webapi/response_attribute.dream"),
+        ),
+        (
+            "<std>/system/webapi/o_auth2_scheme_attribute.dream",
+            include_str!("../system/webapi/o_auth2_scheme_attribute.dream"),
         ),
     ],
 };

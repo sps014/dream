@@ -1,0 +1,20 @@
+module system.webapi;
+
+/// Describes a route operation in OpenAPI.
+@attribute(AttributeTarget.StaticMethod)
+public struct OperationAttribute {
+    /// Short summary displayed in the API documentation.
+    public summary: Option<string>;
+
+    /// Description displayed in the API documentation.
+    public description: Option<string>;
+
+    /// Optional tags grouping the operation in the API documentation.
+    public tags: Option<string>;
+
+    /// HTTP response status code.
+    public status: Option<int>;
+
+    /// Whether the operation is marked deprecated in the API description.
+    public deprecated: Option<bool>;
+}

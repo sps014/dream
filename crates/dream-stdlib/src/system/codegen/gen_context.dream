@@ -66,7 +66,7 @@ public class GenContext {
         let text = File.read(snapshot_path).await;
         switch (text) {
             Ok(source) => {
-                switch (Json._parse(source)) {
+                switch (Json.parse(source)) {
                     Ok(root) => {
                         let snapshot = GenSnapshot(root);
                         if snapshot.version != gen_snapshot_version() {
@@ -239,7 +239,7 @@ public class GenContext {
         known.push(id);
         let i = 0;
         while i < known.length {
-            let base = known.get(i);
+            let base = known[i];
             for (let s in this.snapshot.symbols) {
                 if !known.contains(s.id) {
                     switch (s.declaration) {
@@ -288,19 +288,19 @@ public class GenContext {
 
     // `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
     public fun options<T>(): Result<T, ParseError> {
-        return Json.deserialize<T>(Json._stringify(this.snapshot.options));
+        return Json.deserialize<T>(Json.stringify(this.snapshot.options));
     }
 
     // One option as text (`fallback` when unset).
     public fun option_or(borrow key: string, fallback: string): string {
-        switch (this.snapshot.options.get(key)) {
+        switch (this.snapshot.options[key]) {
             Some(v) => {
                 switch (v.as_string()) {
                     Some(s) => {
                         return s;
                     }
                     None => {
-                        return Json._stringify(v);
+                        return Json.stringify(v);
                     }
                 }
             }
@@ -319,9 +319,9 @@ public class GenContext {
     // Rewrites `block`'s site to the Dream expression `source`.
     public fun replace(borrow block: GenSyntaxBlock, source: string): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("replace"));
-        out.set("site", JsonValue.from_string(block.id));
-        out.set("source", JsonValue.from_string(source));
+        out["kind"] = JsonValue.from_string("replace");
+        out["site"] = JsonValue.from_string(block.id);
+        out["source"] = JsonValue.from_string(source);
         this.outputs.push(out);
     }
 
@@ -329,9 +329,9 @@ public class GenContext {
     // It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
     public fun emit_file(path: string, source: string): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("file"));
-        out.set("path", JsonValue.from_string(path));
-        out.set("source", JsonValue.from_string(source));
+        out["kind"] = JsonValue.from_string("file");
+        out["path"] = JsonValue.from_string(path);
+        out["source"] = JsonValue.from_string(source);
         this.outputs.push(out);
     }
 
@@ -356,12 +356,12 @@ public class GenContext {
         outputs: List<string>
     ): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("tool_run"));
-        out.set("id", JsonValue.from_string(id));
-        out.set("tool", JsonValue.from_string(tool));
-        out.set("args", gen_json_strings(args));
-        out.set("inputs", gen_json_strings(inputs));
-        out.set("outputs", gen_json_strings(outputs));
+        out["kind"] = JsonValue.from_string("tool_run");
+        out["id"] = JsonValue.from_string(id);
+        out["tool"] = JsonValue.from_string(tool);
+        out["args"] = gen_json_strings(args);
+        out["inputs"] = gen_json_strings(inputs);
+        out["outputs"] = gen_json_strings(outputs);
         this.outputs.push(out);
     }
 
@@ -373,18 +373,18 @@ public class GenContext {
     // Embeds an artifact or tool output for the selected target triples or families.
     public fun emit_asset(name: string, source: string, targets: List<string>): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("asset"));
-        out.set("name", JsonValue.from_string(name));
-        out.set("source", JsonValue.from_string(source));
-        out.set("targets", gen_json_strings(targets));
+        out["kind"] = JsonValue.from_string("asset");
+        out["name"] = JsonValue.from_string(name);
+        out["source"] = JsonValue.from_string(source);
+        out["targets"] = gen_json_strings(targets);
         this.outputs.push(out);
     }
 
     // Removes a selected or referenced user function from the compiled program.
     public fun consume(borrow f: GenFunction): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("consume"));
-        out.set("target", JsonValue.from_string(f.id));
+        out["kind"] = JsonValue.from_string("consume");
+        out["target"] = JsonValue.from_string(f.id);
         this.outputs.push(out);
     }
 
@@ -396,22 +396,22 @@ public class GenContext {
         publish: bool = false
     ): void {
         let out = JsonValue.dict();
-        out.set("kind", JsonValue.from_string("artifact"));
-        out.set("path", JsonValue.from_string(path));
-        out.set("contents", JsonValue.from_string(contents));
-        out.set("mappings", map.mappings);
-        out.set("publish", JsonValue.boolean(publish));
+        out["kind"] = JsonValue.from_string("artifact");
+        out["path"] = JsonValue.from_string(path);
+        out["contents"] = JsonValue.from_string(contents);
+        out["mappings"] = map.mappings;
+        out["publish"] = JsonValue.boolean(publish);
         this.outputs.push(out);
     }
 
     // Reports an artifact location through its source map to the originating Dream node.
     public fun error_in_artifact(path: string, line: int, column: int, message: string): void {
         let d = JsonValue.dict();
-        d.set("severity", JsonValue.from_string("error"));
-        d.set("message", JsonValue.from_string(message));
-        d.set("artifact", JsonValue.from_string(path));
-        d.set("line", JsonValue.from_int(line));
-        d.set("column", JsonValue.from_int(column));
+        d["severity"] = JsonValue.from_string("error");
+        d["message"] = JsonValue.from_string(message);
+        d["artifact"] = JsonValue.from_string(path);
+        d["line"] = JsonValue.from_int(line);
+        d["column"] = JsonValue.from_int(column);
         this.diagnostics.push(d);
         this.error_count = this.error_count + 1;
     }
@@ -419,7 +419,7 @@ public class GenContext {
     // Extensions keep their declaring module, including its internal visibility and name scope.
     public fun emit_extend(borrow decl: GenDecl, body: string): void {
         if !this.extends.contains(decl.module_name) {
-            this.extends.set(decl.module_name, StringBuilder());
+            this.extends[decl.module_name] = StringBuilder();
         }
         let source = this.extends.get(decl.module_name).unwrap();
         source.append("extend " + decl.self_type() + " {\n");
@@ -432,9 +432,9 @@ public class GenContext {
 
     fun report(severity: string, borrow target: string, message: string): void {
         let d = JsonValue.dict();
-        d.set("severity", JsonValue.from_string(severity));
-        d.set("message", JsonValue.from_string(message));
-        d.set("target", JsonValue.from_string(target));
+        d["severity"] = JsonValue.from_string(severity);
+        d["message"] = JsonValue.from_string(message);
+        d["target"] = JsonValue.from_string(target);
         this.diagnostics.push(d);
         if severity == "error" {
             this.error_count = this.error_count + 1;
@@ -511,12 +511,12 @@ public class GenContext {
             this.emit_file(path, header + entry.value.to_string());
         }
         let root = JsonValue.dict();
-        root.set("version", JsonValue.from_int(gen_snapshot_version()));
-        root.set("generator", JsonValue.from_string(this.generator_name));
-        root.set("outputs", this.outputs);
-        root.set("diagnostics", this.diagnostics);
-        root.set("logs", this.logs);
-        let written = File.write(this.result_path, Json._stringify(root)).await;
+        root["version"] = JsonValue.from_int(gen_snapshot_version());
+        root["generator"] = JsonValue.from_string(this.generator_name);
+        root["outputs"] = this.outputs;
+        root["diagnostics"] = this.diagnostics;
+        root["logs"] = this.logs;
+        let written = File.write(this.result_path, Json.stringify(root)).await;
         switch (written) {
             Ok(_) => {
                 return 0;

@@ -1,0 +1,21 @@
+module system.core;
+
+/// Closes an asynchronous cursor when its iteration scope ends.
+@allow_cycle
+public class AsyncIteratorLease<T> {
+    cursor: AsyncIterator<T>;
+
+    /// Creates a `AsyncIteratorLease` with `cursor`.
+    public constructor(cursor: AsyncIterator<T>) {
+        this.cursor = cursor;
+    }
+
+    /// Ends iteration and releases resources held by the cursor.
+    public fun close(): void {
+        this.cursor.close();
+    }
+
+    fun del() {
+        this.close();
+    }
+}

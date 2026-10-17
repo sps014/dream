@@ -2,9 +2,7 @@
 
 **Import:** `import system.text;`
 
-Read the [usage guide](../../library/text/string.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-[All sections](text-string.md)
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `compare`
 
@@ -32,7 +30,7 @@ public fun this[index: int]: char
 
 ## `this`
 
-Overwrites the character at the specified index (panics if out of range). Named `set_at` (not `set`) so it does not collide with static `string.set`.
+Replaces the UTF-16 code unit at `index`; an invalid index panics.
 
 ```dream
 public fun this[index: int] = value: char

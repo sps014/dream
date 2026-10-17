@@ -37,7 +37,19 @@ pub fn prepare<'a>(
         (visibility_modules(acc), visibility_imports(acc)),
         diagnostics,
     )
-    .with_import_hint(import_hint);
+    .with_import_hint(import_hint)
+    .with_internal_callers(
+        acc.generated_files
+            .iter()
+            .cloned()
+            .chain(
+                acc.file_contents
+                    .keys()
+                    .filter(|file| dream_stdlib::package_for_source(file).is_some())
+                    .cloned(),
+            )
+            .collect(),
+    );
     dream_abi::attributes::validate_program_attributes(
         &acc.all_structs,
         &acc.all_interfaces,
@@ -109,7 +121,7 @@ fn reader(kind: ArgKind, ty: &str, index: &str) -> String {
         ArgKind::Int => format!("({ty})a.long_arg({index})"),
         ArgKind::Enum => format!("a.enum_member({index})"),
         ArgKind::Path => {
-            format!("DeclarationPath(a.args.get({index}).value, a.args.get({index}).symbol)")
+            format!("DeclarationPath(a.args[{index}].value, a.args[{index}].symbol)")
         }
     }
 }

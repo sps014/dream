@@ -38,7 +38,7 @@ fun ce1_verify_observation(borrow value: string): void {
     let wanted = "250\n40\n";
     let end = ce1_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ce1_cursor, end));
+    Assert.eq(actual, wanted.substring(ce1_cursor, end));
     ce1_cursor = end;
 }
 

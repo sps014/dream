@@ -39,7 +39,7 @@ fun c240_verify_observation(borrow value: string): void {
     let wanted = "2 4 6 8 10\n2,3 4,5\n";
     let end = c240_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c240_cursor, end));
+    Assert.eq(actual, wanted.substring(c240_cursor, end));
     c240_cursor = end;
 }
 

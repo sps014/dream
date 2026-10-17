@@ -1,0 +1,50 @@
+module system.io;
+
+// Byte input with partial reads and optional positioning; operations report I/O failures.
+public interface Reader {
+    // Reads at most `max_bytes` bytes; empty success means EOF for a positive size.
+    // A zero size consumes nothing; negative sizes and closed resources return errors.
+    unique fun read(max_bytes: int): Result<byte[], IoError>;
+
+    // Moves to an absolute byte position; unsupported readers return `ENOTSUP`.
+    // A failed seek preserves the previous logical position.
+    public unique fun seek(position: long): Result<bool, IoError> {
+        return Result.Err(IoError("", "ENOTSUP", "stream is not seekable"));
+    }
+
+    // Returns the logical byte position, or `ENOTSUP` when positioning is unavailable.
+    public fun tell(): Result<long, IoError> {
+        return Result.Err(IoError("", "ENOTSUP", "stream has no position"));
+    }
+
+    // Collects exactly `count` bytes, retrying short reads; premature EOF returns `EEOF`.
+    // Errors may occur after input has already been consumed; negative counts are invalid.
+    public fun read_exact(count: int): Result<byte[], IoError> {
+        if count < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if count == 0 {
+            let bytes = this.read(0)?;
+            if bytes.length != 0 {
+                return Result.Err(IoError.other("", "reader exceeded requested size"));
+            }
+            return Result.Ok(bytes);
+        }
+        let output = Buffer.alloc<byte>(count);
+        let offset = 0;
+        while offset < count {
+            let bytes = this.read(count - offset)?;
+            if bytes.length == 0 {
+                return Result.Err(IoError("", "EEOF", "unexpected end of stream"));
+            }
+            if bytes.length > count - offset {
+                return Result.Err(IoError.other("", "reader exceeded requested size"));
+            }
+            for (let i = 0; i < bytes.length; i = i + 1) {
+                output[offset + i] = bytes[i];
+            }
+            offset = offset + bytes.length;
+        }
+        return Result.Ok(output);
+    }
+}

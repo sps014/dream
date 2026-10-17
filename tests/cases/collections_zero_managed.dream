@@ -1,3 +1,5 @@
+module system.core;
+
 import system;
 import system.collections;
 
@@ -21,12 +23,12 @@ fun exercise(): void {
     let popped = xs.pop().unwrap();
     System.println(popped.n);
     xs.clear();
-    let entries = Buffer.alloc<Entry>(2);
+    let entries = Array.alloc<Entry>(2);
     entries[0] = Entry("one");
     entries[1] = Entry("two");
     Buffer.truncate(entries, 1);
     Buffer.clear(entries);
-    let slots = Buffer.alloc<Slot>(2);
+    let slots = Array.alloc<Slot>(2);
     slots[0] = Slot.Value("three");
     slots[1] = Slot.Value("four");
     Buffer.truncate(slots, 1);

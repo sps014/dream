@@ -31,7 +31,15 @@ impl<'a> Analyzer<'a> {
         let expr_type =
             self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?;
         self.current_expected_type = saved_expected;
-        self.check_type_not_static_class(target_type, diagnostics);
+        self.check_declared_type(
+            target_type,
+            &self
+                .current_generic_bindings
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            diagnostics,
+        );
         let inner_hir = self.hir_take();
         let expr_id = inner_hir
             .as_ref()

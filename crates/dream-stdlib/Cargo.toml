@@ -13,3 +13,6 @@ dream-diagnostics = { path = "../dream-diagnostics" }
 dream-syntax = { path = "../dream-syntax" }
 dream-abi = { path = "../dream-abi" }
 indexmap = "2"
+
+[dev-dependencies]
+heck = "0.5"

@@ -29,7 +29,7 @@ fun c61_verify_observation(borrow value: string): void {
     let wanted = "0.5 4\n0.5 4\n";
     let end = c61_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c61_cursor, end));
+    Assert.eq(actual, wanted.substring(c61_cursor, end));
     c61_cursor = end;
 }
 

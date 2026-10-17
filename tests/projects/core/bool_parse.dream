@@ -27,7 +27,7 @@ fun c50_verify_observation(borrow value: string): void {
     let wanted = "true\nfalse\nEPARSE\nEPARSE\n";
     let end = c50_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c50_cursor, end));
+    Assert.eq(actual, wanted.substring(c50_cursor, end));
     c50_cursor = end;
 }
 

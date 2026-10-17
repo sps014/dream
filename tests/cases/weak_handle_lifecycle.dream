@@ -1,26 +1,23 @@
-// Weak handles do not keep their target alive; `is_dead()` flips when the target drops.
-// Alive-case ref_count stays 1: the handle is non-owning.
-
 import system;
 
-public class Session {
+class Session {
     public id: int;
-    public constructor(id: int) { this.id = id; }
+    public constructor(id: int) {
+        this.id = id;
+    }
+}
+
+fun make_and_drop(): fun(): Option<Session> {
+    let session = Session(1);
+    let weak observer = session;
+    return () => observer;
 }
 
 fun main(): void {
-    // Dead case: target scoped out before the check.
-    let wb = make_and_drop();
-    System.println(wb.is_dead());
-
-    // Alive case: target held by a live local.
+    let dead = make_and_drop();
+    System.println(dead().is_none());
     let engine = Session(99);
-    let wa = Weak<Session>(engine);
-    System.println(wa.is_dead());
+    let weak alive = engine;
+    System.println(alive.is_none());
     System.println(Debug.ref_count(engine).to_string());
-}
-
-fun make_and_drop(): Weak<Session> {
-    let s = Session(1);
-    return Weak<Session>(s);
 }

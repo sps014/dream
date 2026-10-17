@@ -15,13 +15,13 @@ fun c121_body(): void {
         let decoded = Json.deserialize<JsonValue>(input).unwrap().as_string().unwrap();
         valid = valid && decoded == expected;
         if n > 0 {
-            string.set(input, 1, 'Z');
+            input[1] = 'Z';
             valid = valid && decoded == expected;
         }
         let escaped = "\"" + expected + "\\n" + expected + "\"";
         let with_escape = Json.deserialize<JsonValue>(escaped).unwrap().as_string().unwrap();
         valid = valid && with_escape == expected + "\n" + expected;
-        let truncated = JsonParser("\"" + expected, 0).parse_string();
+        let truncated = Json.deserialize<JsonValue>("\"" + expected).unwrap().as_string().unwrap();
         valid = valid && truncated == expected;
     }
     c121_verify_observation((valid).to_string());
@@ -34,7 +34,7 @@ fun c121_verify_observation(borrow value: string): void {
     let wanted = "true\n";
     let end = c121_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c121_cursor, end));
+    Assert.eq(actual, wanted.substring(c121_cursor, end));
     c121_cursor = end;
 }
 

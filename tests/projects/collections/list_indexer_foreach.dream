@@ -10,7 +10,7 @@ fun c134_body() {
     xs.push(2);
     xs.push(3);
 
-    xs[2] = 30; // List.set(2, 30)
+    xs[2] = 30;
 
     let sum = 0;
     for (let x in xs) { // x is the unwrapped element (int)
@@ -27,7 +27,7 @@ fun c134_verify_observation(borrow value: string): void {
     let wanted = "33\n3\n";
     let end = c134_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c134_cursor, end));
+    Assert.eq(actual, wanted.substring(c134_cursor, end));
     c134_cursor = end;
 }
 

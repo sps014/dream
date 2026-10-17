@@ -1,25 +1,5 @@
 module system.uuid;
 
-// Invalid UUID text or an unavailable secure entropy source.
-public class UuidError: Error {
-    detail: string;
-
-    // Creates a UUID error without including secret input.
-    public constructor(message: string) {
-        this.detail = message;
-    }
-
-    // Stable UUID error code.
-    public fun code(): string {
-        return "EUUID";
-    }
-
-    // Human-readable validation or entropy failure.
-    public fun message(): string {
-        return this.detail;
-    }
-}
-
 // A 16-byte UUID value; assignment copies bits without allocation or reference counting.
 public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
     high: ulong;

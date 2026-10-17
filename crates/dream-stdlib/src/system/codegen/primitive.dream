@@ -1,0 +1,40 @@
+module system.codegen;
+import system;
+import system.collections;
+
+// The program model a `@generator` reads through `GenContext`: declarations with resolved type
+// references and typed attribute access, syntax-block sites and call sites. Every node has a
+// stable `id` (`module::Name`, `module::Name.member`, `site:file:line:col`, `call:...`) that
+// diagnostics are anchored to.
+
+// Built-in scalar types.
+public enum Primitive {
+    /// Identifies not primitive types.
+    NotPrimitive,
+    /// Identifies int types.
+    Int,
+    /// Identifies long types.
+    Long,
+    /// Identifies uint types.
+    UInt,
+    /// Identifies ulong types.
+    ULong,
+    /// Identifies isize types.
+    ISize,
+    /// Identifies usize types.
+    USize,
+    /// Identifies byte types.
+    Byte,
+    /// Identifies float types.
+    Float,
+    /// Identifies double types.
+    Double,
+    /// Identifies bool types.
+    Bool,
+    /// Identifies char types.
+    Char,
+    /// Identifies string types.
+    String,
+    /// Identifies object types.
+    Object
+}

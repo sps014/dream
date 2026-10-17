@@ -9,41 +9,41 @@ import system.text;
 @timeout(180000)
 fun datetime_basic(): void {
     let dt = DateTime.of(2026, 7, 2, 10, 35, 0, 250);
-    Assert.eq_str((dt.to_iso8601()).to_string(), "2026-07-02T10:35:00.250Z");
-    Assert.eq_str((dt.year).to_string(), "2026");
-    Assert.eq_str((dt.month).to_string(), "7");
-    Assert.eq_str((dt.day).to_string(), "2");
-    Assert.eq_str((dt.hour).to_string(), "10");
-    Assert.eq_str((dt.minute).to_string(), "35");
-    Assert.eq_str((dt.second).to_string(), "0");
-    Assert.eq_str((dt.millisecond).to_string(), "250");
-    Assert.eq_str((dt.day_of_week).to_string(), "4");
-    Assert.eq_str((dt.day_of_year).to_string(), "183");
+    Assert.eq((dt.to_iso8601()).to_string(), "2026-07-02T10:35:00.250Z");
+    Assert.eq((dt.year).to_string(), "2026");
+    Assert.eq((dt.month).to_string(), "7");
+    Assert.eq((dt.day).to_string(), "2");
+    Assert.eq((dt.hour).to_string(), "10");
+    Assert.eq((dt.minute).to_string(), "35");
+    Assert.eq((dt.second).to_string(), "0");
+    Assert.eq((dt.millisecond).to_string(), "250");
+    Assert.eq((dt.day_of_week).to_string(), "4");
+    Assert.eq((dt.day_of_year).to_string(), "183");
 
     let later = dt.add_days(30);
-    Assert.eq_str((later.to_iso8601()).to_string(), "2026-08-01T10:35:00.250Z");
+    Assert.eq((later.to_iso8601()).to_string(), "2026-08-01T10:35:00.250Z");
 
     let earlier = dt.add_hours(0L - 15L);
-    Assert.eq_str((earlier.to_iso8601()).to_string(), "2026-07-01T19:35:00.250Z");
+    Assert.eq((earlier.to_iso8601()).to_string(), "2026-07-01T19:35:00.250Z");
 
-    Assert.eq_str((dt.is_before(later)).to_string(), "true");
-    Assert.eq_str((later.is_after(dt)).to_string(), "true");
-    Assert.eq_str((dt.equals(dt)).to_string(), "true");
-    Assert.eq_str((dt.compare_to(later)).to_string(), "-1");
-    Assert.eq_str((later.compare_to(dt)).to_string(), "1");
-    Assert.eq_str((dt.compare_to(dt)).to_string(), "0");
+    Assert.eq((dt.is_before(later)).to_string(), "true");
+    Assert.eq((later.is_after(dt)).to_string(), "true");
+    Assert.eq((dt.equals(dt)).to_string(), "true");
+    Assert.eq((dt.compare_to(later)).to_string(), "-1");
+    Assert.eq((later.compare_to(dt)).to_string(), "1");
+    Assert.eq((dt.compare_to(dt)).to_string(), "0");
 
     let epoch = DateTime.from_epoch_millis(0L);
-    Assert.eq_str((epoch.to_iso8601()).to_string(), "1970-01-01T00:00:00.000Z");
+    Assert.eq((epoch.to_iso8601()).to_string(), "1970-01-01T00:00:00.000Z");
 
     // A fixed offset (+05:30, e.g. IST) constructed directly from an instant + offset.
     let offset_dt = DateTime(19800000L, 330);
-    Assert.eq_str((offset_dt.to_iso8601()).to_string(), "1970-01-01T11:00:00.000+05:30");
-    Assert.eq_str((offset_dt.to_utc().to_iso8601()).to_string(), "1970-01-01T05:30:00.000Z");
-    Assert.eq_str((offset_dt.to_string()).to_string(), "1970-01-01 11:00:00 +05:30");
+    Assert.eq((offset_dt.to_iso8601()).to_string(), "1970-01-01T11:00:00.000+05:30");
+    Assert.eq((offset_dt.to_utc().to_iso8601()).to_string(), "1970-01-01T05:30:00.000Z");
+    Assert.eq((offset_dt.to_string()).to_string(), "1970-01-01 11:00:00 +05:30");
 
     // Dates before the epoch exercise the floor-division paths.
     let before_epoch = DateTime.of(1969, 12, 31, 23, 59, 59, 500);
-    Assert.eq_str((before_epoch.to_iso8601()).to_string(), "1969-12-31T23:59:59.500Z");
-    Assert.eq_str((before_epoch.day_of_week).to_string(), "3");
+    Assert.eq((before_epoch.to_iso8601()).to_string(), "1969-12-31T23:59:59.500Z");
+    Assert.eq((before_epoch.day_of_week).to_string(), "3");
 }

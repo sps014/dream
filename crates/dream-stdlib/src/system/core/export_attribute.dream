@@ -1,0 +1,5 @@
+module system.core;
+
+/// Exports a non-generic synchronous function through a plain C ABI wrapper.
+@attribute(AttributeTarget.Function)
+public struct ExportAttribute {}

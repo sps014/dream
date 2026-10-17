@@ -98,7 +98,7 @@ fun cc7_verify_observation(borrow value: string): void {
     let wanted = "boom1!\nfiller2\nboom1!\nboom1\n7\nNamed(a3)\nBlank\nend\n";
     let end = cc7_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cc7_cursor, end));
+    Assert.eq(actual, wanted.substring(cc7_cursor, end));
     cc7_cursor = end;
 }
 

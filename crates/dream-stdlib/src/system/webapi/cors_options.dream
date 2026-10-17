@@ -1,0 +1,42 @@
+module system.webapi;
+
+// FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are comma-separated
+// (`"*"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is
+// echoed instead, matching Starlette).
+public class CorsOptions {
+    /// Allowed request origins, or `*` for any origin.
+    public allow_origins: string;
+
+    /// Allowed HTTP methods, or `*` to allow all.
+    public allow_methods: string;
+
+    /// Allowed request headers, or `*` to allow all.
+    public allow_headers: string;
+
+    /// Response headers that browsers may expose to cross-origin callers.
+    public expose_headers: string;
+
+    /// Whether cross-origin requests may include credentials.
+    public allow_credentials: bool;
+
+    /// How long browsers may cache preflight results, in seconds.
+    public max_age: int;
+
+    /// Creates a `CorsOptions` with `allow_origins`, `allow_methods`, `allow_headers`,
+    /// `expose_headers`, `allow_credentials`, `max_age`.
+    public constructor(
+        allow_origins: string = "*",
+        allow_methods: string = "*",
+        allow_headers: string = "*",
+        expose_headers: string = "",
+        allow_credentials: bool = false,
+        max_age: int = 600
+    ) {
+        this.allow_origins = allow_origins;
+        this.allow_methods = allow_methods;
+        this.allow_headers = allow_headers;
+        this.expose_headers = expose_headers;
+        this.allow_credentials = allow_credentials;
+        this.max_age = max_age;
+    }
+}

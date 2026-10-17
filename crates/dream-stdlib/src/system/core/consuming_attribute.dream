@@ -1,0 +1,5 @@
+module system.core;
+
+/// Marks an extern whose reference parameters transfer ownership to the host, which must release them. Extern parameters are otherwise passed borrowed, since a host cannot release a Dream reference.
+@attribute(AttributeTarget.ExternFunction)
+public struct ConsumingAttribute {}

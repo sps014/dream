@@ -9,7 +9,7 @@ class ca1_Cache {
     count: int;
 
     public constructor() {
-        this.entries = Buffer.alloc<string>(16);
+        this.entries = Array.alloc<string>(16);
         this.count = 0;
     }
 
@@ -45,7 +45,7 @@ fun ca1_verify_observation(borrow value: string): void {
     let wanted = "0\n";
     let end = ca1_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(ca1_cursor, end));
+    Assert.eq(actual, wanted.substring(ca1_cursor, end));
     ca1_cursor = end;
 }
 

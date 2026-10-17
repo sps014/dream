@@ -1,0 +1,35 @@
+module system.webapi.auth;
+
+/// One external OIDC identity provider. Redirect URIs must match the registered callback exactly.
+public class OidcOptions {
+    /// Name identifying this entry.
+    public name: string;
+
+    /// Identity of the token issuer.
+    public issuer: string;
+
+    /// Application identifier registered with the identity provider.
+    public client_id: string;
+
+    /// Confidential client credential; keep this value secret.
+    public client_secret: string;
+
+    /// Registered callback URL receiving the authorization response.
+    public redirect_uri: string;
+
+    /// Creates a `OidcOptions` with `name`, `issuer`, `client_id`, `redirect_uri`,
+    /// `client_secret`.
+    public constructor(
+        name: string,
+        issuer: string,
+        client_id: string,
+        redirect_uri: string,
+        client_secret: string = ""
+    ) {
+        this.name = name;
+        this.issuer = issuer;
+        this.client_id = client_id;
+        this.redirect_uri = redirect_uri;
+        this.client_secret = client_secret;
+    }
+}

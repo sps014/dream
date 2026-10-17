@@ -1,0 +1,8 @@
+module system.core;
+
+/// Binds an external declaration to the specified built-in operation.
+@attribute(AttributeTarget.ExternFunction)
+public struct IntrinsicAttribute {
+    /// Operation associated with this intrinsic declaration.
+    public operation: Intrinsic;
+}

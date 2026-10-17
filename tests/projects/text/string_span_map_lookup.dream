@@ -37,7 +37,7 @@ fun c22c_verify_observation(borrow value: string): void {
     let wanted = "apple=1 true 1\npear=2 true 2\nplum=-1 false 0\n2\ntrue\nfalse\n";
     let end = c22c_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c22c_cursor, end));
+    Assert.eq(actual, wanted.substring(c22c_cursor, end));
     c22c_cursor = end;
 }
 

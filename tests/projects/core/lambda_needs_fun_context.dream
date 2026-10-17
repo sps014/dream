@@ -6,5 +6,5 @@ import system;
 @timeout(180000)
 fun lambda_needs_fun_context(): void {
     let f = (x: int) => x * 2;
-    Assert.eq_str((f(21)).to_string(), "42");
+    Assert.eq((f(21)).to_string(), "42");
 }

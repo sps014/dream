@@ -55,7 +55,7 @@ async fun value(n: int): int {
 async fun burst(n: int, iters: int): int {
     let total = 0;
     for (let round = 0; round < iters; round = round + 1) {
-        let pending = Buffer.alloc<Future<int>>(n);
+        let pending = Array.alloc<Future<int>>(n);
         for (let i = 0; i < n; i = i + 1) {
             pending[i] = value(i);
         }

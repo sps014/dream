@@ -18,8 +18,8 @@ async fun task_pool_typed(): void {
     let a = pool.dispatch(() => c254_square(3));
     let b = pool.dispatch(() => c254_square(4));
     let c = pool.dispatch_async(async () => c254_bump(5).await);
-    Assert.eq_str(((a.await.unwrap()).to_string()).to_string(), "9");
-    Assert.eq_str(((b.await.unwrap()).to_string()).to_string(), "16");
-    Assert.eq_str(((c.await.unwrap()).to_string()).to_string(), "6");
+    Assert.eq(((a.await.unwrap()).to_string()).to_string(), "9");
+    Assert.eq(((b.await.unwrap()).to_string()).to_string(), "16");
+    Assert.eq(((c.await.unwrap()).to_string()).to_string(), "6");
     pool.close().await.unwrap();
 }

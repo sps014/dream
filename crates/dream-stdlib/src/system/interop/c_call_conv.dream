@@ -1,0 +1,10 @@
+module system.interop;
+
+/// Calling convention for C imports.
+public enum CCallConv {
+    /// The platform default C calling convention.
+    Cdecl,
+    /// The stdcall convention on 32-bit Windows; equivalent to the default convention on other
+    /// targets.
+    Stdcall
+}

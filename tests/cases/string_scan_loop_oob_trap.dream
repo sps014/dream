@@ -7,7 +7,7 @@ fun main(): void {
     let sum = 0;
     let i = 0;
     while i <= s.length {
-        sum = sum + (int)s.char_at(i);
+        sum = sum + (int)s[i];
         i = i + 1;
     }
     System.println(sum);

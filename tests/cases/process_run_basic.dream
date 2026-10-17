@@ -45,7 +45,7 @@ async fun main(): void {
         expected.append("\n");
     }
     let roundtrip = Process.run(System.exe_path.unwrap(), roundtrip_args.take_array()).await.unwrap();
-    Assert.eq_str(roundtrip.stdout.replace("\r\n", "\n"), expected.to_string());
+    Assert.eq(roundtrip.stdout.replace("\r\n", "\n"), expected.to_string());
 
     let no_arguments: string[] = [];
     let missing = Process.run("dream-process-run-basic-missing-binary", no_arguments).await;

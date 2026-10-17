@@ -38,7 +38,7 @@ Dream's type system and compiler enforce the following in safe code — no `unsa
 | Constructor side effects preserved | Constructor bodies always run at allocation sites |
 | Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
 
-When these guarantees are not enough, the `@unsafe` tier (`RawPtr<T>`, `Buffer.realloc`, `Buffer.free`) provides manual control with explicit opt-in.
+When these guarantees are not enough, the `@unsafe` tier (`RawPtr<T>` and `Arena`) provides manual control with explicit opt-in.
 
 ## How it works
 

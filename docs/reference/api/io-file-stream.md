@@ -1,6 +1,8 @@
-# File Stream
+# FileStream
 
 **Import:** `import system.io;`
+
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `FileStream`
 
@@ -58,14 +60,6 @@ Compares the current position with the current file length, propagating errors. 
 public fun has_more(): Result<bool, IoError>
 ```
 
-## `position`
-
-Returns the current byte offset, or an I/O or closed-resource error.
-
-```dream
-public get position(): Result<long, IoError>
-```
-
 ## `length`
 
 Returns the current file length in bytes, or an I/O or closed-resource error.
@@ -96,14 +90,6 @@ Returns the current byte offset, accounting for buffered read-ahead.
 
 ```dream
 public fun tell(): Result<long, IoError>
-```
-
-## `reset`
-
-Seeks to byte zero; propagates positioning errors without changing position on failure.
-
-```dream
-public fun reset(): Result<bool, IoError>
 ```
 
 ## `close`

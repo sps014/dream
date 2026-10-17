@@ -8,7 +8,7 @@ fun c1fc_sum(s: Span<int>): int {
     let total = 0;
     let i = 0;
     while i < s.length {
-        total = total + s.get(i);
+        total = total + s[i];
         i = i + 1;
     }
     return total;
@@ -26,7 +26,7 @@ fun c1fc_body(): void {
     c1fc_verify_observation((c1fc_sum(mid)).to_string()); // 9
 
     // Writing through a span mutates the backing array.
-    mid.set(0, 20);
+    mid[0] = 20;
     c1fc_verify_observation((xs[1]).to_string()); // 20
 
     let copy = mid.to_array();
@@ -45,7 +45,7 @@ fun c1fc_verify_observation(borrow value: string): void {
     let wanted = "5\n15\n3\n9\n20\n3\n20\n7\n";
     let end = c1fc_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1fc_cursor, end));
+    Assert.eq(actual, wanted.substring(c1fc_cursor, end));
     c1fc_cursor = end;
 }
 

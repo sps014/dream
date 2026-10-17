@@ -1,16 +1,8 @@
 module system.json;
 
-internal static class JsonStorage {
-    @intrinsic(Intrinsic.StringJsonBoundary)
-    internal static extern fun boundary(borrow text: string, start: int): int;
-
-    @intrinsic(Intrinsic.StringCloneRange)
-    internal static extern fun clone_range(borrow text: string, start: int, end: int): string;
-}
-
 // Code-unit cursor recursive-descent JSON parser over the input string
 // (`char_at` / `.length`) — no intermediate `byte[]` copy.
-public class JsonParser {
+internal class JsonParser {
     text: string;
     pos: int;
     invalid: bool;
@@ -27,11 +19,11 @@ public class JsonParser {
     }
 
     fun b(): int {
-        return this.text.char_at(this.pos).to_int();
+        return ((int)this.text.char_at(this.pos));
     }
 
     fun b_at(i: int): int {
-        return this.text.char_at(i).to_int();
+        return ((int)this.text.char_at(i));
     }
 
     /// Advances past JSON whitespace.
@@ -350,7 +342,7 @@ public class JsonParser {
                 }
             }
             let value = this.parse_value();
-            result.set(key, value);
+            result[key] = value;
             this.skip_ws();
             if this.pos >= this.len() {
                 going = false;

@@ -1,0 +1,5 @@
+module system.webapi;
+
+/// Extracts the request body as text, bytes or a JSON model.
+@attribute(AttributeTarget.Parameter)
+public struct BodyAttribute {}

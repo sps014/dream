@@ -1,0 +1,12 @@
+module system.net;
+
+// Availability of raw sockets independently of the host's HTTP support.
+public static class SocketCapabilities {
+    @runtime("netCapabilities")
+    static extern fun flags_host(): int;
+
+    // True on native and Node; browsers return EUNSUPPORTED for raw socket requests.
+    public static get supported(): bool {
+        return (SocketCapabilities.flags_host() & 8) != 0;
+    }
+}

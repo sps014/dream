@@ -313,7 +313,7 @@ struct ValueVisit: Comparable<ValueVisit> {
 
 fun shortest_sum_class(borrow g: List<Vertex>, src: int): int {
     let n = g.length;
-    let dist = Buffer.alloc<int>(n);
+    let dist = Array.alloc<int>(n);
     let i = 0;
     while i < n {
         dist[i] = 2147483647;
@@ -371,7 +371,7 @@ fun bench_graph_paths_class(iters: int): void {
 
 fun shortest_sum_value(borrow g: List<Vertex>, src: int): int {
     let n = g.length;
-    let dist = Buffer.alloc<int>(n);
+    let dist = Array.alloc<int>(n);
     let i = 0;
     while i < n {
         dist[i] = 2147483647;
@@ -448,7 +448,7 @@ async fun bench_async_fanout(iters: int): void {
     let acc = 0;
     let i = 0;
     while i < iters {
-        let batch = Buffer.alloc<Future<int>>(64);
+        let batch = Array.alloc<Future<int>>(64);
         let k = 0;
         while k < 64 {
             batch[k] = mid_job(i + k * 4);
@@ -484,7 +484,7 @@ fun chunk_work(seed: int): int {
 }
 
 async fun bench_task_parallel(iters: int): void {
-    let seeds = Buffer.alloc<int>(16);
+    let seeds = Array.alloc<int>(16);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;

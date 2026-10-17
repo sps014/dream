@@ -1,0 +1,15 @@
+import system;
+import system.io;
+
+fun main(): void {
+    let temporary = TempFile.create().unwrap();
+    let input: Reader = System.stdin;
+    if !input.read(-1).is_err() || input.read(0).unwrap().length != 0 {
+        System.panic("invalid stdin read size handling");
+    }
+    Streams.copy(input, temporary.file).unwrap();
+    temporary.file.seek(0L).unwrap();
+    Streams.copy(temporary.file, System.stdout).unwrap();
+    System.stdout.flush().unwrap();
+    temporary.close().unwrap();
+}

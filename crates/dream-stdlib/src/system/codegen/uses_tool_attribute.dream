@@ -1,0 +1,9 @@
+module system.codegen;
+
+/// Declares a pinned external tool that the generator may request.
+@repeatable
+@attribute(AttributeTarget.Function)
+public struct UsesToolAttribute {
+    /// Name identifying this entry.
+    public name: string;
+}

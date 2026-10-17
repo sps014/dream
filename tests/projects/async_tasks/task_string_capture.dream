@@ -6,5 +6,5 @@ import system.task;
 @timeout(180000)
 async fun task_string_capture(): void {
     let name = "dream";
-    Assert.eq_str((Task.spawn(() => "hello, " + name).await).to_string(), "hello, dream");
+    Assert.eq((Task.spawn(() => "hello, " + name).await).to_string(), "hello, dream");
 }

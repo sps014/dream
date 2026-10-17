@@ -14,7 +14,7 @@ class cea_Util {
 @test
 @timeout(180000)
 fun generic_static_method_call(): void {
-    Assert.eq_str((cea_Util.id(42)).to_string(), "42");
-    Assert.eq_str((cea_Util.id("hi")).to_string(), "hi");
-    Assert.eq_str((cea_Util.pair(1, true)).to_string(), "1,true");
+    Assert.eq((cea_Util.id(42)).to_string(), "42");
+    Assert.eq((cea_Util.id("hi")).to_string(), "hi");
+    Assert.eq((cea_Util.pair(1, true)).to_string(), "1,true");
 }

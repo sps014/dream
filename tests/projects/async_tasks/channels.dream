@@ -17,7 +17,7 @@ async fun channels(): void {
     Time.delay(1).await;
     source.cancel();
     Assert.is_true(blocked.await.unwrap_err() == ChannelError.Cancelled);
-    Assert.eq_str(receiver.receive().await.unwrap().unwrap(), "first");
+    Assert.eq(receiver.receive().await.unwrap().unwrap(), "first");
     sender.close();
     sender.close();
     Assert.is_true(receiver.receive().await.unwrap().is_none());
@@ -47,7 +47,7 @@ async fun channels(): void {
 
     let shared_queue = Channel.shared_bounded<string>(2).unwrap();
     let owner_receiver = shared_queue.receiver;
-    let workers = Buffer.alloc<Future<int>>(4);
+    let workers = Array.alloc<Future<int>>(4);
     for (let producer_id = 0; producer_id < 4; producer_id = producer_id + 1) {
         let worker_sender = shared_queue.sender;
         let base = producer_id * 50;
@@ -63,7 +63,7 @@ async fun channels(): void {
         workers[producer_id] = worker;
         Promise.start(worker);
     }
-    let seen = Buffer.alloc<bool>(200);
+    let seen = Array.alloc<bool>(200);
     let count = 0;
     while true {
         let item = owner_receiver.receive().await.unwrap();

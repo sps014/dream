@@ -88,9 +88,15 @@ pub struct UserAttributes {
     pub(super) modules: BTreeMap<String, String>,
     pub(super) imports: BTreeMap<String, Vec<String>>,
     import_hint: Option<fn(&str) -> Option<String>>,
+    internal_callers: std::collections::BTreeSet<String>,
 }
 
 impl UserAttributes {
+    pub fn with_internal_callers(mut self, files: std::collections::BTreeSet<String>) -> Self {
+        self.internal_callers = files;
+        self
+    }
+
     pub fn with_import_hint(mut self, hint: fn(&str) -> Option<String>) -> Self {
         self.import_hint = Some(hint);
         self
@@ -155,7 +161,9 @@ impl UserAttributes {
             .unwrap_or("");
         match visibility {
             Visibility::Private => declaration_file == file,
-            Visibility::Internal => module == own,
+            Visibility::Internal => {
+                module == own || file.is_some_and(|f| self.internal_callers.contains(f))
+            }
             Visibility::Public => {
                 module == own
                     || matches!(module, "system.core" | "system.primitives")

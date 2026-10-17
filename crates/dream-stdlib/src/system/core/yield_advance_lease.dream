@@ -1,0 +1,25 @@
+module system.core;
+
+/// Releases a producer's pending advancement when the consumer's scope ends.
+@allow_cycle
+public class YieldAdvanceLease<T> {
+    cursor: YieldAsyncCursor<T>;
+    complete_: bool;
+
+    /// Creates a `YieldAdvanceLease` with `cursor`.
+    public constructor(cursor: YieldAsyncCursor<T>) {
+        this.cursor = cursor;
+        this.complete_ = false;
+    }
+
+    /// Completes the pending signal or advancement operation.
+    public fun complete(): void {
+        this.complete_ = true;
+    }
+
+    fun del() {
+        if !this.complete_ {
+            this.cursor.close();
+        }
+    }
+}

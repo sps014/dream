@@ -31,8 +31,8 @@ struct c114_Box<T> {
 fun json_generic_class(): void {
     let b = c114_Box<c114_Point>(c114_Point(3, 4));
     let s = Json.serialize<c114_Box<c114_Point>>(b);
-    Assert.eq_str((s).to_string(), "{\"value\":{\"x\":3,\"y\":4}}");
+    Assert.eq((s).to_string(), "{\"value\":{\"x\":3,\"y\":4}}");
     let back = Json.deserialize<c114_Box<c114_Point>>(s).unwrap_or(b);
-    Assert.eq_str((back.value.x).to_string(), "3");
-    Assert.eq_str((back.value.y).to_string(), "4");
+    Assert.eq((back.value.x).to_string(), "3");
+    Assert.eq((back.value.y).to_string(), "4");
 }

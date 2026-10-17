@@ -18,7 +18,7 @@ public class MemoryAuthStore: AuthSessionStore {
         if this.sessions.contains(session.hash) {
             return Result.Err(AuthError("EDUPLICATE", "session already exists"));
         }
-        this.sessions.set(session.hash, session);
+        this.sessions[session.hash] = session;
         return Result.Ok(true);
     }
 
@@ -65,7 +65,7 @@ public class MemoryAuthStore: AuthSessionStore {
             return Result.Err(AuthError("EINVAL", "invalid refresh replacement"));
         }
         original.consumed = true;
-        this.sessions.set(replacement.hash, replacement);
+        this.sessions[replacement.hash] = replacement;
         return Result.Ok(replacement);
     }
 
@@ -97,7 +97,7 @@ public class MemoryAuthStore: AuthSessionStore {
         if this.transactions.contains(state) {
             return Result.Err(AuthError("EDUPLICATE", "transaction already exists"));
         }
-        this.transactions.set(state, transaction);
+        this.transactions[state] = transaction;
         return Result.Ok(true);
     }
 

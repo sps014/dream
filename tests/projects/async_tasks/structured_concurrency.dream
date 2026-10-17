@@ -192,7 +192,7 @@ async fun structured_concurrency(): void {
     Assert.is_true(failure.is_err());
     Assert.eq(observed_cleaned.count, 1);
     switch (failure.unwrap_err()) {
-        Failed(message) => Assert.eq_str(message, "first failure"),
+        Failed(message) => Assert.eq(message, "first failure"),
         _ => Assert.is_true(false),
     }
 

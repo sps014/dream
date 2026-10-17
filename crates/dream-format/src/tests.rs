@@ -497,3 +497,12 @@ fn opaque_payloads_in_statement_fragments_are_preserved() {
     let source = "System.println(\n    quote { Hello generators }\n);\n";
     assert_format(source, source);
 }
+
+#[test]
+fn weak_local_spacing() {
+    let source = "fun f():void{let weak observer=value;const weak other=value;}";
+    let formatted = format(source);
+    assert!(formatted.contains("let weak observer = value;"));
+    assert!(formatted.contains("const weak other = value;"));
+    assert_idempotent(source);
+}

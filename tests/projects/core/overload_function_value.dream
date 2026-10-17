@@ -23,8 +23,8 @@ fun overload_function_value(): void {
     let fi: fun(int, int): int = c194_add;
     let fd: fun(double, double): double = c194_add;
     let fs: fun(string, string): string = c194_add;
-    Assert.eq_str((fi(2, 3)).to_string(), "5");
-    Assert.eq_str((fd(1.0d, 2.0d)).to_string(), "3.5");
-    Assert.eq_str((fs("a", "b")).to_string(), "ab");
-    Assert.eq_str((c194_apply(c194_add, 4, 5)).to_string(), "9");
+    Assert.eq((fi(2, 3)).to_string(), "5");
+    Assert.eq((fd(1.0d, 2.0d)).to_string(), "3.5");
+    Assert.eq((fs("a", "b")).to_string(), "ab");
+    Assert.eq((c194_apply(c194_add, 4, 5)).to_string(), "9");
 }

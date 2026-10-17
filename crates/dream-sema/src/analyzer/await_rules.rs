@@ -109,7 +109,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics.report_error(message.to_string(), inner.position());
                 self.scan_expr_await(inner, message, diagnostics);
             }
-            StatementNode::Declaration(_, _, e, _)
+            StatementNode::Declaration(_, _, e, _, _)
             | StatementNode::Assignment(_, e)
             | StatementNode::IndexAssignment(_, _, e)
             | StatementNode::ExpressionStatement(e)

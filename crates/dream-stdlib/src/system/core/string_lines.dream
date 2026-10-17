@@ -1,0 +1,38 @@
+module system.core;
+
+// Cursor over the lines of a `ReadOnlySpan<char>`.
+public ref struct StringLines {
+    rest: ReadOnlySpan<char>;
+    _current: ReadOnlySpan<char>;
+
+    internal constructor(rest: ReadOnlySpan<char>) {
+        this.rest = rest;
+        this._current = rest.slice(0, 0);
+    }
+
+    /// Advances to the next segment; returns false at the end.
+    public fun move_next(): bool {
+        let r = this.rest;
+        if r._length == 0 {
+            return false;
+        }
+        let at = r.index_of('\n').unwrap_or(-1);
+        let line = r;
+        if at < 0 {
+            this.rest = r.slice(r._length);
+        } else {
+            line = r.slice(0, at);
+            this.rest = r.slice(at + 1);
+        }
+        if line.ends_with("\r") {
+            line = line.slice(0, line._length - 1);
+        }
+        this._current = line;
+        return true;
+    }
+
+    /// View of the segment selected by the last successful `move_next`.
+    public get current(): ReadOnlySpan<char> {
+        return this._current;
+    }
+}

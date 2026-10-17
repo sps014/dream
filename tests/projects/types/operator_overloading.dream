@@ -57,29 +57,29 @@ fun operator_overloading(): void {
     let b = c17e_Vector2(3, 4);
 
     let sum = a + b;
-    Assert.eq_str((sum.x).to_string(), "4");
-    Assert.eq_str((sum.y).to_string(), "6");
+    Assert.eq((sum.x).to_string(), "4");
+    Assert.eq((sum.y).to_string(), "6");
 
     let diff = a - b;
-    Assert.eq_str((diff.x).to_string(), "-2");
-    Assert.eq_str((diff.y).to_string(), "-2");
+    Assert.eq((diff.x).to_string(), "-2");
+    Assert.eq((diff.y).to_string(), "-2");
 
     let neg = -a;
-    Assert.eq_str((neg.x).to_string(), "-1");
-    Assert.eq_str((neg.y).to_string(), "-2");
+    Assert.eq((neg.x).to_string(), "-1");
+    Assert.eq((neg.y).to_string(), "-2");
 
-    Assert.eq_str((a == b).to_string(), "false");
-    Assert.eq_str((a == c17e_Vector2(1, 2)).to_string(), "true");
-    Assert.eq_str((a != b).to_string(), "true");
+    Assert.eq((a == b).to_string(), "false");
+    Assert.eq((a == c17e_Vector2(1, 2)).to_string(), "true");
+    Assert.eq((a != b).to_string(), "true");
 
-    Assert.eq_str(((string)a).to_string(), "(1, 2)");
+    Assert.eq(((string)a).to_string(), "(1, 2)");
 
     let cheap = c17e_Money(10);
     let pricey = c17e_Money(20);
-    Assert.eq_str((cheap < pricey).to_string(), "true");
-    Assert.eq_str((cheap > pricey).to_string(), "false");
-    Assert.eq_str((cheap <= c17e_Money(10)).to_string(), "true");
+    Assert.eq((cheap < pricey).to_string(), "true");
+    Assert.eq((cheap > pricey).to_string(), "false");
+    Assert.eq((cheap <= c17e_Money(10)).to_string(), "true");
 
     let cents: int = cheap;
-    Assert.eq_str((cents).to_string(), "10");
+    Assert.eq((cents).to_string(), "10");
 }

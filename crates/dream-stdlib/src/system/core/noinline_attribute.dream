@@ -1,0 +1,11 @@
+module system.core;
+
+/// Prevents inlining of the annotated function or method.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Constructor,
+    AttributeTarget.Destructor
+)
+public struct NoinlineAttribute {}

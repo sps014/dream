@@ -5,7 +5,7 @@ import system.testing;
 
 @test
 fun compression_streams(): void {
-    let input = Buffer.alloc<byte>(100000);
+    let input = Array.alloc<byte>(100000);
     for (let i = 0; i < input.length; i = i + 1) {
         input[i] = (byte)(i % 251);
     }

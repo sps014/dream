@@ -48,7 +48,7 @@ fun c11d_verify_observation(borrow value: string): void {
     let wanted = "{\n  \"name\": \"Ada\",\n  \"age\": 36,\n  \"address\": {\n    \"city\": \"London\",\n    \"zip\": \"NW1\"\n  },\n  \"tags\": [\n    \"dev\",\n    \"math\"\n  ]\n}\n{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    },\n    \"d\": []\n}\n{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}\n";
     let end = c11d_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c11d_cursor, end));
+    Assert.eq(actual, wanted.substring(c11d_cursor, end));
     c11d_cursor = end;
 }
 

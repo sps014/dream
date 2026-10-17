@@ -26,13 +26,13 @@ fun ref_basic(): void {
     let p: int = 1;
     let q: int = 2;
     c1cb_swap(ref p, ref q);
-    Assert.eq_str((p).to_string(), "2"); // 2
-    Assert.eq_str((q).to_string(), "1"); // 1
+    Assert.eq((p).to_string(), "2"); // 2
+    Assert.eq((q).to_string(), "1"); // 1
 
     c1cb_increment(ref p);
-    Assert.eq_str((p).to_string(), "3"); // 3
+    Assert.eq((p).to_string(), "3"); // 3
 
     let sum: int = c1cb_add_to_both(ref p, 10);
-    Assert.eq_str((sum).to_string(), "13"); // 13
-    Assert.eq_str((p).to_string(), "13"); // 13
+    Assert.eq((sum).to_string(), "13"); // 13
+    Assert.eq((p).to_string(), "13"); // 13
 }

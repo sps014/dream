@@ -26,11 +26,10 @@ fun main() {
 
 | Call | Meaning |
 | --- | --- |
-| `char_at(i)` / `s[i]` / `get(i)` | UTF-16 code unit at index |
-| `s[i] = c` / `set_at(i, c)` | replace a code unit |
+| `s[i]` | UTF-16 code unit at index |
+| `s[i] = c` | replace a code unit |
 | `byte_at(i)` | one payload byte (UTF-16 LE) |
 | `for (let c in s)` | walk code units |
-| `string.alloc(n)` | allocate `n` code units (low-level) |
 
 ## Search and transform
 
@@ -76,7 +75,7 @@ b.append_line(" world");
 System.println(b.build());
 ```
 
-Also: `append_char`, `append_int`, `append_long`, `append_double`, `append_bool`, `.length`, `is_empty()`, `clear()`, `to_string()`. `append_int` writes decimal digits into the builder (no intermediate `to_string()` allocation).
+Also: `append_char`, `append_int`, `append_long`, `append_double`, `append_bool`, `.length`, `is_empty()`, `clear()`, `build()`. `append_int` writes decimal digits into the builder (no intermediate `to_string()` allocation).
 
 ## Join an array of strings
 

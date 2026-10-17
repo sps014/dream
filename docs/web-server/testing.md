@@ -32,7 +32,7 @@ async fun health_test(): void {
         HttpRequest.get(Url.parse("http://127.0.0.1:" + port.to_string() + "/health").unwrap())
     ).await.unwrap();
     Assert.eq(response.status, 200);
-    Assert.eq_str(response.read_text().await.unwrap(), "ok");
+    Assert.eq(response.read_text().await.unwrap(), "ok");
     response.close();
     app.shutdown();
     app.wait().await;

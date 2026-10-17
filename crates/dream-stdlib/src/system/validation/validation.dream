@@ -49,7 +49,7 @@ public static class Validation {
         ) {
             return;
         }
-        if schema.get("$ref").is_some() {
+        if schema["$ref"].is_some() {
             let key = schema.get_or("$ref", JsonValue.none()).as_string().unwrap_or("");
             Validation.walk(
                 value,
@@ -88,15 +88,12 @@ public static class Validation {
                 .unwrap_or(List<JsonValue>());
             for (let key in properties.keys()) {
                 let rule = properties.get_or(key, JsonValue.none());
-                let item = value.get(key);
-                if item.is_none() && rule.get("default").is_some() {
-                    value.set(
-                        key,
-                        Json.deserialize<JsonValue>(
-                            Json.serialize(rule.get_or("default", JsonValue.none()))
-                        ).unwrap()
-                    );
-                    item = value.get(key);
+                let item = value[key];
+                if item.is_none() && rule["default"].is_some() {
+                    value[key] = Json.deserialize<JsonValue>(
+                        Json.serialize(rule.get_or("default", JsonValue.none()))
+                    ).unwrap();
+                    item = value[key];
                 }
                 if item.is_some() {
                     Validation.walk(
@@ -121,7 +118,7 @@ public static class Validation {
             let extra = schema.get_or("additionalProperties", JsonValue.none());
             if extra.is_object() {
                 for (let key in value.keys()) {
-                    if properties.get(key).is_none() {
+                    if properties[key].is_none() {
                         Validation.walk(
                             value.get_or(key, JsonValue.none()),
                             extra,
@@ -133,7 +130,7 @@ public static class Validation {
                 }
             } else if !extra.as_bool().unwrap_or(false) {
                 for (let key in value.keys()) {
-                    if properties.get(key).is_none() {
+                    if properties[key].is_none() {
                         errors.add(Validation.child(location, key), "extra", "unknown field");
                     }
                 }

@@ -54,22 +54,3 @@ public static class Time {
     @runtime("timeNowNanos")
     static extern fun nano_time(): long;
 }
-
-// Cancelling a timer frame must also release the scheduler/host timer that owns its wakeup.
-// The guarded host/timer future cannot capture its owner.
-@allow_cycle
-class TimerGuard {
-    pending: Future<void>;
-
-    internal constructor(pending: Future<void>) {
-        this.pending = pending;
-    }
-
-    internal fun close(): void {
-        Promise.cancel(this.pending);
-    }
-
-    del() {
-        this.close();
-    }
-}

@@ -41,11 +41,11 @@ fun c28c_identity(value: c28c_Payload): c28c_Payload {
 fun value_argument_indirect_ownership(): void {
     let value = c28c_Payload("hello" + System.env_or("DREAM_VALUE_SUFFIX", " world"));
     let callback: fun(c28c_Payload): string = c28c_read;
-    Assert.eq_str((callback(value)).to_string(), "hello world");
-    Assert.eq_str((callback(value)).to_string(), "hello world");
-    Assert.eq_str((c28c_call_reader(c28c_Echo(), value)).to_string(), "hello world");
+    Assert.eq((callback(value)).to_string(), "hello world");
+    Assert.eq((callback(value)).to_string(), "hello world");
+    Assert.eq((c28c_call_reader(c28c_Echo(), value)).to_string(), "hello world");
     let identity_callback: fun(c28c_Payload): c28c_Payload = c28c_identity;
     let copy = identity_callback(value);
-    Assert.eq_str((copy.data).to_string(), "hello world");
-    Assert.eq_str((value.data).to_string(), "hello world");
+    Assert.eq((copy.data).to_string(), "hello world");
+    Assert.eq((value.data).to_string(), "hello world");
 }

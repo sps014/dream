@@ -1,0 +1,43 @@
+module system.webapi.auth;
+
+/// A refresh-token record. Stores contain only the digest of the bearer secret.
+public class AuthSession {
+    /// Hash of the refresh token; the raw refresh token is not stored.
+    public hash: string;
+
+    /// Identifier shared by successive refresh tokens for the same session.
+    public family: string;
+
+    /// Stable identifier of the authenticated account.
+    public subject: string;
+
+    /// Space-separated permissions granted to this account or token.
+    public scopes: string;
+
+    /// Expiry time in Unix epoch seconds.
+    public expires: long;
+
+    /// Secret used to validate requests made with session cookies.
+    public csrf: string;
+
+    /// Whether this refresh session has already been rotated.
+    public consumed: bool;
+
+    /// Creates a `AuthSession` with `hash`, `family`, `subject`, `scopes`, `expires`, `csrf`.
+    public constructor(
+        hash: string,
+        family: string,
+        subject: string,
+        scopes: string,
+        expires: long,
+        csrf: string
+    ) {
+        this.hash = hash;
+        this.family = family;
+        this.subject = subject;
+        this.scopes = scopes;
+        this.expires = expires;
+        this.csrf = csrf;
+        this.consumed = false;
+    }
+}

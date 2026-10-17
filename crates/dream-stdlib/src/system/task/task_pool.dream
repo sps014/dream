@@ -1,15 +1,5 @@
 module system.task;
 
-// Failures scheduling or closing a reusable worker pool.
-public enum TaskPoolError {
-    // Pool sizes must be positive.
-    InvalidSize,
-    // The pool no longer accepts work.
-    Closed,
-    // Cancellation was requested; any submitted work has settled before this is returned.
-    Cancelled,
-}
-
 // Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.
 @allow_cycle
 public class TaskPool {

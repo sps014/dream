@@ -10,9 +10,9 @@ fun borrow_after_last_use(): void {
     xs.push(1);
     xs.push(2);
     let cur = xs.iterator();
-    Assert.eq_str((cur.next().unwrap_or(-1)).to_string(), "1");
+    Assert.eq((cur.next().unwrap_or(-1)).to_string(), "1");
     // Cursor not used again — safe to mutate.
     xs.push(3);
     xs.sort();
-    Assert.eq_str((xs.length.to_string()).to_string(), "3");
+    Assert.eq((xs.length.to_string()).to_string(), "3");
 }

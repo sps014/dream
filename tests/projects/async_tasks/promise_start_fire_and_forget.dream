@@ -23,7 +23,7 @@ fun c1bc_verify_observation(borrow value: string): void {
     let wanted = "created\nworker ran\ndone\n";
     let end = c1bc_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1bc_cursor, end));
+    Assert.eq(actual, wanted.substring(c1bc_cursor, end));
     c1bc_cursor = end;
 }
 

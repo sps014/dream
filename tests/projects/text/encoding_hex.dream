@@ -22,7 +22,7 @@ fun cc4_verify_observation(borrow value: string): void {
     let wanted = "6869\nhi\nEPARSE\n";
     let end = cc4_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cc4_cursor, end));
+    Assert.eq(actual, wanted.substring(cc4_cursor, end));
     cc4_cursor = end;
 }
 

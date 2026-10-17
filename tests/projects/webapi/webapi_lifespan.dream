@@ -28,5 +28,5 @@ async fun webapi_lifespan(): void {
     ).unwrap();
     Assert.is_true(app.listen("127.0.0.1", 0).await.is_err());
     Assert.eq(order.length, 3);
-    Assert.eq_str(order.get(2), "stop-first");
+    Assert.eq(order[2], "stop-first");
 }

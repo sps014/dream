@@ -9,7 +9,7 @@
 #include <conio.h>
 #endif
 
-void print_int(int32_t v) { printf("%d", v); }
+void print_int(int32_t v) { printf("%d", v); fflush(stdout); }
 
 void print_char(int32_t c) {
     if (c == 10) {
@@ -66,9 +66,9 @@ static void print_float_shortest(float v) {
     fputs(text, stdout);
 }
 
-void print_float(float v) { print_float_shortest(v); }
+void print_float(float v) { print_float_shortest(v); fflush(stdout); }
 
-void print_double(double v) { printf("%.16g", v); }
+void print_double(double v) { printf("%.16g", v); fflush(stdout); }
 
 dream_ptr consoleReadLine(void) {
     char buf[4096];
@@ -94,7 +94,5 @@ int32_t consoleReadKey(void) {
     return fgetc(stdin);
 #endif
 }
-
-void consoleWriteStderr(dream_ptr text) { write_string(stderr, text); }
 
 void consoleExit(int32_t code) { exit(code); }

@@ -1,0 +1,15 @@
+module system.task;
+
+// Distinguishes backpressure, exhausted inputs, closed endpoints, and cancellation.
+public enum ChannelError {
+    // The queue has reached its configured capacity.
+    Full,
+    // No item is available yet.
+    Empty,
+    // The relevant endpoint has closed.
+    Closed,
+    // The pending operation was cancelled.
+    Cancelled,
+    // A bounded channel requires a positive capacity.
+    InvalidCapacity,
+}

@@ -127,7 +127,7 @@ public class HtmlCompiler {
     static fun tag_name_end(after: string): int {
         let i = 0;
         while i < after.length {
-            let c = after.char_at(i);
+            let c = after[i];
             if c.is_whitespace() || (c == '>') || (c == '/') {
                 return i;
             }
@@ -204,7 +204,7 @@ public class HtmlCompiler {
             if i > 0 {
                 joined_sb.append(", ");
             }
-            joined_sb.append(parts.get(i));
+            joined_sb.append(parts[i]);
             i = i + 1;
         }
         return HtmlResult.success("[" + joined_sb.build() + "]");
@@ -272,7 +272,7 @@ public class HtmlCompiler {
             if i > 0 {
                 joined_sb.append(" + ");
             }
-            joined_sb.append(parts.get(i));
+            joined_sb.append(parts[i]);
             i = i + 1;
         }
         return HtmlResult.success(joined_sb.build());
@@ -335,7 +335,7 @@ public class HtmlCompiler {
             }
             let end = end_opt.unwrap_or(0);
             if cur.i < splices.length {
-                result_parts.push("(" + splices.get(cur.i) + ")");
+                result_parts.push("(" + splices[cur.i] + ")");
                 cur.i = cur.i + 1;
             } else {
                 result_parts.push("(" + after.substring(0, end) + ")");
@@ -354,7 +354,7 @@ public class HtmlCompiler {
             if i > 0 {
                 joined_sb.append(" + ");
             }
-            joined_sb.append(result_parts.get(i));
+            joined_sb.append(result_parts[i]);
             i = i + 1;
         }
         return HtmlResult.success(joined_sb.build());

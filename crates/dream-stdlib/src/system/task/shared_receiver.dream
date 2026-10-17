@@ -1,0 +1,76 @@
+module system.task;
+
+// A shared consumer; queued values remain available after the last producer closes.
+shared public class SharedReceiver<T: shared> {
+    owner: SharedChannelState;
+    endpoint: usize;
+
+    internal constructor(owner: SharedChannelState) {
+        this.owner = owner;
+        this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 0);
+    }
+
+    // Creates an independently closable consumer on the same queue.
+    public fun clone(): SharedReceiver<T> {
+        return SharedReceiver<T>(this.owner);
+    }
+
+    // Attempts one receive, distinguishing Empty, closed endpoints, and drained EOF.
+    public fun try_receive(): Result<Option<T>, ChannelError> {
+        let carrier = SharedChannelHost.receive<T>(this.endpoint);
+        if carrier.length > 0 {
+            return Result.Ok(Option.Some(carrier[0]));
+        }
+        let status = SharedChannelHost.status(this.endpoint);
+        if status == 2 {
+            return Result.Err(ChannelError.Closed);
+        }
+        if status == 1 {
+            let end: Option<T> = Option.None;
+            return Result.Ok(end);
+        }
+        return Result.Err(ChannelError.Empty);
+    }
+
+    // Waits for a value or drained EOF using cross-worker notifications.
+    public fun receive(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Option<T>, ChannelError>> {
+        return SharedReceiver<T>.receive_owned(this, CancellationToken.resolve(token));
+    }
+
+    static async fun receive_owned(
+        receiver: SharedReceiver<T>,
+        token: Option<CancellationToken>
+    ): Result<Option<T>, ChannelError> {
+        while true {
+            if CancellationToken.is_cancelled_opt(token) {
+                return Result.Err(ChannelError.Cancelled);
+            }
+            let result = receiver.try_receive();
+            if result.is_ok() || result.unwrap_err() != ChannelError.Empty {
+                return result;
+            }
+            let waiting = SharedChannelWait(receiver.endpoint);
+            if token.is_some() {
+                let result = token.unwrap().wait(waiting.signal()).await;
+                waiting.close();
+                if result.is_err() {
+                    return Result.Err(ChannelError.Cancelled);
+                }
+            } else {
+                waiting.signal().await;
+                waiting.close();
+            }
+        }
+    }
+
+    // Closes this endpoint; the last consumer releases queued values and wakes blocked sends.
+    public fun close(): void {
+        SharedChannelHost.close(this.endpoint);
+    }
+
+    del() {
+        SharedChannelHost.free(this.endpoint);
+    }
+}

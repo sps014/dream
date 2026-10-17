@@ -21,8 +21,8 @@ fun ref_method(): void {
     let d: c1d1_Doubler = c1d1_Doubler();
     let n: int = 5;
     d.apply(ref n);
-    Assert.eq_str((n).to_string(), "10"); // 10
+    Assert.eq((n).to_string(), "10"); // 10
 
     c1d1_Doubler.apply_static(ref n);
-    Assert.eq_str((n).to_string(), "20"); // 20
+    Assert.eq((n).to_string(), "20"); // 20
 }

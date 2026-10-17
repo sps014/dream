@@ -1,0 +1,6 @@
+module system.json;
+
+// Derives JSON serialization for a class, struct or discriminated union: `to_json`,
+// `write_json` and `from_json`, written by the `system.json.derive` generator.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct, AttributeTarget.Union)
+public struct JsonAttribute {}

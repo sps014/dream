@@ -251,7 +251,7 @@ extend WebGenerator {
             } else if core.name == "double" || core.name == "float" {
                 kind = "number";
             }
-            rule.set("type", JsonValue.from_string(kind));
+            rule["type"] = JsonValue.from_string(kind);
             ValidationGenerator.constraints(attributes, rule);
             out.line(
                 "let "

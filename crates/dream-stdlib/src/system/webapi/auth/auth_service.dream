@@ -53,15 +53,12 @@ public class AuthService {
             || options.name.is_empty() || options.name.contains("/") {
             return Result.Err(AuthError("EINVAL", "invalid or duplicate OIDC provider"));
         }
-        this.providers.set(
+        this.providers[options.name] = OidcOptions(
             options.name,
-            OidcOptions(
-                options.name,
-                options.issuer,
-                options.client_id,
-                options.redirect_uri,
-                options.client_secret
-            )
+            options.issuer,
+            options.client_id,
+            options.redirect_uri,
+            options.client_secret
         );
         return Result.Ok(true);
     }
@@ -122,14 +119,11 @@ public class AuthService {
         refresh: string
     ): Result<AuthTokens, AuthError> {
         let claims = JsonValue.dict();
-        claims.set("sub", JsonValue.from_string(session.subject));
-        claims.set("scope", JsonValue.from_string(session.scopes));
-        claims.set("sid", JsonValue.from_string(session.family));
-        claims.set("iat", JsonValue.number((double)AuthCrypto.now()));
-        claims.set(
-            "exp",
-            JsonValue.number((double)(AuthCrypto.now() + (long)service.access_seconds))
-        );
+        claims["sub"] = JsonValue.from_string(session.subject);
+        claims["scope"] = JsonValue.from_string(session.scopes);
+        claims["sid"] = JsonValue.from_string(session.family);
+        claims["iat"] = JsonValue.number((double)AuthCrypto.now());
+        claims["exp"] = JsonValue.number((double)(AuthCrypto.now() + (long)service.access_seconds));
         let signed = AuthCrypto.jwt(service.jwt, "sign", claims)?;
         return Result.Ok(
             AuthTokens(

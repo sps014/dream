@@ -67,7 +67,7 @@ impl<'a> Analyzer<'a> {
 
             let resolved = match &global.declared_type {
                 Some(declared) => {
-                    self.check_type_not_static_class(declared, diagnostics);
+                    self.check_declared_type(declared, &[], diagnostics);
                     let expected = self.type_ctx.lower(declared);
                     let given = self.type_ctx.lower(&init_type);
                     let numeric = matches!(self.type_ctx.interner.kind(expected), dream_types::TyKind::Prim(p) if p.is_numeric())

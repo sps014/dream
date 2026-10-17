@@ -15,26 +15,3 @@ public class DependencyResource<T> {
         this.cleanup = cleanup;
     }
 }
-
-/// Generated, type-checked dependency replacement selection for one application.
-public class DependencyOverrides {
-    internal providers: Map<string, string>;
-
-    /// Creates a `DependencyOverrides` with `providers`.
-    public constructor(providers: Map<string, string>) {
-        this.providers = Map<string, string>();
-        for (let entry in providers.entries()) {
-            this.providers.set(entry.key, entry.value);
-        }
-    }
-}
-
-/// A typed reference box keeps cached primitive values out of the erased object representation.
-@allow_cycle
-internal class DependencyValue<T> {
-    internal value: T;
-
-    internal constructor(value: T) {
-        this.value = value;
-    }
-}

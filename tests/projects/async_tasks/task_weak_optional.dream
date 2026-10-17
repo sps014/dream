@@ -1,58 +1,24 @@
 import system.testing;
-import system;
 import system.task;
 
-shared class c25d_Session {
+shared class TaskWeakSession {
     public id: int;
-    public label: string;
-
     public constructor(id: int) {
         this.id = id;
-        this.label = "live" + " child";
     }
 }
 
-fun c25d_make_dead(): Weak<c25d_Session> {
-    return Weak<c25d_Session>(c25d_Session(7));
-}
-
-fun c25d_check(handle: Weak<c25d_Session>): bool {
-    switch (handle.get()) {
-        Some(value) => {
-            return value.id == 42 && value.label == "live child";
-        },
-        None => {
-            return false;
-        },
-    }
-}
-
-async fun c25d_body(): void {
-    let session = c25d_Session(42);
-    let alive = Weak<c25d_Session>(session);
-    let valid = Task.spawn(() => c25d_check(alive)).await;
-    c25d_verify_observation((valid).to_string());
-    c25d_verify_observation((session.id).to_string());
-    let dead = c25d_make_dead();
-    c25d_verify_observation((Task.spawn(() => dead.get().is_none()).await).to_string());
-}
-
-let c25d_cursor: int = 0;
-
-fun c25d_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "true\n42\ntrue\n";
-    let end = c25d_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c25d_cursor, end));
-    c25d_cursor = end;
+fun task_dead_weak_reader(): fun(): Option<TaskWeakSession> {
+    let weak dead = TaskWeakSession(7);
+    return () => dead;
 }
 
 @test
-@timeout(180000)
-
 async fun task_weak_optional(): void {
-    c25d_cursor = 0;
-    c25d_body().await;
-    Assert.eq(c25d_cursor, ("true\n42\ntrue\n").length);
+    let session = TaskWeakSession(42);
+    let weak alive = session;
+    Assert.is_true(Task.spawn(() => alive.unwrap().id == 42).await);
+    session.id = 43;
+    let dead = task_dead_weak_reader();
+    Assert.is_true(Task.spawn(() => dead().is_none()).await);
 }

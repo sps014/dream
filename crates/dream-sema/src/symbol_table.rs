@@ -14,6 +14,7 @@ pub struct SymbolTable {
     symbols: IndexMap<String, Symbol>,
     /// Names declared with `const` in this scope; reassigning them is an error.
     const_symbols: HashSet<String>,
+    weak_symbols: HashSet<String>,
     /// Locals (`let`/`const`/tuple bindings) subject to unused-variable warnings, with decl span.
     tracked_locals: IndexMap<String, TextSpan>,
     /// Names that have been read (not merely assigned to) in this scope or via lookup here.
@@ -34,6 +35,7 @@ impl SymbolTable {
         SymbolTable {
             symbols: IndexMap::new(),
             const_symbols: HashSet::new(),
+            weak_symbols: HashSet::new(),
             tracked_locals: IndexMap::new(),
             used_locals: HashSet::new(),
             parent: parent.as_ref().map(Rc::downgrade),
@@ -59,6 +61,20 @@ impl SymbolTable {
             Some(parent) => parent.borrow().is_const(name),
             None => false,
         }
+    }
+
+    pub fn mark_weak(&mut self, name: String) {
+        self.weak_symbols.insert(name);
+    }
+
+    pub fn is_weak(&self, name: &str) -> bool {
+        if self.symbols.contains_key(name) {
+            return self.weak_symbols.contains(name);
+        }
+        self.parent
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|parent| parent.borrow().is_weak(name))
     }
 
     pub fn add_child(&mut self, child: Rc<RefCell<SymbolTable>>) {

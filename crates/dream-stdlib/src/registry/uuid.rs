@@ -9,8 +9,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
     ],
     generators: &[],
-    files: &[(
-        "<std>/system/uuid/uuid.dream",
-        include_str!("../system/uuid/uuid.dream"),
-    )],
+    files: &[
+        (
+            "<std>/system/uuid/uuid_error.dream",
+            include_str!("../system/uuid/uuid_error.dream"),
+        ),
+        (
+            "<std>/system/uuid/uuid.dream",
+            include_str!("../system/uuid/uuid.dream"),
+        ),
+    ],
 };

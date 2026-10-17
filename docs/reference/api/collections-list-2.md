@@ -2,13 +2,7 @@
 
 **Import:** `import system.collections;`
 
-## `clear`
-
-Removes all elements and releases the references they held. Capacity is unchanged.
-
-```dream
-public fun clear(): void where T: unmanaged
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `insert`
 

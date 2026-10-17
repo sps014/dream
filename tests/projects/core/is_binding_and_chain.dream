@@ -39,7 +39,7 @@ fun c108_verify_observation(borrow value: string): void {
     let wanted = "flagged cat\nother\nother\n";
     let end = c108_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c108_cursor, end));
+    Assert.eq(actual, wanted.substring(c108_cursor, end));
     c108_cursor = end;
 }
 

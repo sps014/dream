@@ -25,7 +25,7 @@ async fun async_wide_scalar_return(): void {
     let l = c41_bigNumber().await;
     let f = c41_ratio().await;
     let d = c41_precise().await;
-    Assert.eq_str(("" + l).to_string(), "9000000000");
-    Assert.eq_str(("" + f).to_string(), "3.5");
-    Assert.eq_str(("" + d).to_string(), "2.71828");
+    Assert.eq(("" + l).to_string(), "9000000000");
+    Assert.eq(("" + f).to_string(), "3.5");
+    Assert.eq(("" + d).to_string(), "2.71828");
 }

@@ -1,0 +1,20 @@
+module system.webapi;
+
+/// Declares a dependency's OpenAPI authentication scheme.
+@attribute(AttributeTarget.Function, AttributeTarget.StaticMethod)
+public struct SecuritySchemeAttribute {
+    /// Identifier used to reference this security scheme in OpenAPI.
+    public id: string;
+
+    /// OpenAPI scheme kind, such as `http`, `apiKey`, or `oauth2`.
+    public kind: string;
+
+    /// HTTP authentication scheme, such as `bearer`.
+    public scheme: string;
+
+    /// Name of the API-key header, query parameter, or cookie, when applicable.
+    public name: Option<string>;
+
+    /// Where an API key is supplied: `header`, `query`, or `cookie`.
+    public location: Option<string>;
+}

@@ -110,7 +110,7 @@ fn test_parse_repeat_array_literal() {
         }
     };
 
-    if let StatementNode::Declaration(_, _, init, _) = &func.body[0] {
+    if let StatementNode::Declaration(_, _, init, _, _) = &func.body[0] {
         if let ExpressionNode::ArrayRepeat(open, value, len) = init {
             assert_eq!(open.text, "[");
             assert_eq!(lit_text(value), "7");
@@ -123,7 +123,7 @@ fn test_parse_repeat_array_literal() {
     }
 
     // Nesting: the outer repeat's value is itself an inner repeat.
-    if let StatementNode::Declaration(_, _, init, _) = &func.body[1] {
+    if let StatementNode::Declaration(_, _, init, _, _) = &func.body[1] {
         if let ExpressionNode::ArrayRepeat(_, value, len) = init {
             assert!(
                 matches!(&**value, ExpressionNode::ArrayRepeat(_, _, _)),
@@ -144,7 +144,7 @@ fn test_comma_literal_still_parses_alongside_repeat_syntax() {
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
     assert_eq!(diagnostics.has_errors(), false);
-    if let StatementNode::Declaration(_, _, init, _) = &program.functions[0].body[0] {
+    if let StatementNode::Declaration(_, _, init, _, _) = &program.functions[0].body[0] {
         assert!(matches!(init, ExpressionNode::ArrayLiteral(_, elems) if elems.len() == 2));
     }
 }
@@ -164,6 +164,7 @@ fn test_parse_array_declaration_and_assignment() {
         id,
         type_annotation,
         ExpressionNode::ArrayLiteral(_, elements),
+        _,
         _,
     ) = &func.body[0]
     {
@@ -197,7 +198,7 @@ fn test_parse_binary_expression_precedence() {
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
 
-    if let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, opr, right), _) =
+    if let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, opr, right), _, _) =
         &func.body[0]
     {
         assert_eq!(opr.kind, TokenKind::PlusToken);
@@ -522,7 +523,7 @@ fn test_parse_try_propagation_before_semicolon() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Try(inner), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Try(inner), _, _) = &func.body[0] else {
         panic!(
             "expected a `let` binding of a Try expression, got {:?}",
             func.body[0]
@@ -665,7 +666,8 @@ fn test_parse_lambda_expr_body() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!(
             "expected a `let` binding of a Lambda expression, got {:?}",
             func.body[0]
@@ -686,7 +688,8 @@ fn test_parse_async_lambda_expr_body() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!(
             "expected a `let` binding of a Lambda expression, got {:?}",
             func.body[0]
@@ -706,7 +709,8 @@ fn test_parse_async_lambda_block_body() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!("expected a `let` binding of an async Lambda expression");
     };
     assert!(lambda.is_async);
@@ -721,7 +725,8 @@ fn test_parse_lambda_block_body() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!("expected a `let` binding of a Lambda expression");
     };
     let crate::nodes::LambdaBody::Block(stmts) = &lambda.body else {
@@ -738,7 +743,8 @@ fn test_parse_lambda_zero_params() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!("expected a `let` binding of a Lambda expression");
     };
     assert!(lambda.parameters.is_empty());
@@ -754,7 +760,8 @@ fn test_parse_lambda_untyped_params() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _) = &func.body[0] else {
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), _, _) = &func.body[0]
+    else {
         panic!("expected a `let` binding of a Lambda expression");
     };
     assert_eq!(lambda.parameters.len(), 2);
@@ -774,9 +781,9 @@ fn test_parse_lambda_disambiguated_from_cast_and_paren() {
     let func = &program.functions[0];
     assert!(matches!(
         &func.body[0],
-        StatementNode::Declaration(_, _, ExpressionNode::Cast(_, _, _), _)
+        StatementNode::Declaration(_, _, ExpressionNode::Cast(_, _, _), _, _)
     ));
-    let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, _, _), _) = &func.body[1]
+    let StatementNode::Declaration(_, _, ExpressionNode::Binary(left, _, _), _, _) = &func.body[1]
     else {
         panic!("expected a `let` binding of a binary expression");
     };
@@ -916,7 +923,7 @@ fn test_parse_const_and_labeled_break() {
     // First statement is a const declaration (is_const == true).
     assert!(matches!(
         &func.body[0],
-        StatementNode::Declaration(_, _, _, true)
+        StatementNode::Declaration(_, _, _, true, _)
     ));
     // Second statement is a labeled loop containing a `break loop;`.
     if let StatementNode::Labeled(label, inner) = &func.body[1] {
@@ -939,7 +946,7 @@ fn test_parse_char_literal() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    if let StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Char(t)), _) =
+    if let StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Char(t)), _, _) =
         &func.body[0]
     {
         assert_eq!(t.text, "65");
@@ -963,16 +970,16 @@ fn test_parse_suffixed_number_literals() {
     let body = &program.functions[0].body;
 
     assert!(
-        matches!(&body[0], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Long(t)), _) if t.text == "42")
+        matches!(&body[0], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Long(t)), _, _) if t.text == "42")
     );
     assert!(
-        matches!(&body[1], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::UInt(t)), _) if t.text == "7")
+        matches!(&body[1], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::UInt(t)), _, _) if t.text == "7")
     );
     assert!(
-        matches!(&body[2], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::ULong(t)), _) if t.text == "9")
+        matches!(&body[2], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::ULong(t)), _, _) if t.text == "9")
     );
     assert!(
-        matches!(&body[3], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Byte(t)), _) if t.text == "255")
+        matches!(&body[3], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Byte(t)), _, _) if t.text == "255")
     );
 }
 
@@ -1261,7 +1268,7 @@ fn test_parse_async_function_and_await() {
     assert!(matches!(&func.body[0], StatementNode::AwaitStmt(_)));
     assert!(matches!(
         &func.body[1],
-        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _)
+        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _, _)
     ));
 }
 
@@ -1285,7 +1292,7 @@ fn test_parse_postfix_await() {
     assert!(matches!(&func.body[0], StatementNode::AwaitStmt(_)));
     assert!(matches!(
         &func.body[1],
-        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _)
+        StatementNode::Declaration(_, _, ExpressionNode::Await(_, _), _, _)
     ));
 }
 
@@ -1307,7 +1314,7 @@ fn test_parse_postfix_await_chains() {
     assert_eq!(diagnostics.has_errors(), false);
     let body = &program.functions[0].body;
     let init = |i: usize| match &body[i] {
-        StatementNode::Declaration(_, _, e, _) => e,
+        StatementNode::Declaration(_, _, e, _, _) => e,
         other => panic!("expected declaration, got {:?}", other),
     };
     assert!(
@@ -1588,7 +1595,7 @@ fn test_typeof_is_not_a_reserved_word() {
     let func = &program.functions[0];
     assert!(matches!(
         &func.body[0],
-        StatementNode::Declaration(name, _, _, _) if name.text == "typeof"
+        StatementNode::Declaration(name, _, _, _, _) if name.text == "typeof"
     ));
     assert!(matches!(
         &func.body[1],
@@ -1713,7 +1720,7 @@ fn test_parse_named_call_argument() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _) =
+    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _, _) =
         &func.body[0]
     else {
         panic!(
@@ -1737,7 +1744,7 @@ fn test_parse_named_and_positional_call_arguments_mixed() {
 
     assert_eq!(diagnostics.has_errors(), false);
     let func = &program.functions[0];
-    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _) =
+    let StatementNode::Declaration(_, _, ExpressionNode::FunctionCall(_, _, args), _, _) =
         &func.body[0]
     else {
         panic!("expected a `let` binding of a call expression");
@@ -1809,7 +1816,7 @@ fn test_required_parameter_after_default_is_rejected() {
 fn only_decl_expr<'a>(program: &'a ProgramNode<'a>) -> &'a ExpressionNode<'a> {
     let func = &program.functions[0];
     match &func.body[0] {
-        StatementNode::Declaration(_, _, expr, _) => expr,
+        StatementNode::Declaration(_, _, expr, _, _) => expr,
         other => panic!("expected a declaration, got {:?}", other),
     }
 }
@@ -2169,4 +2176,49 @@ fn malformed_yield_recovers() {
         let (_, diagnostics) = parse_code(source, &arena);
         assert!(diagnostics.has_errors());
     }
+}
+
+#[test]
+fn weak_local_declarations_preserve_modifiers() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun f(): void { let weak a = value; const weak b: Option<Node> = value; let c = value; }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    let body = program.functions[0].body;
+    assert!(matches!(
+        body[0],
+        StatementNode::Declaration(_, _, _, false, true)
+    ));
+    assert!(matches!(
+        body[1],
+        StatementNode::Declaration(_, _, _, true, true)
+    ));
+    assert!(matches!(
+        body[2],
+        StatementNode::Declaration(_, _, _, false, false)
+    ));
+}
+
+#[test]
+fn invalid_local_ownership_modifiers_recover() {
+    for declaration in ["let weak (a, b) = pair;", "let unowned a = value;"] {
+        let arena = bumpalo::Bump::new();
+        let source = format!("fun f(): void {{ {declaration} let after = 1; }}");
+        let (program, diagnostics) = parse_code(&source, &arena);
+        assert!(diagnostics.has_errors());
+        assert_eq!(program.functions[0].body.len(), 2);
+    }
+}
+
+#[test]
+fn character_literals_can_be_cast_to_integers() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code("fun f(): int { return (int)'0'; }", &arena);
+    assert!(!diagnostics.has_errors());
+    assert!(matches!(
+        program.functions[0].body[0],
+        StatementNode::Return(Some(ExpressionNode::Cast(..)))
+    ));
 }

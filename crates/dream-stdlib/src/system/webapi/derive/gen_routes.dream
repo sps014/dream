@@ -10,13 +10,13 @@ extend WebGenerator {
             this.remember(f, "");
         }
         for (let d in this.ctx.referenced_decls()) {
-            this.declarations.set(d.id, d);
+            this.declarations[d.id] = d;
             for (let f in d.methods) {
                 this.remember(f, this.owner_name(d));
             }
         }
         for (let d in this.ctx.decls()) {
-            this.declarations.set(d.id, d);
+            this.declarations[d.id] = d;
             for (let f in d.methods) {
                 this.remember(f, this.owner_name(d));
             }
@@ -68,14 +68,14 @@ extend WebGenerator {
                     if !d.has<RouterAttribute>() {
                         this.ctx.error_at(f.id, "HTTP handlers must belong to an @router class");
                     }
-                    this.owners.set(before, d.id);
+                    this.owners[before] = d.id;
                 }
             }
         }
         let methods = Map<string, bool>();
         for (let d in this.ctx.decls()) {
             for (let f in d.methods) {
-                methods.set(f.id, true);
+                methods[f.id] = true;
             }
         }
         for (let entry in this.functions.entries()) {
@@ -93,7 +93,7 @@ extend WebGenerator {
                     "duplicate " + route.method + " route '" + route.path + "'"
                 );
             }
-            seen.set(key, true);
+            seen[key] = true;
         }
     }
 
@@ -167,7 +167,7 @@ extend WebGenerator {
         let placeholders = Map<string, bool>();
         for (let segment in route.path.split('/')) {
             if segment.starts_with("{") && segment.ends_with("}") && segment.length > 2 {
-                placeholders.set(segment.substring(1, segment.length - 1), false);
+                placeholders[segment.substring(1, segment.length - 1)] = false;
             }
         }
         let flags = Map<string, bool>();
@@ -201,7 +201,7 @@ extend WebGenerator {
         if visited.contains(f.id) {
             return;
         }
-        visited.set(f.id, true);
+        visited[f.id] = true;
         for (let p in f.params) {
             if p.has<DepAttribute>() {
                 let dependency = this.functions.get(
@@ -226,7 +226,7 @@ extend WebGenerator {
             let ty = p.ty;
             let name = p.name;
             if ty.name == nameof(ServerWebSocket) {
-                flags.set("ws", true);
+                flags["ws"] = true;
                 if !route.websocket {
                     this.ctx.error_at(f.id, "ServerWebSocket is only valid on `@websocket` routes");
                 }
@@ -236,7 +236,7 @@ extend WebGenerator {
                 continue;
             }
             if p.has<BodyAttribute>() {
-                flags.set("body", true);
+                flags["body"] = true;
                 let declaration = this.declaration(ty);
                 if ty.name
                     != "string"
@@ -253,14 +253,14 @@ extend WebGenerator {
                 continue;
             }
             if p.has<FileAttribute>() {
-                flags.set("form", true);
+                flags["form"] = true;
                 if web_inner(ty).name != nameof(UploadedFile) {
                     this.ctx.error_at(f.id, "@file parameter '" + name + "' must be UploadedFile");
                 }
                 continue;
             }
             if p.has<FormAttribute>() {
-                flags.set("form", true);
+                flags["form"] = true;
                 continue;
             }
             if p.has<QueryAttribute>() || p.has<HeaderAttribute>() || p.has<CookieAttribute>() {
@@ -284,7 +284,7 @@ extend WebGenerator {
                         + "' is not a path segment of '" + route.path + "' and has no extractor"
                 );
             } else {
-                placeholders.set(key, true);
+                placeholders[key] = true;
             }
         }
     }

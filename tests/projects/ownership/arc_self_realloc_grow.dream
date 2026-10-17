@@ -19,8 +19,8 @@ fun c1f_body(): void {
         i = i + 1;
     }
     c1f_verify_observation((b.names.length).to_string());
-    c1f_verify_observation((b.names.get(0)).to_string());
-    c1f_verify_observation((b.names.get(63)).to_string());
+    c1f_verify_observation((b.names[0]).to_string());
+    c1f_verify_observation((b.names[63]).to_string());
 }
 
 let c1f_cursor: int = 0;
@@ -30,7 +30,7 @@ fun c1f_verify_observation(borrow value: string): void {
     let wanted = "64\nitem0\nitem63\n";
     let end = c1f_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1f_cursor, end));
+    Assert.eq(actual, wanted.substring(c1f_cursor, end));
     c1f_cursor = end;
 }
 

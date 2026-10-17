@@ -1,0 +1,18 @@
+module system.core;
+
+/// A repeatable synchronous sequence backed by a producer factory.
+@allow_cycle
+public class YieldIterable<T>: Iterable<T> {
+    factory: fun(YieldChannel<T>): Future<void>;
+
+    /// Creates a `YieldIterable` with `factory`.
+    public constructor(factory: fun(YieldChannel<T>): Future<void>) {
+        this.factory = factory;
+    }
+
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
+    public fun iterator(): Iterator<T> {
+        let channel = YieldChannel<T>();
+        return YieldCursor<T>(channel, (this.factory)(channel));
+    }
+}

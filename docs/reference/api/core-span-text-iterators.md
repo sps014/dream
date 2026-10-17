@@ -2,71 +2,7 @@
 
 No import is needed.
 
-Read the [span guide](../../language/types/spans.md) for usage and backing-storage semantics.
-
-## `StringSplit`
-
-Cursor over the pieces of a `ReadOnlySpan<char>` between separators. Every piece is a view of the same source; nothing is allocated.
-
-```dream
-public ref struct StringSplit
-```
-
-## `move_next`
-
-Advances to the next piece; `false` once every piece has been produced.
-
-```dream
-public fun move_next(): bool
-```
-
-## `current`
-
-The piece produced by the last `move_next()`.
-
-```dream
-public get current(): ReadOnlySpan<char>
-```
-
-## `StringLines`
-
-Cursor over the lines of a `ReadOnlySpan<char>`.
-
-```dream
-public ref struct StringLines
-```
-
-## `move_next`
-
-Advances to the next segment; returns false at the end.
-
-```dream
-public fun move_next(): bool
-```
-
-## `current`
-
-View of the segment selected by the last successful `move_next`.
-
-```dream
-public get current(): ReadOnlySpan<char>
-```
-
-## `StringKey`
-
-A `Map`/`Set` key that can be found by a `ReadOnlySpan<char>` without building a `string`.
-
-```dream
-public interface StringKey
-```
-
-## `matches_span`
-
-Returns whether this value equals the supplied text view.
-
-```dream
-fun matches_span(borrow other: ReadOnlySpan<char>): bool
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `span`
 

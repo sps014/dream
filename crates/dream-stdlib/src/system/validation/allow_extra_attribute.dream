@@ -1,0 +1,5 @@
+module system.validation;
+
+/// Permits additional input properties on a model; the default is to reject them.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct)
+public struct AllowExtraAttribute {}

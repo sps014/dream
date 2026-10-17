@@ -1,0 +1,16 @@
+module system.core;
+
+/// Signals coordinating a yielding producer and its consumer.
+public static class YieldSignals {
+    /// Creates a signal that stays pending until explicitly completed.
+    @intrinsic(Intrinsic.DreamYieldSignal)
+    public static extern fun pending(): Future<void>;
+
+    /// Completes the pending signal or advancement operation.
+    @intrinsic(Intrinsic.DreamYieldSignalComplete)
+    public static extern fun complete(borrow signal: Future<void>): void;
+
+    /// Runs the producer until a value is ready or the producer finishes.
+    @intrinsic(Intrinsic.DreamYieldRun)
+    public static extern fun run(borrow producer: Future<void>, borrow ready: Future<void>): void;
+}

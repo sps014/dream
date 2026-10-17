@@ -5,25 +5,25 @@ import system.text;
 @test
 @timeout(180000)
 fun fmt_basic(): void {
-    let args1: object[] = Buffer.alloc<object>(2);
+    let args1: object[] = Array.alloc<object>(2);
     args1[0] = "world";
     args1[1] = 42;
-    Assert.eq_str(
+    Assert.eq(
         (Fmt.format("Hello, {0}! The answer is {1}.", args1)).to_string(),
         "Hello, world! The answer is 42."
     );
 
-    let args2: object[] = Buffer.alloc<object>(1);
+    let args2: object[] = Array.alloc<object>(1);
     args2[0] = 3.14159d;
-    Assert.eq_str((Fmt.format("Pi ~= {0:.2}", args2)).to_string(), "Pi ~= 3.14");
+    Assert.eq((Fmt.format("Pi ~= {0:.2}", args2)).to_string(), "Pi ~= 3.14");
 
-    let args3: object[] = Buffer.alloc<object>(2);
+    let args3: object[] = Array.alloc<object>(2);
     args3[0] = 1;
     args3[1] = 1;
-    Assert.eq_str((Fmt.format("{0} + {1} = {0}", args3)).to_string(), "1 + 1 = 1");
+    Assert.eq((Fmt.format("{0} + {1} = {0}", args3)).to_string(), "1 + 1 = 1");
 
-    let args4: object[] = Buffer.alloc<object>(0);
-    Assert.eq_str(
+    let args4: object[] = Array.alloc<object>(0);
+    Assert.eq(
         (Fmt.format("literal {{braces}} stay", args4)).to_string(),
         "literal {braces} stay"
     );

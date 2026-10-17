@@ -34,27 +34,6 @@ public static class Path {
         return (seg.ends_with("/") == false) && (seg.ends_with("\\") == false);
     }
 
-    // Joins every segment in `parts` left-to-right with the same rules as `join`.
-    public static fun of(parts: string[]): string {
-        if parts.length == 0 {
-            return string.empty;
-        }
-        let total = 0;
-        let i = 0;
-        while i < parts.length {
-            total = total + parts[i].length + 1;
-            i = i + 1;
-        }
-        let sb = StringBuilder(total);
-        let have = false;
-        i = 0;
-        while i < parts.length {
-            have = Path._append_segment(sb, have, parts[i]);
-            i = i + 1;
-        }
-        return sb.build();
-    }
-
     // Final path component after the last `/` or `\`, or `None` for a trailing separator.
     public static fun file_name(path: string): Option<string> {
         let n = path.length;
@@ -146,7 +125,7 @@ public static class Path {
                     // skip
                     } else if (part == "..") {
                         if parts.length > 0 {
-                            let last = parts.get(parts.length - 1);
+                            let last = parts[parts.length - 1];
                             if last != ".." {
                                 parts.pop();
                             } else {
@@ -169,7 +148,7 @@ public static class Path {
             if j > 0 {
                 sb.append(sep);
             }
-            sb.append(parts.get(j));
+            sb.append(parts[j]);
             j = j + 1;
         }
         let out = sb.build();

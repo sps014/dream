@@ -1,7 +1,7 @@
 module system.webapi;
 
 /// Native OIDC exchange transport used by system.webapi.auth; completion obeys cancellation.
-public static class OidcTransport {
+internal static class OidcTransport {
     /// Performs an OIDC begin or completion request. Honors `token` cancellation and returns an
     /// I/O error on failure.
     @native
@@ -13,8 +13,8 @@ public static class OidcTransport {
         if action != "oidc_begin" && action != "oidc_complete" {
             return Result.Err(IoError.other("", "invalid OIDC operation"));
         }
-        request.set("id", JsonValue.from_int(0));
-        request.set("timeout_ms", JsonValue.from_int(30000));
+        request["id"] = JsonValue.from_int(0);
+        request["timeout_ms"] = JsonValue.from_int(30000);
         return WebOperation.parse(WebOperation.submit(request, [], token).await?);
     }
 }

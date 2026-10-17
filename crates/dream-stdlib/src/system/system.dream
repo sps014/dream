@@ -2,11 +2,11 @@ module system;
 
 // System utilities for console I/O, process control, and terminal colors.
 extend System {
-    // Prints a value to standard output.
+    /// Writes and flushes a value as console text, as a shortcut for `System.stdout`.
     @intrinsic(Intrinsic.Print)
     public static extern fun print<T>(borrow value: T): void;
 
-    // Prints a value to standard output followed by a newline.
+    /// Writes and flushes a value followed by a newline, as a shortcut for `System.stdout`.
     @intrinsic(Intrinsic.Println)
     public static extern fun println<T>(borrow value: T): void;
 

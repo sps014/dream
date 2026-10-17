@@ -17,7 +17,7 @@ public fun resources(ctx: GenContext): void {
         switch (f.body) {
             Some(body) => {
                 if body.statements.length == 0 { ctx.error_at(f.id, "missing body"); }
-                if mode == "body_error" { ctx.error_at(body.statements.get(0).id, "body marker"); return; }
+                if mode == "body_error" { ctx.error_at(body.statements[0].id, "body marker"); return; }
             }
             None => { ctx.error_at(f.id, "missing body"); }
         }

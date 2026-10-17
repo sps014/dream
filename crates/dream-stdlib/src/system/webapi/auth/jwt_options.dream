@@ -1,0 +1,35 @@
+module system.webapi.auth;
+
+/// Native JWT configuration; RS256 uses PEM keys, HS256 requires an explicit 32-byte minimum secret.
+public class JwtOptions {
+    /// Identity of the token issuer.
+    public issuer: string;
+
+    /// Expected token audience.
+    public audience: string;
+
+    /// Private key used to sign tokens; keep it secret.
+    public signing_key: string;
+
+    /// Public key used to verify token signatures.
+    public verification_key: string;
+
+    /// Signature algorithm name, such as `RS256`.
+    public algorithm: string;
+
+    /// Creates a `JwtOptions` with `issuer`, `audience`, `signing_key`, `verification_key`,
+    /// `algorithm`.
+    public constructor(
+        issuer: string,
+        audience: string,
+        signing_key: string,
+        verification_key: string,
+        algorithm: string = "RS256"
+    ) {
+        this.issuer = issuer;
+        this.audience = audience;
+        this.signing_key = signing_key;
+        this.verification_key = verification_key;
+        this.algorithm = algorithm;
+    }
+}

@@ -62,7 +62,7 @@ fun c2a4_verify_observation(borrow value: string): void {
     let wanted = "inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n";
     let end = c2a4_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c2a4_cursor, end));
+    Assert.eq(actual, wanted.substring(c2a4_cursor, end));
     c2a4_cursor = end;
 }
 

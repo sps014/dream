@@ -9,8 +9,22 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.collections",
     ],
     generators: &[],
-    files: &[(
-        "<std>/system/csv/csv.dream",
-        include_str!("../system/csv/csv.dream"),
-    )],
+    files: &[
+        (
+            "<std>/system/csv/csv_error.dream",
+            include_str!("../system/csv/csv_error.dream"),
+        ),
+        (
+            "<std>/system/csv/csv_codec.dream",
+            include_str!("../system/csv/csv_codec.dream"),
+        ),
+        (
+            "<std>/system/csv/csv_reader.dream",
+            include_str!("../system/csv/csv_reader.dream"),
+        ),
+        (
+            "<std>/system/csv/csv_writer.dream",
+            include_str!("../system/csv/csv_writer.dream"),
+        ),
+    ],
 };

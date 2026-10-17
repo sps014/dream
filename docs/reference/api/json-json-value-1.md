@@ -1,66 +1,8 @@
-# JsonKind, JsonValue
+# JsonValue
 
 **Import:** `import system.json;`
 
-Read the [usage guide](../../library/serialization/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-[All sections](json-json-value.md)
-
-## `JsonKind`
-
-Discriminant for `JsonValue.kind()`.
-
-```dream
-public enum JsonKind
-```
-
-## `Null`
-
-A JSON null value.
-
-```dream
-Null
-```
-
-## `Bool`
-
-A JSON boolean value.
-
-```dream
-Bool
-```
-
-## `Number`
-
-A JSON numeric value.
-
-```dream
-Number
-```
-
-## `String`
-
-A JSON string value.
-
-```dream
-String
-```
-
-## `Array`
-
-An ordered JSON array of values.
-
-```dream
-Array
-```
-
-## `Object`
-
-A JSON object mapping property names to values.
-
-```dream
-Object
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `JsonValue`
 
@@ -196,4 +138,60 @@ Returns the elements when this is an array, otherwise `None`.
 
 ```dream
 public fun as_array(): Option<List<JsonValue>>
+```
+
+## `as_map`
+
+Returns the entries when this is an object, otherwise `None`.
+
+```dream
+public fun as_map(): Option<Map<string, JsonValue>>
+```
+
+## `str_or`
+
+Returns the string value, or `fallback` for a different JSON kind.
+
+```dream
+public fun str_or(fallback: string): string
+```
+
+## `int_or`
+
+Returns the integer value, or `fallback` for a different JSON kind.
+
+```dream
+public fun int_or(fallback: int): int
+```
+
+## `bool_or`
+
+Returns the boolean value, or `fallback` for a different JSON kind.
+
+```dream
+public fun bool_or(fallback: bool): bool
+```
+
+## `double_or`
+
+Returns the numeric value, or `fallback` for a different JSON kind.
+
+```dream
+public fun double_or(fallback: double): double
+```
+
+## `get_str`
+
+Returns the named string property, or `None` if missing or not a string.
+
+```dream
+public fun get_str(borrow key: string): Option<string>
+```
+
+## `get_int`
+
+Returns the named integer property, or `None` if missing or not numeric.
+
+```dream
+public fun get_int(borrow key: string): Option<int>
 ```

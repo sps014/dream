@@ -174,7 +174,7 @@ public fun build(): string
 
 ## `to_string`
 
-Returns a text representation of this value.
+Supplies text to object formatting. Use `build()` when finishing a builder.
 
 ```dream
 public override fun to_string(): string

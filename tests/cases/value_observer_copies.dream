@@ -1,3 +1,5 @@
+module system.core;
+
 import system;
 import system.collections;
 
@@ -26,7 +28,7 @@ fun fill(borrow entries: View[]): void {
 @noinline
 fun read(borrow value: Borrowed): int { return value.note.n; }
 fun exercise(): void {
-    let entries = Buffer.alloc<View>(2);
+    let entries = Array.alloc<View>(2);
     fill(entries);
     System.println(entries[0].note.is_none());
     System.println(entries[1].note.is_none());

@@ -18,5 +18,5 @@ fun c1cf_increment(ref x: int): void {
 fun ref_field(): void {
     let c: c1cf_Counter = c1cf_Counter();
     c1cf_increment(ref c.value);
-    Assert.eq_str((c.value).to_string(), "1");
+    Assert.eq((c.value).to_string(), "1");
 }

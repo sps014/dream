@@ -46,14 +46,14 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 ## Read and remove
 
-`list[index]` and `get(index)` require a valid position. Unlike map `get`, list `get` returns the item directly and stops the program for an invalid position. `set` or indexed assignment replaces an item.
+`list[index]` requires a valid position and stops the program if the position is outside the list. Indexed assignment replaces an item.
 
 `pop()` returns `Option<T>` because a list can be empty. `remove_at(index)` returns whether it removed an item; `remove(value)` removes the first matching item. Searches compare items by value, so strings match by their contents.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
-| `list[index]`, `get(index)` | `T` | Item at `index`; an invalid index stops the program. |
-| `list[index] = value`, `set(index, value)` | `void` | Replaces the item; an invalid index stops the program. |
+| `list[index]` | `T` | Item at `index`; an invalid index stops the program. |
+| `list[index] = value` | `void` | Replaces the item; an invalid index stops the program. |
 | `first()` | `Option<T>` | First item, or `None` when empty. |
 | `last()` | `Option<T>` | Last item, or `None` when empty. |
 | `contains(value)` | `bool` | Whether an equal item is present. |
@@ -90,6 +90,6 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 A span keeps showing the storage it was taken from. After the list grows, shrinks, or is emptied, take a new span.
 
-A `for` loop visits items from first to last. Lists also have the query helpers described in [queries](seq.md), such as `filter`, `map`, and `any`.
+A `for` loop visits items from first to last. Use `list.seq()` to start the transformations described in [queries](seq.md). Collection predicates such as `any` are also available directly.
 
 See [all List signatures](../../reference/api/collections-list.md), [queries](seq.md), and [collection choice](index.md).

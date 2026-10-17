@@ -1,0 +1,37 @@
+module system;
+import system.interop;
+
+// An opaque C pointer (`void*`, `T*`). `@c` passes it by value; `ref p: CPtr` is a `T**` out-param
+// and `Option<CPtr>` a nullable pointer.
+public struct CPtr {
+    raw: usize;
+
+    /// Creates a `CPtr` with `raw`.
+    public constructor(raw: usize) {
+        this.raw = raw;
+    }
+
+    // The `NULL` pointer.
+    public static fun null(): CPtr {
+        return CPtr((usize)0);
+    }
+
+    // True when this is `NULL`.
+    public fun is_null(): bool {
+        return this.raw == (usize)0;
+    }
+
+    // The pointer as an integer address.
+    public fun address(): usize {
+        return this.raw;
+    }
+
+    // The pointer `bytes` bytes past this one.
+    public fun offset(bytes: isize): CPtr {
+        return CPtr(this.raw + (usize)bytes);
+    }
+
+    fun operator ==(other: CPtr): bool {
+        return this.raw == other.raw;
+    }
+}

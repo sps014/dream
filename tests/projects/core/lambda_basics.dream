@@ -40,7 +40,7 @@ fun c128_verify_observation(borrow value: string): void {
     let wanted = "5\n25\n101\n1\n2\n3\n";
     let end = c128_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c128_cursor, end));
+    Assert.eq(actual, wanted.substring(c128_cursor, end));
     c128_cursor = end;
 }
 

@@ -1,9 +1,5 @@
 module system.core;
 
-internal interface SpanCharacter {}
-
-extend char: SpanCharacter {}
-
 // `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
 // `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
 // The same `ref struct` escape rules as `Span<T>` apply (see `docs/language/types/spans.md`).
@@ -75,11 +71,6 @@ public ref struct ReadOnlySpan<T> {
             System.panic("Span index out of range");
         }
         return this.at_unchecked(index);
-    }
-
-    /// Returns the element at `index`; an out-of-range index panics.
-    public fun get(index: int): T {
-        return this[index];
     }
 
     // For-each access; see `Span<T>.at_unchecked`.
@@ -205,7 +196,7 @@ public ref struct ReadOnlySpan<T> {
         if this._text {
             let i = 0;
             while i < this._length {
-                dst.set(i, this.at_unchecked(i));
+                dst[i] = this.at_unchecked(i);
                 i = i + 1;
             }
             return;

@@ -22,7 +22,7 @@ async fun c3d_echo(value: string): string {
 @timeout(180000)
 async fun async_ref_params(): void {
     let g = c3d_greet("World").await;
-    Assert.eq_str((g).to_string(), "Hello, World!");
+    Assert.eq((g).to_string(), "Hello, World!");
     let e = c3d_echo("dream").await;
-    Assert.eq_str((e).to_string(), "echo: dream");
+    Assert.eq((e).to_string(), "echo: dream");
 }

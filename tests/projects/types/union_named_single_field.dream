@@ -47,7 +47,7 @@ fun c279_verify_observation(borrow value: string): void {
     let wanted = "7\n9\n{\"type\":\"Full\",\"value\":7}\n1\n2\n{\"type\":\"Pos\",\"_0\":3}\n{\"type\":\"Named\",\"x\":4}\n";
     let end = c279_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c279_cursor, end));
+    Assert.eq(actual, wanted.substring(c279_cursor, end));
     c279_cursor = end;
 }
 

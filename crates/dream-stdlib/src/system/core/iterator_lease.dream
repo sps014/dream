@@ -1,0 +1,22 @@
+module system.core;
+
+// A loop owns a lease even when the caller retains the cursor. Dropping a cancelled
+// coroutine therefore closes the active cursor independently of its other aliases.
+@allow_cycle
+public class IteratorLease<T> {
+    cursor: Iterator<T>;
+
+    /// Creates a `IteratorLease` with `cursor`.
+    public constructor(cursor: Iterator<T>) {
+        this.cursor = cursor;
+    }
+
+    /// Ends iteration and releases resources held by the cursor.
+    public fun close(): void {
+        this.cursor.close();
+    }
+
+    fun del() {
+        this.close();
+    }
+}

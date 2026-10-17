@@ -1,0 +1,518 @@
+module system;
+
+// A calendar date and time of day.
+public struct DateTime: Equatable<DateTime> {
+    @runtime("dateNowMillis")
+    static extern fun now_millis(): long;
+
+    @runtime("dateLocalOffsetMinutes")
+    static extern fun local_offset_minutes(epoch_millis: long): int;
+
+    // The instant this value represents, as UTC epoch milliseconds.
+    _epoch_millis: long;
+
+    // The UTC offset in minutes.
+    _offset_minutes: int;
+
+    /// Creates a `DateTime` with `epoch_millis`, `offset_minutes`.
+    public constructor(epoch_millis: long, offset_minutes: int) {
+        this._epoch_millis = epoch_millis;
+        this._offset_minutes = offset_minutes;
+    }
+
+    /// UTC time as milliseconds since the Unix epoch.
+    public get epoch_millis(): long {
+        return this._epoch_millis;
+    }
+
+    /// Offset from UTC, in minutes.
+    public get offset_minutes(): int {
+        return this._offset_minutes;
+    }
+
+    // The current instant in UTC.
+    public static fun utc_now(): DateTime {
+        return DateTime(DateTime.now_millis(), 0);
+    }
+
+    // The current instant in the local system timezone.
+    public static fun now(): DateTime {
+        let millis = DateTime.now_millis();
+        let offset = DateTime.local_offset_minutes(millis);
+        return DateTime(millis, offset);
+    }
+
+    // The current instant in `zone` (an IANA timezone, see `TimeZone`).
+    public static fun now_in(zone: TimeZone): DateTime {
+        let millis = DateTime.now_millis();
+        let offset = zone.offset_minutes_at(millis);
+        return DateTime(millis, offset);
+    }
+
+    // Wraps a raw UTC epoch millisecond instant.
+    public static fun from_epoch_millis(millis: long): DateTime {
+        return DateTime(millis, 0);
+    }
+
+    /// UTC time as whole seconds since the Unix epoch.
+    public get epoch_seconds(): long {
+        return this._epoch_millis / 1000L;
+    }
+
+    /// Creates a UTC date/time from seconds since the Unix epoch.
+    public static fun from_epoch_seconds(seconds: long): DateTime {
+        return DateTime.from_epoch_millis(seconds * 1000L);
+    }
+
+    // Builds a UTC instant from calendar fields.
+    public static fun of(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        minute: int,
+        second: int,
+        millisecond: int
+    ): DateTime {
+        let days = DateTime._days_from_civil(year, month, day);
+        let millis = (long)days
+            * 86400000L
+            + (long)hour
+            * 3600000L + (long)minute * 60000L + (long)second * 1000L + (long)millisecond;
+        return DateTime(millis, 0);
+    }
+
+    // Builds an instant from calendar fields interpreted as local wall-clock time.
+    public static fun of_local(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        minute: int,
+        second: int,
+        millisecond: int
+    ): DateTime {
+        let tentative = DateTime.of(year, month, day, hour, minute, second, millisecond);
+        let offset = DateTime.local_offset_minutes(tentative.epoch_millis);
+        return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
+    }
+
+    // Builds an instant from calendar fields interpreted as wall-clock time in `zone`.
+    public static fun of_zoned(
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        minute: int,
+        second: int,
+        millisecond: int,
+        zone: TimeZone
+    ): DateTime {
+        let tentative = DateTime.of(year, month, day, hour, minute, second, millisecond);
+        let offset = zone.offset_minutes_at(tentative.epoch_millis);
+        return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
+    }
+
+    // The same instant in UTC.
+    public fun to_utc(): DateTime {
+        return DateTime(this._epoch_millis, 0);
+    }
+
+    // The same instant in the local system timezone.
+    public fun to_local(): DateTime {
+        let offset = DateTime.local_offset_minutes(this._epoch_millis);
+        return DateTime(this._epoch_millis, offset);
+    }
+
+    // The same instant in `zone` (an IANA timezone, see `TimeZone`).
+    public fun to_zone(zone: TimeZone): DateTime {
+        let offset = zone.offset_minutes_at(this._epoch_millis);
+        return DateTime(this._epoch_millis, offset);
+    }
+
+    fun _local_days(): int {
+        let total = this._epoch_millis + (long)this._offset_minutes * 60000L;
+        return (int)DateTime._floor_div(total, 86400000L);
+    }
+
+    fun _millis_of_day(): long {
+        let total = this._epoch_millis + (long)this._offset_minutes * 60000L;
+        return DateTime._floor_mod(total, 86400000L);
+    }
+
+    // The year.
+    public get year(): int {
+        return this.decompose().year;
+    }
+
+    // The month.
+    public get month(): int {
+        return this.decompose().month;
+    }
+
+    // The day.
+    public get day(): int {
+        return this.decompose().day;
+    }
+
+    // Calendar date fields (year/month/day) computed once.
+    public fun decompose(): DateTimeYmd {
+        return DateTime._civil_from_days(this._local_days());
+    }
+
+    // The hour.
+    public get hour(): int {
+        return (int)(this._millis_of_day() / 3600000L);
+    }
+
+    // The minute.
+    public get minute(): int {
+        return (int)((this._millis_of_day() / 60000L) % 60L);
+    }
+
+    // The second.
+    public get second(): int {
+        return (int)((this._millis_of_day() / 1000L) % 60L);
+    }
+
+    // The millisecond.
+    public get millisecond(): int {
+        return (int)(this._millis_of_day() % 1000L);
+    }
+
+    // The day of the week (0 = Sunday).
+    public get day_of_week(): int {
+        return (int)DateTime._floor_mod((long)this._local_days() + 4L, 7L);
+    }
+
+    // The day of the year (1-based).
+    public get day_of_year(): int {
+        let ymd = DateTime._civil_from_days(this._local_days());
+        let jan1 = DateTime._days_from_civil(ymd.year, 1, 1);
+        return this._local_days() - jan1 + 1;
+    }
+
+    // Adds milliseconds.
+    public fun add_millis(amount: long): DateTime {
+        return DateTime(this._epoch_millis + amount, this._offset_minutes);
+    }
+
+    // Adds seconds.
+    public fun add_seconds(amount: long): DateTime {
+        return this.add_millis(amount * 1000L);
+    }
+
+    // Adds minutes.
+    public fun add_minutes(amount: long): DateTime {
+        return this.add_millis(amount * 60000L);
+    }
+
+    // Adds hours.
+    public fun add_hours(amount: long): DateTime {
+        return this.add_millis(amount * 3600000L);
+    }
+
+    // Adds days.
+    public fun add_days(amount: long): DateTime {
+        return this.add_millis(amount * 86400000L);
+    }
+
+    /// Returns the instant `d` after this date/time, keeping its UTC offset.
+    public fun add(d: Duration): DateTime {
+        return this.add_millis(d.millis);
+    }
+
+    /// Returns the duration from this instant to `other`.
+    public fun until(other: DateTime): Duration {
+        return Duration(other.epoch_millis - this._epoch_millis);
+    }
+
+    /// Returns midnight on the same calendar date, keeping this UTC offset.
+    public fun start_of_day(): DateTime {
+        return this.add_millis(0L - this._millis_of_day());
+    }
+
+    // Compares to another DateTime.
+    public fun compare_to(other: DateTime): int {
+        if this._epoch_millis < other.epoch_millis {
+            return 0 - 1;
+        }
+        if this._epoch_millis > other.epoch_millis {
+            return 1;
+        }
+        return 0;
+    }
+
+    // True if this is before `other`.
+    public fun is_before(other: DateTime): bool {
+        return this._epoch_millis < other.epoch_millis;
+    }
+
+    // True if this is after `other`.
+    public fun is_after(other: DateTime): bool {
+        return this._epoch_millis > other.epoch_millis;
+    }
+
+    // True if this equals `other`.
+    public fun equals(other: DateTime): bool {
+        return this._epoch_millis == other.epoch_millis;
+    }
+
+    // Formats as ISO-8601.
+    public fun to_iso8601(): string {
+        let ymd = this.decompose();
+        let sb = StringBuilder(32);
+        sb.append(DateTime._pad(ymd.year, 4));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.month, 2));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.day, 2));
+        sb.append_char('T');
+        sb.append(DateTime._pad(this.hour, 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.minute, 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.second, 2));
+        sb.append_char('.');
+        sb.append(DateTime._pad(this.millisecond, 3));
+        if this._offset_minutes == 0 {
+            sb.append_char('Z');
+        } else {
+            sb.append(DateTime._offset_suffix(this._offset_minutes));
+        }
+        return sb.build();
+    }
+
+    // A human-readable formatting.
+    public override fun to_string(): string {
+        let ymd = this.decompose();
+        let sb = StringBuilder(32);
+        sb.append(DateTime._pad(ymd.year, 4));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.month, 2));
+        sb.append_char('-');
+        sb.append(DateTime._pad(ymd.day, 2));
+        sb.append_char(' ');
+        sb.append(DateTime._pad(this.hour, 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.minute, 2));
+        sb.append_char(':');
+        sb.append(DateTime._pad(this.second, 2));
+        if this._offset_minutes == 0 {
+            sb.append(" UTC");
+        } else {
+            sb.append_char(' ');
+            sb.append(DateTime._offset_suffix(this._offset_minutes));
+        }
+        return sb.build();
+    }
+
+    // Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
+    public static fun parse(text: string): Result<DateTime, ParseError> {
+        let n = text.length;
+        if n < 19 {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+        if (text.char_at(4) != '-') || (text.char_at(7) != '-') {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+        if (text.char_at(10) != 'T') && (text.char_at(10) != ' ') {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+        if (text.char_at(13) != ':') || (text.char_at(16) != ':') {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+
+        let year_r = DateTime._parse_digits(text, 0, 4);
+        let month_r = DateTime._parse_digits(text, 5, 2);
+        let day_r = DateTime._parse_digits(text, 8, 2);
+        let hour_r = DateTime._parse_digits(text, 11, 2);
+        let minute_r = DateTime._parse_digits(text, 14, 2);
+        let second_r = DateTime._parse_digits(text, 17, 2);
+        if year_r.is_none()
+            || month_r.is_none()
+            || day_r.is_none() || hour_r.is_none() || minute_r.is_none() || second_r.is_none() {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+
+        let year = year_r.unwrap_or(0);
+        let month = month_r.unwrap_or(0);
+        let day = day_r.unwrap_or(0);
+        let hour = hour_r.unwrap_or(0);
+        let minute = minute_r.unwrap_or(0);
+        let second = second_r.unwrap_or(0);
+        if (month < 1)
+            || (month > 12)
+            || (day < 1) || (day > 31) || (hour > 23) || (minute > 59) || (second > 59) {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+
+        let pos = 19;
+        let millisecond = 0;
+        if (pos < n) && (text.char_at(pos) == '.') {
+            let start = pos + 1;
+            let end = start;
+            while (end < n) && (text.char_at(end).is_digit() == true) {
+                end = end + 1;
+            }
+            let frac_len = end - start;
+            let frac_r = DateTime._parse_digits(text, start, frac_len);
+            if frac_r.is_none() {
+                return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+            }
+            let frac = frac_r.unwrap_or(0);
+            while frac_len > 3 {
+                frac = frac / 10;
+                frac_len = frac_len - 1;
+            }
+            while frac_len < 3 {
+                frac = frac * 10;
+                frac_len = frac_len + 1;
+            }
+            millisecond = frac;
+            pos = end;
+        }
+
+        let offset_minutes = 0;
+        if pos < n {
+            let c = text.char_at(pos);
+            if c == 'Z' {
+                pos = pos + 1;
+            } else if ((c == '+') || (c == '-')) {
+                if (pos + 6 > n) || (text.char_at(pos + 3) != ':') {
+                    return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+                }
+                let oh_r = DateTime._parse_digits(text, pos + 1, 2);
+                let om_r = DateTime._parse_digits(text, pos + 4, 2);
+                if oh_r.is_none() || om_r.is_none() {
+                    return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+                }
+                let total = oh_r.unwrap_or(0) * 60 + om_r.unwrap_or(0);
+                if c == '-' {
+                    total = 0 - total;
+                }
+                offset_minutes = total;
+                pos = pos + 6;
+            } else {
+                return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+            }
+        }
+
+        if pos != n {
+            return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
+        }
+
+        let days = DateTime._days_from_civil(year, month, day);
+        let time_millis = ((long)hour * 3600000L)
+            + ((long)minute * 60000L) + ((long)second * 1000L) + (long)millisecond;
+        let utc_millis = (long)days * 86400000L + time_millis - ((long)offset_minutes * 60000L);
+        return Result.Ok(DateTime(utc_millis, offset_minutes));
+    }
+
+    static fun _floor_div(a: long, b: long): long {
+        let q = a / b;
+        let r = a % b;
+        if (r != 0L) && ((r < 0L) != (b < 0L)) {
+            return q - 1L;
+        }
+        return q;
+    }
+
+    static fun _floor_mod(a: long, b: long): long {
+        let r = a % b;
+        if (r != 0L) && ((r < 0L) != (b < 0L)) {
+            return r + b;
+        }
+        return r;
+    }
+
+    static fun _days_from_civil(year: int, month: int, day: int): int {
+        let y = year;
+        if month <= 2 {
+            y = y - 1;
+        }
+        let era = y;
+        if y < 0 {
+            era = y - 399;
+        }
+        era = era / 400;
+        let yoe = y - era * 400;
+        let mp = (month + 9) % 12;
+        let doy = (153 * mp + 2) / 5 + day - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return era * 146097 + doe - 719468;
+    }
+
+    static fun _civil_from_days(days: int): DateTimeYmd {
+        let z = days + 719468;
+        let era = z;
+        if z < 0 {
+            era = z - 146096;
+        }
+        era = era / 146097;
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = mp + 3;
+        if mp >= 10 {
+            m = mp - 9;
+        }
+        if m <= 2 {
+            y = y + 1;
+        }
+        return DateTimeYmd(y, m, d);
+    }
+
+    static fun _pad(n: int, width: int): string {
+        let s = n.to_string();
+        if s.length >= width {
+            return s;
+        }
+        let out = string.alloc(width);
+        let zeros = width - s.length;
+        let i = 0;
+        while i < zeros {
+            string.set(out, i, '0');
+            i = i + 1;
+        }
+        let j = 0;
+        while j < s.length {
+            string.set(out, zeros + j, s.char_at(j));
+            j = j + 1;
+        }
+        return out;
+    }
+
+    static fun _offset_suffix(offset_minutes: int): string {
+        let sign = "+";
+        let m = offset_minutes;
+        if m < 0 {
+            sign = "-";
+            m = 0 - m;
+        }
+        return sign + DateTime._pad(m / 60, 2) + ":" + DateTime._pad(m % 60, 2);
+    }
+
+    static fun _parse_digits(text: string, start: int, len: int): Option<int> {
+        if len <= 0 {
+            return Option.None;
+        }
+        if (start < 0) || (start + len > text.length) {
+            return Option.None;
+        }
+        let result = 0;
+        let i = 0;
+        while i < len {
+            let c = text.char_at(start + i);
+            if c.is_digit() == false {
+                return Option.None;
+            }
+            result = result * 10 + ((int)c) - 48;
+            i = i + 1;
+        }
+        return Option.Some(result);
+    }
+}

@@ -38,14 +38,14 @@ fun c6f_read_chars(borrow chars: char[]): void {
         c6f_verify_observation(((int)read_only[i]).to_string());
         i = i + 1;
     }
-    span.set(1, '界');
+    span[1] = '界';
     c6f_verify_observation(((int)span[1]).to_string());
 }
 
 fun c6f_body(): void {
     let chars = ['Ω', '界', '😀'];
     c6f_read_chars(chars);
-    let allocated = Buffer.alloc<char>(2);
+    let allocated = Array.alloc<char>(2);
     allocated[0] = '😀';
     allocated[1] = 'Ω';
     c6f_read_chars(allocated);
@@ -69,7 +69,7 @@ fun c6f_verify_observation(borrow value: string): void {
     let wanted = "937\n30028\n128512\n30028\n128512\n937\n30028\n30607\n129091\n937\n128512\n";
     let end = c6f_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c6f_cursor, end));
+    Assert.eq(actual, wanted.substring(c6f_cursor, end));
     c6f_cursor = end;
 }
 

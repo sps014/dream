@@ -4,7 +4,7 @@ import system.process;
 import system.collections;
 
 fun main(): void {
-    let _r = ProcessWireReader(Buffer.alloc<char>(0));
+    let _r = ProcessWireReader(Array.alloc<char>(0));
     let _m = MapSlot<int, int>(0, 0, 0);
     let _s = Stdout();
 }

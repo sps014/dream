@@ -1,0 +1,111 @@
+module system.compress;
+
+// Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
+@allow_cycle
+public class CompressionWriter: Writer {
+    destination: Writer;
+    codec: CompressionCodec;
+    closed: bool;
+
+    internal constructor(destination: Writer, codec: CompressionCodec) {
+        this.destination = destination;
+        this.codec = codec;
+        this.closed = false;
+    }
+
+    // Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.
+    public fun write(bytes: byte[]): Result<int, IoError> {
+        if this.closed {
+            return Result.Err(IoError.closed("compression stream"));
+        }
+        if bytes.length == 0 {
+            return Result.Ok(0);
+        }
+        let count = bytes.length;
+        if count > 65536 {
+            count = 65536;
+        }
+        let input = Span<byte>(bytes, 0, count).to_array();
+        while true {
+            let next = this.codec.step(input, 65536, false);
+            if next.is_err() {
+                this.close();
+                return Result.Err(next.unwrap_err());
+            }
+            let progress = next.unwrap();
+            let written = this.destination.write_all(progress.bytes);
+            if written.is_err() {
+                this.close();
+                return Result.Err(written.unwrap_err());
+            }
+            if progress.consumed > 0 {
+                return Result.Ok(progress.consumed);
+            }
+            if progress.bytes.length == 0 {
+                this.close();
+                return Result.Err(IoError.other("", "compressor made no progress"));
+            }
+        }
+    }
+
+    // Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
+    public fun flush(): Result<bool, IoError> {
+        if this.closed {
+            return Result.Err(IoError.closed("compression stream"));
+        }
+        while true {
+            let next = this.codec.step([], 65536, false, true);
+            if next.is_err() {
+                this.close();
+                return Result.Err(next.unwrap_err());
+            }
+            let written = this.destination.write_all(next.unwrap().bytes);
+            if written.is_err() {
+                this.close();
+                return Result.Err(written.unwrap_err());
+            }
+            if next.unwrap().bytes.length < 65536 {
+                break;
+            }
+        }
+        return this.destination.flush();
+    }
+
+    // Finishes the trailer, releases encoder state, and flushes the borrowed destination.
+    public fun finish(): Result<bool, IoError> {
+        if this.closed {
+            return Result.Err(IoError.closed("compression stream"));
+        }
+        while true {
+            let next = this.codec.step([], 65536, true);
+            if next.is_err() {
+                this.close();
+                return Result.Err(next.unwrap_err());
+            }
+            let written = this.destination.write_all(next.unwrap().bytes);
+            if written.is_err() {
+                this.close();
+                return Result.Err(written.unwrap_err());
+            }
+            if next.unwrap().finished {
+                break;
+            }
+            if next.unwrap().bytes.length == 0 {
+                this.close();
+                return Result.Err(IoError.other("", "compressor made no progress"));
+            }
+        }
+        this.close();
+        return this.destination.flush();
+    }
+
+    // Abandons codec state without finishing or closing the borrowed destination.
+    public fun close(): void {
+        this.codec.close();
+        this.closed = true;
+    }
+
+    del() {
+        this.close();
+    }
+}

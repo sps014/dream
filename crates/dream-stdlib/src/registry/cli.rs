@@ -12,6 +12,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/cli/cli_error.dream",
+            include_str!("../system/cli/cli_error.dream"),
+        ),
+        (
             "<std>/system/cli/parsed_arguments.dream",
             include_str!("../system/cli/parsed_arguments.dream"),
         ),

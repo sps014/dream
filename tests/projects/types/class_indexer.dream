@@ -6,7 +6,7 @@ class c76_Grid {
     cells: int[];
 
     public constructor(size: int) {
-        this.cells = Buffer.alloc<int>(size);
+        this.cells = Array.alloc<int>(size);
     }
 
     public fun this[index: int]: int {
@@ -25,7 +25,7 @@ fun class_indexer() {
     g[0] = 5;
     g[1] = 10;
     g[2] = g[0] + g[1]; // read indexer on both sides
-    Assert.eq_str((g[0]).to_string(), "5"); // 5
-    Assert.eq_str((g[1]).to_string(), "10"); // 10
-    Assert.eq_str((g[2]).to_string(), "15"); // 15
+    Assert.eq((g[0]).to_string(), "5"); // 5
+    Assert.eq((g[1]).to_string(), "10"); // 10
+    Assert.eq((g[2]).to_string(), "15"); // 15
 }

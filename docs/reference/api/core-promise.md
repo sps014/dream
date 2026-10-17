@@ -12,30 +12,6 @@ Promise utilities for async tasks.
 public static class Promise
 ```
 
-## `all_host`
-
-Waits for every future and returns their results in input order.
-
-```dream
-public static extern async fun all_host<T>(borrow promises: T[]): T[]
-```
-
-## `any_host`
-
-Waits for the first successful future and returns its result.
-
-```dream
-public static extern async fun any_host<T>(borrow promises: T[]): T
-```
-
-## `race_host`
-
-Returns the result of the first future to complete.
-
-```dream
-public static extern async fun race_host<T>(borrow promises: T[]): T
-```
-
 ## `all`
 
 Waits for all promises in the array to resolve.

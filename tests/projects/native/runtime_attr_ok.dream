@@ -17,7 +17,7 @@ fun c1ea_verify_observation(borrow value: string): void {
     let wanted = "ok\n";
     let end = c1ea_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1ea_cursor, end));
+    Assert.eq(actual, wanted.substring(c1ea_cursor, end));
     c1ea_cursor = end;
 }
 

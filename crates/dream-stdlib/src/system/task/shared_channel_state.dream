@@ -1,0 +1,20 @@
+module system.task;
+
+// A shared queue's native state outlives every endpoint on every worker.
+shared internal class SharedChannelState {
+    internal handle: usize;
+
+    internal constructor(capacity: int) {
+        this.handle = SharedChannelState.create_host(capacity);
+    }
+
+    del() {
+        SharedChannelState.free_host(this.handle);
+    }
+
+    @intrinsic(Intrinsic.DreamChannelNew)
+    static extern fun create_host(capacity: int): usize;
+
+    @intrinsic(Intrinsic.DreamChannelFree)
+    static extern fun free_host(handle: usize): void;
+}

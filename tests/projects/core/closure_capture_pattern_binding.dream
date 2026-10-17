@@ -79,7 +79,7 @@ fun c7c_verify_observation(borrow value: string): void {
     let wanted = "view 1\nerr nope\narray a\narray b\nlist x 2\nlist y 3\n";
     let end = c7c_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c7c_cursor, end));
+    Assert.eq(actual, wanted.substring(c7c_cursor, end));
     c7c_cursor = end;
 }
 

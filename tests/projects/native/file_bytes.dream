@@ -5,7 +5,7 @@ import system.io;
 
 async fun cce_body(): void {
     let path = "dream_file_bytes_e2e.bin";
-    let data = Buffer.alloc<byte>(4);
+    let data = Array.alloc<byte>(4);
     data[0] = (byte)1;
     data[1] = (byte)0;
     data[2] = (byte)255;
@@ -37,7 +37,7 @@ fun cce_verify_observation(borrow value: string): void {
     let wanted = "4\n4\n1\n0\n255\n2\n";
     let end = cce_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cce_cursor, end));
+    Assert.eq(actual, wanted.substring(cce_cursor, end));
     cce_cursor = end;
 }
 

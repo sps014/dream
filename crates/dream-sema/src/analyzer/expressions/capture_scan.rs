@@ -73,7 +73,7 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(a, out);
             walk_expr_for_ref_targets(v, out);
         }
-        StatementNode::Declaration(_, _, e, _)
+        StatementNode::Declaration(_, _, e, _, _)
         | StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_ref_targets(e, out),
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
@@ -276,7 +276,7 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_lambdas(a, out);
             walk_expr_for_lambdas(v, out);
         }
-        StatementNode::Declaration(_, _, e, _)
+        StatementNode::Declaration(_, _, e, _, _)
         | StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_lambdas(e, out),
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
@@ -540,7 +540,7 @@ fn collect_names_stmt(
             collect_names_expr(a, scopes, referenced);
             collect_names_expr(v, scopes, referenced);
         }
-        StatementNode::Declaration(name, _, e, _) => {
+        StatementNode::Declaration(name, _, e, _, _) => {
             // Init sees outer scopes; the name binds only after the initializer.
             collect_names_expr(e, scopes, referenced);
             bind_here(scopes, name.text.clone());

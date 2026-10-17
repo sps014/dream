@@ -13,7 +13,7 @@ fun c132_sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
     while i < xs.length {
-        total = total + xs.get(i);
+        total = total + xs[i];
         i = i + 1;
     }
     return total;
@@ -65,7 +65,7 @@ fun c132_verify_observation(borrow value: string): void {
     let wanted = "3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n";
     let end = c132_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c132_cursor, end));
+    Assert.eq(actual, wanted.substring(c132_cursor, end));
     c132_cursor = end;
 }
 
@@ -73,7 +73,40 @@ fun c132_verify_observation(borrow value: string): void {
 @timeout(180000)
 
 fun list_collection(): void {
+    interface_indexer_roundtrip();
     c132_cursor = 0;
     c132_body();
     Assert.eq(c132_cursor, ("3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n").length);
+}
+
+interface MutableIndex {
+    fun this[index: int]: int;
+    unique fun this[index: int] = value: int;
+}
+
+class MutableIndexValue: MutableIndex {
+    value: int;
+
+    public constructor() {
+        this.value = 2;
+    }
+
+    public fun this[index: int]: int {
+        return this.value + index;
+    }
+
+    public fun this[index: int] = value: int {
+        this.value = value - index;
+    }
+}
+
+fun mutate_through_indexer(values: MutableIndex): int {
+    values[1] = 9;
+    return values[0];
+}
+
+fun interface_indexer_roundtrip(): void {
+    let values = MutableIndexValue();
+    Assert.eq(mutate_through_indexer(values), 8);
+    Assert.eq(values[1], 9);
 }

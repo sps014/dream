@@ -2,9 +2,11 @@
 
 **Import:** `import system;`
 
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
 ## `print`
 
-Prints a value to standard output.
+Writes and flushes a value as console text, as a shortcut for `System.stdout`.
 
 ```dream
 public static extern fun print<T>(borrow value: T): void
@@ -12,7 +14,7 @@ public static extern fun print<T>(borrow value: T): void
 
 ## `println`
 
-Prints a value to standard output followed by a newline.
+Writes and flushes a value followed by a newline, as a shortcut for `System.stdout`.
 
 ```dream
 public static extern fun println<T>(borrow value: T): void

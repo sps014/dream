@@ -232,14 +232,28 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(false)
     }
 
-    /// Rejects using a `static class` as a value type (annotations, fields, generic args, arrays).
-    pub(in crate::analyzer) fn check_type_not_static_class(
+    /// Checks explicit type visibility and rejects static classes in value positions.
+    pub(in crate::analyzer) fn check_declared_type(
         &self,
         ty: &Type,
+        parameters: &[String],
         diagnostics: &mut DiagnosticBag,
     ) {
         match ty {
             Type::Struct(token, args) => {
+                if args.is_none() && parameters.contains(&token.text) {
+                    return;
+                }
+                // Storage synthesized by lowering and the `fun(ref T)` grammar is not a source type name.
+                if token.position.end > token.position.start && token.kind != TokenKind::RefToken {
+                    let caller = diagnostics.file_path.as_deref().map(Rc::<str>::from);
+                    self.check_type_visible(
+                        &token.text,
+                        caller.as_ref(),
+                        token.position,
+                        diagnostics,
+                    );
+                }
                 if self.is_static_class_name(&token.text) {
                     diagnostics.report_error(
                         format!(
@@ -251,21 +265,21 @@ impl<'a> Analyzer<'a> {
                 }
                 if let Some(args) = args {
                     for a in args {
-                        self.check_type_not_static_class(a, diagnostics);
+                        self.check_declared_type(a, parameters, diagnostics);
                     }
                 }
             }
-            Type::Array(inner) => self.check_type_not_static_class(inner, diagnostics),
+            Type::Array(inner) => self.check_declared_type(inner, parameters, diagnostics),
             Type::Tuple(elems) => {
                 for e in elems {
-                    self.check_type_not_static_class(e, diagnostics);
+                    self.check_declared_type(e, parameters, diagnostics);
                 }
             }
             Type::Function(params, ret) => {
                 for p in params {
-                    self.check_type_not_static_class(p, diagnostics);
+                    self.check_declared_type(p, parameters, diagnostics);
                 }
-                self.check_type_not_static_class(ret, diagnostics);
+                self.check_declared_type(ret, parameters, diagnostics);
             }
             _ => {}
         }

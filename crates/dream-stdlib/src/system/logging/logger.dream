@@ -23,7 +23,7 @@ public class Logger {
             return existing.unwrap_or(Logger(name));
         }
         let created = Logger(name);
-        loggers_map.set(name, created);
+        loggers_map[name] = created;
         return created;
     }
 
@@ -49,7 +49,7 @@ public class Logger {
         let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
         let i = 0;
         while i < this.handlers.length {
-            let h = this.handlers.get(i);
+            let h = this.handlers[i];
             h.emit(record);
             i = i + 1;
         }

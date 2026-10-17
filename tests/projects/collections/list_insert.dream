@@ -9,9 +9,9 @@ fun list_insert(): void {
     xs.push(1);
     xs.push(3);
     xs.insert(1, 2);
-    Assert.eq_str((xs.get(0)).to_string(), "1");
-    Assert.eq_str((xs.get(1)).to_string(), "2");
-    Assert.eq_str((xs.get(2)).to_string(), "3");
+    Assert.eq((xs[0]).to_string(), "1");
+    Assert.eq((xs[1]).to_string(), "2");
+    Assert.eq((xs[2]).to_string(), "3");
     xs.remove(2);
-    Assert.eq_str((xs.length).to_string(), "2");
+    Assert.eq((xs.length).to_string(), "2");
 }

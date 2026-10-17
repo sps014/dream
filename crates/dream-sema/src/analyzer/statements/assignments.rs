@@ -121,6 +121,15 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         use crate::analyzer::declarations::protocol_hooks::ProtocolRole;
+        if let Some(name) = self.interface_protocol_method(obj_type, ProtocolRole::Set) {
+            let method = synthetic_token(TokenKind::IdentifierToken, &name);
+            let call =
+                ExpressionNode::MethodCall(arr, method, None, vec![index.clone(), right.clone()]);
+            self.analyze_expression(&call, parent_function, symbol_table, diagnostics)?;
+            let value = self.hir_take();
+            self.hir_expr_stmt(value);
+            return Ok(());
+        }
         let pretty_obj = self.ty_display(obj_type);
         let Some((hook, _)) = self.resolve_hook_or_diagnose(
             obj_type,

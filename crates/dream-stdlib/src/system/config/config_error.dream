@@ -1,0 +1,29 @@
+module system.config;
+
+// Invalid or missing configuration, including the originating source and key.
+public class ConfigError: Error {
+    // Logical setting name associated with the failure.
+    public key: string;
+
+    // The default, JSON filename, environment variable, or CLI argument that supplied it.
+    public source: string;
+
+    detail: string;
+
+    // Creates a diagnostic with setting provenance.
+    public constructor(key: string, source: string, message: string) {
+        this.key = key;
+        this.source = source;
+        this.detail = message;
+    }
+
+    // Machine-readable configuration failure code.
+    public fun code(): string {
+        return "ECONFIG";
+    }
+
+    // Describes the invalid setting without disclosing its value.
+    public fun message(): string {
+        return this.source + ": " + this.key + ": " + this.detail;
+    }
+}

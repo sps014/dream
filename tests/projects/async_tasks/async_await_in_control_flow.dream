@@ -81,7 +81,7 @@ fun c2c_verify_observation(borrow value: string): void {
     let wanted = "3\n7\n6\n12\n100\n200\n7\ntrue\n";
     let end = c2c_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c2c_cursor, end));
+    Assert.eq(actual, wanted.substring(c2c_cursor, end));
     c2c_cursor = end;
 }
 

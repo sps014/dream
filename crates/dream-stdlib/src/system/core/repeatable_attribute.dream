@@ -1,0 +1,5 @@
+module system.core;
+
+/// Allows an `@attribute` type to appear more than once on the same declaration.
+@attribute(AttributeTarget.Class, AttributeTarget.Struct)
+public struct RepeatableAttribute {}

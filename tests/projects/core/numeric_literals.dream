@@ -4,9 +4,9 @@ import system;
 @test
 @timeout(180000)
 fun numeric_literals() {
-    Assert.eq_str((0x10).to_string(), "16");
-    Assert.eq_str((0b101).to_string(), "5");
-    Assert.eq_str((0o10).to_string(), "8");
+    Assert.eq((0x10).to_string(), "16");
+    Assert.eq((0b101).to_string(), "5");
+    Assert.eq((0o10).to_string(), "8");
     let x: float = 1e2;
-    Assert.eq_str(((int)x).to_string(), "100");
+    Assert.eq(((int)x).to_string(), "100");
 }

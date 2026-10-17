@@ -1,0 +1,11 @@
+module system.json.derive;
+import system;
+import system.collections;
+import system.codegen;
+import system.json;
+
+internal enum Construction {
+    Fieldwise,
+    Assign,
+    Impossible,
+}

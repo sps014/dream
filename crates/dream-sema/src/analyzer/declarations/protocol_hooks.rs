@@ -92,6 +92,18 @@ impl ProtocolHooks {
 }
 
 impl<'a> Analyzer<'a> {
+    pub(in crate::analyzer) fn interface_protocol_method(
+        &mut self,
+        receiver: &Type,
+        role: ProtocolRole,
+    ) -> Option<String> {
+        let ty = self.type_ctx.lower(receiver);
+        self.interface_method_list(ty)?
+            .iter()
+            .find(|method| ProtocolRole::from_method(method) == Some(role))
+            .map(|method| method.name.text.clone())
+    }
+
     /// Recognizes `@get_indexer`/`@set_indexer`/`@iterator`/`@next` on `method` and records it
     /// against `target_type_str`. Reports role-specific shape rules the generic attribute layer
     /// cannot know, and rejects a second method claiming the same role on the same type.

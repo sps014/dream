@@ -50,7 +50,7 @@ Every `T[]` has these members without an import:
 
 | Member | Returns | Effect |
 |--------|---------|--------|
-| `arr[i]` / `arr.get(i)` | `T` | Element at index `i`; out of range panics |
+| `arr[i]` | `T` | Element at index `i`; out of range panics |
 | `arr[i] = v` | — | Replaces the element at index `i`; out of range panics |
 | `.length` | `int` | Number of elements |
 | `.is_empty()` | `bool` | `true` when `length` is `0` |
@@ -130,11 +130,10 @@ A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 | `Array.alloc<T>(len)` | `len` zero-initialized slots |
 | `Array.repeat<T>(len, value)` | `len` slots sharing one `value`, evaluated once |
 | `Array.repeat_with<T>(len, fill)` | `len` slots, calling `fill()` once per slot |
-| `Buffer.alloc<T>(len)` | Same as `Array.alloc<T>(len)` |
 
 ## Fixed-size buffers
 
-Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (no extra import needed). `Buffer.alloc<T>(n)` is the another way to request the same array:
+Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (no extra import needed):
 
 ```dream
 let buf = Array.alloc<int>(4); // int[] of length 4, all zero
@@ -153,8 +152,6 @@ while r < 5 {
 grid[0][0] = 32;
 ```
 
-`Buffer.realloc<T>(arr, new_len)` and `Buffer.free<T>(arr)` (both [`@unsafe`](../memory/buffers.md#unsafe-manual-memory-management)) manage an array's backing block directly through the allocator instead of through ARC: `realloc` resizes it in place (preserving the overlapping prefix, zero-filling any grown tail) and `free` returns it immediately, bypassing reference counting. `arr` must have exactly one owner going into either call — the old value must never be read again afterward. Use ordinary arrays for managed elements; [`RawPtr<T>`](arrays.md#rawptrt-raw-memory-unsafe) provides separate raw storage for unmanaged elements.
-
 !!! note "Arrays own their slots"
     Every slot of a `T[]` is released when the array is dropped, even if your own bookkeeping
     stopped tracking it earlier — see [Raw buffers and custom containers](../memory/buffers.md#raw-buffers-and-custom-containers).
@@ -169,8 +166,8 @@ let xs = [1, 2, 3, 4, 5];
 let whole = Span.of(xs); // inferred Span<int> — a span over all of xs
 let mid = whole.slice(1, 3); // [2, 3, 4] — still a view, no copy
 
-System.println(mid.get(0)); // 2
-mid.set(0, 20); // writes through to xs[1]
+System.println(mid[0]); // 2
+mid[0] = 20; // writes through to xs[1]
 System.println(xs[1]); // 20
 
 let owned = mid.to_array(); // copies into a fresh, independently-owned array
@@ -274,10 +271,10 @@ let xs = List<int>();
 xs.push(10);
 xs.push(20);
 System.println(xs.length); // 2
-System.println(xs.get(0)); // 10
+System.println(xs[0]); // 10
 ```
 
-`List<T>` offers `push`, `pop`, `@get_indexer` / `@set_indexer` (so `xs[i]` / `xs.get(i)` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+`List<T>` offers `push`, `pop`, `@get_indexer` / `@set_indexer` (so `xs[i]` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
 let ys = List<int>();
@@ -293,7 +290,7 @@ System.println(ys.binary_search(2).unwrap_or(-1)); // 1
 `Iterator<T>`, `Collection<T>`, and `IndexedCollection<T>` live in bootstrap `system.core`.
 
 - `Collection<T>` — `length` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and every `T[]`.
-- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`get(index)`, defaults `first` / `last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
+- `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`items[index]`, defaults `first` / `last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
 - `for (let x in xs)` works for arrays (native index loop), concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
 
 ```dream

@@ -31,9 +31,9 @@ class StreamingShortWriter: Writer {
 fun streaming_io(): void {
     let input = MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast"));
     let reader = BufferedReader(input, 2);
-    Assert.eq_str(reader.read_line().unwrap().unwrap(), "a");
-    Assert.eq_str(reader.read_line().unwrap().unwrap(), "b\rc");
-    Assert.eq_str(reader.read_line().unwrap().unwrap(), "last");
+    Assert.eq(reader.read_line().unwrap().unwrap(), "a");
+    Assert.eq(reader.read_line().unwrap().unwrap(), "b\rc");
+    Assert.eq(reader.read_line().unwrap().unwrap(), "last");
     Assert.is_true(reader.read_line().unwrap().is_none());
     Assert.eq(input.read(0).unwrap().length, 0);
     Assert.is_true(input.read_exact(1).is_err());
@@ -46,13 +46,13 @@ fun streaming_io(): void {
     destination.fail = false;
     buffered.finish().unwrap();
     buffered.finish().unwrap();
-    Assert.eq_str(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
+    Assert.eq(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
     Assert.is_true(buffered.write([(byte)1]).is_err());
 
     input.seek(0L).unwrap();
     let output = MemoryStream();
     Assert.eq(Streams.copy(input, output, 1).unwrap(), 11L);
-    Assert.eq_str(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
+    Assert.eq(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
     output.seek(15L).unwrap();
     output.write([(byte)65]).unwrap();
     let sparse = output.to_bytes().unwrap();
@@ -64,9 +64,9 @@ fun streaming_io(): void {
     Assert.is_true(BufferedWriter(destination, 0).finish().is_err());
     let seek_source = MemoryStream(Encoding.utf8_encode("first\nsecond\n"));
     let seek_reader = BufferedReader(seek_source, 8192);
-    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "first");
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");
     Assert.is_true(seek_reader.seek(0L - 1L).is_err());
-    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "second");
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "second");
     seek_reader.seek(0L).unwrap();
-    Assert.eq_str(seek_reader.read_line().unwrap().unwrap(), "first");
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");
 }

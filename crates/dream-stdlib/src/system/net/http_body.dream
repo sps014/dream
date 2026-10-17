@@ -1,0 +1,60 @@
+module system.net;
+
+// An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
+public class HttpBody: AsyncReader {
+    id: int;
+
+    internal constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        HttpBody.close_host(this.id);
+    }
+
+    @runtime("netBodyRead")
+    static extern fun read_host(id: int, count: int): int;
+
+    @runtime("netBodyClose")
+    static extern fun close_host(id: int): void;
+
+    // Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
+    // Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
+    public async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
+        let effective_token = CancellationToken.resolve(token);
+        let lifetime = [this];
+        if CancellationToken.is_cancelled_opt(effective_token) {
+            return Result.Err(IoError.cancelled());
+        }
+        if lifetime[0].id <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if max_bytes == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
+        let operation = HttpOperation(HttpBody.read_host(lifetime[0].id, max_bytes));
+        let result = operation.wait(effective_token).await;
+        operation.close();
+        if result.is_err() {
+            return Result.Err(
+                IoError("", result.unwrap_err().code(), result.unwrap_err().message())
+            );
+        }
+        return Result.Ok(result.unwrap());
+    }
+
+    // Releases the response transport and cancels a pending read; safe to call repeatedly.
+    public fun close(): Result<bool, HttpError> {
+        if this.id > 0 {
+            HttpBody.close_host(this.id);
+            this.id = 0;
+        }
+        return Result.Ok(true);
+    }
+}

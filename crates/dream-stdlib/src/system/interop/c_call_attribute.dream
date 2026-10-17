@@ -1,0 +1,8 @@
+module system.interop;
+
+/// C calling convention for `@c` externs: `@c_call(CCallConv.Cdecl)` (the platform default) or `@c_call(CCallConv.Stdcall)` (Win32 APIs; identical to cdecl on every target but 32-bit x86 Windows).
+@attribute(AttributeTarget.ExternFunction)
+public struct CCallAttribute {
+    /// Calling convention used by the foreign function.
+    public convention: CCallConv;
+}

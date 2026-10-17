@@ -1,0 +1,13 @@
+module system.compress;
+
+internal class CompressionStep {
+    internal consumed: int;
+    internal bytes: byte[];
+    internal finished: bool;
+
+    internal constructor(consumed: int, bytes: byte[], finished: bool) {
+        this.consumed = consumed;
+        this.bytes = bytes;
+        this.finished = finished;
+    }
+}

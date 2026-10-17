@@ -2,6 +2,8 @@
 
 **Import:** `import system.collections;`
 
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
 ## `Map`
 
 A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
@@ -48,14 +50,6 @@ The first probe hits an empty or matching slot on the usual insert. That case st
 
 ```dream
 public fun this[key: K] = value: V
-```
-
-## `set`
-
-Inserts `key` and `value`, replacing the value if the key is already present.
-
-```dream
-public fun set(key: K, value: V): void
 ```
 
 ## `contains`
@@ -192,4 +186,12 @@ Returns a new array containing the keys.
 
 ```dream
 public fun keys(): K[]
+```
+
+## `values`
+
+Returns a new array containing the values.
+
+```dream
+public fun values(): V[]
 ```

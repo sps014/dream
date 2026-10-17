@@ -1,27 +1,5 @@
 module system.cli;
 
-// Invalid invocation, command definition, or typed lookup; help and version are successful outcomes.
-public class CliError: Error {
-    error_code: string;
-    error_message: string;
-
-    // Creates an error with a stable machine code and diagnostic text.
-    public constructor(code: string, message: string) {
-        this.error_code = code;
-        this.error_message = message;
-    }
-
-    // EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
-    public fun code(): string {
-        return this.error_code;
-    }
-
-    // Human-readable diagnostic; invocation failures include usage guidance.
-    public fun message(): string {
-        return this.error_message;
-    }
-}
-
 // Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
 public class ParsedArguments {
     wire: JsonValue;
@@ -66,10 +44,8 @@ public class ParsedArguments {
 
     // True only for arguments explicitly supplied on the command line, excluding defaults.
     public fun is_present(name: string): bool {
-        return this.field("values")
-            .get(name)
-            .unwrap_or(JsonValue.none())
-            .get("provided")
+        return this.field("values")[name]
+            .unwrap_or(JsonValue.none())["provided"]
             .unwrap_or(JsonValue.none())
             .as_bool()
             .unwrap_or(false);
@@ -132,7 +108,7 @@ public class ParsedArguments {
 
     // Returns the final explicit scalar value for configuration merging, including typed options.
     public fun config_value(name: string): Result<string, CliError> {
-        let entry = this.field("values").get(name);
+        let entry = this.field("values")[name];
         if entry.is_none() {
             return Result.Err(CliError("ENOENT", "unknown argument: " + name));
         }
@@ -144,7 +120,7 @@ public class ParsedArguments {
     }
 
     fun field(name: string): JsonValue {
-        return this.wire.get(name).unwrap_or(JsonValue.none());
+        return this.wire[name].unwrap_or(JsonValue.none());
     }
 
     fun kind(): string {
@@ -152,7 +128,7 @@ public class ParsedArguments {
     }
 
     fun values(name: string, expected: string): Result<string[], CliError> {
-        let entry = this.field("values").get(name);
+        let entry = this.field("values")[name];
         if entry.is_none() {
             return Result.Err(CliError("ENOENT", "unknown argument: " + name));
         }

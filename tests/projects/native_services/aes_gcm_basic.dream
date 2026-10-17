@@ -13,7 +13,7 @@ fun c3_body(): void {
     let aad = Encoding.utf8_encode("header");
     let plaintext = Encoding.utf8_encode("attack at dawn");
 
-    let ciphertext = AesGcm.encrypt(key, nonce, plaintext, aad).unwrap_or(Buffer.alloc<byte>(0));
+    let ciphertext = AesGcm.encrypt(key, nonce, plaintext, aad).unwrap_or(Array.alloc<byte>(0));
     c3_verify_observation((ciphertext.length).to_string());
 
     switch (AesGcm.decrypt(key, nonce, ciphertext, aad)) {
@@ -40,13 +40,13 @@ fun c3_body(): void {
     }
 
     // Bad key length is rejected before touching the host.
-    switch (AesGcmKey.from_bytes(Buffer.alloc<byte>(10))) {
+    switch (AesGcmKey.from_bytes(Array.alloc<byte>(10))) {
         Ok(k) => c3_verify_observation(("should not construct").to_string()),
         Err(e) => c3_verify_observation(("invalid key rejected: " + e.code()).to_string()),
     }
 
     // Bad nonce length is rejected before touching the host.
-    switch (AesGcm.encrypt(key, Buffer.alloc<byte>(4), plaintext, aad)) {
+    switch (AesGcm.encrypt(key, Array.alloc<byte>(4), plaintext, aad)) {
         Ok(c) => c3_verify_observation(("should not encrypt").to_string()),
         Err(e) => c3_verify_observation(("invalid nonce rejected: " + e.code()).to_string()),
     }
@@ -59,7 +59,7 @@ fun c3_verify_observation(borrow value: string): void {
     let wanted = "32\n12\n30\nattack at dawn\nauth failed as expected: EDECRYPT\nauth failed as expected: EDECRYPT\ninvalid key rejected: EINVAL_KEY\ninvalid nonce rejected: EINVAL_NONCE\n";
     let end = c3_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c3_cursor, end));
+    Assert.eq(actual, wanted.substring(c3_cursor, end));
     c3_cursor = end;
 }
 

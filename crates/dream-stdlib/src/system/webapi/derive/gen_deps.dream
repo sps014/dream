@@ -15,7 +15,7 @@ extend WebGenerator {
         if color == 2 {
             return;
         }
-        this.colors.set(f.id, 1);
+        this.colors[f.id] = 1;
         for (let p in f.params) {
             if !p.has<DepAttribute>() {
                 continue;
@@ -39,7 +39,7 @@ extend WebGenerator {
                 this.visit_dependency(replacement);
             }
         }
-        this.colors.set(f.id, 2);
+        this.colors[f.id] = 2;
     }
 
     internal fun collect_overrides(): void {
@@ -77,9 +77,9 @@ extend WebGenerator {
                 let replacements = this.replacements.get(original.symbol)
                     .unwrap_or(List<GenFunction>());
                 replacements.push(f);
-                this.replacements.set(original.symbol, replacements);
+                this.replacements[original.symbol] = replacements;
                 out.line(
-                    "providers.set(" + web_quote(original.symbol) + ", " + web_quote(f.id) + ");"
+                    "providers[" + web_quote(original.symbol) + "] = " + web_quote(f.id) + ";"
                 );
             }
             out.line("return DependencyOverrides(providers); }");
@@ -168,9 +168,9 @@ extend WebGenerator {
         }
         if cache {
             out.line(
-                "ctx.dependencies.set("
+                "ctx.dependencies["
                     + web_quote(path.symbol)
-                    + ", DependencyValue<" + this.type_code(ty) + ">(" + value + ".unwrap())); }"
+                    + "] = DependencyValue<" + this.type_code(ty) + ">(" + value + ".unwrap()); }"
             );
         }
         return value + ".unwrap()";

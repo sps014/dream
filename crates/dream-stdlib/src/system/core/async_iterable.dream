@@ -1,0 +1,7 @@
+module system.core;
+
+/// A sequence that creates a fresh asynchronous cursor for each traversal.
+public interface AsyncIterable<T> {
+    /// Creates a cursor over the sequence. Close it when iteration ends early.
+    borrow fun iterator(): AsyncIterator<T>;
+}

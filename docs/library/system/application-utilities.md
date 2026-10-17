@@ -182,6 +182,7 @@ file keeps memory bounded while allowing the synchronous CSV reader to consume a
 network response.
 
 ```dream
+import system.encoding;
 import system;
 import system.cli;
 import system.config;
@@ -266,7 +267,8 @@ async fun main(): int {
         .string_option("output", short: "o", default_value: "records.csv");
     let parsed = command.parse(System.args);
     if parsed.is_err() {
-        System.stderr.write_line(parsed.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(parsed.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 2;
     }
     if parsed.unwrap().is_help {
@@ -275,7 +277,8 @@ async fun main(): int {
     }
     let config = ConfigBuilder().default_value("output", "records.csv").cli(parsed.unwrap()).build();
     if config.is_err() {
-        System.stderr.write_line(config.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(config.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 2;
     }
     let result = convert(
@@ -283,7 +286,8 @@ async fun main(): int {
         config.unwrap().get_string("output").unwrap()
     ).await;
     if result.is_err() {
-        System.stderr.write_line(result.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.flush().unwrap();
         return 1;
     }
     System.println("Wrote " + result.unwrap().to_string() + " records");

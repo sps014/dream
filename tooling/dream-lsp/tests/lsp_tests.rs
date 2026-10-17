@@ -2651,7 +2651,7 @@ fn instance_dispatch_resolves_its_receiver() {
 class JobGroup { public static fun begin(): JobGroup { return JobGroup(); } public fun dispatch(kernel: string, buffers: float[][], x: int, y: int, z: int): void {} public fun submit(): void {} }
 async fun main(): void {
     let p = JobGroup.begin();
-    p.dispa|tch("k", Buffer.alloc<float[]>(0), 1, 1, 1);
+    p.dispa|tch("k", Array.alloc<float[]>(0), 1, 1, 1);
 }
 "#,
     );
@@ -2775,7 +2775,7 @@ async fun main(): void {
 fn generic_buffer_alloc_infers_concrete_element_type() {
     let harness = TestHarness::new(
         r#"
-class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Buffer.alloc<T>(n); } }
+class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Array.alloc<T>(n); } }
 async fun main(): void {
     let buffer = TestBuffer<float>.alloc(4);
     buffe|r;
@@ -2797,7 +2797,7 @@ async fun main(): void {
 fn generic_buffer_read_at_hover_substitutes_element_type() {
     let harness = TestHarness::new(
         r#"
-class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Buffer.alloc<T>(n); } }
+class TestBuffer<T> { public static fun alloc(n: int): TestBuffer<T> { return TestBuffer<T>(); } public fun read_at(start: int, n: int): T[] { return Array.alloc<T>(n); } }
 async fun main(): void {
     let buffer = TestBuffer<float>.alloc(4);
     buffer.read_|at(0, 1);

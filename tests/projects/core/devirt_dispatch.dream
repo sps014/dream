@@ -163,7 +163,7 @@ fun cbc_verify_observation(borrow value: string): void {
     let wanted = "11\n20\n13\n14\n40\n-4\ncircle 12\nsquare 9\ncircle 3\n24\n3\n";
     let end = cbc_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cbc_cursor, end));
+    Assert.eq(actual, wanted.substring(cbc_cursor, end));
     cbc_cursor = end;
 }
 

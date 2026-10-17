@@ -33,7 +33,7 @@ fun c126_verify_observation(borrow value: string): void {
     let wanted = "{\"ok\":true,\"tags\":[\"a\"]}\ntrue 2\n";
     let end = c126_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c126_cursor, end));
+    Assert.eq(actual, wanted.substring(c126_cursor, end));
     c126_cursor = end;
 }
 

@@ -1,3 +1,5 @@
+module system.core;
+
 @intrinsic(Intrinsic.ArraySlotTake)
 extern fun forged(items: int[], index: int): int;
 fun main(): void { let x = forged([1], 0); }

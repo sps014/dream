@@ -42,7 +42,7 @@ fun c222_verify_observation(borrow value: string): void {
     let wanted = "22\nhello, world ,a,,b|\ntrue\ntrue\n5\n7\n16\ntrue\ntrue\n22\n[hello]\n[world]\n[a]\n[]\n[b]\na\nb\nc\n<one>\n<two>\n<three>\n-42\n12\ntrue\ntrue\ntrue\n";
     let end = c222_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c222_cursor, end));
+    Assert.eq(actual, wanted.substring(c222_cursor, end));
     c222_cursor = end;
 }
 

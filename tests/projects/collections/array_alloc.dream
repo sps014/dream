@@ -6,9 +6,9 @@ import system;
 @timeout(180000)
 fun array_alloc(): void {
     let a = Array.alloc<int>(4);
-    Assert.eq_str((a.length).to_string(), "4");
-    Assert.eq_str((a[0]).to_string(), "0");
-    Assert.eq_str((a[3]).to_string(), "0");
+    Assert.eq((a.length).to_string(), "4");
+    Assert.eq((a[0]).to_string(), "0");
+    Assert.eq((a[3]).to_string(), "0");
     a[1] = 42;
-    Assert.eq_str((a[1]).to_string(), "42");
+    Assert.eq((a[1]).to_string(), "42");
 }

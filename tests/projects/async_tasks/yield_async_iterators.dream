@@ -85,11 +85,11 @@ async fun yield_async_iterators(): void {
     Assert.is_true(a.next().await.is_none());
     b.close();
     await for (let value in YaValues<string>("ok").values()) {
-        Assert.eq_str(value, "ok");
+        Assert.eq(value, "ok");
     }
     let source: YaSource<string> = YaValues<string>("interface");
     await for (let value in source.values()) {
-        Assert.eq_str(value, "interface");
+        Assert.eq(value, "interface");
     }
     await for (let value in ya_empty()) {
         Assert.is_true(false);

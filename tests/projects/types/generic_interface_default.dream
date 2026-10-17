@@ -46,10 +46,10 @@ class ce6_IntBox: ce6_Container<int> {
 @timeout(180000)
 fun generic_interface_default(): void {
     let b = ce6_Box<int>(7);
-    Assert.eq_str((b.firstOr(9)).to_string(), "7");
-    Assert.eq_str((b.count()).to_string(), "1");
+    Assert.eq((b.firstOr(9)).to_string(), "7");
+    Assert.eq((b.count()).to_string(), "1");
 
     let a = ce6_IntBox(42);
-    Assert.eq_str((a.firstOr(9)).to_string(), "42");
-    Assert.eq_str((a.count()).to_string(), "1");
+    Assert.eq((a.firstOr(9)).to_string(), "42");
+    Assert.eq((a.count()).to_string(), "1");
 }

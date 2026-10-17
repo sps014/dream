@@ -16,10 +16,10 @@ fun ref_closure_capture(): void {
         c1cd_increment(ref counter); // ref-passes the closure's own captured cell
         return counter;
     };
-    Assert.eq_str((inc()).to_string(), "1"); // 1
-    Assert.eq_str((inc()).to_string(), "2"); // 2
-    Assert.eq_str((counter).to_string(), "2"); // 2: visible to the enclosing scope too
+    Assert.eq((inc()).to_string(), "1"); // 1
+    Assert.eq((inc()).to_string(), "2"); // 2
+    Assert.eq((counter).to_string(), "2"); // 2: visible to the enclosing scope too
 
     c1cd_increment(ref counter); // and the enclosing scope's ref-passing is visible to the closure
-    Assert.eq_str((inc()).to_string(), "4"); // 4
+    Assert.eq((inc()).to_string(), "4"); // 4
 }

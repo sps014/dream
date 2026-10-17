@@ -1,0 +1,10 @@
+module system.core;
+
+/// Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction
+)
+public struct WebAttribute {}

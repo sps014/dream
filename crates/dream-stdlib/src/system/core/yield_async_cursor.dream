@@ -1,0 +1,54 @@
+module system.core;
+
+/// An asynchronous cursor over values from a yielding producer.
+@allow_cycle
+public class YieldAsyncCursor<T>: AsyncIterator<T> {
+    channel: YieldChannel<T>;
+    producer: Option<Future<void>>;
+    started: bool;
+    busy: bool;
+
+    /// Creates a `YieldAsyncCursor` with `channel`, `producer`.
+    public constructor(channel: YieldChannel<T>, producer: Future<void>) {
+        this.channel = channel;
+        this.producer = Option.Some(producer);
+        this.started = false;
+        this.busy = false;
+    }
+
+    /// Returns the next value, or `None` when the sequence has ended.
+    public async fun next(): Option<T> {
+        if this.channel.ended {
+            return Option.None;
+        }
+        if this.busy {
+            System.panic("async iterator advancement is already pending");
+        }
+        this.busy = true;
+        let advancement = YieldAdvanceLease<T>(this);
+        if this.started {
+            this.channel.advance();
+        }
+        this.started = true;
+        Promise.start(this.producer.unwrap());
+        this.channel.ready.await;
+        this.busy = false;
+        advancement.complete();
+        return this.channel.value;
+    }
+
+    /// Ends iteration and releases resources held by the cursor.
+    public fun close(): void {
+        this.channel.finish();
+        if this.producer.is_some() {
+            Promise.cancel(this.producer.unwrap());
+        }
+        YieldSignals.complete(this.channel.resume);
+        this.producer = Option.None;
+        this.channel.value = Option.None;
+    }
+
+    fun del() {
+        this.close();
+    }
+}

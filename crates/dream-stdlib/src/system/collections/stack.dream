@@ -30,7 +30,7 @@ public class Stack<T>: Collection<T> {
         if this.items.length == 0 {
             return Option.None;
         }
-        return Option.Some(this.items.get(this.items.length - 1));
+        return Option.Some(this.items[this.items.length - 1]);
     }
 
     // Removes every element.

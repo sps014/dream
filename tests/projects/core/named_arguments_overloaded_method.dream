@@ -16,6 +16,6 @@ class c164_Calc {
 @timeout(180000)
 fun named_arguments_overloaded_method(): void {
     let c = c164_Calc();
-    Assert.eq_str((c.add(x: 5)).to_string(), "5");
-    Assert.eq_str((c.add(x: 2, y: 3)).to_string(), "5");
+    Assert.eq((c.add(x: 5)).to_string(), "5");
+    Assert.eq((c.add(x: 2, y: 3)).to_string(), "5");
 }

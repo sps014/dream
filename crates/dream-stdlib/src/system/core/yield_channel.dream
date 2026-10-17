@@ -1,0 +1,47 @@
+module system.core;
+
+/// A single-value channel coordinating a yielding producer and consumer.
+@allow_cycle
+public class YieldChannel<T> {
+    /// Next value waiting for the consumer, or `None` when no value is ready.
+    public value: Option<T>;
+
+    /// Whether the producer has finished yielding values.
+    public ended: bool;
+
+    /// Signal completed when the next yielded value is available.
+    public ready: Future<void>;
+
+    /// Signal allowing the producer to continue after a value is consumed.
+    public resume: Future<void>;
+
+    /// Creates a `YieldChannel` with default settings.
+    public constructor() {
+        this.value = Option.None;
+        this.ended = false;
+        this.ready = YieldSignals.pending();
+        this.resume = YieldSignals.pending();
+    }
+
+    /// Publishes a value and waits until the consumer allows the producer to continue.
+    public fun emit(value: T): Future<void> {
+        this.value = Option.Some(value);
+        YieldSignals.complete(this.ready);
+        return this.resume;
+    }
+
+    /// Marks the producer complete and wakes a waiting consumer.
+    public fun finish(): void {
+        this.ended = true;
+        YieldSignals.complete(this.ready);
+    }
+
+    /// Allows the producer to continue after the current value has been consumed.
+    public fun advance(): void {
+        this.value = Option.None;
+        this.ready = YieldSignals.pending();
+        let previous = this.resume;
+        this.resume = YieldSignals.pending();
+        YieldSignals.complete(previous);
+    }
+}

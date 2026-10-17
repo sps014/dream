@@ -13,5 +13,5 @@ fun c162_h(x: string): int {
 @test
 @timeout(180000)
 fun named_arguments_overloaded(): void {
-    Assert.eq_str((c162_h(x: 5)).to_string(), "5");
+    Assert.eq((c162_h(x: 5)).to_string(), "5");
 }

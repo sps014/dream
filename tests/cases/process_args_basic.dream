@@ -9,8 +9,8 @@ fun main(): void {
     System.println(args.length);
     System.println(args[0]);
     System.println(args[1]);
-    Assert.eq_str(args[2], "");
-    Assert.eq_str(args[3], "first\nsecond");
-    Assert.eq_str(args[4], "こんにちは");
-    Assert.eq_str(Encoding.hex_encode(Encoding.utf8_encode(args[5])), "efbbbf6c656164696e67");
+    Assert.eq(args[2], "");
+    Assert.eq(args[3], "first\nsecond");
+    Assert.eq(args[4], "こんにちは");
+    Assert.eq(Encoding.hex_encode(Encoding.utf8_encode(args[5])), "efbbbf6c656164696e67");
 }

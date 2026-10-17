@@ -1,0 +1,27 @@
+module system.webapi.auth;
+
+/// Verified identity and application-defined space-separated permission scopes.
+@json
+public class AuthPrincipal {
+    /// Stable identifier of the authenticated account.
+    public subject: string;
+
+    /// Space-separated permissions granted to this account or token.
+    public scopes: string;
+
+    /// Creates a `AuthPrincipal` with `subject`, `scopes`.
+    public constructor(subject: string, scopes: string) {
+        this.subject = subject;
+        this.scopes = scopes;
+    }
+
+    /// Returns whether the space-separated scope list includes `scope`.
+    public fun has_scope(scope: string): bool {
+        for (let item in this.scopes.split(' ')) {
+            if item == scope {
+                return true;
+            }
+        }
+        return false;
+    }
+}

@@ -2,6 +2,8 @@
 
 **Import:** `import system.collections;`
 
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
 ## `List`
 
 A growable, ordered sequence with zero-based indexed access. Adding elements may increase its capacity.
@@ -106,14 +108,6 @@ Overwrites the element at `index`. Panics if `index` is out of range.
 public fun this[index: int] = value: T
 ```
 
-## `set`
-
-Replaces the element at `index`; an out-of-range index panics.
-
-```dream
-public fun set(index: int, value: T): void
-```
-
 ## `pop`
 
 Removes and returns the last element, or `None` if the list is empty.
@@ -192,4 +186,12 @@ Removes all elements and releases the references they held. Capacity is unchange
 
 ```dream
 public fun clear(): void
+```
+
+## `clear`
+
+Removes all elements and releases the references they held. Capacity is unchanged.
+
+```dream
+public fun clear(): void where T: unmanaged
 ```

@@ -26,5 +26,5 @@ fun arc_slot_overwrite_snapshot(): void {
     q.head = Option.Some(c20_Job("j"));
     let taken = q.head;
     q.head = Option.None;
-    Assert.eq_str((taken.unwrap().name).to_string(), "j");
+    Assert.eq((taken.unwrap().name).to_string(), "j");
 }

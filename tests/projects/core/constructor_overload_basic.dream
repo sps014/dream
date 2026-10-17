@@ -33,7 +33,7 @@ fun constructor_overload_basic(): void {
     let a = c9d_Point();
     let b = c9d_Point(3, 4);
     let c = c9d_Point(5);
-    Assert.eq_str((a.describe()).to_string(), "(0, 0)");
-    Assert.eq_str((b.describe()).to_string(), "(3, 4)");
-    Assert.eq_str((c.describe()).to_string(), "(5, 5)");
+    Assert.eq((a.describe()).to_string(), "(0, 0)");
+    Assert.eq((b.describe()).to_string(), "(3, 4)");
+    Assert.eq((c.describe()).to_string(), "(5, 5)");
 }

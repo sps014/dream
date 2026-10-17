@@ -53,11 +53,6 @@ public class FileStream {
         return Result.Ok(this.handle.tell()? < this.handle.length()?);
     }
 
-    // Returns the current byte offset, or an I/O or closed-resource error.
-    public get position(): Result<long, IoError> {
-        return this.handle.tell();
-    }
-
     // Returns the current file length in bytes, or an I/O or closed-resource error.
     public get length(): Result<long, IoError> {
         return this.handle.length();
@@ -76,11 +71,6 @@ public class FileStream {
     // Returns the current byte offset, accounting for buffered read-ahead.
     public fun tell(): Result<long, IoError> {
         return this.handle.tell();
-    }
-
-    // Seeks to byte zero; propagates positioning errors without changing position on failure.
-    public fun reset(): Result<bool, IoError> {
-        return this.seek(0L);
     }
 
     // Closes the underlying handle idempotently and reports explicit closure failures.

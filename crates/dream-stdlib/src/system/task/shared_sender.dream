@@ -1,0 +1,74 @@
+module system.task;
+
+// A shared producer; clone creates an independent endpoint and ordinary aliases share closure.
+shared public class SharedSender<T: shared> {
+    owner: SharedChannelState;
+    endpoint: usize;
+
+    internal constructor(owner: SharedChannelState) {
+        this.owner = owner;
+        this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 1);
+    }
+
+    // Creates another producer; the queue closes after the last producer closes or drops.
+    public fun clone(): SharedSender<T> {
+        return SharedSender<T>(this.owner);
+    }
+
+    // Attempts one send atomically without blocking the scheduler.
+    public fun try_send(value: T): Result<bool, ChannelError> {
+        let carrier = [value];
+        let status = SharedChannelHost.send<T>(this.endpoint, carrier);
+        if status == 1 {
+            return Result.Err(ChannelError.Full);
+        }
+        if status == 2 {
+            return Result.Err(ChannelError.Closed);
+        }
+        return Result.Ok(true);
+    }
+
+    // Waits for capacity using cross-worker notifications and inherited cancellation.
+    public fun send(
+        value: T,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<bool, ChannelError>> {
+        return SharedSender<T>.send_owned(this, value, CancellationToken.resolve(token));
+    }
+
+    static async fun send_owned(
+        sender: SharedSender<T>,
+        value: T,
+        token: Option<CancellationToken>
+    ): Result<bool, ChannelError> {
+        while true {
+            if CancellationToken.is_cancelled_opt(token) {
+                return Result.Err(ChannelError.Cancelled);
+            }
+            let result = sender.try_send(value);
+            if result.is_ok() || result.unwrap_err() != ChannelError.Full {
+                return result;
+            }
+            let waiting = SharedChannelWait(sender.endpoint);
+            if token.is_some() {
+                let result = token.unwrap().wait(waiting.signal()).await;
+                waiting.close();
+                if result.is_err() {
+                    return Result.Err(ChannelError.Cancelled);
+                }
+            } else {
+                waiting.signal().await;
+                waiting.close();
+            }
+        }
+    }
+
+    // Closes this endpoint atomically and wakes affected producers and consumers.
+    public fun close(): void {
+        SharedChannelHost.close(this.endpoint);
+    }
+
+    del() {
+        SharedChannelHost.free(this.endpoint);
+    }
+}

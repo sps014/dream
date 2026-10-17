@@ -36,12 +36,12 @@ class c116_User {
 fun json_ignore(): void {
     let u = c116_User("Ada", 36, "secret", 7, Option.Some("Countess"));
     let text = Json.serialize(u);
-    Assert.eq_str((text).to_string(), "{\"name\":\"Ada\",\"age\":36}");
+    Assert.eq((text).to_string(), "{\"name\":\"Ada\",\"age\":36}");
 
     let back = Json.deserialize<c116_User>(text).unwrap_or(u);
-    Assert.eq_str((back.name).to_string(), "Ada");
-    Assert.eq_str((back.age).to_string(), "36");
-    Assert.eq_str((back.password).to_string(), "");
-    Assert.eq_str((back.login_count).to_string(), "0");
-    Assert.eq_str((back.nickname.is_none()).to_string(), "true");
+    Assert.eq((back.name).to_string(), "Ada");
+    Assert.eq((back.age).to_string(), "36");
+    Assert.eq((back.password).to_string(), "");
+    Assert.eq((back.login_count).to_string(), "0");
+    Assert.eq((back.nickname.is_none()).to_string(), "true");
 }

@@ -37,7 +37,7 @@ fun cd4_verify_observation(borrow value: string): void {
     let wanted = "true\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n";
     let end = cd4_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(cd4_cursor, end));
+    Assert.eq(actual, wanted.substring(cd4_cursor, end));
     cd4_cursor = end;
 }
 

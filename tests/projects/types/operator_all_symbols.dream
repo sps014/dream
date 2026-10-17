@@ -61,16 +61,16 @@ class c177_Bits {
 @timeout(180000)
 fun operator_all_symbols(): void {
     let b = c177_Bits(10);
-    Assert.eq_str((b % 3).to_string(), "1");
-    Assert.eq_str((b % c177_Bits(3)).to_string(), "1");
-    Assert.eq_str((b & 3).to_string(), "2");
-    Assert.eq_str((b & c177_Bits(3)).to_string(), "2");
-    Assert.eq_str((b | 3).to_string(), "11");
-    Assert.eq_str((b | c177_Bits(3)).to_string(), "11");
-    Assert.eq_str((b ^ 3).to_string(), "9");
-    Assert.eq_str((b ^ c177_Bits(3)).to_string(), "9");
-    Assert.eq_str((b << 3).to_string(), "80");
-    Assert.eq_str((b << c177_Bits(3)).to_string(), "80");
-    Assert.eq_str((b >> 3).to_string(), "1");
-    Assert.eq_str((b >> c177_Bits(3)).to_string(), "1");
+    Assert.eq((b % 3).to_string(), "1");
+    Assert.eq((b % c177_Bits(3)).to_string(), "1");
+    Assert.eq((b & 3).to_string(), "2");
+    Assert.eq((b & c177_Bits(3)).to_string(), "2");
+    Assert.eq((b | 3).to_string(), "11");
+    Assert.eq((b | c177_Bits(3)).to_string(), "11");
+    Assert.eq((b ^ 3).to_string(), "9");
+    Assert.eq((b ^ c177_Bits(3)).to_string(), "9");
+    Assert.eq((b << 3).to_string(), "80");
+    Assert.eq((b << c177_Bits(3)).to_string(), "80");
+    Assert.eq((b >> 3).to_string(), "1");
+    Assert.eq((b >> c177_Bits(3)).to_string(), "1");
 }

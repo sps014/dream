@@ -125,9 +125,10 @@ fn call_result_member_completion() {
         .expect("call-result receiver resolves");
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
-        names.contains(&"length") && names.contains(&"get") && names.contains(&"reverse"),
+        names.contains(&"length") && names.contains(&"reverse"),
         "expected array members on a call-result receiver, got {names:?}"
     );
+    assert!(!names.contains(&"get"), "array access uses the indexer");
 }
 
 #[test]

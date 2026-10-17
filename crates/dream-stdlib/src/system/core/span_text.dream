@@ -3,7 +3,7 @@ module system.core;
 extend ReadOnlySpan<T: SpanCharacter> {
     /// Returns the character at the zero-based index; an invalid index panics.
     @inline
-    public fun char_at(index: int): char {
+    internal fun char_at(index: int): char {
         return this[index];
     }
 

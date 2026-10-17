@@ -75,7 +75,7 @@ fun c112_verify_observation(borrow value: string): void {
     let wanted = "{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}\n199000\n";
     let end = c112_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c112_cursor, end));
+    Assert.eq(actual, wanted.substring(c112_cursor, end));
     c112_cursor = end;
 }
 

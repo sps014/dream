@@ -12,38 +12,6 @@ Allocator introspection for tests and diagnostics.
 public static class Debug
 ```
 
-## `host_free_list_head`
-
-Returns the allocator's free-list address for debugging.
-
-```dream
-public static extern fun host_free_list_head(): int
-```
-
-## `host_heap_ptr`
-
-Returns the current heap address for debugging.
-
-```dream
-public static extern fun host_heap_ptr(): int
-```
-
-## `host_live_objects`
-
-Returns the number of currently live managed allocations.
-
-```dream
-public static extern fun host_live_objects(): long
-```
-
-## `host_total_allocations`
-
-Returns the total number of managed allocations made so far.
-
-```dream
-public static extern fun host_total_allocations(): long
-```
-
 ## `ref_count`
 
 Returns the current strong reference count of `o` for debugging.

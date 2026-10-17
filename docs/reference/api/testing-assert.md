@@ -2,6 +2,8 @@
 
 **Import:** `import system.testing;`
 
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
 ## `Assert`
 
 Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.
@@ -36,7 +38,7 @@ public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T
 
 ## `eq`
 
-Asserts that `actual == expected`.
+Asserts that `actual == expected`. String failures quote the expected and actual values.
 
 ```dream
 public static fun eq<T>(actual: T, expected: T): void
@@ -72,12 +74,4 @@ Asserts that two doubles are within `epsilon` of each other.
 
 ```dream
 public static fun approx(actual: double, expected: double, epsilon: double): void
-```
-
-## `eq_str`
-
-Asserts that two strings have identical contents.
-
-```dream
-public static fun eq_str(actual: string, expected: string): void
 ```

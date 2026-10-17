@@ -20,14 +20,6 @@ Accesses the element at `index`; an out-of-range index panics.
 fun this[index: int]: T
 ```
 
-## `get`
-
-Returns the element at `index`; an out-of-range index panics.
-
-```dream
-public fun get(index: int): T
-```
-
 ## `first`
 
 Element at index 0, or `None` when empty.

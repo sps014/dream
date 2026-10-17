@@ -15,7 +15,7 @@ import system.process;
 
 async fun main(): void {
     let options = ProcessOptions();
-    options.env.set("APP_MODE", "test");
+    options.env["APP_MODE"] = "test";
     options.timeout_ms = 5000;
     let output = Process.run("example-tool", ["--check"], options: options).await;
     switch (output) {

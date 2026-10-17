@@ -1,0 +1,116 @@
+module system.net;
+
+// Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).
+public class UrlQuery {
+    keys: List<string>;
+    values: List<string>;
+    original: string;
+    dirty: bool;
+
+    internal constructor(parts: string[]) {
+        this.keys = List<string>();
+        this.values = List<string>();
+        this.original = parts[5];
+        this.dirty = false;
+        for (let i = 6; i < parts.length; i = i + 2) {
+            this.keys.push(parts[i]);
+            this.values.push(parts[i + 1]);
+        }
+    }
+
+    // Number of key/value pairs, including repeated keys and empty values.
+    public get length(): int {
+        return this.keys.length;
+    }
+
+    // Appends a decoded key/value pair after existing parameters.
+    public fun append(key: string, value: string): void {
+        this.keys.push(key);
+        this.values.push(value);
+        this.dirty = true;
+    }
+
+    // Returns the first decoded value for `key`, or `None` if the key is absent.
+    public fun get(key: string): Option<string> {
+        for (let i = 0; i < this.keys.length; i = i + 1) {
+            if this.keys[i] == key {
+                return Option.Some(this.values[i]);
+            }
+        }
+        return Option.None;
+    }
+
+    // Copies all decoded values for `key` in their original order.
+    public fun get_all(key: string): string[] {
+        let matches = List<string>();
+        for (let i = 0; i < this.keys.length; i = i + 1) {
+            if this.keys[i] == key {
+                matches.push(this.values[i]);
+            }
+        }
+        return matches.take_array();
+    }
+
+    // Replaces the first occurrence in place and removes later duplicates; appends if absent.
+    public fun set(key: string, value: string): void {
+        let found = false;
+        let i = 0;
+        while i < this.keys.length {
+            if this.keys[i] == key {
+                if found {
+                    this.keys.remove_at(i);
+                    this.values.remove_at(i);
+                    continue;
+                }
+                this.values[i] = value;
+                found = true;
+            }
+            i = i + 1;
+        }
+        if !found {
+            this.append(key, value);
+        }
+        this.dirty = true;
+    }
+
+    // Removes every occurrence of `key`, preserving the order of remaining pairs.
+    public fun remove(key: string): void {
+        let i = 0;
+        while i < this.keys.length {
+            if this.keys[i] == key {
+                this.keys.remove_at(i);
+                this.values.remove_at(i);
+            } else {
+                i = i + 1;
+            }
+        }
+        this.dirty = true;
+    }
+
+    // Removes all parameters and the query delimiter from the URL.
+    public fun clear(): void {
+        this.keys.clear();
+        this.values.clear();
+        this.dirty = true;
+    }
+
+    internal fun render(): string {
+        if !this.dirty {
+            return this.original;
+        }
+        if this.keys.length == 0 {
+            return "";
+        }
+        let output = StringBuilder();
+        output.append("?");
+        for (let i = 0; i < this.keys.length; i = i + 1) {
+            if i > 0 {
+                output.append("&");
+            }
+            output.append(Encoding.form_encode_component(this.keys[i]));
+            output.append("=");
+            output.append(Encoding.form_encode_component(this.values[i]));
+        }
+        return output.to_string();
+    }
+}

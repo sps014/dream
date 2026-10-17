@@ -60,7 +60,7 @@ fun c94_body(): void {
     prices.sort();
     let i = 0;
     while i < prices.length {
-        c94_verify_observation((prices.get(i).cents).to_string());
+        c94_verify_observation((prices[i].cents).to_string());
         i = i + 1;
     }
 
@@ -72,14 +72,14 @@ fun c94_body(): void {
     vs.sort();
     let j = 0;
     while j < vs.length {
-        let v = vs.get(j);
+        let v = vs[j];
         c94_verify_observation((v.x * v.x + v.y * v.y).to_string());
         j = j + 1;
     }
 
     // `sort_by` with an explicit comparator (descending by cents).
     prices.sort_by(c94_by_cents_desc);
-    c94_verify_observation((prices.get(0).cents).to_string()); // 300
+    c94_verify_observation((prices[0].cents).to_string()); // 300
 }
 
 let c94_cursor: int = 0;
@@ -89,7 +89,7 @@ fun c94_verify_observation(borrow value: string): void {
     let wanted = "true\ntrue\ntrue\nfalse\n100\n200\n300\n2\n4\n25\n300\n";
     let end = c94_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c94_cursor, end));
+    Assert.eq(actual, wanted.substring(c94_cursor, end));
     c94_cursor = end;
 }
 

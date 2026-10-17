@@ -39,36 +39,71 @@ fun c8b_asc(a: int, b: int): int {
 }
 
 fun c8b_sum_evens(xs: Collection<int>): int {
-    let evens = xs.filter(c8b_is_even);
-    return evens.reduce(0, c8b_add);
+    return xs.seq().filter(c8b_is_even).reduce(0, c8b_add);
 }
 
 @test
 @timeout(180000)
 fun collection_query(): void {
+    c8b_lazy_stages();
     let xs = List<int>();
     xs.push(1);
     xs.push(2);
     xs.push(3);
     xs.push(4);
 
-    Assert.eq_str((xs.all(c8b_is_positive)).to_string(), "true");
-    Assert.eq_str((xs.any(c8b_is_three)).to_string(), "true");
-    Assert.eq_str((xs.count_where(c8b_gt_two)).to_string(), "2");
-    Assert.eq_str((xs.find_where(c8b_gt_two).unwrap_or(-1)).to_string(), "3");
+    Assert.eq((xs.all(c8b_is_positive)).to_string(), "true");
+    Assert.eq((xs.any(c8b_is_three)).to_string(), "true");
+    Assert.eq((xs.count_where(c8b_gt_two)).to_string(), "2");
+    Assert.eq((xs.find_where(c8b_gt_two).unwrap_or(-1)).to_string(), "3");
 
-    let doubled = xs.map(c8b_times_two);
-    Assert.eq_str((doubled.length).to_string(), "4");
-    Assert.eq_str((doubled.get(0)).to_string(), "2");
+    let doubled = xs.seq().map(c8b_times_two).to_list();
+    Assert.eq((doubled.length).to_string(), "4");
+    Assert.eq((doubled[0]).to_string(), "2");
 
-    Assert.eq_str((c8b_sum_evens(xs)).to_string(), "6");
+    Assert.eq((c8b_sum_evens(xs)).to_string(), "6");
 
     let filtered = xs.seq().filter(c8b_gt_one).map(c8b_plus_ten).to_list();
-    Assert.eq_str((filtered.reduce(0, c8b_add)).to_string(), "39");
+    Assert.eq((filtered.seq().reduce(0, c8b_add)).to_string(), "39");
 
     let from_iface: Collection<int> = xs;
-    Assert.eq_str((from_iface.to_list().length).to_string(), "4");
+    Assert.eq((from_iface.seq().to_list().length).to_string(), "4");
 
-    Assert.eq_str((xs.distinct().length).to_string(), "4");
-    Assert.eq_str((xs.order_by(c8b_asc).get(0)).to_string(), "1");
+    Assert.eq((xs.seq().distinct().to_list().length).to_string(), "4");
+    Assert.eq((xs.seq().order_by(c8b_asc).to_list()[0]).to_string(), "1");
+}
+
+let c8b_visits: int = 0;
+
+fun c8b_observe(n: int): int {
+    c8b_visits++;
+    return n * 2;
+}
+
+fun c8b_expand(n: int): List<int> {
+    return [n, n];
+}
+
+fun c8b_lazy_stages(): void {
+    c8b_visits = 0;
+    let values: List<int> = [1, 2, 3, 4];
+    let query = values.seq().map(c8b_observe).filter(c8b_gt_two).skip(1).take(1);
+    Assert.eq(c8b_visits, 0);
+    Assert.eq(query.reduce(0, c8b_add), 6);
+    Assert.eq(c8b_visits, 3);
+    Assert.eq(query.count(), 1);
+    Assert.eq(c8b_visits, 6);
+    Assert.eq(values.seq().map(c8b_observe).take(0).count(), 0);
+    Assert.eq(c8b_visits, 6);
+    let flattened = values.seq().flat_map(c8b_expand).distinct().take(2);
+    Assert.eq(flattened.reduce(0, c8b_add), 3);
+    Assert.eq(flattened.reduce(0, c8b_add), 3);
+    let first = 0;
+    for (let value in query) {
+        first = value;
+        break;
+    }
+    Assert.eq(first, 6);
+    Assert.eq(query.to_list()[0], 6);
+    Assert.eq(values.seq().skip(-2).take(-1).count(), 0);
 }

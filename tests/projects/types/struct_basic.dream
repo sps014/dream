@@ -30,11 +30,11 @@ fun struct_basic() {
     let b = a; // copy
     b.x = 100; // mutates the copy only
 
-    Assert.eq_str((a.x).to_string(), "1"); // 1  (unchanged by the copy's mutation)
-    Assert.eq_str((b.x).to_string(), "100"); // 100
-    Assert.eq_str((a.sum()).to_string(), "3"); // 3
-    Assert.eq_str((b.sum()).to_string(), "102"); // 102
+    Assert.eq((a.x).to_string(), "1"); // 1  (unchanged by the copy's mutation)
+    Assert.eq((b.x).to_string(), "100"); // 100
+    Assert.eq((a.sum()).to_string(), "3"); // 3
+    Assert.eq((b.sum()).to_string(), "102"); // 102
 
-    Assert.eq_str((c231_bump(a)).to_string(), "1001"); // 1001 (local copy inside bump)
-    Assert.eq_str((a.x).to_string(), "1"); // 1    (caller's value unchanged)
+    Assert.eq((c231_bump(a)).to_string(), "1001"); // 1001 (local copy inside bump)
+    Assert.eq((a.x).to_string(), "1"); // 1    (caller's value unchanged)
 }

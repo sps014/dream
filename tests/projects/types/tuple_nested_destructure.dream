@@ -5,11 +5,11 @@ import system;
 @timeout(180000)
 fun tuple_nested_destructure() {
     let (a, (b, c)) = (1, (2, 3));
-    Assert.eq_str((a).to_string(), "1");
-    Assert.eq_str((b).to_string(), "2");
-    Assert.eq_str((c).to_string(), "3");
+    Assert.eq((a).to_string(), "1");
+    Assert.eq((b).to_string(), "2");
+    Assert.eq((c).to_string(), "3");
     let t = (10, (20, 30));
     let (x, (y, _)) = t;
-    Assert.eq_str((x).to_string(), "10");
-    Assert.eq_str((y).to_string(), "20");
+    Assert.eq((x).to_string(), "10");
+    Assert.eq((y).to_string(), "20");
 }

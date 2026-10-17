@@ -6,8 +6,8 @@ import system.testing;
 fun incremental_utf8(): void {
     let bytes = Encoding.utf8_encode("Aé😀日本語");
     for (let split = 0; split <= bytes.length; split = split + 1) {
-        let first = Buffer.alloc<byte>(split);
-        let second = Buffer.alloc<byte>(bytes.length - split);
+        let first = Array.alloc<byte>(split);
+        let second = Array.alloc<byte>(bytes.length - split);
         for (let i = 0; i < split; i = i + 1) {
             first[i] = bytes[i];
         }
@@ -19,7 +19,7 @@ fun incremental_utf8(): void {
             .unwrap() + decoder.decode_chunk(second)
             .unwrap() + decoder.finish()
             .unwrap();
-        Assert.eq_str(decoded, "Aé😀日本語");
+        Assert.eq(decoded, "Aé😀日本語");
         Assert.is_true(decoder.decode_chunk([]).is_err());
     }
     let strict = Utf8Decoder();
@@ -28,13 +28,13 @@ fun incremental_utf8(): void {
     truncated.decode_chunk([(byte)226]).unwrap();
     Assert.is_true(truncated.finish().is_err());
     let replacement = Utf8Decoder(InvalidEncoding.Replace);
-    Assert.eq_str(replacement.decode_chunk([(byte)226, (byte)65]).unwrap(), "�A");
-    Assert.eq_str(Encoding.uri_decode_component("a+b%20é").unwrap(), "a+b é");
-    Assert.eq_str(Encoding.form_decode_component("a+b%2b").unwrap(), "a b+");
-    Assert.eq_str(Encoding.form_encode_component("a b+"), "a+b%2b");
-    Assert.eq_str(Encoding.form_encode_component("~*"), "%7e*");
-    Assert.eq_str(Encoding.uri_encode_component("~*"), "~%2a");
-    Assert.eq_str(Encoding.uri_decode_component("日本語").unwrap(), "日本語");
+    Assert.eq(replacement.decode_chunk([(byte)226, (byte)65]).unwrap(), "�A");
+    Assert.eq(Encoding.uri_decode_component("a+b%20é").unwrap(), "a+b é");
+    Assert.eq(Encoding.form_decode_component("a+b%2b").unwrap(), "a b+");
+    Assert.eq(Encoding.form_encode_component("a b+"), "a+b%2b");
+    Assert.eq(Encoding.form_encode_component("~*"), "%7e*");
+    Assert.eq(Encoding.uri_encode_component("~*"), "~%2a");
+    Assert.eq(Encoding.uri_decode_component("日本語").unwrap(), "日本語");
     Assert.is_true(Utf8Decoder().decode_chunk([(byte)224, (byte)128, (byte)128]).is_err());
     Assert.is_true(Utf8Decoder().decode_chunk([(byte)237, (byte)160, (byte)128]).is_err());
     Assert.is_true(

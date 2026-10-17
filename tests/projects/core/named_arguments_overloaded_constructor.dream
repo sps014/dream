@@ -21,6 +21,6 @@ class c163_Point {
 @timeout(180000)
 fun named_arguments_overloaded_constructor(): void {
     let p = c163_Point(x: 3, y: 4);
-    Assert.eq_str((p.x).to_string(), "3");
-    Assert.eq_str((p.y).to_string(), "4");
+    Assert.eq((p.x).to_string(), "3");
+    Assert.eq((p.y).to_string(), "4");
 }

@@ -366,6 +366,19 @@ impl<'a> Analyzer<'a> {
             }
         };
 
+        if self.is_foreach_interface_type(&enumerator_type) {
+            self.hir_set_method_call(iter_hir, &iterator_info.identity, vec![], &enumerator_type);
+            let iterator = self.hir_take();
+            return self.analyze_foreach_iface(
+                element,
+                &enumerator_type,
+                iterator,
+                body,
+                ctx,
+                diagnostics,
+            );
+        }
+
         // 2. `@next` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
         let pretty_enumerator = self.ty_display(&enumerator_type);
         let (_next_hook, next_info) = match self.resolve_hook_or_diagnose(

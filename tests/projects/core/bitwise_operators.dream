@@ -10,63 +10,63 @@ fun bitwise_operators(): void {
     // int
     let a = 12;
     let b = 10;
-    Assert.eq_str((a & b).to_string(), "8"); // 8
-    Assert.eq_str((a | b).to_string(), "14"); // 14
-    Assert.eq_str((a ^ b).to_string(), "6"); // 6
-    Assert.eq_str((a << 2).to_string(), "48"); // 48
-    Assert.eq_str((a >> 1).to_string(), "6"); // 6
-    Assert.eq_str((~a).to_string(), "-13"); // -13
+    Assert.eq((a & b).to_string(), "8"); // 8
+    Assert.eq((a | b).to_string(), "14"); // 14
+    Assert.eq((a ^ b).to_string(), "6"); // 6
+    Assert.eq((a << 2).to_string(), "48"); // 48
+    Assert.eq((a >> 1).to_string(), "6"); // 6
+    Assert.eq((~a).to_string(), "-13"); // -13
     let neg: int = 0 - 1;
-    Assert.eq_str((neg >> 1).to_string(), "-1"); // -1 (arithmetic shift keeps the sign bit)
+    Assert.eq((neg >> 1).to_string(), "-1"); // -1 (arithmetic shift keeps the sign bit)
 
     // long
     let la: long = 12l;
     let lb: long = 10l;
-    Assert.eq_str((la & lb).to_string(), "8"); // 8
-    Assert.eq_str((la | lb).to_string(), "14"); // 14
-    Assert.eq_str((la ^ lb).to_string(), "6"); // 6
-    Assert.eq_str((la << 2l).to_string(), "48"); // 48
-    Assert.eq_str((la >> 1l).to_string(), "6"); // 6
-    Assert.eq_str((~la).to_string(), "-13"); // -13
+    Assert.eq((la & lb).to_string(), "8"); // 8
+    Assert.eq((la | lb).to_string(), "14"); // 14
+    Assert.eq((la ^ lb).to_string(), "6"); // 6
+    Assert.eq((la << 2l).to_string(), "48"); // 48
+    Assert.eq((la >> 1l).to_string(), "6"); // 6
+    Assert.eq((~la).to_string(), "-13"); // -13
     let lneg: long = 0l - 1l;
-    Assert.eq_str((lneg >> 1l).to_string(), "-1"); // -1
+    Assert.eq((lneg >> 1l).to_string(), "-1"); // -1
 
     // uint
     let ua: uint = 12u;
     let ub: uint = 10u;
-    Assert.eq_str((ua & ub).to_string(), "8"); // 8
-    Assert.eq_str((ua | ub).to_string(), "14"); // 14
-    Assert.eq_str((ua ^ ub).to_string(), "6"); // 6
-    Assert.eq_str((ua << 2u).to_string(), "48"); // 48
-    Assert.eq_str((ua >> 1u).to_string(), "6"); // 6
-    Assert.eq_str((~ua).to_string(), "4294967283"); // 4294967283 (unsigned complement)
-    Assert.eq_str((4000000000u >> 1u).to_string(), "2000000000"); // 2000000000, zero-filled
+    Assert.eq((ua & ub).to_string(), "8"); // 8
+    Assert.eq((ua | ub).to_string(), "14"); // 14
+    Assert.eq((ua ^ ub).to_string(), "6"); // 6
+    Assert.eq((ua << 2u).to_string(), "48"); // 48
+    Assert.eq((ua >> 1u).to_string(), "6"); // 6
+    Assert.eq((~ua).to_string(), "4294967283"); // 4294967283 (unsigned complement)
+    Assert.eq((4000000000u >> 1u).to_string(), "2000000000"); // 2000000000, zero-filled
 
     // ulong
     let uga: ulong = 12ul;
     let ugb: ulong = 10ul;
-    Assert.eq_str((uga & ugb).to_string(), "8"); // 8
-    Assert.eq_str((uga | ugb).to_string(), "14"); // 14
-    Assert.eq_str((uga ^ ugb).to_string(), "6"); // 6
-    Assert.eq_str((uga << 2ul).to_string(), "48"); // 48
-    Assert.eq_str((uga >> 1ul).to_string(), "6"); // 6
-    Assert.eq_str((~uga).to_string(), "18446744073709551603"); // 18446744073709551603
+    Assert.eq((uga & ugb).to_string(), "8"); // 8
+    Assert.eq((uga | ugb).to_string(), "14"); // 14
+    Assert.eq((uga ^ ugb).to_string(), "6"); // 6
+    Assert.eq((uga << 2ul).to_string(), "48"); // 48
+    Assert.eq((uga >> 1ul).to_string(), "6"); // 6
+    Assert.eq((~uga).to_string(), "18446744073709551603"); // 18446744073709551603
 
     // byte (wraps into 0..255)
     let ba: byte = 12b;
     let bb: byte = 10b;
-    Assert.eq_str((ba & bb).to_string(), "8"); // 8
-    Assert.eq_str((ba | bb).to_string(), "14"); // 14
-    Assert.eq_str((ba ^ bb).to_string(), "6"); // 6
-    Assert.eq_str((ba << 2b).to_string(), "48"); // 48
-    Assert.eq_str((200b >> 2b).to_string(), "50"); // 50, zero-filled
-    Assert.eq_str((~ba).to_string(), "243"); // 243
-    Assert.eq_str((~5b).to_string(), "250"); // 250
+    Assert.eq((ba & bb).to_string(), "8"); // 8
+    Assert.eq((ba | bb).to_string(), "14"); // 14
+    Assert.eq((ba ^ bb).to_string(), "6"); // 6
+    Assert.eq((ba << 2b).to_string(), "48"); // 48
+    Assert.eq((200b >> 2b).to_string(), "50"); // 50, zero-filled
+    Assert.eq((~ba).to_string(), "243"); // 243
+    Assert.eq((~5b).to_string(), "250"); // 250
 
     // dynamic (non-constant-foldable) byte value through a function call, to exercise the
     // runtime masking path rather than just the constant-folding path.
-    Assert.eq_str((c4e_flip((byte)(5 + 0))).to_string(), "250");
-    Assert.eq_str("v=" + c4e_uflip(12u).to_string(), "v=4294967283");
+    Assert.eq((c4e_flip((byte)(5 + 0))).to_string(), "250");
+    Assert.eq("v=" + c4e_uflip(12u).to_string(), "v=4294967283");
 }
 
 fun c4e_uflip(x: uint): uint {

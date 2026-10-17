@@ -63,5 +63,5 @@ fun main() {
 | `Assert.eq` / `Assert.ne` | equal / not equal |
 | `Assert.is_true` / `is_false` | bool |
 | `Assert.approx(a, b, eps)` | floats |
-| `Assert.eq_str` | strings |
+| `Assert.eq` | strings |
 | `Assert.fail(message)` | fail now |

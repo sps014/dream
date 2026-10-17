@@ -23,8 +23,12 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/process/process_operation.dream"),
         ),
         (
-            "<std>/system/process/process_pipe.dream",
-            include_str!("../system/process/process_pipe.dream"),
+            "<std>/system/process/process_reader.dream",
+            include_str!("../system/process/process_reader.dream"),
+        ),
+        (
+            "<std>/system/process/process_writer.dream",
+            include_str!("../system/process/process_writer.dream"),
         ),
         (
             "<std>/system/process/process_error.dream",

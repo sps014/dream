@@ -1,0 +1,30 @@
+module system.io;
+
+/// Standard output as a byte stream. Obtain it through `System.stdout`.
+public class Stdout: Writer {
+    internal constructor() {}
+
+    @intrinsic(Intrinsic.ConsoleWrite)
+    static extern fun host_write(stream: int, borrow data: byte[]): int;
+
+    @intrinsic(Intrinsic.ConsoleFlush)
+    static extern fun host_flush(stream: int): int;
+
+    /// Writes bytes and returns the number accepted; failures leave completed writes in effect.
+    /// Call `flush` to deliver any buffered bytes.
+    public unique fun write(data: byte[]): Result<int, IoError> {
+        let written = Stdout.host_write(1, data);
+        if written < 0 {
+            return Result.Err(IoError.other("stdout", "write failed"));
+        }
+        return Result.Ok(written);
+    }
+
+    /// Delivers buffered output; returns an I/O error when flushing fails.
+    public unique fun flush(): Result<bool, IoError> {
+        if Stdout.host_flush(1) < 0 {
+            return Result.Err(IoError.other("stdout", "flush failed"));
+        }
+        return Result.Ok(true);
+    }
+}

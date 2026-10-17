@@ -1,0 +1,24 @@
+module system.webapi.auth;
+
+/// An expiring, browser-bound OIDC authorization transaction.
+public class OidcTransaction {
+    /// Name of the identity provider handling this login.
+    public provider: string;
+
+    /// Random value used to bind an identity response to its login request.
+    public nonce: string;
+
+    /// PKCE verifier kept until the authorization code is exchanged.
+    public verifier: string;
+
+    /// Expiry time in Unix epoch seconds.
+    public expires: long;
+
+    /// Creates a `OidcTransaction` with `provider`, `nonce`, `verifier`, `expires`.
+    public constructor(provider: string, nonce: string, verifier: string, expires: long) {
+        this.provider = provider;
+        this.nonce = nonce;
+        this.verifier = verifier;
+        this.expires = expires;
+    }
+}

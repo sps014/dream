@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Collection`
 
-Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for concrete `@iterator` types and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). List-returning query helpers (`to_list`, `filter`, `map`, …) live in `system.collections` as `extend Collection<T>` so bootstrap does not depend on `List`.
+Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for concrete `@iterator` types and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). Query chains start with `seq()` in system.collections, keeping bootstrap independent of List.
 
 ```dream
 public interface Collection<T>: Iterable<T>

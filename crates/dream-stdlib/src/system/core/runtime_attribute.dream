@@ -1,0 +1,8 @@
+module system.core;
+
+/// Binds an external function to a named Dream host service on supported platforms.
+@attribute(AttributeTarget.ExternFunction)
+public struct RuntimeAttribute {
+    /// Name exposed to callers of the foreign function.
+    public export_name: string;
+}

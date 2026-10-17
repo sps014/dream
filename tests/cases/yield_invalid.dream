@@ -1,3 +1,5 @@
+module system.core;
+
 fun wrong_context(): void { yield 1; }
 fun wrong_element(): Iterable<int> { yield "bad"; }
 fun wrong_return(): Iterable<int> { yield 1; return; }

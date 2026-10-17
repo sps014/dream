@@ -32,7 +32,7 @@ fun c20a_body(): void {
     c20a_verify_observation((bytes.length).to_string());
     let j = Json.deserialize<JsonValue>("{\"k\":[1]}").unwrap();
     c20a_verify_observation((j.as_map().is_some()).to_string());
-    switch (j.get("k")) {
+    switch (j["k"]) {
         Some(arr) => c20a_verify_observation((arr.as_array().unwrap().length).to_string()),
         None => c20a_verify_observation((0).to_string()),
     }
@@ -55,7 +55,7 @@ fun c20a_verify_observation(borrow value: string): void {
     let wanted = "3,2,1\n3,2\nhi |\ncd\na|b,c\n3\ntrue\n2\ntrue\n3\n4\ntrue\n1\nfalse\n2\n2000\n0\ntrue\n";
     let end = c20a_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c20a_cursor, end));
+    Assert.eq(actual, wanted.substring(c20a_cursor, end));
     c20a_cursor = end;
 }
 

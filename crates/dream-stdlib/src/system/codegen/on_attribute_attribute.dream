@@ -1,0 +1,12 @@
+module system.codegen;
+
+/// Runs the generator when a declaration carries one of the named `@attribute` types.
+@repeatable
+@attribute(AttributeTarget.Function)
+public struct OnAttributeAttribute {
+    /// Declaration associated with this entry.
+    public declaration: DeclarationPath;
+
+    /// Additional declarations made available to the generator.
+    public additional_declarations: List<DeclarationPath>;
+}

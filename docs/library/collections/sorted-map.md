@@ -17,8 +17,8 @@ import system.collections;
 
 fun main() {
     let scores = SortedMap<string, int>();
-    scores.set("Sam", 80);
-    scores.set("Ada", 95);
+    scores["Sam"] = 80;
+    scores["Ada"] = 95;
     for (let entry in scores) {
         System.println(entry.key);
     }

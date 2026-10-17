@@ -22,7 +22,7 @@ fun c1c2_body(): void {
     c1c2_verify_observation((text.slice(1).length).to_string());
     c1c2_verify_observation((array.byte_size()).to_string());
     c1c2_verify_observation((text.byte_size()).to_string());
-    let copy = Buffer.alloc<char>(4);
+    let copy = Array.alloc<char>(4);
     text.copy_to(Span<char>.of(copy));
     c1c2_verify_observation((ReadOnlySpan<char>.of(copy).sequence_equal(text)).to_string());
     c1c2_verify_observation(((int)text.to_array()[2]).to_string());
@@ -31,7 +31,7 @@ fun c1c2_body(): void {
     joined.append(text.slice(1, 2));
     c1c2_verify_observation((joined.to_string()).to_string());
     let keys = Map<string, int>();
-    keys.set("aΩ界b", 42);
+    keys["aΩ界b"] = 42;
     c1c2_verify_observation((keys.get(array).unwrap_or(-1)).to_string());
     c1c2_verify_observation((keys.get(text).unwrap_or(-1)).to_string());
     let empty = string.empty.span();
@@ -61,9 +61,9 @@ fun c1c2_body(): void {
     c1c2_verify_observation((offsets.to_string()).to_string());
     let astral = "😀".span();
     c1c2_verify_observation((astral.length).to_string());
-    c1c2_verify_observation(((int)astral.get(0)).to_string());
-    c1c2_verify_observation(((int)astral.get(1)).to_string());
-    c1c2_verify_observation(((int)ReadOnlySpan<char>.of(['😀']).get(0)).to_string());
+    c1c2_verify_observation(((int)astral[0]).to_string());
+    c1c2_verify_observation(((int)astral[1]).to_string());
+    c1c2_verify_observation(((int)ReadOnlySpan<char>.of(['😀'])[0]).to_string());
 }
 
 let c1c2_cursor: int = 0;
@@ -73,7 +73,7 @@ fun c1c2_verify_observation(borrow value: string): void {
     let wanted = "Ω界\n2\ntrue\nΩ界\n2\ntrue\ntrue\ntrue\ntrue\n0\n3\n16\n8\ntrue\n30028\nΩ界Ω界\n42\n42\n0\ntrue\na\nb\na\nb\nx\ny\n-42\nΩ界\n23\n2\n55357\n56832\n128512\n";
     let end = c1c2_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1c2_cursor, end));
+    Assert.eq(actual, wanted.substring(c1c2_cursor, end));
     c1c2_cursor = end;
 }
 

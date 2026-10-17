@@ -1,0 +1,5 @@
+module system.codegen;
+
+/// Marks `fun name(ctx: GenContext)` as a source generator (`system.codegen`). The function name is the generator name.
+@attribute(AttributeTarget.Function)
+public struct GeneratorAttribute {}

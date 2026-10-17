@@ -22,14 +22,14 @@ fun c28_sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
     while i < xs.length {
-        total = total + xs.get(i);
+        total = total + xs[i];
         i = i + 1;
     }
     return total;
 }
 
 fun c28_sum_collection(xs: Collection<int>): int {
-    return xs.to_list().reduce(0, c28_add);
+    return xs.seq().reduce(0, c28_add);
 }
 
 fun c28_body(): void {
@@ -45,16 +45,16 @@ fun c28_body(): void {
         c28_verify_observation((x).to_string());
     }
 
-    c28_verify_observation((arr.filter(c28_is_even).length).to_string());
-    c28_verify_observation((arr.map(c28_times_two).reduce(0, c28_add)).to_string());
+    c28_verify_observation((arr.seq().filter(c28_is_even).to_list().length).to_string());
+    c28_verify_observation((arr.seq().map(c28_times_two).reduce(0, c28_add)).to_string());
 
     let xs = List<int>();
     xs.push(3);
     xs.push(1);
     xs.push(2);
     xs.push(1);
-    c28_verify_observation((xs.distinct().length).to_string());
-    c28_verify_observation((xs.order_by(c28_asc).get(0)).to_string());
+    c28_verify_observation((xs.seq().distinct().to_list().length).to_string());
+    c28_verify_observation((xs.seq().order_by(c28_asc).to_list()[0]).to_string());
 }
 
 let c28_cursor: int = 0;
@@ -64,7 +64,7 @@ fun c28_verify_observation(borrow value: string): void {
     let wanted = "60\nfalse\n10\n30\n60\n10\n20\n30\n3\n120\n3\n1\n";
     let end = c28_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c28_cursor, end));
+    Assert.eq(actual, wanted.substring(c28_cursor, end));
     c28_cursor = end;
 }
 

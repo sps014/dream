@@ -265,7 +265,11 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
             "\u{feff}leading",
         ]);
     }
-    let stdin = (case.stem == "console_read_line").then_some(&b"hello-line\n"[..]);
+    let stdin = match case.stem {
+        "console_read_line" => Some(&b"hello-line\n"[..]),
+        "stdio_pipe" => Some("piped λ\0tail\n".as_bytes()),
+        _ => None,
+    };
     let result = capture(command, stdin);
     let stdout = String::from_utf8_lossy(&result.stdout).replace("\r\n", "\n");
     let stderr = String::from_utf8_lossy(&result.stderr).replace("\r\n", "\n");

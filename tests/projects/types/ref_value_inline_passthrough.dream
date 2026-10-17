@@ -32,7 +32,7 @@ fun c1da_verify_observation(borrow value: string): void {
     let wanted = "set\nset\nset\nset\n1.5\n";
     let end = c1da_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c1da_cursor, end));
+    Assert.eq(actual, wanted.substring(c1da_cursor, end));
     c1da_cursor = end;
 }
 

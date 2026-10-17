@@ -10,18 +10,18 @@ fun span_map_inline(): void {
     map[""] = 7;
     let chars = ['x', 'Ω', '界', (char)55357, (char)56832, 'y'];
     let view = ReadOnlySpan<char>.of(chars).slice(1, 4);
-    Assert.eq_str((view.hash_code() == "Ω界😀".hash_code()).to_string(), "true");
-    Assert.eq_str((map.get_or(view, -1)).to_string(), "42");
-    Assert.eq_str((map.get_or("xΩ界😀y".span(1, 5), -1)).to_string(), "42");
+    Assert.eq((view.hash_code() == "Ω界😀".hash_code()).to_string(), "true");
+    Assert.eq((map.get_or(view, -1)).to_string(), "42");
+    Assert.eq((map.get_or("xΩ界😀y".span(1, 5), -1)).to_string(), "42");
     let empty: char[] = [];
-    Assert.eq_str((map.get_or(ReadOnlySpan<char>.of(empty), -1)).to_string(), "7");
-    Assert.eq_str((map.contains(ReadOnlySpan<char>.of(['Ω', '界']))).to_string(), "false");
-    Assert.eq_str((map.remove("Ω界😀")).to_string(), "true");
-    Assert.eq_str((map.get_or(view, -1)).to_string(), "-1");
+    Assert.eq((map.get_or(ReadOnlySpan<char>.of(empty), -1)).to_string(), "7");
+    Assert.eq((map.contains(ReadOnlySpan<char>.of(['Ω', '界']))).to_string(), "false");
+    Assert.eq((map.remove("Ω界😀")).to_string(), "true");
+    Assert.eq((map.get_or(view, -1)).to_string(), "-1");
     map["Ω界😀"] = 99;
-    Assert.eq_str((map.get_or(view, -1)).to_string(), "99");
+    Assert.eq((map.get_or(view, -1)).to_string(), "99");
     map.clear();
-    Assert.eq_str((map.get_or(view, -1)).to_string(), "-1");
+    Assert.eq((map.get_or(view, -1)).to_string(), "-1");
     map["Ω界😀"] = 100;
-    Assert.eq_str((map.get_or(view, -1)).to_string(), "100");
+    Assert.eq((map.get_or(view, -1)).to_string(), "100");
 }

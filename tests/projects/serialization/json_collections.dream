@@ -51,13 +51,13 @@ fun c10d_body(): void {
     tags.add("a");
 
     let scores = Map<string, int>();
-    scores.set("ada", 10);
+    scores["ada"] = 10;
 
     let ordered = SortedMap<string, int>();
-    ordered.set("z", 1);
-    ordered.set("a", 2);
+    ordered["z"] = 1;
+    ordered["a"] = 2;
 
-    let trail = Buffer.alloc<int>(2);
+    let trail = Array.alloc<int>(2);
     trail[0] = 9;
     trail[1] = 8;
 
@@ -75,7 +75,7 @@ fun c10d_body(): void {
             c10d_verify_observation((back.scores.get("ada").unwrap_or(-1)).to_string());
             c10d_verify_observation((back.ordered.get("a").unwrap_or(-1)).to_string());
             c10d_verify_observation((back.trail[0]).to_string());
-            c10d_verify_observation((back.nested.get(0).x).to_string());
+            c10d_verify_observation((back.nested[0].x).to_string());
         },
         Err(e) => c10d_verify_observation(("err:" + e.message()).to_string()),
     }
@@ -91,11 +91,11 @@ fun c10d_body(): void {
     c10d_verify_observation((Json.serialize<Set<string>>(top_set)).to_string());
 
     let top_map = Map<string, int>();
-    top_map.set("k", 42);
+    top_map["k"] = 42;
     c10d_verify_observation((Json.serialize<Map<string, int>>(top_map)).to_string());
 
     switch (Json.deserialize<List<int>>("[9,10]")) {
-        Ok(xs) => c10d_verify_observation((xs.get(0)).to_string()),
+        Ok(xs) => c10d_verify_observation((xs[0]).to_string()),
         Err(e) => c10d_verify_observation((e.message()).to_string()),
     }
 
@@ -116,7 +116,7 @@ fun c10d_verify_observation(borrow value: string): void {
     let wanted = "{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}\n2\n2\n10\n2\n9\n3\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n9\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n{\"key\":\"value\"}\n";
     let end = c10d_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c10d_cursor, end));
+    Assert.eq(actual, wanted.substring(c10d_cursor, end));
     c10d_cursor = end;
 }
 

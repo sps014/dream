@@ -3,49 +3,49 @@ import system.testing;
 
 @test
 fun url_basics(): void {
-    Assert.eq_str(
+    Assert.eq(
         Url.parse("data:text/plain,hello ?#").unwrap().to_string(),
         "data:text/plain,hello%20?#"
     );
-    Assert.eq_str(
+    Assert.eq(
         Url.parse("data:text/plain,hello  ?x").unwrap().to_string(),
         "data:text/plain,hello %20?x"
     );
 
     let base = Url.parse("HTTPS://ExAmPle.COM:443/a/../v1/?role=reader&role=editor#fragment")
         .unwrap();
-    Assert.eq_str(base.scheme, "https");
-    Assert.eq_str(base.host, "example.com");
-    Assert.eq_str(base.path, "/v1/");
-    Assert.eq_str(base.to_string(), "https://example.com/v1/?role=reader&role=editor#fragment");
+    Assert.eq(base.scheme, "https");
+    Assert.eq(base.host, "example.com");
+    Assert.eq(base.path, "/v1/");
+    Assert.eq(base.to_string(), "https://example.com/v1/?role=reader&role=editor#fragment");
     Assert.eq(base.query.length, 2);
-    Assert.eq_str(base.query.get("role").unwrap(), "reader");
+    Assert.eq(base.query.get("role").unwrap(), "reader");
     let roles = base.query.get_all("role");
     Assert.eq(roles.length, 2);
-    Assert.eq_str(roles[1], "editor");
+    Assert.eq(roles[1], "editor");
     let users = base.resolve("users?name=Jane+Doe&plus=%2B#").unwrap();
-    Assert.eq_str(users.query.get("name").unwrap(), "Jane Doe");
-    Assert.eq_str(users.query.get("plus").unwrap(), "+");
+    Assert.eq(users.query.get("name").unwrap(), "Jane Doe");
+    Assert.eq(users.query.get("plus").unwrap(), "+");
     users.query.append("role", "admin");
     users.query.append("role", "editor");
-    Assert.eq_str(
+    Assert.eq(
         users.to_string(),
         "https://example.com/v1/users?name=Jane+Doe&plus=%2b&role=admin&role=editor#"
     );
     users.query.set("role", "two words");
     Assert.eq(users.query.get_all("role").length, 1);
-    Assert.eq_str(users.query.get("role").unwrap(), "two words");
+    Assert.eq(users.query.get("role").unwrap(), "two words");
     users.query.remove("name");
     Assert.is_true(users.query.get("name").is_none());
     users.query.clear();
-    Assert.eq_str(users.to_string(), "https://example.com/v1/users#");
-    Assert.eq_str(
+    Assert.eq(users.to_string(), "https://example.com/v1/users#");
+    Assert.eq(
         Url.parse("https://example.com/?#").unwrap().to_string(),
         "https://example.com/?#"
     );
-    Assert.eq_str(Url.parse("https://bücher.example/こんにちは").unwrap().host, "xn--bcher-kva.example");
-    Assert.eq_str(Url.parse("https://[::1]:443/").unwrap().host, "[::1]");
-    Assert.eq_str(
+    Assert.eq(Url.parse("https://bücher.example/こんにちは").unwrap().host, "xn--bcher-kva.example");
+    Assert.eq(Url.parse("https://[::1]:443/").unwrap().host, "[::1]");
+    Assert.eq(
         Url.parse("data:text/plain,hello%20?#").unwrap().to_string(),
         "data:text/plain,hello%20?#"
     );

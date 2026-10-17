@@ -16,7 +16,7 @@ async fun discard_binding(): void {
     let _ = cbe_side();
     let (_, _) = (1, 2);
     let (_, y) = (3, 4);
-    Assert.eq_str((y).to_string(), "4");
+    Assert.eq((y).to_string(), "4");
     let _ = cbe_tick().await;
     cbe_tick().await;
 }

@@ -53,7 +53,7 @@ Suffixes are case-insensitive. Integer literals can also be written in hex (`0xF
 | `.abs()` | `int`, `long`, `float`, `double` | Same type | Absolute value |
 | `.signum()` | `int`, `long` | Same type | `-1`, `0`, or `1` by sign |
 | `.pow(exp)` | `int` | `int` | This value raised to `exp`; an exponent of `0` or less gives `1` |
-| `.to_int()` | `bool`, `char` | `int` | `1`/`0` for a `bool`; the code point for a `char` |
+| `.to_int()` | `bool` | `int` | `1` for true and `0` for false |
 | `.is_digit()` / `.is_alpha()` / `.is_whitespace()` | `char` | `bool` | ASCII classification |
 | `.to_lower()` / `.to_upper()` | `char` | `char` | ASCII case conversion; other characters are unchanged |
 | `.as_string()` | `char` | `string` | A new one-character string |
@@ -157,7 +157,7 @@ let bad = bool.parse("True").unwrap_or(false); // false — not exact "true"
 
 - `.is_digit()` / `.is_alpha()` / `.is_whitespace()` — classify the character (ASCII rules).
 - `.to_lower()` / `.to_upper()` — ASCII case conversion.
-- `.to_int()` — the numeric code point.
+- `(int)c` — the numeric code point of character `c`.
 - `.as_string()` — a new single-character string.
 - `char.parse(str)` — static; requires exactly one Unicode scalar in `str`; returns `Result<char, ParseError>`.
 

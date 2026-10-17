@@ -167,3 +167,5 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 }
+
+mod weak_locals;

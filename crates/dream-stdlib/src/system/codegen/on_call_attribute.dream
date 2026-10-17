@@ -1,0 +1,12 @@
+module system.codegen;
+
+/// Runs the generator for call sites of the named functions or methods (`Type.method`).
+@repeatable
+@attribute(AttributeTarget.Function)
+public struct OnCallAttribute {
+    /// Declaration associated with this entry.
+    public declaration: DeclarationPath;
+
+    /// Additional declarations made available to the generator.
+    public additional_declarations: List<DeclarationPath>;
+}

@@ -7,20 +7,20 @@ import system.collections;
 @test
 @timeout(180000)
 fun length_consistent(): void {
-    let a = Buffer.alloc<int>(4);
-    Assert.eq_str((a.length).to_string(), "4"); // 4  (array)
+    let a = Array.alloc<int>(4);
+    Assert.eq((a.length).to_string(), "4"); // 4  (array)
 
     let s = "hello";
-    Assert.eq_str((s.length).to_string(), "5"); // 5  (string)
+    Assert.eq((s.length).to_string(), "5"); // 5  (string)
 
     let xs = List<int>();
     xs.push(10);
     xs.push(20);
     xs.push(30);
-    Assert.eq_str((xs.length).to_string(), "3"); // 3  (list)
+    Assert.eq((xs.length).to_string(), "3"); // 3  (list)
 
     let m = Map<string, int>();
-    m.set("a", 1);
-    m.set("b", 2);
-    Assert.eq_str((m.length).to_string(), "2"); // 2  (map)
+    m["a"] = 1;
+    m["b"] = 2;
+    Assert.eq((m.length).to_string(), "2"); // 2  (map)
 }

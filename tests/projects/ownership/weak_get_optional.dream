@@ -1,50 +1,94 @@
 import system.testing;
-import system;
 
-class c2a5_Session {
+class WeakLocalSession {
     public id: int;
-
     public constructor(id: int) {
         this.id = id;
     }
 }
 
-fun c2a5_make_dead(): Weak<c2a5_Session> {
-    return Weak<c2a5_Session>(c2a5_Session(7));
-}
-
-fun c2a5_body(): void {
-    let session = c2a5_Session(42);
-    let handle = Weak<c2a5_Session>(session);
-    switch (handle.get()) {
-        Some(value) => c2a5_verify_observation((value.id).to_string()),
-        None => c2a5_verify_observation((-1).to_string()),
-    }
-    session.id = 43;
-    handle.release();
-    handle.release();
-    c2a5_verify_observation((handle.is_dead()).to_string());
-    c2a5_verify_observation((handle.get().is_none()).to_string());
-    let dead = c2a5_make_dead();
-    c2a5_verify_observation((dead.get().is_none()).to_string());
-}
-
-let c2a5_cursor: int = 0;
-
-fun c2a5_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "42\ntrue\ntrue\ntrue\n";
-    let end = c2a5_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c2a5_cursor, end));
-    c2a5_cursor = end;
+fun dead_weak_reader(): fun(): Option<WeakLocalSession> {
+    let session = WeakLocalSession(7);
+    let weak observer = session;
+    return () => observer;
 }
 
 @test
-@timeout(180000)
-
 fun weak_get_optional(): void {
-    c2a5_cursor = 0;
-    c2a5_body();
-    Assert.eq(c2a5_cursor, ("42\ntrue\ntrue\ntrue\n").length);
+    let session = WeakLocalSession(42);
+    let weak observer = session;
+    Assert.eq(observer.unwrap().id, 42);
+    session.id = 43;
+    Assert.eq(observer.unwrap().id, 43);
+    let other = WeakLocalSession(99);
+    observer = other;
+    Assert.eq(observer.unwrap().id, 99);
+    other.id = 100;
+    observer = Option<WeakLocalSession>.None;
+    Assert.is_true(observer.is_none());
+    observer = Option.Some(session);
+    Assert.eq(observer.unwrap().id, 43);
+    session.id = 44;
+    let dead = dead_weak_reader();
+    Assert.is_true(dead().is_none());
+    let const_reader = () => observer;
+    observer = other;
+    Assert.eq(const_reader().unwrap().id, 100);
+    other.id = 101;
+    weak_local_breaks_callback_cycle();
+    weak_storage_uses_builtin_identity();
+}
+
+let weak_callback_drops: int = 0;
+
+@allow_cycle
+class WeakCallbackOwner {
+    public callback: fun(): int;
+    public value: int;
+
+    public constructor() {
+        this.value = 5;
+        this.callback = () => 0;
+    }
+
+    del() {
+        weak_callback_drops = weak_callback_drops + 1;
+    }
+}
+
+fun make_weak_callback(): fun(): int {
+    let owner = WeakCallbackOwner();
+    const weak observer = owner;
+    owner.callback = () => {
+        return switch (observer) {
+            Some(live) => live.value,
+            None => -1,
+        };
+    };
+    let callback = owner.callback;
+    Assert.eq(callback(), 5);
+    return owner.callback;
+}
+
+fun weak_local_breaks_callback_cycle(): void {
+    weak_callback_drops = 0;
+    let callback = make_weak_callback();
+    Assert.eq(weak_callback_drops, 1);
+    Assert.eq(callback(), -1);
+}
+
+class Weak {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+fun weak_storage_uses_builtin_identity(): void {
+    let target = Weak(17);
+    let weak observer = target;
+    Assert.eq(observer.unwrap().value, 17);
+    target.value = 18;
+    Assert.eq(observer.unwrap().value, 18);
 }

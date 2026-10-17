@@ -12,8 +12,48 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/io/temporary.dream",
-            include_str!("../system/io/temporary.dream"),
+            "<std>/system/io/system.dream",
+            include_str!("../system/io/system.dream"),
+        ),
+        (
+            "<std>/system/io/stdin.dream",
+            include_str!("../system/io/stdin.dream"),
+        ),
+        (
+            "<std>/system/io/stdout.dream",
+            include_str!("../system/io/stdout.dream"),
+        ),
+        (
+            "<std>/system/io/stderr.dream",
+            include_str!("../system/io/stderr.dream"),
+        ),
+        (
+            "<std>/system/io/temp_capabilities.dream",
+            include_str!("../system/io/temp_capabilities.dream"),
+        ),
+        (
+            "<std>/system/io/temp_directory.dream",
+            include_str!("../system/io/temp_directory.dream"),
+        ),
+        (
+            "<std>/system/io/temp_file.dream",
+            include_str!("../system/io/temp_file.dream"),
+        ),
+        (
+            "<std>/system/io/reader.dream",
+            include_str!("../system/io/reader.dream"),
+        ),
+        (
+            "<std>/system/io/writer.dream",
+            include_str!("../system/io/writer.dream"),
+        ),
+        (
+            "<std>/system/io/async_reader.dream",
+            include_str!("../system/io/async_reader.dream"),
+        ),
+        (
+            "<std>/system/io/async_writer.dream",
+            include_str!("../system/io/async_writer.dream"),
         ),
         (
             "<std>/system/io/streams.dream",
@@ -42,6 +82,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/io/file_handle.dream",
             include_str!("../system/io/file_handle.dream"),
+        ),
+        (
+            "<std>/system/io/file_operation.dream",
+            include_str!("../system/io/file_operation.dream"),
         ),
         (
             "<std>/system/io/file_stream.dream",

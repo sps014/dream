@@ -18,11 +18,13 @@ impl<'a> Analyzer<'a> {
         for struct_decl in node.structs.iter() {
             self.type_ctx
                 .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
-            self.type_ctx.register(
+            let def = self.type_ctx.register(
                 DefKind::Struct,
                 &struct_decl.name.text,
                 generic_param_names(&struct_decl.generic_parameters),
             );
+            self.type_visibility
+                .insert(def, (struct_decl.file_path.clone(), struct_decl.visibility));
         }
         // Conformance checks may ask whether a later-declared class (`HttpHeadersIterator`)
         // implements an interface, so every declared clause is visible before any is validated.
@@ -171,7 +173,11 @@ impl<'a> Analyzer<'a> {
                 if !struct_decl.is_ref_struct {
                     self.reject_ref_struct_field(&struct_decl.name.text, field, diagnostics);
                 }
-                self.check_type_not_static_class(&field.field_type, diagnostics);
+                self.check_declared_type(
+                    &field.field_type,
+                    &generic_param_names(&struct_decl.generic_parameters),
+                    diagnostics,
+                );
             }
         }
     }

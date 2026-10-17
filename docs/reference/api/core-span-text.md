@@ -2,15 +2,7 @@
 
 No import is needed.
 
-Read the [span guide](../../language/types/spans.md) for usage and backing-storage semantics.
-
-## `char_at`
-
-Returns the character at the zero-based index; an invalid index panics.
-
-```dream
-public fun char_at(index: int): char
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `byte_size`
 

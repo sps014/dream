@@ -47,7 +47,7 @@ fun c100_verify_observation(borrow value: string): void {
     let wanted = "Hello, I am Ada\nBEEP R2\n";
     let end = c100_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c100_cursor, end));
+    Assert.eq(actual, wanted.substring(c100_cursor, end));
     c100_cursor = end;
 }
 

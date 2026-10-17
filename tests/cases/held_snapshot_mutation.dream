@@ -43,7 +43,7 @@ fun field_replaced_by_callee(): int {
         let s = b.s;
         replace(b, i);
         total = total + churn(4);
-        total = total * 7 + s.length + s.char_at(0).to_int();
+        total = total * 7 + s.length + ((int)s[0]);
         i = i + 1;
     }
     return total + b.s.length;
@@ -54,7 +54,7 @@ fun field_replaced_inline(): int {
     let s = b.s;
     b.s = "x" + "y";
     let t = churn(5);
-    return s.length * 100 + s.char_at(1).to_int() + t;
+    return s.length * 100 + ((int)s[1]) + t;
 }
 
 fun element_overwritten(): int {
@@ -65,7 +65,7 @@ fun element_overwritten(): int {
         let w = a[k];
         overwrite(a, k);
         total = total + churn(3);
-        total = total * 5 + w.length + w.char_at(0).to_int();
+        total = total * 5 + w.length + ((int)w[0]);
         k = k + 1;
     }
     return total + a[0].length;
@@ -76,7 +76,7 @@ fun owner_rebound(): int {
     let s = b.s;
     b = Box("other" + "2");
     let t = churn(6);
-    return s.length * 1000 + s.char_at(4).to_int() + b.s.length + t;
+    return s.length * 1000 + ((int)s[4]) + b.s.length + t;
 }
 
 fun read_only_walk(): int {

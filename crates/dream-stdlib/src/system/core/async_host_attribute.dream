@@ -1,0 +1,5 @@
+module system.core;
+
+/// Deferred native host for an `extern async fun`: the `<host>Async` C symbol takes the future as its leading argument, performs the work off-thread, and completes it via the bound dream_complete_foreign. The run loop stays parked while the work is in flight.
+@attribute(AttributeTarget.ExternFunction)
+public struct AsyncHostAttribute {}

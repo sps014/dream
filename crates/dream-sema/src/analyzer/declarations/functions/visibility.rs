@@ -77,7 +77,9 @@ impl<'a> Analyzer<'a> {
             .type_ctx
             .nominal_kind(name)
             .and_then(|kind| self.type_ctx.resolve(kind, name));
-        if let Some((_, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
+        if let Some((_, visibility)) = def
+            .filter(|_| self.type_ctx.nominal_kind(name) != Some(DefKind::Struct))
+            .and_then(|def| self.type_visibility.get(&def))
             && !visibility.is_public()
         {
             diagnostics.report_error(

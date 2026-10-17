@@ -62,6 +62,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/codegen/gen_body_decode.dream"),
         ),
         (
+            "<std>/system/codegen/expr_kind.dream",
+            include_str!("../system/codegen/expr_kind.dream"),
+        ),
+        (
+            "<std>/system/codegen/stmt_kind.dream",
+            include_str!("../system/codegen/stmt_kind.dream"),
+        ),
+        (
             "<std>/system/codegen/gen_source_map.dream",
             include_str!("../system/codegen/gen_source_map.dream"),
         ),
@@ -70,8 +78,28 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/codegen/artifact_builder.dream"),
         ),
         (
-            "<std>/system/codegen/attributes.dream",
-            include_str!("../system/codegen/attributes.dream"),
+            "<std>/system/codegen/generator_attribute.dream",
+            include_str!("../system/codegen/generator_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/incremental_attribute.dream",
+            include_str!("../system/codegen/incremental_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/on_attribute_attribute.dream",
+            include_str!("../system/codegen/on_attribute_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/on_call_attribute.dream",
+            include_str!("../system/codegen/on_call_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/syntax_block_attribute.dream",
+            include_str!("../system/codegen/syntax_block_attribute.dream"),
+        ),
+        (
+            "<std>/system/codegen/uses_tool_attribute.dream",
+            include_str!("../system/codegen/uses_tool_attribute.dream"),
         ),
         (
             "<std>/system/codegen/code_builder.dream",
@@ -80,6 +108,22 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/codegen/gen_model.dream",
             include_str!("../system/codegen/gen_model.dream"),
+        ),
+        (
+            "<std>/system/codegen/primitive.dream",
+            include_str!("../system/codegen/primitive.dream"),
+        ),
+        (
+            "<std>/system/codegen/collection_kind.dream",
+            include_str!("../system/codegen/collection_kind.dream"),
+        ),
+        (
+            "<std>/system/codegen/type_ref_kind.dream",
+            include_str!("../system/codegen/type_ref_kind.dream"),
+        ),
+        (
+            "<std>/system/codegen/decl_kind.dream",
+            include_str!("../system/codegen/decl_kind.dream"),
         ),
         (
             "<std>/system/codegen/gen_location.dream",

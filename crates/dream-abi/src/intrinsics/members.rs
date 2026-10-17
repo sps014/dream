@@ -1,5 +1,8 @@
 /// The source enum and the compiler's binding table are checked for exact agreement.
 pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
+    ("ConsoleRead", "dream_console_read"),
+    ("ConsoleWrite", "dream_console_write"),
+    ("ConsoleFlush", "dream_console_flush"),
     ("AssetBytes", "asset_bytes"),
     ("RawLoad", "raw_load"),
     ("RawStore", "raw_store"),

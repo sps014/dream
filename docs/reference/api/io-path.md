@@ -20,14 +20,6 @@ Joins path segments with the platform separator, skipping empty segments and avo
 public static fun join(a: string, b: string, ...more: string[]): string
 ```
 
-## `of`
-
-Joins every segment in `parts` left-to-right with the same rules as `join`.
-
-```dream
-public static fun of(parts: string[]): string
-```
-
 ## `file_name`
 
 Final path component after the last `/` or `\`, or `None` for a trailing separator.

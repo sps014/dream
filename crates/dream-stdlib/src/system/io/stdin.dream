@@ -1,0 +1,22 @@
+module system.io;
+
+/// Standard input as a byte stream. Obtain it through `System.stdin`.
+public class Stdin: Reader {
+    internal constructor() {}
+
+    @intrinsic(Intrinsic.ConsoleRead)
+    static extern fun host_read(count: int): byte[];
+
+    /// Reads up to `max_bytes` bytes; an empty result indicates EOF for a positive size.
+    /// Negative sizes return an error. This operation can block waiting for input.
+    public unique fun read(max_bytes: int): Result<byte[], IoError> {
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("stdin", "negative read size"));
+        }
+        let raw = Stdin.host_read(max_bytes);
+        if raw.length == 0 || raw[0] != (byte)0 {
+            return Result.Err(IoError.other("stdin", "read failed"));
+        }
+        return Result.Ok(Streams.slice(raw, 1, raw.length - 1));
+    }
+}

@@ -21,9 +21,9 @@ class c33_Cell<T> {
 async fun async_generic_method(): void {
     let a = c33_Cell<int>(42);
     let ra = a.get().await;
-    Assert.eq_str((ra).to_string(), "42");
+    Assert.eq((ra).to_string(), "42");
 
     let b = c33_Cell<string>("hello");
     let rb = b.get().await;
-    Assert.eq_str((rb).to_string(), "hello");
+    Assert.eq((rb).to_string(), "hello");
 }

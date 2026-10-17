@@ -73,7 +73,7 @@ fun c142_verify_observation(borrow value: string): void {
     let wanted = "20\n10\n0\n0\n9\n18\n8\n16\n2\n";
     let end = c142_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c142_cursor, end));
+    Assert.eq(actual, wanted.substring(c142_cursor, end));
     c142_cursor = end;
 }
 

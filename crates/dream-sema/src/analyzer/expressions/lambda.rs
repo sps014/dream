@@ -438,7 +438,7 @@ impl<'a> Analyzer<'a> {
                         )?;
                     }
                 }
-                StatementNode::Declaration(name, declared, init, _) => {
+                StatementNode::Declaration(name, declared, init, _, is_weak) => {
                     let t = match declared {
                         Some(ty) => ty.clone(),
                         None => {
@@ -452,9 +452,18 @@ impl<'a> Analyzer<'a> {
                             t
                         }
                     };
+                    let t = if *is_weak {
+                        let target = Self::collection_generic_arg(&t, "Option").unwrap_or(t);
+                        Self::weak_storage_type(&target)
+                    } else {
+                        t
+                    };
                     let _ = (*symbol_table)
                         .borrow_mut()
                         .add_symbol(name.text.clone(), t);
+                    if *is_weak {
+                        symbol_table.borrow_mut().mark_weak(name.text.clone());
+                    }
                 }
                 _ => {}
             }
@@ -666,6 +675,14 @@ impl<'a> Analyzer<'a> {
         }
         if !captures.is_empty() {
             self.closure_captures.insert(def, captures.clone());
+            let table = symbol_table.borrow();
+            self.closure_binding_modifiers.insert(
+                def,
+                captures
+                    .iter()
+                    .map(|(name, _)| (name.clone(), table.is_weak(name), table.is_const(name)))
+                    .collect(),
+            );
         }
 
         if is_generic_lambda {

@@ -10,9 +10,9 @@ struct c1b3_Vec2(x: int, y: int);
 @timeout(180000)
 fun primary_constructor() {
     let p = c1b3_Point(3, 4);
-    Assert.eq_str((p.x).to_string(), "3");
-    Assert.eq_str((p.y).to_string(), "4");
+    Assert.eq((p.x).to_string(), "3");
+    Assert.eq((p.y).to_string(), "4");
     let v = c1b3_Vec2(1, 2);
-    Assert.eq_str((v.x).to_string(), "1");
-    Assert.eq_str((v.y).to_string(), "2");
+    Assert.eq((v.x).to_string(), "1");
+    Assert.eq((v.y).to_string(), "2");
 }

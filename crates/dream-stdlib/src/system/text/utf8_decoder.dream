@@ -1,13 +1,5 @@
 module system.text;
 
-// Policy for malformed or truncated UTF-8 input.
-public enum InvalidEncoding {
-    // Returns a parse error and permanently fails the decoder on invalid input.
-    Strict,
-    // Emits U+FFFD replacement characters for invalid input and continues decoding.
-    Replace,
-}
-
 // Incremental UTF-8 decoding that retains incomplete sequences between chunks
 // and preserves a leading byte-order mark as text.
 public class Utf8Decoder {

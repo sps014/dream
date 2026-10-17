@@ -17,7 +17,7 @@ public class Widget {
 
 fun main(): void {
     let w = Widget(7);
-    let arr = Buffer.alloc<Widget>(4);
+    let arr = Array.alloc<Widget>(4);
     arr[0] = w;
     System.println(Debug.ref_count(w));
     let x = arr[0];

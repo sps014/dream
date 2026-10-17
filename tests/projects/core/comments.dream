@@ -13,5 +13,5 @@ fun comments(): void {
     comment spanning
     multiple lines */
     let x: int = 42; // a trailing line comment
-    Assert.eq_str((x).to_string(), "42");
+    Assert.eq((x).to_string(), "42");
 }

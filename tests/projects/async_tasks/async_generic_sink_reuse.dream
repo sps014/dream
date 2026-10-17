@@ -19,7 +19,7 @@ async fun async_generic_sink_reuse(): void {
     h.id = 7;
     let a = c34_id_of(h, 1).await;
     let b = c34_id_of(h, 2).await;
-    Assert.eq_str((a).to_string(), "7");
-    Assert.eq_str((b).to_string(), "7");
-    Assert.eq_str((h.id).to_string(), "7");
+    Assert.eq((a).to_string(), "7");
+    Assert.eq((b).to_string(), "7");
+    Assert.eq((h.id).to_string(), "7");
 }

@@ -60,28 +60,12 @@ The element at `index` (relative to this span, not the backing array). Traps if 
 public fun this[index: int]: T
 ```
 
-## `get`
-
-Returns the element at `index`; an out-of-range index panics.
-
-```dream
-public fun get(index: int): T
-```
-
 ## `this`
 
 Overwrites the element at `index` (relative to this span). Traps if out of range.
 
 ```dream
 public fun this[index: int] = value: T
-```
-
-## `set`
-
-Replaces the element at `index`; an out-of-range index panics.
-
-```dream
-public fun set(index: int, value: T): void
 ```
 
 ## `slice`

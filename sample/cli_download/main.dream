@@ -1,3 +1,4 @@
+import system.text;
 import system;
 import system.cli;
 import system.io;
@@ -60,7 +61,8 @@ async fun main(): int {
         .flag("verbose", short: "v");
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_line(result.unwrap_err().message());
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n"));
+        System.stderr.flush();
         return 2;
     }
     let parsed = result.unwrap();
@@ -74,13 +76,15 @@ async fun main(): int {
     }
     let timeout = parsed.get_int("timeout").unwrap();
     if timeout < 0 {
-        System.stderr.write_line("timeout must be nonnegative");
+        System.stderr.write_all(Encoding.utf8_encode("timeout must be nonnegative" + "\n"));
+        System.stderr.flush();
         return 2;
     }
     let output = parsed.get_string("output").unwrap();
     let copied = download(parsed.get_string("url").unwrap(), output, timeout).await;
     if copied.is_err() {
-        System.stderr.write_line(copied.unwrap_err());
+        System.stderr.write_all(Encoding.utf8_encode(copied.unwrap_err() + "\n"));
+        System.stderr.flush();
         return 1;
     }
     if parsed.get_bool("verbose").unwrap() {

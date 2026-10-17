@@ -6,10 +6,10 @@ fun c90_body(): void {
     let m = Map<int, string>(8);
     let s = Set<int>(8);
     for (let i = 0; i < 5; i = i + 1) {
-        m.set(i * 8, i.to_string());
+        m[i * 8] = i.to_string();
         s.add(i * 8);
     }
-    m.set(32, "updated");
+    m[32] = "updated";
     c90_verify_observation((m.capacity).to_string());
     c90_verify_observation((s.add(32)).to_string());
     c90_verify_observation((s.capacity).to_string());
@@ -17,7 +17,7 @@ fun c90_body(): void {
         m.remove(i * 8);
         s.remove(i * 8);
     }
-    m.set(40, "new");
+    m[40] = "new";
     s.add(40);
     c90_verify_observation((m.capacity).to_string());
     c90_verify_observation((s.capacity).to_string());
@@ -25,7 +25,7 @@ fun c90_body(): void {
     c90_verify_observation((m[40]).to_string());
     c90_verify_observation((s.contains(32) && s.contains(40)).to_string());
     for (let i = 0; i < 100; i = i + 1) {
-        m.set(i + 100, "value");
+        m[i + 100] = "value";
         s.add(i + 100);
         m.remove(i + 100);
         s.remove(i + 100);
@@ -43,7 +43,7 @@ fun c90_verify_observation(borrow value: string): void {
     let wanted = "8\nfalse\n8\n16\n16\nupdated\nnew\ntrue\n128\n128\n2\n2\n";
     let end = c90_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c90_cursor, end));
+    Assert.eq(actual, wanted.substring(c90_cursor, end));
     c90_cursor = end;
 }
 

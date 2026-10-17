@@ -1,66 +1,8 @@
-# JsonKind, JsonValue
+# JsonValue
 
 **Import:** `import system.json;`
 
-Read the [usage guide](../../library/serialization/json.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
-
-[All sections](json-json-value.md)
-
-## `as_map`
-
-Returns the entries when this is an object, otherwise `None`.
-
-```dream
-public fun as_map(): Option<Map<string, JsonValue>>
-```
-
-## `str_or`
-
-Returns the string value, or `fallback` for a different JSON kind.
-
-```dream
-public fun str_or(fallback: string): string
-```
-
-## `int_or`
-
-Returns the integer value, or `fallback` for a different JSON kind.
-
-```dream
-public fun int_or(fallback: int): int
-```
-
-## `bool_or`
-
-Returns the boolean value, or `fallback` for a different JSON kind.
-
-```dream
-public fun bool_or(fallback: bool): bool
-```
-
-## `double_or`
-
-Returns the numeric value, or `fallback` for a different JSON kind.
-
-```dream
-public fun double_or(fallback: double): double
-```
-
-## `get_str`
-
-Returns the named string property, or `None` if missing or not a string.
-
-```dream
-public fun get_str(borrow key: string): Option<string>
-```
-
-## `get_int`
-
-Returns the named integer property, or `None` if missing or not numeric.
-
-```dream
-public fun get_int(borrow key: string): Option<int>
-```
+Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
 ## `get_bool`
 
@@ -118,14 +60,6 @@ The value for `key`, or `None` when this is not an object or the key is absent.
 public fun this[borrow key: string]: Option<JsonValue>
 ```
 
-## `get`
-
-Returns the named object property, or `None` if absent or not an object.
-
-```dream
-public fun get(borrow key: string): Option<JsonValue>
-```
-
 ## `at`
 
 The value for `key`. Panics when this is not an object or the key is absent — use `get(key)` for absence-tolerant reads.
@@ -140,14 +74,6 @@ Sets the value for `key` (objects only).
 
 ```dream
 public fun this[key: string] = value: JsonValue
-```
-
-## `set`
-
-Sets the named property when this value is a JSON object.
-
-```dream
-public fun set(key: string, value: JsonValue): void
 ```
 
 ## `key_at`

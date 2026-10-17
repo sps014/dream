@@ -56,7 +56,7 @@ fn internal_intrinsic_is_callable_in_its_module() {
     std::fs::write(
         &source,
         r#"
-module trusted;
+module system.core;
 import system;
 static class Hidden {
     @intrinsic(Intrinsic.ArrayNew)

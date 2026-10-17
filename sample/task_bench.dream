@@ -32,7 +32,7 @@ async fun main(): void {
     let seq_ms = ms_between(seq_start, seq_end);
 
     let par_start = Time.nano_time();
-    let workers = Buffer.alloc<Future<string>>(tasks);
+    let workers = Array.alloc<Future<string>>(tasks);
     let s = 0;
     while s < tasks {
         workers[s] = Task.spawn(() => heavy("par"));

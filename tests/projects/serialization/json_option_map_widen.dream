@@ -28,8 +28,8 @@ class c119_Widened {
 
 fun c119_body(): void {
     let scores = Map<string, int>();
-    scores.set("alice", 10);
-    scores.set("bob", 20);
+    scores["alice"] = 10;
+    scores["bob"] = 20;
 
     let w = c119_Widened(Option.Some(5), Option.None, Option.Some(true), scores);
     let s = Json.serialize(w);
@@ -55,7 +55,7 @@ fun c119_verify_observation(borrow value: string): void {
     let wanted = "{\"a\":5,\"b\":null,\"c\":true,\"scores\":{\"bob\":20,\"alice\":10}}\n5\ntrue\ntrue\n2\n10\n20\n";
     let end = c119_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c119_cursor, end));
+    Assert.eq(actual, wanted.substring(c119_cursor, end));
     c119_cursor = end;
 }
 

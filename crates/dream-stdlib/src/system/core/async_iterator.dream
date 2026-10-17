@@ -1,0 +1,10 @@
+module system.core;
+
+/// A cursor whose next value may require asynchronous work. Close it when finished.
+public interface AsyncIterator<T> {
+    /// Returns the next value, or `None` when the sequence has ended.
+    async unique fun next(): Option<T>;
+
+    /// Ends iteration and releases resources held by the cursor.
+    unique fun close(): void;
+}

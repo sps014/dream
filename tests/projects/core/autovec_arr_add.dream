@@ -3,9 +3,9 @@ import system;
 
 fun c47_body(): void {
     let n = 10;
-    let a = Buffer.alloc<float>(n);
-    let b = Buffer.alloc<float>(n);
-    let c = Buffer.alloc<float>(n);
+    let a = Array.alloc<float>(n);
+    let b = Array.alloc<float>(n);
+    let c = Array.alloc<float>(n);
     let i = 0;
     while i < n {
         a[i] = (float)i;
@@ -25,9 +25,9 @@ fun c47_body(): void {
     }
     c47_verify_observation((s).to_string());
 
-    let ai = Buffer.alloc<int>(n);
-    let bi = Buffer.alloc<int>(n);
-    let ci = Buffer.alloc<int>(n);
+    let ai = Array.alloc<int>(n);
+    let bi = Array.alloc<int>(n);
+    let ci = Array.alloc<int>(n);
     i = 0;
     while i < n {
         ai[i] = i;
@@ -55,7 +55,7 @@ fun c47_verify_observation(borrow value: string): void {
     let wanted = "55\n65\n";
     let end = c47_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
-    Assert.eq_str(actual, wanted.substring(c47_cursor, end));
+    Assert.eq(actual, wanted.substring(c47_cursor, end));
     c47_cursor = end;
 }
 

@@ -187,6 +187,12 @@ Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` 
 
 Any expression can be used as a statement (`expr;`); the result is evaluated and dropped.
 
+## Range expressions
+
+`a..b` produces a reusable `Range` value with `int` bounds and an excluded end.
+It counts upward or downward toward `b`; equal bounds produce an empty range.
+See [Ranges](../types/ranges.md) for value operations, iteration, and collection conversion.
+
 ## Precedence
 
 Higher rows bind tighter; use parentheses when in doubt.

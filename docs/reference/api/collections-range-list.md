@@ -2,7 +2,7 @@
 
 **Import:** `import system.collections;`
 
-Use `(5 .. 0).to_list()` to create a list containing `5, 4, 3, 2, 1`. The list has independent storage. See [integer ranges](../../language/basics/control-flow.md#integer-ranges) for a runnable example.
+Use `(5..0).to_list()` to create a list containing `5, 4, 3, 2, 1`. The list has independent storage. See [Ranges](../../language/types/ranges.md) for a runnable example.
 
 ## `to_list`
 

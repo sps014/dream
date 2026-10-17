@@ -3,6 +3,7 @@ nav:
   - index.md
   - primitives.md
   - arrays.md
+  - ranges.md
   - spans.md
   - enums-unions.md
   - classes-structs.md

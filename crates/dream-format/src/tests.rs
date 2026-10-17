@@ -506,3 +506,35 @@ fn weak_local_spacing() {
     assert!(formatted.contains("const weak other = value;"));
     assert_idempotent(source);
 }
+
+#[test]
+fn ranges_bind_tightly_to_their_bounds() {
+    for (source, expected) in [
+        ("let r = 0 .. 8;", "let r = 0..8;\n"),
+        ("let r = -1 .. n - 1;", "let r = -1..n - 1;\n"),
+        ("let r = 1 .. -2;", "let r = 1..-2;\n"),
+        (
+            "let xs = (0 .. 8).to_list();",
+            "let xs = (0..8).to_list();\n",
+        ),
+        ("let r = 0.5 .. 2.5;", "let r = 0.5..2.5;\n"),
+    ] {
+        assert_format(source, expected);
+        assert_idempotent(source);
+    }
+    let pattern = format("switch (n) { 0 .. 8 => 1, _ => 0 }");
+    assert!(pattern.contains("0..8 => 1"), "{pattern}");
+}
+
+#[test]
+fn tight_ranges_preserve_comments_and_separate_dot_tokens() {
+    for source in [
+        "let r = 0 .. .. 8;",
+        "let r = 0 . .. 8;",
+        "let r = 0 .. . 8;",
+        "let r = 0 /* start */ .. /* end */ 8;",
+    ] {
+        assert!(crate::try_format(source).is_some(), "{source}");
+        assert_idempotent(source);
+    }
+}

@@ -10,9 +10,9 @@ enum c23c_Shape {
 
 fun c23c_grade(score: int): string {
     return switch (score) {
-        90 .. 100 => "A",
-        80 .. 89 => "B",
-        70 .. 79 => "C",
+        90..100 => "A",
+        80..89 => "B",
+        70..79 => "C",
         _ => "F",
     };
 }

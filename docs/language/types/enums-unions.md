@@ -132,7 +132,7 @@ switch (s) {
 | Binding | `x` | Anything, binding it to the name |
 | Wildcard | `_` | Anything, binding nothing |
 | Literal | `0`, `'a'`, `"yes"`, `true` | A subject equal to the literal |
-| Range | `90 .. 100` | An ordered scalar between the bounds, inclusive |
+| Range | `90..100` | An ordered scalar between the bounds, inclusive |
 | Or-pattern | `'a' | 'e'` | Any alternative; alternatives cannot bind names |
 | Tuple | `(a, 0)` | A tuple whose elements match each sub-pattern |
 | Guard | `Some(n) if n > 10` | The pattern, only when the condition is also `true` |
@@ -190,9 +190,9 @@ A literal pattern over an ordered scalar subject (`int` / `long` / `uint` / `ulo
 ```dream
 fun grade(score: int): string {
     return switch (score) {
-        90 .. 100 => "A",
-        80 .. 89 => "B",
-        70 .. 79 => "C",
+        90..100 => "A",
+        80..89 => "B",
+        70..79 => "C",
         _ => "F",
     };
 }

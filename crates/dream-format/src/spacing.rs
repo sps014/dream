@@ -88,7 +88,6 @@ fn is_binary_op(kind: TokenKind) -> bool {
             | TokenKind::IsToken
             | TokenKind::AsToken
             | TokenKind::InToken
-            | TokenKind::DotDotToken
     )
 }
 
@@ -204,6 +203,17 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
             | (TokenKind::GreaterThanToken, TokenKind::GreaterThanToken)
     ) {
         return true;
+    }
+
+    if prev == TokenKind::DotDotToken || cur == TokenKind::DotDotToken {
+        // Adjacent dot tokens must not merge into `...` on malformed input.
+        return matches!(
+            prev,
+            TokenKind::DotToken | TokenKind::DotDotToken | TokenKind::DotDotDotToken
+        ) && matches!(
+            cur,
+            TokenKind::DotToken | TokenKind::DotDotToken | TokenKind::DotDotDotToken
+        );
     }
 
     // Never space before closers / separators / postfix.

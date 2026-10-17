@@ -1,6 +1,6 @@
 ---
 title: Types
-summary: "Primitives, arrays, tuples, options, classes, structs, enums, and casts."
+summary: "Primitives, arrays, ranges, tuples, options, classes, structs, enums, and casts."
 icon: material/shape-outline
 ---
 

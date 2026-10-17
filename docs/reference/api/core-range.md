@@ -2,7 +2,7 @@
 
 **Import:** `import system.core;`
 
-Ranges are also available without an explicit import. See [integer ranges](../../language/basics/control-flow.md#integer-ranges) for runnable examples, including descending traversal.
+Ranges are also available without an explicit import. See [Ranges](../../language/types/ranges.md) for runnable examples, including descending traversal.
 
 ## `Range`
 

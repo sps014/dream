@@ -2,5 +2,5 @@ import system;
 
 fun main(): void {
     let minimum = -2147483647 - 1;
-    System.println((minimum .. 2147483647).length);
+    System.println((minimum..2147483647).length);
 }

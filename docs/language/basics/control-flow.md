@@ -84,62 +84,6 @@ for (let i = 0; i < 5; i++) {
 }
 ```
 
-### Integer ranges
-
-`start .. end` creates a reusable `Range` value. Both bounds must be `int`.
-It counts in steps of one toward the end, and the end is always excluded.
-The operator needs no import. This example imports `system` to print the values:
-
-```dream
-import system;
-
-fun main(): void {
-    for let i in 0 .. 5 {
-        System.println(i);
-    }
-
-    let descending = 5 .. 0;
-    for let i in descending {
-        System.println(i);
-    }
-}
-```
-
-The first loop prints `0, 1, 2, 3, 4`; the second prints `5, 4, 3, 2, 1`,
-one number per line. Equal bounds produce an empty range. Unlike Rust,
-`10 .. 5` counts down rather than being empty. In particular, `0 .. n` with
-negative `n` runs `abs(n)` times.
-
-Bounds can be expressions: `-1 .. n - 1` means `(-1) .. (n - 1)`.
-Each bound is evaluated once, from left to right, before the loop starts.
-A stored range can be traversed repeatedly; `break` and `continue` work as
-in other loops. Ranges support neither an inclusive `..=` end nor a custom step.
-[Switch range patterns](../types/enums-unions.md#or-patterns-and-range-patterns) match both bounds inclusively; they do not construct a `Range`.
-
-Use `length`, `is_empty`, and `contains(value)` to inspect a range.
-`length` panics if the distance between the bounds exceeds `2147483647`;
-traversal itself supports all `int` bounds. To collect the values, import
-`system.collections`:
-
-```dream
-import system;
-import system.collections;
-
-fun main(): void {
-    let r = 2 .. 5;
-    System.println(r.length); // 3
-    System.println(r.contains(4)); // true
-    System.println(r.is_empty); // false
-
-    let values = (5 .. 0).to_list();
-    System.println(values[0]); // 5
-    System.println(values.length); // 5
-}
-```
-
-`to_list()` preserves iteration order and has the same length restriction.
-See the [Range API](../../reference/api/core-range.md).
-
 ### for-each
 
 Iterate a collection's elements directly with `for (let x in ...)`. The loop variable takes each element in turn:
@@ -150,6 +94,8 @@ for (let value in xs) {
     System.println(value);
 }
 ```
+
+Use a [range value](../types/ranges.md) to iterate integers, for example `for let i in 0..8 { ... }`.
 
 `for..in` also works over a `string` (yielding each `char`), over any type implementing the enumerator protocol — including `List` and `Map` — and over interface-typed `Collection<T>`, `IndexedCollection<T>`, or `Iterator<T>` (dispatched through `.iterator()` / `.next()`). See [Indexers and enumerators](../types/classes-structs.md#indexers-and-enumerators).
 

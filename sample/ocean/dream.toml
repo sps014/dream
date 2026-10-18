@@ -1,0 +1,7 @@
+[package]
+name = "ocean"
+version = "0.1.0"
+type = "bin"
+entry = "main.dream"
+targets = ["native", "web"]
+description = "TDM Seascape adapted to Dream GPU shaders for native and browser rendering"

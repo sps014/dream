@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#082632">
+  <link rel="icon" href="data:,">
+  <title>Pelagic · Dream Ocean</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #082632; color: #f5f5e9; }
+    body { font-family: system-ui, sans-serif; }
+    canvas { display: block; position: fixed; inset: 0; width: 100% !important; height: 100% !important; outline: none; }
+    header, footer { position: fixed; z-index: 1; pointer-events: none; left: 4vw; right: 4vw; }
+    header { top: 5vh; display: flex; justify-content: space-between; align-items: start; }
+    .eyebrow { font-size: 10px; letter-spacing: .28em; text-transform: uppercase; opacity: .75; }
+    h1 { font-family: Georgia, serif; font-weight: 400; font-size: clamp(42px, 7vw, 90px); letter-spacing: -.06em; margin: 8px 0; }
+    .tag { border: 1px solid #ffffff45; border-radius: 99px; padding: 9px 14px; font-size: 10px; letter-spacing: .15em; }
+    footer { bottom: 4vh; display: flex; justify-content: space-between; gap: 20px; font-size: 11px; line-height: 1.8; text-shadow: 0 1px 8px #00202c; }
+    kbd { font: inherit; color: white; }
+    #status { max-width: 420px; white-space: pre-wrap; }
+    .credit { pointer-events: auto; color: inherit; }
+    @media (max-width: 600px) { footer { flex-direction: column; } .tag { display: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><div class="eyebrow">Dream / Studies in motion / 001</div><h1>Pelagic</h1><div class="eyebrow">An open-water reverie</div></div>
+    <div class="tag">REAL-TIME · GPU OCEAN</div>
+  </header>
+  <footer>
+    <div>Click the ocean to focus<br><kbd>Space</kbd> pause &nbsp; <kbd>↑ ↓</kbd> swell &nbsp; <kbd>← →</kbd> daylight &nbsp; <kbd>Q</kbd> quality &nbsp; <kbd>R</kbd> reset</div>
+    <div><div id="status" role="status">Preparing the ocean…</div><a class="credit" href="https://www.shadertoy.com/view/Ms2SD1" target="_blank" rel="noreferrer">Seascape by TDM</a> · <a class="credit" href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 3.0</a></div>
+  </footer>
+  <script type="module">
+    const status = document.querySelector('#status');
+    try {
+      if (!navigator.gpu) throw new Error('WebGPU is unavailable. Use a WebGPU-enabled browser on localhost or HTTPS.');
+      status.textContent = 'Loading the browser runtime…';
+      let runtimeTimer;
+      const { load } = await Promise.race([
+        import('./target/web/main.web.runtime.js'),
+        new Promise((_, reject) => {
+          runtimeTimer = setTimeout(() => reject(new Error('Runtime request timed out. Restart your local web server.')), 15000);
+        })
+      ]).finally(() => clearTimeout(runtimeTimer));
+      const observer = new MutationObserver(() => {
+        const canvas = document.querySelector('canvas');
+        if (canvas) { canvas.setAttribute('aria-label', 'Animated ocean'); canvas.focus(); observer.disconnect(); }
+      });
+      observer.observe(document.body, { childList: true });
+      status.textContent = 'Downloading the ocean…';
+      const response = await fetch('./target/web/main.wasm', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(`Ocean download failed: HTTP ${response.status}. Build main.dream first.`);
+      const bytes = await response.arrayBuffer();
+      status.textContent = 'Compiling the ocean…';
+      let failure = '';
+      const ocean = await load(bytes, { stdout(text) {
+        console.log(text);
+        if (text.includes('Ocean ready')) status.textContent = 'Ray-traced water · One shared Dream source';
+        if (/GPU error:|Window error:/.test(text)) failure = text;
+      } });
+      status.textContent = 'Opening the GPU…';
+      await ocean.run();
+      if (failure) throw new Error(failure.trim());
+      status.textContent = 'Ocean closed. Reload to return.';
+    } catch (error) {
+      status.textContent = `Unable to start: ${error.message}`;
+      console.error(error);
+    }
+  </script>
+</body>
+</html>

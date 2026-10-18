@@ -1,0 +1,335 @@
+// Adapted from "Seascape" by Alexander Alekseev (TDM), 2014.
+// https://www.shadertoy.com/view/Ms2SD1
+// https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader
+// Licensed under CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/
+// Dream adaptation: explicit parameters, shared height sampling, supersampling and controls.
+import system;
+import system.gpu;
+import system.window;
+
+public struct OceanPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+}
+
+fun sea_hash(p: GpuVec2): float {
+    // Integer lattice values must agree across noise cells on every GPU compiler.
+    // lowbias32 finalizer: https://github.com/skeeto/hash-prospector (public domain).
+    let x = (uint)(int)p.x;
+    let y = (uint)(int)p.y;
+    let h = (x * 1597334677u) ^ (y * 3812015801u);
+    h = (h ^ (h >> 16)) * 2146121005u;
+    h = (h ^ (h >> 15)) * 2221713035u;
+    h = h ^ (h >> 16);
+    return (float)(h >> 8) * (1.0f / 16777216.0f);
+}
+
+fun sea_noise(p: GpuVec2): float {
+    let i = GpuMath.floor(p);
+    let f = GpuMath.fract(p);
+    let u = f * f * (GpuVec2(3.0f) - f * 2.0f);
+    let a = GpuMath.mix(sea_hash(i), sea_hash(i + GpuVec2(1.0f, 0.0f)), u.x);
+    let b = GpuMath.mix(sea_hash(i + GpuVec2(0.0f, 1.0f)), sea_hash(i + GpuVec2(1.0f)), u.x);
+    return -1.0f + 2.0f * GpuMath.mix(a, b, u.y);
+}
+
+fun sea_octave(uv: GpuVec2, choppy: float): float {
+    uv = uv + GpuVec2(sea_noise(uv));
+    let waves = GpuVec2(1.0f) - GpuMath.abs(GpuMath.sin(uv));
+    let swell = GpuMath.abs(GpuMath.cos(uv));
+    waves = GpuMath.mix(waves, swell, waves);
+    return GpuMath.pow(1.0f - GpuMath.pow(waves.x * waves.y, 0.65f), choppy);
+}
+
+fun sea_map(p: GpuVec3, time: float, strength: float, octaves: int): float {
+    let frequency = 0.16f;
+    let amplitude = 0.6f * strength;
+    let choppy = 4.0f;
+    let uv = GpuVec2(p.x * 0.75f, p.z);
+    let height = 0.0f;
+    let sea_time = 1.0f + time * 0.8f;
+    for (let i in 0..octaves) {
+        let d = sea_octave((uv + GpuVec2(sea_time)) * frequency, choppy)
+            + sea_octave((uv - GpuVec2(sea_time)) * frequency, choppy);
+        height = height + d * amplitude;
+        uv = GpuVec2(uv.x * 1.6f + uv.y * 1.2f, -uv.x * 1.2f + uv.y * 1.6f);
+        frequency = frequency * 1.9f;
+        amplitude = amplitude * 0.22f;
+        choppy = GpuMath.mix(choppy, 1.0f, 0.2f);
+    }
+    return p.y - height;
+}
+
+fun sea_sky(ray: GpuVec3, daylight: float): GpuVec3 {
+    let y = (GpuMath.max(ray.y, 0.0f) * 0.8f + 0.2f) * 0.8f;
+    let color = GpuVec3((1.0f - y) * (1.0f - y), 1.0f - y, 0.6f + (1.0f - y) * 0.4f) * 1.1f;
+    let sunset = GpuVec3(1.1f, 0.64f, 0.42f);
+    return color * (GpuVec3(1.0f) * daylight + sunset * (1.0f - daylight));
+}
+
+fun sea_trace(origin: GpuVec3, ray: GpuVec3, time: float, strength: float): GpuVec3 {
+    let near = 0.0f;
+    let far = 1000.0f;
+    let far_height = sea_map(origin + ray * far, time, strength, 3);
+    if far_height > 0.0f {
+        return origin + ray * far;
+    }
+    let near_height = sea_map(origin, time, strength, 3);
+    let point = origin;
+    // The height field is not a signed distance: use a bracketed secant search.
+    for (let i in 0..32) {
+        let middle = GpuMath.mix(near, far, near_height / (near_height - far_height));
+        point = origin + ray * middle;
+        let height = sea_map(point, time, strength, 3);
+        if GpuMath.abs(height) < 0.001f {
+            break;
+        }
+        if height < 0.0f {
+            far = middle;
+            far_height = height;
+        } else {
+            near = middle;
+            near_height = height;
+        }
+    }
+    return point;
+}
+
+fun sea_normal(p: GpuVec3, epsilon: float, time: float, strength: float): GpuVec3 {
+    let height = sea_map(p, time, strength, 5);
+    let nx = sea_map(p + GpuVec3(epsilon, 0.0f, 0.0f), time, strength, 5) - height;
+    let nz = sea_map(p + GpuVec3(0.0f, 0.0f, epsilon), time, strength, 5) - height;
+    return GpuVec3(nx, epsilon, nz).normalize();
+}
+
+fun sea_color(
+    p: GpuVec3,
+    normal: GpuVec3,
+    ray: GpuVec3,
+    distance: GpuVec3,
+    strength: float,
+    daylight: float
+): GpuVec3 {
+    let light = GpuVec3(0.0f, 0.3f + daylight * 0.7f, 0.8f).normalize();
+    let fresnel = GpuMath.clamp(1.0f - normal.dot(-ray), 0.0f, 1.0f);
+    fresnel = GpuMath.min(fresnel * fresnel * fresnel, 0.5f);
+    let reflected = sea_sky(GpuMath.reflect(ray, normal), daylight);
+    let water = GpuVec3(0.8f, 0.9f, 0.6f) * 0.6f;
+    let diffuse = GpuMath.pow(normal.dot(light) * 0.4f + 0.6f, 80.0f);
+    let refracted = GpuVec3(0.0f, 0.09f, 0.18f) + water * diffuse * 0.12f;
+    let color = GpuMath.mix(refracted, reflected, GpuVec3(fresnel));
+    let attenuation = GpuMath.max(1.0f - distance.dot(distance) * 0.001f, 0.0f);
+    color = color + water * (p.y - 0.6f * strength) * 0.18f * attenuation;
+    let shininess = 600.0f * GpuMath.rsqrt(GpuMath.max(distance.dot(distance), 0.001f));
+    let normalization = (shininess + 8.0f) / (3.141592f * 8.0f);
+    let specular = GpuMath.pow(
+        GpuMath.max(GpuMath.reflect(ray, normal).dot(light), 0.0f),
+        shininess
+    );
+    return color + GpuVec3(specular * normalization);
+}
+
+@vertex
+fun ocean_vertex(): OceanPixel {
+    let x = -1.0f;
+    let y = -1.0f;
+    if vertex_id() == 1 {
+        x = 3.0f;
+    } else if vertex_id() == 2 {
+        y = 3.0f;
+    }
+    let pixel = OceanPixel();
+    pixel.position = GpuVec4(x, y, 0.0f, 1.0f);
+    pixel.uv = GpuVec2(x, y);
+    return pixel;
+}
+
+fun sea_camera(ray: GpuVec3, angles: GpuVec3): GpuVec3 {
+    let s = GpuMath.sin(angles);
+    let c = GpuMath.cos(angles);
+    let column_x = GpuVec3(c.x * c.z + s.x * s.y * s.z, c.x * s.y * s.z + c.z * s.x, -c.y * s.z);
+    let column_y = GpuVec3(-c.y * s.x, c.x * c.y, s.y);
+    let column_z = GpuVec3(c.z * s.x * s.y + c.x * s.z, s.x * s.z - c.x * c.z * s.y, c.y * c.z);
+    return GpuVec3(ray.dot(column_x), ray.dot(column_y), ray.dot(column_z));
+}
+
+fun sea_pixel(
+    uv: GpuVec2,
+    resolution: GpuVec2,
+    time: float,
+    strength: float,
+    daylight: float
+): GpuVec3 {
+    let camera_time = time * 0.3f;
+    let angles = GpuVec3(
+        GpuMath.sin(camera_time * 3.0f) * 0.1f,
+        GpuMath.sin(camera_time) * 0.2f + 0.3f,
+        camera_time
+    );
+    let origin = GpuVec3(0.0f, 3.5f, camera_time * 5.0f);
+    let ray = GpuVec3(uv.x, uv.y, -2.0f).normalize();
+    ray.z = ray.z + uv.length() * 0.14f;
+    ray = sea_camera(ray.normalize(), angles);
+    let color = sea_sky(ray, daylight);
+    if ray.y < 0.0f {
+        let point = sea_trace(origin, ray, time, strength);
+        let distance = point - origin;
+        let epsilon = GpuMath.max(distance.dot(distance) * 0.1f / resolution.x, 0.0001f);
+        let normal = sea_normal(point, epsilon, time, strength);
+        let ocean = sea_color(point, normal, ray, distance, strength, daylight);
+        let blend = GpuMath.pow(1.0f - GpuMath.smoothstep(-0.02f, 0.0f, ray.y), 0.2f);
+        color = GpuMath.mix(color, ocean, GpuVec3(blend));
+    }
+    return color;
+}
+
+fun srgb_decode(channel: float): float {
+    if channel <= 0.04045f {
+        return channel / 12.92f;
+    }
+    return GpuMath.pow((channel + 0.055f) / 1.055f, 2.4f);
+}
+
+@fragment
+fun ocean_fragment(
+    pixel: OceanPixel,
+    resolution: GpuVec2,
+    time: float,
+    strength: float,
+    daylight: float,
+    antialias: int,
+    target_srgb: int
+): GpuVec4 {
+    let uv = GpuVec2(pixel.uv.x * resolution.x / resolution.y, pixel.uv.y);
+    let color = GpuVec3(0.0f);
+    if antialias != 0 {
+        // Average radiance before gamma to preserve the reference's highlights.
+        for (let y in 0..3) {
+            for (let x in 0..3) {
+                let offset = GpuVec2((float)(x - 1), (float)(y - 1))
+                    * (2.0f / (3.0f * resolution.y));
+                color = color + sea_pixel(uv + offset, resolution, time, strength, daylight);
+            }
+        }
+        color = color / 9.0f;
+    } else {
+        color = sea_pixel(uv, resolution, time, strength, daylight);
+    }
+    color = GpuMath.pow(GpuMath.max(color, GpuVec3(0.0f)), GpuVec3(0.65f));
+    // An sRGB attachment encodes on write, so undo the artistic display curve first.
+    if target_srgb != 0 {
+        color = GpuVec3(srgb_decode(color.x), srgb_decode(color.y), srgb_decode(color.z));
+    }
+    return GpuVec4(color.x, color.y, color.z, 1.0f);
+}
+
+async fun run_ocean(window: Window): Result<bool, GpuError> {
+    let device = GpuDevice.create(GpuBackend.Auto).await?;
+    let surface = device.create_surface(window)?;
+    let pipeline = device.render_pipeline(
+        GpuShaders.ocean_vertex,
+        GpuShaders.ocean_fragment,
+        GpuRenderPipelineDesc.defaults(surface.color_format)
+    )?;
+    let target_srgb = 0;
+    if surface.color_format
+        == GpuTextureFormat.Rgba8UnormSrgb
+        || surface.color_format == GpuTextureFormat.Bgra8UnormSrgb {
+        target_srgb = 1;
+    }
+    let time = 0.0f;
+    let strength = 1.0f;
+    let daylight = 1.0f;
+    let paused = false;
+    let antialias = 1;
+    System.println(
+        "Ocean ready | Space: pause | Up/Down: waves | Left/Right: daylight | Q: quality | R: reset | Esc: close"
+    );
+    while window.is_open {
+        let input = window.poll();
+        for (let event in input.events) {
+            switch (event) {
+                WindowEvent.Resized(size) => {
+                    if size.width > 0 && size.height > 0 {
+                        surface.resize(size.width, size.height)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if input.keyboard.pressed(KeyCode.Escape) {
+            window.close();
+        }
+        if !window.is_open {
+            break;
+        }
+        if input.keyboard.pressed(KeyCode.Space) {
+            paused = !paused;
+        }
+        if input.keyboard.pressed(KeyCode.Q) {
+            antialias = 1 - antialias;
+        }
+        let dt = (float)Math.min(input.delta_seconds, 0.05f);
+        if !paused {
+            time = time + dt;
+        }
+        if input.keyboard.is_down(KeyCode.ArrowUp) {
+            strength = (float)Math.min(strength + dt * 0.3f, 1.5f);
+        }
+        if input.keyboard.is_down(KeyCode.ArrowDown) {
+            strength = (float)Math.max(strength - dt * 0.3f, 0.3f);
+        }
+        if input.keyboard.is_down(KeyCode.ArrowRight) {
+            daylight = (float)Math.min(daylight + dt * 0.4f, 1.0f);
+        }
+        if input.keyboard.is_down(KeyCode.ArrowLeft) {
+            daylight = (float)Math.max(daylight - dt * 0.4f, 0.0f);
+        }
+        if input.keyboard.pressed(KeyCode.R) {
+            strength = 1.0f;
+            daylight = 1.0f;
+            time = 0.0f;
+        }
+        let size = window.pixel_size;
+        if size.width <= 0 || size.height <= 0 {
+            Time.delay(50).await;
+            continue;
+        }
+        let frame = surface.begin_frame(GpuVec4(0.0f, 0.09f, 0.18f, 1.0f)).await?;
+        let pass = frame.pass;
+        pass.set_pipeline(pipeline);
+        pass.bind_value(
+            GpuShaders.ocean_fragment.resolution,
+            GpuVec2((float)size.width, (float)size.height)
+        );
+        pass.bind_value(GpuShaders.ocean_fragment.time, time);
+        pass.bind_value(GpuShaders.ocean_fragment.strength, strength);
+        pass.bind_value(GpuShaders.ocean_fragment.daylight, daylight);
+        pass.bind_value(GpuShaders.ocean_fragment.antialias, antialias);
+        pass.bind_value(GpuShaders.ocean_fragment.target_srgb, target_srgb);
+        pass.draw(3);
+        frame.present().await?;
+    }
+    return Result.Ok(true);
+}
+
+async fun main(): void {
+    let opened = Window.open(
+        WindowDesc.of("Pelagic | Dream Seascape", 1280, 800).resizable(true).vsync(true)
+    );
+    if opened.is_err() {
+        System.println("Window error: " + opened.unwrap_err().message());
+        return;
+    }
+    let window = opened.unwrap();
+    switch (run_ocean(window).await) {
+        Ok(_) => {}
+        Err(error) => {
+            System.println("GPU error: " + error.message());
+        }
+    }
+    window.close();
+}

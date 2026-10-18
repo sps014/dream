@@ -674,6 +674,7 @@ fn constant(c: &Const) -> String {
         Const::Long(v) => format!("{v}L"),
         Const::Float(v) => format!("{v:?}"),
         Const::F32(v) => format!("{v:?}f"),
+        Const::F16(v) => format!("{:?}h", half::f16::from_bits(*v).to_f32()),
         Const::Bool(v) => v.to_string(),
         Const::Char(v) => format!("{v:?}"),
         Const::Str(s) => format!("{s:?}"),

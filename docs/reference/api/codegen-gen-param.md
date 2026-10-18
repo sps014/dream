@@ -26,6 +26,14 @@ Type of this declaration or expression.
 public ty: GenTypeRef
 ```
 
+## `is_ref`
+
+Whether this is a `ref` parameter, so assignments to it in the body are visible to the caller.
+
+```dream
+public is_ref: bool
+```
+
 ## `attributes`
 
 Attributes attached to this declaration.
@@ -39,7 +47,7 @@ public attributes: List<GenAttribute>
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(name: string, ty: GenTypeRef, attributes: List<GenAttribute>)
+public constructor(name: string, ty: GenTypeRef, is_ref: bool, attributes: List<GenAttribute>)
 ```
 
 ## `attribute`

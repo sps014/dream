@@ -40,6 +40,7 @@ struct CachedIndex {
     /// without panicking. Powers type-aware completion/hover; `None` falls back to the
     /// AST-index heuristics.
     sema: Option<Arc<dream_sema::analyzer::IdeSnapshot>>,
+    consumed: Arc<Vec<analysis::ConsumedFunction>>,
 }
 
 #[derive(Debug)]
@@ -235,18 +236,32 @@ impl Backend {
         };
 
         let index = Arc::new(Index::build(file_path, &text));
-        let sema = analysis::analyze_document(file_path, &text)
-            .sema
-            .map(Arc::new);
+        let outcome = analysis::analyze_document(file_path, &text);
+        let sema = outcome.sema.map(Arc::new);
         self.index_cache.insert(
             uri.to_string(),
             CachedIndex {
                 version,
                 index: index.clone(),
                 sema: sema.clone(),
+                consumed: Arc::new(outcome.consumed),
             },
         );
         Some((index, sema))
+    }
+
+    /// Functions in the document that generators consumed, for the version [`Self::models_for`]
+    /// last analyzed.
+    fn consumed_for(
+        &self,
+        uri: &str,
+        file_path: Option<&str>,
+    ) -> Arc<Vec<analysis::ConsumedFunction>> {
+        self.models_for(uri, file_path);
+        self.index_cache
+            .get(uri)
+            .map(|cached| cached.consumed.clone())
+            .unwrap_or_default()
     }
 
     /// Returns the symbol index for a document, rebuilding it only when the cached version is
@@ -277,6 +292,47 @@ impl Backend {
                 .await;
         });
     }
+}
+
+/// "consumed by generator" lenses for consumed functions, each followed by a lens that opens every
+/// artifact the generator mapped back into the function.
+pub fn consumed_lenses(consumed: &[analysis::ConsumedFunction], text: &str) -> Vec<CodeLens> {
+    let line_index = LineIndex::new(text);
+    let mut lenses = Vec::new();
+    for function in consumed {
+        let range = Range {
+            start: map_position(line_index.position(function.start)),
+            end: map_position(line_index.position(function.end)),
+        };
+        lenses.push(CodeLens {
+            range,
+            command: Some(Command {
+                title: format!("consumed by generator '{}'", function.generator),
+                command: String::new(),
+                arguments: None,
+            }),
+            data: None,
+        });
+        for artifact in function.artifacts.iter().filter(|a| a.is_file()) {
+            let Ok(target) = Url::from_file_path(artifact) else {
+                continue;
+            };
+            let name = artifact
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            lenses.push(CodeLens {
+                range,
+                command: Some(Command {
+                    title: format!("open {name}"),
+                    command: "vscode.open".to_string(),
+                    arguments: Some(vec![serde_json::json!(target.to_string())]),
+                }),
+                data: None,
+            });
+        }
+    }
+    lenses
 }
 
 /// Runs the front-end and maps its output to protocol diagnostics.

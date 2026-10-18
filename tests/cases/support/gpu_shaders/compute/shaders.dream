@@ -1,0 +1,17 @@
+module shaders;
+
+import system.gpu;
+
+@compute(64, 1, 1)
+public fun saxpy(
+    @readonly x: GpuBuffer<float>,
+    @readonly y: GpuBuffer<float>,
+    out: GpuBuffer<float>,
+    a: float,
+    n: int
+): void {
+    let i = global_id().x;
+    if i < n {
+        out[i] = a * x[i] + y[i];
+    }
+}

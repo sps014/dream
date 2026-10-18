@@ -1,0 +1,23 @@
+import system.testing;
+import system;
+
+class RgsmSwap {
+    public static fun replace<T>(ref slot: T, value: T): T {
+        let old = slot;
+        slot = value;
+        return old;
+    }
+}
+
+@test
+@timeout(180000)
+fun ref_generic_static_method(): void {
+    let count = 1;
+    let old = RgsmSwap.replace(ref count, 7);
+    Assert.eq(old, 1);
+    Assert.eq(count, 7);
+
+    let label = "a";
+    RgsmSwap.replace(ref label, "b");
+    Assert.eq(label, "b");
+}

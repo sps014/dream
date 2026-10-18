@@ -14,7 +14,7 @@ class WebapiPayload {
 }
 let webapi_dep_calls: int = 0;
 
-fun webapi_dependency(@header("X-Key")key: string): string {
+fun webapi_dependency(@header("X-Key") key: string): string {
     webapi_dep_calls++;
     return key;
 }
@@ -212,8 +212,8 @@ class WebapiRoutes {
         @path id: int,
         @query q: Option<int>,
         @cookie session: Option<string>,
-        @dep(webapi_dependency)first: string,
-        @dep(webapi_dependency)second: string
+        @dep(webapi_dependency) first: string,
+        @dep(webapi_dependency) second: string
     ): string {
         return id.to_string()
             + ":" + q.unwrap_or(0)
@@ -221,7 +221,7 @@ class WebapiRoutes {
     }
 
     @get("/dependency/{id}")
-    public static fun webapi_dependency_path(@dep(webapi_path_dependency)value: int): string {
+    public static fun webapi_dependency_path(@dep(webapi_path_dependency) value: int): string {
         return value.to_string();
     }
 
@@ -249,7 +249,7 @@ class WebapiRoutes {
     }
 
     @get("/auth")
-    public static fun webapi_auth(@dep(BearerToken)token: string): string {
+    public static fun webapi_auth(@dep(BearerToken) token: string): string {
         return token;
     }
 

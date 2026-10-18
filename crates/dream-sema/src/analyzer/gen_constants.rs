@@ -38,12 +38,12 @@ impl Analyzer<'_> {
                 Type::Boolean(t) => value("bool", &t.text),
                 Type::String(t) => value("string", super::hir_emit::string_lit_value(&t.text)),
                 Type::Char(t) => value("char", &t.text),
-                Type::Float(t) | Type::Double(t) => {
+                Type::Float16(t) | Type::Float(t) | Type::Double(t) => {
                     let number = dream_syntax::number::parse_float_literal(&t.text)?;
-                    let number = if matches!(ty, Type::Float(_)) {
-                        (number as f32) as f64
-                    } else {
-                        number
+                    let number = match ty {
+                        Type::Float(_) => (number as f32) as f64,
+                        Type::Float16(_) => half::f16::from_f64(number).to_f64(),
+                        _ => number,
                     };
                     if !number.is_finite() {
                         return None;

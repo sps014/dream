@@ -106,13 +106,27 @@ impl<'a> Analyzer<'a> {
                             number.get_span(),
                         );
                     }
-                } else if let Type::Float(t) | Type::Double(t) = &ty
-                    && dream_syntax::number::parse_float_literal(&t.text).is_none()
-                {
-                    diagnostics.report_error(
-                        format!("float literal '{}' is out of range or malformed", t.text),
-                        number.get_span(),
-                    );
+                } else if let Type::Float16(t) | Type::Float(t) | Type::Double(t) = &ty {
+                    match dream_syntax::number::parse_float_literal(&t.text) {
+                        None => diagnostics.report_error(
+                            format!("float literal '{}' is out of range or malformed", t.text),
+                            number.get_span(),
+                        ),
+                        Some(v)
+                            if matches!(ty, Type::Float16(_))
+                                && v.is_finite()
+                                && half::f16::from_f64(v).is_infinite() =>
+                        {
+                            diagnostics.report_error(
+                                format!(
+                                    "literal {} does not fit in float16 (largest finite value is 65504)",
+                                    t.text
+                                ),
+                                number.get_span(),
+                            )
+                        }
+                        Some(_) => {}
+                    }
                 }
 
                 self.hir_set_literal(&ty);

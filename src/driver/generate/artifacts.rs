@@ -11,11 +11,52 @@ pub(super) fn valid_relative_path(path: &str) -> bool {
         && !std::path::Path::new(path).is_absolute()
 }
 
+/// Rejects undeclared tools and paths that could escape the tool scratch directory.
+pub(super) fn valid_tool_request(output: &super::model::Output, declared: &[String]) -> bool {
+    match output {
+        super::model::Output::ToolRun {
+            id,
+            tool,
+            inputs,
+            outputs,
+            opaque_outputs,
+            ..
+        } => {
+            let mut produced = std::collections::BTreeSet::new();
+            !id.is_empty()
+                && !id.contains('/')
+                && declared.contains(tool)
+                && inputs
+                    .iter()
+                    .chain(outputs)
+                    .chain(opaque_outputs)
+                    .all(|p| valid_relative_path(p) && p != "outputs.json")
+                && outputs
+                    .iter()
+                    .chain(opaque_outputs)
+                    .all(|p| produced.insert(p))
+        }
+        _ => false,
+    }
+}
+
 /// Protects Dream source emission and the compiler-owned manifest namespace.
 pub(super) fn valid_artifact_path(path: &str) -> bool {
     valid_relative_path(path)
         && !path.to_ascii_lowercase().ends_with(".dream")
         && path.split('/').next() != Some("outputs.json")
+}
+
+/// The bytes of an emitted artifact: its text, or its decoded base64 for binary artifacts.
+pub(super) fn artifact_bytes(contents: &str, binary: bool) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    if binary {
+        base64::engine::general_purpose::STANDARD
+            .decode(contents)
+            .ok()
+    } else {
+        Some(contents.as_bytes().to_vec())
+    }
 }
 
 /// Chooses the innermost half-open source mapping covering an artifact coordinate.
@@ -85,6 +126,13 @@ pub(super) fn position(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn binary_artifacts_carry_base64_bytes_and_text_artifacts_their_utf8() {
+        assert_eq!(artifact_bytes("AAEC/w==", true), Some(vec![0, 1, 2, 255]));
+        assert_eq!(artifact_bytes("é", false), Some("é".as_bytes().to_vec()));
+        assert_eq!(artifact_bytes("not base64!", true), None);
+    }
 
     #[test]
     fn paths_are_portable_and_manifest_cannot_be_overwritten() {

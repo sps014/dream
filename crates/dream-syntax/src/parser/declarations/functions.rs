@@ -68,14 +68,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         // empty `first_trivia` reliably means "nothing but the attribute came before us".)
         let first_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
 
-        let is_intrinsic = attributes.iter().any(|a| a.name.text == "intrinsic");
+        // `@generator_only` declarations are typed but never compiled, so like intrinsics they
+        // may be public and generic without naming a host symbol.
+        let no_host_symbol = self.in_generator_only_type
+            || attributes
+                .iter()
+                .any(|a| a.name.text == "intrinsic" || a.name.text == "generator_only");
         let FunctionModifiers {
             is_async,
             visibility,
             is_static,
             is_extern,
             is_override,
-        } = self.parse_function_modifiers(is_intrinsic);
+        } = self.parse_function_modifiers(no_host_symbol);
 
         // Optional receiver-mode qualifier immediately before `fun` (`[borrow | unique] fun ...`):
         // pins the method's mutation contract instead of letting the analyzer infer it from the
@@ -283,7 +288,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             // Extern functions are lowered to WASM imports: no body, terminated by `;`.
             // An `@intrinsic` marker lets an extern function be generic. Checked inline so the
             // syntax crate stays free of any dependency on the `intrinsics` module.
-            if generic_parameters.is_some() && !is_intrinsic {
+            if generic_parameters.is_some() && !no_host_symbol {
                 self.diagnostics.report_error(
                     "Extern functions cannot be generic unless they are marked @intrinsic"
                         .to_string(),

@@ -1,0 +1,216 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// Expression emission shares the local and resource state of the enclosing shader body.
+extend SlangBody {
+    // Wraps operands that are themselves operators, so precedence never depends on Slang's
+    // operator table.
+    fun operand(borrow n: ShaderNode): void {
+        let wrap = n.is_expr(ExprKind.Binary) || n.is_expr(ExprKind.Ternary);
+        if wrap {
+            this.w.text("(");
+        }
+        this.expr(n);
+        if wrap {
+            this.w.text(")");
+        }
+    }
+
+    internal fun expr(borrow n: ShaderNode): void {
+        let w = this.w;
+        w.open();
+        if n.expr == ExprKind.Literal {
+            w.text(SlangBody.literal(n));
+        } else if n.expr == ExprKind.Identifier {
+            if n.symbol_kind == "function" {
+                w.text(Names.ident(n.text));
+            } else {
+                w.text(this.local(n.text));
+            }
+        } else if n.expr == ExprKind.Parenthesized {
+            w.text("(");
+            this.expr(n.child(0));
+            w.text(")");
+        } else if n.expr == ExprKind.Binary {
+            this.binary(n);
+        } else if n.expr == ExprKind.Unary {
+            w.text(n.op);
+            this.operand(n.child(0));
+        } else if n.expr == ExprKind.IncDec {
+            let child = n.child(0);
+            let prefix = n.line < child.line || (n.line == child.line && n.column < child.column);
+            if prefix {
+                w.text(n.op);
+                this.expr(child);
+            } else {
+                this.expr(child);
+                w.text(n.op);
+            }
+        } else if n.expr == ExprKind.Ternary {
+            this.operand(n.child(0));
+            w.text(" ? ");
+            this.operand(n.child(1));
+            w.text(" : ");
+            this.operand(n.child(2));
+        } else if n.expr == ExprKind.Cast {
+            let ty = "";
+            if !n.types.is_empty() {
+                ty = SlangTypes.of(n.types[0], List<int>());
+            }
+            if ty.is_empty() {
+                this.expr(n.child(0));
+            } else {
+                w.text(ty + "(");
+                this.expr(n.child(0));
+                w.text(")");
+            }
+        } else if n.expr == ExprKind.Member {
+            this.member(n.child(0), n.text);
+        } else if n.expr == ExprKind.Index {
+            let target = n.child(0);
+            if this.is_atomic(target) {
+                if this.float_atomics.contains(target.text) {
+                    w.text("asfloat(");
+                }
+                this.expr(target);
+                w.text("[");
+                this.expr(n.child(1));
+                w.text("].load()");
+                if this.float_atomics.contains(target.text) {
+                    w.text(")");
+                }
+            } else {
+                this.expr(target);
+                w.text("[");
+                this.index(target, n.child(1));
+                w.text("]");
+            }
+        } else if n.expr == ExprKind.Ref {
+            this.expr(n.child(0));
+        } else if n.expr == ExprKind.FunctionCall {
+            SlangCalls.call(this, n);
+        } else if n.expr == ExprKind.MethodCall {
+            SlangCalls.call(this, n);
+        } else {
+            this.ctx.error_at(n.id, "this expression is not supported in GPU shaders");
+        }
+        w.close(n.id);
+    }
+
+    fun binary(borrow n: ShaderNode): void {
+        let w = this.w;
+        let left = n.child(0);
+        let right = n.child(1);
+        if n.op == "*" && SlangTypes.is_named(left.ty, "GpuMat4") {
+            // Dream matrices are column-major values stored as Slang rows, so `m * v` is
+            // `mul(v, m)` and `a * b` is `mul(b, a)`.
+            w.text("mul(");
+            this.expr(right);
+            w.text(", ");
+            this.expr(left);
+            w.text(")");
+            return;
+        }
+        if (n.op == "==" || n.op == "!=") && SlangTypes.is_vector(left.ty) {
+            if n.op == "==" {
+                w.text("all(");
+            } else {
+                w.text("any(");
+            }
+            this.operand(left);
+            w.text(" " + n.op + " ");
+            this.operand(right);
+            w.text(")");
+            return;
+        }
+        this.operand(left);
+        w.text(" " + n.op + " ");
+        this.operand(right);
+    }
+
+    fun member(borrow receiver: ShaderNode, borrow name: string): void {
+        let w = this.w;
+        if receiver.is_type_name() {
+            if receiver.text == "GpuRayFlags" {
+                w.text(Builtins.ray_flag(name));
+            } else {
+                w.text(Names.ident(receiver.text) + "." + Names.ident(name));
+            }
+            return;
+        }
+        let ty = receiver.ty;
+        if SlangTypes.is_named(ty, "GpuMat4") && name.starts_with("c") {
+            this.expr(receiver);
+            w.text("[" + name.substring(1, name.length) + "]");
+            return;
+        }
+        this.expr(receiver);
+        if SlangTypes.is_named(ty, "GpuRay") {
+            if name == "origin" {
+                w.text(".Origin");
+            } else if name == "direction" {
+                w.text(".Direction");
+            } else if name == "t_min" {
+                w.text(".TMin");
+            } else {
+                w.text(".TMax");
+            }
+            return;
+        }
+        if ty.decl.starts_with("system.gpu::") {
+            w.text("." + name);
+        } else {
+            w.text("." + Names.ident(name));
+        }
+    }
+
+    // Dream literal spelling to Slang: suffixes differ for unsigned, 64-bit and double values.
+    internal static fun literal(borrow n: ShaderNode): string {
+        let kind = n.literal_kind;
+        let text = n.literal.replace("_", "");
+        if kind == "bool" || kind == "int" {
+            return text;
+        }
+        let digits = text;
+        while digits.length > 0
+            && SlangBody.suffix_char(digits.substring(digits.length - 1, digits.length), digits) {
+            digits = digits.substring(0, digits.length - 1);
+        }
+        if kind == "uint" {
+            return digits + "u";
+        }
+        if kind == "long" {
+            return digits + "ll";
+        }
+        if kind == "ulong" {
+            return digits + "ull";
+        }
+        if !digits.contains(".") && !digits.contains("e") && !digits.contains("E") {
+            digits = digits + ".0";
+        }
+        if kind == "float16" {
+            return digits + "h";
+        }
+        if kind == "double" {
+            return digits + "l";
+        }
+        return digits + "f";
+    }
+
+    static fun suffix_char(borrow c: string, borrow text: string): bool {
+        if text.starts_with("0x") || text.starts_with("0X") {
+            return c == "u" || c == "U" || c == "l" || c == "L";
+        }
+        return c
+            == "u"
+            || c
+            == "U"
+            || c
+            == "l"
+            || c == "L" || c == "f" || c == "F" || c == "h" || c == "H" || c == "d" || c == "D";
+    }
+}

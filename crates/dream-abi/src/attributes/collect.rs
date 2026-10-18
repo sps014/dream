@@ -1,7 +1,6 @@
 use super::user::AttributeEnum;
 use super::*;
 use dream_syntax::nodes::{EnumDeclarationNode, StructDeclarationNode};
-use heck::ToSnakeCase;
 
 fn placement_targets(member: &str) -> Option<&'static [AttributeTarget]> {
     Some(match member {
@@ -61,11 +60,7 @@ impl UserAttributes {
             };
             diagnostics.file_path = s.file_path.as_deref().map(str::to_owned);
             let type_name = s.name.text.clone();
-            let name = type_name
-                .strip_suffix("Attribute")
-                .filter(|name| !name.is_empty())
-                .map(str::to_snake_case)
-                .unwrap_or_else(|| type_name.clone());
+            let name = attribute_use_name(&type_name);
             let module = module_of(s.file_path.as_deref());
             if s.generic_parameters.as_ref().is_some_and(|g| !g.is_empty()) {
                 diagnostics.report_error(

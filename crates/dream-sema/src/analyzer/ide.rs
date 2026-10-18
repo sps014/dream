@@ -609,6 +609,7 @@ impl<'a> Analyzer<'a> {
             }
             _ => self.resolve_ide_target(target),
         };
+        self.record_generator_use(span, &target);
         self.ide_refs.push(IdeRef {
             start: span.start,
             end: span.end,

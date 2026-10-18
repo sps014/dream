@@ -31,7 +31,7 @@ impl<'a> Analyzer<'a> {
                 PrimTy::String => self.js_bridge_call("box_string", vec![e], js),
                 PrimTy::Bool => self.js_bridge_call("box_bool", vec![e], js),
                 PrimTy::Double => self.js_bridge_call("box_double", vec![e], js),
-                PrimTy::Float => {
+                PrimTy::Float | PrimTy::Float16 => {
                     let d = self.cast_prim(e, PrimTy::Double);
                     self.js_bridge_call("box_double", vec![d], js)
                 }
@@ -115,7 +115,7 @@ impl<'a> Analyzer<'a> {
         match p {
             PrimTy::String => Some("string"),
             PrimTy::Bool => Some("bool"),
-            PrimTy::Double | PrimTy::Float => Some("double"),
+            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => Some("double"),
             PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Some("long"),
             PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Some("int"),
         }
@@ -126,7 +126,7 @@ impl<'a> Analyzer<'a> {
         match p {
             PrimTy::String => self.type_ctx.interner.string(),
             PrimTy::Bool => self.type_ctx.interner.bool(),
-            PrimTy::Double | PrimTy::Float => self.type_ctx.interner.double(),
+            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => self.type_ctx.interner.double(),
             PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
                 self.type_ctx.interner.long()
             }
@@ -146,7 +146,12 @@ impl<'a> Analyzer<'a> {
         target: TypeId,
     ) -> HExpr {
         match p {
-            PrimTy::Float | PrimTy::UInt | PrimTy::Byte | PrimTy::Char | PrimTy::ULong => {
+            PrimTy::Float
+            | PrimTy::Float16
+            | PrimTy::UInt
+            | PrimTy::Byte
+            | PrimTy::Char
+            | PrimTy::ULong => {
                 HExpr::new(target, HExprKind::Cast(Box::new(raw)))
             }
             _ => {

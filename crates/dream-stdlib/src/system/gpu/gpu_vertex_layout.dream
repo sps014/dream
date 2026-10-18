@@ -1,0 +1,52 @@
+module system.gpu;
+
+/// How the vertex shader's `@location` inputs are read from one vertex buffer.
+///
+/// Start from `GpuVertexLayout.of` with the byte size of one element, usually `sizeof` of
+/// the vertex struct, and add one `attribute` per input.
+public class GpuVertexLayout {
+    layout_stride: int;
+    instanced: bool;
+    internal attributes: List<int>;
+
+    constructor(stride: int) {
+        this.layout_stride = stride;
+        this.instanced = false;
+        this.attributes = List<int>();
+    }
+
+    /// Describes a buffer whose elements are `stride` bytes apart.
+    public static fun of(stride: int): GpuVertexLayout {
+        return GpuVertexLayout(stride);
+    }
+
+    /// Bytes from one element to the next.
+    public get stride(): int {
+        return this.layout_stride;
+    }
+
+    /// Whether the buffer advances once per instance instead of once per vertex.
+    public get is_per_instance(): bool {
+        return this.instanced;
+    }
+
+    /// The number of attributes added.
+    public get attribute_count(): int {
+        return this.attributes.length / 3;
+    }
+
+    /// Feeds the vertex shader input `@location(location)` from `offset` bytes into each
+    /// element, read as `format`. Returns this layout.
+    public fun attribute(location: int, format: GpuVertexFormat, offset: int): GpuVertexLayout {
+        let f: int = format;
+        this.attributes.push_all([location, f, offset]);
+        return this;
+    }
+
+    /// Sets whether the buffer advances once per instance, for per-instance data such as
+    /// transforms, and returns this layout.
+    public fun per_instance(value: bool): GpuVertexLayout {
+        this.instanced = value;
+        return this;
+    }
+}

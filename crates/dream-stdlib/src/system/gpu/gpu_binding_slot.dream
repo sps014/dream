@@ -1,0 +1,27 @@
+module system.gpu;
+
+/// One resource parameter of a render shader, such as the texture a fragment shader samples.
+/// The shader generator exposes each as `GpuShaders.<shader>.<parameter>`; pass it to
+/// `GpuRenderPass.bind` to choose the resource the next draws use.
+public class GpuBindingSlot {
+    slot_stage: GpuStage;
+    internal index: int;
+    slot_name: string;
+
+    // `index` is the parameter's position in the shader's parameter list.
+    internal constructor(stage: GpuStage, index: int, name: string) {
+        this.slot_stage = stage;
+        this.index = index;
+        this.slot_name = name;
+    }
+
+    /// The parameter's name.
+    public get name(): string {
+        return this.slot_name;
+    }
+
+    /// The stage of the shader that declares the parameter.
+    public get stage(): GpuStage {
+        return this.slot_stage;
+    }
+}

@@ -46,6 +46,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/primitives/float.dream"),
         ),
         (
+            "<std>/system/primitives/float16.dream",
+            include_str!("../system/primitives/float16.dream"),
+        ),
+        (
             "<std>/system/primitives/double.dream",
             include_str!("../system/primitives/double.dream"),
         ),

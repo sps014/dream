@@ -1,0 +1,74 @@
+module system.gpu;
+
+/// How many threads a compute dispatch runs.
+///
+/// The `threads_*` constructors take the number of threads you need; the dispatch rounds up
+/// to whole workgroups of the shader's `@compute` size, so a shader should check its
+/// `global_id()` against the real count. `groups` takes workgroup counts directly.
+public struct GpuDispatch {
+    count_x: int;
+    count_y: int;
+    count_z: int;
+    in_threads: bool;
+
+    static fun make(x: int, y: int, z: int, threads: bool): GpuDispatch {
+        let d = GpuDispatch();
+        d.count_x = x;
+        d.count_y = y;
+        d.count_z = z;
+        d.in_threads = threads;
+        return d;
+    }
+
+    /// Runs at least `count` threads along x.
+    public static fun threads_1d(count: int): GpuDispatch {
+        return GpuDispatch.make(count, 1, 1, true);
+    }
+
+    /// Runs at least `width` by `height` threads, for example one per pixel.
+    public static fun threads_2d(width: int, height: int): GpuDispatch {
+        return GpuDispatch.make(width, height, 1, true);
+    }
+
+    /// Runs at least `x` by `y` by `z` threads.
+    public static fun threads_3d(x: int, y: int, z: int): GpuDispatch {
+        return GpuDispatch.make(x, y, z, true);
+    }
+
+    /// Runs exactly `x` by `y` by `z` workgroups.
+    public static fun groups(x: int, y: int, z: int): GpuDispatch {
+        return GpuDispatch.make(x, y, z, false);
+    }
+
+    /// The workgroup counts for a shader whose `@compute` size is `workgroup`. Thread counts
+    /// round up to whole workgroups; zero or negative counts give zero workgroups, which
+    /// runs nothing.
+    public fun group_counts(workgroup: GpuIVec3): GpuIVec3 {
+        if !this.in_threads {
+            return GpuIVec3.of(
+                GpuDispatch.non_negative(this.count_x),
+                GpuDispatch.non_negative(this.count_y),
+                GpuDispatch.non_negative(this.count_z)
+            );
+        }
+        return GpuIVec3.of(
+            GpuDispatch.round_up(this.count_x, workgroup.x),
+            GpuDispatch.round_up(this.count_y, workgroup.y),
+            GpuDispatch.round_up(this.count_z, workgroup.z)
+        );
+    }
+
+    static fun non_negative(count: int): int {
+        if count < 0 {
+            return 0;
+        }
+        return count;
+    }
+
+    static fun round_up(count: int, size: int): int {
+        if count <= 0 || size <= 0 {
+            return 0;
+        }
+        return (count + size - 1) / size;
+    }
+}

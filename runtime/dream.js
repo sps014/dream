@@ -28,6 +28,7 @@ const TAGS = {
   FUTURE: 256,
   FUNCBOX: 257,
   CLOSURE_ENV: 258,
+  FLOAT16: 259,
   STRUCT_BASE: 14,
   SHARED: 1073741824,
   VALUE_MASK: 1073741823,
@@ -2998,6 +2999,1356 @@ function makeDatetimeTextHost() {
   };
 }
 
+// ----- hosts/window.js -----
+// Browser windows for `system.window`: a canvas plus keyboard, pointer, wheel, Pointer Lock and
+// Gamepad API input. `windowPoll` returns the same `[kind, length, payload...]` float records
+// as the native GLFW host (crates/dream-host-window/src/wire.rs), decoded by
+// crates/dream-stdlib/src/system/window/input_wire.dream.
+
+const RESIZED = 1;
+const FOCUSED = 3;
+const UNFOCUSED = 4;
+const KEY_DOWN = 6;
+const KEY_UP = 7;
+const TEXT = 8;
+const MOUSE_MOVE = 9;
+const MOUSE_DOWN = 10;
+const MOUSE_UP = 11;
+const SCROLL = 12;
+const GAMEPAD_CONNECTED = 13;
+const GAMEPAD_DISCONNECTED = 14;
+const FILE_DROPPED = 15;
+const GAMEPAD_SAMPLE = 16;
+
+const FLAG_FULLSCREEN = 2;
+const CURSOR_CAPTURED = 2;
+const GAMEPAD_SLOTS = 16;
+const CURSOR_ICONS = ["default", "text", "crosshair", "pointer", "ew-resize", "ns-resize",
+  "nwse-resize", "nesw-resize", "move", "not-allowed"];
+// `KeyCode` values from 61 on, in enum order; KeyboardEvent.code uses the same names.
+const NAMED_KEYS = ["Escape", "Enter", "Tab", "Backspace", "Space", "Insert", "Delete",
+  "ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "PageUp", "PageDown", "Home", "End",
+  "CapsLock", "ScrollLock", "NumLock", "PrintScreen", "Pause", "Minus", "Equal", "BracketLeft",
+  "BracketRight", "Backslash", "Semicolon", "Quote", "Backquote", "Comma", "Period", "Slash",
+  "IntlBackslash", "Numpad0", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6",
+  "Numpad7", "Numpad8", "Numpad9", "NumpadDecimal", "NumpadDivide", "NumpadMultiply",
+  "NumpadSubtract", "NumpadAdd", "NumpadEnter", "NumpadEqual", "ShiftLeft", "ControlLeft",
+  "AltLeft", "MetaLeft", "ShiftRight", "ControlRight", "AltRight", "MetaRight", "ContextMenu"];
+// Browser `MouseEvent.button` (0 left, 1 middle, 2 right) to `MouseButton` order.
+const MOUSE_BUTTONS = [0, 2, 1, 3, 4];
+// Standard Gamepad mapping button index for each `GamepadButton`, in Dream order.
+const PAD_BUTTONS = [0, 1, 2, 3, 4, 5, 8, 9, 16, 10, 11, 12, 15, 13, 14];
+
+const KEY_CODES = (() => {
+  const codes = Object.create(null);
+  for (let i = 0; i < 26; i++) codes["Key" + String.fromCharCode(65 + i)] = 1 + i;
+  for (let i = 0; i < 10; i++) codes["Digit" + i] = 27 + i;
+  for (let i = 1; i <= 24; i++) codes["F" + i] = 36 + i;
+  NAMED_KEYS.forEach((name, i) => { codes[name] = 61 + i; });
+  return codes;
+})();
+
+function utf16(text) {
+  const units = [];
+  for (let i = 0; i < text.length; i++) units.push(text.charCodeAt(i));
+  return units;
+}
+
+function push(state, kind, payload, text = "") {
+  const units = utf16(text);
+  state.queue.push(kind, payload.length + units.length, ...payload, ...units);
+}
+
+function modifiers(e) {
+  const lock = name => (typeof e.getModifierState === "function" && e.getModifierState(name));
+  return (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0)
+    | (lock("CapsLock") ? 16 : 0) | (lock("NumLock") ? 32 : 0);
+}
+
+// `KeyboardEvent.key` is a name such as "ArrowUp" for keys that print nothing.
+function printable(key) {
+  return typeof key === "string" && [...key].length === 1 ? key : "";
+}
+
+function pixelRatio() {
+  return (typeof globalThis.devicePixelRatio === "number" && globalThis.devicePixelRatio > 0)
+    ? globalThis.devicePixelRatio : 1;
+}
+
+function cssSize(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return [rect.width || canvas.clientWidth || canvas.width, rect.height || canvas.clientHeight || canvas.height];
+}
+
+function locked(state) {
+  return globalThis.document?.pointerLockElement === state.canvas;
+}
+
+function requestLock(state) {
+  try {
+    const request = state.canvas.requestPointerLock?.();
+    request?.catch?.(() => {});
+  } catch (_) {
+    // Browsers refuse the lock outside a user gesture; the next pointerdown retries.
+  }
+}
+
+function releaseHeld(state) {
+  for (const code of state.keys) push(state, KEY_UP, [code, 0, 0]);
+  for (const button of state.buttons) push(state, MOUSE_UP, [button]);
+  state.keys.clear();
+  state.buttons.clear();
+}
+
+function pointerPosition(state, e) {
+  if (locked(state)) {
+    state.x += e.movementX || 0;
+    state.y += e.movementY || 0;
+  } else {
+    const rect = state.canvas.getBoundingClientRect();
+    state.x = e.clientX - rect.left;
+    state.y = e.clientY - rect.top;
+  }
+  push(state, MOUSE_MOVE, [state.x, state.y]);
+}
+
+function applyCursor(state) {
+  state.canvas.style.cursor = state.cursorMode === 0 ? CURSOR_ICONS[state.icon] : "none";
+}
+
+function syncSize(state, report) {
+  const [width, height] = cssSize(state.canvas);
+  const ratio = pixelRatio();
+  const pixels = [Math.max(1, Math.round(width * ratio)), Math.max(1, Math.round(height * ratio))];
+  if (pixels[0] !== state.pixels[0] || pixels[1] !== state.pixels[1]) {
+    state.pixels = pixels;
+    state.canvas.width = pixels[0];
+    state.canvas.height = pixels[1];
+    if (report) push(state, RESIZED, pixels);
+  }
+}
+
+function pollGamepads(state) {
+  const pads = typeof globalThis.navigator?.getGamepads === "function" ? globalThis.navigator.getGamepads() : [];
+  const present = new Set();
+  for (const pad of pads || []) {
+    if (!pad || pad.connected === false || pad.index >= GAMEPAD_SLOTS) continue;
+    present.add(pad.index);
+    if (!state.pads.has(pad.index)) {
+      state.pads.add(pad.index);
+      push(state, GAMEPAD_CONNECTED, [pad.index], String(pad.id || ""));
+    }
+    let buttons = 0;
+    PAD_BUTTONS.forEach((index, bit) => {
+      if (pad.buttons?.[index]?.pressed) buttons |= 1 << bit;
+    });
+    const axis = i => Math.max(-1, Math.min(1, Number(pad.axes?.[i]) || 0));
+    const trigger = i => Math.max(0, Math.min(1, Number(pad.buttons?.[i]?.value) || 0));
+    push(state, GAMEPAD_SAMPLE, [pad.index, buttons, axis(0), axis(1), axis(2), axis(3), trigger(6), trigger(7)]);
+  }
+  for (const slot of [...state.pads]) {
+    if (!present.has(slot)) {
+      state.pads.delete(slot);
+      push(state, GAMEPAD_DISCONNECTED, [slot]);
+    }
+  }
+}
+
+function attach(canvas, owns) {
+  const state = {
+    canvas, owns, queue: [], keys: new Set(), buttons: new Set(), pads: new Set(),
+    listeners: [], x: 0, y: 0, cursorMode: 0, icon: 0, pixels: [0, 0],
+  };
+  const listen = (target, type, handler, options) => {
+    target.addEventListener(type, handler, options);
+    state.listeners.push([target, type, handler, options]);
+  };
+  if (!(canvas.tabIndex >= 0)) canvas.tabIndex = 0;
+  syncSize(state, false);
+  listen(canvas, "keydown", e => {
+    const code = KEY_CODES[e.code] || 0;
+    const key = printable(e.key);
+    push(state, KEY_DOWN, [code, modifiers(e), e.repeat ? 1 : 0], key);
+    if (code) state.keys.add(code);
+    if (key && !e.ctrlKey && !e.metaKey && !e.isComposing) push(state, TEXT, [], key);
+    // Keep browser shortcuts working while games get Tab, Space and the arrows.
+    if (!e.ctrlKey && !e.metaKey && !/^F\d+$/.test(e.code || "")) e.preventDefault?.();
+  });
+  listen(canvas, "keyup", e => {
+    const code = KEY_CODES[e.code] || 0;
+    push(state, KEY_UP, [code, modifiers(e), 0], printable(e.key));
+    state.keys.delete(code);
+  });
+  listen(canvas, "compositionend", e => {
+    if (e.data) push(state, TEXT, [], e.data);
+  });
+  listen(canvas, "pointermove", e => pointerPosition(state, e));
+  listen(canvas, "pointerdown", e => {
+    canvas.focus?.();
+    if (state.cursorMode === CURSOR_CAPTURED && !locked(state)) requestLock(state);
+    const button = MOUSE_BUTTONS[e.button];
+    if (button === undefined) return;
+    state.buttons.add(button);
+    push(state, MOUSE_DOWN, [button]);
+  });
+  listen(canvas, "pointerup", e => {
+    const button = MOUSE_BUTTONS[e.button];
+    if (button === undefined) return;
+    state.buttons.delete(button);
+    push(state, MOUSE_UP, [button]);
+  });
+  listen(canvas, "contextmenu", e => e.preventDefault?.());
+  listen(canvas, "wheel", e => {
+    e.preventDefault?.();
+    // One notch is 1.0: about 100 pixels or 3 lines in pixel and line delta modes.
+    const unit = e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 : 100;
+    push(state, SCROLL, [(e.deltaX || 0) / unit, (0 - (e.deltaY || 0)) / unit]);
+  }, { passive: false });
+  listen(canvas, "focus", () => push(state, FOCUSED, []));
+  listen(canvas, "blur", () => {
+    releaseHeld(state);
+    push(state, UNFOCUSED, []);
+  });
+  listen(canvas, "dragover", e => e.preventDefault?.());
+  listen(canvas, "drop", e => {
+    e.preventDefault?.();
+    for (const file of e.dataTransfer?.files || []) push(state, FILE_DROPPED, [], String(file.name));
+  });
+  return state;
+}
+
+// Canvases by window handle for capability hosts that draw into windows (gpu.js). Handles are
+// unique across every window host on the page so this lookup cannot mix up two instances.
+const surfaceCanvases = new Map();
+let nextWindowId = 1;
+
+/** The canvas behind a live window handle, or null. */
+function windowSurfaceCanvas(handle) {
+  return surfaceCanvases.get(handle) || null;
+}
+
+function makeWindowHost() {
+  const windows = new Map();
+  let lastError = "";
+  const fail = (code, message) => {
+    lastError = code + "\n" + message;
+    return 0;
+  };
+  const register = state => {
+    const id = nextWindowId++;
+    windows.set(id, state);
+    surfaceCanvases.set(id, state.canvas);
+    return id;
+  };
+  const noDisplay = () => fail("ENODISPLAY", "no display is available: this JavaScript host has no DOM");
+
+  return {
+    windowOpen: (title, width, height, flags) => {
+      const doc = globalThis.document;
+      if (!doc?.createElement || !doc.body) return noDisplay();
+      if (!(width > 0 && height > 0)) return fail("EINVAL", "window width and height must be positive");
+      const canvas = doc.createElement("canvas");
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      doc.body.appendChild(canvas);
+      doc.title = title;
+      const state = attach(canvas, true);
+      if (flags & FLAG_FULLSCREEN) canvas.requestFullscreen?.()?.catch?.(() => {});
+      return register(state);
+    },
+    windowCanvas: (id, flags) => {
+      const doc = globalThis.document;
+      if (!doc?.getElementById) return noDisplay();
+      const canvas = doc.getElementById(id);
+      if (!canvas || String(canvas.tagName).toLowerCase() !== "canvas") {
+        return fail("ENOTFOUND", "no <canvas> element has the id '" + id + "'");
+      }
+      const state = attach(canvas, false);
+      if (flags & FLAG_FULLSCREEN) canvas.requestFullscreen?.()?.catch?.(() => {});
+      return register(state);
+    },
+    windowError: () => lastError || "EWINDOW\nwindow creation failed",
+    windowClose: handle => {
+      const state = windows.get(handle);
+      if (!state) return;
+      windows.delete(handle);
+      surfaceCanvases.delete(handle);
+      for (const [target, type, handler, options] of state.listeners) {
+        target.removeEventListener(type, handler, options);
+      }
+      if (locked(state)) globalThis.document.exitPointerLock?.();
+      if (state.owns) state.canvas.remove?.();
+    },
+    windowPoll: handle => {
+      const state = windows.get(handle);
+      if (!state) return [];
+      syncSize(state, true);
+      pollGamepads(state);
+      const records = state.queue;
+      state.queue = [];
+      return records;
+    },
+    windowQuery: handle => {
+      const state = windows.get(handle);
+      if (!state) return [];
+      const [width, height] = cssSize(state.canvas);
+      const doc = globalThis.document;
+      return [width, height, state.pixels[0], state.pixels[1], pixelRatio(),
+        doc?.fullscreenElement === state.canvas ? 1 : 0, doc?.activeElement === state.canvas ? 1 : 0];
+    },
+    windowSetTitle: (handle, title) => {
+      const state = windows.get(handle);
+      if (state?.owns) globalThis.document.title = title;
+    },
+    windowSetSize: (handle, width, height) => {
+      const state = windows.get(handle);
+      if (!state || !(width > 0 && height > 0)) return;
+      state.canvas.style.width = width + "px";
+      state.canvas.style.height = height + "px";
+    },
+    windowSetFullscreen: (handle, enabled) => {
+      const state = windows.get(handle);
+      if (!state) return;
+      const doc = globalThis.document;
+      if (enabled) state.canvas.requestFullscreen?.()?.catch?.(() => {});
+      else if (doc?.fullscreenElement === state.canvas) doc.exitFullscreen?.()?.catch?.(() => {});
+    },
+    windowSetCursorMode: (handle, mode) => {
+      const state = windows.get(handle);
+      if (!state) return;
+      state.cursorMode = mode;
+      applyCursor(state);
+      if (mode === CURSOR_CAPTURED) requestLock(state);
+      else if (locked(state)) globalThis.document.exitPointerLock?.();
+    },
+    windowSetCursorIcon: (handle, icon) => {
+      const state = windows.get(handle);
+      if (!state) return;
+      state.icon = icon >= 0 && icon < CURSOR_ICONS.length ? icon : 0;
+      applyCursor(state);
+    },
+    windowGamepadRumble: (slot, low, high, ms) => {
+      const pads = typeof globalThis.navigator?.getGamepads === "function" ? globalThis.navigator.getGamepads() : [];
+      const actuator = pads?.[slot]?.vibrationActuator;
+      if (typeof actuator?.playEffect !== "function") return false;
+      actuator.playEffect("dual-rumble", {
+        duration: ms,
+        strongMagnitude: Math.max(0, Math.min(1, low)),
+        weakMagnitude: Math.max(0, Math.min(1, high)),
+      })?.catch?.(() => {});
+      return true;
+    },
+  };
+}
+
+// ----- hosts/gpu_bundle.js -----
+// Reader for the generated shader bundle (DGPB v0, docs/internals/18-gpu-shader-bundle.md).
+// The browser only drives the `wgsl` target; it binds from the parameter table, so the layout
+// blobs are never read (wasm bundles carry none).
+
+const GPU_BUNDLE_STAGES = new Set(["compute", "vertex", "fragment", "raygeneration", "closesthit",
+  "anyhit", "miss", "intersection", "callable"]);
+const GPU_BUNDLE_MAX_COUNT = 1 << 16;
+
+class GpuBundleError extends Error {}
+
+class GpuBundleReader {
+  constructor(bytes, end) {
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.pos = 0;
+    this.end = end;
+  }
+
+  need(count) {
+    if (count < 0 || this.pos + count > this.end) throw new GpuBundleError("the bundle header is truncated");
+  }
+
+  u32() {
+    this.need(4);
+    const value = this.view.getUint32(this.pos, true);
+    this.pos += 4;
+    return value;
+  }
+
+  count(what) {
+    const value = this.u32();
+    if (value > GPU_BUNDLE_MAX_COUNT) throw new GpuBundleError(what + " count " + value + " is too large");
+    return value;
+  }
+
+  raw(length) {
+    this.need(length);
+    const out = this.bytes.subarray(this.pos, this.pos + length);
+    this.pos += length;
+    return out;
+  }
+
+  str() {
+    const length = this.u32();
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(this.raw(length));
+    } catch (error) {
+      if (error instanceof GpuBundleError) throw error;
+      throw new GpuBundleError("a bundle string is not UTF-8");
+    }
+  }
+
+  blob(dataStart) {
+    const offset = this.u32();
+    const size = this.u32();
+    const sha256 = this.raw(32);
+    const start = dataStart + offset;
+    if (start + size > this.bytes.length) throw new GpuBundleError("a blob lies outside the data section");
+    return { offset, size, sha256, bytes: this.bytes.subarray(start, start + size) };
+  }
+}
+
+function gpuParseParam(r) {
+  return {
+    name: r.str(),
+    kind: r.u32(),
+    flags: r.u32(),
+    group: r.u32(),
+    binding: r.u32(),
+    offset: r.u32(),
+    size: r.u32(),
+  };
+}
+
+function gpuParseEntry(r, dataStart) {
+  const name = r.str();
+  const stage = r.str();
+  if (!GPU_BUNDLE_STAGES.has(stage)) throw new GpuBundleError("entry " + name + " has unknown stage '" + stage + "'");
+  const layout = r.u32();
+  const code = r.blob(dataStart);
+  const threadGroupSize = [r.u32(), r.u32(), r.u32()];
+  const params = [];
+  for (let i = 0, n = r.count("parameter"); i < n; i++) params.push(gpuParseParam(r));
+  const capabilities = [];
+  for (let i = 0, n = r.count("capability"); i < n; i++) capabilities.push(r.str());
+  return { name, stage, layout, code, threadGroupSize, params, capabilities };
+}
+
+/**
+ * Parses a whole bundle. Throws `GpuBundleError` with a readable reason for any malformed input;
+ * never reads outside `bytes`.
+ */
+function gpuParseBundle(bytes) {
+  if (!(bytes instanceof Uint8Array)) bytes = Uint8Array.from(bytes || []);
+  if (bytes.length < 16) throw new GpuBundleError("the bundle is shorter than its header");
+  const head = new GpuBundleReader(bytes, 16);
+  const magic = new TextDecoder().decode(head.raw(4));
+  if (magic !== "DGPB") throw new GpuBundleError("the bundle does not start with DGPB");
+  const version = head.u32();
+  if (version !== 0) throw new GpuBundleError("bundle version " + version + " is not supported");
+  const headerSize = head.u32();
+  if (headerSize < 16 || headerSize > bytes.length) throw new GpuBundleError("the bundle header size is out of range");
+  const targetCount = head.count("target");
+  const r = new GpuBundleReader(bytes, headerSize);
+  r.pos = 16;
+  const targets = [];
+  for (let t = 0; t < targetCount; t++) {
+    const name = r.str();
+    const codeFormat = r.str();
+    const layouts = [];
+    for (let i = 0, n = r.count("layout"); i < n; i++) layouts.push(r.blob(headerSize));
+    const entries = [];
+    for (let i = 0, n = r.count("entry"); i < n; i++) entries.push(gpuParseEntry(r, headerSize));
+    targets.push({ name, codeFormat, layouts, entries });
+  }
+  return { version, targets };
+}
+
+function gpuHex(bytes) {
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return out;
+}
+
+/**
+ * Resolves to null when every code blob of `target` matches its SHA-256, else to the reason.
+ * WebGPU only exists in secure contexts, which always provide `crypto.subtle`.
+ */
+async function gpuVerifyTarget(target) {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return "SHA-256 verification needs crypto.subtle";
+  const seen = new Set();
+  for (const entry of target.entries) {
+    const blob = entry.code;
+    if (seen.has(blob.offset)) continue;
+    seen.add(blob.offset);
+    const digest = new Uint8Array(await subtle.digest("SHA-256", blob.bytes));
+    if (gpuHex(digest) !== gpuHex(blob.sha256)) return "the code of " + entry.name + " fails its SHA-256 check";
+  }
+  return null;
+}
+
+// WGSL resource declarations by "group:binding". The parameter table says what a binding holds;
+// the declaration supplies what the bind group layout additionally needs (access mode, sample
+// type, storage format).
+function gpuScanWgslBindings(source) {
+  const out = new Map();
+  const declaration = /((?:@\w+\s*\(\s*\d+\s*\)\s*)+)var\s*(<[^>]*>)?\s*[A-Za-z_]\w*\s*:\s*([^;]+);/g;
+  for (const m of source.matchAll(declaration)) {
+    const group = /@group\s*\(\s*(\d+)\s*\)/.exec(m[1]);
+    const binding = /@binding\s*\(\s*(\d+)\s*\)/.exec(m[1]);
+    if (!group || !binding) continue;
+    out.set(group[1] + ":" + binding[1], { space: (m[2] || "").replace(/\s+/g, ""), type: m[3].trim() });
+  }
+  return out;
+}
+
+// ----- hosts/gpu_commands.js -----
+// Translation of the `system.gpu` command stream (crates/dream-stdlib/src/system/gpu/gpu_op.dream)
+// and shader parameter tables into WebGPU calls.
+
+// GPUBufferUsage, GPUTextureUsage, GPUShaderStage and GPUMapMode values from the WebGPU spec;
+// hosts without the globals (Node with a Dawn binding) still use the same numbers.
+const GPU_BUFFER = { MAP_READ: 1, COPY_SRC: 4, COPY_DST: 8, INDEX: 16, VERTEX: 32, UNIFORM: 64, STORAGE: 128, INDIRECT: 256 };
+const GPU_TEXTURE = { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 };
+const GPU_VISIBILITY = { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 };
+const GPU_MAP_READ = 1;
+
+// GpuArgKind.
+const GPU_ARG = { BUFFER: 1, TEXTURE: 2, SAMPLER: 3, STORAGE_TEXTURE: 4, ACCELERATION_STRUCTURE: 5, VALUE: 6, MLP_WEIGHTS: 7 };
+// GpuFeature.
+const GPU_FEATURE = { RAY_TRACING: 0, RAY_QUERY: 1, BINDLESS: 2, SUBGROUPS: 3, COOPERATIVE_VECTORS: 4, COOPERATIVE_MATRICES: 5, FLOAT16: 6, ATOMICS64: 7 };
+// GpuStage values that WebGPU can run.
+const GPU_STAGE = { COMPUTE: 0, VERTEX: 1, FRAGMENT: 2 };
+
+// GpuTextureFormat order, with bytes per texel (0 for depth formats, which cannot be copied).
+const GPU_TEXTURE_FORMATS = [
+  ["rgba8unorm", 4], ["rgba8unorm-srgb", 4], ["bgra8unorm", 4], ["bgra8unorm-srgb", 4],
+  ["r8unorm", 1], ["r32float", 4], ["rg32float", 8], ["rgba16float", 8], ["rgba32float", 16],
+  ["r32uint", 4], ["depth32float", 0], ["depth24plus-stencil8", 0],
+];
+
+/** A host failure reported to the guest as `CODE\ndetail`. */
+class GpuFailure extends Error {
+  constructor(code, detail) {
+    super(detail);
+    this.code = code;
+    this.detail = String(detail);
+  }
+}
+
+const GPU_VIEW_DIMENSIONS = { "1d": "1d", "2d": "2d", "2d_array": "2d-array", "3d": "3d", "cube": "cube", "cube_array": "cube-array" };
+const GPU_SAMPLE_TYPES = { f32: "float", i32: "sint", u32: "uint" };
+const GPU_STORAGE_ACCESS = { read: "read-only", write: "write-only", read_write: "read-write" };
+
+function gpuLayoutResource(slot) {
+  const decl = slot.decl;
+  const param = slot.slots[0].param;
+  switch (slot.kind) {
+    case GPU_ARG.VALUE:
+      return { buffer: { type: "uniform" } };
+    case GPU_ARG.BUFFER: {
+      if (decl?.space === "<uniform>") return { buffer: { type: "uniform" } };
+      const writable = decl ? decl.space.includes("read_write") : (param.flags & 1) === 0;
+      return { buffer: { type: writable ? "storage" : "read-only-storage" } };
+    }
+    case GPU_ARG.SAMPLER:
+      return { sampler: { type: decl?.type === "sampler_comparison" ? "comparison" : "filtering" } };
+    case GPU_ARG.TEXTURE: {
+      const type = decl?.type || "";
+      let m = /^texture_depth_multisampled_2d/.exec(type);
+      if (m) return { texture: { sampleType: "depth", viewDimension: "2d", multisampled: true } };
+      m = /^texture_depth_(2d_array|2d|cube_array|cube)/.exec(type);
+      if (m) return { texture: { sampleType: "depth", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
+      m = /^texture_multisampled_2d\s*<\s*(\w+)\s*>/.exec(type);
+      if (m) return { texture: { sampleType: GPU_SAMPLE_TYPES[m[1]] || "float", viewDimension: "2d", multisampled: true } };
+      m = /^texture_(1d|2d_array|2d|3d|cube_array|cube)\s*<\s*(\w+)\s*>/.exec(type);
+      if (m) return { texture: { sampleType: GPU_SAMPLE_TYPES[m[2]] || "float", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
+      return { texture: { sampleType: "float", viewDimension: "2d" } };
+    }
+    case GPU_ARG.STORAGE_TEXTURE: {
+      const m = /^texture_storage_(1d|2d_array|2d|3d)\s*<\s*(\w+)\s*,\s*(\w+)\s*>/.exec(decl?.type || "");
+      if (!m) throw new GpuFailure("EVALIDATION", "storage texture " + param.name + " has no WGSL declaration");
+      return { storageTexture: { format: m[2], access: GPU_STORAGE_ACCESS[m[3]] || "write-only", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
+    }
+    default:
+      throw new GpuFailure("EINVALID", "parameter " + param.name + " has unknown kind " + slot.kind);
+  }
+}
+
+/**
+ * Bind group layouts for the parameter tables of every stage in one pipeline. `stages` holds
+ * `{ stage, visibility, entry, decls }`; parameters of different stages that share a
+ * @group/@binding become one layout entry visible to both.
+ */
+function gpuPipelineLayout(device, stages) {
+  const groups = new Map();
+  for (const { stage, visibility, entry, decls } of stages) {
+    entry.params.forEach((param, index) => {
+      if (param.kind === GPU_ARG.ACCELERATION_STRUCTURE) throw new GpuFailure("EUNSUPPORTED", GPU_FEATURE.RAY_QUERY);
+      if (param.kind === GPU_ARG.MLP_WEIGHTS) throw new GpuFailure("EUNSUPPORTED", GPU_FEATURE.COOPERATIVE_VECTORS);
+      if (!groups.has(param.group)) groups.set(param.group, new Map());
+      const group = groups.get(param.group);
+      let slot = group.get(param.binding);
+      if (!slot) {
+        slot = { kind: param.kind, visibility: 0, slots: [], decl: decls.get(param.group + ":" + param.binding) };
+        group.set(param.binding, slot);
+      } else if (slot.kind !== param.kind) {
+        throw new GpuFailure("EVALIDATION", "parameters " + slot.slots[0].param.name + " and " + param.name
+          + " share @group(" + param.group + ") @binding(" + param.binding + ") with different kinds");
+      }
+      slot.visibility |= visibility;
+      slot.slots.push({ stage, index, param });
+    });
+  }
+  const highest = groups.size ? Math.max(...groups.keys()) : -1;
+  const layouts = [];
+  const bound = new Map();
+  for (let g = 0; g <= highest; g++) {
+    const bindings = [...(groups.get(g) || new Map())].sort((a, b) => a[0] - b[0]);
+    const entries = bindings.map(([binding, slot]) => {
+      if (slot.kind === GPU_ARG.VALUE) {
+        const end = Math.max(...slot.slots.map(s => s.param.offset + s.param.size));
+        slot.blockSize = Math.max(16, Math.ceil(end / 16) * 16);
+      }
+      return { binding, visibility: slot.visibility, ...gpuLayoutResource(slot) };
+    });
+    const object = device.createBindGroupLayout({ entries });
+    layouts.push(object);
+    if (bindings.length) bound.set(g, { object, bindings });
+  }
+  return { groups: bound, layout: device.createPipelineLayout({ bindGroupLayouts: layouts }) };
+}
+
+const gpuFloatView = new DataView(new ArrayBuffer(4));
+function gpuFloat(bits) {
+  gpuFloatView.setInt32(0, bits, true);
+  return gpuFloatView.getFloat32(0, true);
+}
+
+function gpuBindingResource(record, kind, name) {
+  switch (kind) {
+    case GPU_ARG.BUFFER:
+      if (record.type === "buffer") return { buffer: record.obj };
+      break;
+    case GPU_ARG.TEXTURE:
+    case GPU_ARG.STORAGE_TEXTURE:
+      if (record.type === "texture") return record.obj.createView();
+      break;
+    case GPU_ARG.SAMPLER:
+      if (record.type === "sampler") return record.obj;
+      break;
+  }
+  throw new GpuFailure("EINVALID", "the resource bound to " + name + " is not of the kind the shader expects");
+}
+
+// Builds and sets one bind group per group of the current pipeline from the pass's Bind state.
+function gpuApplyBindings(state) {
+  const { dev, pipeline, bindings, data, resource } = state;
+  for (const [group, { object, bindings: slots }] of pipeline.groups) {
+    const entries = [];
+    for (const [binding, slot] of slots) {
+      if (slot.kind === GPU_ARG.VALUE) {
+        const block = new Uint8Array(slot.blockSize);
+        for (const { stage, index, param } of slot.slots) {
+          const bound = bindings.get(stage + ":" + index);
+          if (!bound) throw new GpuFailure("EVALIDATION", "shader parameter " + param.name + " was not bound");
+          if (bound.kind !== GPU_ARG.VALUE) throw new GpuFailure("EVALIDATION", "shader parameter " + param.name + " takes a value");
+          if (bound.a < 0 || bound.b < 0 || bound.a + bound.b > data.length) {
+            throw new GpuFailure("EVALIDATION", "the value of " + param.name + " lies outside the submitted data");
+          }
+          if (bound.b > param.size) {
+            throw new GpuFailure("EVALIDATION", "the value of " + param.name + " has " + bound.b + " bytes; the shader takes " + param.size);
+          }
+          block.set(data.subarray(bound.a, bound.a + bound.b), param.offset);
+        }
+        const buffer = dev.device.createBuffer({ size: block.length, usage: GPU_BUFFER.UNIFORM | GPU_BUFFER.COPY_DST });
+        dev.device.queue.writeBuffer(buffer, 0, block);
+        state.transient.push(buffer);
+        entries.push({ binding, resource: { buffer } });
+        continue;
+      }
+      const first = slot.slots.find(s => bindings.has(s.stage + ":" + s.index));
+      if (!first) throw new GpuFailure("EVALIDATION", "shader parameter " + slot.slots[0].param.name + " was not bound");
+      const bound = bindings.get(first.stage + ":" + first.index);
+      if (bound.kind !== slot.kind) throw new GpuFailure("EVALIDATION", "shader parameter " + first.param.name + " was bound to the wrong kind of resource");
+      entries.push({ binding, resource: gpuBindingResource(resource(bound.a), slot.kind, first.param.name) });
+    }
+    state.pass.setBindGroup(group, dev.device.createBindGroup({ layout: object, entries }));
+  }
+}
+
+function gpuAttachmentView(state, handle, what) {
+  const record = state.resource(handle);
+  if (record.type !== "texture") throw new GpuFailure("EINVALID", "the " + what + " is not a texture");
+  return record;
+}
+
+function gpuBeginRenderPass(state, [color, colorClear, r, g, b, a, depth, depthClear, depthValue]) {
+  const target = gpuAttachmentView(state, color, "color target");
+  const desc = {
+    colorAttachments: [{
+      view: target.obj.createView(),
+      loadOp: colorClear ? "clear" : "load",
+      storeOp: "store",
+      clearValue: { r: gpuFloat(r), g: gpuFloat(g), b: gpuFloat(b), a: gpuFloat(a) },
+    }],
+  };
+  if (depth) {
+    const record = gpuAttachmentView(state, depth, "depth target");
+    const attachment = {
+      view: record.obj.createView(),
+      depthLoadOp: depthClear ? "clear" : "load",
+      depthStoreOp: "store",
+      depthClearValue: gpuFloat(depthValue),
+    };
+    if (record.format === "depth24plus-stencil8") Object.assign(attachment, { stencilLoadOp: "clear", stencilStoreOp: "store" });
+    desc.depthStencilAttachment = attachment;
+  }
+  return state.encoder.beginRenderPass(desc);
+}
+
+// Operand counts per GpuOp.
+const GPU_OPERANDS = [-1, 9, 0, 0, 1, 5, 3, 3, 3, 6, 4, 4, 5, 5, 3];
+
+/**
+ * Records one submit's command stream and returns the finished command buffer.
+ * `resource(handle)` returns the live record for a handle of this device or throws. Per-submit
+ * uniform buffers are pushed onto `transient`, even when recording fails, for the caller to
+ * destroy once the GPU is done.
+ */
+function gpuRecordCommands(dev, words, data, resource, pipelineOf, transient) {
+  const encoder = dev.device.createCommandEncoder();
+  const state = { dev, encoder, data, resource, pass: null, passKind: "", pipeline: null, bindings: new Map(), transient };
+  const inPass = (kind, what) => {
+    if (state.passKind !== kind) throw new GpuFailure("EVALIDATION", what + " was recorded outside a " + kind + " pass");
+  };
+  const ready = () => {
+    if (!state.pipeline) throw new GpuFailure("EVALIDATION", "a draw or dispatch was recorded before set_pipeline");
+    gpuApplyBindings(state);
+  };
+  for (let at = 0; at < words.length;) {
+    const op = words[at++];
+    const count = GPU_OPERANDS[op];
+    if (count === undefined || count < 0) throw new GpuFailure("EVALIDATION", "unknown GPU command " + op);
+    if (at + count > words.length) throw new GpuFailure("EVALIDATION", "the GPU command stream is truncated");
+    const args = words.slice(at, at + count);
+    at += count;
+    switch (op) {
+      case 1:
+      case 2:
+        if (state.pass) throw new GpuFailure("EVALIDATION", "a pass was begun before the previous one ended");
+        state.pass = op === 1 ? gpuBeginRenderPass(state, args) : encoder.beginComputePass();
+        state.passKind = op === 1 ? "render" : "compute";
+        state.pipeline = null;
+        state.bindings = new Map();
+        break;
+      case 3:
+        if (!state.pass) throw new GpuFailure("EVALIDATION", "end_pass was recorded outside a pass");
+        state.pass.end();
+        state.pass = null;
+        state.passKind = "";
+        break;
+      case 4: {
+        if (!state.pass) throw new GpuFailure("EVALIDATION", "set_pipeline was recorded outside a pass");
+        const pipeline = pipelineOf(args[0]);
+        if (pipeline.kind !== state.passKind) throw new GpuFailure("EVALIDATION", "a " + pipeline.kind + " pipeline was set in a " + state.passKind + " pass");
+        state.pipeline = pipeline;
+        state.pass.setPipeline(pipeline.obj);
+        break;
+      }
+      case 5:
+        if (!state.pass) throw new GpuFailure("EVALIDATION", "bind was recorded outside a pass");
+        state.bindings.set(args[0] + ":" + args[1], { kind: args[2], a: args[3], b: args[4] });
+        break;
+      case 6:
+        inPass("compute", "dispatch");
+        ready();
+        state.pass.dispatchWorkgroups(args[0], args[1], args[2]);
+        break;
+      case 7: {
+        inPass("render", "set_vertex_buffer");
+        const record = resource(args[1]);
+        if (record.type !== "buffer") throw new GpuFailure("EINVALID", "the vertex buffer is not a buffer");
+        state.pass.setVertexBuffer(args[0], record.obj, args[2]);
+        break;
+      }
+      case 8: {
+        inPass("render", "set_index_buffer");
+        const record = resource(args[0]);
+        if (record.type !== "buffer") throw new GpuFailure("EINVALID", "the index buffer is not a buffer");
+        state.pass.setIndexBuffer(record.obj, args[1] === 0 ? "uint16" : "uint32", args[2]);
+        break;
+      }
+      case 9:
+        inPass("render", "set_viewport");
+        state.pass.setViewport(...args.map(gpuFloat));
+        break;
+      case 10:
+        inPass("render", "set_scissor");
+        state.pass.setScissorRect(...args);
+        break;
+      case 11:
+        inPass("render", "draw");
+        ready();
+        state.pass.draw(...args);
+        break;
+      case 12:
+        inPass("render", "draw_indexed");
+        ready();
+        state.pass.drawIndexed(...args);
+        break;
+      case 13: {
+        if (state.pass) throw new GpuFailure("EVALIDATION", "copy_buffer was recorded inside a pass");
+        const [source, sourceOffset, destination, destinationOffset, size] = args;
+        const from = resource(source);
+        const to = resource(destination);
+        if (from.type !== "buffer" || to.type !== "buffer") throw new GpuFailure("EINVALID", "copy_buffer needs two buffers");
+        if ((sourceOffset | destinationOffset | size) & 3) {
+          throw new GpuFailure("EINVALID", "WebGPU copies whole 4-byte words; the copy offsets and size must be multiples of 4");
+        }
+        encoder.copyBufferToBuffer(from.obj, sourceOffset, to.obj, destinationOffset, size);
+        break;
+      }
+      case 14:
+        throw new GpuFailure("EUNSUPPORTED", GPU_FEATURE.RAY_TRACING);
+    }
+  }
+  if (state.pass) throw new GpuFailure("EVALIDATION", "a pass was not ended before submit");
+  return encoder.finish();
+}
+
+// ----- hosts/gpu.js -----
+// WebGPU host for `system.gpu` (imports declared in crates/dream-stdlib/src/system/gpu/gpu_host.dream).
+// Shaders come only from the `wgsl` target of generated bundles; this host never compiles
+// anything but that WGSL. Canvas surfaces attach to `system.window` canvases.
+
+
+
+const GPU_BACKEND_AUTO = 0;
+const GPU_BACKEND_WEBGPU = 6;
+const GPU_BACKEND_NAMES = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+const GPU_TOPOLOGIES = ["triangle-list", "triangle-strip", "line-list", "line-strip", "point-list"];
+const GPU_CULL_MODES = ["none", "front", "back"];
+const GPU_COMPARES = ["never", "less", "less-equal", "equal", "greater-equal", "greater", "not-equal", "always"];
+const GPU_VERTEX_FORMATS = ["float32", "float32x2", "float32x3", "float32x4", "sint32", "uint32", "unorm8x4"];
+const GPU_FILTERS = ["nearest", "linear"];
+const GPU_ADDRESS_MODES = ["clamp-to-edge", "repeat", "mirror-repeat"];
+const GPU_BLENDS = [
+  null,
+  { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } },
+  { color: { srcFactor: "one", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } },
+  { color: { srcFactor: "one", dstFactor: "one" }, alpha: { srcFactor: "one", dstFactor: "one" } },
+];
+// Adapter features requested when present, with the GpuFeature bit each one grants.
+const GPU_OPTIONAL_FEATURES = [["subgroups", GPU_FEATURE.SUBGROUPS], ["shader-f16", GPU_FEATURE.FLOAT16]];
+// The bundle's capability names (docs/internals/18-gpu-shader-bundle.md), by GpuFeature.
+const GPU_CAPABILITY_FEATURES = new Map([
+  ["raytracing", GPU_FEATURE.RAY_TRACING],
+  ["rayquery", GPU_FEATURE.RAY_QUERY],
+  ["descriptor_handle", GPU_FEATURE.BINDLESS],
+  ["subgroup_basic", GPU_FEATURE.SUBGROUPS],
+  ["cooperative_vector", GPU_FEATURE.COOPERATIVE_VECTORS],
+  ["cooperative_matrix", GPU_FEATURE.COOPERATIVE_MATRICES],
+  ["half", GPU_FEATURE.FLOAT16],
+  ["atomic64", GPU_FEATURE.ATOMICS64],
+]);
+
+function gpuNextFrame() {
+  return new Promise(resolve => {
+    if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+}
+
+function gpuBytes(data) {
+  return data instanceof Uint8Array ? data : Uint8Array.from(data || []);
+}
+
+
+function makeGpuHost() {
+  // Every live handle: devices, buffers, textures, samplers, libraries, pipelines and surfaces.
+  const table = new Map();
+  let nextHandle = 1;
+  let lastError = "";
+
+  const fail = (code, detail, result = 0) => {
+    lastError = code + "\n" + detail;
+    return result;
+  };
+  const failWith = (error, result = 0) => {
+    if (error instanceof GpuFailure) return fail(error.code, error.detail, result);
+    return fail("EVALIDATION", error?.message || String(error), result);
+  };
+  const register = record => {
+    const handle = nextHandle++;
+    table.set(handle, record);
+    return handle;
+  };
+  const live = (dev) => {
+    if (dev.lost !== null) throw new GpuFailure("EDEVICELOST", dev.lost);
+  };
+  const deviceOf = handle => {
+    const record = table.get(handle);
+    if (record?.type !== "device") throw new GpuFailure("EINVALID", "GPU device " + handle + " was released");
+    live(record);
+    return record;
+  };
+  const recordOf = (handle, type, what) => {
+    const record = table.get(handle);
+    if (!record || (type && record.type !== type)) throw new GpuFailure("EINVALID", "the " + what + " was released");
+    live(record.dev);
+    return record;
+  };
+  const resourceOn = dev => handle => {
+    const record = table.get(handle);
+    if (!record || record.type === "device") throw new GpuFailure("EINVALID", "GPU handle " + handle + " was released");
+    if (record.dev !== dev) throw new GpuFailure("EWRONGDEVICE", "GPU handle " + handle);
+    return record;
+  };
+  // Runs a synchronous import body; host failures become `fallback` plus `gpuLastError`.
+  const guard = (fallback, body) => {
+    try {
+      return body();
+    } catch (error) {
+      return failWith(error, fallback);
+    }
+  };
+
+  const createDevice = async (backend, compiled) => {
+    if (backend !== GPU_BACKEND_AUTO && backend !== GPU_BACKEND_WEBGPU) {
+      if (compiled !== 0 && (compiled & (1 << backend)) === 0) return fail("ENOTCOMPILED", backend);
+      const name = GPU_BACKEND_NAMES[backend] || String(backend);
+      return fail("EUNAVAILABLE", "GpuBackend." + name + " is not available in a JavaScript host; browsers run GpuBackend.WebGpu");
+    }
+    if (compiled !== 0 && (compiled & (1 << GPU_BACKEND_WEBGPU)) === 0) return fail("ENOTCOMPILED", GPU_BACKEND_WEBGPU);
+    const gpu = globalThis.navigator?.gpu;
+    if (!gpu?.requestAdapter) return fail("ENODEVICE", "WebGPU is not available: navigator.gpu is missing");
+    let adapter;
+    try {
+      adapter = await gpu.requestAdapter();
+    } catch (error) {
+      return fail("ENODEVICE", "WebGPU adapter request failed: " + (error?.message || error));
+    }
+    if (!adapter) return fail("ENODEVICE", "WebGPU found no adapter");
+    const granted = GPU_OPTIONAL_FEATURES.filter(([name]) => adapter.features?.has?.(name));
+    let device;
+    try {
+      device = await adapter.requestDevice({ requiredFeatures: granted.map(([name]) => name) });
+    } catch (error) {
+      return fail("ENODEVICE", "WebGPU device request failed: " + (error?.message || error));
+    }
+    const dev = { type: "device", device, lost: null, uncaptured: null, libraries: new Set(), features: 0 };
+    dev.dev = dev;
+    for (const [name, bit] of granted) if (device.features?.has?.(name) !== false) dev.features |= 1 << bit;
+    device.lost?.then?.(info => {
+      if (dev.lost === null) dev.lost = info?.message || "the WebGPU device was lost";
+    });
+    device.onuncapturederror = event => {
+      dev.uncaptured ??= event?.error?.message || "WebGPU reported an error";
+    };
+    return register(dev);
+  };
+
+  const loadLibrary = (deviceHandle, bundle) => {
+    const dev = deviceOf(deviceHandle);
+    let parsed;
+    try {
+      parsed = gpuParseBundle(gpuBytes(bundle));
+    } catch (error) {
+      throw new GpuFailure("EINVALID", "malformed shader bundle: " + error.message);
+    }
+    const target = parsed.targets.find(t => t.name === "wgsl");
+    if (!target) throw new GpuFailure("ENOTCOMPILED", GPU_BACKEND_WEBGPU);
+    if (target.codeFormat !== "wgsl") throw new GpuFailure("EINVALID", "the wgsl target holds " + target.codeFormat + " code");
+    const library = { type: "library", dev, target, modules: new Map(), bad: null, verified: null };
+    library.verified = gpuVerifyTarget(target).then(reason => {
+      library.bad = reason;
+    }, error => {
+      library.bad = "SHA-256 verification failed: " + (error?.message || error);
+    });
+    dev.libraries.add(library);
+    return register(library);
+  };
+
+  // The GPUShaderModule and binding declarations for one entry; blobs shared by entries share one module.
+  const shaderOf = (library, name, stage) => {
+    if (library.bad) throw new GpuFailure("EINVALID", library.bad);
+    const entry = library.target.entries.find(e => e.name === name);
+    // A shader whose @gpu_targets leave out WebGPU (GpuBackend 6) has no WGSL entry.
+    if (!entry) throw new GpuFailure("ENOTCOMPILED", "6");
+    if (entry.stage !== stage) throw new GpuFailure("EVALIDATION", name + " is a " + entry.stage + " shader, not " + stage);
+    for (const capability of entry.capabilities) {
+      const feature = GPU_CAPABILITY_FEATURES.get(capability);
+      if (feature === undefined) throw new GpuFailure("EINVALID", name + " needs the unknown capability " + capability);
+      if ((library.dev.features & (1 << feature)) === 0) throw new GpuFailure("EUNSUPPORTED", feature);
+    }
+    let shader = library.modules.get(entry.code.offset);
+    if (!shader) {
+      let code;
+      try {
+        code = new TextDecoder("utf-8", { fatal: true }).decode(entry.code.bytes);
+      } catch (_) {
+        throw new GpuFailure("EINVALID", "the WGSL of " + name + " is not UTF-8");
+      }
+      shader = { module: library.dev.device.createShaderModule({ code }), decls: gpuScanWgslBindings(code) };
+      library.modules.set(entry.code.offset, shader);
+    }
+    return { entry, ...shader };
+  };
+
+  const renderPipelineDesc = (desc, vertex, fragment, layout) => {
+    const word = i => {
+      if (i >= desc.length) throw new GpuFailure("EVALIDATION", "the render pipeline description is truncated");
+      return desc[i];
+    };
+    const [colorCode, topology, cull, blend, depthCode, depthCompare, depthWrite, samples, layoutCount] =
+      Array.from({ length: 9 }, (_, i) => word(i));
+    const color = GPU_TEXTURE_FORMATS[colorCode];
+    if (!color) throw new GpuFailure("EINVALID", "unknown color format " + colorCode);
+    const buffers = [];
+    let at = 9;
+    for (let i = 0; i < layoutCount; i++) {
+      const arrayStride = word(at);
+      const stepMode = word(at + 1) ? "instance" : "vertex";
+      const count = word(at + 2);
+      at += 3;
+      const attributes = [];
+      for (let j = 0; j < count; j++, at += 3) {
+        const format = GPU_VERTEX_FORMATS[word(at + 1)];
+        if (!format) throw new GpuFailure("EINVALID", "unknown vertex format " + word(at + 1));
+        attributes.push({ shaderLocation: word(at), format, offset: word(at + 2) });
+      }
+      buffers.push({ arrayStride, stepMode, attributes });
+    }
+    const target = { format: color[0] };
+    if (GPU_BLENDS[blend]) target.blend = GPU_BLENDS[blend];
+    const out = {
+      layout,
+      vertex: { module: vertex.module, entryPoint: vertex.entry.name, buffers },
+      fragment: { module: fragment.module, entryPoint: fragment.entry.name, targets: [target] },
+      primitive: { topology: GPU_TOPOLOGIES[topology] || "triangle-list", cullMode: GPU_CULL_MODES[cull] || "none" },
+      multisample: { count: samples > 0 ? samples : 1 },
+    };
+    if (depthCode > 0) {
+      const depth = GPU_TEXTURE_FORMATS[depthCode - 1];
+      if (!depth) throw new GpuFailure("EINVALID", "unknown depth format " + (depthCode - 1));
+      out.depthStencil = { format: depth[0], depthCompare: GPU_COMPARES[depthCompare] || "less", depthWriteEnabled: depthWrite !== 0 };
+    }
+    return out;
+  };
+
+  // Copies `size` bytes at `offset` out of `buffer` through a mappable staging buffer.
+  const readBack = async (dev, record, offset, size) => {
+    const start = offset & ~3;
+    const span = Math.ceil((offset + size - start) / 4) * 4;
+    if (start + span > record.allocated) throw new GpuFailure("EINVALID", "the read range lies outside the buffer");
+    const staging = dev.device.createBuffer({ size: span, usage: GPU_BUFFER.MAP_READ | GPU_BUFFER.COPY_DST });
+    try {
+      const encoder = dev.device.createCommandEncoder();
+      encoder.copyBufferToBuffer(record.obj, start, staging, 0, span);
+      dev.device.queue.submit([encoder.finish()]);
+      await staging.mapAsync(GPU_MAP_READ);
+      live(dev);
+      const bytes = new Uint8Array(staging.getMappedRange()).slice(offset - start, offset - start + size);
+      staging.unmap();
+      return bytes;
+    } finally {
+      staging.destroy();
+    }
+  };
+
+  const textureExtent = (record, mip) => [Math.max(1, record.width >> mip), Math.max(1, record.height >> mip)];
+
+  const submit = async (deviceHandle, commands, data) => {
+    const dev = deviceOf(deviceHandle);
+    await Promise.all([...dev.libraries].map(l => l.verified));
+    live(dev);
+    const pipelineOf = handle => {
+      const record = resourceOn(dev)(handle);
+      if (record.type !== "pipeline") throw new GpuFailure("EINVALID", "GPU handle " + handle + " is not a pipeline");
+      const bad = record.libraries.find(l => l.bad);
+      if (bad) throw new GpuFailure("EINVALID", bad.bad);
+      return record;
+    };
+    const device = dev.device;
+    const transient = [];
+    let recordError = null;
+    device.pushErrorScope?.("out-of-memory");
+    device.pushErrorScope?.("validation");
+    try {
+      device.queue.submit([gpuRecordCommands(dev, commands, gpuBytes(data), resourceOn(dev), pipelineOf, transient)]);
+    } catch (error) {
+      recordError = error;
+    }
+    const validation = await device.popErrorScope?.();
+    const memory = await device.popErrorScope?.();
+    if (!recordError) await device.queue.onSubmittedWorkDone?.();
+    for (const buffer of transient) buffer.destroy();
+    if (recordError) throw recordError;
+    live(dev);
+    if (memory) throw new GpuFailure("ENOMEM", memory.message);
+    if (validation) throw new GpuFailure("EVALIDATION", validation.message);
+    if (dev.uncaptured !== null) {
+      const message = dev.uncaptured;
+      dev.uncaptured = null;
+      throw new GpuFailure("EVALIDATION", message);
+    }
+    return 0;
+  };
+
+  const release = handle => {
+    const record = table.get(handle);
+    if (!record) return;
+    table.delete(handle);
+    switch (record.type) {
+      case "device":
+        for (const [other, owned] of table) if (owned.dev === record) table.delete(other);
+        record.lost ??= "the device was released";
+        record.device.destroy?.();
+        break;
+      case "buffer":
+        record.obj.destroy?.();
+        break;
+      case "texture":
+        if (!record.surface) record.obj.destroy?.();
+        break;
+      case "library":
+        record.dev.libraries.delete(record);
+        break;
+      case "surface":
+        if (record.frame) table.delete(record.frame);
+        record.context.unconfigure?.();
+        break;
+    }
+  };
+
+  const dropFrame = surface => {
+    if (surface.frame) table.delete(surface.frame);
+    surface.frame = 0;
+  };
+
+  const asyncGuard = (fallback, body) => async (...args) => {
+    try {
+      return await body(...args);
+    } catch (error) {
+      return failWith(error, fallback);
+    }
+  };
+
+  return {
+    gpuDeviceCreate: asyncGuard(0, createDevice),
+    gpuLastError: () => lastError || "EVALIDATION\nthe GPU host reported no error",
+    gpuDeviceBackend: handle => (table.get(handle)?.type === "device" ? GPU_BACKEND_WEBGPU : 0),
+    gpuDeviceFeatures: handle => {
+      const record = table.get(handle);
+      return record?.type === "device" ? record.features : 0;
+    },
+    gpuDeviceCheck: handle => guard(1, () => {
+      deviceOf(handle);
+      return 0;
+    }),
+    gpuLibraryLoad: (device, bundle) => guard(0, () => loadLibrary(device, bundle)),
+    gpuBufferCreate: (device, byteSize, usage) => guard(0, () => {
+      const dev = deviceOf(device);
+      if (!(byteSize >= 0)) throw new GpuFailure("EINVALID", "buffer size must not be negative");
+      let flags = GPU_BUFFER.COPY_SRC | GPU_BUFFER.COPY_DST;
+      if (usage & 1) flags |= GPU_BUFFER.STORAGE;
+      if (usage & 2) flags |= GPU_BUFFER.VERTEX;
+      if (usage & 4) flags |= GPU_BUFFER.INDEX;
+      if (usage & 8) flags |= GPU_BUFFER.INDIRECT;
+      // WebGPU sizes and copies buffers in whole 4-byte words.
+      const allocated = Math.max(4, Math.ceil(byteSize / 4) * 4);
+      const obj = dev.device.createBuffer({ size: allocated, usage: flags });
+      return register({ type: "buffer", dev, obj, size: byteSize, allocated });
+    }),
+    gpuBufferWrite: (buffer, byteOffset, data) => guard(1, () => {
+      const record = recordOf(buffer, "buffer", "buffer");
+      const bytes = gpuBytes(data);
+      if (byteOffset < 0 || byteOffset + bytes.length > record.size) throw new GpuFailure("EINVALID", "the write range lies outside the buffer");
+      if (byteOffset & 3) throw new GpuFailure("EINVALID", "WebGPU writes buffers at 4-byte aligned offsets");
+      let words = bytes;
+      if (bytes.length & 3) {
+        // Only a write that ends the buffer may be padded: the padding then lands in the
+        // allocation's slack rather than over live data.
+        if (byteOffset + bytes.length !== record.size) {
+          throw new GpuFailure("EINVALID", "WebGPU writes whole 4-byte words; the write length must be a multiple of 4");
+        }
+        words = new Uint8Array(Math.ceil(bytes.length / 4) * 4);
+        words.set(bytes);
+      }
+      record.dev.device.queue.writeBuffer(record.obj, byteOffset, words);
+      return 0;
+    }),
+    gpuBufferRead: asyncGuard([], async (buffer, byteOffset, byteSize) => {
+      const record = recordOf(buffer, "buffer", "buffer");
+      if (byteOffset < 0 || byteSize < 0 || byteOffset + byteSize > record.size) throw new GpuFailure("EINVALID", "the read range lies outside the buffer");
+      return readBack(record.dev, record, byteOffset, byteSize);
+    }),
+    gpuTextureCreate: (device, desc) => guard(0, () => {
+      const dev = deviceOf(device);
+      const [width, height, layers, mips, formatCode, usage, samples] = desc;
+      const format = GPU_TEXTURE_FORMATS[formatCode];
+      if (!format || desc.length < 7) throw new GpuFailure("EINVALID", "unknown texture format " + formatCode);
+      if (!(width > 0 && height > 0)) throw new GpuFailure("EINVALID", "texture width and height must be positive");
+      let flags = GPU_TEXTURE.TEXTURE_BINDING;
+      if (format[1] > 0) flags |= GPU_TEXTURE.COPY_SRC | GPU_TEXTURE.COPY_DST;
+      if ((usage & 1) || format[1] === 0) flags |= GPU_TEXTURE.RENDER_ATTACHMENT;
+      if (usage & 2) flags |= GPU_TEXTURE.STORAGE_BINDING;
+      const obj = dev.device.createTexture({
+        size: [width, height, Math.max(1, layers)],
+        mipLevelCount: Math.max(1, mips),
+        sampleCount: Math.max(1, samples),
+        format: format[0],
+        usage: flags,
+      });
+      return register({ type: "texture", dev, obj, width, height, format: format[0], texel: format[1] });
+    }),
+    gpuTextureWrite: (texture, mip, layer, data) => guard(1, () => {
+      const record = recordOf(texture, "texture", "texture");
+      if (record.surface || record.texel === 0) throw new GpuFailure("EINVALID", "this texture cannot be written from the CPU");
+      const [width, height] = textureExtent(record, mip);
+      const bytes = gpuBytes(data);
+      if (bytes.length !== width * height * record.texel) {
+        throw new GpuFailure("EINVALID", "mip " + mip + " needs " + width * height * record.texel + " bytes, got " + bytes.length);
+      }
+      record.dev.device.queue.writeTexture(
+        { texture: record.obj, mipLevel: mip, origin: { x: 0, y: 0, z: layer } },
+        bytes,
+        { bytesPerRow: width * record.texel, rowsPerImage: height },
+        { width, height, depthOrArrayLayers: 1 },
+      );
+      return 0;
+    }),
+    gpuTextureRead: asyncGuard([], async (texture, mip, layer) => {
+      const record = recordOf(texture, "texture", "texture");
+      if (record.texel === 0) throw new GpuFailure("EINVALID", "depth textures cannot be read back in WebGPU");
+      const dev = record.dev;
+      const [width, height] = textureExtent(record, mip);
+      const row = width * record.texel;
+      // Texture-to-buffer copies need 256-byte aligned rows.
+      const stride = Math.ceil(row / 256) * 256;
+      const staging = dev.device.createBuffer({ size: stride * height, usage: GPU_BUFFER.MAP_READ | GPU_BUFFER.COPY_DST });
+      try {
+        const encoder = dev.device.createCommandEncoder();
+        encoder.copyTextureToBuffer(
+          { texture: record.obj, mipLevel: mip, origin: { x: 0, y: 0, z: layer } },
+          { buffer: staging, bytesPerRow: stride, rowsPerImage: height },
+          { width, height, depthOrArrayLayers: 1 },
+        );
+        dev.device.queue.submit([encoder.finish()]);
+        await staging.mapAsync(GPU_MAP_READ);
+        live(dev);
+        const mapped = new Uint8Array(staging.getMappedRange());
+        const out = new Uint8Array(row * height);
+        for (let y = 0; y < height; y++) out.set(mapped.subarray(y * stride, y * stride + row), y * row);
+        staging.unmap();
+        return out;
+      } finally {
+        staging.destroy();
+      }
+    }),
+    gpuSamplerCreate: (device, desc) => guard(0, () => {
+      const dev = deviceOf(device);
+      if (desc.length < 8) throw new GpuFailure("EINVALID", "the sampler description is truncated");
+      const [minFilter, magFilter, mipFilter, u, v, w, compare, anisotropy] = desc;
+      const options = {
+        minFilter: GPU_FILTERS[minFilter] || "nearest",
+        magFilter: GPU_FILTERS[magFilter] || "nearest",
+        mipmapFilter: GPU_FILTERS[mipFilter] || "nearest",
+        addressModeU: GPU_ADDRESS_MODES[u] || "clamp-to-edge",
+        addressModeV: GPU_ADDRESS_MODES[v] || "clamp-to-edge",
+        addressModeW: GPU_ADDRESS_MODES[w] || "clamp-to-edge",
+      };
+      // WebGPU allows anisotropy only when every filter is linear.
+      if (anisotropy > 1 && minFilter === 1 && magFilter === 1 && mipFilter === 1) options.maxAnisotropy = anisotropy;
+      if (compare > 0) options.compare = GPU_COMPARES[compare - 1];
+      return register({ type: "sampler", dev, obj: dev.device.createSampler(options) });
+    }),
+    gpuDescriptorHandle: () => fail("EUNSUPPORTED", GPU_FEATURE.BINDLESS, 0xffffffffffffffffn),
+    gpuComputePipelineCreate: (library, entry) => guard(0, () => {
+      const lib = recordOf(library, "library", "shader library");
+      const shader = shaderOf(lib, entry, "compute");
+      const { groups, layout } = gpuPipelineLayout(lib.dev.device, [
+        { stage: GPU_STAGE.COMPUTE, visibility: GPU_VISIBILITY.COMPUTE, ...shader },
+      ]);
+      const obj = lib.dev.device.createComputePipeline({ layout, compute: { module: shader.module, entryPoint: entry } });
+      return register({ type: "pipeline", kind: "compute", dev: lib.dev, obj, groups, libraries: [lib] });
+    }),
+    gpuRenderPipelineCreate: (vertexLibrary, vertexEntry, fragmentLibrary, fragmentEntry, desc) => guard(0, () => {
+      const vlib = recordOf(vertexLibrary, "library", "vertex shader library");
+      const flib = recordOf(fragmentLibrary, "library", "fragment shader library");
+      if (vlib.dev !== flib.dev) throw new GpuFailure("EWRONGDEVICE", "fragment shader library");
+      const vertex = shaderOf(vlib, vertexEntry, "vertex");
+      const fragment = shaderOf(flib, fragmentEntry, "fragment");
+      const { groups, layout } = gpuPipelineLayout(vlib.dev.device, [
+        { stage: GPU_STAGE.VERTEX, visibility: GPU_VISIBILITY.VERTEX, ...vertex },
+        { stage: GPU_STAGE.FRAGMENT, visibility: GPU_VISIBILITY.FRAGMENT, ...fragment },
+      ]);
+      const obj = vlib.dev.device.createRenderPipeline(renderPipelineDesc(desc, vertex, fragment, layout));
+      return register({ type: "pipeline", kind: "render", dev: vlib.dev, obj, groups, libraries: [vlib, flib] });
+    }),
+    gpuRayTracingPipelineCreate: () => fail("EUNSUPPORTED", GPU_FEATURE.RAY_TRACING),
+    gpuBottomLevelBuild: async () => fail("EUNSUPPORTED", GPU_FEATURE.RAY_TRACING),
+    gpuTopLevelBuild: async () => fail("EUNSUPPORTED", GPU_FEATURE.RAY_TRACING),
+    gpuMlpUpload: () => fail("EUNSUPPORTED", GPU_FEATURE.COOPERATIVE_VECTORS),
+    gpuSurfaceCreate: (device, window, _vsync) => guard(0, () => {
+      const dev = deviceOf(device);
+      // The window chunk is absent from selective runtimes of programs that never open a window.
+      const canvas = typeof windowSurfaceCanvas === "function" ? windowSurfaceCanvas(window) : null;
+      if (!canvas) throw new GpuFailure("ESURFACE", "window " + window + " has no canvas");
+      const context = canvas.getContext?.("webgpu");
+      if (!context) throw new GpuFailure("ESURFACE", "the canvas has no WebGPU context");
+      const preferred = globalThis.navigator?.gpu?.getPreferredCanvasFormat?.() || "bgra8unorm";
+      const formatCode = GPU_TEXTURE_FORMATS.findIndex(([name]) => name === preferred);
+      // Browsers present at the display's refresh rate, so the vsync hint has no effect here.
+      context.configure({ device: dev.device, format: preferred, alphaMode: "opaque", usage: GPU_TEXTURE.RENDER_ATTACHMENT });
+      return register({ type: "surface", dev, canvas, context, formatCode: formatCode < 0 ? 2 : formatCode, frame: 0 });
+    }),
+    gpuSurfaceResize: (surface, width, height) => guard(1, () => {
+      const record = recordOf(surface, "surface", "surface");
+      if (!(width > 0 && height > 0)) throw new GpuFailure("EINVALID", "surface width and height must be positive");
+      if (record.canvas.width !== width) record.canvas.width = width;
+      if (record.canvas.height !== height) record.canvas.height = height;
+      return 0;
+    }),
+    gpuSurfaceInfo: surface => {
+      const record = table.get(surface);
+      if (record?.type !== "surface") return [];
+      return [record.formatCode, record.canvas.width, record.canvas.height];
+    },
+    gpuSurfaceAcquire: asyncGuard(0, async surface => {
+      const record = recordOf(surface, "surface", "surface");
+      dropFrame(record);
+      let texture;
+      try {
+        texture = record.context.getCurrentTexture();
+      } catch (error) {
+        throw new GpuFailure("ESURFACE", error?.message || "the canvas cannot present");
+      }
+      const format = GPU_TEXTURE_FORMATS[record.formatCode];
+      record.frame = register({
+        type: "texture", dev: record.dev, obj: texture, surface: true,
+        width: record.canvas.width, height: record.canvas.height, format: format[0], texel: 0,
+      });
+      return record.frame;
+    }),
+    gpuSurfacePresent: asyncGuard(1, async surface => {
+      const record = recordOf(surface, "surface", "surface");
+      dropFrame(record);
+      // The browser shows the canvas once the task yields; waiting for the next frame also keeps
+      // a render loop from starving the page.
+      await gpuNextFrame();
+      live(record.dev);
+      return 0;
+    }),
+    gpuSubmit: asyncGuard(1, submit),
+    gpuRelease: handle => {
+      try {
+        release(handle);
+      } catch (_) {
+        // Releasing never fails from the program's point of view.
+      }
+    },
+  };
+}
+
 // ----- hosts.js -----
 /**
  * Full built-in `Dream` host module (every optional chunk). Selective runtimes compose a subset
@@ -3013,6 +4364,8 @@ function defaultDreamModule(getInstance) {
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
+    ...makeWindowHost(),
+    ...makeGpuHost(),
   };
 }
 

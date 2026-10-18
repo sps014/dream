@@ -28,7 +28,7 @@ class Routes {
     public static fun item(
         @path id: int,
         @query limit: Option<int>,
-        @header("X-Request-ID")request_id: Option<string>
+        @header("X-Request-ID") request_id: Option<string>
     ): string {
         return id.to_string()
             + ":" + limit.unwrap_or(10)

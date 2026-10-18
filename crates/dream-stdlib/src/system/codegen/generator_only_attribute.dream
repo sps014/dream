@@ -1,0 +1,26 @@
+module system.codegen;
+
+/// Declares a name that exists only in a generator's target language, such as a shader built-in.
+/// The compiler type-checks uses of it like any other declaration, so generators see fully typed
+/// facts, but it is never compiled: code may use it only inside a function that carries one of
+/// the listed attributes and that a generator consumes. Any other use is an error.
+///
+/// Apply it to bodiless `extern` functions (which may then be `public` and generic, including
+/// function-typed and `ref` parameters) and to classes, structs and interfaces, whose members
+/// are covered too.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.ExternFunction,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.Class,
+    AttributeTarget.Struct,
+    AttributeTarget.Interface
+)
+public struct GeneratorOnlyAttribute {
+    /// An `@attribute` type; functions carrying it may use the declaration.
+    public attribute: DeclarationPath;
+
+    /// More `@attribute` types that also grant use.
+    public additional_attributes: List<DeclarationPath>;
+}

@@ -1,0 +1,125 @@
+module system.gpu;
+
+/// The settings a new texture is created with.
+///
+/// Start from `GpuTextureDesc.of` and chain the settings you want to change. Every texture
+/// can be sampled by shaders and copied to and from the CPU.
+public class GpuTextureDesc {
+    desc_width: int;
+    desc_height: int;
+    desc_format: GpuTextureFormat;
+    desc_mips: int;
+    desc_layers: int;
+    desc_samples: int;
+    desc_render_target: bool;
+    desc_storage: bool;
+
+    constructor(width: int, height: int, format: GpuTextureFormat) {
+        this.desc_width = width;
+        this.desc_height = height;
+        this.desc_format = format;
+        this.desc_mips = 1;
+        this.desc_layers = 1;
+        this.desc_samples = 1;
+        this.desc_render_target = false;
+        this.desc_storage = false;
+    }
+
+    /// Describes a `width` by `height` texture of `format` with one mip level and one layer.
+    public static fun of(width: int, height: int, format: GpuTextureFormat): GpuTextureDesc {
+        return GpuTextureDesc(width, height, format);
+    }
+
+    /// Width in texels.
+    public get width(): int {
+        return this.desc_width;
+    }
+
+    /// Height in texels.
+    public get height(): int {
+        return this.desc_height;
+    }
+
+    /// How each texel is stored.
+    public get format(): GpuTextureFormat {
+        return this.desc_format;
+    }
+
+    /// The number of mip levels, each half the size of the previous one. Defaults to `1`.
+    public get mip_level_count(): int {
+        return this.desc_mips;
+    }
+
+    /// The number of array layers. Defaults to `1`.
+    public get layer_count(): int {
+        return this.desc_layers;
+    }
+
+    /// Samples per texel for multisampled render targets: `1` or `4`. Defaults to `1`.
+    public get sample_count(): int {
+        return this.desc_samples;
+    }
+
+    /// Whether render passes can draw into the texture. Defaults to `false`.
+    public get is_render_target(): bool {
+        return this.desc_render_target;
+    }
+
+    /// Whether shaders can write texels directly. Defaults to `false`.
+    public get is_storage(): bool {
+        return this.desc_storage;
+    }
+
+    /// Sets the number of mip levels, and returns this description.
+    public fun mip_levels(count: int): GpuTextureDesc {
+        this.desc_mips = count;
+        return this;
+    }
+
+    /// Sets the number of array layers, and returns this description.
+    public fun layers(count: int): GpuTextureDesc {
+        this.desc_layers = count;
+        return this;
+    }
+
+    /// Sets the samples per texel, and returns this description.
+    public fun samples(count: int): GpuTextureDesc {
+        this.desc_samples = count;
+        return this;
+    }
+
+    /// Sets whether render passes can draw into the texture, and returns this description.
+    /// Depth formats must be render targets to be used as depth buffers.
+    public fun render_target(value: bool): GpuTextureDesc {
+        this.desc_render_target = value;
+        return this;
+    }
+
+    /// Sets whether shaders can write texels directly, and returns this description.
+    public fun storage(value: bool): GpuTextureDesc {
+        this.desc_storage = value;
+        return this;
+    }
+
+    // [width, height, depth_or_layers, mip_levels, format, usage, sample_count]; usage bit 1 is
+    // render target and bit 2 storage.
+    internal fun encode(): int[] {
+        let usage = 0;
+        if this.desc_render_target {
+            usage = usage | 1;
+        }
+        if this.desc_storage {
+            usage = usage | 2;
+        }
+        let format: int = this.desc_format;
+        return [
+            this.desc_width,
+            this.desc_height,
+            this.desc_layers,
+            this.desc_mips,
+            format,
+            usage,
+            this.desc_samples
+        ];
+    }
+}

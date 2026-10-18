@@ -74,6 +74,49 @@ fn internal_class_annotations_are_visible_only_to_generated_callers() {
 }
 
 #[test]
+fn internal_declarations_of_a_generated_root_file_reach_unmoded_user_files() {
+    let arena = Bump::new();
+    let mut diagnostics = DiagnosticBag::new(None);
+    let mut inputs = Vec::new();
+    for (file, source) in [
+        (
+            "generated.dream",
+            "internal static class Shaders { internal static fun answer(): int { return 42; } }",
+        ),
+        (
+            "main.dream",
+            "fun main(): void { let result = Shaders.answer(); }",
+        ),
+    ] {
+        let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics)
+            .parse()
+            .unwrap();
+        let mut program = tree.get_root().clone();
+        for ty in &mut program.structs {
+            ty.file_path = Some(file.into());
+            for method in &mut ty.methods {
+                method.file_path = Some(file.into());
+            }
+        }
+        for function in &mut program.functions {
+            function.file_path = Some(file.into());
+        }
+        inputs.push((file.to_string(), source.to_string(), program));
+    }
+    let mut edges = IndexMap::new();
+    edges.insert(
+        "main.dream".to_string(),
+        vec!["generated.dream".to_string()],
+    );
+    let mut graph = ModuleGraph::new(inputs, &edges);
+    graph.generated_files.insert("generated.dream".to_string());
+    let hir_arena = Bump::new();
+    let mut analyzer = Analyzer::new(&graph, &hir_arena);
+    let _ = analyzer.analyze(&mut diagnostics);
+    assert_no_type_errors(&diagnostics);
+}
+
+#[test]
 fn generated_code_can_call_internal_members() {
     assert_no_type_errors(&analyze_member_call(true, "internal"));
 }

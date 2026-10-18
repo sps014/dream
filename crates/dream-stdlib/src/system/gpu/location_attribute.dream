@@ -1,0 +1,11 @@
+module system.gpu;
+
+/// Numbers a value passed between pipeline stages: a vertex shader output and the fragment
+/// shader input with the same `index` carry the same value, interpolated across the
+/// triangle. On a fragment shader's return struct, `index` selects the color target.
+/// Indexes start at `0` and must be unique within a struct.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct LocationAttribute {
+    /// The slot number, starting at `0`.
+    public index: int;
+}

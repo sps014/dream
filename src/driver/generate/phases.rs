@@ -1,10 +1,11 @@
 use super::exe::GenExe;
-use super::model::{GenPhase, GenResult, Output};
+use super::model::{GenPhase, GenResult, Output, ToolResult};
 use crate::driver::toolchain::ToolchainConfig;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-/// Every phase sees the original compilation plus the compiler-collected tool feedback.
+/// Every phase sees the original compilation plus the compiler-collected tool feedback. The
+/// transcript records the base snapshot's hash and each phase's feedback, never a phase snapshot.
 pub(super) fn run(
     config: &Arc<ToolchainConfig>,
     exe: &GenExe,
@@ -19,27 +20,37 @@ pub(super) fn run(
     let mut aggregate = GenResult {
         version: snapshot.version,
         generator: snapshot.generator.clone(),
+        base_snapshot: blake3::hash(json.as_bytes()).to_hex().to_string(),
         ..Default::default()
     };
     let mut artifacts = BTreeMap::new();
     let mut request_ids = indexmap::IndexSet::new();
+    let mut feedback: Vec<ToolResult> = Vec::new();
     for phase in 0..3 {
-        snapshot.phase = phase;
-        let json = serde_json::to_string(&snapshot).map_err(|e| e.to_string())?;
-        let result = super::run::run(config, exe, generator, &json, timeout)?;
+        let result = if phase == 0 {
+            super::run::run(config, exe, generator, json, timeout)?
+        } else {
+            snapshot.phase = phase;
+            let json = serde_json::to_string(&snapshot).map_err(|e| e.to_string())?;
+            super::run::run(config, exe, generator, &json, timeout)?
+        };
         aggregate.phases.push(GenPhase {
-            snapshot: snapshot.clone(),
+            tool_results: std::mem::take(&mut feedback),
             outputs: result.outputs.clone(),
         });
         aggregate.logs.extend(result.logs);
         let errors = result.diagnostics.iter().any(|d| d.severity != "warning");
         aggregate.diagnostics.extend(result.diagnostics);
         for output in &result.outputs {
-            if let Output::Artifact { path, contents, .. } = output
+            if let Output::Artifact {
+                path,
+                contents,
+                binary,
+                ..
+            } = output
                 && (!super::artifacts::valid_artifact_path(path)
-                    || artifacts
-                        .insert(path.clone(), contents.as_bytes().to_vec())
-                        .is_some())
+                    || super::artifacts::artifact_bytes(contents, *binary)
+                        .is_none_or(|bytes| artifacts.insert(path.clone(), bytes).is_some()))
             {
                 return Err(format!("invalid or duplicate tool input artifact '{path}'"));
             }
@@ -58,26 +69,32 @@ pub(super) fn run(
                 "generator requested a tool in the final feedback round (maximum 3 phases)".into(),
             );
         }
-        snapshot.tool_results.clear();
-        for request in requests {
-            if !super::tools::valid_request(request, declared) {
+        for request in &requests {
+            if !super::artifacts::valid_tool_request(request, declared) {
                 return Err("invalid request or undeclared generator tool".into());
             }
-            let Output::ToolRun { id, .. } = request else {
-                continue;
-            };
-            if !request_ids.insert(id.clone()) {
+            if let Output::ToolRun { id, .. } = request
+                && !request_ids.insert(id.clone())
+            {
                 return Err(format!("duplicate tool request id '{id}'"));
             }
-            let result = super::tools::run(config, root, request, &snapshot.tools, &artifacts)?;
-            for file in &result.files {
-                let bytes = super::assets::file_bytes(file)?;
-                if artifacts.insert(file.path.clone(), bytes).is_some() {
+        }
+        let runs = super::parallel::map(&requests, |request| {
+            super::tools::run(config, root, request, &snapshot.tools, &artifacts)
+        });
+        snapshot.tool_results.clear();
+        for run in runs {
+            let run = run?;
+            let mut shown = run.result.clone();
+            for (file, bytes) in shown.files.iter_mut().zip(&run.bytes) {
+                *file = super::assets::snapshot_file(file, bytes);
+                if artifacts.insert(file.path.clone(), bytes.clone()).is_some() {
                     return Err(format!("duplicate tool output '{}'", file.path));
                 }
+                super::assets::store_blob(&mut aggregate.blobs, &file.hash, bytes);
             }
-            aggregate.tool_results.push(result.clone());
-            snapshot.tool_results.push(result);
+            snapshot.tool_results.push(shown);
+            feedback.push(run.result);
         }
     }
     Ok(aggregate)

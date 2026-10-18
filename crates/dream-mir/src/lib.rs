@@ -473,6 +473,8 @@ pub enum Const {
     /// A 32-bit float literal (`float`), kept distinct from [`Const::Float`] so the backend emits
     /// `f32.const` rather than widening to `f64.const`.
     F32(f32),
+    /// A `float16` literal, held as its IEEE binary16 bits (Rust has no stable `f16`).
+    F16(u16),
     Bool(bool),
     Char(char),
     /// An interned string; the backend resolves the pointer.

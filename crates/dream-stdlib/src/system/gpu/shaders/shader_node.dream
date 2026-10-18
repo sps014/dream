@@ -1,0 +1,139 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+// One body node: the generator model splits statements (`GenStmt`) from expressions and nested
+// statements (`GenExpr`); every shader pass walks this single shape instead.
+@allow_cycle
+internal class ShaderNode {
+    internal id: string;
+    internal is_stmt: bool;
+    internal expr: ExprKind;
+    internal stmt: StmtKind;
+    internal text: string;
+    internal op: string;
+    internal literal: string;
+    internal literal_kind: string;
+    internal ty: GenTypeRef;
+    internal symbol: string;
+    internal symbol_kind: string;
+    internal types: List<GenTypeRef>;
+    internal type_args: List<GenTypeRef>;
+    internal constant: string;
+    internal has_constant: bool;
+    internal line: int;
+    internal column: int;
+    internal children: List<ShaderNode>;
+
+    internal constructor(id: string, is_stmt: bool, expr: ExprKind, stmt: StmtKind) {
+        this.id = id;
+        this.is_stmt = is_stmt;
+        this.expr = expr;
+        this.stmt = stmt;
+        this.text = "";
+        this.op = "";
+        this.literal = "";
+        this.literal_kind = "";
+        this.ty = GenTypeRef.unknown();
+        this.symbol = "";
+        this.symbol_kind = "";
+        this.types = List<GenTypeRef>();
+        this.type_args = List<GenTypeRef>();
+        this.constant = "";
+        this.has_constant = false;
+        this.line = 0;
+        this.column = 0;
+        this.children = List<ShaderNode>();
+    }
+
+    internal static fun of_stmt(borrow s: GenStmt): ShaderNode {
+        let n = ShaderNode(s.id, true, ExprKind.Unknown, s.kind);
+        n.text = s.text;
+        n.ty = s.ty;
+        n.symbol = s.symbol;
+        n.types = s.types;
+        n.type_args = s.type_args;
+        n.line = s.span.line;
+        n.column = s.span.column;
+        switch (s.constant) {
+            Some(c) => {
+                n.constant = c.value;
+                n.has_constant = true;
+            }
+            None => {}
+        }
+        for (let child in s.children()) {
+            n.children.push(ShaderNode.of_expr(child));
+        }
+        return n;
+    }
+
+    internal static fun of_expr(borrow e: GenExpr): ShaderNode {
+        let is_stmt = e.kind == ExprKind.Unknown && e.statement_kind != StmtKind.Unknown;
+        let n = ShaderNode(e.id, is_stmt, e.kind, e.statement_kind);
+        n.text = e.text;
+        n.op = e.op;
+        n.literal = e.literal;
+        n.literal_kind = e.literal_kind;
+        n.ty = e.ty;
+        n.symbol = e.symbol;
+        n.symbol_kind = e.symbol_kind;
+        n.types = e.types;
+        n.type_args = e.type_args;
+        n.line = e.span.line;
+        n.column = e.span.column;
+        switch (e.constant) {
+            Some(c) => {
+                n.constant = c.value;
+                n.has_constant = true;
+            }
+            None => {}
+        }
+        for (let child in e.children()) {
+            n.children.push(ShaderNode.of_expr(child));
+        }
+        return n;
+    }
+
+    // The statements of `f`'s body, or an empty list for a bodiless declaration.
+    internal static fun body_of(borrow f: GenFunction): List<ShaderNode> {
+        let out = List<ShaderNode>();
+        switch (f.body) {
+            Some(body) => {
+                for (let s in body.statements) {
+                    out.push(ShaderNode.of_stmt(s));
+                }
+            }
+            None => {}
+        }
+        return out;
+    }
+
+    internal fun is_expr(kind: ExprKind): bool {
+        return !this.is_stmt && this.expr == kind;
+    }
+
+    internal fun is_statement(kind: StmtKind): bool {
+        return this.is_stmt && this.stmt == kind;
+    }
+
+    internal fun child(index: int): ShaderNode {
+        return this.children[index];
+    }
+
+    // A static receiver such as `GpuMath` in `GpuMath.sin(x)` names a type, not a value.
+    internal fun is_type_name(): bool {
+        return this.is_expr(ExprKind.Identifier)
+            && this.ty.kind == TypeRefKind.Unknown && this.symbol.is_empty();
+    }
+
+    // Every node below this one, depth first, in source order.
+    internal fun walk(out: List<ShaderNode>): void {
+        for (let c in this.children) {
+            out.push(c);
+            c.walk(out);
+        }
+    }
+}

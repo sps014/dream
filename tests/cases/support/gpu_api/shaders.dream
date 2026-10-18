@@ -1,0 +1,163 @@
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+module shaders;
+
+import system.gpu;
+
+public struct VertexOutput {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public color: GpuVec4;
+}
+
+public struct HitInfo {
+    @ray_payload
+    public color: GpuVec3;
+}
+
+@compute(64, 1, 1)
+fun saxpy(
+    @readonly x: GpuBuffer<float>,
+    @readonly y: GpuBuffer<float>,
+    out: GpuBuffer<float>,
+    n: int
+): void {
+    let i = global_id().x;
+    if i < n {
+        out[i] = 2.0f * x[i] + y[i];
+    }
+}
+
+@compute(256)
+@gpu_targets(GpuTarget.Vulkan)
+fun reduce_sum(@readonly input: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+    let partial = workgroup_array<float>(256);
+    let i = global_id().x;
+    let lane = local_id().x;
+    partial[lane] = i < n ? input[i] : 0.0f;
+    workgroup_barrier();
+    let stride = 128;
+    while stride > 0 {
+        if lane < stride {
+            partial[lane] = partial[lane] + partial[lane + stride];
+        }
+        workgroup_barrier();
+        stride = stride / 2;
+    }
+    if lane == 0 {
+        GpuAtomic.add_float(out, 0, partial[0]);
+    }
+}
+
+@compute(256)
+fun prefix_count(@readonly flags: GpuBuffer<uint>, counts: GpuBuffer<uint>): void {
+    let i = global_id().x;
+    let active = flags[i] != 0u;
+    let before = subgroup_prefix_count(active);
+    let total = subgroup_count(active);
+    if subgroup_invocation_id() == 0u {
+        GpuAtomic.add(counts, 0, total);
+    }
+    if before == 0u {
+        GpuAtomic.max(counts, 1, before);
+    }
+}
+
+@vertex
+fun triangle_vertex(): VertexOutput {
+    let x = -0.5f;
+    let y = -0.5f;
+    if vertex_id() == 1 {
+        x = 0.5f;
+    } else if vertex_id() == 2 {
+        x = 0.0f;
+        y = 0.5f;
+    }
+    let result = VertexOutput();
+    result.position = GpuVec4.of(x, y, 0.0f, 1.0f);
+    result.color = GpuVec4.of(1.0f, 0.3f, 0.1f, 1.0f);
+    return result;
+}
+
+@fragment
+fun triangle_fragment(input: VertexOutput, albedo: GpuTexture, linear: GpuSampler): GpuVec4 {
+    let tex = albedo.sample(linear, input.position.xy);
+    let lit = GpuMath.saturate(tex * input.color);
+    return lit + GpuVec4.splat(GpuMath.sin(0.5f));
+}
+
+@ray_generation
+@gpu_targets(GpuTarget.Vulkan)
+fun camera(scene: GpuAccelerationStructure, output: GpuStorageTexture<GpuVec4>): void {
+    let pixel = dispatch_ray_index().xy;
+    let size = dispatch_ray_dimensions().xy;
+    let uv = GpuVec2.of((float)pixel.x / (float)size.x, (float)pixel.y / (float)size.y);
+    let ray = GpuRay.of(
+        GpuVec3.of(0.0f, 0.0f, -2.0f),
+        GpuVec3.of(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f),
+        0.001f,
+        1000.0f
+    );
+    let hit = HitInfo();
+    trace_ray(scene, GpuRayFlags.None, 255u, ray, ref hit);
+    output[pixel] = GpuVec4.of(hit.color.x, hit.color.y, hit.color.z, 1.0f);
+}
+
+@closest_hit
+@gpu_targets(GpuTarget.Vulkan)
+fun shade(ref hit: HitInfo, attributes: GpuTriangleHit): void {
+    hit.color = GpuVec3.of(
+        attributes.barycentrics.x,
+        attributes.barycentrics.y,
+        1.0f - attributes.barycentrics.x - attributes.barycentrics.y
+    );
+}
+
+@miss
+@gpu_targets(GpuTarget.Vulkan)
+fun sky(ref hit: HitInfo): void {
+    hit.color = GpuVec3.of(0.2f, 0.4f, 0.8f);
+}
+
+@gpu
+@differentiable
+fun loss(weight: float, input: float, target: float): float {
+    let prediction = weight * input;
+    let error = prediction - target;
+    return error * error;
+}
+
+@compute(64, 1, 1)
+fun train_step(
+    @readonly inputs: GpuBuffer<float>,
+    @readonly targets: GpuBuffer<float>,
+    weights: GpuBuffer<float>,
+    gradients: GpuBuffer<float>,
+    n: int
+): void {
+    let i = global_id().x;
+    if i >= n {
+        return;
+    }
+    let w = GpuDiffPair.of(weights[0], 0.0f);
+    let x = GpuDiffPair.constant(inputs[i]);
+    let t = GpuDiffPair.constant(targets[i]);
+    GpuDiff.backward3(loss, ref w, ref x, ref t, 1.0f);
+    GpuAtomic.add_float(gradients, 0, w.derivative());
+}
+
+@compute(32, 1, 1)
+@gpu_targets(GpuTarget.Vulkan)
+fun evaluate_mlp(
+    @readonly @coop_shape(16, 32) layer0: GpuMlpWeights<float16>,
+    @readonly @coop_shape(32, 4) layer1: GpuMlpWeights<float16>,
+    @readonly @coop_shape(16) features: GpuBuffer<GpuCoopVec<float16>>,
+    @coop_shape(4) out: GpuBuffer<GpuCoopVec<float16>>
+): void {
+    let i = global_id().x;
+    let hidden = GpuCoopVec.relu(layer0.apply(features[i]));
+    let result = layer1.apply(hidden);
+    result[0] = GpuMath.max(result[0], 0.0h);
+    out[i] = result;
+}

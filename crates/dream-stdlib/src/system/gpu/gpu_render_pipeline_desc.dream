@@ -1,0 +1,151 @@
+module system.gpu;
+
+/// The fixed-function settings of a render pipeline: target format, primitive topology,
+/// culling, blending, depth testing and vertex buffer layouts.
+///
+/// Start from `GpuRenderPipelineDesc.defaults` and chain the settings you want to change.
+public class GpuRenderPipelineDesc {
+    desc_color_format: GpuTextureFormat;
+    desc_topology: GpuTopology;
+    desc_cull: GpuCullMode;
+    desc_blend: GpuBlendMode;
+    desc_depth_format: Option<GpuTextureFormat>;
+    desc_depth_compare: GpuCompare;
+    desc_depth_write: bool;
+    desc_samples: int;
+    layouts: List<GpuVertexLayout>;
+
+    constructor(color_format: GpuTextureFormat) {
+        this.desc_color_format = color_format;
+        this.desc_topology = GpuTopology.TriangleList;
+        this.desc_cull = GpuCullMode.None;
+        this.desc_blend = GpuBlendMode.Replace;
+        this.desc_depth_format = Option.None;
+        this.desc_depth_compare = GpuCompare.Less;
+        this.desc_depth_write = true;
+        this.desc_samples = 1;
+        this.layouts = List<GpuVertexLayout>();
+    }
+
+    /// Settings for drawing triangle lists into a `color_format` target: no culling, no
+    /// blending, no depth buffer, no vertex buffers and one sample per pixel. Pass a
+    /// surface's `GpuSurface.color_format` to draw into a window.
+    public static fun defaults(color_format: GpuTextureFormat): GpuRenderPipelineDesc {
+        return GpuRenderPipelineDesc(color_format);
+    }
+
+    /// The color target's format.
+    public get color_format(): GpuTextureFormat {
+        return this.desc_color_format;
+    }
+
+    /// How vertices form primitives.
+    public get topology(): GpuTopology {
+        return this.desc_topology;
+    }
+
+    /// Which triangles are skipped.
+    public get cull_mode(): GpuCullMode {
+        return this.desc_cull;
+    }
+
+    /// How new colors combine with the target.
+    public get blend_mode(): GpuBlendMode {
+        return this.desc_blend;
+    }
+
+    /// The depth buffer's format, or `None` without depth testing.
+    public get depth_format(): Option<GpuTextureFormat> {
+        return this.desc_depth_format;
+    }
+
+    /// Samples per pixel; must match the pass targets' sample count.
+    public get sample_count(): int {
+        return this.desc_samples;
+    }
+
+    /// The number of vertex buffer layouts added.
+    public get vertex_buffer_count(): int {
+        return this.layouts.length;
+    }
+
+    /// Sets how vertices form primitives, and returns this description.
+    public fun with_topology(topology: GpuTopology): GpuRenderPipelineDesc {
+        this.desc_topology = topology;
+        return this;
+    }
+
+    /// Sets which triangles are skipped, and returns this description.
+    public fun with_cull_mode(mode: GpuCullMode): GpuRenderPipelineDesc {
+        this.desc_cull = mode;
+        return this;
+    }
+
+    /// Sets how new colors combine with the target, and returns this description.
+    public fun with_blend_mode(mode: GpuBlendMode): GpuRenderPipelineDesc {
+        this.desc_blend = mode;
+        return this;
+    }
+
+    /// Enables depth testing against a `format` depth buffer: a fragment is kept when
+    /// `compare` passes against the stored depth, and its depth is stored when `write` is
+    /// true. Returns this description.
+    public fun with_depth(
+        format: GpuTextureFormat,
+        compare: GpuCompare,
+        write: bool
+    ): GpuRenderPipelineDesc {
+        this.desc_depth_format = Option.Some(format);
+        this.desc_depth_compare = compare;
+        this.desc_depth_write = write;
+        return this;
+    }
+
+    /// Sets the samples per pixel, `1` or `4`, and returns this description.
+    public fun with_samples(count: int): GpuRenderPipelineDesc {
+        this.desc_samples = count;
+        return this;
+    }
+
+    /// Adds a vertex buffer layout. The first layout added reads from vertex buffer slot
+    /// `0`, the next from slot `1`, and so on. Returns this description.
+    public fun with_vertex_buffer(layout: GpuVertexLayout): GpuRenderPipelineDesc {
+        this.layouts.push(layout);
+        return this;
+    }
+
+    // [color_format, topology, cull, blend, depth_format + 1 or 0, depth_compare, depth_write,
+    //  sample_count, layout_count, then per layout: stride, per_instance, attribute_count,
+    //  (location, format, offset) per attribute]
+    internal fun encode(): int[] {
+        let out = List<int>();
+        let color: int = this.desc_color_format;
+        let topology: int = this.desc_topology;
+        let cull: int = this.desc_cull;
+        let blend: int = this.desc_blend;
+        let compare: int = this.desc_depth_compare;
+        out.push_all([color, topology, cull, blend]);
+        switch (this.desc_depth_format) {
+            Some(format) => {
+                let f: int = format;
+                out.push(f + 1);
+            }
+            None => {
+                out.push(0);
+            }
+        }
+        out.push(compare);
+        out.push(this.desc_depth_write ? 1 : 0);
+        out.push(this.desc_samples);
+        out.push(this.layouts.length);
+        for (let layout in this.layouts) {
+            out.push(layout.stride);
+            out.push(layout.is_per_instance ? 1 : 0);
+            out.push(layout.attribute_count);
+            for (let word in layout.attributes) {
+                out.push(word);
+            }
+        }
+        return out.take_array();
+    }
+}

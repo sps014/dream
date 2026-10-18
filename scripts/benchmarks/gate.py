@@ -20,7 +20,7 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def identity(bench, csharp, runner, seed, passes, target="native", benchmark_source=None):
+def identity(bench, runner, seed, passes, target="native", benchmark_source=None):
     source = Path(bench).read_bytes() if benchmark_source is None else benchmark_source
     model = platform.processor()
     if platform.system() == 'Darwin':
@@ -29,10 +29,9 @@ def identity(bench, csharp, runner, seed, passes, target="native", benchmark_sou
         model = next((line.split(':', 1)[1].strip() for line in Path('/proc/cpuinfo').read_text().splitlines()
                       if line.startswith('model name') or line.startswith('Hardware')), model)
     return {
-        "benchmark": hashlib.sha256(source).hexdigest(), "csharp": digest(csharp) if csharp else None,
-        "csharp_project": digest(Path(csharp).with_name("DreamBench.csproj")) if csharp and Path(csharp).with_name("DreamBench.csproj").is_file() else None,
+        "benchmark": hashlib.sha256(source).hexdigest(),
         "harness": {name: digest(Path(__file__).resolve().parents[1] / name)
-                    for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py')},
+                    for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py', 'benchmarks/layout.py')},
         "hardware": {"platform": platform.platform(), "machine": platform.machine(),
                      "processor": model, "cpus": os.cpu_count(), "runner": runner},
         "target": target,

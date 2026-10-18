@@ -292,6 +292,7 @@ impl TypeCtx {
             Type::USize(_) => self.interner.prim(PrimTy::USize),
             Type::Byte(_) => self.interner.prim(PrimTy::Byte),
             Type::Float(_) => self.interner.prim(PrimTy::Float),
+            Type::Float16(_) => self.interner.prim(PrimTy::Float16),
             Type::Double(_) => self.interner.prim(PrimTy::Double),
             Type::Boolean(_) => self.interner.prim(PrimTy::Bool),
             Type::Char(_) => self.interner.prim(PrimTy::Char),

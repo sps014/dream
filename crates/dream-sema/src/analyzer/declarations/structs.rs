@@ -385,6 +385,18 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let concrete_ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        self.ensure_struct_instance(def, base_name, concrete_ids, position, diagnostics);
+    }
+
+    /// [`Self::ensure_struct_instantiated`] for an already resolved generic definition.
+    pub(in crate::analyzer) fn ensure_struct_instance(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        concrete_ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         let instance = self.type_ctx.instantiate(def, concrete_ids.clone());
         if self.struct_info(instance).is_some() {
             return;

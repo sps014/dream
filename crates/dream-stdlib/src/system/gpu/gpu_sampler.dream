@@ -1,0 +1,17 @@
+module system.gpu;
+
+/// Filtering and wrapping settings that shaders pass to `GpuTexture.sample`. Create one with
+/// `GpuDevice.sampler`.
+public class GpuSampler {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+
+    internal constructor(device_id: int, handle: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+}

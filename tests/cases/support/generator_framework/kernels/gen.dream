@@ -1,0 +1,102 @@
+module gen;
+
+import system;
+import system.codegen;
+import system.collections;
+
+// A module default that a function can override.
+@attribute(AttributeTarget.Module, AttributeTarget.Function)
+public struct KernelAttribute {
+    public workgroup: int;
+}
+
+@generator_only(KernelAttribute)
+public extern fun global_id(): uint;
+
+@generator_only(KernelAttribute)
+public extern fun backward<F>(f: F, ref gradient: float): float;
+
+@generator_only(KernelAttribute)
+public extern fun lane<T>(): Lane<T>;
+
+@generator_only(KernelAttribute)
+public class Lane<T> {
+    public extern fun read(): T;
+}
+
+fun describe(borrow ctx: GenContext, borrow e: GenExpr, out: StringBuilder): void {
+    let label = "";
+    if e.is_kind(ExprKind.Identifier) {
+        label = "ident";
+    } else if e.is_kind(ExprKind.FunctionCall)
+        || e.is_kind(ExprKind.Call) || e.is_kind(ExprKind.MethodCall) {
+        label = "call";
+    } else if e.is_kind(ExprKind.Ref) {
+        label = "ref";
+    }
+    if !label.is_empty() {
+        out.append(
+            label
+                + " " + e.text + " sym=" + ctx.symbol_of(e) + " ty=" + ctx.type_of(e)
+                .display + "; "
+        );
+    }
+    for (let child in e.children()) {
+        describe(ctx, child, out);
+    }
+}
+
+// Reads configuration from module and function attributes and typed facts from consumed bodies.
+@generator
+@on_attribute(KernelAttribute)
+public fun kernels(ctx: GenContext): void {
+    let out = StringBuilder();
+    for (let m in ctx.modules_with<KernelAttribute>()) {
+        out.append("module " + m.name + "; ");
+    }
+    for (let f in ctx.functions_with<KernelAttribute>()) {
+        let workgroup = 0;
+        switch (ctx.module_of(f)) {
+            Some(m) => {
+                switch (m.attribute<KernelAttribute>()) {
+                    Some(defaults) => {
+                        workgroup = defaults.workgroup;
+                    }
+                    None => {}
+                }
+            }
+            None => {}
+        }
+        switch (f.attribute<KernelAttribute>()) {
+            Some(own) => {
+                if own.workgroup > 0 {
+                    workgroup = own.workgroup;
+                }
+            }
+            None => {}
+        }
+        out.append(f.name + " workgroup=" + workgroup.to_string() + "; ");
+        for (let p in f.params) {
+            if p.is_ref {
+                out.append("refparam " + p.name + "; ");
+            }
+        }
+        switch (f.body) {
+            Some(body) => {
+                for (let stmt in body.statements) {
+                    for (let e in stmt.children()) {
+                        describe(ctx, e, out);
+                    }
+                }
+            }
+            None => {}
+        }
+        ctx.consume(f, "dispatch it with Kernels.run(\"" + f.name + "\")");
+    }
+    ctx.emit_file(
+        "kernels.dream",
+        "public fun kernel_facts(): string {\n    return \""
+            + out.to_string()
+            .replace("\"", "'") + "\";\n}\n"
+    );
+}

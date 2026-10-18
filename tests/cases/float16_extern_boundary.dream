@@ -1,0 +1,6 @@
+@export
+fun scale(value: float16): float16 {
+    return value;
+}
+
+fun main(): void {}

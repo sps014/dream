@@ -94,7 +94,7 @@ A generator runs only when the program contains something it declares interest i
 | Attribute          | Runs when                                              | Context API                                                                 |
 | ------------------ | ------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `@syntax_block`    | a `name { … }` site uses the generator's function name | `ctx.syntax_blocks()`                                                       |
-| `@on_attribute(A)` | a declaration (or one of its members) carries `@A`     | `ctx.types_with<A>()`, `ctx.functions_with<A>()`, `ctx.decls()`             |
+| `@on_attribute(A)` | a declaration (or one of its members) or a `module` declaration carries `@A` | `ctx.types_with<A>()`, `ctx.functions_with<A>()`, `ctx.modules_with<A>()`, `ctx.decls()` |
 | `@on_call(f, …)`   | the program calls one of the named functions           | `ctx.call_sites()`                                                          |
 | `@incremental`     | (modifier)                                             | replays the cached result when the generator and its snapshot are unchanged |
 
@@ -371,10 +371,125 @@ Use `ctx.referenced_decls()`, `ctx.referenced_functions()`, `ctx.find_decl(id)`,
 to 512 declarations and 32 levels. `ctx.find_symbol(id)` searches program-wide signature
 views; `implementations_of(id)` and `subtypes_of(id)` traverse declared interface ancestry.
 
-`ctx.consume(function)` removes a selected or referenced top-level user function from the
-compiled program. Standard-library functions and methods cannot be consumed. A later use
-of a consumed function produces a diagnostic naming the generator that consumed it.
-Two generators cannot consume the same function.
+`ctx.consume(function, help)` takes over a selected or referenced top-level user function,
+for example a function the generator translates to another language. The function stays in
+the program and its body is type-checked like any other code, so a typo or type error inside
+it is reported once through the normal diagnostics; the generator does not need to forward
+`ctx.compilation_errors()`. The function is never compiled, and calling it, or using it as a
+value, from ordinary code is an error naming the generator. The optional `help` text is shown
+under that error:
+
+```dream
+ctx.consume(f, "dispatch it with Shaders." + f.name + ".run(...)");
+```
+
+```text
+error: 'blur' was consumed by generator 'shaders' and is not available as a function
+help: dispatch it with Shaders.blur.run(...)
+```
+
+A consumed function may still call or name other consumed functions, which lets one
+generator translate a group of related functions. Generator-specific rules, such as "no
+closures", remain the generator's job. Standard-library functions and methods cannot be
+consumed, and two generators cannot consume the same function. Other generators' syntax
+blocks inside a consumed body are left to the consuming generator.
+
+## Configuration on modules
+
+Generator settings belong in source, next to the code they configure. An `@attribute` type
+whose targets include `AttributeTarget.Module` can be placed on a `module` declaration, and
+`@on_attribute` fires for it just like for a function or type:
+
+```dream
+@kernel(64)
+module shaders;
+
+import gpu;
+
+@kernel(128)
+public fun blur(x: float): float {
+    return x * 0.5;
+}
+
+@kernel(0)
+public fun fill(x: float): float {
+    return x;
+}
+```
+
+`ctx.modules_with<A>()` lists the modules that carry `@A`, and `ctx.module_of(decl)` or
+`ctx.module_of(function)` returns the trigger-carrying module that declares a declaration, so
+a generator can merge module defaults with per-declaration overrides:
+
+```dream
+let size = 0;
+switch (ctx.module_of(f)) {
+    Some(m) => {
+        switch (m.attribute<KernelAttribute>()) {
+            Some(defaults) => {
+                size = defaults.workgroup;
+            }
+            None => {}
+        }
+    }
+    None => {}
+}
+switch (f.attribute<KernelAttribute>()) {
+    Some(own) => {
+        if own.workgroup > 0 {
+            size = own.workgroup;
+        }
+    }
+    None => {}
+}
+```
+
+`GenModule` exposes `attribute<A>()`, `attributes_of<A>()` and `has<A>()`. Its `id` is a
+diagnostic target, so `ctx.error_at(m.id, message)` points at the module declaration.
+
+## Generator-only declarations
+
+Some names exist only in a generator's target language, such as a shader's thread index.
+Declare them with `@generator_only(A, ...)` from `system.codegen`. The compiler type-checks
+uses like any other declaration, so generators see real types, symbols and generic arguments
+in the body facts, but the declarations are never compiled:
+
+```dream
+module gpu;
+
+import system.codegen;
+
+@attribute(AttributeTarget.Module, AttributeTarget.Function)
+public struct KernelAttribute {
+    public workgroup: int;
+}
+
+@generator_only(KernelAttribute)
+public extern fun global_id(): uint;
+
+@generator_only(KernelAttribute)
+public extern fun backward<F>(f: F, ref gradient: float): float;
+
+@generator_only(KernelAttribute)
+public class Texture<T> {
+    public extern fun sample(u: float, v: float): T;
+}
+```
+
+A generator-only declaration is a bodiless `extern` function, which may then be `public` and
+generic, or a class, struct or interface, whose members are covered too. It may be used only
+inside a function that carries one of the listed attributes and that a generator consumed.
+Any other use is an error:
+
+```text
+error: 'global_id' is only available inside functions marked @kernel
+```
+
+Passing a consumed or generator-only function as a value types it normally: in
+`backward(blur, ref gradient)`, `ctx.type_of` of the `blur` argument is
+`fun(float): float` and `ctx.symbol_of` is the function's identity. `ref` parameters keep
+`GenParam.is_ref`, and `ref` arguments appear as `ExprKind.Ref` nodes with the argument's
+type, so a generator can see mutation through parameters.
 
 ## Artifacts and source maps
 
@@ -384,6 +499,14 @@ Two generators cannot consume the same function.
 let artifact = ArtifactBuilder();
 artifact.mapped("external text", function.id);
 ctx.emit_artifact("input.txt", artifact.to_string(), artifact.source_map);
+```
+
+Binary files, such as packed GPU code, use the overload that takes `byte[]` contents. They have
+no source map; embed them with `emit_asset` or pass them to `run_tool` like text artifacts:
+
+```dream
+ctx.emit_artifact("kernels.bundle", bundle_bytes);
+ctx.emit_asset("kernels", "kernels.bundle");
 ```
 
 Artifact paths are relative to the generator directory, cannot contain `..`, and cannot
@@ -399,41 +522,100 @@ the artifact file. `ctx.error_at(node.id, message)` also accepts body-node ident
 
 ## Pinned tools and feedback phases
 
-A generator declares each external tool with `@uses_tool("name")`. Tools resolve from the
-pinned LLVM/Binaryen toolchain or from a project declaration:
+A generator declares each external tool with `@uses_tool("name")`, where `name` is an
+executable. Dream resolves it from its own table of pinned tools first:
+
+| Tool       | Install with                        | Executables                                  | Override         |
+| ---------- | ----------------------------------- | -------------------------------------------- | ---------------- |
+| `llvm`     | ships with Dream releases           | `clang`, `opt`, `llc`, `llvm-*`, `wasm-ld`, … | `DREAM_LLVM`     |
+| `binaryen` | `dreamer toolchain install binaryen` | `wasm-opt`, `wasm-as`, `wasm-dis`, …         | `DREAM_WASM_OPT` |
+| `zig`      | `dreamer toolchain install cc`       | `zig`                                        | `DREAM_ZIG`      |
+| `slang`    | `dreamer toolchain install slang`    | `slangc`                                     | `DREAM_SLANG`    |
+
+Each tool installs into `~/.dream/toolchains/<name>-<version>`. A `DREAM_<TOOL>` variable
+points at an install root (or its `bin/`), except `DREAM_WASM_OPT` and `DREAM_ZIG`, which name
+the executable itself. Any other tool is pinned in the project's `dream.toml`:
 
 ```toml
 [tools.schema]
-path = "tools/schema-checker"
+path = "tools/schema/bin/schema-checker"
 version = "1.0"
 hash = "<64 hexadecimal characters: BLAKE3 of the executable>"
+root = "tools/schema"
+timeout_secs = 60
 ```
 
-Tool declarations are fingerprinted before cache lookup. An undeclared tool or an
-executable whose hash differs from its project pin is rejected.
+`hash` is checked against the executable before every use; a mismatch reports the hash the
+file actually has. The optional `root` names the tool's install tree. The tool can read every
+file under it, such as sibling libraries and data files. `timeout_secs` overrides the default
+30-second limit; tools from the pinned table have their own defaults.
 
-`ctx.run_tool(id, tool, args, inputs, outputs)` takes lists of arguments and artifact paths.
-The compiler copies declared inputs into a scratch directory, invokes the tool directly,
-and collects declared outputs. macOS uses `sandbox-exec`; Linux requires Bubblewrap
-(`bwrap`). Tool execution fails on hosts without a supported sandbox. Network access is
-disabled, the environment is minimal, and a tool has a 30-second timeout. Captured stdout
-and stderr are limited to 8 MiB each; individual output files are limited to 64 MiB.
+`ctx.tools()` lists every declared tool. A tool that cannot be found on this machine is listed
+with `available == false`, and requesting it with `run_tool` fails with the reason, such as the
+install command. A generator can therefore skip a step that only an optional tool performs:
+
+```dream
+let recorder = false;
+for (let tool in ctx.tools()) {
+    if tool.name == "dream-slang-layout" && tool.available {
+        recorder = true;
+    }
+}
+```
+
+Tool declarations are fingerprinted before cache lookup. A tool with an install tree (every
+pinned-table tool installed under a toolchains directory, and every project pin with `root`)
+is fingerprinted over all of its files, so replacing a sibling library invalidates cached
+results. An undeclared tool, or an executable whose hash differs from its pin, is rejected.
+
+`ctx.run_tool(id, tool, args, inputs, outputs, opaque_outputs)` takes lists of arguments and
+artifact paths. The compiler copies declared inputs into a scratch directory, invokes the tool
+directly, and collects declared outputs. Network access is disabled, the environment is
+minimal, and the tool can write only to its scratch directory and read only system locations,
+its executable and its install tree:
+
+- macOS runs the tool under `sandbox-exec`.
+- Linux requires Bubblewrap; when `bwrap` is missing, the error explains how to install it.
+- Windows runs the tool in a job object that ends every process it starts, under an
+  AppContainer that can write only to the scratch directory.
+
+Captured stdout and stderr are limited to 8 MiB each; individual output files are limited to
+64 MiB. All requests made in one phase run in parallel, at most `DREAM_GEN_JOBS` at a time.
+Results keep request order, and when several fail, the first failing request in that order is
+the one reported.
+
+Files listed in `opaque_outputs` are collected like any other output, but the next phase sees
+only their path, hash and size (`GenToolFile.opaque` is true and `contents` is empty). Use them
+for large or binary results the generator never reads. Refer to any tool output as
+`tool:<request id>/<path>`:
+
+```dream
+ctx.emit_asset("kernels", "tool:compile/kernels.spv");
+ctx.publish_tool_output("tool:compile/kernels.spv", "shaders/kernels.spv");
+```
+
+`publish_tool_output` copies the file next to the build output; the same rules as for
+published artifacts apply.
 
 A generator starts at `ctx.phase() == 0`. After tool requests, the compiler invokes the
 same executable with the next phase number and `ctx.tool_results()`. Results include the
 request identity, exit code, stdout, stderr, and output files. Binary files use base64
-contents with `binary == true`; every file includes a BLAKE3 hash. The generator interprets
+contents with `binary == true`; every file includes its BLAKE3 hash and size. The generator interprets
 the tool's diagnostics and emits the final Dream files or assets. There are at most three
 phases; the final phase cannot request another tool. Request identities and output paths
 must be unique across phases.
 
-Incremental results include the phase transcript and tool feedback. Cache replay and the
-materialized manifest validate the same paths, outputs, mappings, and consumption targets
-as fresh execution. Capture/replay and incremental verification retain phase data.
+Incremental results include the phase transcript: the hash of the first phase's snapshot,
+each phase's outputs and tool feedback, and every tool output's bytes, stored once and
+addressed by hash. Later phase snapshots are rebuilt from that record, so the transcript grows
+with the tool outputs rather than with the number of phases. Cache replay and the materialized
+manifest validate the same paths, outputs, mappings, hashes, and consumption targets as fresh
+execution. Capture/replay and incremental verification retain phase data.
 
 ## Embedded assets
 
-`ctx.emit_asset(name, source)` embeds an artifact or declared tool-output file.
+`ctx.emit_asset(name, source)` embeds an emitted artifact, or a tool output named
+`tool:<request id>/<path>`.
 The overload taking `targets: List<string>` restricts an asset to target triples or the
 families `native` and `wasm`. Asset names must be unique across generators.
 
@@ -446,3 +628,13 @@ Ordering follows generator name and output emission order.
 The compiler persists each generator's `outputs.json` manifest with the materialized
 sources. Replay-only builds and the language server read the manifest, including
 replacements, consumption, artifacts, source maps, and assets.
+
+## Editor support
+
+The language server replays the last build's manifests, so consumed functions are analyzed
+like ordinary code: hover, go to definition, references and completion work inside them,
+including generator-only names. Before the first build it treats a function that carries a
+granting attribute as consumed. Errors a generator reported inside an artifact
+(`ctx.error_in_artifact`) appear at the Dream code the artifact's source map points to. A
+consumed function shows a "consumed by generator" code lens, followed by a lens that opens each
+artifact the generator mapped back into it, such as a translated shader.

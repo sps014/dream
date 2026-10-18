@@ -1,0 +1,34 @@
+module system.gpu;
+
+// Command stream opcodes for `gpuSubmit`. Each opcode is followed by its int operands;
+// floats travel as their IEEE bit patterns and byte ranges as offsets into the submit's
+// data array.
+internal enum GpuOp {
+    // color_texture, color_clear (0 keep, 1 clear), r, g, b, a,
+    // depth_texture (0 none), depth_clear (0 keep, 1 clear), depth_value
+    BeginRenderPass = 1,
+    BeginComputePass = 2,
+    EndPass = 3,
+    // pipeline
+    SetPipeline = 4,
+    // stage, parameter index, GpuArgKind, operand a, operand b
+    Bind = 5,
+    // group counts x, y, z
+    Dispatch = 6,
+    // slot, buffer, byte_offset
+    SetVertexBuffer = 7,
+    // buffer, GpuIndexFormat, byte_offset
+    SetIndexBuffer = 8,
+    // x, y, width, height, min_depth, max_depth
+    SetViewport = 9,
+    // x, y, width, height
+    SetScissor = 10,
+    // vertex_count, instance_count, first_vertex, first_instance
+    Draw = 11,
+    // index_count, instance_count, first_index, base_vertex, first_instance
+    DrawIndexed = 12,
+    // source, source_offset, destination, destination_offset, byte_size
+    CopyBuffer = 13,
+    // width, height, depth
+    TraceRays = 14,
+}

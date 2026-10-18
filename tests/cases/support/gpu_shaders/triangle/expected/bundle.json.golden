@@ -1,0 +1,38 @@
+{
+  "format": "DGPB",
+  "version": 0,
+  "module": "shaders",
+  "targets": [
+    {
+      "name": "wgsl",
+      "code_format": "wgsl",
+      "layouts": [],
+      "entries": [
+        {
+          "name": "triangle_vertex",
+          "stage": "vertex",
+          "layout": 0,
+          "code": {"offset": 0, "size": 2444, "sha256": "fc77793a22686ab9766db6844718aeb5c1cf9c99c807e9607251d1bbf841ef82"},
+          "thread_group_size": [0, 0, 0],
+          "params": [
+            {"name": "transform", "kind": 6, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 64}
+          ],
+          "capabilities": []
+        },
+        {
+          "name": "triangle_fragment",
+          "stage": "fragment",
+          "layout": 0,
+          "code": {"offset": 2444, "size": 954, "sha256": "8c9384aaa81ab3675f99df17827f6c2a8a04073a89f9678e950630b68e1dd0e0"},
+          "thread_group_size": [0, 0, 0],
+          "params": [
+            {"name": "albedo", "kind": 2, "flags": 0, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "linear", "kind": 3, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 0},
+            {"name": "highlight", "kind": 6, "flags": 0, "space": 0, "binding": 3, "offset": 0, "size": 4}
+          ],
+          "capabilities": []
+        }
+      ]
+    }
+  ]
+}

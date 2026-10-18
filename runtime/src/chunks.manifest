@@ -12,7 +12,7 @@
 # none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
 # field to this chunk by prefix; a leading `=` marks an exact-match field.
 always abi.js platform.js urls.js core.js instance.js marshal.js hosts/env.js
-order js cancellation fs net cli data crypto console_process datetime_text workers
+order js cancellation fs net cli data crypto console_process datetime_text window gpu workers
 chunk js hosts/js.js makeJsHost js
 chunk fs hosts/file_operations.js,hosts/fs.js makeFsHost file dir temp
 chunk net hosts/http.js,hosts/websocket.js,hosts/sockets.js,hosts/net.js makeNetHost net
@@ -26,3 +26,7 @@ chunk cancellation hosts/cancellation.js makeCancellationHost cancellation =asyn
 chunk cli hosts/cli_parser.js,hosts/cli.js makeCliHost cli
 
 chunk data hosts/data_codecs.js,hosts/data.js makeDataHost data
+
+chunk window hosts/window.js makeWindowHost window
+
+chunk gpu hosts/gpu_bundle.js,hosts/gpu_commands.js,hosts/gpu.js makeGpuHost gpu

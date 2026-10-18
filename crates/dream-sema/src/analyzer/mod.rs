@@ -362,6 +362,9 @@ pub struct Analyzer<'a> {
     /// Label attached to the immediately-following loop (`outer: for ...`), consumed by that loop's
     /// analyzer so it can be threaded into the loop's HIR node. `None` for unlabeled loops.
     pending_loop_label: Option<String>,
+    /// Whether the statement-position pattern `switch` being analyzed sits inside a loop, so
+    /// `break`/`continue` in its block arms reach that loop.
+    switch_in_loop: bool,
     /// True while instantiating a generic whose type argument was already rejected as a
     /// `ref struct`: the same escape would otherwise be reported again from inside its body.
     ref_struct_escape_muted: bool,
@@ -416,6 +419,8 @@ pub struct Analyzer<'a> {
     hir: hir_emit::HirEmit,
     /// Library units have no process entry point.
     crate_type: CrateType,
+    /// Check-only consumed functions and `@generator_only` declarations.
+    generator_scope: generator_scope::GeneratorScope,
 }
 
 /// Whether the compilation unit is a library or a binary.
@@ -428,7 +433,7 @@ pub enum CrateType {
 
 mod access;
 mod assets;
-mod consumed;
+mod generator_scope;
 mod contexts;
 mod gen_constants;
 mod gen_facts;
@@ -486,6 +491,7 @@ impl<'a> Analyzer<'a> {
             current_call_target_name: None,
             loop_labels: Vec::new(),
             pending_loop_label: None,
+            switch_in_loop: false,
             ref_struct_escape_muted: false,
             current_function_is_async: false,
             current_function_is_unsafe: false,
@@ -525,6 +531,7 @@ impl<'a> Analyzer<'a> {
             ide_member_sources: HashMap::new(),
             hir: hir_emit::HirEmit::default(),
             crate_type: CrateType::Bin,
+            generator_scope: Default::default(),
         }
     }
 

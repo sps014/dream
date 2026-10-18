@@ -355,6 +355,16 @@ impl<'a> Analyzer<'a> {
                         return None;
                     }
                 };
+                (**symbol_table).borrow_mut().mark_used(&tok.text);
+                let summary = self.ide_summary(&ty);
+                self.record_ide_ref(
+                    tok.position,
+                    ide::IdeTarget::Local {
+                        name: tok.text.clone(),
+                    },
+                    summary,
+                );
+                self.record_generator_type(inner, ty.clone());
                 let hir = self.hir_read_cell_ref(&tok.text);
                 if hir.is_none() {
                     self.hir_fail();
@@ -570,6 +580,7 @@ impl<'a> Analyzer<'a> {
                 self.current_expected_type = saved_expected;
                 match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
                     Some((t, hir)) => {
+                        self.record_generator_type(param, t.clone());
                         arg_hirs.push(hir);
                         arg_types.push(self.type_ctx.lower(&t));
                     }

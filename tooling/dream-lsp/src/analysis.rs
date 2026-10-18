@@ -18,6 +18,19 @@ use crate::position::LineIndex;
 pub struct AnalysisOutcome {
     pub diagnostics: Vec<DiagnosticOut>,
     pub sema: Option<dream_sema::analyzer::IdeSnapshot>,
+    /// Functions in this document that the last build's generators consumed.
+    pub consumed: Vec<ConsumedFunction>,
+}
+
+/// A function in the analyzed document that a generator took over.
+#[derive(Debug, Clone)]
+pub struct ConsumedFunction {
+    /// Byte span of the function name.
+    pub start: usize,
+    pub end: usize,
+    pub generator: String,
+    /// Materialized artifacts the generator mapped back into this function.
+    pub artifacts: Vec<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -171,7 +184,15 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     }
 
     // Generators cannot run here; the generate pass instead merges the files the last build
-    // materialized under `.dream/generated`, so generated members resolve in the editor.
+    // materialized under `.dream/generated`, so generated members resolve in the editor. A file
+    // other than the project entry replays the entry's build, which covers every module it imports.
+    let replay_entry = file_path.map(|path| {
+        std::path::Path::new(path)
+            .parent()
+            .and_then(dream::driver::generate::default_compile_entry)
+            .map(|entry| entry.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string())
+    });
     if let Ok(attributes) = dream::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics) {
         let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
         let target = dream_abi::target::TargetSpec::host();
@@ -179,7 +200,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             &dream::driver::generate::GenerateRequest {
                 config: &config,
                 stage: dream::driver::generate::GeneratorStage::All,
-                entry_file: file_path.unwrap_or(MAIN_FILE),
+                entry_file: replay_entry.as_deref().unwrap_or(MAIN_FILE),
                 target: &target,
                 replay_materialized: true,
             },
@@ -203,11 +224,12 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let target = dream_abi::target::TargetSpec::host();
-            let mut analyzer =
-                Analyzer::new(&graph, &arena).with_target_layout(dream_hir::TargetLayout {
+            let mut analyzer = Analyzer::new(&graph, &arena)
+                .with_target_layout(dream_hir::TargetLayout {
                     ptr_size: target.ptr_size,
                     ptr_align: target.ptr_align,
-                });
+                })
+                .with_unverified_consumption();
             let _ = analyzer.analyze(&mut diagnostics);
             analyzer.ide_snapshot()
         }));
@@ -240,6 +262,22 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         }
     }
 
+    let consumed = acc
+        .consumed
+        .iter()
+        .filter(|(_, by)| by.file == MAIN_FILE)
+        .map(|(id, by)| ConsumedFunction {
+            start: by.span.start,
+            end: by.span.end,
+            generator: by.generator.clone(),
+            artifacts: acc
+                .consumed_artifacts
+                .get(id)
+                .cloned()
+                .unwrap_or_default(),
+        })
+        .collect();
+
     let diagnostics: Vec<DiagnosticOut> = diagnostics
         .diagnostics
         .iter()
@@ -267,7 +305,11 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         })
         .collect();
 
-    AnalysisOutcome { diagnostics, sema }
+    AnalysisOutcome {
+        diagnostics,
+        sema,
+        consumed,
+    }
 }
 
 /// Diagnostics-only variant of [`analyze_document`] (the snapshot is dropped).

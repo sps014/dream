@@ -1,0 +1,31 @@
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
+module shaders;
+
+import system.gpu;
+
+@compute(32, 1, 1)
+public fun evaluate_mlp(
+    @readonly @coop_shape(16, 32) layer0: GpuMlpWeights<float16>,
+    @readonly @coop_shape(32, 4) layer1: GpuMlpWeights<float16>,
+    @readonly @coop_shape(16) features: GpuBuffer<GpuCoopVec<float16>>,
+    @coop_shape(4) out: GpuBuffer<GpuCoopVec<float16>>
+): void {
+    let i = global_id().x;
+    let hidden = GpuCoopVec.relu(layer0.apply(features[i]));
+    let result = layer1.apply(hidden);
+    result[0] = GpuMath.max(result[0], 0.0h);
+    out[i] = result;
+}
+
+@compute(32, 1, 1)
+public fun tile_multiply(
+    @readonly a: GpuBuffer<float16>,
+    @readonly b: GpuBuffer<float16>,
+    c: GpuBuffer<float16>
+): void {
+    let left = GpuCoopMat.load(a, 0, 16, 16, 16);
+    let right = GpuCoopMat.load(b, 0, 16, 16, 16);
+    let sum = GpuCoopMat<float16>.zeros(16, 16);
+    let product = GpuCoopMat.multiply_add(left, right, sum);
+    product.store(c, 0, 16);
+}

@@ -32,6 +32,11 @@ impl<'a> Analyzer<'a> {
     ) -> bool {
         self.same_module(decl_file, caller_file)
             || caller_file.is_some_and(|c| self.generated_files.contains(c))
+            // A generated file belongs to the module it was emitted into; one emitted into the
+            // unnamed root module serves the unmoded user files.
+            || (decl_file.is_some_and(|d| self.generated_files.contains(d))
+                && !caller_file.is_some_and(|c| self.stdlib_files.contains(c))
+                && self.module_of(decl_file) == self.module_of(caller_file))
             // Embedded modules share compiler/runtime plumbing without exposing it to imports.
             || (decl_file.is_some_and(|p| self.stdlib_files.contains(p))
                 && caller_file.is_some_and(|p| self.stdlib_files.contains(p)))

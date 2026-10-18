@@ -41,6 +41,7 @@ enum OpKey {
     /// and `x / 0.0` vs `x / -0.0` differ (+inf vs -inf), so they must not share a key.
     F64(u64),
     F32(u32),
+    F16(u16),
 }
 
 impl MirPass for Gvn {
@@ -205,6 +206,7 @@ fn op_key(op: &Operand, scalar: &[bool]) -> Option<OpKey> {
         // IEEE op we CSE, NaN payloads included.
         Operand::Const(Const::Float(v)) => OpKey::F64(v.to_bits()),
         Operand::Const(Const::F32(v)) => OpKey::F32(v.to_bits()),
+        Operand::Const(Const::F16(v)) => OpKey::F16(*v),
         Operand::Const(_) => return None,
     })
 }

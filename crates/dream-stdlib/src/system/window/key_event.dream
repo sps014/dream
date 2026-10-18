@@ -1,0 +1,27 @@
+module system.window;
+
+/// One key press or release, carried by `WindowEvent.KeyDown` and `WindowEvent.KeyUp`.
+public struct KeyEvent {
+    /// The physical key, independent of the keyboard layout.
+    public code: KeyCode;
+
+    /// What the key prints on the active layout, such as `"q"` for `KeyCode.A` on
+    /// AZERTY. Empty for keys that print nothing (arrows, function keys, modifiers)
+    /// and when the platform cannot name the key. Use `WindowEvent.Text` for typed text.
+    public key: string;
+
+    /// Modifier keys and lock states held when the event happened.
+    public modifiers: KeyModifiers;
+
+    /// True when the operating system repeated a held key. Repeats never change
+    /// `KeyboardState.pressed`.
+    public repeat: bool;
+
+    /// Creates a key event. `simulate` uses events built this way to replay input.
+    public constructor(code: KeyCode, key: string, modifiers: KeyModifiers, repeat: bool) {
+        this.code = code;
+        this.key = key;
+        this.modifiers = modifiers;
+        this.repeat = repeat;
+    }
+}

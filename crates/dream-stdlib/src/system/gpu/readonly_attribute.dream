@@ -1,0 +1,7 @@
+module system.gpu;
+
+/// Marks a shader's `GpuBuffer` parameter as read-only. The shader can read its elements
+/// but not write them, which lets the driver skip synchronization and lets several shaders
+/// read the same buffer at once. Writing to it is a build error.
+@attribute(AttributeTarget.Parameter)
+public struct ReadonlyAttribute {}

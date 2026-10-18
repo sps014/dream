@@ -6,16 +6,12 @@ import system.text;
 
 // Microbench suite for ARC / string / collection / allocator hot paths.
 // Run: `dream --release run tests/bench/microbenches.dream`
-// Or:  `./scripts/bench.py` (optional C# compare when `dotnet` is available)
+// Or:  `./scripts/bench.py` (paired, process-clustered measurements)
 // Output lines: `bench <name> ns_total=<n> iters=<n> ns_per_op=<n>`
 //
-// Notes vs C# (`tests/bench/csharp`):
-// - Dream is native LLVM + ARC (`dream --release run`); C# is Release JIT + GC.
 // - `char_scan` is a `char_at` loop over UTF-16 units; `byte_scan` walks UTF-16 LE payload bytes.
-// - `substring(start, end)` is start/end indices; C# uses (start, length). `substring` is an owned
-//   slice on both sides (C# `Substring` copies); `*_span` rows are stack views (`AsSpan`).
-// - `regex_find` uses the PCRE2 runtime; C# uses the interpreted `Regex`, not a compiled one.
-// - `json_*` is `@json` codegen; C# uses System.Text.Json source generation.
+// - `substring` is an owned slice; `*_span` rows are stack views.
+// - `regex_find` uses the PCRE2 runtime; `json_*` is `@json` codegen.
 let measuring: bool = true;
 
 // Heap sink so -O3/LTO cannot delete timed loops that it would otherwise
@@ -828,7 +824,7 @@ fun bench_quicksort(iters: int): void {
     while r < iters {
         let t = 0;
         while t < n {
-            // Same LCG as the C# bench; the product wraps past `int`.
+            // The product wraps past `int`.
             seed = seed * 1103515245 + 12345;
             a[t] = (seed >> 16) & 1023;
             t = t + 1;
@@ -1005,7 +1001,7 @@ fun make_tree(depth: int): Option<TreeNode> {
 }
 
 // One op = build a depth-12 tree (4095 nodes) and keep it; teardown runs after the timer.
-// This is allocation throughput only, comparable to C# without a collection.
+// This is allocation throughput only.
 fun bench_binary_trees_alloc(iters: int): void {
     let keep = List<Option<TreeNode>>(iters);
     let sw = Stopwatch();
@@ -1020,8 +1016,7 @@ fun bench_binary_trees_alloc(iters: int): void {
 }
 
 // One op = build a depth-12 tree (4095 nodes) then drop it (full recursive ARC release).
-// Dream reclaims eagerly, so both labels time construction plus completed reclamation; the
-// `_reclaim` row exists because C# only forces a collection there (`BenchBinaryTrees`).
+// Reclamation is eager, so both labels time construction plus completed reclamation.
 fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     let sw = Stopwatch();
     let acc = 0;
@@ -1361,7 +1356,7 @@ async fun main(): void {
     let scale = 20000;
     // TCO sentinel: 5M-deep tail recursion must not overflow the stack (crashes if TCO broke).
     sink_int(tco_sum(5000000, 0));
-    // Warmup (discard): mirrors C# JIT warmup so ratios are not cold-vs-hot.
+    // Warmup (discard) so caches and the allocator are hot before measuring.
     measuring = false;
     run_suite(scale);
     bench_async_poll(scale).await;

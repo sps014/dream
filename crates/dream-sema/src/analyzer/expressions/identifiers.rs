@@ -96,10 +96,6 @@ impl<'a> Analyzer<'a> {
                         return Ok(t);
                     }
                 }
-                if self.report_consumed(id, diagnostics) {
-                    self.hir_fail();
-                    return Ok(Type::Unknown);
-                }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.
                 return Err(report_with_code(

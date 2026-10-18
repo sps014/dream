@@ -29,6 +29,32 @@ permissions:
   contents: read
 
 jobs:
+  gpu-browser:
+    name: Browser WebGPU execution and surfaces
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tooling/gpu-browser/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+      - run: npm ci
+        working-directory: tooling/gpu-browser
+      - run: npx playwright install --with-deps chromium
+        working-directory: tooling/gpu-browser
+      - run: |
+          export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          xvfb-run -a vulkaninfo --summary
+          xvfb-run -a npm test
+        working-directory: tooling/gpu-browser
+        env:
+          GPU_BROWSER_SOFTWARE: "1"
+          GPU_BROWSER_HEADLESS: "0"
+          DEBUG: pw:browser
+
   hygiene:
     runs-on: ubuntu-24.04
     steps:
@@ -52,10 +78,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
-            ninja-build pkg-config python3 xz-utils
+            ninja-build pkg-config python3 xz-utils \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libvulkan1 mesa-vulkan-drivers bubblewrap xvfb xauth
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Locate the GPU host input cache
+        shell: bash
+        run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
+      # dream-host-gpu's build.rs downloads its pinned, hash-verified inputs (slang-rhi, Dawn,
+      # Slang headers) once into this cache.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/dream-gpu-cache
+          key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - uses: actions/setup-python@v7
@@ -109,9 +149,38 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo build --workspace --timings
       - run: cargo run --locked -p dreamer -- toolchain install binaryen
+      # The GPU shader generator compiles with the pinned slangc and records layouts with
+      # dream-slang-layout, which the install builds against that Slang release.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.dream/toolchains/slang-2026.20
+          key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
+      - run: cargo run --locked -p dreamer -- toolchain install slang
+      - name: Stage Windows SDK shader compilers inside the Slang sandbox
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sdkBin = Join-Path $env:WindowsSdkVerBinPath x64
+          $slangBin = Join-Path $env:USERPROFILE '.dream/toolchains/slang-2026.20/bin'
+          foreach ($library in @('dxcompiler.dll', 'dxil.dll')) {
+            Copy-Item -LiteralPath (Join-Path $sdkBin $library) -Destination $slangBin
+          }
+      # Linux and macOS skip the same targets (dxil, dxbc and ptx need dxc, fxc and NVRTC), so
+      # their bundles must match the committed fixtures byte for byte.
+      - name: Check GPU host test bundles are fresh
+        if: runner.os != 'Windows'
+        run: python3 crates/dream-host-gpu/tests/fixtures/make_bundles.py --check
+      - name: Build GPU host bundles with Windows shader targets
+        if: runner.os == 'Windows'
+        run: python crates/dream-host-gpu/tests/fixtures/make_bundles.py
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
+      - name: X11 windows and GPU presentation under a real display server
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a env DREAM_WINDOW_DISPLAY_TEST=1 cargo test -p dream-host-window --test main_thread
+          xvfb-run -a env DREAM_GPU_SURFACE_TEST=1 cargo test -p dream-host-gpu --test backends
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -147,13 +216,19 @@ jobs:
             cargo build --locked -p dream --bin dream --manifest-path "$baseline_tree/Cargo.toml" --target-dir "$PWD/target"
             cp target/debug/dream "$RUNNER_TEMP/dream-compile-baseline-bin"
             cp "$RUNNER_TEMP/dream-compile-candidate" target/debug/dream
-            git worktree remove --force "$baseline_tree"
           fi
+          # The baseline compiler reads its C runtime sources from the worktree it was built in,
+          # so the worktree must outlive the measurement.
+          status=0
           python3 scripts/check_compile_budget.py \
             --baseline "$RUNNER_TEMP/dream-compile-baseline-bin" \
             --candidate "$RUNNER_TEMP/dream-compile-candidate" \
             --baseline-revision "$baseline_commit" --candidate-revision "$GITHUB_SHA" \
-            --report target/compile-budget.json
+            --report target/compile-budget.json || status=$?
+          if [ -d "$baseline_tree" ]; then
+            git worktree remove --force "$baseline_tree"
+          fi
+          exit "$status"
       - name: Preserve compile budget measurements
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@v7
@@ -163,7 +238,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
       - name: Build release host capabilities
-        run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io
+        run: cargo build --locked --release -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dream-host-window -p dream-host-gpu
       - name: Native distribution measurements and isolation
         run: python scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" --host-directory target/release --llvm-directory "$HOME/.dream/toolchains/llvm-22.1.8/bin" --report target/binary-size.json
       - name: Preserve native size measurements
@@ -245,8 +320,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
-            ninja-build pkg-config python3 xz-utils
+            ninja-build pkg-config python3 xz-utils \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libvulkan1 mesa-vulkan-drivers bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
+      - name: Locate the GPU host input cache
+        shell: bash
+        run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
+      # dream-host-gpu's build.rs downloads its pinned, hash-verified inputs (slang-rhi, Dawn,
+      # Slang headers) once into this cache.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/dream-gpu-cache
+          key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
@@ -257,7 +346,7 @@ jobs:
       - name: JavaScript runtime storage and generated bundle
         run: |
           node scripts/bundle-runtime.mjs --check
-          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs
+          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
@@ -277,6 +366,13 @@ jobs:
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+      # The GPU shader generator compiles with the pinned slangc and records layouts with
+      # dream-slang-layout, which the install builds against that Slang release.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.dream/toolchains/slang-2026.20
+          key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
+      - run: cargo run --locked -p dreamer -- toolchain install slang
       - name: Full native and Node assertion corpus
         shell: bash
         run: |
@@ -322,8 +418,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
-            ninja-build pkg-config python3 xz-utils
+            ninja-build pkg-config python3 xz-utils \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libvulkan1 mesa-vulkan-drivers bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
+      - name: Locate the GPU host input cache
+        shell: bash
+        run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
+      # dream-host-gpu's build.rs downloads its pinned, hash-verified inputs (slang-rhi, Dawn,
+      # Slang headers) once into this cache.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/dream-gpu-cache
+          key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -335,6 +445,13 @@ jobs:
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
+      # The GPU shader generator compiles with the pinned slangc and records layouts with
+      # dream-slang-layout, which the install builds against that Slang release.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.dream/toolchains/slang-2026.20
+          key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
+      - run: cargo run --locked -p dreamer -- toolchain install slang
       # The runtime's own allocator hides heap blocks from ASan's malloc interposition; the
       # runtime poisons freed payloads instead, so dangling reads through ARC bugs still trap.
       - name: Full native corpus (runtime instrumented)

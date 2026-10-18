@@ -1,0 +1,97 @@
+module system.gpu;
+
+/// One frame of a window surface, from `GpuSurface.begin_frame` until `present`.
+///
+/// Draw with `draw` for simple cases, or record into `pass` for vertex buffers, textures
+/// and other settings. For extra passes, such as post-processing, use `encoder`; every pass
+/// runs in the order recorded, and the first frame pass clears `target` to the color given
+/// to `begin_frame`. Nothing appears on screen until `present`.
+public class GpuFrame {
+    device: GpuDevice;
+    surface: GpuSurface;
+    frame_target: GpuTexture;
+    frame_encoder: GpuCommandEncoder;
+    clear: GpuVec4;
+    cleared: bool;
+    open_pass: Option<GpuRenderPass>;
+
+    internal constructor(
+        device: GpuDevice,
+        surface: GpuSurface,
+        target: GpuTexture,
+        clear: GpuVec4
+    ) {
+        this.frame_encoder = device.command_encoder();
+        this.device = device;
+        this.surface = surface;
+        this.frame_target = target;
+        this.clear = clear;
+        this.cleared = false;
+        this.open_pass = Option.None;
+    }
+
+    /// The texture shown when the frame is presented. Valid until `present`.
+    public get target(): GpuTexture {
+        return this.frame_target;
+    }
+
+    /// The render pass that draws into `target`, begun on first use. Draws recorded into it
+    /// appear in order with everything else in the frame.
+    public get pass(): GpuRenderPass {
+        switch (this.open_pass) {
+            Some(open) => {
+                return open;
+            }
+            None => {}
+        }
+        let load: GpuLoad<GpuVec4> = GpuLoad.Keep;
+        if !this.cleared {
+            load = GpuLoad.Clear(this.clear);
+            this.cleared = true;
+        }
+        let pass = this.frame_encoder.begin_render_pass(
+            GpuRenderPassDesc.color(this.frame_target, load)
+        );
+        this.open_pass = Option.Some(pass);
+        return pass;
+    }
+
+    /// The encoder that records this frame's work, for passes of your own. The frame's
+    /// `pass` is ended first, so your passes run after the draws recorded so far.
+    public get encoder(): GpuCommandEncoder {
+        this.end_pass();
+        return this.frame_encoder;
+    }
+
+    /// Draws `vertex_count` vertices with `pipeline` into `target`, for shaders that need no
+    /// vertex buffers or bound resources.
+    public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<bool, GpuError> {
+        if pipeline.device_id != this.device.id {
+            return Result.Err(GpuError.WrongDevice("pipeline"));
+        }
+        let pass = this.pass;
+        pass.set_pipeline(pipeline);
+        pass.draw(vertex_count);
+        return Result.Ok(true);
+    }
+
+    /// Submits everything recorded for the frame and shows `target` in the window.
+    public async fun present(): Result<bool, GpuError> {
+        if !this.cleared {
+            this.pass;
+        }
+        this.end_pass();
+        this.device.submit(this.frame_encoder.finish()).await?;
+        return this.surface.present().await;
+    }
+
+    fun end_pass(): void {
+        switch (this.open_pass) {
+            Some(open) => {
+                open.end();
+            }
+            None => {}
+        }
+        this.open_pass = Option.None;
+    }
+}

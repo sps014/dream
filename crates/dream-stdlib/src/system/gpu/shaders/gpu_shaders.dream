@@ -1,0 +1,394 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.encoding;
+import system.gpu;
+
+/// Compiles the program's GPU shaders ahead of time. Phase 0 checks every shader against the
+/// shader rules, translates each module's shaders to a readable Slang file (published next to
+/// the build output) and asks the pinned `slangc` for every `@gpu_targets` target. Phase 1
+/// maps Slang errors back to Dream code, embeds one shader bundle per module and emits the
+/// module's `GpuShaders` class.
+@generator
+@incremental
+@uses_tool("slangc")
+@uses_tool("dream-slang-layout")
+@on_attribute(
+    ComputeAttribute,
+    VertexAttribute,
+    FragmentAttribute,
+    GpuAttribute,
+    RayGenerationAttribute,
+    ClosestHitAttribute,
+    AnyHitAttribute,
+    MissAttribute,
+    IntersectionAttribute,
+    CallableAttribute,
+    GpuTargetsAttribute
+)
+public fun gpu_shaders(ctx: GenContext): void {
+    let program = ShaderProgram.collect(ctx);
+    if program.functions.is_empty() {
+        return;
+    }
+    for (let e in program.entries) {
+        Targets.select(ctx, e);
+        ShaderAnalysis.prepare(ctx, program, e);
+    }
+    program.group(ctx);
+    for (let m in program.modules) {
+        for (let e in m.entries) {
+            let nodes = program.nodes(e.function.id);
+            for (let h in program.reachable(List<string>.from_array([e.function.id]))) {
+                for (let n in program.nodes(h.id)) {
+                    nodes.push(n);
+                }
+            }
+            Capabilities.check(ctx, e, nodes);
+        }
+    }
+    if ctx.phase() == 0 {
+        translate(ctx, program);
+    } else {
+        finish(ctx, program);
+    }
+}
+
+fun consume_help(borrow program: ShaderProgram, borrow f: GenFunction): string {
+    for (let e in program.entries) {
+        if e.function.id != f.id {
+            continue;
+        }
+        if e.is_compute() {
+            return "dispatch it with GpuShaders." + f.name + ".dispatch(device, ...)";
+        }
+        if e.is_render() {
+            return "pass GpuShaders." + f.name + " to GpuDevice.render_pipeline";
+        }
+        if e.stage == GpuStage.RayGeneration {
+            return "trace it with GpuShaders." + f.name + ".trace(device, pipeline, ...)";
+        }
+        return "pass GpuShaders." + f.name + " to GpuDevice.ray_tracing_pipeline";
+    }
+    return "@gpu helpers run only on the GPU; call it from a shader";
+}
+
+fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
+    for (let f in program.functions) {
+        ctx.consume(f, consume_help(program, f));
+    }
+    for (let f in program.functions) {
+        Verify.function(ctx, program, f, program.body(f.id));
+    }
+    for (let e in program.entries) {
+        check_interface(ctx, e);
+    }
+    Verify.recursion(ctx, program);
+    if ctx.has_errors() {
+        return;
+    }
+    let layouts = false;
+    if !Targets.is_wasm(ctx.target) {
+        for (let t in ctx.tools()) {
+            if t.name == "dream-slang-layout" && t.available {
+                layouts = true;
+            }
+        }
+    }
+    for (let m in program.modules) {
+        check_webgpu_storage(ctx, m);
+        let artifact = SlangEmit(ctx, program, m).emit();
+        if ctx.has_errors() {
+            return;
+        }
+        ctx.emit_artifact(m.stem() + ".slang", artifact.to_string(), artifact.source_map, true);
+        Targets.request(ctx, m, layouts);
+    }
+    // Without a tool request there is no next phase, so a program whose shaders all target
+    // other platforms gets its empty bundles and wrappers now.
+    for (let m in program.modules) {
+        if !m.targets().is_empty() {
+            return;
+        }
+    }
+    finish(ctx, program);
+}
+
+// WebGPU guarantees 8 storage buffers per stage. A pipeline binds the globals of its pipeline
+// group: a compute shader's own, or natively all of the module's render or ray-tracing
+// shaders together, because they share one recorded layout. The browser lays out each render
+// pipeline from its two shaders alone, so wasm builds check compute shaders only.
+fun check_webgpu_storage(ctx: GenContext, borrow m: ShaderModule): void {
+    let wasm = Targets.is_wasm(ctx.target);
+    for (let group in m.groups_for(GpuTarget.WebGpu)) {
+        let entries = m.group_entries(GpuTarget.WebGpu, group);
+        let compute = entries[0].is_compute();
+        if wasm && !compute {
+            continue;
+        }
+        let count = 0;
+        for (let e in entries) {
+            for (let p in e.params) {
+                if p.kind == ParamKinds.buffer() || p.kind == ParamKinds.mlp_weights() {
+                    count = count + 1;
+                }
+            }
+            if count <= 8 {
+                continue;
+            }
+            if compute {
+                ctx.warning_at(
+                    e.function.id,
+                    "'" + e.name() + "' binds " + count.to_string()
+                        + " storage buffers, more than the 8 per stage WebGPU guarantees; pass some data in fewer buffers"
+                );
+            } else {
+                let stages = "ray-tracing";
+                if e.is_render() {
+                    stages = "vertex and fragment";
+                }
+                ctx.warning_at(
+                    e.function.id,
+                    "the "
+                        + stages
+                        + " shaders of this module bind "
+                        + count.to_string()
+                        + " storage buffers together, more than the 8 per stage WebGPU guarantees; native GpuBackend.WebGpu pipelines bind the buffers of all of them, so move some shaders to another module"
+                );
+            }
+            break;
+        }
+    }
+}
+
+// Signature rules that depend on the stage.
+fun check_interface(ctx: GenContext, borrow e: ShaderEntry): void {
+    let f = e.function;
+    if e.is_compute() && f.ret.kind != TypeRefKind.Void {
+        ctx.error_at(f.id, "@compute shaders return void; write results into a GpuBuffer");
+    }
+    if e.stage == GpuStage.Vertex && f.ret.kind != TypeRefKind.Named {
+        ctx.error_at(
+            f.id,
+            "@vertex shaders return GpuVec4 or a struct with a @builtin(\"position\") field"
+        );
+    }
+    if e.stage == GpuStage.Fragment && f.ret.kind == TypeRefKind.Void {
+        ctx.error_at(
+            f.id,
+            "@fragment shaders return the pixel color as GpuVec4, or a struct of @location outputs"
+        );
+    }
+    for (let p in e.params) {
+        if p.is_ref && (e.is_compute() || e.is_render() || e.stage == GpuStage.RayGeneration) {
+            ctx.error_at(
+                f.id,
+                "parameter '"
+                    + p.name + "': only ray payloads and callable data can be ref parameters"
+            );
+        }
+        if p.bindable() && e.is_ray_tracing() && e.stage != GpuStage.RayGeneration {
+            ctx.error_at(
+                f.id,
+                "parameter '"
+                    + p.name
+                    + "': only @ray_generation shaders take resource and value parameters; pass data through the ray payload"
+            );
+        }
+        if p.bindable()
+            && p.kind
+            != ParamKinds.value()
+            && p.kind
+            != ParamKinds.buffer()
+            && p.kind
+            != ParamKinds.mlp_weights()
+            && p.kind
+            != ParamKinds.texture()
+            && p.kind
+            != ParamKinds.sampler()
+            && p.kind
+            != ParamKinds.storage_texture() && p.kind != ParamKinds.acceleration_structure() {
+            ctx.error_at(f.id, "parameter '" + p.name + "' has a type shaders cannot bind");
+        }
+    }
+}
+
+fun result_of(borrow results: List<GenToolResult>, borrow id: string): Option<GenToolResult> {
+    for (let r in results) {
+        if r.id == id {
+            return Option.Some(r);
+        }
+    }
+    return Option.None;
+}
+
+fun file_bytes(borrow result: GenToolResult, borrow path: string): Option<byte[]> {
+    for (let f in result.files) {
+        if f.path != path {
+            continue;
+        }
+        if f.binary {
+            switch (Encoding.base64_decode(f.contents)) {
+                Ok(bytes) => {
+                    return Option.Some(bytes);
+                }
+                Err(_) => {
+                    return Option.None;
+                }
+            }
+        }
+        // Slang's Windows text outputs use CRLF; bundles keep one spelling on every host.
+        return Option.Some(Encoding.utf8_encode(f.contents.replace("\r\n", "\n")));
+    }
+    return Option.None;
+}
+
+fun file_text(borrow result: GenToolResult, borrow path: string): string {
+    for (let f in result.files) {
+        if f.path == path && !f.binary {
+            return f.contents;
+        }
+    }
+    return "";
+}
+
+// Metal code is a metallib when every entry compiled to one, otherwise MSL source.
+fun metal_kind(borrow results: List<GenToolResult>, borrow m: ShaderModule): string {
+    for (let e in m.entries_for(GpuTarget.Metal)) {
+        switch (result_of(results, Targets.slangc_id(m, "metallib", e))) {
+            Some(r) => {
+                if r.exit != 0 {
+                    return "metal";
+                }
+            }
+            None => {
+                return "metal";
+            }
+        }
+    }
+    return "metallib";
+}
+
+fun finish(ctx: GenContext, borrow program: ShaderProgram): void {
+    let results = ctx.tool_results();
+    let reported = List<string>();
+    for (let m in program.modules) {
+        let artifact = m.stem() + ".slang";
+        let targets = List<BundleTarget>();
+        let ok = true;
+        for (let target in m.targets()) {
+            let name = Targets.name(target);
+            let kind = name;
+            let format = name;
+            if target == GpuTarget.Metal {
+                kind = metal_kind(results, m);
+                format = kind;
+                if kind == "metal" {
+                    format = "msl";
+                }
+            }
+            let section = BundleTarget(name, format);
+            let groups = m.groups_for(target);
+            for (let group in groups) {
+                switch (result_of(results, Targets.layout_id(m, target, group))) {
+                    Some(r) => {
+                        if r.exit != 0 {
+                            ctx.error(
+                                "dream-slang-layout failed for target "
+                                    + name + ": " + r.stderr.trim()
+                            );
+                            ok = false;
+                        } else {
+                            let path = Targets.layout_path(m, target, group);
+                            section.layouts.push(
+                                file_bytes(r, path).unwrap_or(Buffer.alloc<byte>(0))
+                            );
+                        }
+                    }
+                    None => {}
+                }
+            }
+            for (let e in m.entries_for(target)) {
+                let layout = 0;
+                if !section.layouts.is_empty() {
+                    layout = groups.index_of(e.pipeline_group()).unwrap_or(0);
+                }
+                switch (result_of(results, Targets.slangc_id(m, kind, e))) {
+                    Some(r) => {
+                        if r.exit != 0 {
+                            ok = false;
+                            report_failure(ctx, r, e, target, artifact, reported);
+                        } else {
+                            add_code(ctx, section, r, m, kind, e, layout);
+                        }
+                    }
+                    None => {
+                        ok = false;
+                        ctx.error("missing slangc result for '" + e.name() + "' (" + name + ")");
+                    }
+                }
+            }
+            targets.push(section);
+        }
+        if !ok {
+            continue;
+        }
+        targets.sort_by(
+            (a, b) => {
+                return a.name.compare(b.name);
+            }
+        );
+        let bundle = Bundle.write(m.name, targets);
+        ctx.emit_artifact(m.stem() + ".bundle", bundle.bytes());
+        ctx.emit_artifact(m.stem() + ".bundle.json", bundle.view_json(), GenSourceMap());
+        ctx.emit_asset(m.asset(), m.stem() + ".bundle");
+        ctx.emit_file(m.stem() + ".gpu.dream", Wrappers.source(m));
+    }
+}
+
+fun report_failure(
+    ctx: GenContext,
+    borrow r: GenToolResult,
+    borrow e: ShaderEntry,
+    target: GpuTarget,
+    borrow artifact: string,
+    reported: List<string>
+): void {
+    let name = Targets.name(target);
+    let missing = SlangDiag.missing_compiler(r.stderr + r.stdout);
+    if missing.is_empty() {
+        SlangDiag.report(ctx, r, artifact, name, reported);
+    } else if !reported.contains("missing:" + name) {
+        reported.push("missing:" + name);
+        ctx.error_at(
+            e.targets_at,
+            Targets.spelling(target)
+                + " needs "
+                + SlangDiag.compiler_hint(missing)
+                + ", which Slang could not load on this build machine; install it or remove "
+                + Targets.spelling(target) + " from @gpu_targets"
+        );
+    }
+}
+
+fun add_code(
+    ctx: GenContext,
+    section: BundleTarget,
+    borrow r: GenToolResult,
+    borrow m: ShaderModule,
+    borrow kind: string,
+    e: ShaderEntry,
+    layout: int
+): void {
+    switch (file_bytes(r, Targets.code_path(m, kind, e))) {
+        Some(code) => {
+            let reflection = Reflection.parse(file_text(r, Targets.reflection_path(m, kind, e)), e);
+            section.add(e, layout, code, reflection);
+        }
+        None => {
+            ctx.error("slangc produced no " + kind + " code for '" + e.name() + "'");
+        }
+    }
+}

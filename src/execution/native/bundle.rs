@@ -21,10 +21,17 @@ pub(crate) fn stage_runtime(
         }
     }
     for capability in capabilities {
-        let source = source_dir.join(capability.library_name(spec));
-        let destination = output_dir.join(capability.library_name(spec));
-        std::fs::copy(&source, &destination)
-            .map_err(|e| format!("bundling {}: {e}", source.display()))?;
+        let names = std::iter::once(capability.library_name(spec)).chain(
+            capability
+                .companion_library_names(spec)
+                .iter()
+                .map(|name| name.to_string()),
+        );
+        for name in names {
+            let source = source_dir.join(&name);
+            std::fs::copy(&source, output_dir.join(&name))
+                .map_err(|e| format!("bundling {}: {e}", source.display()))?;
+        }
     }
     Ok(output_dir.to_path_buf())
 }

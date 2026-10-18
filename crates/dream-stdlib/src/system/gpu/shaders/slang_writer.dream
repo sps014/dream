@@ -1,0 +1,110 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+// Indented Slang text with nested source mappings: `open()` remembers a position and `close`
+// maps everything written since then to a Dream node, so statement ranges enclose the
+// ranges of their expressions and an error points at the innermost node.
+internal class SlangWriter {
+    internal artifact: ArtifactBuilder;
+    line: int;
+    column: int;
+    depth: int;
+    at_line_start: bool;
+    open_lines: List<int>;
+    open_columns: List<int>;
+
+    internal constructor() {
+        this.artifact = ArtifactBuilder();
+        this.line = 1;
+        this.column = 1;
+        this.depth = 0;
+        this.at_line_start = true;
+        this.open_lines = List<int>();
+        this.open_columns = List<int>();
+    }
+
+    internal fun text(s: string): void {
+        if s.is_empty() {
+            return;
+        }
+        if this.at_line_start {
+            this.at_line_start = false;
+            let pad = StringBuilder();
+            let i = 0;
+            while i < this.depth {
+                pad.append("    ");
+                i = i + 1;
+            }
+            this.raw(pad.to_string());
+        }
+        this.raw(s);
+    }
+
+    fun raw(s: string): void {
+        this.artifact.append(s);
+        for (let c in s) {
+            if c == '\n' {
+                this.line = this.line + 1;
+                this.column = 1;
+            } else if ((int)c) < 56320 || ((int)c) > 57343 {
+                this.column = this.column + 1;
+            }
+        }
+    }
+
+    internal fun newline(): void {
+        this.raw("\n");
+        this.at_line_start = true;
+    }
+
+    internal fun line_of(s: string): void {
+        this.text(s);
+        this.newline();
+    }
+
+    internal fun blank(): void {
+        this.newline();
+    }
+
+    internal fun indent(): void {
+        this.depth = this.depth + 1;
+    }
+
+    internal fun dedent(): void {
+        this.depth = this.depth - 1;
+    }
+
+    internal fun open(): void {
+        if this.at_line_start {
+            // Mappings start at the first written character, after the indentation.
+            this.text("");
+        }
+        this.open_lines.push(this.line);
+        this.open_columns.push(this.column + this.pending_indent());
+    }
+
+    fun pending_indent(): int {
+        if this.at_line_start {
+            return this.depth * 4;
+        }
+        return 0;
+    }
+
+    internal fun close(target: string): void {
+        let line = this.open_lines.pop().unwrap();
+        let column = this.open_columns.pop().unwrap();
+        if target.is_empty() || (line == this.line && column >= this.column) {
+            return;
+        }
+        this.artifact.source_map.add(line, column, this.line, this.column, target);
+    }
+
+    internal fun mapped(s: string, target: string): void {
+        this.open();
+        this.text(s);
+        this.close(target);
+    }
+}

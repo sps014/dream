@@ -1,0 +1,7 @@
+import system;
+import system.gpu;
+import shaders;
+
+fun main(): void {
+    System.println(GpuShaders.backends().length);
+}

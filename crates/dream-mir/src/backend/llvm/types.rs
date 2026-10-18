@@ -17,6 +17,7 @@ pub(super) fn abi_ll(t: AbiTy, h: &Ty, word: &Ty) -> Ty {
         AbiTy::I64 => Ty::I64,
         AbiTy::Ptr => h.clone(),
         AbiTy::Word => word.clone(),
+        AbiTy::F16 => Ty::F16,
         AbiTy::F32 => Ty::F32,
         AbiTy::F64 => Ty::F64,
     }
@@ -153,6 +154,9 @@ pub(super) fn export_functions(l: &super::lcx::Lcx<'_>) -> Vec<dream_abi::export
                             P::ISize => K::ISize,
                             P::USize => K::USize,
                             P::Float => K::Float,
+                            P::Float16 => {
+                                crate::internal_error!("@export rejects float16 in sema")
+                            }
                             P::Double => K::Double,
                             P::String => K::Opaque,
                         }

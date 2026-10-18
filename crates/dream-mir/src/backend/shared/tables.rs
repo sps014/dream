@@ -25,6 +25,7 @@ pub(crate) const BUILTIN_TYPE_NAMES: &[(&str, &str)] = &[
     ("TAG_BOOL", "bool"),
     ("TAG_CHAR", "char"),
     ("TAG_FLOAT", "float"),
+    ("TAG_FLOAT16", "float16"),
     ("TAG_DOUBLE", "double"),
     ("TAG_STRING", "string"),
     ("TAG_ARRAY", "array"),

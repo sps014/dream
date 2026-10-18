@@ -1,0 +1,46 @@
+module system.window;
+
+/// Something that happened to a window since the previous `Window.poll`.
+///
+/// `InputFrame.events` lists events in the order the operating system or browser
+/// reported them, followed by events queued with `Window.simulate`.
+public enum WindowEvent {
+    /// The drawable area changed size. The size is in physical pixels, which is the
+    /// size a GPU surface needs; it differs from `Window.size` on high-DPI displays.
+    Resized(size: WindowSize),
+    /// The window moved; `x` and `y` are the new top-left corner in screen coordinates.
+    /// Browsers never report this event.
+    Moved(x: int, y: int),
+    /// The window gained keyboard focus.
+    Focused,
+    /// The window lost keyboard focus. Every held key and mouse button is reported
+    /// released first, so input never sticks while the window is in the background.
+    Unfocused,
+    /// The user asked to close the window, for example with its close button.
+    /// `Window.is_open` is false after the poll that delivers this event.
+    CloseRequested,
+    /// A key went down, or the operating system repeated a held key.
+    KeyDown(key: KeyEvent),
+    /// A key was released.
+    KeyUp(key: KeyEvent),
+    /// Text the user typed, after the keyboard layout, dead keys and input-method
+    /// composition were applied. Consecutive characters arrive as one event.
+    Text(text: string),
+    /// The cursor moved to `position`, in window coordinates.
+    MouseMove(position: WindowVector),
+    /// A mouse button went down.
+    MouseDown(button: MouseButton),
+    /// A mouse button was released.
+    MouseUp(button: MouseButton),
+    /// The wheel or touchpad scrolled. One wheel notch is `1.0`; positive `y` scrolls
+    /// up and positive `x` scrolls right.
+    Scroll(delta: WindowVector),
+    /// A gamepad was connected in `slot`. Gamepads already connected when the window
+    /// opens are reported in the first poll.
+    GamepadConnected(slot: int),
+    /// The gamepad in `slot` was disconnected.
+    GamepadDisconnected(slot: int),
+    /// A file was dropped on the window. Native programs receive its full path;
+    /// browsers only reveal the file name.
+    FileDropped(path: string),
+}

@@ -1,0 +1,72 @@
+module system.gpu;
+
+/// The geometry of one bottom-level acceleration structure: triangles from a vertex buffer,
+/// or boxes around custom shapes that an `@intersection` shader tests.
+public class GpuGeometry {
+    internal device_id: int;
+    kind: int;
+
+    // The buffers stay alive until the build that reads them was submitted.
+    vertices: GpuOwnedHandle;
+
+    vertex_count: int;
+    indices: Option<GpuOwnedHandle>;
+    index_count: int;
+    is_opaque: bool;
+
+    constructor(device_id: int, kind: int, vertices: GpuOwnedHandle, vertex_count: int) {
+        this.device_id = device_id;
+        this.kind = kind;
+        this.vertices = vertices;
+        this.vertex_count = vertex_count;
+        this.indices = Option.None;
+        this.index_count = 0;
+        this.is_opaque = true;
+    }
+
+    /// Triangles whose corners are consecutive triples of `positions`.
+    public static fun triangles(positions: GpuBuffer<GpuVec3>): GpuGeometry {
+        return GpuGeometry(positions.device_id, 0, positions.owner, positions.length);
+    }
+
+    /// Custom shapes, one per pair of `bounds` corners: each box is its minimum corner
+    /// followed by its maximum corner.
+    public static fun boxes(bounds: GpuBuffer<GpuVec3>): GpuGeometry {
+        return GpuGeometry(bounds.device_id, 1, bounds.owner, bounds.length);
+    }
+
+    /// Builds triangles from consecutive triples of `indices` into the positions instead of
+    /// consecutive positions, and returns this geometry. Only for `triangles`.
+    public fun indexed(indices: GpuBuffer<uint>): GpuGeometry {
+        if indices.device_id != this.device_id {
+            this.device_id = -1;
+        }
+        this.indices = Option.Some(indices.owner);
+        this.index_count = indices.length;
+        return this;
+    }
+
+    /// Sets whether the geometry is opaque, and returns this geometry. Any-hit shaders only
+    /// run for non-opaque geometry. Defaults to `true`.
+    public fun opaque(value: bool): GpuGeometry {
+        this.is_opaque = value;
+        return this;
+    }
+
+    // [kind (0 triangles, 1 boxes), vertex_buffer, vertex_count, index_buffer or 0, index_count,
+    //  opaque]
+    internal fun encode(): int[] {
+        let index_buffer = switch (this.indices) {
+            Some(owner) => owner.handle,
+            None => 0,
+        };
+        return [
+            this.kind,
+            this.vertices.handle,
+            this.vertex_count,
+            index_buffer,
+            this.index_count,
+            this.is_opaque ? 1 : 0
+        ];
+    }
+}

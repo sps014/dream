@@ -1,0 +1,36 @@
+module system.gpu;
+
+import system.codegen;
+
+/// A value together with its derivative, the argument type of `GpuDiff.forward` and
+/// `GpuDiff.backward`.
+///
+/// For `forward`, `derivative` is the direction to differentiate in: `1` for the input you
+/// differentiate by and `0` for the rest. After `backward`, each pair's `derivative` holds the
+/// gradient of the result with respect to that input. `T` is `float`, `float16`, a GPU
+/// vector, or a struct whose fields are all differentiable.
+@generator_only(
+    ComputeAttribute,
+    VertexAttribute,
+    FragmentAttribute,
+    GpuAttribute,
+    RayGenerationAttribute,
+    ClosestHitAttribute,
+    AnyHitAttribute,
+    MissAttribute,
+    IntersectionAttribute,
+    CallableAttribute
+)
+public struct GpuDiffPair<T> {
+    /// A pair of `value` and `derivative`.
+    public static extern fun of(value: T, derivative: T): GpuDiffPair<T>;
+
+    /// A pair whose derivative is zero, for inputs that are held constant.
+    public static extern fun constant(value: T): GpuDiffPair<T>;
+
+    /// The value.
+    public extern fun value(): T;
+
+    /// The derivative.
+    public extern fun derivative(): T;
+}

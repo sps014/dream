@@ -113,7 +113,7 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut boo
         let mut deps: Vec<TypeId> = Vec::new();
         match cx.interner.kind(ty) {
             TyKind::Void | TyKind::Prim(_) => {}
-            TyKind::Array(e) => deps.push(*e),
+            TyKind::Array(_) => deps.push(ty),
             _ => {
                 if let Some(l) = cx.nstruct(ty) {
                     deps.extend(l.fields.iter().map(|f| f.ty));
@@ -127,12 +127,19 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut boo
         for d in deps {
             let dep_key = match cx.interner.kind(d) {
                 TyKind::Prim(_) | TyKind::Void => continue,
-                TyKind::Array(e) => *e,
+                TyKind::Array(e) => {
+                    // `array_to_string_t{e}` is keyed by the element whatever its kind, including
+                    // primitive and enum elements that have no converter of their own.
+                    if set.insert(*e) {
+                        work.push(*e);
+                    }
+                    *e
+                }
                 _ => d,
             };
             if cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some() {
                 if set.insert(dep_key) {
-                    work.push(d);
+                    work.push(dep_key);
                 }
             } else if !matches!(
                 cx.interner.kind(dep_key),
@@ -171,6 +178,7 @@ fn op_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &Operand) -> TypeId {
         Operand::Const(crate::Const::Long(_)) => cx.interner.long(),
         Operand::Const(crate::Const::Float(_)) => cx.interner.double(),
         Operand::Const(crate::Const::F32(_)) => cx.interner.float(),
+        Operand::Const(crate::Const::F16(_)) => cx.interner.float16(),
         Operand::Const(crate::Const::Bool(_)) => cx.interner.bool(),
         Operand::Const(crate::Const::Char(_)) => cx.interner.char(),
         Operand::Const(_) => cx.interner.int(),

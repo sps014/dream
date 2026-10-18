@@ -1,0 +1,60 @@
+module system.window;
+
+/// Everything `Window.poll` collected since the previous poll.
+///
+/// The states are snapshots: keeping an older frame does not change it.
+public class InputFrame {
+    frame_events: List<WindowEvent>;
+    frame_keyboard: KeyboardState;
+    frame_mouse: MouseState;
+    frame_gamepads: Gamepads;
+    frame_delta: float;
+    frame_time: double;
+
+    internal constructor(
+        events: List<WindowEvent>,
+        keyboard: KeyboardState,
+        mouse: MouseState,
+        gamepads: Gamepads,
+        delta: float,
+        time: double
+    ) {
+        this.frame_events = events;
+        this.frame_keyboard = keyboard;
+        this.frame_mouse = mouse;
+        this.frame_gamepads = gamepads;
+        this.frame_delta = delta;
+        this.frame_time = time;
+    }
+
+    /// The events since the previous poll, in the order they happened.
+    public get events(): List<WindowEvent> {
+        return this.frame_events;
+    }
+
+    /// The keyboard after applying this frame's events.
+    public get keyboard(): KeyboardState {
+        return this.frame_keyboard;
+    }
+
+    /// The mouse after applying this frame's events.
+    public get mouse(): MouseState {
+        return this.frame_mouse;
+    }
+
+    /// The connected gamepads, sampled during this poll.
+    public get gamepads(): Gamepads {
+        return this.frame_gamepads;
+    }
+
+    /// Seconds since the previous poll on the monotonic clock; `0.0` for the first poll.
+    /// Multiply speeds by this value to move at the same rate at any frame rate.
+    public get delta_seconds(): float {
+        return this.frame_delta;
+    }
+
+    /// Seconds since the window was created, on the monotonic clock.
+    public get time_seconds(): double {
+        return this.frame_time;
+    }
+}

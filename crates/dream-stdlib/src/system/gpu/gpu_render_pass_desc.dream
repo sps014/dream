@@ -1,0 +1,31 @@
+module system.gpu;
+
+/// The color and depth targets of a render pass, and how each starts.
+///
+/// Start from `GpuRenderPassDesc.color` and add a depth buffer with `with_depth`.
+public class GpuRenderPassDesc {
+    internal color_target: GpuTexture;
+    internal color_load: GpuLoad<GpuVec4>;
+    internal depth_target: Option<GpuTexture>;
+    internal depth_load: GpuLoad<float>;
+
+    constructor(target: GpuTexture, load: GpuLoad<GpuVec4>) {
+        this.color_target = target;
+        this.color_load = load;
+        this.depth_target = Option.None;
+        this.depth_load = GpuLoad.Keep;
+    }
+
+    /// A pass that draws into `target`, which starts as `load` says.
+    public static fun color(target: GpuTexture, load: GpuLoad<GpuVec4>): GpuRenderPassDesc {
+        return GpuRenderPassDesc(target, load);
+    }
+
+    /// Adds `depth` as the pass's depth buffer, which starts as `load` says, and returns
+    /// this description. The texture needs a depth format and must be a render target.
+    public fun with_depth(depth: GpuTexture, load: GpuLoad<float>): GpuRenderPassDesc {
+        this.depth_target = Option.Some(depth);
+        this.depth_load = load;
+        return this;
+    }
+}

@@ -139,6 +139,7 @@ impl<'a> Analyzer<'a> {
                     | PrimTy::Long
                     | PrimTy::ULong
                     | PrimTy::Byte
+                    | PrimTy::Float16
                     | PrimTy::Float
                     | PrimTy::Double
                     | PrimTy::Bool

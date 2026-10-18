@@ -1,0 +1,75 @@
+module system.window;
+
+/// A connected gamepad as of one `Window.poll`, using the standard controller layout.
+///
+/// Native programs map controllers with the SDL game controller database bundled in
+/// GLFW; browsers use the Gamepad API's standard mapping. `pressed` and `released`
+/// compare this poll with the previous one, so a button tapped entirely between two
+/// polls can go unnoticed.
+public class Gamepad {
+    pad_slot: int;
+    pad_name: string;
+    buttons: int;
+    previous: int;
+    axes: float[];
+
+    internal constructor(slot: int, name: string, buttons: int, previous: int, axes: float[]) {
+        this.pad_slot = slot;
+        this.pad_name = name;
+        this.buttons = buttons;
+        this.previous = previous;
+        this.axes = axes;
+    }
+
+    /// The platform slot the gamepad occupies; it matches the slot in
+    /// `WindowEvent.GamepadConnected` and stays the same while the pad is connected.
+    public get slot(): int {
+        return this.pad_slot;
+    }
+
+    /// The controller's name as reported by the mapping database or the browser.
+    public get name(): string {
+        return this.pad_name;
+    }
+
+    /// True while `button` is held down.
+    public fun is_down(button: GamepadButton): bool {
+        return (this.buttons & (1 << button)) != 0;
+    }
+
+    /// True when `button` went down since the previous poll.
+    public fun pressed(button: GamepadButton): bool {
+        let bit = 1 << button;
+        return (this.buttons & bit) != 0 && (this.previous & bit) == 0;
+    }
+
+    /// True when `button` was released since the previous poll.
+    public fun released(button: GamepadButton): bool {
+        let bit = 1 << button;
+        return (this.buttons & bit) == 0 && (this.previous & bit) != 0;
+    }
+
+    /// The current value of `axis`: `-1.0` to `1.0` for sticks, `0.0` to `1.0` for triggers.
+    public fun axis(axis: GamepadAxis): float {
+        let index: int = axis;
+        if index < 0 || index >= this.axes.length {
+            return 0.0f;
+        }
+        return this.axes[index];
+    }
+
+    /// Vibrates the controller for `seconds`. `low` drives the strong low-frequency
+    /// motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`.
+    /// Returns false when the platform cannot vibrate this controller; native programs
+    /// built on GLFW currently always return false.
+    public fun rumble(low: float, high: float, seconds: float): bool {
+        let ms = (int)(seconds * 1000.0f);
+        if ms <= 0 {
+            return false;
+        }
+        return Gamepad.rumble_host(this.pad_slot, low, high, ms);
+    }
+
+    @runtime("windowGamepadRumble")
+    static extern fun rumble_host(slot: int, low: float, high: float, ms: int): bool;
+}

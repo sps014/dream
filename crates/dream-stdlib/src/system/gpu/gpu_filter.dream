@@ -1,0 +1,9 @@
+module system.gpu;
+
+/// How a sampler picks a color between texel centers.
+public enum GpuFilter {
+    /// Uses the closest texel, for a sharp pixelated look.
+    Nearest = 0,
+    /// Blends the surrounding texels, for smooth results.
+    Linear = 1,
+}

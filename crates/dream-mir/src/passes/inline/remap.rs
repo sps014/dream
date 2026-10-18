@@ -12,6 +12,7 @@ pub(super) enum WasmKind {
     I32,
     I64,
     Word,
+    F16,
     F32,
     F64,
 }
@@ -20,6 +21,7 @@ pub(super) fn wasm_kind(interner: &TypeInterner, ty: TypeId) -> WasmKind {
     match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => WasmKind::F64,
         TyKind::Prim(PrimTy::Float) => WasmKind::F32,
+        TyKind::Prim(PrimTy::Float16) => WasmKind::F16,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => WasmKind::I64,
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) => WasmKind::Word,
         _ => WasmKind::I32,
@@ -42,12 +44,13 @@ pub(super) fn arg_type(
 }
 
 /// The type a constant operand carries (mirrors the backend's `operand_ty`): `Float` is a 64-bit
-/// `double`, `F32` a 32-bit `float`; `Null` is a null pointer (`i32`).
+/// `double`, `F32` a 32-bit `float`, `F16` a `float16`; `Null` is a null pointer (`i32`).
 fn const_type(c: &Const, interner: &TypeInterner) -> TypeId {
     match c {
         Const::Long(_) => interner.long(),
         Const::Float(_) => interner.double(),
         Const::F32(_) => interner.float(),
+        Const::F16(_) => interner.float16(),
         Const::Char(_) => interner.char(),
         Const::Bool(_) => interner.bool(),
         Const::Str(_) => interner.string(),

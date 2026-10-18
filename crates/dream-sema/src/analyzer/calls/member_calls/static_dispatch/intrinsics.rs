@@ -121,6 +121,15 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return Ok(Type::Unknown);
         }
+        if let Some(key) = self.function_table.declaration_node(template) {
+            self.record_generator_use(
+                method.position,
+                &crate::analyzer::ide::IdeTarget::Callee {
+                    key,
+                    label: method.text.clone(),
+                },
+            );
+        }
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         let call_target = format!("{}.{}", type_name, method.text);
@@ -209,16 +218,24 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        for (i, param) in params.iter().enumerate() {
-            let saved_expected = self.current_expected_type.take();
-            self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
-            let t =
-                self.analyze_expression(param, ctx.parent_function, ctx.symbol_table, diagnostics)?;
-            self.current_expected_type = saved_expected;
-            arg_hirs.push(self.hir_take());
-            params_types.push(self.type_ctx.lower(&t));
-        }
+        let (arg_types, analyzed_hirs, arg_is_ref) = self.analyze_call_arguments_expecting_ref(
+            params,
+            expected_params.as_deref(),
+            ctx.parent_function,
+            ctx.symbol_table,
+            diagnostics,
+        )?;
+        params_types.extend(arg_types);
+        arg_hirs.extend(analyzed_hirs);
         self.current_call_target_name = saved_call_target;
+        let expected_is_ref: Vec<bool> = template.parameters.iter().map(|p| p.is_ref).collect();
+        self.validate_ref_arguments(
+            &format!("method '{}'", method.text),
+            &expected_is_ref,
+            &arg_is_ref,
+            method.position,
+            diagnostics,
+        );
         // `System.print`/`println` are generic builtins (not real monomorphizations): they lower
         // to the host `print_*` imports, so handle them before the generic-instance machinery.
         if let Some(op @ (intrinsics::IntrinsicOp::Print | intrinsics::IntrinsicOp::Println)) =

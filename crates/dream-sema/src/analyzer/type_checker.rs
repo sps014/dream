@@ -23,6 +23,7 @@ impl<'a> Analyzer<'a> {
             self.add_function_param_table(function, diagnostics)?,
         ));
         let errors_before = diagnostics.errors().count();
+        let outer_context = self.enter_generator_context(function);
         self.hir_begin_function(function);
         let is_unsafe = function
             .attributes
@@ -49,6 +50,7 @@ impl<'a> Analyzer<'a> {
             })
         });
         self.overflow = saved_overflow;
+        self.leave_generator_context(outer_context);
         body?;
         self.hir_emit_entry_tail_return(function, diagnostics);
         self.hir_finish_function(diagnostics, errors_before);
@@ -291,6 +293,7 @@ impl<'a> Analyzer<'a> {
                 if let dream_syntax::nodes::ExpressionNode::Switch(_, subject, arms) = expr {
                     // `analyze_pattern_switch` emits the `Switch` itself (or fails the function) in
                     // statement position; no separate expression-statement is needed.
+                    let in_loop = std::mem::replace(&mut self.switch_in_loop, has_parent_while);
                     let _ = self.analyze_pattern_switch(
                         subject,
                         arms,
@@ -299,6 +302,7 @@ impl<'a> Analyzer<'a> {
                         false,
                         diagnostics,
                     );
+                    self.switch_in_loop = in_loop;
                 } else {
                     let _ =
                         self.analyze_expression(expr, parent_function, symbol_table, diagnostics);

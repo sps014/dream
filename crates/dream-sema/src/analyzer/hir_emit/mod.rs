@@ -141,7 +141,10 @@ impl<'a> Analyzer<'a> {
         // `(import ...)` (see `hir_build_imports`) and `@intrinsic` ones lower straight to their
         // runtime helper (e.g. `String.alloc` → `$string_alloc`). Emitting an (empty) HIR body for
         // them would define a second `$string_alloc`, colliding with the runtime function.
-        if function.is_extern || self.generator_facts.is_some() {
+        if function.is_extern
+            || self.generator_facts.is_some()
+            || self.generator_scope.analyzing_consumed()
+        {
             self.hir.collecting = false;
             return;
         }
@@ -583,6 +586,32 @@ impl<'a> Analyzer<'a> {
     /// Takes the HIR recorded for the most-recently-analyzed expression.
     pub(in crate::analyzer) fn hir_take(&mut self) -> Option<HExpr> {
         self.hir.last.take()
+    }
+
+    /// Constant-label validation needs resolved expression HIR even in check-only functions.
+    /// Isolate that capture so it cannot emit a consumed function or change its enclosing state.
+    pub(in crate::analyzer) fn hir_expression_probe_begin(&mut self) -> Option<HirEmit> {
+        if self.active() {
+            return None;
+        }
+        let probe = HirEmit {
+            collecting: true,
+            ok: true,
+            blocks: vec![Vec::new()],
+            ..Default::default()
+        };
+        Some(std::mem::replace(&mut self.hir, probe))
+    }
+
+    pub(in crate::analyzer) fn hir_expression_probe_end(
+        &mut self,
+        saved: Option<HirEmit>,
+    ) -> Option<HExpr> {
+        let expression = self.hir_take();
+        if let Some(saved) = saved {
+            self.hir = saved;
+        }
+        expression
     }
 
     /// Resolves a [`LocalId`] back to its source name in the current function (parameters and

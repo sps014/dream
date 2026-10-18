@@ -3,6 +3,8 @@
 //! Allocation and completion go through the core C ABI so Rust static linking cannot
 //! duplicate the callback state. Counts retain Dream's int ABI; references use native pointers.
 
+pub mod window_surface;
+
 pub type DreamPtr = *mut u8;
 
 /// A published future stays retained by the guest scheduler until foreign completion.
@@ -150,6 +152,17 @@ pub fn alloc_i32s(xs: &[i32]) -> DreamPtr {
             return std::ptr::null_mut();
         }
         std::ptr::copy_nonoverlapping(xs.as_ptr(), p.add(4).cast::<i32>(), xs.len());
+        p
+    }
+}
+
+pub fn alloc_f32s(xs: &[f32]) -> DreamPtr {
+    unsafe {
+        let p = dream_host_array_new(xs.len() as i32, 4);
+        if p.is_null() {
+            return std::ptr::null_mut();
+        }
+        std::ptr::copy_nonoverlapping(xs.as_ptr(), p.add(4).cast::<f32>(), xs.len());
         p
     }
 }

@@ -1,0 +1,25 @@
+module shaders;
+
+import system.gpu;
+
+@compute(256)
+public fun prefix_count(
+    @readonly flags: GpuBuffer<uint>,
+    offsets: GpuBuffer<uint>,
+    counts: GpuBuffer<uint>
+): void {
+    let i = global_id().x;
+    let active = flags[i] != 0u;
+    let before = subgroup_prefix_count(active);
+    let total = subgroup_count(active);
+    offsets[i] = before;
+    if subgroup_elect() {
+        GpuAtomic.add(counts, 0, total);
+        GpuAtomic.max(counts, 1, subgroup_max(flags[i]));
+    }
+    let lane = subgroup_invocation_id();
+    let neighbor = subgroup_shuffle(flags[i], (lane + 1u) % subgroup_size());
+    if subgroup_any(neighbor != flags[i]) {
+        offsets[i] = offsets[i] + subgroup_broadcast(before, 0u);
+    }
+}

@@ -1,0 +1,248 @@
+module system.window;
+
+/// A physical key, named after its position on a US keyboard.
+///
+/// Key codes do not change with the keyboard layout, so `KeyCode.W`, `KeyCode.A`,
+/// `KeyCode.S` and `KeyCode.D` are the same four keys on QWERTY, AZERTY and Dvorak
+/// keyboards. Use `KeyEvent.key` when you need the character the active layout
+/// prints for a key, and `WindowEvent.Text` for typed text.
+public enum KeyCode {
+    /// A key the platform reported without a known physical position.
+    Unknown = 0,
+    /// The key labelled A on a US keyboard.
+    A = 1,
+    /// The key labelled B on a US keyboard.
+    B = 2,
+    /// The key labelled C on a US keyboard.
+    C = 3,
+    /// The key labelled D on a US keyboard.
+    D = 4,
+    /// The key labelled E on a US keyboard.
+    E = 5,
+    /// The key labelled F on a US keyboard.
+    F = 6,
+    /// The key labelled G on a US keyboard.
+    G = 7,
+    /// The key labelled H on a US keyboard.
+    H = 8,
+    /// The key labelled I on a US keyboard.
+    I = 9,
+    /// The key labelled J on a US keyboard.
+    J = 10,
+    /// The key labelled K on a US keyboard.
+    K = 11,
+    /// The key labelled L on a US keyboard.
+    L = 12,
+    /// The key labelled M on a US keyboard.
+    M = 13,
+    /// The key labelled N on a US keyboard.
+    N = 14,
+    /// The key labelled O on a US keyboard.
+    O = 15,
+    /// The key labelled P on a US keyboard.
+    P = 16,
+    /// The key labelled Q on a US keyboard.
+    Q = 17,
+    /// The key labelled R on a US keyboard.
+    R = 18,
+    /// The key labelled S on a US keyboard.
+    S = 19,
+    /// The key labelled T on a US keyboard.
+    T = 20,
+    /// The key labelled U on a US keyboard.
+    U = 21,
+    /// The key labelled V on a US keyboard.
+    V = 22,
+    /// The key labelled W on a US keyboard.
+    W = 23,
+    /// The key labelled X on a US keyboard.
+    X = 24,
+    /// The key labelled Y on a US keyboard.
+    Y = 25,
+    /// The key labelled Z on a US keyboard.
+    Z = 26,
+    /// The 0 key in the number row.
+    Digit0 = 27,
+    /// The 1 key in the number row.
+    Digit1 = 28,
+    /// The 2 key in the number row.
+    Digit2 = 29,
+    /// The 3 key in the number row.
+    Digit3 = 30,
+    /// The 4 key in the number row.
+    Digit4 = 31,
+    /// The 5 key in the number row.
+    Digit5 = 32,
+    /// The 6 key in the number row.
+    Digit6 = 33,
+    /// The 7 key in the number row.
+    Digit7 = 34,
+    /// The 8 key in the number row.
+    Digit8 = 35,
+    /// The 9 key in the number row.
+    Digit9 = 36,
+    /// Function key F1.
+    F1 = 37,
+    /// Function key F2.
+    F2 = 38,
+    /// Function key F3.
+    F3 = 39,
+    /// Function key F4.
+    F4 = 40,
+    /// Function key F5.
+    F5 = 41,
+    /// Function key F6.
+    F6 = 42,
+    /// Function key F7.
+    F7 = 43,
+    /// Function key F8.
+    F8 = 44,
+    /// Function key F9.
+    F9 = 45,
+    /// Function key F10.
+    F10 = 46,
+    /// Function key F11.
+    F11 = 47,
+    /// Function key F12.
+    F12 = 48,
+    /// Function key F13.
+    F13 = 49,
+    /// Function key F14.
+    F14 = 50,
+    /// Function key F15.
+    F15 = 51,
+    /// Function key F16.
+    F16 = 52,
+    /// Function key F17.
+    F17 = 53,
+    /// Function key F18.
+    F18 = 54,
+    /// Function key F19.
+    F19 = 55,
+    /// Function key F20.
+    F20 = 56,
+    /// Function key F21.
+    F21 = 57,
+    /// Function key F22.
+    F22 = 58,
+    /// Function key F23.
+    F23 = 59,
+    /// Function key F24.
+    F24 = 60,
+    /// The Escape key.
+    Escape = 61,
+    /// The main Enter (Return) key.
+    Enter = 62,
+    /// The Tab key.
+    Tab = 63,
+    /// The Backspace key.
+    Backspace = 64,
+    /// The space bar.
+    Space = 65,
+    /// The Insert key.
+    Insert = 66,
+    /// The forward Delete key.
+    Delete = 67,
+    /// The right arrow key.
+    ArrowRight = 68,
+    /// The left arrow key.
+    ArrowLeft = 69,
+    /// The down arrow key.
+    ArrowDown = 70,
+    /// The up arrow key.
+    ArrowUp = 71,
+    /// The Page Up key.
+    PageUp = 72,
+    /// The Page Down key.
+    PageDown = 73,
+    /// The Home key.
+    Home = 74,
+    /// The End key.
+    End = 75,
+    /// The Caps Lock key.
+    CapsLock = 76,
+    /// The Scroll Lock key.
+    ScrollLock = 77,
+    /// The Num Lock key.
+    NumLock = 78,
+    /// The Print Screen key.
+    PrintScreen = 79,
+    /// The Pause key.
+    Pause = 80,
+    /// The `-` key next to the number row.
+    Minus = 81,
+    /// The `=` key next to the number row.
+    Equal = 82,
+    /// The `[` key.
+    BracketLeft = 83,
+    /// The `]` key.
+    BracketRight = 84,
+    /// The `\` key above Enter on a US keyboard.
+    Backslash = 85,
+    /// The `;` key.
+    Semicolon = 86,
+    /// The `'` key.
+    Quote = 87,
+    /// The `` ` `` key left of the number row.
+    Backquote = 88,
+    /// The `,` key.
+    Comma = 89,
+    /// The `.` key.
+    Period = 90,
+    /// The `/` key.
+    Slash = 91,
+    /// The extra key next to the left Shift on ISO keyboards.
+    IntlBackslash = 92,
+    /// The 0 key on the numeric keypad.
+    Numpad0 = 93,
+    /// The 1 key on the numeric keypad.
+    Numpad1 = 94,
+    /// The 2 key on the numeric keypad.
+    Numpad2 = 95,
+    /// The 3 key on the numeric keypad.
+    Numpad3 = 96,
+    /// The 4 key on the numeric keypad.
+    Numpad4 = 97,
+    /// The 5 key on the numeric keypad.
+    Numpad5 = 98,
+    /// The 6 key on the numeric keypad.
+    Numpad6 = 99,
+    /// The 7 key on the numeric keypad.
+    Numpad7 = 100,
+    /// The 8 key on the numeric keypad.
+    Numpad8 = 101,
+    /// The 9 key on the numeric keypad.
+    Numpad9 = 102,
+    /// The decimal point key on the numeric keypad.
+    NumpadDecimal = 103,
+    /// The `/` key on the numeric keypad.
+    NumpadDivide = 104,
+    /// The `*` key on the numeric keypad.
+    NumpadMultiply = 105,
+    /// The `-` key on the numeric keypad.
+    NumpadSubtract = 106,
+    /// The `+` key on the numeric keypad.
+    NumpadAdd = 107,
+    /// The Enter key on the numeric keypad.
+    NumpadEnter = 108,
+    /// The `=` key on the numeric keypad.
+    NumpadEqual = 109,
+    /// The left Shift key.
+    ShiftLeft = 110,
+    /// The left Control key.
+    ControlLeft = 111,
+    /// The left Alt key (Option on macOS).
+    AltLeft = 112,
+    /// The left Meta key (Command on macOS, Windows key on Windows).
+    MetaLeft = 113,
+    /// The right Shift key.
+    ShiftRight = 114,
+    /// The right Control key.
+    ControlRight = 115,
+    /// The right Alt key (Option on macOS, AltGr on many layouts).
+    AltRight = 116,
+    /// The right Meta key (Command on macOS, Windows key on Windows).
+    MetaRight = 117,
+    /// The context menu key.
+    ContextMenu = 118,
+}

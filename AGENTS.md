@@ -132,7 +132,7 @@ Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership 
 
 Every MIR block becomes one LLVM block and every local an entry `alloca` (mem2reg promotes them); async poll functions switch on the `Future` state word to resume. Runtime calls are typed from the runtime bitcode's own signatures (`RuntimeSigs`) — never spell a runtime signature by hand. Ownership stays in MIR: each `Retain`/`Release` becomes exactly one call or glue sequence, and no LLVM attribute or metadata is added unless Dream semantics prove it (see `docs/internals/06-llvm-backend.md`).
 
-Every build needs the pinned LLVM (`LLVM_VERSION` in `src/execution/llvm/tools.rs`): `dreamer toolchain install llvm`, or `DREAM_LLVM` pointing at its `bin/`. Native builds also need a linker driver (`cc`, or Zig via `dreamer toolchain install cc`).
+Every build needs the pinned LLVM (`LLVM_VERSION` in `crates/dream-abi/src/toolchain.rs`, the pinned-tool table): bundled with releases or fetched by `scripts/fetch-dev-llvm.sh`, or `DREAM_LLVM` pointing at its `bin/`. Native builds also need a linker driver (`cc`, or Zig via `dreamer toolchain install cc`).
 
 ## Error handling model
 

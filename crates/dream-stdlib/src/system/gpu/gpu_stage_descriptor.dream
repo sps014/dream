@@ -1,0 +1,38 @@
+module system.gpu;
+
+/// A compiled render or ray tracing shader: `@vertex`, `@fragment`, `@ray_generation`,
+/// `@closest_hit`, `@any_hit`, `@miss`, `@intersection` or `@callable`. The shader generator
+/// creates one for every such shader as `GpuShaders.<name>`; pass it to
+/// `GpuDevice.render_pipeline` or `GpuDevice.ray_tracing_pipeline`.
+public class GpuStageDescriptor {
+    internal library: GpuShaderLibrary;
+    entry: string;
+    shader_stage: GpuStage;
+    internal inputs: List<int>;
+    internal outputs: List<int>;
+
+    // `inputs` and `outputs` are the stage interface's @location indexes.
+    internal constructor(
+        library: GpuShaderLibrary,
+        entry: string,
+        stage: GpuStage,
+        inputs: int[],
+        outputs: int[]
+    ) {
+        this.library = library;
+        this.entry = entry;
+        this.shader_stage = stage;
+        this.inputs = List<int>.from_array(inputs);
+        this.outputs = List<int>.from_array(outputs);
+    }
+
+    /// The shader function's name.
+    public get name(): string {
+        return this.entry;
+    }
+
+    /// The stage the shader runs in.
+    public get stage(): GpuStage {
+        return this.shader_stage;
+    }
+}

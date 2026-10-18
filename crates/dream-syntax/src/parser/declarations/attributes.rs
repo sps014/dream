@@ -67,7 +67,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     t
                 };
                 Some(match ty {
-                    crate::nodes::Type::Float(t) => AttributeArg::Float(signed(t)),
+                    crate::nodes::Type::Float(t) | crate::nodes::Type::Float16(t) => {
+                        AttributeArg::Float(signed(t))
+                    }
                     crate::nodes::Type::Double(t) => AttributeArg::Double(signed(t)),
                     crate::nodes::Type::Integer(t)
                     | crate::nodes::Type::Long(t)

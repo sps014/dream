@@ -10,6 +10,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.io",
         "system.collections",
         "system.json",
+        "system.encoding",
     ],
     generators: &[],
     files: &[
@@ -32,6 +33,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/codegen/gen_tool_info.dream",
             include_str!("../system/codegen/gen_tool_info.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_module.dream",
+            include_str!("../system/codegen/gen_module.dream"),
+        ),
+        (
+            "<std>/system/codegen/generator_only_attribute.dream",
+            include_str!("../system/codegen/generator_only_attribute.dream"),
         ),
         (
             "<std>/system/codegen/gen_tool_file.dream",

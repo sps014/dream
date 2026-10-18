@@ -15,7 +15,7 @@ impl<'a> Analyzer<'a> {
             Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::Byte(t) | Type::ISize(t) => {
                 dream_syntax::number::parse_int_literal(&t.text).map(HExprKind::IntLit)
             }
-            Type::Float(t) | Type::Double(t) => {
+            Type::Float16(t) | Type::Float(t) | Type::Double(t) => {
                 dream_syntax::number::parse_float_literal(&t.text).map(HExprKind::FloatLit)
             }
             Type::Boolean(t) => Some(HExprKind::BoolLit(t.text == "true")),

@@ -1,0 +1,18 @@
+module system.gpu;
+
+/// Chooses which GPU APIs shaders are compiled for. This is the only place targets are
+/// chosen; there are no command-line flags for it.
+///
+/// On a `module` declaration it applies to every shader in the module. On a shader
+/// function it replaces the module's list for that shader. Without any `@gpu_targets`,
+/// shaders are compiled for `GpuTarget.WebGpu`, which runs in browsers and natively.
+/// Each build keeps only the listed targets it can use: wasm builds keep `WebGpu`, and
+/// native builds keep `WebGpu` plus the native APIs of the platform being built for. A
+/// shader whose list fits none of them is left out of that build with a warning, and running
+/// it returns `GpuError.BackendNotCompiled`, so one program can carry platform-specific
+/// shaders.
+@attribute(AttributeTarget.Module, AttributeTarget.Function)
+public struct GpuTargetsAttribute {
+    /// The APIs to compile for, in no particular order.
+    public targets: List<GpuTarget>;
+}

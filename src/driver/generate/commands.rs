@@ -203,11 +203,21 @@ pub fn summarize(result: &GenResult) -> String {
             Output::File { path, source } => {
                 let _ = writeln!(out, "file {path} ({} lines)", source.lines().count());
             }
-            Output::Consume { target } => {
+            Output::Consume { target, .. } => {
                 let _ = writeln!(out, "consume {target}");
             }
-            Output::Artifact { path, contents, .. } => {
-                let _ = writeln!(out, "artifact {path} ({} bytes)", contents.len());
+            Output::Publish { path, source } => {
+                let _ = writeln!(out, "publish {path} from {source}");
+            }
+            Output::Artifact {
+                path,
+                contents,
+                binary,
+                ..
+            } => {
+                let size =
+                    super::artifacts::artifact_bytes(contents, *binary).map_or(0, |b| b.len());
+                let _ = writeln!(out, "artifact {path} ({size} bytes)");
             }
             Output::ToolRun { id, tool, .. } => {
                 let _ = writeln!(out, "tool {id}: {tool}");

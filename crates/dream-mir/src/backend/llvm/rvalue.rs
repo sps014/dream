@@ -856,12 +856,14 @@ impl<'l, 'a> Fx<'l, 'a> {
                 i32s(self, &src)
             }
             (_, TyKind::Object) => {
-                if matches!(fk, TyKind::Prim(P::ISize | P::USize)) {
+                if matches!(fk, TyKind::Prim(P::ISize | P::USize | P::Float16)) {
                     let size = elem_size(&self.l.cx, from) as i64;
                     let tag = runtime_tag(&self.l.cx, from);
                     let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
                     let address = self.ptr(&boxed);
-                    self.store_ty(&self.word(), &address, &src, size as u32);
+                    let payload =
+                        super::types::ll_ty(self.interner, from, &self.h(), &self.word());
+                    self.store_ty(&payload, &address, &src, size as u32);
                     return boxed;
                 }
                 let (f, t) = match fk {
@@ -879,6 +881,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let x = self.conv_v(&src, &t, false);
                 self.call_v(f, &[x])
             }
+            (TyKind::Object, TyKind::Prim(P::Float16)) => {
+                let boxed = self.check_box_tag(&src, to);
+                let address = self.ptr(&boxed);
+                self.load_ty(Ty::F16, &address, 2, false)
+            }
             (TyKind::Object, TyKind::Prim(p)) => {
                 let unbox = match p {
                     P::Int => "dream_unbox_int",
@@ -895,6 +902,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     P::USize => "dream_unbox_uint",
                     P::Byte => "dream_unbox_byte",
                     P::String => return src,
+                    P::Float16 => unreachable!("float16 unboxes inline above"),
                 };
                 self.checked_unbox(&src, to, unbox)
             }
@@ -903,6 +911,12 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     fn checked_unbox(&mut self, src: &V, ty: TypeId, unbox: &str) -> V {
+        let boxed = self.check_box_tag(src, ty);
+        self.call_v(unbox, &[boxed])
+    }
+
+    /// Traps unless boxed `src` carries `ty`'s runtime tag; returns it as a reference.
+    fn check_box_tag(&mut self, src: &V, ty: TypeId) -> V {
         let tag = runtime_tag(&self.l.cx, ty);
         let boxed = self.as_ref(src);
         let t = self.call_v("dream_object_tag", std::slice::from_ref(&boxed));
@@ -911,6 +925,6 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.if_then(&bad, |fx| {
             fx.panic_with(crate::backend::shared::panic_msgs::INVALID_CAST)
         });
-        self.call_v(unbox, &[boxed])
+        boxed
     }
 }

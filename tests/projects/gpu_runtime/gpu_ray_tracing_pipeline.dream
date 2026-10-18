@@ -1,0 +1,146 @@
+module gpu_ray_tracing_pipeline;
+
+import system.testing;
+import system;
+import system.gpu;
+
+public struct TracePayload {
+    @ray_payload
+    public color: GpuVec3;
+}
+
+// The plan's ray-traced triangle: a pinhole camera over [-1, 1] x [-1, 1], barycentric colors
+// where rays hit the triangle and a sky color elsewhere.
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
+@ray_generation
+fun trace_camera(scene: GpuAccelerationStructure, output: GpuStorageTexture<GpuVec4>): void {
+    let pixel = dispatch_ray_index().xy;
+    let size = dispatch_ray_dimensions().xy;
+    let u = ((float)pixel.x + 0.5f) / (float)size.x * 2.0f - 1.0f;
+    let v = 1.0f - ((float)pixel.y + 0.5f) / (float)size.y * 2.0f;
+    let ray = GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.001f, 100.0f);
+    let payload = TracePayload();
+    trace_ray(scene, GpuRayFlags.None, 255u, ray, ref payload);
+    output[pixel] = GpuVec4.of(payload.color.x, payload.color.y, payload.color.z, 1.0f);
+}
+
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
+@closest_hit
+fun trace_shade(ref payload: TracePayload, attributes: GpuTriangleHit): void {
+    payload.color = GpuVec3.of(1.0f, attributes.barycentrics.x, attributes.barycentrics.y);
+}
+
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
+@miss
+fun trace_sky(ref payload: TracePayload): void {
+    payload.color = GpuVec3.of(0.0f, 0.0f, 1.0f);
+}
+
+fun traced_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+fun traced_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_ray_tracing_pipeline(): void {
+    let size = 16;
+    Assert.is_false(GpuShaders.backends().is_empty());
+    for (let backend in GpuShaders.backends()) {
+        switch (GpuDevice.create(backend).await) {
+            Ok(device) => {
+                let label = traced_label(device.backend);
+                if !device.supports(GpuFeature.RayTracing) {
+                    switch (device.ray_tracing_pipeline(
+                        GpuShaders.trace_camera,
+                        [GpuShaders.trace_sky],
+                        [GpuHitGroup.closest(GpuShaders.trace_shade)],
+                        []
+                    )) {
+                        Ok(_) => {
+                            Assert.fail(
+                                label + ": a ray tracing pipeline without GpuFeature.RayTracing"
+                            );
+                        }
+                        Err(GpuError.UnsupportedCapability(feature)) => {
+                            Assert.is_true(feature == GpuFeature.RayTracing);
+                        }
+                        Err(e) => {
+                            Assert.fail(label + ": " + e.message());
+                        }
+                    }
+                    System.println(
+                        "SKIP gpu_ray_tracing_pipeline on " + label + ": no ray tracing pipelines"
+                    );
+                    continue;
+                }
+                let positions = traced_ok(
+                    device.buffer_from(
+                        [
+                            GpuVec3.of(-0.5f, -0.5f, 0.0f),
+                            GpuVec3.of(0.5f, -0.5f, 0.0f),
+                            GpuVec3.of(0.0f, 0.5f, 0.0f)
+                        ]
+                    ),
+                    "positions"
+                );
+                let blas = traced_ok(
+                    device.build_bottom_level(GpuGeometry.triangles(positions)).await,
+                    "bottom level"
+                );
+                let tlas = traced_ok(
+                    device.build_top_level([GpuInstance.of(blas, GpuMat4.identity())]).await,
+                    "top level"
+                );
+                let image = traced_ok(device.storage_texture<GpuVec4>(size, size), "image");
+                let pipeline = traced_ok(
+                    device.ray_tracing_pipeline(
+                        GpuShaders.trace_camera,
+                        [GpuShaders.trace_sky],
+                        [GpuHitGroup.closest(GpuShaders.trace_shade)],
+                        []
+                    ),
+                    "pipeline on " + label
+                );
+                traced_ok(
+                    GpuShaders.trace_camera.trace(device, pipeline, size, size, tlas, image).await,
+                    "trace on " + label
+                );
+                let pixels = traced_ok(image.read().await, "read");
+                let centre = pixels[(size / 2) * size + size / 2];
+                Assert.eq(centre.x, 1.0f);
+                Assert.is_true(centre.y > 0.0f && centre.z > 0.0f);
+                let corner = pixels[0];
+                Assert.eq(corner.x, 0.0f);
+                Assert.eq(corner.z, 1.0f);
+                System.println(label + " ray-tracing pipeline matches hit and miss references");
+            }
+            Err(GpuError.BackendUnavailable(reason)) => {
+                System.println(
+                    "SKIP gpu_ray_tracing_pipeline on " + traced_label(backend) + ": " + reason
+                );
+            }
+            Err(GpuError.NoDevice(reason)) => {
+                System.println(
+                    "SKIP gpu_ray_tracing_pipeline on " + traced_label(backend) + ": " + reason
+                );
+            }
+            Err(e) => {
+                Assert.fail(traced_label(backend) + ": " + e.message());
+            }
+        }
+    }
+}

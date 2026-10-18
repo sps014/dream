@@ -146,6 +146,7 @@ impl<'a> Analyzer<'a> {
         ) else {
             return Ok(());
         };
+        self.record_indexer_use(arr, &hook, &pretty_obj);
         let set_tok = synthetic_token(TokenKind::IdentifierToken, &hook.surface_name);
         let call =
             ExpressionNode::MethodCall(arr, set_tok, None, vec![(*index).clone(), right.clone()]);

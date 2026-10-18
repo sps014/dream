@@ -1,0 +1,9 @@
+module system.gpu;
+
+/// Marks a function as a vertex shader, which runs once per vertex of a draw and returns
+/// the vertex's clip-space position plus any values the fragment shader reads.
+///
+/// The return type is a struct whose fields carry `@builtin("position")` or `@location(n)`.
+/// The shader becomes `GpuShaders.<name>`, which `GpuDevice.render_pipeline` accepts.
+@attribute(AttributeTarget.Function)
+public struct VertexAttribute {}

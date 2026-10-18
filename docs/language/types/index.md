@@ -23,6 +23,7 @@ A type describes the values a variable can hold and the operations it supports. 
 | `isize` | Target-pointer-width signed integer | `let n: isize = 42;`, `(isize)42` |
 | `usize` | Target-pointer-width unsigned integer | `let n: usize = 42;`, `(usize)42` |
 | `byte` | 8-bit unsigned integer (0–255) | `255b`, `255B` |
+| `float16` | 16-bit floating point (IEEE binary16) | `1.5h` |
 | `float` | 32-bit floating point | `3.14f`, `1.0` |
 | `double` | 64-bit floating point | `3.14d`, or bare `3.14` / `0` when the expected type is `double` |
 | `bool` | `true` or `false` | `true` |
@@ -42,6 +43,7 @@ A plain integer literal is `int`. A literal with a decimal point is `float`. A c
 | `u` / `U` | `uint` | `4000000000u` |
 | `uL` / `UL` / `Lu` | `ulong` | `18000000000uL` |
 | `b` / `B` | `byte` | `255b` |
+| `h` / `H` | `float16` | `1.5h` |
 | `f` / `F` | `float` | `3.14f` |
 | `d` / `D` | `double` | `3.0d` |
 
@@ -61,6 +63,8 @@ Bare decimal literals default to `float`. When the surrounding expected type is 
 
 A narrower numeric value promotes to a wider type automatically. Narrowing — and switching signedness at the same width (`int`↔`uint`, `long`↔`ulong`) — always needs an explicit cast.
 
+`float16` widens to `float` and `double`, but nothing widens to `float16`: converting a `float`, a `double`, or any integer to `float16` needs a cast, because most of those values lose precision. Unsuffixed literals are not retyped either, so write `1.5h` or `(float16)1.5`.
+
 Target-sized integers keep distinct type identities. Portable implicit conversions include `int` → `isize`, `uint` → `usize`, `isize` → `long`, and `usize` → `ulong`. Converting a fixed 64-bit integer to a target-sized integer requires a cast and wraps at the target width. Their `parse` methods reject values outside that width.
 
 ```mermaid
@@ -73,6 +77,7 @@ flowchart LR
   ulong --> double
   uint --> float
   uint --> double
+  float16 --> float
 ```
 
 ```dream

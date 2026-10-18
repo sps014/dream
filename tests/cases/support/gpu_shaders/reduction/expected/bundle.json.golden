@@ -1,0 +1,40 @@
+{
+  "format": "DGPB",
+  "version": 0,
+  "module": "shaders",
+  "targets": [
+    {
+      "name": "wgsl",
+      "code_format": "wgsl",
+      "layouts": [],
+      "entries": [
+        {
+          "name": "reduce_sum",
+          "stage": "compute",
+          "layout": 0,
+          "code": {"offset": 0, "size": 2069, "sha256": "adaf1c358c730857287a9fa11b0e7f6be949b665adb1a888cc9bb8e5804430d9"},
+          "thread_group_size": [256, 1, 1],
+          "params": [
+            {"name": "input", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "n", "kind": 6, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 4}
+          ],
+          "capabilities": []
+        },
+        {
+          "name": "histogram",
+          "stage": "compute",
+          "layout": 0,
+          "code": {"offset": 2069, "size": 1022, "sha256": "142c515fc7172a5e07ed1dc8d62afbbfd96256318edd6ebb06be9b1487f3c38e"},
+          "thread_group_size": [64, 1, 1],
+          "params": [
+            {"name": "values", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "bins", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "count", "kind": 6, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 4}
+          ],
+          "capabilities": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+import system.testing;
+import system;
+import system.gpu;
+
+@test
+@timeout(180000)
+fun gpu_error_messages(): void {
+    let missing = GpuError.BackendNotCompiled(GpuBackend.Cuda);
+    Assert.eq(missing.code(), "ENOTCOMPILED");
+    Assert.eq(
+        missing.message(),
+        "GPU backend Cuda has no shader code in this build; add it to @gpu_targets"
+    );
+
+    let unsupported = GpuError.UnsupportedCapability(GpuFeature.CooperativeVectors);
+    Assert.eq(unsupported.code(), "EUNSUPPORTED");
+    Assert.eq(unsupported.message(), "GPU device does not support CooperativeVectors");
+
+    let unavailable = GpuError.BackendUnavailable("no NVIDIA driver");
+    Assert.eq(unavailable.code(), "EUNAVAILABLE");
+    Assert.eq(unavailable.message(), "GPU backend unavailable: no NVIDIA driver");
+
+    Assert.eq(GpuError.DeviceLost("reset").code(), "EDEVICELOST");
+    Assert.eq(
+        GpuError.WrongDevice("buffer").message(),
+        "GPU resource belongs to another device: buffer"
+    );
+    Assert.eq(GpuError.NoDevice("none").code(), "ENODEVICE");
+    Assert.eq(GpuError.InvalidResource("gone").code(), "EINVALID");
+    Assert.eq(GpuError.Validation("bad").code(), "EVALIDATION");
+    Assert.eq(GpuError.OutOfMemory("full").code(), "ENOMEM");
+    Assert.eq(GpuError.SurfaceLost("closed").code(), "ESURFACE");
+
+    let recovered = switch (unavailable) {
+        BackendUnavailable(reason) => reason,
+        _ => "",
+    };
+    Assert.eq(recovered, "no NVIDIA driver");
+}

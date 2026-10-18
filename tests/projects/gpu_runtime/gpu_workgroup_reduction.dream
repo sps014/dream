@@ -1,0 +1,148 @@
+module gpu_workgroup_reduction;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun reduction_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun reduction_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_workgroup_reduction on " + reduction_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_workgroup_reduction on " + reduction_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail(
+                "gpu_workgroup_reduction on " + reduction_label(backend) + ": " + e.message()
+            );
+        }
+    }
+    return Option.None;
+}
+
+fun reduction_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(256)
+fun workgroup_sum(@readonly input: GpuBuffer<uint>, out: GpuBuffer<uint>, n: int): void {
+    let partial = workgroup_array<uint>(256);
+    let i = global_id().x;
+    let lane = local_id().x;
+    partial[lane] = i < n ? input[i] : 0u;
+    workgroup_barrier();
+    let stride = 128;
+    while stride > 0 {
+        if lane < stride {
+            partial[lane] = partial[lane] + partial[lane + stride];
+        }
+        workgroup_barrier();
+        stride = stride / 2;
+    }
+    if lane == 0 {
+        GpuAtomic.add(out, 0, partial[0]);
+    }
+}
+
+// Each subgroup adds its lanes in registers, then one elected lane per subgroup publishes the
+// subgroup's total, so the atomic sees one add per subgroup instead of one per thread.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(256)
+fun subgroup_sum(@readonly input: GpuBuffer<uint>, out: GpuBuffer<uint>, n: int): void {
+    let i = global_id().x;
+    let value = i < n ? input[i] : 0u;
+    let total = subgroup_add(value);
+    let active = subgroup_count(value != 0u);
+    if subgroup_elect() {
+        GpuAtomic.add(out, 0, total);
+        GpuAtomic.add(out, 1, active);
+        GpuAtomic.max(out, 2, subgroup_size());
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_workgroup_reduction(): void {
+    let n = 5000;
+    let values = Array.alloc<uint>(n);
+    let expected = 0u;
+    for (let i = 0; i < n; i = i + 1) {
+        values[i] = (uint)(i % 97);
+        expected = expected + values[i];
+    }
+    let nonzero = 0u;
+    for (let v in values) {
+        if v != 0u {
+            nonzero = nonzero + 1u;
+        }
+    }
+    for (let backend in GpuShaders.backends()) {
+        switch (reduction_device(backend).await) {
+            Some(device) => {
+                let label = reduction_label(backend);
+                let input = reduction_ok(device.buffer_from(values), "input");
+
+                let sums = reduction_ok(device.buffer_alloc<uint>(1), "sums");
+                reduction_ok(
+                    GpuShaders.workgroup_sum.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        input,
+                        sums,
+                        n
+                    ).await,
+                    "workgroup_sum on " + label
+                );
+                Assert.eq(reduction_ok(sums.read().await, "read")[0], expected);
+
+                if !device.supports(GpuFeature.Subgroups) {
+                    System.println(
+                        "SKIP gpu_workgroup_reduction subgroups on " + label + ": not supported"
+                    );
+                    continue;
+                }
+                let stats = reduction_ok(device.buffer_alloc<uint>(3), "stats");
+                reduction_ok(
+                    GpuShaders.subgroup_sum.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        input,
+                        stats,
+                        n
+                    ).await,
+                    "subgroup_sum on " + label
+                );
+                let result = reduction_ok(stats.read().await, "read stats");
+                Assert.eq(result[0], expected);
+                Assert.eq(result[1], nonzero);
+                Assert.is_true(result[2] >= 4u && result[2] <= 128u);
+                System.println(label + " subgroup size " + result[2].to_string());
+            }
+            None => {}
+        }
+    }
+}

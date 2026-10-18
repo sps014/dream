@@ -1,0 +1,83 @@
+module system.gpu.shaders;
+
+import system;
+import system.codegen;
+
+// The `GpuArgKind` numbering of `system.gpu` (internal there), which the bundle's parameter
+// table and the generated `GpuArgs` calls share.
+internal static class ParamKinds {
+    internal static fun buffer(): int {
+        return 1;
+    }
+
+    internal static fun texture(): int {
+        return 2;
+    }
+
+    internal static fun sampler(): int {
+        return 3;
+    }
+
+    internal static fun storage_texture(): int {
+        return 4;
+    }
+
+    internal static fun acceleration_structure(): int {
+        return 5;
+    }
+
+    internal static fun value(): int {
+        return 6;
+    }
+
+    internal static fun mlp_weights(): int {
+        return 7;
+    }
+
+    // The resource kind of a parameter type, or `value()` for plain data.
+    internal static fun of(borrow ty: GenTypeRef): int {
+        let decl = ty.decl;
+        if decl == "system.gpu::GpuBuffer" {
+            return ParamKinds.buffer();
+        }
+        if decl == "system.gpu::GpuTexture" {
+            return ParamKinds.texture();
+        }
+        if decl == "system.gpu::GpuSampler" {
+            return ParamKinds.sampler();
+        }
+        if decl == "system.gpu::GpuStorageTexture" {
+            return ParamKinds.storage_texture();
+        }
+        if decl == "system.gpu::GpuAccelerationStructure" {
+            return ParamKinds.acceleration_structure();
+        }
+        if decl == "system.gpu::GpuMlpWeights" {
+            return ParamKinds.mlp_weights();
+        }
+        return ParamKinds.value();
+    }
+
+    // The `GpuArgs` builder method that passes a parameter of this kind.
+    internal static fun builder(kind: int): string {
+        if kind == ParamKinds.buffer() {
+            return "buffer";
+        }
+        if kind == ParamKinds.texture() {
+            return "texture";
+        }
+        if kind == ParamKinds.sampler() {
+            return "sampler";
+        }
+        if kind == ParamKinds.storage_texture() {
+            return "storage_texture";
+        }
+        if kind == ParamKinds.acceleration_structure() {
+            return "acceleration_structure";
+        }
+        if kind == ParamKinds.mlp_weights() {
+            return "mlp_weights";
+        }
+        return "value";
+    }
+}

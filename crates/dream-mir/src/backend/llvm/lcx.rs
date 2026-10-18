@@ -264,6 +264,7 @@ impl<'a> Lcx<'a> {
         if !self.m.has_global(name) {
             let align = match &ty {
                 Ty::Int(b) => (b / 8).clamp(1, 8),
+                Ty::F16 => 2,
                 Ty::F32 => 4,
                 _ => 8,
             };

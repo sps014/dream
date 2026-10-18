@@ -2,6 +2,7 @@
 
 mod common;
 
+mod consumed_tests;
 mod followup_tests;
 mod lsp_tests;
 mod sema_ide_tests;

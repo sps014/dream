@@ -54,6 +54,9 @@ public class GenSnapshot {
     /// Function declarations available to the generator.
     public functions: List<GenFunction>;
 
+    /// User modules whose declaration carries a trigger attribute.
+    public modules: List<GenModule>;
+
     /// Syntax blocks available to the generator.
     public blocks: List<GenSyntaxBlock>;
 
@@ -108,6 +111,18 @@ public class GenSnapshot {
             this.decls.push(gen_decl(d));
         }
         this.functions = gen_functions(root, "functions");
+        this.modules = List<GenModule>();
+        for (let m in gen_items(root, "modules")) {
+            this.modules.push(
+                GenModule(
+                    gen_str(m, "id"),
+                    gen_str(m, "name"),
+                    gen_str(m, "file"),
+                    gen_location(m),
+                    gen_attributes(m)
+                )
+            );
+        }
         this.blocks = List<GenSyntaxBlock>();
         for (let b in gen_items(root, "blocks")) {
             this.blocks.push(

@@ -1,0 +1,92 @@
+module system.gpu;
+
+/// The settings a new sampler is created with.
+///
+/// Start from `GpuSamplerDesc.linear` or `GpuSamplerDesc.nearest` and chain the settings
+/// you want to change.
+public class GpuSamplerDesc {
+    desc_filter: GpuFilter;
+    desc_address: GpuAddressMode;
+    desc_compare: Option<GpuCompare>;
+    desc_anisotropy: int;
+
+    constructor(filter: GpuFilter) {
+        this.desc_filter = filter;
+        this.desc_address = GpuAddressMode.ClampToEdge;
+        this.desc_compare = Option.None;
+        this.desc_anisotropy = 1;
+    }
+
+    /// Smooth filtering within and between mip levels, clamped at the edges.
+    public static fun linear(): GpuSamplerDesc {
+        return GpuSamplerDesc(GpuFilter.Linear);
+    }
+
+    /// Sharp nearest-texel filtering, clamped at the edges, for pixel art and data textures.
+    public static fun nearest(): GpuSamplerDesc {
+        return GpuSamplerDesc(GpuFilter.Nearest);
+    }
+
+    /// The filter used when magnifying, minifying and between mip levels.
+    public get filter(): GpuFilter {
+        return this.desc_filter;
+    }
+
+    /// What reads outside `0.0` to `1.0` return, on every axis. Defaults to `ClampToEdge`.
+    public get address_mode(): GpuAddressMode {
+        return this.desc_address;
+    }
+
+    /// The comparison of a comparison sampler for `GpuTexture.sample_compare`, or `None`
+    /// for an ordinary sampler. Defaults to `None`.
+    public get compare(): Option<GpuCompare> {
+        return this.desc_compare;
+    }
+
+    /// The maximum anisotropic filtering ratio, `1` (off) through `16`. Defaults to `1`.
+    public get anisotropy(): int {
+        return this.desc_anisotropy;
+    }
+
+    /// Sets what reads outside `0.0` to `1.0` return, and returns this description.
+    public fun address(mode: GpuAddressMode): GpuSamplerDesc {
+        this.desc_address = mode;
+        return this;
+    }
+
+    /// Makes this a comparison sampler using `compare`, and returns this description.
+    public fun comparing(compare: GpuCompare): GpuSamplerDesc {
+        this.desc_compare = Option.Some(compare);
+        return this;
+    }
+
+    /// Sets the maximum anisotropic filtering ratio, clamped to `1` through `16`, and
+    /// returns this description. Anisotropy sharpens textures seen at grazing angles.
+    public fun max_anisotropy(ratio: int): GpuSamplerDesc {
+        if ratio < 1 {
+            this.desc_anisotropy = 1;
+        } else if ratio > 16 {
+            this.desc_anisotropy = 16;
+        } else {
+            this.desc_anisotropy = ratio;
+        }
+        return this;
+    }
+
+    // [min_filter, mag_filter, mip_filter, address_u, address_v, address_w, compare + 1 or 0,
+    //  max_anisotropy]
+    internal fun encode(): int[] {
+        let filter: int = this.desc_filter;
+        let address: int = this.desc_address;
+        let compare = switch (this.desc_compare) {
+            Some(c) => GpuSamplerDesc.compare_code(c),
+            None => 0,
+        };
+        return [filter, filter, filter, address, address, address, compare, this.desc_anisotropy];
+    }
+
+    static fun compare_code(compare: GpuCompare): int {
+        let code: int = compare;
+        return code + 1;
+    }
+}

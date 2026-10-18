@@ -12,7 +12,7 @@ stay under ignored `tests/bench/out/` directories; machine-specific result files
 `--release --perf-symbols` emits source/function information while retaining ordinary Release
 MIR optimization. Debugger local preservation remains separate and ordinary `-g` keeps its
 policy. Compiler/link caches distinguish the settings; the profiling helper uses performance
-symbols. Dream-only comparisons are the default. Existing C# arms remain explicitly selectable.
+symbols. Comparisons are Dream against Dream: current versus a baseline build or saved reference.
 
 The harness preserves matching compiler/runtime snapshots, fixture bytes, checksums, tool and
 runner identities, raw samples and process RSS. Timing is separate from counters and sanitizers.
@@ -195,8 +195,8 @@ Accepted:
   with Release guest builds, and the sanitizer job adds an instrumented Release native corpus,
   so Release-only ownership bugs no longer hide behind Debug coverage.
 - **Benchmark gate.** `bench.py --fail-on-regression` fails a paired baseline/current run on any
-  `regression` decision. The .NET bench workflow builds the PR's base revision and gates micro
-  and macro against it before the C# comparison.
+  `regression` decision. The benchmark workflow builds the PR's base revision and gates micro
+  and macro against it.
 - **Closed interface fallback.** A guarded interface call covers every implementor in the itable,
   so its fallback now aborts instead of calling the itable dispatcher. LLVM can then hoist list
   buffer and length loads out of a dispatch loop. Locally `iface_dispatch` is neutral (1.78 ns vs

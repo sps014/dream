@@ -98,7 +98,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let name = js_bridge(&self.l.cx, method);
                 let v = self.call_v(&name, std::slice::from_ref(src));
                 Some(if narrow {
-                    V::s(self.conv(&v, &Ty::F32))
+                    let target = super::types::ll_ty(self.interner, to, &self.h(), &self.word());
+                    V::s(self.conv(&v, &target))
                 } else {
                     v
                 })

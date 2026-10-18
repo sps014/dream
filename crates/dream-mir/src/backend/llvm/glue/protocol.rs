@@ -26,6 +26,7 @@ fn builtin_tag(name: &str) -> i32 {
         "TAG_BOOL" => abi::TAG_BOOL,
         "TAG_CHAR" => abi::TAG_CHAR,
         "TAG_FLOAT" => abi::TAG_FLOAT,
+        "TAG_FLOAT16" => abi::TAG_FLOAT16,
         "TAG_DOUBLE" => abi::TAG_DOUBLE,
         "TAG_STRING" => abi::TAG_STRING,
         "TAG_ARRAY" => abi::TAG_ARRAY,
@@ -154,7 +155,7 @@ fn elem_units_bound(l: &Lcx<'_>, elem: TypeId) -> i64 {
         TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => 14,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => 24,
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) => 24,
-        TyKind::Prim(PrimTy::Float | PrimTy::Double) => 16,
+        TyKind::Prim(PrimTy::Float16 | PrimTy::Float | PrimTy::Double) => 16,
         _ => 8,
     }
 }
@@ -648,6 +649,11 @@ fn to_string_router(l: &mut Lcx<'_>) {
             Some(Ty::F32),
         ),
         call_arm(
+            vec![abi::TAG_FLOAT16],
+            "dream_float16_to_string".into(),
+            Some(Ty::F16),
+        ),
+        call_arm(
             vec![abi::TAG_DOUBLE],
             "dream_double_to_string".into(),
             Some(Ty::F64),
@@ -718,6 +724,11 @@ fn hash_code_router(l: &mut Lcx<'_>) {
             vec![abi::TAG_FLOAT],
             "dream_bitcast_f32".into(),
             Some(Ty::F32),
+        ),
+        call_arm(
+            vec![abi::TAG_FLOAT16],
+            "dream_bitcast_f32".into(),
+            Some(Ty::F16),
         ),
         call_arm(
             vec![abi::TAG_DOUBLE],

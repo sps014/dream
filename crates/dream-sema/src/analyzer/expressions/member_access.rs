@@ -316,14 +316,20 @@ impl<'a> Analyzer<'a> {
             }
             MemberField::NotAStruct => {
                 self.hir_none();
-                Err(report(
-                    diagnostics,
-                    format!(
+                let message = match (obj, &obj_type) {
+                    (ExpressionNode::Identifier(name), Type::Function(params, _)) => {
+                        let args = if params.is_empty() { "" } else { "..." };
+                        format!(
+                            "'{0}' is a function; call it as '{0}({args})' to use its result",
+                            name.text
+                        )
+                    }
+                    _ => format!(
                         "Cannot access member of non-class type {}",
                         self.ty_display(&obj_type)
                     ),
-                    Some(member.position),
-                ))
+                };
+                Err(report(diagnostics, message, Some(member.position)))
             }
             MemberField::StructNotFound { struct_name, .. } => {
                 self.hir_none();
@@ -509,6 +515,7 @@ impl<'a> Analyzer<'a> {
         let _ = self.function_table.add_function(name.clone(), info);
         self.pending_lambdas
             .insert(def, (func_ref, self.current_generic_bindings.clone()));
+        self.inherit_generator_context(def);
         self.closure_captures
             .insert(def, vec![(recv_name, receiver_ty.clone())]);
 

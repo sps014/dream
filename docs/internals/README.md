@@ -37,6 +37,10 @@ Additional engineering records:
 - [Build performance and minimal compiler plan](14-build-performance-and-native-networking-plan.md): planned prerequisite to self-hosting.
 - [Stdlib v1 implementation status](16-stdlib-v1-implementation.md): delivered foundations and remaining release phases.
 - [Self-hosting readiness](13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
+- [Window host](17-window-host.md): main-thread event pump, event wire format, and the GPU surface C ABI.
+- [GPU shader bundle](18-gpu-shader-bundle.md): how shader modules are compiled ahead of time and the bundle format every GPU host reads.
+- [Native GPU host](19-gpu-host.md): the slang-rhi capability library, its pinned build, `dream-slang-layout`, futures, bindings and the backend test matrix.
+- [Slang GPU remaining work](20-slang-gpu-remaining-work.md): what landed, what is unverified, and the plan for the rest.
 
 ## Why a multi-pass architecture
 

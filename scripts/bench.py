@@ -4,7 +4,6 @@
 Arms:
   current   target/release/dream compiling tests/bench/microbenches.dream
   baseline  a reference Dream build (default: target/bench-baseline worktree)
-  csharp    tests/bench/csharp Release Native AOT publish, run as a native executable
 
 Every arm compiles once. Rounds rotate and alternate the arm order (ABBA-style) so drift in
 CPU frequency or thermal state is spread over all arms. Raw per-pass samples are kept as JSONL;
@@ -35,22 +34,23 @@ import tempfile
 import time
 from pathlib import Path
 from benchmarks import gate as bench_gate, stats as bench_stats
+from benchmarks import layout
 from benchmarks.process import dream_name, peak_working_set, with_exe
 
 ROOT = Path(__file__).resolve().parent.parent
 SUITES = {
-    "micro": (ROOT / "tests/bench/microbenches.dream", ROOT / "tests/bench/csharp"),
-    "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ROOT / "tests/bench/macro/csharp"),
-    "collections": (ROOT / "tests/bench/collections.dream", None),
-    "map_phases": (ROOT / "tests/bench/map_phases.dream", None),
-    "io": (ROOT / "tests/bench/io.dream", None),
-    "webapi": (ROOT / "tests/bench/webapi.dream", None),
-    "text": (ROOT / "tests/bench/text.dream", None),
-    "search": (ROOT / "tests/bench/search.dream", None),
-    "scheduler": (ROOT / "tests/bench/scheduler.dream", None),
-    "timers": (ROOT / "tests/bench/timers.dream", None),
-    "workers": (ROOT / "tests/bench/workers.dream", None),
-    "concurrency": (ROOT / "tests/bench/concurrency.dream", None),
+    "micro": ROOT / "tests/bench/microbenches.dream",
+    "macro": ROOT / "tests/bench/macro/macrobenches.dream",
+    "collections": ROOT / "tests/bench/collections.dream",
+    "map_phases": ROOT / "tests/bench/map_phases.dream",
+    "io": ROOT / "tests/bench/io.dream",
+    "webapi": ROOT / "tests/bench/webapi.dream",
+    "text": ROOT / "tests/bench/text.dream",
+    "search": ROOT / "tests/bench/search.dream",
+    "scheduler": ROOT / "tests/bench/scheduler.dream",
+    "timers": ROOT / "tests/bench/timers.dream",
+    "workers": ROOT / "tests/bench/workers.dream",
+    "concurrency": ROOT / "tests/bench/concurrency.dream",
 }
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.
 MIN_NS_PER_OP = 0.25
@@ -62,12 +62,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--suite", choices=sorted(SUITES), default="micro",
                    help="workload suite; --benchmark overrides the fixture")
     p.add_argument("--benchmark", type=Path, help="fixture path, including a preserved campaign snapshot")
-    p.add_argument("--csharp", type=Path,
-                   help="C# twin project directory (Program.cs + DreamBench.csproj) for the fixture")
     p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
     p.add_argument("--arms", nargs="+", default=["current"],
-                   choices=["baseline", "current", "csharp"])
+                   choices=["baseline", "current"])
     p.add_argument("--current-dream", default=str(ROOT / "target" / "release" / dream_name()))
     p.add_argument("--baseline-dream", default=str(ROOT / "target" / "bench-baseline" / "target" / "release" / dream_name()))
     p.add_argument("--current-runtime", type=Path, help="matching current C runtime source snapshot")
@@ -81,13 +79,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--regression-threshold", type=float, default=0.10)
     p.add_argument("--fail-on-regression", action="store_true",
                    help="exit 1 when a paired current/baseline row regresses past the threshold")
+    p.add_argument("--function-alignment", type=int, choices=(0, 16, 32, 64, 128), default=0,
+                   help="apply the same function alignment to both native Linux arms (bytes)")
+    p.add_argument("--loop-alignment", type=int, choices=(0, 16, 32, 64, 128), default=0,
+                   help="apply the same loop alignment to both native Linux arms (bytes)")
     p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
     p.add_argument("--input-seed", type=int, default=1)
     args = p.parse_args()
-    args.benchmark = args.benchmark or SUITES[args.suite][0]
-    args.csharp = args.csharp or SUITES[args.suite][1]
+    args.benchmark = args.benchmark or SUITES[args.suite]
     return args
 
 
@@ -121,7 +122,7 @@ def tool_versions(args) -> dict:
             "DREAM_WASM_OPT", str(Path.home() / ".dream" / "toolchains" / f"binaryen-{version}" / "bin" / "wasm-opt"))))
         out["wasm_opt_sha256"] = bench_gate.digest(optimizer)
         out["wasm_opt_version"] = run([str(optimizer), "--version"]).strip()
-    tools = ROOT / "src/execution/llvm/tools.rs"
+    tools = ROOT / "crates/dream-abi/src/toolchain.rs"
     m = re.search(r'LLVM_VERSION[^"]*"([^"]+)"', tools.read_text()) if tools.exists() else None
     out["llvm"] = m.group(1) if m else "unknown"
     llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{out['llvm']}" / "bin")))
@@ -134,11 +135,6 @@ def tool_versions(args) -> dict:
             out[f"{name}_version"] = run([str(executable), "--version"]).strip()
         else:
             out[f"{name}_version"] = "unknown"
-    if "csharp" in args.arms and shutil.which("dotnet"):
-        out["dotnet"] = run(["dotnet", "--version"]).strip()
-        out["dotnet_info"] = run(["dotnet", "--info"]).strip()
-        out["dotnet_sha256"] = bench_gate.digest(Path(shutil.which("dotnet")).resolve())
-        out["csharp_deployment"] = "native-aot"
     out["runtime_sources"] = {str(p.relative_to(ROOT)): bench_gate.digest(p)
         for p in sorted((ROOT / "crates/dream-mir/src/runtime").rglob("*")) if p.is_file()}
     for arm in ("baseline", "current"):
@@ -164,6 +160,8 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     if not path.exists() or path.read_bytes() != args.benchmark_source:
         path.write_bytes(args.benchmark_source)
     compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if args.counters else "0")
+    if args.layout_toolchain:
+        compile_env["DREAM_LLVM"] = str(args.layout_toolchain)
     runtime = getattr(args, f"{arm}_runtime")
     if runtime is not None:
         if not runtime.is_dir():
@@ -194,7 +192,7 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
         raise ValueError(f"{arm}: missing compiled artifact {artifact}")
     elapsed = time.monotonic() - started
     if args.diagnostics and args.target == "native":
-        version = re.search(r'LLVM_VERSION[^"\n]*"([^"]+)"', (ROOT / "src/execution/llvm/tools.rs").read_text()).group(1)
+        version = re.search(r'LLVM_VERSION[^"\n]*"([^"]+)"', (ROOT / "crates/dream-abi/src/toolchain.rs").read_text()).group(1)
         llvm = Path(os.environ.get("DREAM_LLVM", str(Path.home() / ".dream/toolchains" / f"llvm-{version}" / "bin")))
         if (llvm / "bin").is_dir():
             llvm /= "bin"
@@ -203,43 +201,6 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     (work / "build.json").write_text(json.dumps({"compile_seconds": elapsed,
         "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
     return command
-
-
-def prepare_csharp(out, args) -> list[str]:
-    if not shutil.which("dotnet"):
-        raise SystemExit("csharp: dotnet not found")
-    work = out.resolve() / "csharp"
-    work.mkdir(parents=True, exist_ok=True)
-    (work / "Program.cs").write_bytes(args.csharp_source)
-    (work / "DreamBench.csproj").write_bytes(args.csharp_project)
-    publish = work / "publish"
-    # An earlier publish must not let a managed-only build reuse a stale native executable.
-    if publish.exists():
-        shutil.rmtree(publish)
-    command = ["dotnet", "publish", "DreamBench.csproj", "-c", "Release",
-               "-p:PublishAot=true", "-p:OptimizationPreference=Speed",
-               "-p:IlcInstructionSet=native", "-o", str(publish), "--nologo", "-v", "q"]
-    if args.diagnostics:
-        command.append("-p:IlcGenerateMapFile=true")
-    started = time.monotonic()
-    stdout = run(command, cwd=work)
-    elapsed = time.monotonic() - started
-    (work / "publish.txt").write_text(stdout)
-    artifact = with_exe(publish / "DreamBench")
-    if not artifact.is_file():
-        raise SystemExit("csharp: Native AOT executable not found after publish")
-    assets = json.loads((work / "obj/project.assets.json").read_text())
-    (work / "build.json").write_text(json.dumps({"compile_seconds": elapsed,
-        "deployment": "native-aot", "optimization": "Speed", "instruction_set": "native",
-        "publish_command": command, "runtime_targets": sorted(assets["targets"]),
-        "packages": sorted(assets["libraries"]),
-        "artifact_bytes": artifact.stat().st_size, "sha256": bench_gate.digest(artifact)}, indent=2) + "\n")
-    if args.diagnostics:
-        maps = sorted((work / "obj").rglob("DreamBench.map.xml"))
-        if len(maps) != 1:
-            raise ValueError("csharp: expected one Native AOT code map")
-        shutil.copy2(maps[0], work / "native-map.xml")
-    return [str(artifact)]
 
 
 def run_once(cmd: list[str], env: dict) -> tuple[str, int]:
@@ -296,8 +257,6 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
     head = f"{'bench':<22}" + "".join(f"{arm + ' ns/op [95% CI]':>34}" for arm in arms)
     if "current" in arms and "baseline" in arms:
         head += f"{'cur/base [95% CI] decision':>39}"
-    if "current" in arms and "csharp" in arms:
-        head += f"{'cur/C# [95% CI] decision':>39}"
     print(head)
     print("-" * len(head))
     for name, row in summary.items():
@@ -306,12 +265,11 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
             r = row.get(arm)
             cell = f"{fmt(r['median'])} [{fmt(r['ci_low'])}, {fmt(r['ci_high'])}]" if r else "-"
             line += f"{cell:>34}"
-        for other in ("baseline", "csharp"):
-            if "current" in arms and other in arms:
-                comparison = row["comparisons"].get(other)
-                cell = (f"{comparison['ratio']:.2f} [{comparison['ci_low']:.2f}, {comparison['ci_high']:.2f}] "
-                        f"{comparison['decision']}" if comparison else "-")
-                line += f"{cell:>39}"
+        if "current" in arms and "baseline" in arms:
+            comparison = row["comparisons"].get("baseline")
+            cell = (f"{comparison['ratio']:.2f} [{comparison['ci_low']:.2f}, {comparison['ci_high']:.2f}] "
+                    f"{comparison['decision']}" if comparison else "-")
+            line += f"{cell:>39}"
 
         print(line)
     print()
@@ -334,19 +292,13 @@ def main() -> int:
     if args.warmup < 1 or args.rounds < 1 or args.passes < 1 or not 0 <= args.input_seed <= 2147483647:
         raise ValueError("invalid warmup, round, pass count or input seed")
     reference = None
-    if args.target == "wasm" and "csharp" in args.arms:
-        raise ValueError("wasm comparisons use Dream arms only; select --arms current or baseline current")
     if not 0 <= args.regression_threshold < 1:
         raise ValueError("invalid regression threshold")
     args.benchmark_source = args.benchmark.read_bytes()
-    if "csharp" in args.arms:
-        if args.csharp is None:
-            raise ValueError("this suite has no C# fixture")
-        args.csharp_source = (args.csharp / "Program.cs").read_bytes()
-        args.csharp_project = (args.csharp / "DreamBench.csproj").read_bytes()
-    compatibility = bench_gate.identity(args.benchmark,
-                                        args.csharp / "Program.cs" if "csharp" in args.arms else None, args.runner_id,
-                                        args.input_seed, args.passes, args.target, args.benchmark_source)
+    compatibility = bench_gate.identity(args.benchmark, args.runner_id, args.input_seed, args.passes,
+                                        args.target, args.benchmark_source)
+    compatibility["function_alignment"] = args.function_alignment
+    compatibility["loop_alignment"] = args.loop_alignment
     if args.suite == "macro" and args.filter:
         unknown = sorted(set(args.filter) - set(compatibility["names"]))
         if unknown:
@@ -365,6 +317,15 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     commands = {}
     identities = tool_versions(args)
+    args.layout_toolchain = None
+    if args.function_alignment or args.loop_alignment:
+        if args.target != "native":
+            raise ValueError("code alignment requires a native measurement")
+        llvm = Path(os.environ.get("DREAM_LLVM", str(
+            Path.home() / ".dream/toolchains" / f"llvm-{identities['llvm']}" / "bin")))
+        args.layout_toolchain = layout.toolchain(llvm, out, args.function_alignment, args.loop_alignment)
+    identities["function_alignment"] = args.function_alignment
+    identities["loop_alignment"] = args.loop_alignment
     if reference:
         identities.update({key: value for key, value in reference['tools'].items() if key.startswith('baseline_')})
         if args.target == "wasm":
@@ -377,8 +338,6 @@ def main() -> int:
     for arm in args.arms:
         if arm == "baseline" and reference:
             commands[arm] = control
-        elif arm == "csharp":
-            commands[arm] = prepare_csharp(out, args)
         else:
             exe = args.current_dream if arm == "current" else args.baseline_dream
             commands[arm] = prepare_dream(arm, exe, out, args)
@@ -401,7 +360,7 @@ def main() -> int:
         for r in range(args.warmup + args.rounds):
             for arm in order_for(r, args.arms):
                 started = time.time()
-                stdout, peak = run_once(commands[arm], env if arm == "csharp" else dream_env)
+                stdout, peak = run_once(commands[arm], dream_env)
                 sinks = re.findall(r"^sink (-?\d+)$", stdout, re.M)
                 if len(sinks) != 1:
                     raise ValueError(f"{arm}: missing or duplicate result sink")
@@ -427,8 +386,8 @@ def main() -> int:
     print_table(summary, peak, args.arms)
     print(f"\nraw samples: {raw_path}\nsummary: {out / 'summary.json'}")
     status = 0
-    tiny = sorted({s["name"] for s in samples if s["arm"] != "csharp"
-                   and (s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP)})
+    tiny = sorted({s["name"] for s in samples
+                   if s.get("ns_total") == 0 or s["ns_per_op"] < MIN_NS_PER_OP})
     if tiny:
         print("SUB-TIMER rows cannot substantiate a speed claim: " + ", ".join(tiny))
     if args.fail_on_regression:

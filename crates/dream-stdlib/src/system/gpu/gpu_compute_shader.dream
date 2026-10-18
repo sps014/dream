@@ -1,0 +1,63 @@
+module system.gpu;
+
+/// A compiled `@compute` shader. The shader generator creates one for every compute shader
+/// as `GpuShaders.<name>`, with a typed `dispatch(device, GpuDispatch, ...)` that takes the
+/// shader's own parameters.
+public class GpuComputeShader {
+    internal library: GpuShaderLibrary;
+    entry: string;
+    workgroup: GpuIVec3;
+
+    internal constructor(library: GpuShaderLibrary, entry: string, x: int, y: int, z: int) {
+        this.library = library;
+        this.entry = entry;
+        this.workgroup = GpuIVec3.of(x, y, z);
+    }
+
+    /// The shader function's name.
+    public get name(): string {
+        return this.entry;
+    }
+
+    /// The workgroup size from the shader's `@compute` attribute.
+    public get workgroup_size(): GpuIVec3 {
+        return this.workgroup;
+    }
+
+    // Records the dispatch into `pass`; recording errors surface at submit.
+    internal fun encode(
+        device: GpuDevice,
+        pass: GpuComputePass,
+        dispatch: GpuDispatch,
+        args: GpuArgs
+    ): void {
+        switch (args.mismatch) {
+            Some(e) => {
+                pass.encoder.fail(e);
+                return;
+            }
+            None => {}
+        }
+        switch (device.compute_pipeline(this)) {
+            Ok(pipeline) => {
+                pass.dispatch(pipeline, dispatch.group_counts(this.workgroup), args);
+            }
+            Err(e) => {
+                pass.encoder.fail(e);
+            }
+        }
+    }
+
+    // Runs one dispatch on its own and waits until the GPU finished it.
+    internal async fun dispatch(
+        device: GpuDevice,
+        dispatch: GpuDispatch,
+        args: GpuArgs
+    ): Result<bool, GpuError> {
+        let encoder = device.command_encoder();
+        let pass = encoder.begin_compute_pass();
+        this.encode(device, pass, dispatch, args);
+        pass.end();
+        return device.submit(encoder.finish()).await;
+    }
+}

@@ -1,0 +1,150 @@
+module system.gpu;
+
+import system.codegen;
+
+/// An array of `T` in GPU memory.
+///
+/// Create one with `GpuDevice.buffer_from`, `buffer_alloc`, `vertex_buffer_from` or
+/// `index_buffer_from`, and pass it to shaders. Inside a shader, `buffer[i]` reads and
+/// writes element `i`; a parameter marked `@readonly` can only be read. On the CPU, `write`
+/// uploads new contents and `read` downloads them after the GPU finished. `T` must be a
+/// type without references, such as `float`, `int`, `GpuVec4` or a struct of them.
+public class GpuBuffer<T: unmanaged> {
+    internal device_id: int;
+    internal owner: GpuOwnedHandle;
+    count: int;
+    internal usage: int;
+
+    internal constructor(device_id: int, handle: int, count: int, usage: int) {
+        this.device_id = device_id;
+        this.owner = GpuOwnedHandle(handle, true);
+        this.count = count;
+        this.usage = usage;
+    }
+
+    internal get handle(): int {
+        return this.owner.handle;
+    }
+
+    /// The number of elements.
+    public get length(): int {
+        return this.count;
+    }
+
+    /// Replaces the whole contents with `data`, which must have exactly `length` elements.
+    public fun write(data: T[]): Result<bool, GpuError> {
+        if data.length != this.count {
+            return Result.Err(
+                GpuError.InvalidResource(
+                    "write needs "
+                        + this.count.to_string() + " elements, got " + data.length.to_string()
+                )
+            );
+        }
+        return this.write_at(0, data);
+    }
+
+    /// Replaces the elements starting at `offset` with `data`. The range must lie inside
+    /// the buffer. On `GpuBackend.WebGpu` it must also start at a multiple of 4 bytes and end
+    /// at one or at the end of the buffer, which matters for `float16` and `byte` elements.
+    public fun write_at(offset: int, data: T[]): Result<bool, GpuError> {
+        if this.handle == 0 {
+            return Result.Err(GpuError.InvalidResource("the buffer was destroyed"));
+        }
+        if offset < 0 || offset + data.length > this.count {
+            return Result.Err(GpuError.InvalidResource("write range lies outside the buffer"));
+        }
+        if GpuHost.buffer_write(
+            this.handle,
+            offset * GpuBuffer<T>.stride(),
+            GpuBuffer<T>.encode(data)
+        ) != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(true);
+    }
+
+    /// Downloads every element. It waits for submitted GPU work that writes the buffer.
+    public async fun read(): Result<T[], GpuError> {
+        if this.handle == 0 {
+            return Result.Err(GpuError.InvalidResource("the buffer was destroyed"));
+        }
+        let size = this.count * GpuBuffer<T>.stride();
+        if size == 0 {
+            return Result.Ok(Buffer.alloc<T>(0));
+        }
+        let bytes = GpuHost.buffer_read(this.handle, 0, size).await;
+        if bytes.length != size {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuBuffer<T>.decode(bytes, this.count));
+    }
+
+    /// Releases the GPU memory as soon as submitted work that uses it has finished. Later
+    /// uses return `GpuError.InvalidResource`. Releasing the last reference does the same.
+    public fun destroy(): void {
+        this.owner.release();
+    }
+
+    /// Reads element `index` inside a shader. Indexes outside the buffer read zero on most
+    /// backends; never rely on it.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun this[index: int]: T;
+
+    /// Writes element `index` inside a shader. Not allowed on `@readonly` parameters.
+    /// Writes outside the buffer are dropped.
+    @generator_only(
+        ComputeAttribute,
+        VertexAttribute,
+        FragmentAttribute,
+        GpuAttribute,
+        RayGenerationAttribute,
+        ClosestHitAttribute,
+        AnyHitAttribute,
+        MissAttribute,
+        IntersectionAttribute,
+        CallableAttribute
+    )
+    public extern fun this[index: int] = value: T;
+
+    // Bytes per element in the CPU layout the host copies verbatim.
+    internal static fun stride(): int {
+        return Bytes.of(Buffer.zero<T>()).length;
+    }
+
+    internal static fun encode(data: T[]): byte[] {
+        let stride = GpuBuffer<T>.stride();
+        let out = Buffer.alloc<byte>(data.length * stride);
+        for (let i = 0; i < data.length; i = i + 1) {
+            let element = Bytes.of(data[i]);
+            for (let j = 0; j < stride; j = j + 1) {
+                out[i * stride + j] = element[j];
+            }
+        }
+        return out;
+    }
+
+    internal static fun decode(bytes: byte[], count: int): T[] {
+        let stride = GpuBuffer<T>.stride();
+        let out = Buffer.alloc<T>(count);
+        let element = Buffer.alloc<byte>(stride);
+        for (let i = 0; i < count; i = i + 1) {
+            for (let j = 0; j < stride; j = j + 1) {
+                element[j] = bytes[i * stride + j];
+            }
+            out[i] = Bytes.to<T>(element);
+        }
+        return out;
+    }
+}

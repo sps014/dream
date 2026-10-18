@@ -76,6 +76,22 @@ mod tests {
     }
 
     #[test]
+    fn float16_widens_to_wider_floats_only() {
+        let i = TypeInterner::new();
+        let (half, float, double) = (i.float16(), i.float(), i.double());
+        assert!(assignable(&i, float, half));
+        assert!(assignable(&i, double, half));
+        assert!(!assignable(&i, half, float));
+        assert!(!assignable(&i, half, double));
+        assert!(!assignable(&i, half, i.int()));
+        assert!(!assignable(&i, half, i.byte()));
+        assert!(!assignable(&i, i.int(), half));
+        assert_eq!(PrimTy::from_name("float16"), Some(PrimTy::Float16));
+        assert_eq!(PrimTy::Float16.size_align(), (2, 2));
+        assert!(!i.is_reference(half));
+    }
+
+    #[test]
     fn reference_classification() {
         let mut i = TypeInterner::new();
         assert!(!i.is_reference(i.int()));

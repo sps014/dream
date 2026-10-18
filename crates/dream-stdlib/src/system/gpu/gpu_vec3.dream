@@ -1,0 +1,100 @@
+module system.gpu;
+
+/// A vector of three `float`s, laid out like a GPU `float3`, for positions, directions,
+/// normals and RGB colors.
+///
+/// Use it on the CPU and in shaders alike. Arithmetic works component by component, and a
+/// `float` operand applies to every component.
+public struct GpuVec3 {
+    /// The first component.
+    public x: float;
+
+    /// The second component.
+    public y: float;
+
+    /// The third component.
+    public z: float;
+
+    /// Creates the vector `(x, y, z)`.
+    public static fun of(x: float, y: float, z: float): GpuVec3 {
+        let v = GpuVec3();
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        return v;
+    }
+
+    /// Creates a vector with every component equal to `value`.
+    public static fun splat(value: float): GpuVec3 {
+        return GpuVec3.of(value, value, value);
+    }
+
+    /// The first two components.
+    public get xy(): GpuVec2 {
+        return GpuVec2.of(this.x, this.y);
+    }
+
+    /// Adds component by component.
+    fun operator +(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+
+    /// Subtracts component by component.
+    fun operator -(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+
+    /// Multiplies component by component.
+    fun operator *(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x * other.x, this.y * other.y, this.z * other.z);
+    }
+
+    /// Multiplies every component by `scale`.
+    fun operator *(scale: float): GpuVec3 {
+        return GpuVec3.of(this.x * scale, this.y * scale, this.z * scale);
+    }
+
+    /// Divides component by component.
+    fun operator /(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(this.x / other.x, this.y / other.y, this.z / other.z);
+    }
+
+    /// Divides every component by `divisor`.
+    fun operator /(divisor: float): GpuVec3 {
+        return GpuVec3.of(this.x / divisor, this.y / divisor, this.z / divisor);
+    }
+
+    /// Negates every component.
+    fun operator -(): GpuVec3 {
+        return GpuVec3.of(-this.x, -this.y, -this.z);
+    }
+
+    /// True when all components are equal.
+    fun operator ==(other: GpuVec3): bool {
+        return this.x == other.x && this.y == other.y && this.z == other.z;
+    }
+
+    /// The dot product.
+    public fun dot(other: GpuVec3): float {
+        return this.x * other.x + this.y * other.y + this.z * other.z;
+    }
+
+    /// The cross product, perpendicular to both vectors, following the right-hand rule.
+    public fun cross(other: GpuVec3): GpuVec3 {
+        return GpuVec3.of(
+            this.y * other.z - this.z * other.y,
+            this.z * other.x - this.x * other.z,
+            this.x * other.y - this.y * other.x
+        );
+    }
+
+    /// The vector's Euclidean length.
+    public fun length(): float {
+        return (float)Math.sqrt((double)this.dot(this));
+    }
+
+    /// The vector scaled to length `1`. A zero vector gives non-finite components.
+    public fun normalize(): GpuVec3 {
+        return this / this.length();
+    }
+}

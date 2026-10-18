@@ -102,6 +102,7 @@ fn operand_type(
         Operand::Const(Const::Long(_)) => i.long(),
         Operand::Const(Const::Float(_)) => i.double(),
         Operand::Const(Const::F32(_)) => i.float(),
+        Operand::Const(Const::F16(_)) => i.float16(),
         Operand::Const(Const::Bool(_)) => i.bool(),
         Operand::Const(Const::Char(_)) => i.char(),
         Operand::Const(Const::Int(_) | Const::Null) => i.int(),

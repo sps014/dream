@@ -1,0 +1,20 @@
+module system.gpu;
+
+// What a `GpuOp.Bind` operand pair refers to.
+internal enum GpuArgKind {
+    // a = buffer handle
+    Buffer = 1,
+    // a = texture handle
+    Texture = 2,
+    // a = sampler handle
+    Sampler = 3,
+    // a = storage texture handle
+    StorageTexture = 4,
+    // a = acceleration structure handle
+    AccelerationStructure = 5,
+    // a = byte offset into the submit data, b = byte length; the host places the bytes at
+    // the parameter's reflected offset
+    Value = 6,
+    // a = uploaded MLP weights handle
+    MlpWeights = 7,
+}

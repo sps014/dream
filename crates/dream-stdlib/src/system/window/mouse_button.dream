@@ -1,0 +1,15 @@
+module system.window;
+
+/// A mouse button.
+public enum MouseButton {
+    /// The primary (usually left) button.
+    Left = 0,
+    /// The secondary (usually right) button.
+    Right = 1,
+    /// The middle button or pressed scroll wheel.
+    Middle = 2,
+    /// The side button that browsers use for "back".
+    Back = 3,
+    /// The side button that browsers use for "forward".
+    Forward = 4,
+}

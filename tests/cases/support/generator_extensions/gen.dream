@@ -25,7 +25,7 @@ public fun resources(ctx: GenContext): void {
             if ctx.phase() == 0 { ctx.emit_artifact("input.txt", "ABC", GenSourceMap()); }
             let inputs = List<string>();
             inputs.push("input.txt");
-            ctx.run_tool("round-" + ctx.phase().to_string(), "copy", List<string>(), inputs, List<string>());
+            ctx.run_tool("round-" + ctx.phase().to_string(), "copy", List<string>(), inputs, List<string>(), List<string>());
             return;
         }
         if ctx.phase() == 0 {
@@ -43,13 +43,13 @@ public fun resources(ctx: GenContext): void {
             let outputs = List<string>();
             inputs.push("input.txt");
             outputs.push("output.bin");
-            ctx.run_tool("copy-resource", "copy", args, inputs, outputs);
+            ctx.run_tool("copy-resource", "copy", args, inputs, outputs, List<string>());
         } else {
             for (let result in ctx.tool_results()) {
                 if result.exit != 0 { ctx.error_at(f.id, result.stderr); return; }
             }
             ctx.consume(f);
-            ctx.emit_asset("payload", "output.bin");
+            ctx.emit_asset("payload", "tool:copy-resource/output.bin");
         }
     }
 }

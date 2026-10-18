@@ -103,6 +103,7 @@ pub fn splice_source(expr: &ExpressionNode<'_>) -> String {
             | Type::UInt(tok)
             | Type::ULong(tok)
             | Type::Byte(tok) => tok.text.clone(),
+            Type::Float16(tok) => format!("{}h", tok.text),
             _ => "/*lit*/".into(),
         },
         ExpressionNode::MemberAccess(recv, mem) => format!("{}.{}", splice_source(recv), mem.text),

@@ -73,7 +73,9 @@ impl<'a> Analyzer<'a> {
         // disallowed one is reported below); record its HIR before the validation branches.
         self.hir_set_cast(inner_hir, target_type);
         let target_id = self.type_ctx.lower(target_type);
-        let numeric = |ty: &Type| ty.is_integer() || matches!(ty, Type::Float(_) | Type::Double(_));
+        let numeric = |ty: &Type| {
+            ty.is_integer() || matches!(ty, Type::Float16(_) | Type::Float(_) | Type::Double(_))
+        };
 
         if target_id == expr_id ||
            (numeric(target_type) && numeric(&expr_type)) ||

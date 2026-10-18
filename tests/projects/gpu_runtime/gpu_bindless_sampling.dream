@@ -1,0 +1,187 @@
+module gpu_bindless_sampling;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun bindless_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun bindless_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_bindless_sampling on " + bindless_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_bindless_sampling on " + bindless_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail("gpu_bindless_sampling on " + bindless_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun bindless_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+public struct BindlessMaterial {
+    public albedo: GpuHandle<GpuTexture>;
+    public sampler: GpuHandle<GpuSampler>;
+}
+
+public struct BindlessVarying {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+}
+
+// One triangle that covers the whole target; `uv` runs from (0, 0) at the top-left to (1, 1)
+// at the bottom-right.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12)
+@vertex
+fun bindless_vertex(): BindlessVarying {
+    let x = -1.0f;
+    let y = 1.0f;
+    if vertex_id() == 1 {
+        x = 3.0f;
+    } else if vertex_id() == 2 {
+        y = -3.0f;
+    }
+    let result = BindlessVarying();
+    result.position = GpuVec4.of(x, y, 0.0f, 1.0f);
+    result.uv = GpuVec2.of((x + 1.0f) * 0.5f, (1.0f - y) * 0.5f);
+    return result;
+}
+
+// The left half samples material 0 and the right half material 1, picked at run time from a
+// buffer of bindless handles.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12)
+@fragment
+fun bindless_fragment(
+    @readonly materials: GpuBuffer<BindlessMaterial>,
+    input: BindlessVarying
+): GpuVec4 {
+    let index = input.uv.x < 0.5f ? 0 : 1;
+    let material = materials[index];
+    return material.albedo.get().sample(material.sampler.get(), input.uv);
+}
+
+fun solid_texture(device: GpuDevice, r: int, g: int, b: int): GpuTexture {
+    let texture = bindless_ok(
+        device.texture(GpuTextureDesc.of(2, 2, GpuTextureFormat.Rgba8Unorm)),
+        "texture"
+    );
+    let texels = Array.alloc<byte>(16);
+    for (let i = 0; i < 4; i = i + 1) {
+        texels[i * 4] = (byte)r;
+        texels[i * 4 + 1] = (byte)g;
+        texels[i * 4 + 2] = (byte)b;
+        texels[i * 4 + 3] = (byte)255;
+    }
+    bindless_ok(texture.write(0, texels), "texture upload");
+    return texture;
+}
+
+@test
+@timeout(180000)
+async fun gpu_bindless_sampling(): void {
+    let size = 32;
+    for (let backend in GpuShaders.backends()) {
+        if backend == GpuBackend.WebGpu {
+            continue;
+        }
+        switch (bindless_device(backend).await) {
+            Some(device) => {
+                let label = bindless_label(backend);
+                if !device.supports(GpuFeature.Bindless) {
+                    let red = solid_texture(device, 255, 0, 0);
+                    switch (device.handle(red)) {
+                        Ok(_) => {
+                            Assert.fail(label + ": handle() succeeded without GpuFeature.Bindless");
+                        }
+                        Err(GpuError.UnsupportedCapability(feature)) => {
+                            Assert.is_true(feature == GpuFeature.Bindless);
+                        }
+                        Err(e) => {
+                            Assert.fail(label + ": " + e.message());
+                        }
+                    }
+                    System.println(
+                        "SKIP gpu_bindless_sampling on " + label + ": no bindless support"
+                    );
+                    continue;
+                }
+                let red = solid_texture(device, 255, 0, 0);
+                let green = solid_texture(device, 0, 255, 0);
+                let sampler = bindless_ok(device.sampler(GpuSamplerDesc.nearest()), "sampler");
+
+                let left = BindlessMaterial();
+                left.albedo = bindless_ok(device.handle(red), "red handle");
+                left.sampler = bindless_ok(device.handle(sampler), "sampler handle");
+                let right = BindlessMaterial();
+                right.albedo = bindless_ok(device.handle(green), "green handle");
+                right.sampler = left.sampler;
+                let materials = bindless_ok(device.buffer_from([left, right]), "materials");
+
+                let target = bindless_ok(
+                    device.texture(
+                        GpuTextureDesc.of(size, size, GpuTextureFormat.Rgba8Unorm)
+                            .render_target(true)
+                    ),
+                    "target"
+                );
+                let pipeline = bindless_ok(
+                    device.render_pipeline(
+                        GpuShaders.bindless_vertex,
+                        GpuShaders.bindless_fragment,
+                        GpuRenderPipelineDesc.defaults(GpuTextureFormat.Rgba8Unorm)
+                    ),
+                    "pipeline on " + label
+                );
+                let encoder = device.command_encoder();
+                let pass = encoder.begin_render_pass(
+                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4.splat(0.0f)))
+                );
+                pass.set_pipeline(pipeline);
+                pass.bind_buffer(GpuShaders.bindless_fragment.materials, materials);
+                pass.draw(3);
+                pass.end();
+                bindless_ok(device.submit(encoder.finish()).await, "draw on " + label);
+
+                let bytes = bindless_ok(target.read(0).await, "read on " + label);
+                let at_left = (16 * size + 4) * 4;
+                let at_right = (16 * size + 28) * 4;
+                Assert.eq((int)bytes[at_left], 255);
+                Assert.eq((int)bytes[at_left + 1], 0);
+                Assert.eq((int)bytes[at_right], 0);
+                Assert.eq((int)bytes[at_right + 1], 255);
+                Assert.eq((int)bytes[at_right + 3], 255);
+                System.println(label + " bindless textures match both materials");
+            }
+            None => {}
+        }
+    }
+}

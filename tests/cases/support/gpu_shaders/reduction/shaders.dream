@@ -1,0 +1,34 @@
+module shaders;
+
+import system.gpu;
+
+@compute(256)
+public fun reduce_sum(@readonly input: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
+    let partial = workgroup_array<float>(256);
+    let i = global_id().x;
+    let lane = local_id().x;
+    partial[lane] = i < n ? input[i] : 0.0f;
+    workgroup_barrier();
+    let stride = 128;
+    while stride > 0 {
+        if lane < stride {
+            partial[lane] = partial[lane] + partial[lane + stride];
+        }
+        workgroup_barrier();
+        stride = stride / 2;
+    }
+    if lane == 0 {
+        GpuAtomic.add_float(out, 0, partial[0]);
+    }
+}
+
+@compute(64)
+public fun histogram(@readonly values: GpuBuffer<uint>, bins: GpuBuffer<uint>, count: int): void {
+    let i = global_id().x;
+    for (let k = 0; k < 4; k = k + 1) {
+        let index = i * 4 + k;
+        if index < count {
+            GpuAtomic.add(bins, (int)(values[index] % 16u), 1u);
+        }
+    }
+}

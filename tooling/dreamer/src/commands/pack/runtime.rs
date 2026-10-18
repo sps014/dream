@@ -31,16 +31,27 @@ pub(super) fn copy(
             anyhow::bail!("package must not overwrite its source runtime");
         }
     }
+    let names = |capability: dream_abi::host_capability::HostCapability| {
+        std::iter::once(capability.library_name(spec)).chain(
+            capability
+                .companion_library_names(spec)
+                .iter()
+                .map(|name| name.to_string()),
+        )
+    };
     for capability in capabilities {
-        let source = binary.with_file_name(capability.library_name(spec));
-        let destination = directory.join(capability.library_name(spec));
-        std::fs::copy(&source, &destination).with_context(|| {
-            format!("bundling {} into {}", source.display(), directory.display())
-        })?;
+        for name in names(*capability) {
+            let source = binary.with_file_name(&name);
+            std::fs::copy(&source, directory.join(&name)).with_context(|| {
+                format!("bundling {} into {}", source.display(), directory.display())
+            })?;
+        }
     }
     for capability in dream_abi::host_capability::HostCapability::ALL {
         if !capabilities.contains(&capability) {
-            crate::package_fs::remove_entry(&directory.join(capability.library_name(spec)))?;
+            for name in names(capability) {
+                crate::package_fs::remove_entry(&directory.join(name))?;
+            }
         }
     }
     Ok(())
@@ -107,21 +118,27 @@ mod tests {
             )
             .is_err()
         );
+        let spec = dream_abi::target::TargetSpec::host();
         for capability in HostCapability::ALL {
             std::fs::write(
-                binary.with_file_name(
-                    capability.library_name(&dream_abi::target::TargetSpec::host()),
-                ),
+                binary.with_file_name(capability.library_name(&spec)),
                 b"host runtime",
             )
             .unwrap();
         }
-        copy(
-            &binary,
-            &destination,
-            &dream_abi::target::TargetSpec::host(),
-        )
-        .unwrap();
+        assert!(
+            copy(&binary, &destination, &spec).is_err(),
+            "companion libraries such as Dawn are required too"
+        );
+        for capability in HostCapability::ALL {
+            for companion in capability.companion_library_names(&spec) {
+                std::fs::write(binary.with_file_name(companion), b"companion").unwrap();
+            }
+        }
+        copy(&binary, &destination, &spec).unwrap();
+        for companion in HostCapability::Gpu.companion_library_names(&spec) {
+            assert_eq!(std::fs::read(destination.join(companion)).unwrap(), b"companion");
+        }
         for capability in HostCapability::ALL {
             assert_eq!(
                 std::fs::read(

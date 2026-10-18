@@ -1,0 +1,20 @@
+module system.window;
+
+/// A 2D position or offset in window coordinates.
+///
+/// Window coordinates are logical pixels measured from the top-left corner of the
+/// window's content area, with `y` growing downward. Multiply by
+/// `Window.scale_factor` to get physical pixels.
+public struct WindowVector {
+    /// Horizontal component.
+    public x: float;
+
+    /// Vertical component; positive values point down.
+    public y: float;
+
+    /// Creates a vector from its two components.
+    public constructor(x: float, y: float) {
+        this.x = x;
+        this.y = y;
+    }
+}

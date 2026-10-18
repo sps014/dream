@@ -49,6 +49,8 @@ pub(super) struct Printer {
     pending_type: bool,
     chain_indent: bool,
     attribute_end: Option<usize>,
+    /// The `)` closing the arguments of an attribute inside a list, such as a parameter's.
+    inline_attribute_close: Option<usize>,
     /// Armed after a `case`/`default` label; the next colon switches into its body indent.
     case_colon_pending: bool,
     prev_kind: Option<TokenKind>,
@@ -73,6 +75,7 @@ impl Printer {
             pending_type: false,
             chain_indent: false,
             attribute_end: None,
+            inline_attribute_close: None,
             case_colon_pending: false,
             prev_kind: None,
             prev_prev_kind: None,
@@ -213,6 +216,10 @@ impl Printer {
                     .flatten()
                     .unwrap_or(name_end),
             );
+        } else if kind == TokenKind::AtToken
+            && tokens.get(i + 2).map(|t| t.kind) == Some(TokenKind::OpenParenthesisToken)
+        {
+            self.inline_attribute_close = groups.closes.get(i + 2).copied().flatten();
         }
         self.separate_members(i, tokens);
         self.insert_blank_lines(kind);
@@ -268,6 +275,12 @@ impl Printer {
             }
             if groups.ternary_colons[i] {
                 space = true;
+            }
+            // `@location(0) position` inside a parameter list: unlike the `)` of a cast, an
+            // attribute's argument list is separate from what follows.
+            if i > 0 && self.inline_attribute_close == Some(i - 1) {
+                space = true;
+                self.inline_attribute_close = None;
             }
             if kind == TokenKind::OpenParenthesisToken
                 && self.prev_prev_kind == Some(TokenKind::OperatorToken)

@@ -1,0 +1,126 @@
+module system.gpu;
+
+import system.codegen;
+
+/// Math functions for shaders. Each works on `float`, `float16`, `GpuVec2`, `GpuVec3` and
+/// `GpuVec4`, component by component, and returns the same type as its arguments. All of them
+/// except `step`, `sign`, `floor`, `ceil`, `round` and `fract` are differentiable inside
+/// `@differentiable` helpers. They exist only on the GPU; on the CPU use `Math` and the
+/// vector methods.
+@generator_only(
+    ComputeAttribute,
+    VertexAttribute,
+    FragmentAttribute,
+    GpuAttribute,
+    RayGenerationAttribute,
+    ClosestHitAttribute,
+    AnyHitAttribute,
+    MissAttribute,
+    IntersectionAttribute,
+    CallableAttribute
+)
+public static class GpuMath {
+    /// Sine of `x` radians.
+    public static extern fun sin<T>(x: T): T;
+
+    /// Cosine of `x` radians.
+    public static extern fun cos<T>(x: T): T;
+
+    /// Tangent of `x` radians.
+    public static extern fun tan<T>(x: T): T;
+
+    /// Arcsine in radians, for `x` from `-1` to `1`.
+    public static extern fun asin<T>(x: T): T;
+
+    /// Arccosine in radians, for `x` from `-1` to `1`.
+    public static extern fun acos<T>(x: T): T;
+
+    /// Arctangent in radians.
+    public static extern fun atan<T>(x: T): T;
+
+    /// The angle in radians of the point `(x, y)`, from `-π` to `π`.
+    public static extern fun atan2<T>(y: T, x: T): T;
+
+    /// `e` raised to `x`.
+    public static extern fun exp<T>(x: T): T;
+
+    /// `2` raised to `x`.
+    public static extern fun exp2<T>(x: T): T;
+
+    /// Natural logarithm, for positive `x`.
+    public static extern fun log<T>(x: T): T;
+
+    /// Base-2 logarithm, for positive `x`.
+    public static extern fun log2<T>(x: T): T;
+
+    /// `x` raised to `y`, for non-negative `x`.
+    public static extern fun pow<T>(x: T, y: T): T;
+
+    /// Square root, for non-negative `x`.
+    public static extern fun sqrt<T>(x: T): T;
+
+    /// `1 / sqrt(x)`, usually faster than dividing.
+    public static extern fun rsqrt<T>(x: T): T;
+
+    /// Absolute value.
+    public static extern fun abs<T>(x: T): T;
+
+    /// `-1`, `0` or `1` by the sign of `x`.
+    public static extern fun sign<T>(x: T): T;
+
+    /// Rounds down to a whole number.
+    public static extern fun floor<T>(x: T): T;
+
+    /// Rounds up to a whole number.
+    public static extern fun ceil<T>(x: T): T;
+
+    /// Rounds to the nearest whole number, halves to even.
+    public static extern fun round<T>(x: T): T;
+
+    /// `x - floor(x)`, from `0` up to but excluding `1`.
+    public static extern fun fract<T>(x: T): T;
+
+    /// The smaller of `a` and `b`.
+    public static extern fun min<T>(a: T, b: T): T;
+
+    /// The larger of `a` and `b`.
+    public static extern fun max<T>(a: T, b: T): T;
+
+    /// `x` limited to the range `low` through `high`.
+    public static extern fun clamp<T>(x: T, low: T, high: T): T;
+
+    /// `x` limited to the range `0` through `1`.
+    public static extern fun saturate<T>(x: T): T;
+
+    /// Linear interpolation: `a` when `t` is `0`, `b` when `t` is `1`.
+    public static extern fun mix<T>(a: T, b: T, t: T): T;
+
+    /// `0` where `x` is below `edge`, otherwise `1`.
+    public static extern fun step<T>(edge: T, x: T): T;
+
+    /// A smooth curve from `0` at `low` to `1` at `high`.
+    public static extern fun smoothstep<T>(low: T, high: T, x: T): T;
+
+    /// `a * b + c`, computed with a single rounding where the GPU supports it.
+    public static extern fun fma<T>(a: T, b: T, c: T): T;
+
+    /// The direction of `incident` reflected about the unit-length surface `normal`.
+    public static extern fun reflect<T>(incident: T, normal: T): T;
+
+    /// The direction of unit-length `incident` refracted through a surface with unit-length
+    /// `normal`, where `eta` is the ratio of refractive indices; zero on total internal
+    /// reflection.
+    public static extern fun refract<T>(incident: T, normal: T, eta: float): T;
+
+    /// How fast `x` changes between horizontally neighboring pixels. Fragment shaders only.
+    @generator_only(FragmentAttribute, GpuAttribute)
+    public static extern fun ddx<T>(x: T): T;
+
+    /// How fast `x` changes between vertically neighboring pixels. Fragment shaders only.
+    @generator_only(FragmentAttribute, GpuAttribute)
+    public static extern fun ddy<T>(x: T): T;
+
+    /// `abs(ddx(x)) + abs(ddy(x))`, for antialiasing procedural edges. Fragment shaders only.
+    @generator_only(FragmentAttribute, GpuAttribute)
+    public static extern fun fwidth<T>(x: T): T;
+}

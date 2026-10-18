@@ -6,6 +6,17 @@ import webapi_basic;
 
 let resource_order: string = "";
 
+// HTTP teardown continues after the response; Windows timer granularity can exceed 10 ms.
+async fun await_resource_order(expected: string): void {
+    for (let attempt in 0..100) {
+        if resource_order == expected {
+            return;
+        }
+        Time.sleep(5).await;
+    }
+    Assert.eq(resource_order, expected);
+}
+
 fun resource_provider(): DependencyResource<string> {
     resource_order = resource_order + "acquire;";
     return DependencyResource<string>(
@@ -21,35 +32,35 @@ fun resource_provider(): DependencyResource<string> {
 class ResourceRoutes {
     @get("/resource")
     public static fun resource(
-        @dep(resource_provider)first: string,
-        @dep(resource_provider)second: string
+        @dep(resource_provider) first: string,
+        @dep(resource_provider) second: string
     ): string {
         return first + second;
     }
 
     @get("/uncached")
     public static fun uncached(
-        @dep(resource_provider, false)first: string,
-        @dep(resource_provider, false)second: string
+        @dep(resource_provider, false) first: string,
+        @dep(resource_provider, false) second: string
     ): string {
         return first + second;
     }
 
     @get("/resource-stream")
-    public static async fun stream(@dep(resource_provider)resource: string): AsyncIterable<string> {
+    public static async fun stream(@dep(resource_provider) resource: string): AsyncIterable<string> {
         yield resource;
         Time.sleep(60000).await;
         yield "later";
     }
 
     @get("/resource-wait")
-    public static async fun wait(@dep(resource_provider)resource: string): string {
+    public static async fun wait(@dep(resource_provider) resource: string): string {
         Time.sleep(60000).await;
         return resource;
     }
 
     @get("/resource-fail")
-    public static fun fail(@dep(resource_provider)first: string, @query number: int): string {
+    public static fun fail(@dep(resource_provider) first: string, @query number: int): string {
         return first;
     }
 }
@@ -76,16 +87,13 @@ async fun webapi_resources(): void {
     let base2 = "http://127.0.0.1:" + second.to_string();
     resource_order = "";
     Assert.eq(webapi_get(client, base, "/resource", 200).await, "resourceresource");
-    Time.sleep(10).await;
-    Assert.eq(resource_order, "acquire;release;");
+    await_resource_order("acquire;release;").await;
     resource_order = "";
     webapi_get(client, base, "/uncached", 200).await;
-    Time.sleep(10).await;
-    Assert.eq(resource_order, "acquire;acquire;release;release;");
+    await_resource_order("acquire;acquire;release;release;").await;
     resource_order = "";
     webapi_get(client, base, "/resource-fail", 422).await;
-    Time.sleep(10).await;
-    Assert.eq(resource_order, "acquire;release;");
+    await_resource_order("acquire;release;").await;
     resource_order = "";
     Assert.eq(webapi_get(client, base2, "/resource", 200).await, "overrideoverride");
     Assert.eq(resource_order, "");
@@ -95,12 +103,11 @@ async fun webapi_resources(): void {
         .unwrap();
     stream.body.read_async(32).await.unwrap();
     stream.close();
-    Time.sleep(20).await;
-    Assert.eq(resource_order, "acquire;release;");
+    await_resource_order("acquire;release;").await;
     resource_order = "";
     let pending = client.send(HttpRequest.get(Url.parse(base + "/resource-wait").unwrap()));
     Promise.start(pending);
-    Time.sleep(20).await;
+    await_resource_order("acquire;").await;
     app.shutdown();
     app.wait().await;
     pending.await;

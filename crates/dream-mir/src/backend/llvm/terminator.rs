@@ -132,6 +132,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     {
                         Some(Ty::I64)
                     }
+                    TyKind::Prim(PrimTy::Float16) => Some(Ty::F16),
                     TyKind::Prim(PrimTy::Float) => Some(Ty::F32),
                     TyKind::Prim(PrimTy::Double) => Some(Ty::F64),
                     _ => None,

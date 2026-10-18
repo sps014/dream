@@ -138,6 +138,14 @@ Function declarations available to the generator.
 public functions: List<GenFunction>
 ```
 
+## `modules`
+
+User modules whose declaration carries a trigger attribute.
+
+```dream
+public modules: List<GenModule>
+```
+
 ## `blocks`
 
 Syntax blocks available to the generator.

@@ -408,6 +408,7 @@ fn zero_for(interner: &TypeInterner, ty: TypeId) -> Const {
     match interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => Const::Float(0.0),
         TyKind::Prim(PrimTy::Float) => Const::F32(0.0),
+        TyKind::Prim(PrimTy::Float16) => Const::F16(0),
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => Const::Long(0),
         _ => Const::Int(0),
     }
@@ -435,6 +436,7 @@ fn operand_ty(func: &MirFunction, interner: &TypeInterner, op: &Operand) -> Type
         Operand::Const(Const::Long(_)) => interner.long(),
         Operand::Const(Const::Float(_)) => interner.double(),
         Operand::Const(Const::F32(_)) => interner.float(),
+        Operand::Const(Const::F16(_)) => interner.float16(),
         Operand::Const(Const::Bool(_)) => interner.bool(),
         Operand::Const(Const::Char(_)) => interner.char(),
         Operand::Const(Const::Str(_)) => interner.string(),

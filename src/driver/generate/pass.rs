@@ -277,18 +277,24 @@ pub fn run_generators<'a>(
     let consumed_ranges = super::consumption::ranges(&runs);
     let applied = super::apply::apply(&runs, &root, diagnostics);
     failed.extend(applied.failed.iter().cloned());
+    for output in &applied.published {
+        acc.published_artifacts
+            .insert(output.path.clone(), output.bytes.clone());
+    }
     for artifact in &applied.artifacts {
         if artifact.publish {
             acc.published_artifacts
                 .insert(artifact.path.clone(), artifact.contents.clone());
         }
-        acc.file_contents.insert(
-            root.join(&artifact.generator)
-                .join(&artifact.path)
-                .to_string_lossy()
-                .into_owned(),
-            artifact.contents.clone(),
-        );
+        if let Ok(text) = std::str::from_utf8(&artifact.contents) {
+            acc.file_contents.insert(
+                root.join(&artifact.generator)
+                    .join(&artifact.path)
+                    .to_string_lossy()
+                    .into_owned(),
+                text.to_string(),
+            );
+        }
     }
     for (name, (bytes, targets)) in &applied.assets {
         let family = if req.target.capabilities.linear_memory {
@@ -304,18 +310,13 @@ pub fn run_generators<'a>(
             acc.embedded_assets.insert(name.clone(), bytes.clone());
         }
     }
-    acc.all_functions.retain(|f| {
-        let module = super::decls::module_of_files(&acc.file_modules, f.file_path.as_deref());
-        !applied
-            .consumed
-            .contains_key(&dream_abi::attributes::decl_identity(&module, &f.name.text))
-    });
     acc.consumed.extend(
         applied
             .consumed
             .iter()
             .map(|(id, by)| (id.clone(), by.clone())),
     );
+    record_consumed_artifacts(acc, &runs, &applied.consumed, &root);
     let ran: Vec<String> = runs.iter().map(|r| r.registered.name.clone()).collect();
     let files = if req.replay_materialized || !cfg!(feature = "native") {
         super::materialize::located(&root, &applied.files)
@@ -347,6 +348,41 @@ pub fn run_generators<'a>(
         snapshotted
     );
     Ok(())
+}
+
+/// Links each consumed function to the artifacts mapped back into it, so an editor can open the
+/// translated form of the function it is looking at.
+fn record_consumed_artifacts(
+    acc: &mut ProgramAccumulator<'_>,
+    runs: &[super::apply::GenRun<'_>],
+    consumed: &indexmap::IndexMap<String, dream_sema::module_graph::ConsumedBy>,
+    root: &std::path::Path,
+) {
+    for run in runs {
+        for output in &run.result.outputs {
+            let super::model::Output::Artifact { path, mappings, .. } = output else {
+                continue;
+            };
+            for (id, by) in consumed {
+                let inside = |target: &str| {
+                    target == id
+                        || target
+                            .strip_prefix(id.as_str())
+                            .is_some_and(|rest| rest.starts_with(['#', '.']))
+                };
+                if by.generator != run.registered.name
+                    || !mappings.iter().any(|m| inside(&m.target))
+                {
+                    continue;
+                }
+                let artifact = root.join(&run.registered.name).join(path);
+                let artifacts = acc.consumed_artifacts.entry(id.clone()).or_default();
+                if !artifacts.contains(&artifact) {
+                    artifacts.push(artifact);
+                }
+            }
+        }
+    }
 }
 
 fn run_jobs<'g>(
@@ -437,12 +473,14 @@ mod tests {
             outputs: vec![
                 Output::Consume {
                     target: "::selected".into(),
+                    help: String::new(),
                 },
                 Output::Artifact {
                     path: "resource.txt".into(),
                     contents: "ABC".into(),
                     mappings: Vec::new(),
                     publish: false,
+                    binary: false,
                 },
                 Output::Asset {
                     name: "payload".into(),

@@ -1,0 +1,32 @@
+module system.gpu;
+
+/// A vector of four `uint`s, laid out like a GPU `uint4`. `subgroup_ballot` returns one
+/// bit per subgroup lane in it, lane 0 in the lowest bit of `x`.
+public struct GpuUVec4 {
+    /// The first component.
+    public x: uint;
+
+    /// The second component.
+    public y: uint;
+
+    /// The third component.
+    public z: uint;
+
+    /// The fourth component.
+    public w: uint;
+
+    /// Creates the vector `(x, y, z, w)`.
+    public static fun of(x: uint, y: uint, z: uint, w: uint): GpuUVec4 {
+        let v = GpuUVec4();
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        v.w = w;
+        return v;
+    }
+
+    /// True when all components are equal.
+    fun operator ==(other: GpuUVec4): bool {
+        return this.x == other.x && this.y == other.y && this.z == other.z && this.w == other.w;
+    }
+}

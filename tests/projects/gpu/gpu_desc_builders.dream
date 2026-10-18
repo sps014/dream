@@ -1,0 +1,46 @@
+import system.testing;
+import system;
+import system.gpu;
+
+@test
+@timeout(180000)
+fun gpu_desc_builders(): void {
+    let texture = GpuTextureDesc.of(256, 128, GpuTextureFormat.Depth32Float)
+        .render_target(true)
+        .mip_levels(3);
+    Assert.eq(texture.width, 256);
+    Assert.eq(texture.height, 128);
+    Assert.is_true(texture.format == GpuTextureFormat.Depth32Float);
+    Assert.eq(texture.mip_level_count, 3);
+    Assert.eq(texture.layer_count, 1);
+    Assert.is_true(texture.is_render_target);
+    Assert.is_false(texture.is_storage);
+
+    let sampler = GpuSamplerDesc.nearest().address(GpuAddressMode.Repeat).max_anisotropy(64);
+    Assert.is_true(sampler.filter == GpuFilter.Nearest);
+    Assert.is_true(sampler.address_mode == GpuAddressMode.Repeat);
+    Assert.eq(sampler.anisotropy, 16);
+    Assert.is_true(sampler.compare.is_none());
+    Assert.is_true(GpuSamplerDesc.linear().comparing(GpuCompare.LessEqual).compare.is_some());
+    Assert.eq(GpuSamplerDesc.linear().max_anisotropy(0).anisotropy, 1);
+
+    let layout = GpuVertexLayout.of(20)
+        .attribute(0, GpuVertexFormat.Float32x3, 0)
+        .attribute(1, GpuVertexFormat.Float32x2, 12);
+    Assert.eq(layout.stride, 20);
+    Assert.eq(layout.attribute_count, 2);
+    Assert.is_false(layout.is_per_instance);
+
+    let pipeline = GpuRenderPipelineDesc.defaults(GpuTextureFormat.Bgra8Unorm)
+        .with_cull_mode(GpuCullMode.Back)
+        .with_blend_mode(GpuBlendMode.Alpha)
+        .with_depth(GpuTextureFormat.Depth32Float, GpuCompare.Less, true)
+        .with_vertex_buffer(layout);
+    Assert.is_true(pipeline.color_format == GpuTextureFormat.Bgra8Unorm);
+    Assert.is_true(pipeline.topology == GpuTopology.TriangleList);
+    Assert.is_true(pipeline.cull_mode == GpuCullMode.Back);
+    Assert.is_true(pipeline.blend_mode == GpuBlendMode.Alpha);
+    Assert.is_true(pipeline.depth_format.is_some());
+    Assert.eq(pipeline.vertex_buffer_count, 1);
+    Assert.eq(pipeline.sample_count, 1);
+}

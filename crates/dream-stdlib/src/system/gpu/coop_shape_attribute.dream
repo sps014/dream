@@ -1,0 +1,14 @@
+module system.gpu;
+
+/// Gives the fixed dimensions of a cooperative vector or matrix parameter or field.
+///
+/// Write one number for a `GpuCoopVec` element count, or input and output sizes for a
+/// `GpuMlpWeights` layer: `@coop_shape(16, 32)` is a layer from 16 inputs to 32 outputs.
+/// Dispatching a layer of other sizes fails with `GpuError.InvalidResource`. On a
+/// `GpuBuffer<GpuCoopVec<T>>` parameter it is the length of each element, and the CPU passes
+/// a `GpuBuffer<T>` that holds that many values per element.
+@attribute(AttributeTarget.Parameter, AttributeTarget.Field)
+public struct CoopShapeAttribute {
+    /// The dimensions, outermost first.
+    public dimensions: List<int>;
+}

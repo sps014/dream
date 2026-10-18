@@ -1,0 +1,458 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+import system.gpu;
+
+// The shader rules: what a GPU function body may contain beyond ordinary type checking. Every
+// violation is reported at the offending body node.
+internal static class Verify {
+    internal static fun function(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow body: List<ShaderNode>
+    ): void {
+        if f.is_async {
+            ctx.error_at(f.id, "GPU shaders cannot be async");
+        }
+        if program.is_entry(f.id) && Names.is_reserved(f.name) {
+            ctx.error_at(
+                f.id,
+                "'" + f.name + "' is a reserved word in the Slang shader language; rename this shader"
+            );
+        }
+        if !f.generics.is_empty() {
+            ctx.error_at(f.id, "GPU shaders cannot be generic");
+        }
+        for (let p in f.params) {
+            Verify.value_type(ctx, program, p.ty, f.id);
+        }
+        if f.ret.kind != TypeRefKind.Void {
+            Verify.value_type(ctx, program, f.ret, f.id);
+        }
+        let differentiable = f.has<DifferentiableAttribute>();
+        for (let s in body) {
+            Verify.node(ctx, program, f, s, differentiable, false);
+        }
+    }
+
+    // A type a shader declares, passes or returns.
+    static fun value_type(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow ty: GenTypeRef,
+        borrow at: string
+    ): void {
+        if ty.kind == TypeRefKind.Unknown {
+            return;
+        }
+        if ty.is_primitive(Primitive.String) || ty.is_primitive(Primitive.Char) {
+            ctx.error_at(at, "strings are not allowed in GPU shaders");
+            return;
+        }
+        if ty.kind == TypeRefKind.Named && !ty.decl.starts_with("system.") {
+            switch (ctx.find_decl(ty.decl)) {
+                Some(d) => {
+                    if d.kind != DeclKind.Struct && d.kind != DeclKind.Enum {
+                        ctx.error_at(
+                            at,
+                            "'"
+                                + d.name
+                                + "' is not a struct or enum; GPU shaders cannot use classes, unions or interfaces"
+                        );
+                    }
+                    return;
+                }
+                None => {}
+            }
+        }
+        if Verify.shader_only(ty) {
+            return;
+        }
+        let mapped = SlangTypes.of(ty, List<int>());
+        if mapped.is_empty()
+            && !SlangTypes.is_named(ty, "GpuBuffer") && !SlangTypes.is_named(ty, "GpuCoopVec") {
+            ctx.error_at(at, "type '" + ty.source_name() + "' is not supported in GPU shaders");
+        }
+    }
+
+    // The type of an expression's value. Index expressions carry their container's type in the
+    // generator model, so the element type is taken from it.
+    internal static fun value_of(borrow n: ShaderNode): GenTypeRef {
+        if n.is_expr(ExprKind.Index) && (n.ty.kind == TypeRefKind.Array || n.ty.args.length == 1) {
+            return n.ty.arg(0);
+        }
+        return n.ty;
+    }
+
+    // `system.gpu` types that exist only inside shader bodies.
+    static fun shader_only(borrow ty: GenTypeRef): bool {
+        return SlangTypes.is_named(ty, "GpuWorkgroupArray")
+            || SlangTypes.is_named(ty, "GpuRayQuery")
+            || SlangTypes.is_named(ty, "GpuCoopMat") || SlangTypes.is_named(ty, "GpuDiffPair");
+    }
+
+    static fun unsupported(ctx: GenContext, borrow n: ShaderNode, what: string): void {
+        ctx.error_at(n.id, what + " are not supported in GPU shaders");
+    }
+
+    static fun node(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow n: ShaderNode,
+        differentiable: bool,
+        function_value_ok: bool
+    ): void {
+        if n.is_stmt {
+            Verify.statement(ctx, program, f, n, differentiable);
+            return;
+        }
+        if n.expr == ExprKind.Lambda {
+            ctx.error_at(n.id, "closures are not allowed in GPU shaders");
+            return;
+        } else if n.expr == ExprKind.Await {
+            ctx.error_at(n.id, "GPU shaders cannot await");
+            return;
+        } else if n.expr == ExprKind.Literal {
+            if n.literal_kind
+                == "string" || n.literal_kind == "char" || n.ty.is_primitive(Primitive.String) {
+                ctx.error_at(n.id, "strings are not allowed in GPU shaders");
+            }
+            return;
+        } else if n.expr == ExprKind.Array {
+            ctx.error_at(
+                n.id,
+                "heap allocation is not allowed in GPU shaders (arrays are heap objects)"
+            );
+            return;
+        } else if n.expr == ExprKind.ArrayRepeat {
+            ctx.error_at(
+                n.id,
+                "heap allocation is not allowed in GPU shaders (arrays are heap objects)"
+            );
+            return;
+        } else if n.expr == ExprKind.Tuple {
+            Verify.unsupported(ctx, n, "tuples");
+            return;
+        } else if n.expr == ExprKind.Set {
+            ctx.error_at(
+                n.id,
+                "heap allocation is not allowed in GPU shaders (sets are heap objects)"
+            );
+            return;
+        } else if n.expr == ExprKind.Map {
+            ctx.error_at(
+                n.id,
+                "heap allocation is not allowed in GPU shaders (maps are heap objects)"
+            );
+            return;
+        } else if n.expr == ExprKind.Switch {
+            Verify.unsupported(ctx, n, "switch expressions");
+            return;
+        } else if n.expr == ExprKind.Try {
+            Verify.unsupported(ctx, n, "'?' error propagations");
+            return;
+        } else if n.expr == ExprKind.Is {
+            Verify.unsupported(ctx, n, "'is' tests");
+            return;
+        } else if n.expr == ExprKind.SizeOf {
+            Verify.unsupported(ctx, n, "sizeof expressions");
+            return;
+        } else if n.expr == ExprKind.AlignOf {
+            Verify.unsupported(ctx, n, "alignof expressions");
+            return;
+        } else if n.expr == ExprKind.NameOf {
+            Verify.unsupported(ctx, n, "nameof expressions");
+            return;
+        } else if n.expr == ExprKind.DeclOf {
+            Verify.unsupported(ctx, n, "declof expressions");
+            return;
+        } else if n.expr == ExprKind.TypeOf {
+            Verify.unsupported(ctx, n, "typeof expressions");
+            return;
+        } else if n.expr == ExprKind.SyntaxBlock {
+            Verify.unsupported(ctx, n, "syntax blocks");
+            return;
+        } else if n.expr == ExprKind.NamedArg {
+            Verify.unsupported(ctx, n, "named arguments");
+            return;
+        } else if n.expr == ExprKind.Call {
+            Verify.unsupported(ctx, n, "calls through function values");
+            return;
+        } else if n.expr == ExprKind.Pattern {
+            Verify.unsupported(ctx, n, "patterns");
+            return;
+        } else if n.expr == ExprKind.Identifier {
+            if n.symbol_kind == "function" && !function_value_ok {
+                ctx.error_at(
+                    n.id,
+                    "'"
+                        + n.text
+                        + "' is a function; call it as '"
+                        + n.text + "()' (GPU shaders use functions as values only in GpuDiff calls)"
+                );
+            }
+            if n.ty.is_primitive(Primitive.String) {
+                ctx.error_at(n.id, "strings are not allowed in GPU shaders");
+            }
+            return;
+        } else if n.expr == ExprKind.FunctionCall {
+            Verify.call(ctx, program, f, n, differentiable);
+            return;
+        } else if n.expr == ExprKind.MethodCall {
+            Verify.call(ctx, program, f, n, differentiable);
+            return;
+        } else {}
+        for (let c in n.children) {
+            Verify.node(ctx, program, f, c, differentiable, false);
+        }
+    }
+
+    static fun statement(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow n: ShaderNode,
+        differentiable: bool
+    ): void {
+        if n.stmt == StmtKind.Labeled {
+            ctx.error_at(n.id, "labeled statements are not supported in GPU shaders");
+            return;
+        } else if n.stmt == StmtKind.Break {
+            if !n.text.is_empty() {
+                ctx.error_at(n.id, "labeled break is not supported in GPU shaders");
+            }
+            return;
+        } else if n.stmt == StmtKind.Continue {
+            if !n.text.is_empty() {
+                ctx.error_at(n.id, "labeled continue is not supported in GPU shaders");
+            }
+            return;
+        } else if n.stmt == StmtKind.Await {
+            ctx.error_at(n.id, "GPU shaders cannot await");
+            return;
+        } else if n.stmt == StmtKind.AwaitForEach {
+            ctx.error_at(n.id, "GPU shaders cannot await");
+            return;
+        } else if n.stmt == StmtKind.Yield {
+            ctx.error_at(n.id, "GPU shaders cannot yield");
+            return;
+        } else if n.stmt == StmtKind.Lock {
+            Verify.unsupported(ctx, n, "lock statements");
+            return;
+        } else if n.stmt == StmtKind.Defer {
+            Verify.unsupported(ctx, n, "defer statements");
+            return;
+        } else if n.stmt == StmtKind.Overflow {
+            Verify.unsupported(ctx, n, "checked and unchecked blocks");
+            return;
+        } else if n.stmt == StmtKind.TupleDeclaration {
+            Verify.unsupported(ctx, n, "tuple declarations");
+            return;
+        } else if n.stmt == StmtKind.ForEach {
+            let range = n.children.length > 0
+                && n.child(0)
+                .is_expr(ExprKind.Binary) && (n.child(0).op == ".." || n.child(0).op == "..=");
+            if !range {
+                ctx.error_at(n.id, "GPU shaders can only loop over integer ranges such as 0..n");
+                return;
+            }
+        } else if n.stmt == StmtKind.Declaration {
+            if n.children.length > 0 {
+                let init = n.child(0);
+                if Builtins.key_of(init) == "workgroup_array" {
+                    if init.children.is_empty() || !init.child(0).has_constant {
+                        ctx.error_at(init.id, "workgroup_array needs a constant length");
+                    }
+                    return;
+                }
+                Verify.value_type(ctx, program, Verify.value_of(init), n.id);
+            }
+        } else if n.stmt == StmtKind.FunctionInvocation {
+            Verify.call(ctx, program, f, n, differentiable);
+            return;
+        } else if n.stmt == StmtKind.MethodInvocation {
+            Verify.call(ctx, program, f, n, differentiable);
+            return;
+        } else {}
+        for (let c in n.children) {
+            Verify.node(ctx, program, f, c, differentiable, false);
+        }
+    }
+
+    static fun call(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow n: ShaderNode,
+        differentiable: bool
+    ): void {
+        let key = Builtins.key_of(n);
+        let first = 0;
+        let function_arg = false;
+        let free = n.is_expr(ExprKind.FunctionCall) || n.is_statement(StmtKind.FunctionInvocation);
+        if !free {
+            first = 1;
+        }
+        if !key.is_empty() {
+            if !Builtins.template(key).is_some() && !SlangBody.special(key) {
+                ctx.error_at(n.id, "'" + n.text + "' is not available in GPU shaders");
+            }
+            if key.starts_with("GpuDiff.") {
+                function_arg = true;
+            }
+            if differentiable && key.starts_with("GpuMath.") && Verify.not_differentiable(key) {
+                ctx.error_at(
+                    n.id,
+                    "'"
+                        + n.text
+                        + "' is not differentiable and cannot be called from the @differentiable function '"
+                        + f.name + "'"
+                );
+            }
+        } else if free {
+            // An unresolved call has already been reported, by the analyzer or as the error
+            // that left this expression unchecked.
+            if n.symbol.is_empty() && n.ty.kind == TypeRefKind.Unknown {
+                return;
+            }
+            if n.symbol_kind == "type" {
+                Verify.value_type(ctx, program, n.ty, n.id);
+            } else if program.is_user_function(n.symbol) {
+                Verify.user_call(ctx, program, f, n, differentiable);
+            } else {
+                ctx.error_at(
+                    n.id,
+                    "'" + n.text + "' is a CPU function and cannot be called from GPU shaders"
+                );
+            }
+        } else {
+            let receiver = n.child(0);
+            if receiver.ty.kind == TypeRefKind.Named && !receiver.ty.decl.starts_with("system.") {
+                ctx.error_at(
+                    n.id,
+                    "methods of '"
+                        + receiver.ty.source_name()
+                        + "' cannot be called in GPU shaders; move the code into a @gpu helper"
+                );
+            } else {
+                ctx.error_at(
+                    n.id,
+                    "'" + n.text + "' is a CPU function and cannot be called from GPU shaders"
+                );
+            }
+            return;
+        }
+        let i = first;
+        if !free && !n.child(0).is_type_name() {
+            i = 0;
+        }
+        while i < n.children.length {
+            let arg = n.child(i);
+            Verify.node(ctx, program, f, arg, differentiable, function_arg && i == first);
+            if arg.ty.decl == "system.gpu::GpuWorkgroupArray" && arg.is_expr(ExprKind.Identifier) {
+                ctx.error_at(arg.id, "workgroup arrays cannot be passed to functions");
+            }
+            i = i + 1;
+        }
+    }
+
+    static fun user_call(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow f: GenFunction,
+        borrow n: ShaderNode,
+        differentiable: bool
+    ): void {
+        switch (ctx.find_function(n.symbol)) {
+            Some(callee) => {
+                if program.is_entry(callee.id) {
+                    ctx.error_at(
+                        n.id,
+                        "'"
+                            + callee.name
+                            + "' is a shader entry point and cannot be called; move the shared code into a @gpu helper"
+                    );
+                } else if !callee.has<GpuAttribute>() {
+                    ctx.error_at(
+                        n.id,
+                        "'"
+                            + callee.name
+                            + "' runs on the CPU; mark it @gpu to call it from GPU shaders"
+                    );
+                } else if differentiable && !callee.has<DifferentiableAttribute>() {
+                    ctx.error_at(
+                        n.id,
+                        "'"
+                            + callee.name
+                            + "' is called from the differentiable function '"
+                            + f.name + "' but is not @differentiable"
+                    );
+                }
+            }
+            None => {}
+        }
+    }
+
+    static fun not_differentiable(borrow key: string): bool {
+        return key
+            == "GpuMath.step"
+            || key
+            == "GpuMath.sign"
+            || key
+            == "GpuMath.floor"
+            || key == "GpuMath.ceil" || key == "GpuMath.round" || key == "GpuMath.fract";
+    }
+
+    // Reports a call cycle among GPU functions at the call that closes it.
+    internal static fun recursion(ctx: GenContext, borrow program: ShaderProgram): void {
+        let reported = List<string>();
+        for (let f in program.functions) {
+            let path = List<string>();
+            Verify.visit(ctx, program, f.id, path, reported);
+        }
+    }
+
+    static fun visit(
+        ctx: GenContext,
+        borrow program: ShaderProgram,
+        borrow id: string,
+        path: List<string>,
+        reported: List<string>
+    ): void {
+        if path.contains(id) {
+            return;
+        }
+        path.push(id);
+        for (let call in program.calls_from(id)) {
+            let callee = call.symbol;
+            if path.contains(callee) {
+                if !reported.contains(call.id) {
+                    reported.push(call.id);
+                    let name = callee.substring(
+                        callee.last_index_of("::").unwrap_or(-2) + 2,
+                        callee.length
+                    );
+                    if callee == id {
+                        ctx.error_at(
+                            call.id,
+                            "recursion is not allowed in GPU shaders ('" + name + "' calls itself)"
+                        );
+                    } else {
+                        ctx.error_at(
+                            call.id,
+                            "recursion is not allowed in GPU shaders ('"
+                                + name + "' is already on the call path)"
+                        );
+                    }
+                }
+            } else if program.is_user_function(callee) {
+                Verify.visit(ctx, program, callee, path, reported);
+            }
+        }
+        path.pop();
+    }
+}

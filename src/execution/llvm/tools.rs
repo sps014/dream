@@ -1,19 +1,16 @@
-//! Resolve the pinned LLVM toolchain: `DREAM_LLVM` (a `bin/` directory or its parent), then the
-//! minimal LLVM a release ships in `lib/dream/llvm`, then a development LLVM under
-//! `~/.dream/toolchains/llvm-*` (`scripts/fetch-dev-llvm.sh`).
+//! Resolve the pinned LLVM toolchain through the shared pinned-tool table: `DREAM_LLVM` (a `bin/`
+//! directory or its parent), then the minimal LLVM a release ships in `lib/dream/llvm`, then a
+//! development LLVM under `~/.dream/toolchains/llvm-<version>` (`scripts/fetch-dev-llvm.sh`).
 
 use crate::driver::toolchain::ToolchainConfig;
-use std::path::{Path, PathBuf};
+use dream_abi::toolchain::LLVM_VERSION;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-/// Must match `scripts/build-llvm-dist.sh`'s CI pin and `scripts/fetch-dev-llvm.sh`. Textual IR is only guaranteed to parse with
-/// the LLVM major it was written for, so any other major is rejected.
-pub const LLVM_VERSION: &str = "22.1.8";
+/// Textual IR is only guaranteed to parse with the LLVM major it was written for, so any other
+/// major is rejected.
 const LLVM_MAJOR: &str = "22.";
-
-const MISSING_LLVM: &str = "LLVM 22 not found: a Dream release ships it in lib/dream/llvm next to the binary; \
-     for a development build run scripts/fetch-dev-llvm.sh, or set DREAM_LLVM to an LLVM 22 bin/";
 
 #[derive(Clone)]
 pub struct LlvmTools {
@@ -69,12 +66,9 @@ pub fn resolve_llvm(config: &Arc<ToolchainConfig>) -> Result<LlvmTools, String> 
 }
 
 fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
-    let bin = env_bin(config)
-        .or_else(|| super::bundle::bundled_llvm_bin(config).filter(|b| has_opt(b)))
-        .or_else(|| installed_bin(config))
-        .ok_or_else(|| MISSING_LLVM.to_string())?;
+    let llvm = dream_abi::toolchain::pinned_tool("llvm").expect("llvm is a pinned tool");
     let tools = LlvmTools {
-        bin,
+        bin: config.locate_tool(llvm)?.root.join("bin"),
         config: config.clone(),
     };
     for t in ["opt", "llc", "llvm-link", "llvm-dis"] {
@@ -104,38 +98,4 @@ fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
         ));
     }
     Ok(tools.bin)
-}
-
-fn env_bin(config: &ToolchainConfig) -> Option<PathBuf> {
-    let p = config.llvm.as_ref()?.clone();
-    has_opt(&p)
-        .then(|| p.clone())
-        .or_else(|| has_opt(&p.join("bin")).then(|| p.join("bin")))
-}
-
-fn installed_bin(config: &ToolchainConfig) -> Option<PathBuf> {
-    config.toolchains.iter().find_map(|r| newest_llvm_in(r))
-}
-
-fn newest_llvm_in(toolchains: &Path) -> Option<PathBuf> {
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(toolchains)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .is_some_and(|n| n.starts_with("llvm-"))
-        })
-        .collect();
-    dirs.sort();
-    dirs.into_iter()
-        .rev()
-        .map(|d| d.join("bin"))
-        .find(|b| has_opt(b))
-}
-
-fn has_opt(bin: &Path) -> bool {
-    let opt = if cfg!(windows) { "opt.exe" } else { "opt" };
-    bin.join(opt).is_file()
 }

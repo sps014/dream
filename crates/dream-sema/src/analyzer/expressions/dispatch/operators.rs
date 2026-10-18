@@ -149,6 +149,7 @@ impl<'a> Analyzer<'a> {
                                     | Type::ISize(_)
                                     | Type::USize(_)
                                     | Type::Byte(_)
+                                    | Type::Float16(_)
                                     | Type::Float(_)
                                     | Type::Double(_)
                             )

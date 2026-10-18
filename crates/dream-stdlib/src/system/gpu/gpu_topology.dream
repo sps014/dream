@@ -1,0 +1,15 @@
+module system.gpu;
+
+/// How a draw groups vertices into primitives.
+public enum GpuTopology {
+    /// Every three vertices form a separate triangle.
+    TriangleList = 0,
+    /// Each vertex after the first two forms a triangle with the previous two.
+    TriangleStrip = 1,
+    /// Every two vertices form a separate line.
+    LineList = 2,
+    /// Each vertex after the first forms a line with the previous one.
+    LineStrip = 3,
+    /// Each vertex is a single point.
+    PointList = 4,
+}

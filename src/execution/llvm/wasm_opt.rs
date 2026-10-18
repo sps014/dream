@@ -36,23 +36,8 @@ pub fn optimize(path: &Path, level: OptLevel, config: &Arc<ToolchainConfig>) -> 
 }
 
 pub fn resolve_existing(config: &ToolchainConfig) -> Option<PathBuf> {
-    if let Some(path) = &config.wasm_opt {
-        return Some(path.clone());
-    }
-    let binary = if cfg!(windows) {
-        "wasm-opt.exe"
-    } else {
-        "wasm-opt"
-    };
-    config
-        .toolchains
-        .iter()
-        .map(|root| {
-            root.join(format!("binaryen-{BINARYEN_VERSION}"))
-                .join("bin")
-                .join(binary)
-        })
-        .find(|path| path.is_file())
+    let binaryen = dream_abi::toolchain::pinned_tool("binaryen")?;
+    config.locate_tool(binaryen).ok().map(|tool| tool.primary())
 }
 
 pub fn resolve(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
@@ -99,7 +84,7 @@ mod tests {
     use super::*;
     fn config(root: &Path) -> ToolchainConfig {
         ToolchainConfig {
-            wasm_opt: None,
+            tool_overrides: Default::default(),
             toolchains: vec![root.join("toolchains")],
             prefix: root.to_path_buf(),
             path: Vec::new(),
@@ -129,7 +114,7 @@ mod tests {
         let binary = temp.path().join("wasm-opt");
         executable(&binary, "#!/bin/sh\necho 'wasm-opt version 116'\n");
         let mut config = config(temp.path());
-        config.wasm_opt = Some(binary);
+        config.tool_overrides.insert("binaryen".into(), binary);
         assert!(
             resolve(&Arc::new(config))
                 .unwrap_err()
@@ -148,7 +133,9 @@ mod tests {
             ),
         );
         let mut configuration = config(temp.path());
-        configuration.wasm_opt = Some(binary);
+        configuration
+            .tool_overrides
+            .insert("binaryen".into(), binary);
         let wasm = temp.path().join("main.wasm");
         std::fs::write(&wasm, b"invalid").unwrap();
         let error = optimize(&wasm, OptLevel::O3, &Arc::new(configuration)).unwrap_err();

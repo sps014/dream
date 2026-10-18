@@ -29,6 +29,9 @@ TAG_FUNCBOX: i32 = 257 => "TAG_FUNCBOX";
 /// Multi-capture closure env (`object[]` of CaptureCells). `TAG_ARRAY` last-drop is a shallow
 /// free; this tag dispatches to typed `release_array_t{object}` from `dream_release_object`.
 TAG_CLOSURE_ENV: i32 = 258 => "TAG_CLOSURE_ENV";
+/// Boxed `float16` (an `object` holding a binary16 payload). Numbered after the special tags
+/// rather than next to `TAG_FLOAT` so struct tags keep starting at `TAG_STRUCT_BASE`.
+TAG_FLOAT16: i32 = 259 => "TAG_FLOAT16";
 /// Structs/unions are assigned consecutive tags starting here, ordered by sorted type name.
 TAG_STRUCT_BASE: i32 = 14 => "TAG_STRUCT_BASE";
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker

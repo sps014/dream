@@ -1,0 +1,47 @@
+module shaders;
+
+import system.gpu;
+
+public struct VertexOutput {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public color: GpuVec4;
+
+    @location(1)
+    public uv: GpuVec2;
+}
+
+@gpu
+fun tint(color: GpuVec4, amount: float): GpuVec4 {
+    return GpuMath.mix(color, GpuVec4.splat(1.0f), GpuVec4.splat(GpuMath.saturate(amount)));
+}
+
+@vertex
+public fun triangle_vertex(transform: GpuMat4): VertexOutput {
+    let x = -0.5f;
+    let y = -0.5f;
+    if vertex_id() == 1 {
+        x = 0.5f;
+    } else if vertex_id() == 2 {
+        x = 0.0f;
+        y = 0.5f;
+    }
+    let result = VertexOutput();
+    result.position = transform * GpuVec4.of(x, y, 0.0f, 1.0f);
+    result.color = GpuVec4.of(1.0f, 0.3f, 0.1f, 1.0f);
+    result.uv = GpuVec2.of(x + 0.5f, y + 0.5f);
+    return result;
+}
+
+@fragment
+public fun triangle_fragment(
+    input: VertexOutput,
+    albedo: GpuTexture,
+    linear: GpuSampler,
+    highlight: float
+): GpuVec4 {
+    let texel = albedo.sample(linear, input.uv);
+    return tint(texel * input.color, highlight);
+}

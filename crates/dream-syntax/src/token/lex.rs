@@ -98,11 +98,11 @@ fn consume_suffix(bytes: &[u8], allow_byte: bool, is_float: bool) -> Option<usiz
     }
     // Longest suffix first.
     let candidates: &[&[u8]] = if is_float {
-        &[b"d", b"D", b"f", b"F"]
+        &[b"d", b"D", b"f", b"F", b"h", b"H"]
     } else if allow_byte {
         &[
             b"uL", b"ul", b"Ul", b"UL", b"Lu", b"lU", b"LU", b"lu", b"b", b"B", b"u", b"U", b"l",
-            b"L", b"d", b"D", b"f", b"F",
+            b"L", b"d", b"D", b"f", b"F", b"h", b"H",
         ]
     } else {
         &[

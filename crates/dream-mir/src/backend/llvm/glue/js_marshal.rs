@@ -191,7 +191,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let (method, narrow) = unbox_prim(p);
                 let v = self.bridge(method, std::slice::from_ref(j));
                 Some(if narrow {
-                    V::s(self.conv(&v, &Ty::F32))
+                    let target =
+                        super::super::types::ll_ty(self.interner, ty, &self.h(), &self.word());
+                    V::s(self.conv(&v, &target))
                 } else {
                     v
                 })

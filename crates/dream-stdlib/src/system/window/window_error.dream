@@ -1,0 +1,28 @@
+module system.window;
+
+/// Why a window could not be created.
+public class WindowError: Error {
+    error_code: string;
+    error_message: string;
+
+    /// Creates an error with a stable machine code and a readable message.
+    public constructor(code: string, message: string) {
+        this.error_code = code;
+        this.error_message = message;
+    }
+
+    /// The machine-readable reason. `ENODISPLAY` means no display is available, such
+    /// as on a server, under Node, or when the platform window system failed to start.
+    /// `ETHREAD` means the call came from a `Task` worker instead of the program's main
+    /// thread, the only thread allowed to own windows. `ENOTFOUND` means `Window.canvas`
+    /// found no `<canvas>` element with that id. `EINVAL` means the description has a
+    /// non-positive size. `EWINDOW` means the platform refused to create the window.
+    public fun code(): string {
+        return this.error_code;
+    }
+
+    /// A human-readable description that includes the platform's own message when it gave one.
+    public fun message(): string {
+        return this.error_message;
+    }
+}

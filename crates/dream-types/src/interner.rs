@@ -82,6 +82,7 @@ impl TypeInterner {
         interner.intern(TyKind::Void);
         interner.intern(TyKind::Error);
         interner.intern(TyKind::Js);
+        interner.intern(TyKind::Prim(PrimTy::Float16));
         interner
     }
 
@@ -153,6 +154,9 @@ impl TypeInterner {
     }
     pub fn float(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Float))
+    }
+    pub fn float16(&self) -> TypeId {
+        self.find(&TyKind::Prim(PrimTy::Float16))
     }
     pub fn double(&self) -> TypeId {
         self.find(&TyKind::Prim(PrimTy::Double))

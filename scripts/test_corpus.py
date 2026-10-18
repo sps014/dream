@@ -9,6 +9,28 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def gpu_environment(env):
+    """GPU suites run strictly ahead of time: the host aborts if the Slang compiler is ever
+    loaded, and no Slang toolchain is named at run time (the build finds the pinned one). On
+    macOS, Vulkan runs through the Khronos loader and MoltenVK the host build cached, unless
+    the environment already names a Vulkan driver."""
+    env["DREAM_GPU_STRICT_AOT"] = "1"
+    env.pop("DREAM_SLANG", None)
+    if sys.platform != "darwin" or "VK_DRIVER_FILES" in env:
+        return
+    target = Path(env.get("CARGO_TARGET_DIR", ROOT / "target"))
+    if not target.is_absolute():
+        target = ROOT / target
+    cache = Path(env.get("DREAM_GPU_CACHE", target / "gpu-cache"))
+    loaders = sorted(cache.glob("vulkan-loader-*/**/libvulkan.1.dylib"))
+    drivers = sorted(p for p in cache.glob("moltenvk-*/**/MoltenVK_icd.json") if "dynamic" in p.parts)
+    if loaders and drivers:
+        env["DYLD_LIBRARY_PATH"] = os.pathsep.join(
+            filter(None, [str(loaders[0].parent), env.get("DYLD_LIBRARY_PATH")]))
+        env["VK_DRIVER_FILES"] = str(drivers[0])
+        env.setdefault("MVK_CONFIG_LOG_LEVEL", "0")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     host = parser.add_mutually_exclusive_group()
@@ -30,6 +52,7 @@ def main():
             env.pop(key, None)
         else:
             env[key] = value
+    gpu_environment(env)
     build = subprocess.run(["cargo", "build", "--workspace", "--quiet"], cwd=ROOT, env=env)
     if build.returncode:
         return build.returncode

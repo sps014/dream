@@ -1,0 +1,19 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun float16_parse(): void {
+    Assert.eq(float16.parse("0.125").unwrap_or(0.0h), 0.125h);
+    Assert.eq(float16.parse("-3").unwrap_or(0.0h), -3.0h);
+    Assert.eq(float16.parse("6.1e-05").unwrap_or(0.0h), (float16)6.097555160522461e-05d);
+    Assert.eq(float16.parse("2049").unwrap_or(0.0h), 2048.0h);
+    Assert.eq(float16.parse("65500").unwrap_or(0.0h), float16.max_value);
+    Assert.is_true(float16.parse("70000").unwrap_or(0.0h).is_infinite());
+    Assert.is_true(float16.parse("nan").unwrap_or(0.0h).is_nan());
+    Assert.eq(float16.parse("inf").unwrap_or(0.0h), 1.0h / 0.0h);
+    Assert.eq(float16.parse("+inf").unwrap_or(0.0h), 1.0h / 0.0h);
+    Assert.eq(float16.parse("-inf").unwrap_or(0.0h), -1.0h / 0.0h);
+    Assert.is_true(float16.parse("").is_err());
+    Assert.is_true(float16.parse("abc").is_err());
+}

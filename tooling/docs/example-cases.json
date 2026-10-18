@@ -392,5 +392,66 @@
     "page": "docs/library/text/simd.md",
     "block": 0,
     "mode": "compile"
+  },
+  {
+    "name": "window-game-loop",
+    "page": "docs/library/system/window.md",
+    "block": 0,
+    "mode": "compile"
+  },
+  {
+    "name": "window-headless",
+    "page": "docs/library/system/window.md",
+    "block": 2,
+    "stdout": "true\nfalse\ntrue\n"
+  },
+  {
+    "name": "gpu-first-compute",
+    "page": "docs/library/gpu/index.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "gpu-open-device",
+    "page": "docs/library/gpu/index.md",
+    "block": 2,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "gpu-window-render",
+    "page": "docs/library/gpu/rendering.md",
+    "block": 3,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "gpu-ray-query",
+    "page": "docs/library/gpu/ray-tracing.md",
+    "block": 1,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "gpu-autodiff",
+    "page": "docs/library/gpu/machine-learning.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "cookbook-gpu-histogram",
+    "page": "docs/cookbook/gpu-histogram.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 600
+  },
+  {
+    "name": "cookbook-gpu-spotlight",
+    "page": "docs/cookbook/gpu-spotlight.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 600
   }
 ]

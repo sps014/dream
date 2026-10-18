@@ -55,7 +55,8 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates curl git xz-utils build-essential pkg-config \
-            cmake ninja-build python3 clang libclang-dev
+            cmake ninja-build python3 clang libclang-dev \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
 
       - uses: actions/checkout@v4
 
@@ -69,9 +70,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dream-host-gpu -p dream-host-window -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dreamer -p dream-lsp
+            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-unicode -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dream-host-gpu -p dream-host-window -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
@@ -99,7 +100,7 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
-          for capability in core unicode crypto process timezone net cli data io; do
+          for capability in core unicode crypto process timezone net cli data io gpu window; do
             case "$RUNNER_OS" in
               Windows) library="dream_host_${capability}.dll" ;;
               macOS) library="libdream_host_${capability}.dylib" ;;
@@ -114,11 +115,17 @@ jobs:
               cp "${BIN_DIR}/$library.lib" "$STAGE/"
             fi
           done
+          # The GPU host loads Dawn (native WebGPU) from its own directory.
+          case "$RUNNER_OS" in
+            Windows) cp "${BIN_DIR}/dawn.dll" "$STAGE/" ;;
+            macOS) cp "${BIN_DIR}/libdawn.dylib" "$STAGE/" ;;
+            *) cp "${BIN_DIR}/libdawn.so" "$STAGE/" ;;
+          esac
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
           # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)
           # and the runtime prebuilt for every level, which `dream` finds beside itself.
-          LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' src/execution/llvm/tools.rs)"
+          LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' crates/dream-abi/src/toolchain.rs)"
           LLVM_DIST="dream-llvm-${LLVM_VERSION}-${{ matrix.target }}"
           curl -fL --retry 3 -o "${LLVM_DIST}.tar.xz" \
             "https://github.com/${{ github.repository }}/releases/download/llvm-dist-${LLVM_VERSION}/${LLVM_DIST}.tar.xz"

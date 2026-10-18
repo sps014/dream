@@ -1,0 +1,20 @@
+module system.window;
+
+/// An analog control on a standard-layout gamepad.
+///
+/// Stick axes range from `-1.0` to `1.0`; positive X is right and positive Y is down.
+/// Trigger axes range from `0.0` (released) to `1.0` (fully pressed).
+public enum GamepadAxis {
+    /// Horizontal position of the left stick.
+    LeftX = 0,
+    /// Vertical position of the left stick.
+    LeftY = 1,
+    /// Horizontal position of the right stick.
+    RightX = 2,
+    /// Vertical position of the right stick.
+    RightY = 3,
+    /// How far the left trigger is pressed.
+    LeftTrigger = 4,
+    /// How far the right trigger is pressed.
+    RightTrigger = 5,
+}

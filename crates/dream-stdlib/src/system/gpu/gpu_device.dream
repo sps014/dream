@@ -1,0 +1,483 @@
+module system.gpu;
+
+import system.window;
+
+/// A connection to one GPU through one graphics API. Every buffer, texture, pipeline and
+/// surface belongs to the device that created it, and using it with another device returns
+/// `GpuError.WrongDevice`.
+///
+/// Create one with `GpuDevice.create`. Releasing the last reference to the device releases
+/// it on the host once the GPU finished its submitted work.
+public class GpuDevice {
+    handle: int;
+    device_backend: GpuBackend;
+    features: int;
+    libraries: Map<string, int>;
+    pipelines: Map<string, int>;
+
+    constructor(handle: int) {
+        this.handle = handle;
+        this.device_backend = gpu_backend_of(GpuHost.device_backend(handle));
+        this.features = GpuHost.device_features(handle);
+        this.libraries = Map<string, int>();
+        this.pipelines = Map<string, int>();
+    }
+
+    /// Opens a device on `backend`.
+    ///
+    /// `GpuBackend.Auto` picks the platform's native API when this build has shader code for
+    /// it, and WebGPU otherwise. Any other backend is used exactly as asked: when this build
+    /// has no shader code for it the result is `GpuError.BackendNotCompiled`, and when the
+    /// machine cannot run it the result is `GpuError.BackendUnavailable`. A program without
+    /// shaders may open any backend.
+    public static async fun create(backend: GpuBackend): Result<GpuDevice, GpuError> {
+        let compiled = GpuShaderLibrary.compiled_mask();
+        let requested: int = backend;
+        if backend != GpuBackend.Auto && compiled != 0 && (compiled & (1 << requested)) == 0 {
+            return Result.Err(GpuError.BackendNotCompiled(backend));
+        }
+        let handle = GpuHost.device_create(requested, compiled).await;
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuDevice(handle));
+    }
+
+    /// The API this device runs on; never `GpuBackend.Auto`.
+    public get backend(): GpuBackend {
+        return this.device_backend;
+    }
+
+    internal get id(): int {
+        return this.handle;
+    }
+
+    /// True when the device offers `feature`.
+    public fun supports(feature: GpuFeature): bool {
+        let bit: int = feature;
+        return (this.features & (1 << bit)) != 0;
+    }
+
+    /// `Ok(true)` while the device works, or `GpuError.DeviceLost` once the driver or
+    /// browser took it away. Calls that touch a lost device also fail with `DeviceLost`.
+    public fun check(): Result<bool, GpuError> {
+        if GpuHost.device_check(this.handle) != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(true);
+    }
+
+    fun make_buffer<T: unmanaged>(length: int, usage: int): Result<GpuBuffer<T>, GpuError> {
+        if length < 0 {
+            return Result.Err(GpuError.InvalidResource("buffer length must not be negative"));
+        }
+        let handle = GpuHost.buffer_create(this.handle, length * GpuBuffer<T>.stride(), usage);
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuBuffer<T>(this.handle, handle, length, usage));
+    }
+
+    fun filled_buffer<T: unmanaged>(data: T[], usage: int): Result<GpuBuffer<T>, GpuError> {
+        let buffer = this.make_buffer<T>(data.length, usage)?;
+        buffer.write(data)?;
+        return Result.Ok(buffer);
+    }
+
+    /// Creates a storage buffer that shaders can read and write, filled with `data`.
+    public fun buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError> {
+        return this.filled_buffer<T>(data, GpuBufferUsage.Storage);
+    }
+
+    /// Creates a storage buffer of `length` elements, all zero.
+    public fun buffer_alloc<T: unmanaged>(length: int): Result<GpuBuffer<T>, GpuError> {
+        return this.make_buffer<T>(length, GpuBufferUsage.Storage);
+    }
+
+    /// Creates a vertex buffer filled with `data`, one element per vertex. Describe its
+    /// layout to the pipeline with `GpuVertexLayout` and bind it with
+    /// `GpuRenderPass.set_vertex_buffer`.
+    public fun vertex_buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError> {
+        return this.filled_buffer<T>(data, GpuBufferUsage.Vertex);
+    }
+
+    /// Creates an index buffer of 32-bit indexes for `GpuRenderPass.draw_indexed`.
+    public fun index_buffer_from(data: uint[]): Result<GpuBuffer<uint>, GpuError> {
+        return this.filled_buffer<uint>(data, GpuBufferUsage.Index);
+    }
+
+    /// Creates an index buffer of 16-bit indexes, which halves its memory when meshes have
+    /// fewer than 65,536 vertices.
+    public fun index_buffer_from(data: ushort[]): Result<GpuBuffer<ushort>, GpuError> {
+        return this.filled_buffer<ushort>(data, GpuBufferUsage.Index);
+    }
+
+    /// Creates a texture described by `desc`, with every texel zero.
+    public fun texture(desc: GpuTextureDesc): Result<GpuTexture, GpuError> {
+        if desc.width <= 0 || desc.height <= 0 {
+            return Result.Err(
+                GpuError.InvalidResource("texture width and height must be positive")
+            );
+        }
+        let handle = GpuHost.texture_create(this.handle, desc.encode());
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(
+            GpuTexture(this.handle, handle, desc.width, desc.height, desc.format, true)
+        );
+    }
+
+    /// Creates a `width` by `height` texture that shaders write texel by texel.
+    ///
+    /// `T` chooses the format: `GpuVec4` stores four floats, `GpuVec2` two, `float` one and
+    /// `uint` one unsigned integer. Other element types return `GpuError.InvalidResource`.
+    public fun storage_texture<T: unmanaged>(
+        width: int,
+        height: int
+    ): Result<GpuStorageTexture<T>, GpuError> {
+        let format = GpuStorageTexture<T>.format_of()?;
+        if width <= 0 || height <= 0 {
+            return Result.Err(
+                GpuError.InvalidResource("texture width and height must be positive")
+            );
+        }
+        let desc = GpuTextureDesc.of(width, height, format).storage(true);
+        let handle = GpuHost.texture_create(this.handle, desc.encode());
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuStorageTexture<T>(this.handle, handle, width, height, format));
+    }
+
+    /// Creates a sampler, which tells shaders how to filter and wrap texture reads.
+    public fun sampler(desc: GpuSamplerDesc): Result<GpuSampler, GpuError> {
+        let handle = GpuHost.sampler_create(this.handle, desc.encode());
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuSampler(this.handle, handle));
+    }
+
+    fun descriptor(resource: int, owner: int): Result<ulong, GpuError> {
+        if !this.supports(GpuFeature.Bindless) {
+            return Result.Err(GpuError.UnsupportedCapability(GpuFeature.Bindless));
+        }
+        if resource == 0 {
+            return Result.Err(GpuError.InvalidResource("the resource was destroyed"));
+        }
+        if owner != this.handle {
+            return Result.Err(GpuError.WrongDevice("bindless handle"));
+        }
+        let bits = GpuHost.descriptor_handle(resource);
+        if bits == 18446744073709551615ul {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(bits);
+    }
+
+    /// A bindless handle to `texture`, which can be stored in any buffer and sampled by
+    /// shaders. It stays valid while the texture is alive. Needs `GpuFeature.Bindless`.
+    public fun handle(texture: GpuTexture): Result<GpuHandle<GpuTexture>, GpuError> {
+        let bits = this.descriptor(texture.handle, texture.device_id)?;
+        return Result.Ok(GpuHandle<GpuTexture>.of_bits(bits));
+    }
+
+    /// A bindless handle to `sampler`. Needs `GpuFeature.Bindless`.
+    public fun handle(sampler: GpuSampler): Result<GpuHandle<GpuSampler>, GpuError> {
+        let bits = this.descriptor(sampler.handle, sampler.device_id)?;
+        return Result.Ok(GpuHandle<GpuSampler>.of_bits(bits));
+    }
+
+    /// Connects the device to `window` so frames can be drawn into it. The surface
+    /// follows the window's vsync hint from `WindowDesc.vsync`. Headless and closed windows
+    /// return `GpuError.SurfaceLost`.
+    public fun create_surface(window: Window): Result<GpuSurface, GpuError> {
+        let window_handle = window.host_handle;
+        if window_handle <= 0 {
+            return Result.Err(GpuError.SurfaceLost("the window is headless or closed"));
+        }
+        let handle = GpuHost.surface_create(this.handle, window_handle, window.vsync_hint);
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuSurface(this, handle, window));
+    }
+
+    /// Creates a render pipeline from a `@vertex` and a `@fragment` shader, both given as
+    /// their `GpuShaders` descriptors. Every `@location` the fragment shader reads must be
+    /// written by the vertex shader; otherwise the result is `GpuError.Validation`.
+    public fun render_pipeline(
+        vertex_shader: GpuStageShader,
+        fragment_shader: GpuStageShader,
+        desc: GpuRenderPipelineDesc
+    ): Result<GpuRenderPipeline, GpuError> {
+        let vertex = vertex_shader.descriptor();
+        let fragment = fragment_shader.descriptor();
+        if vertex.stage != GpuStage.Vertex || fragment.stage != GpuStage.Fragment {
+            return Result.Err(
+                GpuError.Validation("render_pipeline needs a @vertex and a @fragment shader")
+            );
+        }
+        for (let location in fragment.inputs) {
+            if !vertex.outputs.contains(location) {
+                return Result.Err(
+                    GpuError.Validation(
+                        fragment.name
+                            + " reads @location("
+                            + location.to_string() + "), which " + vertex.name + " does not write"
+                    )
+                );
+            }
+        }
+        let vertex_library = this.library(vertex.library)?;
+        let fragment_library = this.library(fragment.library)?;
+        let handle = GpuHost.render_pipeline_create(
+            vertex_library,
+            vertex.name,
+            fragment_library,
+            fragment.name,
+            desc.encode()
+        );
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuRenderPipeline(this.handle, handle));
+    }
+
+    /// Creates a ray tracing pipeline from a `@ray_generation` shader, the `@miss` shaders
+    /// `trace_ray` selects by index, the hit groups instances select by their hit group
+    /// offset, and the `@callable` shaders `call_shader` selects by index. Needs
+    /// `GpuFeature.RayTracing`.
+    public fun ray_tracing_pipeline(
+        ray_generation: GpuStageShader,
+        misses: GpuStageShader[],
+        hit_groups: GpuHitGroup[],
+        callables: GpuStageShader[]
+    ): Result<GpuRayTracingPipeline, GpuError> {
+        if !this.supports(GpuFeature.RayTracing) {
+            return Result.Err(GpuError.UnsupportedCapability(GpuFeature.RayTracing));
+        }
+        let libraries = List<int>();
+        let entries = List<string>();
+        // Layout: [ray_generation, miss_count, misses..., group_count,
+        //          (closest_hit, any_hit, intersection)..., callable_count, callables...],
+        // each an index into `entries`, or -1 for an absent hit group member.
+        let layout = List<int>();
+        layout.push(
+            this.add_entry(ray_generation.descriptor(), GpuStage.RayGeneration, libraries, entries)?
+        );
+        layout.push(misses.length);
+        for (let miss in misses) {
+            layout.push(this.add_entry(miss.descriptor(), GpuStage.Miss, libraries, entries)?);
+        }
+        layout.push(hit_groups.length);
+        for (let group in hit_groups) {
+            layout.push(
+                this.add_entry(group.closest_hit, GpuStage.ClosestHit, libraries, entries)?
+            );
+            layout.push(
+                this.add_optional_entry(group.any_hit, GpuStage.AnyHit, libraries, entries)?
+            );
+            layout.push(
+                this.add_optional_entry(
+                    group.intersection,
+                    GpuStage.Intersection,
+                    libraries,
+                    entries
+                )?
+            );
+        }
+        layout.push(callables.length);
+        for (let callable in callables) {
+            layout.push(
+                this.add_entry(callable.descriptor(), GpuStage.Callable, libraries, entries)?
+            );
+        }
+        let handle = GpuHost.ray_tracing_pipeline_create(
+            this.handle,
+            libraries.take_array(),
+            entries.join("\n"),
+            layout.take_array()
+        );
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuRayTracingPipeline(this.handle, handle));
+    }
+
+    fun add_entry(
+        shader: GpuStageDescriptor,
+        stage: GpuStage,
+        libraries: List<int>,
+        entries: List<string>
+    ): Result<int, GpuError> {
+        if shader.stage != stage {
+            return Result.Err(
+                GpuError.Validation(shader.name + " is not the expected shader stage")
+            );
+        }
+        libraries.push(this.library(shader.library)?);
+        entries.push(shader.name);
+        return Result.Ok(entries.length - 1);
+    }
+
+    fun add_optional_entry(
+        shader: Option<GpuStageDescriptor>,
+        stage: GpuStage,
+        libraries: List<int>,
+        entries: List<string>
+    ): Result<int, GpuError> {
+        return switch (shader) {
+            Some(s) => this.add_entry(s, stage, libraries, entries),
+            None => Result.Ok(-1),
+        };
+    }
+
+    /// Builds a bottom-level acceleration structure, the ray tracing index of one mesh.
+    /// Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.
+    public async fun build_bottom_level(
+        geometry: GpuGeometry
+    ): Result<GpuAccelerationStructure, GpuError> {
+        if !this.supports(GpuFeature.RayTracing) && !this.supports(GpuFeature.RayQuery) {
+            return Result.Err(GpuError.UnsupportedCapability(GpuFeature.RayTracing));
+        }
+        if geometry.device_id != this.handle {
+            return Result.Err(GpuError.WrongDevice("geometry buffer"));
+        }
+        let handle = GpuHost.bottom_level_build(this.handle, geometry.encode()).await;
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuAccelerationStructure(this.handle, handle));
+    }
+
+    /// Builds a top-level acceleration structure from mesh instances. Shaders trace rays
+    /// against it. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.
+    public async fun build_top_level(
+        instances: GpuInstance[]
+    ): Result<GpuAccelerationStructure, GpuError> {
+        if !this.supports(GpuFeature.RayTracing) && !this.supports(GpuFeature.RayQuery) {
+            return Result.Err(GpuError.UnsupportedCapability(GpuFeature.RayTracing));
+        }
+        let records = List<int>();
+        let transforms = List<float>();
+        for (let instance in instances) {
+            if instance.bottom_level.device_id != this.handle {
+                return Result.Err(GpuError.WrongDevice("instance acceleration structure"));
+            }
+            instance.encode(records, transforms);
+        }
+        let handle = GpuHost.top_level_build(
+            this.handle,
+            records.take_array(),
+            transforms.take_array()
+        ).await;
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuAccelerationStructure(this.handle, handle));
+    }
+
+    /// Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds
+    /// `outputs` rows of `inputs` values each, and `biases` one value per output. On Vulkan
+    /// and D3D12 devices with `GpuFeature.CooperativeVectors` the host converts the weights
+    /// into the device's own matrix layout; elsewhere it keeps them row by row. Uploading
+    /// works on any device. `T` is `float16` or `float`; other element sizes fail with
+    /// `GpuError.InvalidResource`.
+    public fun upload_mlp<T: unmanaged>(
+        weights: T[],
+        biases: T[],
+        inputs: int,
+        outputs: int
+    ): Result<GpuMlpWeights<T>, GpuError> {
+        if inputs <= 0 || outputs <= 0 {
+            return Result.Err(GpuError.InvalidResource("MLP layer sizes must be positive"));
+        }
+        if weights.length != inputs * outputs || biases.length != outputs {
+            return Result.Err(
+                GpuError.InvalidResource(
+                    "MLP weights must hold inputs * outputs values and one bias per output"
+                )
+            );
+        }
+        let bytes = List<byte>();
+        bytes.push_all(GpuBuffer<T>.encode(weights));
+        bytes.push_all(GpuBuffer<T>.encode(biases));
+        let handle = GpuHost.mlp_upload(
+            this.handle,
+            bytes.take_array(),
+            [inputs, outputs, GpuBuffer<T>.stride()]
+        );
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(GpuMlpWeights<T>(this.handle, handle, inputs, outputs));
+    }
+
+    /// Starts recording GPU commands. Submit them with `submit`.
+    public fun command_encoder(): GpuCommandEncoder {
+        return GpuCommandEncoder(this.handle);
+    }
+
+    /// Runs recorded commands and waits until the GPU finished them. Recording errors,
+    /// such as a resource from another device, are reported here.
+    public async fun submit(commands: GpuCommandBuffer): Result<bool, GpuError> {
+        switch (commands.error) {
+            Some(e) => {
+                return Result.Err(e);
+            }
+            None => {}
+        }
+        if commands.device_id != this.handle {
+            return Result.Err(GpuError.WrongDevice("command buffer"));
+        }
+        if GpuHost.submit(this.handle, commands.words, commands.data).await != 0 {
+            return Result.Err(GpuHost.error());
+        }
+        return Result.Ok(true);
+    }
+
+    // The device-local handle of a generated shader bundle, loaded on first use.
+    internal fun library(library: GpuShaderLibrary): Result<int, GpuError> {
+        switch (this.libraries.get(library.name)) {
+            Some(handle) => {
+                return Result.Ok(handle);
+            }
+            None => {}
+        }
+        if !library.backends.contains(this.device_backend) {
+            return Result.Err(GpuError.BackendNotCompiled(this.device_backend));
+        }
+        let handle = GpuHost.library_load(this.handle, library.bundle);
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        this.libraries[library.name] = handle;
+        return Result.Ok(handle);
+    }
+
+    internal fun compute_pipeline(shader: GpuComputeShader): Result<int, GpuError> {
+        let key = shader.library.name + "/" + shader.name;
+        switch (this.pipelines.get(key)) {
+            Some(handle) => {
+                return Result.Ok(handle);
+            }
+            None => {}
+        }
+        let library = this.library(shader.library)?;
+        let handle = GpuHost.compute_pipeline_create(library, shader.name);
+        if handle <= 0 {
+            return Result.Err(GpuHost.error());
+        }
+        this.pipelines[key] = handle;
+        return Result.Ok(handle);
+    }
+
+    del() {
+        if this.handle > 0 {
+            GpuHost.release(this.handle);
+            this.handle = 0;
+        }
+    }
+}

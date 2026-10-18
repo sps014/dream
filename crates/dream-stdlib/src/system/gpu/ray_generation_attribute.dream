@@ -1,0 +1,7 @@
+module system.gpu;
+
+/// Marks a ray generation shader, the entry point of a ray tracing dispatch. It runs once
+/// per element of the dispatch grid, usually once per pixel, and starts rays with
+/// `trace_ray`. Ray tracing needs `GpuTarget.Dx12`, `Vulkan`, `Metal` or `Cuda`.
+@attribute(AttributeTarget.Function)
+public struct RayGenerationAttribute {}

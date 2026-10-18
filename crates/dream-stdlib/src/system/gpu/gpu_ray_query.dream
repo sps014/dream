@@ -1,0 +1,57 @@
+module system.gpu;
+
+import system.codegen;
+
+/// An inline ray trace inside an ordinary shader, without a ray tracing pipeline. Useful
+/// for shadows and ambient occlusion in compute and fragment shaders.
+///
+/// Create one with `GpuRayQuery.of`, start it with `trace`, then call `proceed` in a loop
+/// until it returns false. Inside the loop, decide about non-opaque candidates with
+/// `commit_triangle`; afterwards read the committed hit. Needs `GpuFeature.RayQuery`.
+@generator_only(
+    ComputeAttribute,
+    VertexAttribute,
+    FragmentAttribute,
+    GpuAttribute,
+    RayGenerationAttribute,
+    ClosestHitAttribute,
+    AnyHitAttribute,
+    MissAttribute,
+    IntersectionAttribute,
+    CallableAttribute
+)
+public struct GpuRayQuery {
+    /// Creates a query with `flags` applied to every trace.
+    public static extern fun of(flags: GpuRayFlags): GpuRayQuery;
+
+    /// Starts tracing `ray` against `scene`, seeing only instances whose mask shares a bit
+    /// with `mask`.
+    public extern fun trace(scene: GpuAccelerationStructure, mask: uint, ray: GpuRay): void;
+
+    /// Advances to the next candidate that needs a decision; false once the trace finished.
+    public extern fun proceed(): bool;
+
+    /// Accepts the current non-opaque triangle candidate as a hit.
+    public extern fun commit_triangle(): void;
+
+    /// The distance to the current candidate.
+    public extern fun candidate_distance(): float;
+
+    /// The current triangle candidate's barycentric weights, as in `GpuTriangleHit`.
+    public extern fun candidate_barycentrics(): GpuVec2;
+
+    /// True when the finished trace committed a hit.
+    public extern fun has_hit(): bool;
+
+    /// The distance to the committed hit.
+    public extern fun hit_distance(): float;
+
+    /// The committed hit's barycentric weights, as in `GpuTriangleHit`.
+    public extern fun hit_barycentrics(): GpuVec2;
+
+    /// The `GpuInstance.with_id` value of the committed hit's instance.
+    public extern fun hit_instance_id(): int;
+
+    /// The index of the committed hit's triangle or box within its geometry.
+    public extern fun hit_primitive_index(): int;
+}

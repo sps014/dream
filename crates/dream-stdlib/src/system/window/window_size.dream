@@ -1,0 +1,16 @@
+module system.window;
+
+/// A width and height in whole pixels.
+public struct WindowSize {
+    /// Width in pixels.
+    public width: int;
+
+    /// Height in pixels.
+    public height: int;
+
+    /// Creates a size of `width` by `height` pixels.
+    public constructor(width: int, height: int) {
+        this.width = width;
+        this.height = height;
+    }
+}

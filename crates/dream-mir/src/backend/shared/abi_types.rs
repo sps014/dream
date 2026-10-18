@@ -14,13 +14,14 @@ const NATIVE_RT_HEADER: &str = include_str!("../../runtime/c/core/include/dream_
 mod ref_local_tests;
 
 /// The ABI class of a Dream value (the runtime's `int32_t`/`int64_t`/`float`/`double`/
-/// `dream_ptr`).
+/// `dream_ptr`, plus LLVM `half` for `float16`, which no runtime entry point takes directly).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum AbiTy {
     Void,
     I32,
     I64,
     Word,
+    F16,
     F32,
     F64,
     Ptr,
@@ -34,6 +35,7 @@ impl AbiTy {
             AbiTy::I32 => "i32",
             AbiTy::I64 => "i64",
             AbiTy::Word => "word",
+            AbiTy::F16 => "f16",
             AbiTy::F32 => "f32",
             AbiTy::F64 => "f64",
             AbiTy::Ptr => "ptr",
@@ -46,6 +48,7 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
         TyKind::Void => AbiTy::Void,
         TyKind::Prim(PrimTy::Double) => AbiTy::F64,
         TyKind::Prim(PrimTy::Float) => AbiTy::F32,
+        TyKind::Prim(PrimTy::Float16) => AbiTy::F16,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => AbiTy::I64,
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) => AbiTy::Word,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
@@ -64,6 +67,7 @@ pub(crate) enum MemTy {
     I64,
     Word,
     UWord,
+    F16,
     F32,
     F64,
     Ptr,
@@ -73,6 +77,7 @@ pub(crate) fn mem_ty(cx: &Cx<'_>, ty: TypeId) -> MemTy {
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::Double) => MemTy::F64,
         TyKind::Prim(PrimTy::Float) => MemTy::F32,
+        TyKind::Prim(PrimTy::Float16) => MemTy::F16,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => MemTy::I64,
         TyKind::Prim(PrimTy::ISize) => MemTy::Word,
         TyKind::Prim(PrimTy::USize) => MemTy::UWord,

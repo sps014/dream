@@ -1,0 +1,39 @@
+module system.window;
+
+/// The keyboard as of one `Window.poll`.
+///
+/// `is_down` is the current level of a key. `pressed` and `released` are edges: they
+/// are true only in the frame where the key changed, and a key pressed and released
+/// between two polls reports both edges in the same frame while `is_down` is false.
+/// Key repeats never count as presses.
+public class KeyboardState {
+    // One byte per KeyCode: bit 1 is down, bit 2 pressed this frame, bit 4 released this frame.
+    states: byte[];
+
+    internal constructor(states: byte[]) {
+        this.states = states;
+    }
+
+    /// True while `code` is held down.
+    public fun is_down(code: KeyCode): bool {
+        return this.has(code, 1);
+    }
+
+    /// True when `code` went down during this frame.
+    public fun pressed(code: KeyCode): bool {
+        return this.has(code, 2);
+    }
+
+    /// True when `code` was released during this frame.
+    public fun released(code: KeyCode): bool {
+        return this.has(code, 4);
+    }
+
+    fun has(code: KeyCode, mask: int): bool {
+        let index: int = code;
+        if index < 0 || index >= this.states.length {
+            return false;
+        }
+        return ((int)this.states[index] & mask) != 0;
+    }
+}

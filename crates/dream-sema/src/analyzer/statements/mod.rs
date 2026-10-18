@@ -61,8 +61,8 @@ impl<'a> Analyzer<'a> {
     ) {
         // bare callable, so it is a legal ordinary identifier.
         const RESERVED_TYPE_AND_LITERAL_NAMES: &[&str] = &[
-            "int", "float", "double", "string", "bool", "char", "object", "void", "long", "uint",
-            "ulong", "byte",
+            "int", "float", "float16", "double", "string", "bool", "char", "object", "void", "long",
+            "uint", "ulong", "byte",
             // Former C#/.NET-style primitive aliases: no longer usable as types (removed), but
             // still reserved as identifiers so old code fails loudly instead of silently shadowing.
             "String", "Int32", "Int64", "UInt32", "UInt64", "Byte", "Single", "Double", "Boolean",

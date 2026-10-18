@@ -7,6 +7,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Char](primitives-char.md)
 - [Double](primitives-double.md)
 - [Float](primitives-float.md)
+- [Float16](primitives-float16.md)
 - [Int](primitives-int.md)
 - [Isize](primitives-isize.md)
 - [Long](primitives-long.md)

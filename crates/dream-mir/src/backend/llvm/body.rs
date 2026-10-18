@@ -369,6 +369,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             {
                 (Ty::I64, fut.wide)
             }
+            TyKind::Prim(PrimTy::Float16) => (Ty::F16, fut.wide),
             TyKind::Prim(PrimTy::Float) => (Ty::F32, fut.wide),
             TyKind::Prim(PrimTy::Double) => (Ty::F64, fut.wide),
             _ => (

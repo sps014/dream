@@ -27,6 +27,8 @@ public enum Primitive {
     Byte,
     /// Identifies float types.
     Float,
+    /// Identifies float16 (IEEE binary16) types.
+    Float16,
     /// Identifies double types.
     Double,
     /// Identifies bool types.

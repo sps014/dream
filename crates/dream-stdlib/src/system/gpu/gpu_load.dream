@@ -1,0 +1,13 @@
+module system.gpu;
+
+/// What a render pass does with a target's existing contents when it starts.
+///
+/// For color targets `T` is `GpuVec4` and for depth targets `float`, so
+/// `GpuLoad.Clear(GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f))` clears to opaque black and
+/// `GpuLoad.Clear(1.0f)` clears depth to the far plane.
+public enum GpuLoad<T> {
+    /// Fills the target with `value` first.
+    Clear(value: T),
+    /// Keeps what the target already holds, to draw on top of earlier passes.
+    Keep,
+}

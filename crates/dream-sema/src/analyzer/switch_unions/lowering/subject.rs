@@ -102,7 +102,14 @@ impl<'a> Analyzer<'a> {
                         arm.pattern.position(),
                     );
                 }
-                self.analyze_body(stmts, parent_function, Some(arm_scope), false, diagnostics)?;
+                let in_loop = !is_expression && self.switch_in_loop;
+                self.analyze_body(
+                    stmts,
+                    parent_function,
+                    Some(arm_scope),
+                    in_loop,
+                    diagnostics,
+                )?;
             }
         }
         Ok(())

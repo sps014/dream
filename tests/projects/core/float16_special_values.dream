@@ -1,0 +1,32 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun float16_special_values(): void {
+    let zero = 0.0h;
+    let nan = zero / zero;
+    let inf = 1.0h / zero;
+    Assert.is_true(nan.is_nan());
+    Assert.is_false(nan.is_infinite());
+    Assert.is_true(nan != nan);
+    Assert.is_false(nan == nan);
+    Assert.is_true(inf.is_infinite());
+    Assert.is_true((-inf).is_infinite());
+    Assert.is_false(inf.is_nan());
+    Assert.is_true(inf > float16.max_value);
+    Assert.is_true(-inf < float16.min_value);
+    Assert.is_true((inf - inf).is_nan());
+    Assert.is_true((float16.max_value * 2.0h).is_infinite());
+    Assert.is_true(((float16)1.0e10d).is_infinite());
+    Assert.is_false(float16.max_value.is_infinite());
+
+    Assert.eq(float16.max_value, 65504.0h);
+    Assert.eq(float16.min_value, -65504.0h);
+    Assert.eq(float16.epsilon, 0.0009765625h);
+    Assert.eq((double)float16.max_value, 65504.0d);
+
+    let negative_zero = -0.0h;
+    Assert.is_true(negative_zero == zero);
+    Assert.eq(negative_zero.to_string(), "0");
+}

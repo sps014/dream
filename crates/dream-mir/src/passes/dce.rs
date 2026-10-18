@@ -93,7 +93,7 @@ pub(crate) fn is_pure(rvalue: &Rvalue) -> bool {
         return matches!(
             divisor,
             Operand::Const(Const::Int(v) | Const::Long(v)) if *v != 0
-        ) || matches!(divisor, Operand::Const(Const::Float(_) | Const::F32(_)));
+        ) || matches!(divisor, Operand::Const(Const::Float(_) | Const::F32(_) | Const::F16(_)));
     }
     matches!(
         rvalue,

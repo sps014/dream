@@ -138,7 +138,12 @@ internal fun gen_function(borrow f: JsonValue): GenFunction {
     let params = List<GenParam>();
     for (let p in gen_items(f, "params")) {
         params.push(
-            GenParam(gen_str(p, "name"), gen_type_ref(gen_obj(p, "ty")), gen_attributes(p))
+            GenParam(
+                gen_str(p, "name"),
+                gen_type_ref(gen_obj(p, "ty")),
+                gen_bool(p, "is_ref"),
+                gen_attributes(p)
+            )
         );
     }
     return GenFunction(

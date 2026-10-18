@@ -1,0 +1,8 @@
+import system;
+import system.gpu;
+
+fun first(buffer: GpuBuffer<float>): float {
+    return buffer[0];
+}
+
+fun main(): void {}

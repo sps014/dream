@@ -82,7 +82,7 @@ import system.webapi;
 import system.webapi.auth;
 import models;
 
-public fun request_label(@header("X-Request-ID")label: Option<string>): string {
+public fun request_label(@header("X-Request-ID") label: Option<string>): string {
     return label.unwrap_or("local");
 }
 
@@ -92,8 +92,8 @@ public class Messages {
     @operation("Create a message", "Returns the validated message", "messages", 201)
     @post("/")
     public static fun create(
-        @dep(CurrentUser)user: AuthPrincipal,
-        @dep(request_label)label: string,
+        @dep(CurrentUser) user: AuthPrincipal,
+        @dep(request_label) label: string,
         @body message: CreateMessage
     ): HttpOutgoing {
         return HttpOutgoing.json_text(Json.serialize(message), 201)

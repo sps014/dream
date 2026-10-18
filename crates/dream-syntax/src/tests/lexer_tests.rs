@@ -96,7 +96,7 @@ fn test_lex_literals() {
 fn test_lex_suffixed_number_literals() {
     // Each suffixed numeric literal must lex as a single `NumberToken` carrying the whole text
     // (suffix included); the parser later strips the suffix and assigns the concrete type.
-    let mut lexer = Lexer::new("42L 7u 7U 9uL 9UL 9Lu 255b 255B 3.0d 3.0f".to_string());
+    let mut lexer = Lexer::new("42L 7u 7U 9uL 9UL 9Lu 255b 255B 3.0d 3.0f 1.5h 2H".to_string());
     let mut diagnostics = DiagnosticBag::new(None);
     let tokens = lexer.lex_all(&mut diagnostics);
 
@@ -109,7 +109,8 @@ fn test_lex_suffixed_number_literals() {
     assert_eq!(
         texts,
         vec![
-            "42L", "7u", "7U", "9uL", "9UL", "9Lu", "255b", "255B", "3.0d", "3.0f"
+            "42L", "7u", "7U", "9uL", "9UL", "9Lu", "255b", "255B", "3.0d", "3.0f", "1.5h",
+            "2H"
         ]
     );
 }

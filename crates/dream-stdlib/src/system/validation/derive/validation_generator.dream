@@ -112,7 +112,8 @@ public static class ValidationGenerator {
             kind = "string";
         } else if ty.is_primitive(Primitive.Bool) {
             kind = "boolean";
-        } else if ty.is_primitive(Primitive.Float) || ty.is_primitive(Primitive.Double) {
+        } else if ty.is_primitive(Primitive.Float16)
+            || ty.is_primitive(Primitive.Float) || ty.is_primitive(Primitive.Double) {
             kind = "number";
         } else if ty.primitive() != Primitive.NotPrimitive {
             kind = "integer";

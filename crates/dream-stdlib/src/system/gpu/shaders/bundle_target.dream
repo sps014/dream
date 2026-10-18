@@ -1,0 +1,34 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+
+// One target's section of a shader bundle: its code format, one recorded layout per pipeline
+// group, and the code, layout index and parameter table of every entry compiled for it.
+internal class BundleTarget {
+    internal name: string;
+    internal code_format: string;
+    internal layouts: List<byte[]>;
+    internal entries: List<ShaderEntry>;
+    internal entry_layouts: List<int>;
+    internal codes: List<byte[]>;
+    internal params: List<List<Reflection>>;
+
+    internal constructor(name: string, code_format: string) {
+        this.name = name;
+        this.code_format = code_format;
+        this.layouts = List<byte[]>();
+        this.entries = List<ShaderEntry>();
+        this.entry_layouts = List<int>();
+        this.codes = List<byte[]>();
+        this.params = List<List<Reflection>>();
+    }
+
+    // `layout` indexes `layouts`; it is 0 in wasm bundles, which carry no layouts.
+    internal fun add(entry: ShaderEntry, layout: int, code: byte[], params: List<Reflection>): void {
+        this.entries.push(entry);
+        this.entry_layouts.push(layout);
+        this.codes.push(code);
+        this.params.push(params);
+    }
+}

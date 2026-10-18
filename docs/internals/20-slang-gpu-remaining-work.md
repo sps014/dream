@@ -27,7 +27,7 @@ the strict-AOT self-test and verifies that device creation aborts.
 
 Real browser WebGPU also passes compute/readback, offscreen pixel checks, canvas presentation,
 resize and actual device destruction in Chromium and Edge on this machine. The reproducible
-harness is `tooling/gpu-browser/` and the Linux software-browser job is in `ci.yml`.
+harness is `tooling/gpu-browser/` and the Linux lavapipe browser suite also passes in [CI run 39126271217](https://github.com/sps014/dream/actions/runs/39126271217).
 
 CUDA compute is also verified on the RTX 4080 with NVRTC/NVCC 12.9.86 and CUDA runtime headers
 12.9.79: the Dream saxpy/switch suite and the host's compute, entry-parameter, readback and error
@@ -38,7 +38,7 @@ layout. `dreamer toolchain install slang` rebuilds the recorder when its embedde
 
 ## Not yet verified
 
-- **CI after these fixes.** The original PR head passes Linux/macOS and all sanitizer jobs. Windows passes build, clippy and workspace tests but fails a timed resource-cleanup assertion in its full corpus; that test now waits for cleanup instead of assuming a 10 ms timer. The local Windows full gate passes. The original benchmark gate reports regressions in `string_concat` and `substring_span`; those remain unresolved.
+- **CI after these fixes.** The original PR head passes Linux/macOS and all sanitizer jobs. Windows passes build, clippy and workspace tests but fails a timed resource-cleanup assertion in its full corpus; that test now waits for cleanup instead of assuming a 10 ms timer. The local Windows full gate passes. The original benchmark gate reported regressions in `string_concat` and `substring_span` on Zen 5. The updated branch passes both rows at 1.00x baseline on a Zen 4 runner; that run instead reports 15% regressions in `binary_trees` and `binary_trees_reclaim`. Performance qualification remains open.
 
   A paired Windows comparison against the exact PR base (`19f20169`, 12 measured rounds,
   five passes per process) passes both rows: concatenation is 1.00x baseline and substring
@@ -71,7 +71,7 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 2. **Confirmed.** Linux lavapipe executes ray-tracing pipelines and bindless sampling in debug and release corpus runs; cooperative vectors/matrices skip because the features are absent. `ci.yml` now runs window and GPU presentation tests under Xvfb; that new display job still needs CI qualification.
 3. **CUDA compute manual run done.** `python scripts/qualify-gpu.py --backend cuda` requires actual execution, failing if the test only skips. CUDA cooperative vectors remain blocked by the pinned build's lack of OptiX.
 4. **Vulkan and D3D12 manual runs done** on the Windows RTX 4080. A recurring hardware-RT runner remains.
-5. **Done.** `tooling/gpu-browser/` checks real browser compute, render readback, presentation, resize and device loss. Chromium and Edge pass on the Windows RTX 4080; Linux CI uses SwiftShader.
+5. **Done.** `tooling/gpu-browser/` checks real browser compute, render readback, presentation, resize and device loss. Chromium and Edge pass on the Windows RTX 4080; Linux CI uses Mesa lavapipe.
 6. **Windows manual run done** for Vulkan, D3D12 and WebGPU with `DREAM_GPU_SURFACE_TEST=1`; display-backed CI coverage remains.
 
 ### Docs and final gate

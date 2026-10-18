@@ -7,7 +7,7 @@ The root defaults to $DREAM_SLANG, else ~/.dream/toolchains/slang-<version>; it 
 bin/slangc and bin/dream-slang-layout (`dreamer toolchain install slang`). This stands in for the
 system.gpu.shaders generator in host tests: same tools, same options, same binary format. Targets
 whose downstream compiler is missing on this machine (dxil, dxbc, ptx off Windows/CUDA hosts)
-are skipped and listed.
+are preserved from the committed bundle, skipped and listed.
 """
 
 from __future__ import annotations
@@ -208,50 +208,73 @@ def write_bundle(targets: list[dict]) -> bytes:
     return b"DGPB" + u32(0) + u32(12 + len(header)) + bytes(header) + bytes(data)
 
 
-def blob_digests(bundle: bytes) -> dict[str, str]:
-    """`target/layout<i>` and `target/<entry>` -> SHA-256 of each blob, to say what changed."""
+def read_bundle(bundle: bytes) -> list[dict]:
+    if bundle[:8] != b"DGPB\0\0\0\0":
+        raise ValueError("unsupported bundle header")
+    data_start, count = struct.unpack_from("<II", bundle, 8)
     pos = 16
 
     def u32() -> int:
         nonlocal pos
+        value = struct.unpack_from("<I", bundle, pos)[0]
         pos += 4
-        return struct.unpack_from("<I", bundle, pos - 4)[0]
+        return value
 
     def string() -> str:
         nonlocal pos
         n = u32()
+        raw = bundle[pos:pos + n]
         pos += n
-        return bundle[pos - n:pos].decode()
+        if len(raw) != n or pos > data_start:
+            raise ValueError("truncated bundle string")
+        return raw.decode()
 
-    def digest() -> str:
+    def blob() -> bytes:
         nonlocal pos
-        pos += 40
-        return bundle[pos - 32:pos].hex()
+        offset, size = u32(), u32()
+        digest = bundle[pos:pos + 32]
+        pos += 32
+        raw = bundle[data_start + offset:data_start + offset + size]
+        if pos > data_start or len(raw) != size or hashlib.sha256(raw).digest() != digest:
+            raise ValueError("invalid bundle blob")
+        return raw
 
-    out = {}
-    for _ in range(struct.unpack_from("<I", bundle, 12)[0]):
-        target = string()
-        string()
-        for i in range(u32()):
-            out[f"{target}/layout{i}"] = digest()
+    targets = []
+    for _ in range(count):
+        name, code_format = string(), string()
+        layouts = [blob() for _ in range(u32())]
+        entries = []
         for _ in range(u32()):
-            name = string()
-            string()
-            u32()
-            out[f"{target}/{name}"] = digest()
-            pos += 12
-            for _ in range(u32()):
-                string()
-                pos += 24
-            for _ in range(u32()):
-                string()
+            entry, stage = string(), string()
+            if u32() != 0:
+                raise ValueError("fixture entries must use layout 0")
+            code = blob()
+            size = tuple(u32() for _ in range(3))
+            params = [(string(), *(u32() for _ in range(6))) for _ in range(u32())]
+            capabilities = [string() for _ in range(u32())]
+            entries.append((entry, stage, code, size, params, capabilities))
+        targets.append(dict(name=name, code_format=code_format, layouts=layouts, entries=entries))
+    if pos != data_start:
+        raise ValueError("unexpected bundle header fields")
+    return targets
+
+
+def blob_digests(bundle: bytes) -> dict[str, str]:
+    """`target/layout<i>` and `target/<entry>` -> SHA-256 of each blob, to say what changed."""
+    out = {}
+    for target in read_bundle(bundle):
+        prefix = target["name"]
+        for i, layout in enumerate(target["layouts"]):
+            out[f"{prefix}/layout{i}"] = hashlib.sha256(layout).hexdigest()
+        for name, _, code, *_ in target["entries"]:
+            out[f"{prefix}/{name}"] = hashlib.sha256(code).hexdigest()
     return out
 
 
 def describe_difference(old: bytes, new: bytes) -> str:
     try:
         before, after = blob_digests(old), blob_digests(new)
-    except (struct.error, UnicodeDecodeError, IndexError):
+    except (ValueError, struct.error, UnicodeDecodeError, IndexError):
         return "the committed bundle does not parse"
     changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
     return ", ".join(changed) if changed else "header fields only"
@@ -271,9 +294,11 @@ def main():
                 compiled = compile_target(root, module, target, Path(tmp))
                 (built if compiled else skipped).append(compiled or target)
             path = HERE / f"{module}.dgpb"
-            bundle = write_bundle(built)
             if not built:
                 sys.exit(f"{module}: no shader target compiled; refusing to write an empty bundle")
+            # A Linux host cannot rebuild DXIL/PTX, but must not remove Windows-built targets.
+            retained = [t for t in read_bundle(path.read_bytes()) if t["name"] in skipped] if path.exists() else []
+            bundle = write_bundle(built + retained)
             if check:
                 if not path.exists():
                     stale.append(f"{path.name} (missing)")

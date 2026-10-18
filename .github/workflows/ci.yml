@@ -40,15 +40,20 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: tooling/gpu-browser/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
       - run: npm ci
         working-directory: tooling/gpu-browser
       - run: npx playwright install --with-deps chromium
         working-directory: tooling/gpu-browser
-      - run: xvfb-run -a npm test
+      - run: |
+          export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          xvfb-run -a vulkaninfo --summary
+          xvfb-run -a npm test
         working-directory: tooling/gpu-browser
         env:
           GPU_BROWSER_SOFTWARE: "1"
           GPU_BROWSER_HEADLESS: "0"
+          DEBUG: pw:browser
 
   hygiene:
     runs-on: ubuntu-24.04

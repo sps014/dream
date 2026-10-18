@@ -33,11 +33,10 @@ try {
   browser = await chromium.launch({
     channel: 'chromium',
     headless: process.env.GPU_BROWSER_HEADLESS !== '0',
-    dumpio: process.env.GPU_BROWSER_SOFTWARE === '1',
     executablePath: process.env.GPU_BROWSER_EXECUTABLE || undefined,
     args: [
       '--enable-unsafe-webgpu',
-      ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface'] : []),
+      ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=native', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'] : []),
     ],
   });
   const page = await browser.newPage();

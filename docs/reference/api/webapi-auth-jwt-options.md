@@ -49,7 +49,7 @@ public verification_key: string
 Signature algorithm name, such as `RS256`.
 
 ```dream
-public algorithm: string
+public algorithm: JwtAlgorithm
 ```
 
 ## `constructor`
@@ -62,6 +62,6 @@ public constructor(
     audience: string,
     signing_key: string,
     verification_key: string,
-    algorithm: string = "RS256"
+    algorithm: JwtAlgorithm = JwtAlgorithm.RS256
 )
 ```

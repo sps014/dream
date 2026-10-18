@@ -1,7 +1,7 @@
 module system.json.derive;
 
 // One variant of a `@json` discriminated union.
-public class JsonVariantSpec {
+internal class JsonVariantSpec {
     /// Name identifying this entry.
     public name: string;
 

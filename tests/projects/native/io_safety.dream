@@ -6,7 +6,7 @@ import system.testing;
 @test
 async fun io_safety(): void {
     let path = "dream_io_safety.tmp";
-    let writer = FileHandle.open(path, "w").unwrap();
+    let writer = FileHandle.open(path, FileMode.Write).unwrap();
     Assert.is_true(writer.read(1).is_err());
     writer.write_all(Encoding.utf8_encode("one\r\ntwo\rthree\nlast")).unwrap();
     writer.close().unwrap();
@@ -15,7 +15,7 @@ async fun io_safety(): void {
     Assert.eq(writer.read_exact(0).unwrap_err().code(), "ECLOSED");
     Assert.eq(writer.write_all([]).unwrap_err().code(), "ECLOSED");
 
-    let reader = FileHandle.open(path, "r").unwrap();
+    let reader = FileHandle.open(path, FileMode.Read).unwrap();
     Assert.eq(reader.read_line().unwrap().unwrap(), "one");
     Assert.eq(reader.tell().unwrap(), 5L);
     Assert.is_true(reader.seek(0L - 1L).is_err());
@@ -25,12 +25,12 @@ async fun io_safety(): void {
     Assert.eq(Encoding.utf8_decode(reader.read(3).unwrap()), "one");
     reader.close().unwrap();
 
-    let stream = File.open(path).unwrap();
+    let stream = FileHandle.open(path, FileMode.Read).unwrap();
     Assert.eq(stream.tell().unwrap(), 0L);
     Assert.is_true(stream.seek(0L - 1L).is_err());
     Assert.eq(stream.tell().unwrap(), 0L);
     stream.close().unwrap();
-    Assert.is_true(stream.read_bytes(1).is_err());
-    Assert.is_true(stream.length.is_err());
+    Assert.is_true(stream.read(1).is_err());
+    Assert.is_true(stream.length().is_err());
     File.delete(path).await.unwrap();
 }

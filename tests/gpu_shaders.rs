@@ -273,7 +273,7 @@ fn reports(text: &str, expected: &[(&str, usize)]) {
 #[ignore = "needs the pinned slang toolchain"]
 fn recursion_is_rejected_at_the_call() {
     rejects(
-        "module shaders;\nimport system.gpu;\n\n@gpu\nfun depth(n: int): int {\n    if n <= 0 {\n        return 0;\n    }\n    return depth(n - 1) + 1;\n}\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    out[0] = depth(4);\n}\n",
+        "module shaders;\nimport system.gpu;\n\n\nfun depth(n: int): int {\n    if n <= 0 {\n        return 0;\n    }\n    return depth(n - 1) + 1;\n}\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    out[0] = depth(4);\n}\n",
         false,
         &[(
             "recursion is not allowed in GPU shaders ('depth' calls itself)",
@@ -303,7 +303,7 @@ fn heap_classes_strings_and_closures_are_rejected() {
 #[ignore = "needs the pinned slang toolchain"]
 fn an_unknown_builtin_does_not_cascade_into_its_siblings() {
     let dir = project(
-        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(): GpuVec4 {\n    let x = GpuMath.radians(1.0f) * (float)vertex_id();\n    return GpuVec4.of(x, 0.0f, 0.0f, 1.0f);\n}\n",
+        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(): GpuVec4 {\n    let x = GpuMath.radians(1.0f) * (float)vertex_id();\n    return GpuVec4(x, 0.0f, 0.0f, 1.0f);\n}\n",
         MAIN,
     );
     let output = build_with(dir.path(), &["--wasm"]);
@@ -317,7 +317,7 @@ fn an_unknown_builtin_does_not_cascade_into_its_siblings() {
 #[ignore = "needs the pinned slang toolchain"]
 fn slang_reserved_words_are_renamed_in_helpers_and_rejected_as_shader_names() {
     rejects(
-        "module shaders;\nimport system.gpu;\n\n@gpu\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun unused(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
+        "module shaders;\nimport system.gpu;\n\n\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun unused(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
         false,
         &[(
             "'unused' is a reserved word in the Slang shader language; rename this shader",
@@ -325,7 +325,7 @@ fn slang_reserved_words_are_renamed_in_helpers_and_rejected_as_shader_names() {
         )],
     );
     let dir = project(
-        "module shaders;\nimport system.gpu;\n\n@gpu\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
+        "module shaders;\nimport system.gpu;\n\n\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
         MAIN,
     );
     let output = build_with(dir.path(), &["--wasm"]);
@@ -395,7 +395,11 @@ fn storage_buffers_past_the_webgpu_limit_warn_per_pipeline() {
     );
     let output = build(separate.path(), true);
     assert!(output.status.success(), "{}", log(&output));
-    assert!(!log(&output).contains("storage buffers"), "{}", log(&output));
+    assert!(
+        !log(&output).contains("storage buffers"),
+        "{}",
+        log(&output)
+    );
 
     let many = project(
         "module shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun many(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, @readonly e: GpuBuffer<float>, @readonly f: GpuBuffer<float>, @readonly g: GpuBuffer<float>, @readonly h: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i] + d[i] + e[i] + f[i] + g[i] + h[i];\n}\n",
@@ -415,7 +419,7 @@ fn storage_buffers_past_the_webgpu_limit_warn_per_pipeline() {
     }
 
     let render = project(
-        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>): GpuVec4 {\n    let i = (int)vertex_id();\n    return GpuVec4.of(a[i], b[i], c[i] + d[i], 1.0f);\n}\n\n@fragment\npublic fun paint(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, @readonly e: GpuBuffer<float>): GpuVec4 {\n    return GpuVec4.of(a[0], b[0], c[0], d[0] + e[0]);\n}\n",
+        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>): GpuVec4 {\n    let i = (int)vertex_id();\n    return GpuVec4(a[i], b[i], c[i] + d[i], 1.0f);\n}\n\n@fragment\npublic fun paint(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, @readonly e: GpuBuffer<float>): GpuVec4 {\n    return GpuVec4(a[0], b[0], c[0], d[0] + e[0]);\n}\n",
         MAIN,
     );
     let output = build(render.path(), true);
@@ -476,7 +480,7 @@ fn shaders_for_other_platforms_are_left_out_with_a_warning() {
 #[ignore = "needs the pinned slang toolchain"]
 fn cuda_render_stages_and_unusable_targets_are_rejected() {
     rejects(
-        "@gpu_targets(GpuTarget.Cuda, GpuTarget.Vulkan)\nmodule shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(): GpuVec4 {\n    return GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f);\n}\n",
+        "@gpu_targets(GpuTarget.Cuda, GpuTarget.Vulkan)\nmodule shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(): GpuVec4 {\n    return GpuVec4(0.0f, 0.0f, 0.0f, 1.0f);\n}\n",
         false,
         &[
             (
@@ -592,6 +596,59 @@ fn consumed_shaders_point_at_their_generated_entry() {
     assert!(
         text.contains("'saxpy' was consumed by generator 'gpu_shaders'")
             && text.contains("dispatch it with GpuShaders.saxpy.dispatch(device, ...)"),
+        "{text}"
+    );
+}
+
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn inferred_helpers_and_value_constructors() {
+    let shaders = r#"module shaders;
+import system.gpu;
+struct Sample {
+    public value: float;
+    public constructor(value: float) {
+        this.value = value * 2.0f;
+    }
+    public constructor(text: string) {
+        this.value = 0.0f;
+    }
+}
+fun twice(value: float): float {
+    return value * 2.0f;
+}
+fun evaluate(value: float): float {
+    let sample = Sample(twice(value));
+    let vector = GpuVec3(sample.value);
+    return vector.x;
+}
+@compute(1)
+public fun run(out: GpuBuffer<float>): void {
+    out[0] = evaluate(3.0f);
+}
+"#;
+    let dir = project(shaders, MAIN);
+    let output = build(dir.path(), false);
+    assert!(output.status.success(), "{}", log(&output));
+    let slang = std::fs::read_to_string(generated(dir.path()).join("shaders.slang")).unwrap();
+    assert!(slang.contains("__init(float value)"), "{slang}");
+    assert!(slang.contains("float3(sample_.value)"), "{slang}");
+    assert!(slang.contains("twice(value)"), "{slang}");
+}
+
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn inferred_helpers_reject_cpu_calls() {
+    let shaders = "module shaders;\nimport system.gpu;\npublic fun helper(value: int): int { return value + 1; }\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void { out[0] = helper(1); }\n";
+    let dir = project(
+        shaders,
+        "import shaders;\nfun main(): void { helper(1); }\n",
+    );
+    let output = build(dir.path(), false);
+    let text = log(&output);
+    assert!(!output.status.success(), "{text}");
+    assert!(
+        text.contains("consumed") && text.contains("helper"),
         "{text}"
     );
 }

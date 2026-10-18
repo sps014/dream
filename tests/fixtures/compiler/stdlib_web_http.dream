@@ -2,38 +2,63 @@ import system;
 import system.net;
 
 async fun main(): void {
-    if HttpCapabilities.connection_timeouts || HttpCapabilities.redirect_limits || HttpCapabilities.unrestricted_headers {
+    if HttpCapabilities.connection_timeouts
+        || HttpCapabilities.redirect_limits || HttpCapabilities.unrestricted_headers {
         System.panic("invalid browser HTTP capabilities");
     }
     let client = HttpClient();
-    let request = HttpRequest.get(Url.parse("__BASE__/http").unwrap());
+    let request = HttpRequest(HttpMethod.Get, Url.parse("__BASE__/http").unwrap());
     let response = client.send(request).await.unwrap();
-    if response.status != 200 { System.panic("HTTP status mismatch"); }
-    if response.read_text().await.unwrap() != "hello browser HTTP" { System.panic("HTTP text mismatch"); }
+    if response.status != 200 {
+        System.panic("HTTP status mismatch");
+    }
+    if response.read_text().await.unwrap() != "hello browser HTTP" {
+        System.panic("HTTP text mismatch");
+    }
     response.close().unwrap();
     let limited = client.send(request).await.unwrap();
-    if limited.read_text(max_bytes: 3).await.unwrap_err().code() != "ELIMIT" { System.panic("text limit must fail"); }
+    if limited.read_text(max_bytes: 3).await.unwrap_err().code() != "ELIMIT" {
+        System.panic("text limit must fail");
+    }
     limited.close().unwrap();
-    let slow = HttpRequest.get(Url.parse("__BASE__/slow").unwrap());
+    let slow = HttpRequest(HttpMethod.Get, Url.parse("__BASE__/slow").unwrap());
     let timeout = client.send(slow, options: HttpOptions(timeout_ms: 20)).await;
-    if timeout.unwrap_err().code() != "ETIMEOUT" { System.panic("request deadline must fail"); }
+    if timeout.unwrap_err().code() != "ETIMEOUT" {
+        System.panic("request deadline must fail");
+    }
     let cancellation = CancellationSource();
     let pending = client.send(slow, token: Option.Some(cancellation.token));
     Promise.start(pending);
     Time.delay(20).await;
     cancellation.cancel();
-    if pending.await.unwrap_err().code() != "ECANCELLED" { System.panic("pending send must cancel"); }
-    let broken = client.send(HttpRequest.get(Url.parse("__BASE__/disconnect").unwrap())).await.unwrap();
-    if broken.read_text().await.unwrap_err().code() != "ETRANSPORT" { System.panic("truncated body must fail"); }
+    if pending.await.unwrap_err().code() != "ECANCELLED" {
+        System.panic("pending send must cancel");
+    }
+    let broken = client.send(
+        HttpRequest(HttpMethod.Get, Url.parse("__BASE__/disconnect").unwrap())
+    ).await.unwrap();
+    if broken.read_text().await.unwrap_err().code() != "ETRANSPORT" {
+        System.panic("truncated body must fail");
+    }
     broken.close().unwrap();
-    let cors = client.send(HttpRequest.get(Url.parse("__BASE__/cors-redirect").unwrap())).await;
-    if cors.unwrap_err().code() != "ETRANSPORT" { System.panic("CORS rejection must fail"); }
+    let cors = client.send(
+        HttpRequest(HttpMethod.Get, Url.parse("__BASE__/cors-redirect").unwrap())
+    ).await;
+    if cors.unwrap_err().code() != "ETRANSPORT" {
+        System.panic("CORS rejection must fail");
+    }
     let connection = client.send(request, options: HttpOptions(connect_timeout_ms: 10)).await;
-    if connection.unwrap_err().code() != "ENOTSUP" { System.panic("connection timeout must be unsupported"); }
+    if connection.unwrap_err().code() != "ENOTSUP" {
+        System.panic("connection timeout must be unsupported");
+    }
     let redirects = client.send(request, options: HttpOptions(max_redirects: 5)).await;
-    if redirects.unwrap_err().code() != "ENOTSUP" { System.panic("redirect limits must be unsupported"); }
+    if redirects.unwrap_err().code() != "ENOTSUP" {
+        System.panic("redirect limits must be unsupported");
+    }
     request.headers.set("Host", "example.com");
-    if client.send(request).await.unwrap_err().code() != "ENOTSUP" { System.panic("restricted header must fail"); }
+    if client.send(request).await.unwrap_err().code() != "ENOTSUP" {
+        System.panic("restricted header must fail");
+    }
     client.close().unwrap();
     System.println("browser HTTP fixture passed");
 }

@@ -15,10 +15,11 @@ internal class ShaderNode {
     internal text: string;
     internal op: string;
     internal literal: string;
-    internal literal_kind: string;
+    internal literal_kind: GenValueKind;
     internal ty: GenTypeRef;
     internal symbol: string;
-    internal symbol_kind: string;
+    internal overload: string;
+    internal symbol_kind: GenSymbolKind;
     internal types: List<GenTypeRef>;
     internal type_args: List<GenTypeRef>;
     internal constant: string;
@@ -35,10 +36,11 @@ internal class ShaderNode {
         this.text = "";
         this.op = "";
         this.literal = "";
-        this.literal_kind = "";
+        this.literal_kind = GenValueKind.Unknown;
         this.ty = GenTypeRef.unknown();
         this.symbol = "";
-        this.symbol_kind = "";
+        this.overload = "";
+        this.symbol_kind = GenSymbolKind.Unknown;
         this.types = List<GenTypeRef>();
         this.type_args = List<GenTypeRef>();
         this.constant = "";
@@ -53,6 +55,7 @@ internal class ShaderNode {
         n.text = s.text;
         n.ty = s.ty;
         n.symbol = s.symbol;
+        n.overload = s.overload;
         n.types = s.types;
         n.type_args = s.type_args;
         n.line = s.span.line;
@@ -79,6 +82,7 @@ internal class ShaderNode {
         n.literal_kind = e.literal_kind;
         n.ty = e.ty;
         n.symbol = e.symbol;
+        n.overload = e.overload;
         n.symbol_kind = e.symbol_kind;
         n.types = e.types;
         n.type_args = e.type_args;

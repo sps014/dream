@@ -51,7 +51,7 @@ class Accounts: AuthAccounts {
 async fun main(): void {
     let key = System.env("API_JWT_KEY").unwrap();
     let auth = AuthService(
-        JwtOptions("issuer", "reports", key, key, "HS256"),
+        JwtOptions("issuer", "reports", key, key, JwtAlgorithm.HS256),
         Accounts(Password.hash(System.env("DEMO_PASSWORD").unwrap()).unwrap()),
         MemoryAuthStore()
     );

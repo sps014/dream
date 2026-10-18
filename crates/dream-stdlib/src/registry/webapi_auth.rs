@@ -13,6 +13,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/webapi/auth/jwt_algorithm.dream",
+            include_str!("../system/webapi/auth/jwt_algorithm.dream"),
+        ),
+        (
             "<std>/system/webapi/auth/auth_error.dream",
             include_str!("../system/webapi/auth/auth_error.dream"),
         ),

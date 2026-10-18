@@ -31,7 +31,7 @@ public struct Varying {
 @vertex
 fun colored_vertex(@location(0) position: GpuVec2, @location(1) color: GpuVec4): Varying {
     let result = Varying();
-    result.position = GpuVec4.of(position.x, position.y, 0.0f, 1.0f);
+    result.position = GpuVec4(position.x, position.y, 0.0f, 1.0f);
     result.color = color;
     return result;
 }
@@ -66,18 +66,18 @@ public struct Vertex {
 async fun render(device: GpuDevice): Result<byte[], GpuError> {
     let size = 64;
     let target = device.texture(
-        GpuTextureDesc.of(size, size, GpuTextureFormat.Rgba8Unorm).render_target(true)
+        GpuTextureDesc(size, size, GpuTextureFormat.Rgba8Unorm).render_target(true)
     )?;
 
-    let red = GpuVec4.of(1.0f, 0.0f, 0.0f, 1.0f);
+    let red = GpuVec4(1.0f, 0.0f, 0.0f, 1.0f);
     let vertices = device.vertex_buffer_from(
         [
-            Vertex(GpuVec2.of(-1.0f, -1.0f), red),
-            Vertex(GpuVec2.of(1.0f, -1.0f), red),
-            Vertex(GpuVec2.of(0.0f, 1.0f), red)
+            Vertex(GpuVec2(-1.0f, -1.0f), red),
+            Vertex(GpuVec2(1.0f, -1.0f), red),
+            Vertex(GpuVec2(0.0f, 1.0f), red)
         ]
     )?;
-    let layout = GpuVertexLayout.of(sizeof(Vertex))
+    let layout = GpuVertexLayout(sizeof(Vertex))
         .attribute(0, GpuVertexFormat.Float32x2, 0)
         .attribute(1, GpuVertexFormat.Float32x4, 8);
     let pipeline = device.render_pipeline(
@@ -88,7 +88,7 @@ async fun render(device: GpuDevice): Result<byte[], GpuError> {
 
     let encoder = device.command_encoder();
     let pass = encoder.begin_render_pass(
-        GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)))
+        GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)))
     );
     pass.set_pipeline(pipeline);
     pass.set_vertex_buffer(0, vertices);
@@ -125,7 +125,7 @@ the top corners keep the black clear color.
 
 The pieces:
 
-- `GpuTextureDesc.of(...).render_target(true)` creates a texture that pipelines can draw into.
+- `GpuTextureDesc(...).render_target(true)` creates a texture that pipelines can draw into.
 - `GpuVertexLayout` tells the pipeline where each `@location` input sits inside one `Vertex`: the
   position at byte 0 and the color at byte 8.
 - `GpuRenderPipelineDesc.defaults(format)` draws triangle lists without blending or depth. Chain
@@ -153,13 +153,13 @@ public struct WavePoint {
 fun wave_vertex(time: float): WavePoint {
     let point = WavePoint();
     let x = GpuMath.sin(time + (float)vertex_id()) * 0.5f;
-    point.position = GpuVec4.of(x, 0.0f, 0.0f, 1.0f);
+    point.position = GpuVec4(x, 0.0f, 0.0f, 1.0f);
     return point;
 }
 
 @fragment
 fun wave_fragment(point: WavePoint): GpuVec4 {
-    return GpuVec4.of(1.0f, 1.0f, 1.0f, 1.0f);
+    return GpuVec4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 fun bind_time(pass: GpuRenderPass, time: float): void {
@@ -194,8 +194,8 @@ fun spin_vertex(angle: float): SpinVarying {
     let y = GpuMath.sin(corner + angle) * 0.6f;
 
     let result = SpinVarying();
-    result.position = GpuVec4.of(x, y, 0.0f, 1.0f);
-    result.color = GpuVec4.of(0.5f + 0.5f * x, 0.5f + 0.5f * y, 1.0f, 1.0f);
+    result.position = GpuVec4(x, y, 0.0f, 1.0f);
+    result.color = GpuVec4(0.5f + 0.5f * x, 0.5f + 0.5f * y, 1.0f, 1.0f);
     return result;
 }
 
@@ -234,7 +234,7 @@ async fun run(window: Window): Result<bool, GpuError> {
         }
 
         angle = angle + input.delta_seconds;
-        let frame = surface.begin_frame(GpuVec4.of(0.05f, 0.05f, 0.1f, 1.0f)).await?;
+        let frame = surface.begin_frame(GpuVec4(0.05f, 0.05f, 0.1f, 1.0f)).await?;
         let pass = frame.pass;
         pass.set_pipeline(pipeline);
         pass.bind_value(GpuShaders.spin_vertex.angle, angle);

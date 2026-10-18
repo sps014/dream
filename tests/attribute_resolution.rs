@@ -18,7 +18,7 @@ public fun sample(): void {{}}
 public fun check(): int {{
     if GenAttributes.id<RouteAttribute>() != "{module}::RouteAttribute" {{ return -1; }}
     let args = List<GenAttrArg>();
-    args.push(GenAttrArg("enum", "Mode.First", ""));
+    args.push(GenAttrArg(GenValueKind.Enum, "Mode.First", ""));
     let attrs = List<GenAttribute>();
     attrs.push(GenAttribute(GenAttributes.id<RouteAttribute>(), "route", args));
     if GenAttributes.decode<RouteAttribute>(attrs).unwrap().mode == Mode.First {{ return {value}; }}

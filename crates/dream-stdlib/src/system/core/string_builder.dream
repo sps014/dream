@@ -79,19 +79,19 @@ public class StringBuilder {
 
     /// Appends `text` to the builder.
     @intrinsic(Intrinsic.StringBuilderPush)
-    public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
+    internal static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void;
 
     @intrinsic(Intrinsic.StringBuilderBuffer)
     // Only initialized bytes below `count` can become a built string.
-    public static extern fun new_buffer(capacity: int): byte[];
+    internal static extern fun new_buffer(capacity: int): byte[];
 
     /// Appends the decimal representation of `n`.
     @intrinsic(Intrinsic.StringBuilderPushInt)
-    public static extern fun push_int(borrow sb: StringBuilder, n: int): void;
+    internal static extern fun push_int(borrow sb: StringBuilder, n: int): void;
 
     /// Appends the decimal representation of `n`.
     @intrinsic(Intrinsic.StringBuilderPushLong)
-    public static extern fun push_long(borrow sb: StringBuilder, n: long): void;
+    internal static extern fun push_long(borrow sb: StringBuilder, n: long): void;
 
     // Appends every UTF-16 unit of `text`, growing at most once.
     @inline
@@ -172,7 +172,7 @@ public class StringBuilder {
     /// Creates a string from the first `len` bytes in the builder buffer. The range must be
     /// valid.
     @intrinsic(Intrinsic.StringBuilderView)
-    public static extern fun view_raw(borrow bytes: byte[], len: int): string;
+    internal static extern fun view_raw(borrow bytes: byte[], len: int): string;
 
     // A view of everything appended so far, without copying the units. Later appends and
     // `clear` leave the view unchanged: it is a snapshot.

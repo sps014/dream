@@ -13,7 +13,7 @@ async fun http_types(): void {
     Assert.eq(headers.length, 1);
     headers.remove("x-role");
     Assert.is_true(headers.get("x-role").is_none());
-    let request = HttpRequest.get(Url.parse("https://example.com/").unwrap());
+    let request = HttpRequest(HttpMethod.Get, Url.parse("https://example.com/").unwrap());
     let client = HttpClient();
     let cancelled = CancellationSource();
     cancelled.cancel();
@@ -25,7 +25,7 @@ async fun http_types(): void {
         client.send(request, options: HttpOptions(timeout_ms: 0 - 1)).await.unwrap_err().code(),
         "EINVAL"
     );
-    let invalid = HttpRequest.get(Url.parse("file:///tmp/input").unwrap());
+    let invalid = HttpRequest(HttpMethod.Get, Url.parse("file:///tmp/input").unwrap());
     Assert.eq(client.send(invalid).await.unwrap_err().code(), "EINVAL");
     request.set_text("not valid for GET");
     Assert.eq(client.send(request).await.unwrap_err().code(), "EINVAL");

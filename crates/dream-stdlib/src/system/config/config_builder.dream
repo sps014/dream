@@ -71,7 +71,7 @@ public class ConfigBuilder {
             keys.add(entry.key);
         }
         for (let path in this.files) {
-            let handle = FileHandle.open(path, "r");
+            let handle = FileHandle.open(path, FileMode.Read);
             if handle.is_err() {
                 return Result.Err(ConfigError("", path, handle.unwrap_err().message()));
             }

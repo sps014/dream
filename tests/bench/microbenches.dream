@@ -431,7 +431,7 @@ fun bench_list_clear_reuse(iters: int): void {
 // Public find-all API — pattern is intentionally NOT bare `\d+` (that hits a digit-run
 // fast path and would benchmax the score).
 fun bench_regex_find(iters: int): void {
-    let re = Regex("[a-z]+\\d+", RegexFlags.Global);
+    let re = Regex.compile("[a-z]+\\d+", RegexFlags.Global).unwrap();
     let hay = "abc123def456ghi789xyz";
     let sw = Stopwatch();
     let acc = 0;

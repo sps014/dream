@@ -23,11 +23,6 @@ public class List<T>: IndexedCollection<T> {
         this.count = 0;
     }
 
-    // Allocates an empty list with backing capacity `capacity`.
-    public static fun with_capacity(capacity: int): List<T> {
-        return List<T>(capacity);
-    }
-
     // Number of elements currently stored.
     @inline
     public get length(): int {
@@ -94,10 +89,10 @@ public class List<T>: IndexedCollection<T> {
     // list-literal syntax (e.g. `let xs: List<int> = [1, 2, 3];`) desugars to this.
     /// Creates a list containing the elements of `items` in order. List literals such as `[1,
     /// 2, 3]` create lists in the same way.
-    public static fun from_array(borrow items: T[]): List<T> {
-        let result = List<T>(items.length);
-        result.push_all(items);
-        return result;
+    public constructor(borrow items: T[]) {
+        this.items = Buffer.alloc<T>(items.length);
+        this.count = 0;
+        this.push_all(items);
     }
 
     // Yields a `T[]` of exactly `length` and leaves this list empty. Shrinks via `realloc` when

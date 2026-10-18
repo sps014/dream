@@ -705,7 +705,7 @@
         "page": "reference/api/codegen-gen-attr-arg.md"
       },
       {
-        "signature": "public kind: string",
+        "signature": "public kind: GenValueKind",
         "description": "Category of this entry.",
         "line": 11,
         "page": "reference/api/codegen-gen-attr-arg.md"
@@ -723,7 +723,7 @@
         "page": "reference/api/codegen-gen-attr-arg.md"
       },
       {
-        "signature": "public constructor(kind: string, value: string, symbol: string)",
+        "signature": "public constructor(kind: GenValueKind, value: string, symbol: string)",
         "description": "Creates the snapshot model from the supplied values.",
         "line": 20,
         "page": "reference/api/codegen-gen-attr-arg.md"
@@ -963,7 +963,7 @@
         "page": "reference/api/codegen-gen-constant.md"
       },
       {
-        "signature": "public kind: string",
+        "signature": "public kind: GenValueKind",
         "description": "Category of this entry.",
         "line": 8,
         "page": "reference/api/codegen-gen-constant.md"
@@ -1482,7 +1482,7 @@
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public literal_kind: string",
+        "signature": "public literal_kind: GenValueKind",
         "description": "Category of the literal, such as a number or string.",
         "line": 35,
         "page": "reference/api/codegen-gen-expr.md"
@@ -1500,7 +1500,7 @@
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
-        "signature": "public symbol_kind: string",
+        "signature": "public symbol_kind: GenSymbolKind",
         "description": "Category of the referenced symbol.",
         "line": 44,
         "page": "reference/api/codegen-gen-expr.md"
@@ -2287,7 +2287,7 @@
         "page": "reference/api/codegen-gen-symbol.md"
       },
       {
-        "signature": "public kind: string",
+        "signature": "public kind: GenSymbolKind",
         "description": "Category of this entry.",
         "line": 16,
         "page": "reference/api/codegen-gen-symbol.md"
@@ -2358,6 +2358,109 @@
         "description": "Decodes an instantiated type view exported by semantic analysis.",
         "line": 25,
         "page": "reference/api/codegen-gen-symbol-instance.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_symbol_kind.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-symbol-kind.md",
+    "declarations": [
+      {
+        "signature": "public enum GenSymbolKind",
+        "description": "The category of a symbol in a generator snapshot.",
+        "line": 4,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Unknown",
+        "description": "No recognized symbol category was supplied by the snapshot.",
+        "line": 6,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Class",
+        "description": "A reference type declaration.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Struct",
+        "description": "A value type declaration.",
+        "line": 10,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Enum",
+        "description": "An enum declaration or enum symbol.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Union",
+        "description": "A discriminated union declaration.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Interface",
+        "description": "An interface declaration.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Function",
+        "description": "A function that can be referenced or called.",
+        "line": 18,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Type",
+        "description": "A type name used in a construction or type expression.",
+        "line": 20,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Local",
+        "description": "A variable declared inside a function.",
+        "line": 22,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Parameter",
+        "description": "An argument binding declared by a function.",
+        "line": 24,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Global",
+        "description": "A variable declared at module level.",
+        "line": 26,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Field",
+        "description": "A stored member of an instance.",
+        "line": 28,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Method",
+        "description": "A callable member of a type.",
+        "line": 30,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Variant",
+        "description": "An enum member or discriminated-union choice.",
+        "line": 32,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
+      },
+      {
+        "signature": "Module",
+        "description": "A namespace containing declarations.",
+        "line": 34,
+        "page": "reference/api/codegen-gen-symbol-kind.md"
       }
     ]
   },
@@ -2669,6 +2772,91 @@
         "description": "Returns the requested model information.",
         "line": 161,
         "page": "reference/api/codegen-gen-type-ref.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/codegen/gen_value_kind.dream",
+    "package": "system.codegen",
+    "page": "reference/api/codegen-gen-value-kind.md",
+    "declarations": [
+      {
+        "signature": "public enum GenValueKind",
+        "description": "The category of a literal, constant, or attribute argument.",
+        "line": 4,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Unknown",
+        "description": "No recognized value category was supplied by the snapshot.",
+        "line": 6,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "String",
+        "description": "A string value, with its unquoted contents in the value field.",
+        "line": 8,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Int",
+        "description": "A signed integer constant represented as decimal text.",
+        "line": 10,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "UInt",
+        "description": "An unsigned integer constant represented as decimal text.",
+        "line": 12,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Float",
+        "description": "A single-precision floating-point value.",
+        "line": 14,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Double",
+        "description": "A double-precision floating-point value.",
+        "line": 16,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Bool",
+        "description": "A Boolean value represented as true or false.",
+        "line": 18,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Char",
+        "description": "A character literal.",
+        "line": 20,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Long",
+        "description": "A signed 64-bit integer literal.",
+        "line": 22,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "ULong",
+        "description": "An unsigned 64-bit integer literal.",
+        "line": 24,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Float16",
+        "description": "A half-precision floating-point literal.",
+        "line": 26,
+        "page": "reference/api/codegen-gen-value-kind.md"
+      },
+      {
+        "signature": "Enum",
+        "description": "An enum member represented by its qualified source name.",
+        "line": 28,
+        "page": "reference/api/codegen-gen-value-kind.md"
       }
     ]
   },
@@ -3274,201 +3462,195 @@
         "page": "reference/api/collections-list-1.md"
       },
       {
-        "signature": "public static fun with_capacity(capacity: int): List<T>",
-        "description": "Allocates an empty list with backing capacity `capacity`.",
-        "line": 27,
-        "page": "reference/api/collections-list-1.md"
-      },
-      {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 33,
+        "line": 28,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the list has no elements.",
-        "line": 39,
+        "line": 34,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 45,
+        "line": 40,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<bool, CapacityError>",
         "description": "Reserves room for additional elements without changing length or existing values.",
-        "line": 50,
+        "line": 45,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 70,
+        "line": 65,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items` in order.",
-        "line": 81,
+        "line": 76,
         "page": "reference/api/collections-list-1.md"
       },
       {
-        "signature": "public static fun from_array(borrow items: T[]): List<T>",
+        "signature": "public constructor(borrow items: T[])",
         "description": "Creates a list containing the elements of `items` in order. List literals such as `[1, 2, 3]` create lists in the same way.",
-        "line": 97,
+        "line": 92,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Returns the elements as an array and leaves the list empty. The returned array has exactly the previous list length.",
-        "line": 107,
+        "line": 102,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Returns the element at `index`. Panics if `index` is out of range.",
-        "line": 132,
+        "line": 127,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 140,
+        "line": 135,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 148,
+        "line": 143,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 159,
+        "line": 154,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 171,
+        "line": 166,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 183,
+        "line": 178,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 195,
+        "line": 190,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "A new list of `this[start .. end)` (clamped; empty when the span is inverted).",
-        "line": 206,
+        "line": 201,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 228,
+        "line": 223,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 244,
+        "line": 239,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 250,
+        "line": 245,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 268,
+        "line": 263,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 283,
+        "line": 278,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.",
-        "line": 291,
-        "page": "reference/api/collections-list-2.md"
+        "line": 286,
+        "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T: unmanaged",
         "description": "Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.",
-        "line": 310,
+        "line": 305,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 329,
+        "line": 324,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 345,
+        "line": 340,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 353,
+        "line": 348,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 360,
+        "line": 355,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 365,
+        "line": 360,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 378,
+        "line": 373,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T: Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 432,
+        "line": 427,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 440,
+        "line": 435,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 459,
+        "line": 454,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -3546,111 +3728,111 @@
         "page": "reference/api/collections-map-1.md"
       },
       {
-        "signature": "public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>",
-        "description": "Creates a map from corresponding keys and values; the arrays must have equal lengths.",
+        "signature": "public constructor(borrow keys: K[], borrow values: V[])",
+        "description": "Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.",
         "line": 240,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 249,
+        "line": 253,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 259,
+        "line": 263,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K: StringKey",
         "description": "Returns the value for `key`, or `fallback` when absent.",
-        "line": 268,
+        "line": 272,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey",
         "description": "Returns whether `key` is present.",
-        "line": 277,
+        "line": 281,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 283,
+        "line": 287,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or(borrow key: K, fallback: V): V",
         "description": "Returns the value for `key`, or `fallback` when absent.",
-        "line": 293,
+        "line": 297,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V",
         "description": "Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.",
-        "line": 303,
+        "line": 307,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "Copies entries from `other`, replacing values with matching keys.",
-        "line": 314,
+        "line": 318,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "Returns a new list of key/value pairs.",
-        "line": 321,
+        "line": 325,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes `key` and its value; returns whether the key was present.",
-        "line": 334,
+        "line": 338,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "Returns whether there are no elements.",
-        "line": 350,
+        "line": 354,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 356,
+        "line": 360,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun clear(): void where K: unmanaged, V: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 376,
+        "line": 380,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun keys(): K[]",
         "description": "Returns a new array containing the keys.",
-        "line": 383,
+        "line": 387,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun values(): V[]",
         "description": "Returns a new array containing the values.",
-        "line": 398,
+        "line": 402,
         "page": "reference/api/collections-map-1.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "Creates a cursor over the sequence. Close it when iteration ends early.",
-        "line": 413,
+        "line": 417,
         "page": "reference/api/collections-map-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 438,
+        "line": 442,
         "page": "reference/api/collections-map-2.md"
       }
     ]
@@ -4028,7 +4210,7 @@
         "page": "reference/api/collections-set.md"
       },
       {
-        "signature": "public static fun from_array(borrow items: T[]): Set<T>",
+        "signature": "public constructor(borrow items: T[])",
         "description": "Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2, 3}` create sets in the same way.",
         "line": 239,
         "page": "reference/api/collections-set.md"
@@ -4036,79 +4218,79 @@
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 246,
+        "line": 251,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool where T: unmanaged",
         "description": "Removes `value`; returns whether it was present.",
-        "line": 259,
+        "line": 264,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 270,
+        "line": 275,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 276,
+        "line": 281,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 293,
+        "line": 298,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 300,
+        "line": 305,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 315,
+        "line": 320,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 331,
+        "line": 336,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 346,
+        "line": 351,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 361,
+        "line": 366,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 375,
+        "line": 380,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 389,
+        "line": 394,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 404,
+        "line": 409,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -7040,30 +7222,6 @@
         "page": "reference/api/core-string-builder.md"
       },
       {
-        "signature": "public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void",
-        "description": "Appends `text` to the builder.",
-        "line": 82,
-        "page": "reference/api/core-string-builder.md"
-      },
-      {
-        "signature": "public static extern fun new_buffer(capacity: int): byte[]",
-        "description": "Only initialized bytes below `count` can become a built string.",
-        "line": 86,
-        "page": "reference/api/core-string-builder.md"
-      },
-      {
-        "signature": "public static extern fun push_int(borrow sb: StringBuilder, n: int): void",
-        "description": "Appends the decimal representation of `n`.",
-        "line": 90,
-        "page": "reference/api/core-string-builder.md"
-      },
-      {
-        "signature": "public static extern fun push_long(borrow sb: StringBuilder, n: long): void",
-        "description": "Appends the decimal representation of `n`.",
-        "line": 94,
-        "page": "reference/api/core-string-builder.md"
-      },
-      {
         "signature": "public fun append(borrow text: string): void",
         "description": "Appends every UTF-16 unit of `text`, growing at most once.",
         "line": 98,
@@ -7115,12 +7273,6 @@
         "signature": "public fun clear(): void",
         "description": "Removes every appended character, keeping the backing buffer for reuse.",
         "line": 164,
-        "page": "reference/api/core-string-builder.md"
-      },
-      {
-        "signature": "public static extern fun view_raw(borrow bytes: byte[], len: int): string",
-        "description": "Creates a string from the first `len` bytes in the builder buffer. The range must be valid.",
-        "line": 175,
         "page": "reference/api/core-string-builder.md"
       },
       {
@@ -8445,7 +8597,7 @@
     "declarations": [
       {
         "signature": "public struct CustomDerivativeAttribute",
-        "description": "Supplies a hand-written backward derivative for a `@differentiable` helper, replacing the automatic one. Use it when the automatic derivative is slow or numerically unstable.  `function` names a `@gpu` helper whose parameters are the original parameters as `ref` `GpuDiffPair` values, followed by the derivative of the result. It writes each parameter's derivative into its pair.",
+        "description": "Supplies a hand-written backward derivative for a `@differentiable` helper, replacing the automatic one. Use it when the automatic derivative is slow or numerically unstable.  `function` names a inferred shader helper whose parameters are the original parameters as `ref` `GpuDiffPair` values, followed by the derivative of the result. It writes each parameter's derivative into its pair.",
         "line": 10,
         "page": "reference/api/gpu-custom-derivative-attribute.md"
       },
@@ -8464,7 +8616,7 @@
     "declarations": [
       {
         "signature": "public struct DifferentiableAttribute",
-        "description": "Makes a `@gpu` helper differentiable, so `GpuDiff.forward` and `GpuDiff.backward` can compute its derivatives automatically.  Every function it calls must itself be differentiable: another `@differentiable` helper or a differentiable built-in such as `GpuMath.sin`, `GpuMath.exp` or `GpuMath.max`. Other calls are build errors at the call. Works on every target, including `WebGpu`.",
+        "description": "Makes a inferred shader helper differentiable, so `GpuDiff.forward` and `GpuDiff.backward` can compute its derivatives automatically.  Every function it calls must itself be differentiable: another `@differentiable` helper or a differentiable built-in such as `GpuMath.sin`, `GpuMath.exp` or `GpuMath.max`. Other calls are build errors at the call. Works on every target, including `WebGpu`.",
         "line": 10,
         "page": "reference/api/gpu-differentiable-attribute.md"
       }
@@ -8535,81 +8687,68 @@
       {
         "signature": "public static class GpuAtomic",
         "description": "Atomic read-modify-write operations on buffer elements, safe when many threads update the same element at once. Each returns the element's value from before the operation. Integer forms work on `GpuBuffer<int>` and `GpuBuffer<uint>`; `add_float` on `GpuBuffer<float>`.",
-        "line": 21,
+        "line": 20,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun add<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Adds `value` to element `index`.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun add_float(buffer: GpuBuffer<float>, index: int, value: float): float",
         "description": "Adds `value` to the float element `index`. WebGPU has no float atomics, so there it is emulated with a compare-and-swap loop.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun sub<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Subtracts `value` from element `index`.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun min<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores the smaller of element `index` and `value`.",
-        "line": 33,
+        "line": 32,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun max<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores the larger of element `index` and `value`.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun and<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores the bitwise AND of element `index` and `value`.",
-        "line": 39,
+        "line": 38,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun or<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores the bitwise OR of element `index` and `value`.",
-        "line": 42,
+        "line": 41,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun xor<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores the bitwise exclusive OR of element `index` and `value`.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun exchange<T>(buffer: GpuBuffer<T>, index: int, value: T): T",
         "description": "Stores `value` in element `index`.",
-        "line": 48,
+        "line": 47,
         "page": "reference/api/gpu-gpu-atomic.md"
       },
       {
         "signature": "public static extern fun compare_exchange<T>( buffer: GpuBuffer<T>, index: int, expected: T, value: T ): T",
         "description": "Stores `value` in element `index` only if the element equals `expected`.",
-        "line": 51,
+        "line": 50,
         "page": "reference/api/gpu-gpu-atomic.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/gpu/gpu_attribute.dream",
-    "package": "system.gpu",
-    "page": "reference/api/gpu-gpu-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct GpuAttribute",
-        "description": "Marks a helper function that shaders may call.  A helper follows the same rules as a shader body and may use every shader built-in, but it is not an entry point and has no `GpuShaders` descriptor. Like shaders, helpers are compiled for the GPU only and cannot be called from CPU code.",
-        "line": 9,
-        "page": "reference/api/gpu-gpu-attribute.md"
       }
     ]
   },
@@ -8774,13 +8913,13 @@
       {
         "signature": "public extern fun this[index: int]: T",
         "description": "Reads element `index` inside a shader. Indexes outside the buffer read zero on most backends; never rely on it.",
-        "line": 103,
+        "line": 102,
         "page": "reference/api/gpu-gpu-buffer.md"
       },
       {
         "signature": "public extern fun this[index: int] = value: T",
         "description": "Writes element `index` inside a shader. Not allowed on `@readonly` parameters. Writes outside the buffer are dropped.",
-        "line": 119,
+        "line": 117,
         "page": "reference/api/gpu-gpu-buffer.md"
       }
     ]
@@ -9204,43 +9343,43 @@
       {
         "signature": "public static class GpuDiff",
         "description": "Automatic differentiation of `@differentiable` helpers inside shaders.  Pass the helper itself as `f`, followed by one `GpuDiffPair` per parameter; the name's number is the helper's parameter count (`forward` and `backward` for one parameter). `forward` returns the result and its derivative along the pairs' derivatives. `backward` takes the pairs by `ref`, plus the derivative of whatever the result feeds into (`1` to differentiate the result itself), and stores each parameter's gradient in its pair's `derivative`. Parameters marked `@no_diff` take plain values instead of pairs.",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun forward<A, R>(f: fun(A): R, a: GpuDiffPair<A>): GpuDiffPair<R>",
         "description": "Forward-mode derivative of a one-parameter helper.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun forward2<A, B, R>( f: fun(A, B): R, a: GpuDiffPair<A>, b: GpuDiffPair<B> ): GpuDiffPair<R>",
         "description": "Forward-mode derivative of a two-parameter helper.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun forward3<A, B, C, R>( f: fun(A, B, C): R, a: GpuDiffPair<A>, b: GpuDiffPair<B>, c: GpuDiffPair<C> ): GpuDiffPair<R>",
         "description": "Forward-mode derivative of a three-parameter helper.",
-        "line": 37,
+        "line": 36,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun backward<A, R>(f: fun(A): R, ref a: GpuDiffPair<A>, d_output: R): void",
         "description": "Reverse-mode gradient of a one-parameter helper.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun backward2<A, B, R>( f: fun(A, B): R, ref a: GpuDiffPair<A>, ref b: GpuDiffPair<B>, d_output: R ): void",
         "description": "Reverse-mode gradient of a two-parameter helper.",
-        "line": 48,
+        "line": 47,
         "page": "reference/api/gpu-gpu-diff.md"
       },
       {
         "signature": "public static extern fun backward3<A, B, C, R>( f: fun(A, B, C): R, ref a: GpuDiffPair<A>, ref b: GpuDiffPair<B>, ref c: GpuDiffPair<C>, d_output: R ): void",
         "description": "Reverse-mode gradient of a three-parameter helper.",
-        "line": 56,
+        "line": 55,
         "page": "reference/api/gpu-gpu-diff.md"
       }
     ]
@@ -9253,31 +9392,31 @@
       {
         "signature": "public struct GpuDiffPair<T>",
         "description": "A value together with its derivative, the argument type of `GpuDiff.forward` and `GpuDiff.backward`.  For `forward`, `derivative` is the direction to differentiate in: `1` for the input you differentiate by and `0` for the rest. After `backward`, each pair's `derivative` holds the gradient of the result with respect to that input. `T` is `float`, `float16`, a GPU vector, or a struct whose fields are all differentiable.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/gpu-gpu-diff-pair.md"
       },
       {
-        "signature": "public static extern fun of(value: T, derivative: T): GpuDiffPair<T>",
+        "signature": "public constructor(value: T, derivative: T)",
         "description": "A pair of `value` and `derivative`.",
-        "line": 26,
+        "line": 25,
         "page": "reference/api/gpu-gpu-diff-pair.md"
       },
       {
-        "signature": "public static extern fun constant(value: T): GpuDiffPair<T>",
+        "signature": "public constructor(value: T)",
         "description": "A pair whose derivative is zero, for inputs that are held constant.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/gpu-gpu-diff-pair.md"
       },
       {
         "signature": "public extern fun value(): T",
         "description": "The value.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/gpu-gpu-diff-pair.md"
       },
       {
         "signature": "public extern fun derivative(): T",
         "description": "The derivative.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/gpu-gpu-diff-pair.md"
       }
     ]
@@ -9590,7 +9729,7 @@
       {
         "signature": "public extern fun get(): T",
         "description": "The resource this handle refers to, inside a shader.",
-        "line": 34,
+        "line": 33,
         "page": "reference/api/gpu-gpu-handle.md"
       }
     ]
@@ -9650,7 +9789,7 @@
         "page": "reference/api/gpu-gpu-i-vec2.md"
       },
       {
-        "signature": "public static fun of(x: int, y: int): GpuIVec2",
+        "signature": "public constructor(x: int, y: int)",
         "description": "Creates the vector `(x, y)`.",
         "line": 12,
         "page": "reference/api/gpu-gpu-i-vec2.md"
@@ -9687,7 +9826,7 @@
         "page": "reference/api/gpu-gpu-i-vec3.md"
       },
       {
-        "signature": "public static fun of(x: int, y: int, z: int): GpuIVec3",
+        "signature": "public constructor(x: int, y: int, z: int)",
         "description": "Creates the vector `(x, y, z)`.",
         "line": 16,
         "page": "reference/api/gpu-gpu-i-vec3.md"
@@ -9695,7 +9834,7 @@
       {
         "signature": "public get xy(): GpuIVec2",
         "description": "The first two components, for example a pixel coordinate from a 2D dispatch.",
-        "line": 25,
+        "line": 23,
         "page": "reference/api/gpu-gpu-i-vec3.md"
       }
     ]
@@ -9732,32 +9871,32 @@
     "declarations": [
       {
         "signature": "public class GpuInstance",
-        "description": "One placed copy of a bottom-level acceleration structure inside a top-level one.  Start from `GpuInstance.of` and chain the settings you want to change.",
+        "description": "One placed copy of a bottom-level acceleration structure inside a top-level one.  Start from `GpuInstance(...)` and chain the settings you want to change.",
         "line": 6,
         "page": "reference/api/gpu-gpu-instance.md"
       },
       {
-        "signature": "public static fun of(bottom_level: GpuAccelerationStructure, transform: GpuMat4): GpuInstance",
-        "description": "Places `bottom_level` with the object-to-world `transform`. Only the affine part of the transform is used.",
-        "line": 23,
+        "signature": "public constructor(bottom_level: GpuAccelerationStructure, transform: GpuMat4)",
+        "description": "Places a bottom-level acceleration structure with the supplied object-to-world transform.",
+        "line": 14,
         "page": "reference/api/gpu-gpu-instance.md"
       },
       {
         "signature": "public fun with_id(id: int): GpuInstance",
         "description": "Sets the value hit shaders read with `hit_instance_id()`, and returns this instance.",
-        "line": 28,
+        "line": 23,
         "page": "reference/api/gpu-gpu-instance.md"
       },
       {
         "signature": "public fun with_mask(mask: int): GpuInstance",
         "description": "Sets the 8-bit visibility mask, and returns this instance. A ray only sees instances whose mask shares a bit with the ray's mask. Defaults to `255`.",
-        "line": 35,
+        "line": 30,
         "page": "reference/api/gpu-gpu-instance.md"
       },
       {
         "signature": "public fun with_hit_group(index: int): GpuInstance",
         "description": "Sets which hit group of the ray tracing pipeline handles hits on this instance, and returns this instance. Defaults to `0`.",
-        "line": 42,
+        "line": 37,
         "page": "reference/api/gpu-gpu-instance.md"
       }
     ]
@@ -9769,7 +9908,7 @@
     "declarations": [
       {
         "signature": "public enum GpuLoad<T>",
-        "description": "What a render pass does with a target's existing contents when it starts.  For color targets `T` is `GpuVec4` and for depth targets `float`, so `GpuLoad.Clear(GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f))` clears to opaque black and `GpuLoad.Clear(1.0f)` clears depth to the far plane.",
+        "description": "What a render pass does with a target's existing contents when it starts.  For color targets `T` is `GpuVec4` and for depth targets `float`, so `GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f))` clears to opaque black and `GpuLoad.Clear(1.0f)` clears depth to the far plane.",
         "line": 8,
         "page": "reference/api/gpu-gpu-load.md"
       },
@@ -9823,7 +9962,7 @@
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
-        "signature": "public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4",
+        "signature": "public constructor(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4)",
         "description": "Creates a matrix from its four columns.",
         "line": 24,
         "page": "reference/api/gpu-gpu-mat4.md"
@@ -9831,49 +9970,49 @@
       {
         "signature": "public static fun identity(): GpuMat4",
         "description": "The identity matrix, which leaves vectors unchanged.",
-        "line": 34,
+        "line": 32,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public static fun translation(offset: GpuVec3): GpuMat4",
         "description": "A transform that moves points by `offset`.",
-        "line": 44,
+        "line": 42,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public static fun scaling(factors: GpuVec3): GpuMat4",
         "description": "A transform that scales each axis by the matching component of `factors`.",
-        "line": 51,
+        "line": 49,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public static fun rotation(axis: GpuVec3, radians: float): GpuMat4",
         "description": "A rotation by `radians` around `axis`, counter-clockwise when looking from the tip of the axis toward the origin. `axis` need not have length `1`.",
-        "line": 62,
+        "line": 60,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public static fun perspective( fov_y_radians: float, aspect: float, near: float, far: float ): GpuMat4",
         "description": "A perspective projection with a vertical field of view of `fov_y_radians`, a width-to-height `aspect` ratio, and clipping planes at distances `near` and `far` in front of the camera. Both distances must be positive and `near` below `far`.",
-        "line": 78,
+        "line": 76,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public static fun look_at(eye: GpuVec3, target: GpuVec3, up: GpuVec3): GpuMat4",
         "description": "A camera transform for an eye at `eye` looking at `target`, with `up` giving the upward direction. `up` must not point along the viewing direction.",
-        "line": 96,
+        "line": 94,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public fun row(index: int): GpuVec4",
         "description": "The row at `index` (`0` to `3`) as a vector.",
-        "line": 109,
+        "line": 107,
         "page": "reference/api/gpu-gpu-mat4.md"
       },
       {
         "signature": "public fun transpose(): GpuMat4",
         "description": "The matrix with rows and columns swapped.",
-        "line": 123,
+        "line": 121,
         "page": "reference/api/gpu-gpu-mat4.md"
       }
     ]
@@ -9886,205 +10025,205 @@
       {
         "signature": "public static class GpuMath",
         "description": "Math functions for shaders. Each works on `float`, `float16`, `GpuVec2`, `GpuVec3` and `GpuVec4`, component by component, and returns the same type as its arguments. All of them except `step`, `sign`, `floor`, `ceil`, `round` and `fract` are differentiable inside `@differentiable` helpers. They exist only on the GPU; on the CPU use `Math` and the vector methods.",
-        "line": 22,
+        "line": 21,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun sin<T>(x: T): T",
         "description": "Sine of `x` radians.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun cos<T>(x: T): T",
         "description": "Cosine of `x` radians.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun tan<T>(x: T): T",
         "description": "Tangent of `x` radians.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun asin<T>(x: T): T",
         "description": "Arcsine in radians, for `x` from `-1` to `1`.",
-        "line": 33,
+        "line": 32,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun acos<T>(x: T): T",
         "description": "Arccosine in radians, for `x` from `-1` to `1`.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun atan<T>(x: T): T",
         "description": "Arctangent in radians.",
-        "line": 39,
+        "line": 38,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun atan2<T>(y: T, x: T): T",
         "description": "The angle in radians of the point `(x, y)`, from `-π` to `π`.",
-        "line": 42,
+        "line": 41,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun exp<T>(x: T): T",
         "description": "`e` raised to `x`.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun exp2<T>(x: T): T",
         "description": "`2` raised to `x`.",
-        "line": 48,
+        "line": 47,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun log<T>(x: T): T",
         "description": "Natural logarithm, for positive `x`.",
-        "line": 51,
+        "line": 50,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun log2<T>(x: T): T",
         "description": "Base-2 logarithm, for positive `x`.",
-        "line": 54,
+        "line": 53,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun pow<T>(x: T, y: T): T",
         "description": "`x` raised to `y`, for non-negative `x`.",
-        "line": 57,
+        "line": 56,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun sqrt<T>(x: T): T",
         "description": "Square root, for non-negative `x`.",
-        "line": 60,
+        "line": 59,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun rsqrt<T>(x: T): T",
         "description": "`1 / sqrt(x)`, usually faster than dividing.",
-        "line": 63,
+        "line": 62,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun abs<T>(x: T): T",
         "description": "Absolute value.",
-        "line": 66,
+        "line": 65,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun sign<T>(x: T): T",
         "description": "`-1`, `0` or `1` by the sign of `x`.",
-        "line": 69,
+        "line": 68,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun floor<T>(x: T): T",
         "description": "Rounds down to a whole number.",
-        "line": 72,
+        "line": 71,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun ceil<T>(x: T): T",
         "description": "Rounds up to a whole number.",
-        "line": 75,
+        "line": 74,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun round<T>(x: T): T",
         "description": "Rounds to the nearest whole number, halves to even.",
-        "line": 78,
+        "line": 77,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun fract<T>(x: T): T",
         "description": "`x - floor(x)`, from `0` up to but excluding `1`.",
-        "line": 81,
+        "line": 80,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun min<T>(a: T, b: T): T",
         "description": "The smaller of `a` and `b`.",
-        "line": 84,
+        "line": 83,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun max<T>(a: T, b: T): T",
         "description": "The larger of `a` and `b`.",
-        "line": 87,
+        "line": 86,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun clamp<T>(x: T, low: T, high: T): T",
         "description": "`x` limited to the range `low` through `high`.",
-        "line": 90,
+        "line": 89,
         "page": "reference/api/gpu-gpu-math-1.md"
       },
       {
         "signature": "public static extern fun saturate<T>(x: T): T",
         "description": "`x` limited to the range `0` through `1`.",
-        "line": 93,
+        "line": 92,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun mix<T>(a: T, b: T, t: T): T",
         "description": "Linear interpolation: `a` when `t` is `0`, `b` when `t` is `1`.",
-        "line": 96,
+        "line": 95,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun step<T>(edge: T, x: T): T",
         "description": "`0` where `x` is below `edge`, otherwise `1`.",
-        "line": 99,
+        "line": 98,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun smoothstep<T>(low: T, high: T, x: T): T",
         "description": "A smooth curve from `0` at `low` to `1` at `high`.",
-        "line": 102,
+        "line": 101,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun fma<T>(a: T, b: T, c: T): T",
         "description": "`a * b + c`, computed with a single rounding where the GPU supports it.",
-        "line": 105,
+        "line": 104,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun reflect<T>(incident: T, normal: T): T",
         "description": "The direction of `incident` reflected about the unit-length surface `normal`.",
-        "line": 108,
+        "line": 107,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun refract<T>(incident: T, normal: T, eta: float): T",
         "description": "The direction of unit-length `incident` refracted through a surface with unit-length `normal`, where `eta` is the ratio of refractive indices; zero on total internal reflection.",
-        "line": 113,
+        "line": 112,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun ddx<T>(x: T): T",
         "description": "How fast `x` changes between horizontally neighboring pixels. Fragment shaders only.",
-        "line": 117,
+        "line": 116,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun ddy<T>(x: T): T",
         "description": "How fast `x` changes between vertically neighboring pixels. Fragment shaders only.",
-        "line": 121,
+        "line": 120,
         "page": "reference/api/gpu-gpu-math-2.md"
       },
       {
         "signature": "public static extern fun fwidth<T>(x: T): T",
         "description": "`abs(ddx(x)) + abs(ddy(x))`, for antialiasing procedural edges. Fragment shaders only.",
-        "line": 125,
+        "line": 124,
         "page": "reference/api/gpu-gpu-math-2.md"
       }
     ]
@@ -10128,37 +10267,37 @@
       {
         "signature": "public struct GpuRay",
         "description": "A ray for `trace_ray` and `GpuRayQuery`: hits count only between distances `t_min` and `t_max` from `origin` along `direction`.",
-        "line": 19,
+        "line": 18,
         "page": "reference/api/gpu-gpu-ray.md"
       },
       {
         "signature": "public origin: GpuVec3",
         "description": "Where the ray starts.",
-        "line": 21,
+        "line": 20,
         "page": "reference/api/gpu-gpu-ray.md"
       },
       {
         "signature": "public direction: GpuVec3",
         "description": "The ray's direction; it need not have length `1`, and distances are measured in multiples of it.",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/gpu-gpu-ray.md"
       },
       {
         "signature": "public t_min: float",
         "description": "The nearest distance at which hits count, usually a small positive value that keeps a surface from hitting itself.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/gpu-gpu-ray.md"
       },
       {
         "signature": "public t_max: float",
         "description": "The farthest distance at which hits count.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/gpu-gpu-ray.md"
       },
       {
-        "signature": "public static extern fun of( origin: GpuVec3, direction: GpuVec3, t_min: float, t_max: float ): GpuRay",
+        "signature": "public constructor(origin: GpuVec3, direction: GpuVec3, t_min: float, t_max: float)",
         "description": "Creates a ray from `origin` along `direction` that counts hits from `t_min` to `t_max`.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/gpu-gpu-ray.md"
       }
     ]
@@ -10250,73 +10389,73 @@
       {
         "signature": "public struct GpuRayQuery",
         "description": "An inline ray trace inside an ordinary shader, without a ray tracing pipeline. Useful for shadows and ambient occlusion in compute and fragment shaders.  Create one with `GpuRayQuery.of`, start it with `trace`, then call `proceed` in a loop until it returns false. Inside the loop, decide about non-opaque candidates with `commit_triangle`; afterwards read the committed hit. Needs `GpuFeature.RayQuery`.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
-        "signature": "public static extern fun of(flags: GpuRayFlags): GpuRayQuery",
+        "signature": "public constructor(flags: GpuRayFlags)",
         "description": "Creates a query with `flags` applied to every trace.",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun trace(scene: GpuAccelerationStructure, mask: uint, ray: GpuRay): void",
         "description": "Starts tracing `ray` against `scene`, seeing only instances whose mask shares a bit with `mask`.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun proceed(): bool",
         "description": "Advances to the next candidate that needs a decision; false once the trace finished.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun commit_triangle(): void",
         "description": "Accepts the current non-opaque triangle candidate as a hit.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun candidate_distance(): float",
         "description": "The distance to the current candidate.",
-        "line": 38,
+        "line": 37,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun candidate_barycentrics(): GpuVec2",
         "description": "The current triangle candidate's barycentric weights, as in `GpuTriangleHit`.",
-        "line": 41,
+        "line": 40,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun has_hit(): bool",
         "description": "True when the finished trace committed a hit.",
-        "line": 44,
+        "line": 43,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun hit_distance(): float",
         "description": "The distance to the committed hit.",
-        "line": 47,
+        "line": 46,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun hit_barycentrics(): GpuVec2",
         "description": "The committed hit's barycentric weights, as in `GpuTriangleHit`.",
-        "line": 50,
+        "line": 49,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun hit_instance_id(): int",
         "description": "The `GpuInstance.with_id` value of the committed hit's instance.",
-        "line": 53,
+        "line": 52,
         "page": "reference/api/gpu-gpu-ray-query.md"
       },
       {
         "signature": "public extern fun hit_primitive_index(): int",
         "description": "The index of the committed hit's triangle or box within its geometry.",
-        "line": 56,
+        "line": 55,
         "page": "reference/api/gpu-gpu-ray-query.md"
       }
     ]
@@ -10580,62 +10719,56 @@
     "declarations": [
       {
         "signature": "public class GpuSamplerDesc",
-        "description": "The settings a new sampler is created with.  Start from `GpuSamplerDesc.linear` or `GpuSamplerDesc.nearest` and chain the settings you want to change.",
+        "description": "The settings a new sampler is created with.  Start from `GpuSamplerDesc(GpuFilter.Linear)` or `GpuSamplerDesc(GpuFilter.Nearest)` and chain the settings you want to change.",
         "line": 7,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
-        "signature": "public static fun linear(): GpuSamplerDesc",
-        "description": "Smooth filtering within and between mip levels, clamped at the edges.",
-        "line": 21,
-        "page": "reference/api/gpu-gpu-sampler-desc.md"
-      },
-      {
-        "signature": "public static fun nearest(): GpuSamplerDesc",
-        "description": "Sharp nearest-texel filtering, clamped at the edges, for pixel art and data textures.",
-        "line": 26,
+        "signature": "public constructor(filter: GpuFilter)",
+        "description": "Creates a sampler with the selected filter, clamp-to-edge addressing, and no comparison.",
+        "line": 14,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public get filter(): GpuFilter",
         "description": "The filter used when magnifying, minifying and between mip levels.",
-        "line": 31,
+        "line": 22,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public get address_mode(): GpuAddressMode",
         "description": "What reads outside `0.0` to `1.0` return, on every axis. Defaults to `ClampToEdge`.",
-        "line": 36,
+        "line": 27,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public get compare(): Option<GpuCompare>",
         "description": "The comparison of a comparison sampler for `GpuTexture.sample_compare`, or `None` for an ordinary sampler. Defaults to `None`.",
-        "line": 42,
+        "line": 33,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public get anisotropy(): int",
         "description": "The maximum anisotropic filtering ratio, `1` (off) through `16`. Defaults to `1`.",
-        "line": 47,
+        "line": 38,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public fun address(mode: GpuAddressMode): GpuSamplerDesc",
         "description": "Sets what reads outside `0.0` to `1.0` return, and returns this description.",
-        "line": 52,
+        "line": 43,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public fun comparing(compare: GpuCompare): GpuSamplerDesc",
         "description": "Makes this a comparison sampler using `compare`, and returns this description.",
-        "line": 58,
+        "line": 49,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       },
       {
         "signature": "public fun max_anisotropy(ratio: int): GpuSamplerDesc",
         "description": "Sets the maximum anisotropic filtering ratio, clamped to `1` through `16`, and returns this description. Anisotropy sharpens textures seen at grazing angles.",
-        "line": 65,
+        "line": 56,
         "page": "reference/api/gpu-gpu-sampler-desc.md"
       }
     ]
@@ -10795,13 +10928,13 @@
       {
         "signature": "public extern fun this[coordinate: GpuIVec2]: T",
         "description": "Reads the texel at `coordinate` inside a shader.",
-        "line": 102,
+        "line": 101,
         "page": "reference/api/gpu-gpu-storage-texture.md"
       },
       {
         "signature": "public extern fun this[coordinate: GpuIVec2] = value: T",
         "description": "Writes the texel at `coordinate` inside a shader. Writes outside the texture are dropped.",
-        "line": 116,
+        "line": 114,
         "page": "reference/api/gpu-gpu-storage-texture.md"
       }
     ]
@@ -10973,25 +11106,25 @@
       {
         "signature": "public extern fun sample_level(sampler: GpuSampler, uv: GpuVec2, level: float): GpuVec4",
         "description": "Samples the texture at `uv` from mip level `level`; fractional levels blend two levels when the sampler filters mipmaps linearly.",
-        "line": 102,
+        "line": 101,
         "page": "reference/api/gpu-gpu-texture.md"
       },
       {
         "signature": "public extern fun sample_compare(sampler: GpuSampler, uv: GpuVec2, reference: float): float",
         "description": "Compares `reference` with the depth texture at `uv` using the comparison sampler's `GpuCompare`, and returns the filtered fraction of texels that passed. Used for shadow maps.",
-        "line": 108,
+        "line": 107,
         "page": "reference/api/gpu-gpu-texture.md"
       },
       {
         "signature": "public extern fun load(coordinate: GpuIVec2, level: int): GpuVec4",
         "description": "Reads the texel at integer `coordinate` of mip level `level`, without filtering.",
-        "line": 123,
+        "line": 121,
         "page": "reference/api/gpu-gpu-texture.md"
       },
       {
         "signature": "public extern fun size(level: int): GpuIVec2",
         "description": "The size in texels of mip level `level`.",
-        "line": 138,
+        "line": 135,
         "page": "reference/api/gpu-gpu-texture.md"
       }
     ]
@@ -11003,92 +11136,92 @@
     "declarations": [
       {
         "signature": "public class GpuTextureDesc",
-        "description": "The settings a new texture is created with.  Start from `GpuTextureDesc.of` and chain the settings you want to change. Every texture can be sampled by shaders and copied to and from the CPU.",
+        "description": "The settings a new texture is created with.  Start from `GpuTextureDesc(...)` and chain the settings you want to change. Every texture can be sampled by shaders and copied to and from the CPU.",
         "line": 7,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
-        "signature": "public static fun of(width: int, height: int, format: GpuTextureFormat): GpuTextureDesc",
-        "description": "Describes a `width` by `height` texture of `format` with one mip level and one layer.",
-        "line": 29,
+        "signature": "public constructor(width: int, height: int, format: GpuTextureFormat)",
+        "description": "Creates a 2D texture description with one mip, layer, and sample; width and height are texels.",
+        "line": 18,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get width(): int",
         "description": "Width in texels.",
-        "line": 34,
+        "line": 30,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get height(): int",
         "description": "Height in texels.",
-        "line": 39,
+        "line": 35,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get format(): GpuTextureFormat",
         "description": "How each texel is stored.",
-        "line": 44,
+        "line": 40,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get mip_level_count(): int",
         "description": "The number of mip levels, each half the size of the previous one. Defaults to `1`.",
-        "line": 49,
+        "line": 45,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get layer_count(): int",
         "description": "The number of array layers. Defaults to `1`.",
-        "line": 54,
+        "line": 50,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get sample_count(): int",
         "description": "Samples per texel for multisampled render targets: `1` or `4`. Defaults to `1`.",
-        "line": 59,
+        "line": 55,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get is_render_target(): bool",
         "description": "Whether render passes can draw into the texture. Defaults to `false`.",
-        "line": 64,
+        "line": 60,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public get is_storage(): bool",
         "description": "Whether shaders can write texels directly. Defaults to `false`.",
-        "line": 69,
+        "line": 65,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public fun mip_levels(count: int): GpuTextureDesc",
         "description": "Sets the number of mip levels, and returns this description.",
-        "line": 74,
+        "line": 70,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public fun layers(count: int): GpuTextureDesc",
         "description": "Sets the number of array layers, and returns this description.",
-        "line": 80,
+        "line": 76,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public fun samples(count: int): GpuTextureDesc",
         "description": "Sets the samples per texel, and returns this description.",
-        "line": 86,
+        "line": 82,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public fun render_target(value: bool): GpuTextureDesc",
         "description": "Sets whether render passes can draw into the texture, and returns this description. Depth formats must be render targets to be used as depth buffers.",
-        "line": 93,
+        "line": 89,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       },
       {
         "signature": "public fun storage(value: bool): GpuTextureDesc",
         "description": "Sets whether shaders can write texels directly, and returns this description.",
-        "line": 99,
+        "line": 95,
         "page": "reference/api/gpu-gpu-texture-desc.md"
       }
     ]
@@ -11276,7 +11409,7 @@
         "page": "reference/api/gpu-gpu-u-vec4.md"
       },
       {
-        "signature": "public static fun of(x: uint, y: uint, z: uint, w: uint): GpuUVec4",
+        "signature": "public constructor(x: uint, y: uint, z: uint, w: uint)",
         "description": "Creates the vector `(x, y, z, w)`.",
         "line": 19,
         "page": "reference/api/gpu-gpu-u-vec4.md"
@@ -11307,33 +11440,33 @@
         "page": "reference/api/gpu-gpu-vec2.md"
       },
       {
-        "signature": "public static fun of(x: float, y: float): GpuVec2",
+        "signature": "public constructor(x: float, y: float)",
         "description": "Creates the vector `(x, y)`.",
         "line": 16,
         "page": "reference/api/gpu-gpu-vec2.md"
       },
       {
-        "signature": "public static fun splat(value: float): GpuVec2",
+        "signature": "public constructor(value: float)",
         "description": "Creates a vector with both components equal to `value`.",
-        "line": 24,
+        "line": 22,
         "page": "reference/api/gpu-gpu-vec2.md"
       },
       {
         "signature": "public fun dot(other: GpuVec2): float",
         "description": "The dot product: `x * other.x + y * other.y`.",
-        "line": 69,
+        "line": 68,
         "page": "reference/api/gpu-gpu-vec2.md"
       },
       {
         "signature": "public fun length(): float",
         "description": "The vector's Euclidean length.",
-        "line": 74,
+        "line": 73,
         "page": "reference/api/gpu-gpu-vec2.md"
       },
       {
         "signature": "public fun normalize(): GpuVec2",
         "description": "The vector scaled to length `1`. A zero vector gives non-finite components.",
-        "line": 79,
+        "line": 78,
         "page": "reference/api/gpu-gpu-vec2.md"
       }
     ]
@@ -11368,15 +11501,15 @@
         "page": "reference/api/gpu-gpu-vec3.md"
       },
       {
-        "signature": "public static fun of(x: float, y: float, z: float): GpuVec3",
+        "signature": "public constructor(x: float, y: float, z: float)",
         "description": "Creates the vector `(x, y, z)`.",
         "line": 19,
         "page": "reference/api/gpu-gpu-vec3.md"
       },
       {
-        "signature": "public static fun splat(value: float): GpuVec3",
+        "signature": "public constructor(value: float)",
         "description": "Creates a vector with every component equal to `value`.",
-        "line": 28,
+        "line": 26,
         "page": "reference/api/gpu-gpu-vec3.md"
       },
       {
@@ -11447,45 +11580,45 @@
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
-        "signature": "public static fun of(x: float, y: float, z: float, w: float): GpuVec4",
+        "signature": "public constructor(x: float, y: float, z: float, w: float)",
         "description": "Creates the vector `(x, y, z, w)`.",
         "line": 22,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
-        "signature": "public static fun splat(value: float): GpuVec4",
+        "signature": "public constructor(value: float)",
         "description": "Creates a vector with every component equal to `value`.",
-        "line": 32,
+        "line": 30,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
         "signature": "public get xy(): GpuVec2",
         "description": "The first two components.",
-        "line": 37,
+        "line": 38,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
         "signature": "public get xyz(): GpuVec3",
         "description": "The first three components.",
-        "line": 42,
+        "line": 43,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
         "signature": "public fun dot(other: GpuVec4): float",
         "description": "The dot product.",
-        "line": 87,
+        "line": 88,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
         "signature": "public fun length(): float",
         "description": "The vector's Euclidean length.",
-        "line": 92,
+        "line": 93,
         "page": "reference/api/gpu-gpu-vec4.md"
       },
       {
         "signature": "public fun normalize(): GpuVec4",
         "description": "The vector scaled to length `1`. A zero vector gives non-finite components.",
-        "line": 97,
+        "line": 98,
         "page": "reference/api/gpu-gpu-vec4.md"
       }
     ]
@@ -11552,44 +11685,44 @@
     "declarations": [
       {
         "signature": "public class GpuVertexLayout",
-        "description": "How the vertex shader's `@location` inputs are read from one vertex buffer.  Start from `GpuVertexLayout.of` with the byte size of one element, usually `sizeof` of the vertex struct, and add one `attribute` per input.",
+        "description": "How the vertex shader's `@location` inputs are read from one vertex buffer.  Start from `GpuVertexLayout(...)` with the byte size of one element, usually `sizeof` of the vertex struct, and add one `attribute` per input.",
         "line": 7,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
-        "signature": "public static fun of(stride: int): GpuVertexLayout",
-        "description": "Describes a buffer whose elements are `stride` bytes apart.",
-        "line": 19,
+        "signature": "public constructor(stride: int)",
+        "description": "Creates a vertex layout with the supplied byte stride.",
+        "line": 13,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
         "signature": "public get stride(): int",
         "description": "Bytes from one element to the next.",
-        "line": 24,
+        "line": 20,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
         "signature": "public get is_per_instance(): bool",
         "description": "Whether the buffer advances once per instance instead of once per vertex.",
-        "line": 29,
+        "line": 25,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
         "signature": "public get attribute_count(): int",
         "description": "The number of attributes added.",
-        "line": 34,
+        "line": 30,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
         "signature": "public fun attribute(location: int, format: GpuVertexFormat, offset: int): GpuVertexLayout",
         "description": "Feeds the vertex shader input `@location(location)` from `offset` bytes into each element, read as `format`. Returns this layout.",
-        "line": 40,
+        "line": 36,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       },
       {
         "signature": "public fun per_instance(value: bool): GpuVertexLayout",
         "description": "Sets whether the buffer advances once per instance, for per-instance data such as transforms, and returns this layout.",
-        "line": 48,
+        "line": 44,
         "page": "reference/api/gpu-gpu-vertex-layout.md"
       }
     ]
@@ -11729,91 +11862,91 @@
       {
         "signature": "public extern fun call_shader<D>(index: int, ref data: D): void",
         "description": "Runs the pipeline's callable shader number `index` with `data`.",
-        "line": 40,
+        "line": 34,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun dispatch_ray_index(): GpuIVec3",
         "description": "This thread's position in the ray tracing dispatch grid, for example its pixel.",
-        "line": 52,
+        "line": 45,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun dispatch_ray_dimensions(): GpuIVec3",
         "description": "The size of the ray tracing dispatch grid.",
-        "line": 64,
+        "line": 56,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun world_ray_origin(): GpuVec3",
         "description": "The current ray's origin in world space.",
-        "line": 74,
+        "line": 60,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun world_ray_direction(): GpuVec3",
         "description": "The current ray's direction in world space.",
-        "line": 84,
+        "line": 64,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun object_ray_origin(): GpuVec3",
         "description": "The current ray's origin in the hit instance's object space.",
-        "line": 88,
+        "line": 68,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun object_ray_direction(): GpuVec3",
         "description": "The current ray's direction in the hit instance's object space.",
-        "line": 92,
+        "line": 72,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun ray_t_min(): float",
         "description": "The current ray's `t_min`.",
-        "line": 102,
+        "line": 76,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun ray_t_current(): float",
         "description": "The distance to the current hit, or the ray's `t_max` in miss shaders.",
-        "line": 112,
+        "line": 80,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun hit_instance_id(): int",
         "description": "The `GpuInstance.with_id` value of the hit instance.",
-        "line": 116,
+        "line": 84,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun hit_primitive_index(): int",
         "description": "The index of the hit triangle or box within its geometry.",
-        "line": 120,
+        "line": 88,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun hit_kind(): int",
         "description": "The value the intersection shader passed to `report_hit` as `kind`, or `254` and `255` for front- and back-facing triangles.",
-        "line": 125,
+        "line": 93,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun ignore_hit(): void",
         "description": "Rejects the current candidate hit; the ray continues as if it was not there.",
-        "line": 129,
+        "line": 97,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun accept_hit_and_end_search(): void",
         "description": "Accepts the current candidate hit and stops searching; the closest-hit shader runs for it.",
-        "line": 133,
+        "line": 101,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       },
       {
         "signature": "public extern fun report_hit<A>(t: float, kind: int, attributes: A): bool",
         "description": "Reports a hit on custom geometry at distance `t` with a `kind` from `0` to `127` and the `attributes` the hit shaders receive. Returns true when the hit was accepted.",
-        "line": 138,
+        "line": 106,
         "page": "reference/api/gpu-ray-tracing-builtins.md"
       }
     ]
@@ -11912,7 +12045,7 @@
       {
         "signature": "public fun gpu_shaders(ctx: GenContext): void",
         "description": "Compiles the program's GPU shaders ahead of time. Phase 0 checks every shader against the shader rules, translates each module's shaders to a readable Slang file (published next to the build output) and asks the pinned `slangc` for every `@gpu_targets` target. Phase 1 maps Slang errors back to Dream code, embeds one shader bundle per module and emits the module's `GpuShaders` class.",
-        "line": 31,
+        "line": 30,
         "page": "reference/api/gpu-shaders-gpu-shaders.md"
       }
     ]
@@ -12463,18 +12596,6 @@
         "description": "One `stat` of `path`. Follows symlinks. Missing paths are `Err`.",
         "line": 364,
         "page": "reference/api/io-file.md"
-      },
-      {
-        "signature": "public static fun open(borrow path: string): Result<FileStream, IoError>",
-        "description": "Opens a seekable read stream over `path` (OS-backed; no whole-file preload).",
-        "line": 383,
-        "page": "reference/api/io-file.md"
-      },
-      {
-        "signature": "public static async fun open_async( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<FileStream, IoError>",
-        "description": "Async wrapper around `open`.",
-        "line": 391,
-        "page": "reference/api/io-file.md"
       }
     ]
   },
@@ -12502,13 +12623,13 @@
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public static fun open(path: string, mode: string): Result<FileHandle, IoError>",
-        "description": "Opens `path` with `mode` (\"r\", \"w\", \"a\", \"r+\", \"w+\", \"a+\").",
+        "signature": "public static fun open(path: string, mode: FileMode): Result<FileHandle, IoError>",
+        "description": "Opens a file with the selected access, creation, and truncation behavior.",
         "line": 99,
         "page": "reference/api/io-file-handle.md"
       },
       {
-        "signature": "public static async fun open_async( path: string, mode: string, token: Option<CancellationToken> = Option.None ): Result<FileHandle, IoError>",
+        "signature": "public static async fun open_async( path: string, mode: FileMode, token: Option<CancellationToken> = Option.None ): Result<FileHandle, IoError>",
         "description": "Opens using host async facilities or the bounded filesystem executor. Cancellation abandons the result safely; a late open result is closed automatically.",
         "line": 105,
         "page": "reference/api/io-file-handle.md"
@@ -12606,6 +12727,92 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/io/file_kind.dream",
+    "package": "system.io",
+    "page": "reference/api/io-file-kind.md",
+    "declarations": [
+      {
+        "signature": "public enum FileKind",
+        "description": "The kind of filesystem entry described by metadata.",
+        "line": 4,
+        "page": "reference/api/io-file-kind.md"
+      },
+      {
+        "signature": "File",
+        "description": "A regular file.",
+        "line": 6,
+        "page": "reference/api/io-file-kind.md"
+      },
+      {
+        "signature": "Directory",
+        "description": "A directory.",
+        "line": 8,
+        "page": "reference/api/io-file-kind.md"
+      },
+      {
+        "signature": "Symlink",
+        "description": "A symbolic link.",
+        "line": 10,
+        "page": "reference/api/io-file-kind.md"
+      },
+      {
+        "signature": "Other",
+        "description": "Another filesystem entry, such as a device.",
+        "line": 12,
+        "page": "reference/api/io-file-kind.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/io/file_mode.dream",
+    "package": "system.io",
+    "page": "reference/api/io-file-mode.md",
+    "declarations": [
+      {
+        "signature": "public enum FileMode",
+        "description": "Access, creation, and truncation behavior when opening a file.",
+        "line": 4,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "Read",
+        "description": "Read an existing file without changing it.",
+        "line": 6,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "Write",
+        "description": "Create or truncate a file for writing.",
+        "line": 8,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "Append",
+        "description": "Create a file if needed and append writes to its end.",
+        "line": 10,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "ReadWrite",
+        "description": "Read and write an existing file without truncating it.",
+        "line": 12,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "WriteRead",
+        "description": "Create or truncate a file for reading and writing.",
+        "line": 14,
+        "page": "reference/api/io-file-mode.md"
+      },
+      {
+        "signature": "AppendRead",
+        "description": "Read a file and append writes, creating it if needed.",
+        "line": 16,
+        "page": "reference/api/io-file-mode.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/io/file_stats.dream",
     "package": "system.io",
     "page": "reference/api/io-file-stats.md",
@@ -12619,135 +12826,56 @@
       {
         "signature": "public get size(): long",
         "description": "File size in bytes.",
-        "line": 33,
+        "line": 38,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get mtime_millis(): long",
         "description": "Last modification time in UTC epoch milliseconds.",
-        "line": 38,
+        "line": 43,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get ctime_millis(): long",
         "description": "Last metadata-change time in UTC epoch milliseconds.",
-        "line": 43,
+        "line": 48,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get atime_millis(): long",
         "description": "Last access time in UTC epoch milliseconds.",
-        "line": 48,
+        "line": 53,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get mode(): int",
         "description": "Unix file mode, or zero on platforms without Unix modes.",
-        "line": 53,
+        "line": 58,
         "page": "reference/api/io-file-stats.md"
       },
       {
-        "signature": "public get kind(): int",
-        "description": "File kind: 0 for a file, 1 for a directory, 2 for a symlink, and 3 for other entries.",
-        "line": 58,
+        "signature": "public get kind(): FileKind",
+        "description": "The kind of filesystem entry.",
+        "line": 63,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get is_file(): bool",
         "description": "Returns whether the entry is a regular file.",
-        "line": 63,
+        "line": 68,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get is_dir(): bool",
         "description": "Returns whether the path refers to a directory.",
-        "line": 68,
+        "line": 73,
         "page": "reference/api/io-file-stats.md"
       },
       {
         "signature": "public get is_symlink(): bool",
         "description": "Returns whether the entry is a symbolic link.",
-        "line": 73,
+        "line": 78,
         "page": "reference/api/io-file-stats.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/io/file_stream.dream",
-    "package": "system.io",
-    "page": "reference/api/io-file-stream.md",
-    "declarations": [
-      {
-        "signature": "public class FileStream",
-        "description": "Text and byte access over a file handle, with propagated I/O errors and byte positions.",
-        "line": 4,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun read_bytes(n: int): Result<byte[], IoError>",
-        "description": "Reads up to `n` bytes, advancing the file position; empty success indicates EOF for positive sizes, and negative sizes return an error.",
-        "line": 13,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun read(n: int): Result<string, IoError>",
-        "description": "Reads up to `n` bytes and decodes them as UTF-8; the limit and cursor are byte-based. A read can split a UTF-8 sequence; use an incremental decoder for streamed text.",
-        "line": 19,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun read_all(): Result<string, IoError>",
-        "description": "Collects all remaining bytes through EOF and decodes them as UTF-8; propagates read errors. Memory use grows with the remaining file size.",
-        "line": 25,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun read_line(): Result<Option<string>, IoError>",
-        "description": "Reads an LF or CRLF terminated line without its terminator, or a final unterminated line. Returns `None` at EOF; propagates I/O errors and the handle default line-size limit.",
-        "line": 41,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun write_text(text: string): Result<int, IoError>",
-        "description": "Writes UTF-8 bytes at the current position and returns the byte count; may write partially.",
-        "line": 46,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun has_more(): Result<bool, IoError>",
-        "description": "Compares the current position with the current file length, propagating errors. Concurrent file changes can invalidate the result before the next read.",
-        "line": 52,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public get length(): Result<long, IoError>",
-        "description": "Returns the current file length in bytes, or an I/O or closed-resource error.",
-        "line": 57,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun seek(offset: long): Result<bool, IoError>",
-        "description": "Seeks to an absolute byte offset; failure preserves the previous logical position.",
-        "line": 62,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun seek_end(): Result<bool, IoError>",
-        "description": "Moves to the current end of the file; propagates positioning errors.",
-        "line": 67,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun tell(): Result<long, IoError>",
-        "description": "Returns the current byte offset, accounting for buffered read-ahead.",
-        "line": 72,
-        "page": "reference/api/io-file-stream.md"
-      },
-      {
-        "signature": "public fun close(): Result<bool, IoError>",
-        "description": "Closes the underlying handle idempotently and reports explicit closure failures.",
-        "line": 77,
-        "page": "reference/api/io-file-stream.md"
       }
     ]
   },
@@ -13148,15 +13276,21 @@
         "page": "reference/api/io-streams.md"
       },
       {
+        "signature": "public static fun read_text(source: Reader): Result<string, IoError>",
+        "description": "Reads all remaining bytes and decodes them as UTF-8. Memory grows with the input.",
+        "line": 6,
+        "page": "reference/api/io-streams.md"
+      },
+      {
         "signature": "public static fun copy( source: Reader, destination: Writer, buffer_size: int = 8192 ): Result<long, IoError>",
         "description": "Copies to EOF using chunks bounded by positive `buffer_size` (default 8 KiB), then flushes the destination and returns the byte count; neither stream is closed.",
-        "line": 15,
+        "line": 27,
         "page": "reference/api/io-streams.md"
       },
       {
         "signature": "public static async fun copy_async( source: AsyncReader, destination: AsyncWriter, buffer_size: int = 8192, token: Option<CancellationToken> = Option.None ): Result<long, IoError>",
         "description": "Copies to EOF with bounded chunks, partial-write retries, and cancellation checks, then flushes and returns the byte count. Neither stream is closed; completed writes persist.",
-        "line": 41,
+        "line": 53,
         "page": "reference/api/io-streams.md"
       }
     ]
@@ -13323,61 +13457,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_collection_spec.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-collection-spec.md",
-    "declarations": [
-      {
-        "signature": "public class JsonCollectionSpec",
-        "description": "Snapshot of a collection type that needs top-level `Json.serialize` / `deserialize` adapters.",
-        "line": 4,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public kind: CollectionKind",
-        "description": "Category of this entry.",
-        "line": 6,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public elem_type: string",
-        "description": "Dream type name of each collection element.",
-        "line": 9,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public value_type: string",
-        "description": "Dream type name of values in this collection.",
-        "line": 12,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public self_ty: string",
-        "description": "Dream type name of the collection being described.",
-        "line": 15,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public fn_suffix: string",
-        "description": "Suffix that distinguishes generated helper names.",
-        "line": 18,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public constructor( kind: CollectionKind, elem_type: string, value_type: string, self_ty: string, fn_suffix: string )",
-        "description": "Creates a `JsonCollectionSpec` with `kind`, `elem_type`, `value_type`, `self_ty`, `fn_suffix`.",
-        "line": 22,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      },
-      {
-        "signature": "public static fun make( kind: CollectionKind, elem_type: string, value_type: string, self_ty: string, fn_suffix: string ): JsonCollectionSpec",
-        "description": "Creates a collection description from its kind, element/value types, and generated-name suffix.",
-        "line": 38,
-        "page": "reference/api/json-derive-json-collection-spec.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/json/derive/json_derive.dream",
     "package": "system.json.derive",
     "page": "reference/api/json-derive-json-derive.md",
@@ -13387,311 +13466,6 @@
         "description": "Adds JSON serialization and deserialization methods for types annotated with `@json`.",
         "line": 16,
         "page": "reference/api/json-derive-json-derive.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_field_spec.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-field-spec.md",
-    "declarations": [
-      {
-        "signature": "public class JsonFieldSpec",
-        "description": "One serializable field on a class or union variant.",
-        "line": 6,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "Name identifying this entry.",
-        "line": 8,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public type_name: string",
-        "description": "Dream type name represented by this entry.",
-        "line": 11,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public json_ignore: bool",
-        "description": "Whether this field is omitted from JSON.",
-        "line": 14,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public property_name: string",
-        "description": "Name used for this property in serialized data.",
-        "line": 17,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public option_inner: string",
-        "description": "Dream type name wrapped by `Option`, when applicable.",
-        "line": 20,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public is_type_param: bool",
-        "description": "Whether this reference names a type parameter.",
-        "line": 23,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public map_value_inner: string",
-        "description": "Value type of a `Map<string, V>` / `SortedMap<string, V>` field (empty when not a map); the key type is required to be `string` (see `snapshot_field` in `src/driver/generate/json_gen.rs`).",
-        "line": 27,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public map_ctor: string",
-        "description": "`Map` or `SortedMap` when `map_value_inner` is set (empty otherwise).",
-        "line": 30,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public seq_elem_inner: string",
-        "description": "Element type of a `List<T>` / `Set<T>` field (empty when not a seq collection).",
-        "line": 33,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public seq_kind: CollectionKind",
-        "description": "`list` or `set` when `seq_elem_inner` is set (empty otherwise).",
-        "line": 36,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public constructor( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: CollectionKind )",
-        "description": "Builds a field snapshot from SemanticModel data.",
-        "line": 39,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public static fun make( name: string, type_name: string, json_ignore: bool, property_name: string, option_inner: string, is_type_param: bool, map_value_inner: string, map_ctor: string, seq_elem_inner: string, seq_kind: CollectionKind ): JsonFieldSpec",
-        "description": "Convenience factory matching the constructor arguments.",
-        "line": 64,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      },
-      {
-        "signature": "public fun json_key(): string",
-        "description": "JSON object key: `@json_property` override, else the Dream field name.",
-        "line": 91,
-        "page": "reference/api/json-derive-json-field-spec.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_gen_output.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-gen-output.md",
-    "declarations": [
-      {
-        "signature": "public class JsonGenOutput",
-        "description": "Outcome of a `@json` source-generator expand pass. Optional `error_type` / `error_field` name the type / field the error is reported at.",
-        "line": 5,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public ok: bool",
-        "description": "Whether the operation succeeded.",
-        "line": 7,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public source: string",
-        "description": "Generated Dream source text for this JSON result type.",
-        "line": 10,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public error: string",
-        "description": "Error message reported by the operation.",
-        "line": 13,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public error_type: string",
-        "description": "Dream type name of the error payload.",
-        "line": 16,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public error_field: string",
-        "description": "Name of the field used to represent the error payload.",
-        "line": 19,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public static fun success(source: string): JsonGenOutput",
-        "description": "Successful expand with emitted Dream source.",
-        "line": 37,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public static fun failure(error: string): JsonGenOutput",
-        "description": "Failed expand with a diagnostic message (no span hint).",
-        "line": 42,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      },
-      {
-        "signature": "public static fun failure_at( error: string, type_name: string, field_name: string ): JsonGenOutput",
-        "description": "Failed expand with type/field names for host span recovery.",
-        "line": 47,
-        "page": "reference/api/json-derive-json-gen-output.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_generator.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-generator.md",
-    "declarations": [
-      {
-        "signature": "public static class JsonGenerator",
-        "description": "Builds `extend Type { to_json / write_json / from_json }` source from [`JsonTypeSpec`]s (see `json_derive`).",
-        "line": 8,
-        "page": "reference/api/json-derive-json-generator.md"
-      },
-      {
-        "signature": "public static fun expand( borrow types: List<JsonTypeSpec>, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
-        "description": "Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.",
-        "line": 10,
-        "page": "reference/api/json-derive-json-generator.md"
-      },
-      {
-        "signature": "public static fun members( borrow t: JsonTypeSpec, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
-        "description": "Emits only methods for GenContext.emit_extend, retaining the model's declaration scope.",
-        "line": 36,
-        "page": "reference/api/json-derive-json-generator.md"
-      },
-      {
-        "signature": "public static fun expand_collections( borrow specs: List<JsonCollectionSpec>, borrow json_names: List<string>, borrow jsonable: List<string> ): JsonGenOutput",
-        "description": "Generates JSON serialization and deserialization support for the supplied collection descriptions.",
-        "line": 2251,
-        "page": "reference/api/json-derive-json-generator.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_type_spec.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-type-spec.md",
-    "declarations": [
-      {
-        "signature": "public class JsonTypeSpec",
-        "description": "Class or discriminated-union type snapshot for `@json` codegen.",
-        "line": 4,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "Name identifying this entry.",
-        "line": 6,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public is_union: bool",
-        "description": "Whether the declaration is a discriminated union.",
-        "line": 9,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public generic_params: List<string>",
-        "description": "Names of the declared type parameters, in order.",
-        "line": 12,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public fields: List<JsonFieldSpec>",
-        "description": "Fields of this type, in declaration order.",
-        "line": 15,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public variants: List<JsonVariantSpec>",
-        "description": "Choices declared by this union or enum, in declaration order.",
-        "line": 18,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public assign_fields: bool",
-        "description": "Built with a zero-argument constructor plus field stores, because no constructor takes every field in declaration order.",
-        "line": 22,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public constructor( name: string, is_union: bool, generic_params: List<string>, fields: List<JsonFieldSpec>, variants: List<JsonVariantSpec> )",
-        "description": "Builds a type snapshot (prefer `class_type` / `union_type` factories).",
-        "line": 25,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public static fun class_type( name: string, generic_params: List<string>, fields: List<JsonFieldSpec> ): JsonTypeSpec",
-        "description": "Snapshot for a `@json` class/struct with named fields.",
-        "line": 41,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public static fun union_type( name: string, generic_params: List<string>, variants: List<JsonVariantSpec> ): JsonTypeSpec",
-        "description": "Snapshot for a `@json` discriminated union with variants.",
-        "line": 50,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public fun params_clause(): string",
-        "description": "`<T, U>` clause for emit, or empty when non-generic.",
-        "line": 59,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public fun self_ty(): string",
-        "description": "Fully written self type (`Name` or `Name<T, U>`).",
-        "line": 76,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      },
-      {
-        "signature": "public fun construct(args: string): string",
-        "description": "Expression building a value from its fields' values (`args`, declaration order).",
-        "line": 81,
-        "page": "reference/api/json-derive-json-type-spec.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/json/derive/json_variant_spec.dream",
-    "package": "system.json.derive",
-    "page": "reference/api/json-derive-json-variant-spec.md",
-    "declarations": [
-      {
-        "signature": "public class JsonVariantSpec",
-        "description": "One variant of a `@json` discriminated union.",
-        "line": 4,
-        "page": "reference/api/json-derive-json-variant-spec.md"
-      },
-      {
-        "signature": "public name: string",
-        "description": "Name identifying this entry.",
-        "line": 6,
-        "page": "reference/api/json-derive-json-variant-spec.md"
-      },
-      {
-        "signature": "public fields: List<JsonFieldSpec>",
-        "description": "Fields of this type, in declaration order.",
-        "line": 9,
-        "page": "reference/api/json-derive-json-variant-spec.md"
-      },
-      {
-        "signature": "public constructor(name: string, fields: List<JsonFieldSpec>)",
-        "description": "Builds a variant spec.",
-        "line": 12,
-        "page": "reference/api/json-derive-json-variant-spec.md"
-      },
-      {
-        "signature": "public static fun make(name: string, fields: List<JsonFieldSpec>): JsonVariantSpec",
-        "description": "Convenience factory matching the constructor arguments.",
-        "line": 18,
-        "page": "reference/api/json-derive-json-variant-spec.md"
       }
     ]
   },
@@ -14307,18 +14081,6 @@
         "page": "reference/api/native-callback.md"
       },
       {
-        "signature": "public static extern fun register(borrow callback: object): void",
-        "description": "Keeps a callback available to foreign code until `unregister` is called.",
-        "line": 13,
-        "page": "reference/api/native-callback.md"
-      },
-      {
-        "signature": "public static extern fun unregister(borrow callback: object): void",
-        "description": "Releases a previously registered callback after foreign code has stopped using it.",
-        "line": 17,
-        "page": "reference/api/native-callback.md"
-      },
-      {
         "signature": "public constructor(f: F)",
         "description": "Creates a `NativeCallback` with `f`.",
         "line": 20,
@@ -14512,6 +14274,61 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/net/http_method.dream",
+    "package": "system.net",
+    "page": "reference/api/net-http-method.md",
+    "declarations": [
+      {
+        "signature": "public enum HttpMethod",
+        "description": "An HTTP request method supported by the HTTP client.",
+        "line": 4,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Get",
+        "description": "Get request.",
+        "line": 6,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Post",
+        "description": "Post request.",
+        "line": 8,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Put",
+        "description": "Put request.",
+        "line": 10,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Patch",
+        "description": "Patch request.",
+        "line": 12,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Delete",
+        "description": "Delete request.",
+        "line": 14,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Head",
+        "description": "Head request.",
+        "line": 16,
+        "page": "reference/api/net-http-method.md"
+      },
+      {
+        "signature": "Options",
+        "description": "Options request.",
+        "line": 18,
+        "page": "reference/api/net-http-method.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/net/http_options.dream",
     "package": "system.net",
     "page": "reference/api/net-http-options.md",
@@ -14560,7 +14377,7 @@
         "page": "reference/api/net-http-request.md"
       },
       {
-        "signature": "public method: string",
+        "signature": "public method: HttpMethod",
         "description": "HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.",
         "line": 6,
         "page": "reference/api/net-http-request.md"
@@ -14584,45 +14401,15 @@
         "page": "reference/api/net-http-request.md"
       },
       {
-        "signature": "public constructor(method: string, url: Url)",
+        "signature": "public constructor(method: HttpMethod, url: Url)",
         "description": "Creates a request with empty headers and body.",
         "line": 18,
         "page": "reference/api/net-http-request.md"
       },
       {
-        "signature": "public static fun get(url: Url): HttpRequest",
-        "description": "Creates a GET request.",
-        "line": 26,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public static fun post(url: Url): HttpRequest",
-        "description": "Creates a POST request.",
-        "line": 31,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public static fun put(url: Url): HttpRequest",
-        "description": "Creates a PUT request.",
-        "line": 36,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public static fun patch(url: Url): HttpRequest",
-        "description": "Creates a PATCH request.",
-        "line": 41,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public static fun delete(url: Url): HttpRequest",
-        "description": "Creates a DELETE request.",
-        "line": 46,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
         "signature": "public fun set_text(text: string): void",
         "description": "Replaces the body with UTF-8 bytes; adds no content-type header implicitly.",
-        "line": 51,
+        "line": 26,
         "page": "reference/api/net-http-request.md"
       }
     ]
@@ -17097,39 +16884,70 @@
     "declarations": [
       {
         "signature": "public class Regex",
-        "description": "A compiled regular expression. An invalid pattern never matches.",
+        "description": "A compiled regular expression. Use `Regex.compile` to report invalid patterns.",
         "line": 33,
         "page": "reference/api/text-regex.md"
       },
       {
-        "signature": "public constructor(pattern: string, flags: RegexFlags = 0)",
-        "description": "Compiles `pattern` with optional matching flags. Invalid patterns never match.",
+        "signature": "public static fun compile( pattern: string, flags: RegexFlags = RegexFlags.None ): Result<Regex, RegexError>",
+        "description": "Compiles a pattern with optional flags, returning an error for invalid patterns.",
         "line": 41,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun test(borrow input: string): bool",
         "description": "Returns whether the regular expression matches anywhere in `input`.",
-        "line": 70,
+        "line": 81,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun replace(input: string, replacement: string): string",
         "description": "Replaces matching text. Replaces every match with `Global`; otherwise replaces only the first.",
-        "line": 76,
+        "line": 87,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun match(input: string): string[]",
         "description": "Returns complete matches with `Global`, or the first match followed by its capture groups otherwise. Returns an empty array when unmatched.",
-        "line": 199,
+        "line": 210,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
         "description": "Returns the first match and its named and numbered capture groups, or `None` when unmatched.",
-        "line": 219,
+        "line": 230,
         "page": "reference/api/text-regex.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/text/regex_error.dream",
+    "package": "system.text",
+    "page": "reference/api/text-regex-error.md",
+    "declarations": [
+      {
+        "signature": "public class RegexError: Error",
+        "description": "Failure to compile a regular expression.",
+        "line": 4,
+        "page": "reference/api/text-regex-error.md"
+      },
+      {
+        "signature": "public pattern: string",
+        "description": "Pattern that could not be compiled.",
+        "line": 6,
+        "page": "reference/api/text-regex-error.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "A description of the compilation failure.",
+        "line": 13,
+        "page": "reference/api/text-regex-error.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable compilation-failure code.",
+        "line": 18,
+        "page": "reference/api/text-regex-error.md"
       }
     ]
   },
@@ -17593,12 +17411,6 @@
         "signature": "public static class Time",
         "description": "Timing utilities.",
         "line": 4,
-        "page": "reference/api/time.md"
-      },
-      {
-        "signature": "public static extern async fun sleep_host(ms: int): void",
-        "description": "Suspends for at least `ms` milliseconds.",
-        "line": 7,
         "page": "reference/api/time.md"
       },
       {
@@ -18106,105 +17918,45 @@
         "page": "reference/api/vector.md"
       },
       {
-        "signature": "public static fun splat(value: T): Vector<T>",
-        "description": "Splats `value` into every lane.",
-        "line": 26,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun splat_raw(value: T): Vector<T>",
-        "description": "Creates a vector with every lane equal to `value`.",
-        "line": 32,
-        "page": "reference/api/vector.md"
-      },
-      {
         "signature": "public static fun load(borrow src: T[], offset: int): Vector<T>",
         "description": "Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.",
-        "line": 36,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun load_raw(borrow src: T[], offset: int): Vector<T>",
-        "description": "Loads a vector from `src` starting at `offset`; the range must contain enough elements.",
-        "line": 42,
+        "line": 31,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public fun store(borrow dest: T[], offset: int): void",
         "description": "Writes this vector's lanes into `dest` starting at `offset`.",
-        "line": 46,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void",
-        "description": "Stores all vector lanes into `dest` starting at `offset`; the range must contain enough elements.",
-        "line": 53,
+        "line": 41,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public fun lane(i: int): T",
         "description": "Returns lane `i` (`0 .. count`).",
-        "line": 56,
+        "line": 51,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public fun with_lane(i: int, value: T): Vector<T>",
         "description": "Returns a copy with lane `i` replaced by `value`.",
-        "line": 64,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun bin_add(a: Vector<T>, b: Vector<T>): Vector<T>",
-        "description": "Adds corresponding lanes of the two vectors.",
-        "line": 80,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun bin_sub(a: Vector<T>, b: Vector<T>): Vector<T>",
-        "description": "Subtracts corresponding lanes of the two vectors.",
-        "line": 89,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>",
-        "description": "Multiplies corresponding lanes of the two vectors.",
-        "line": 98,
+        "line": 59,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public static fun min(a: Vector<T>, b: Vector<T>): Vector<T>",
         "description": "Lane-wise minimum of `a` and `b`.",
-        "line": 101,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>",
-        "description": "Selects the smaller value in each pair of lanes.",
-        "line": 107,
+        "line": 96,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public static fun max(a: Vector<T>, b: Vector<T>): Vector<T>",
         "description": "Lane-wise maximum of `a` and `b`.",
-        "line": 110,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>",
-        "description": "Selects the larger value in each pair of lanes.",
-        "line": 116,
+        "line": 105,
         "page": "reference/api/vector.md"
       },
       {
         "signature": "public fun sum(): T",
         "description": "Horizontal sum of every lane.",
-        "line": 119,
-        "page": "reference/api/vector.md"
-      },
-      {
-        "signature": "public static extern fun reduce_sum(v: Vector<T>): T",
-        "description": "Adds all vector lanes and returns the sum.",
-        "line": 125,
+        "line": 114,
         "page": "reference/api/vector.md"
       }
     ]
@@ -18604,6 +18356,31 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/webapi/auth/jwt_algorithm.dream",
+    "package": "system.webapi.auth",
+    "page": "reference/api/webapi-auth-jwt-algorithm.md",
+    "declarations": [
+      {
+        "signature": "public enum JwtAlgorithm",
+        "description": "A supported JWT signature algorithm.",
+        "line": 4,
+        "page": "reference/api/webapi-auth-jwt-algorithm.md"
+      },
+      {
+        "signature": "RS256",
+        "description": "RSA signature using SHA-256 and PEM keys.",
+        "line": 6,
+        "page": "reference/api/webapi-auth-jwt-algorithm.md"
+      },
+      {
+        "signature": "HS256",
+        "description": "HMAC using SHA-256 and a secret of at least 32 bytes.",
+        "line": 8,
+        "page": "reference/api/webapi-auth-jwt-algorithm.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/webapi/auth/jwt_options.dream",
     "package": "system.webapi.auth",
     "page": "reference/api/webapi-auth-jwt-options.md",
@@ -18639,13 +18416,13 @@
         "page": "reference/api/webapi-auth-jwt-options.md"
       },
       {
-        "signature": "public algorithm: string",
+        "signature": "public algorithm: JwtAlgorithm",
         "description": "Signature algorithm name, such as `RS256`.",
         "line": 18,
         "page": "reference/api/webapi-auth-jwt-options.md"
       },
       {
-        "signature": "public constructor( issuer: string, audience: string, signing_key: string, verification_key: string, algorithm: string = \"RS256\" )",
+        "signature": "public constructor( issuer: string, audience: string, signing_key: string, verification_key: string, algorithm: JwtAlgorithm = JwtAlgorithm.RS256 )",
         "description": "Creates a `JwtOptions` with `issuer`, `audience`, `signing_key`, `verification_key`, `algorithm`.",
         "line": 22,
         "page": "reference/api/webapi-auth-jwt-options.md"

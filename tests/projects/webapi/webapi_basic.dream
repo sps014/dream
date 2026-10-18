@@ -78,7 +78,7 @@ class WebapiStreamGuard {
 }
 
 public async fun webapi_get(client: HttpClient, base: string, path: string, expected: int): string {
-    let result = client.send(HttpRequest.get(Url.parse(base + path).unwrap())).await;
+    let result = client.send(HttpRequest(HttpMethod.Get, Url.parse(base + path).unwrap())).await;
     if result.is_err() {
         Assert.fail(
             path + ": " + result.unwrap_err().code() + ": " + result.unwrap_err().message()
@@ -108,7 +108,7 @@ async fun webapi_basic(): void {
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     let base = "http://127.0.0.1:" + port.to_string();
     let client = HttpClient();
-    let request = HttpRequest.get(Url.parse(base + "/hello/12?q=4").unwrap());
+    let request = HttpRequest(HttpMethod.Get, Url.parse(base + "/hello/12?q=4").unwrap());
     request.headers.set("X-Key", "k");
     request.headers.set("Cookie", "session=abc");
     let response = client.send(request).await.unwrap();
@@ -124,14 +124,16 @@ async fun webapi_basic(): void {
     Assert.is_true(webapi_get(client, base, "/failure", 500).await.contains("failed"));
     Assert.is_true(webapi_get(client, base, "/missing", 404).await.contains("Not Found"));
     Assert.eq(webapi_get(client, base, "/chunks", 200).await, "onetwo");
-    let binary = client.send(HttpRequest.get(Url.parse(base + "/binary").unwrap())).await.unwrap();
+    let binary = client.send(HttpRequest(HttpMethod.Get, Url.parse(base + "/binary").unwrap()))
+        .await
+        .unwrap();
     let binary_bytes = binary.body.read_async(16).await.unwrap();
     Assert.eq(binary_bytes.length, 2);
     Assert.eq((int)binary_bytes[1], 255);
     binary.close();
-    let disconnect = client.send(HttpRequest.get(Url.parse(base + "/disconnect").unwrap()))
-        .await
-        .unwrap();
+    let disconnect = client.send(
+        HttpRequest(HttpMethod.Get, Url.parse(base + "/disconnect").unwrap())
+    ).await.unwrap();
     disconnect.body.read_async(16).await.unwrap();
     disconnect.close();
     Time.sleep(20).await;
@@ -139,13 +141,13 @@ async fun webapi_basic(): void {
     let events = webapi_get(client, base, "/events", 200).await;
     Assert.is_true(events.contains("data: first\ndata: second\n\n"));
     Assert.is_true(events.contains("event: update\nid: 2\nretry: 100\ndata: last"));
-    let json_request = HttpRequest("POST", Url.parse(base + "/json").unwrap());
+    let json_request = HttpRequest(HttpMethod.Post, Url.parse(base + "/json").unwrap());
     json_request.headers.set("Content-Type", "application/json");
     json_request.body = Encoding.utf8_encode("{\"name\":\"Dream\"}");
     let json_response = client.send(json_request).await.unwrap();
     Assert.eq(json_response.read_text().await.unwrap(), "{\"name\":\"Dream\"}");
     json_response.close();
-    let multipart = HttpRequest("POST", Url.parse(base + "/multipart").unwrap());
+    let multipart = HttpRequest(HttpMethod.Post, Url.parse(base + "/multipart").unwrap());
     multipart.headers.set("Content-Type", "multipart/form-data; boundary=dream");
     multipart.body = Encoding.utf8_encode(
         "--dream\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\ntitle\r\n--dream\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nbody\r\n--dream--\r\n"
@@ -153,7 +155,7 @@ async fun webapi_basic(): void {
     let upload = client.send(multipart).await.unwrap();
     Assert.eq(upload.read_text().await.unwrap(), "title:a.txt:body");
     upload.close();
-    let preflight = HttpRequest("OPTIONS", Url.parse(base + "/hello/1").unwrap());
+    let preflight = HttpRequest(HttpMethod.Options, Url.parse(base + "/hello/1").unwrap());
     preflight.headers.set("Origin", "https://example.com");
     preflight.headers.set("Access-Control-Request-Method", "GET");
     let cors = client.send(preflight).await.unwrap();

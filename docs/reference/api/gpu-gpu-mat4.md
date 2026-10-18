@@ -2,7 +2,7 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuMat4`
 
@@ -44,12 +44,12 @@ The fourth column, which holds the translation of an affine transform.
 public c3: GpuVec4
 ```
 
-## `of`
+## `constructor`
 
 Creates a matrix from its four columns.
 
 ```dream
-public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4
+public constructor(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4)
 ```
 
 ## `identity`

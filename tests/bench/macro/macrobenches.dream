@@ -212,7 +212,7 @@ fun make_log(rng: Lcg, lines: int): string {
 fun bench_log_processor(iters: int): void {
     let rng = Lcg(29 + seed_bit());
     let text = make_log(rng, 2000);
-    let status_re = Regex("status=(5\\d\\d)");
+    let status_re = Regex.compile("status=(5\\d\\d)").unwrap();
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;

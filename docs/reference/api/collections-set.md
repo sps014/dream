@@ -74,12 +74,12 @@ Adds every element of `items`, ignoring duplicates.
 public fun add_all(borrow items: T[]): void
 ```
 
-## `from_array`
+## `constructor`
 
 Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2, 3}` create sets in the same way.
 
 ```dream
-public static fun from_array(borrow items: T[]): Set<T>
+public constructor(borrow items: T[])
 ```
 
 ## `remove`

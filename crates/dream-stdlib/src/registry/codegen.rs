@@ -15,6 +15,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/codegen/gen_symbol_kind.dream",
+            include_str!("../system/codegen/gen_symbol_kind.dream"),
+        ),
+        (
+            "<std>/system/codegen/gen_value_kind.dream",
+            include_str!("../system/codegen/gen_value_kind.dream"),
+        ),
+        (
             "<std>/system/codegen/gen_symbol_instance.dream",
             include_str!("../system/codegen/gen_symbol_instance.dream"),
         ),

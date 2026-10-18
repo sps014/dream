@@ -55,11 +55,11 @@ fun ray_query_grid(
     if cell.x < size && cell.y < size {
         let u = ((float)cell.x + 0.5f) / (float)size * 2.0f - 1.0f;
         let v = 1.0f - ((float)cell.y + 0.5f) / (float)size * 2.0f;
-        let query = GpuRayQuery.of(GpuRayFlags.ForceOpaque);
+        let query = GpuRayQuery(GpuRayFlags.ForceOpaque);
         query.trace(
             scene,
             255u,
-            GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.0f, 100.0f)
+            GpuRay(GpuVec3(u, v, -2.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0.0f, 100.0f)
         );
         while query.proceed() {
             query.commit_triangle();
@@ -93,9 +93,9 @@ async fun gpu_ray_query(): void {
                 let positions = rays_ok(
                     device.buffer_from(
                         [
-                            GpuVec3.of(-0.5f, -0.5f, 0.0f),
-                            GpuVec3.of(0.5f, -0.5f, 0.0f),
-                            GpuVec3.of(0.0f, 0.5f, 0.0f)
+                            GpuVec3(-0.5f, -0.5f, 0.0f),
+                            GpuVec3(0.5f, -0.5f, 0.0f),
+                            GpuVec3(0.0f, 0.5f, 0.0f)
                         ]
                     ),
                     "positions"
@@ -105,10 +105,8 @@ async fun gpu_ray_query(): void {
                     "bottom level on " + label
                 );
                 // The instance moves the triangle to z = 1, three units in front of the rays.
-                let instance = GpuInstance.of(
-                    blas,
-                    GpuMat4.translation(GpuVec3.of(0.0f, 0.0f, 1.0f))
-                ).with_id(7);
+                let instance = GpuInstance(blas, GpuMat4.translation(GpuVec3(0.0f, 0.0f, 1.0f)))
+                    .with_id(7);
                 let tlas = rays_ok(
                     device.build_top_level([instance]).await,
                     "top level on " + label

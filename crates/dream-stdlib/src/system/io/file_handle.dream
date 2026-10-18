@@ -95,23 +95,23 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(FileHandle(id, path));
     }
 
-    // Opens `path` with `mode` ("r", "w", "a", "r+", "w+", "a+").
-    public static fun open(path: string, mode: string): Result<FileHandle, IoError> {
-        return FileHandle.open_result(path, mode);
+    /// Opens a file with the selected access, creation, and truncation behavior.
+    public static fun open(path: string, mode: FileMode): Result<FileHandle, IoError> {
+        return FileHandle.open_result(path, mode.wire());
     }
 
     // Opens using host async facilities or the bounded filesystem executor.
     // Cancellation abandons the result safely; a late open result is closed automatically.
     public static async fun open_async(
         path: string,
-        mode: string,
+        mode: FileMode,
         token: Option<CancellationToken> = Option.None
     ): Result<FileHandle, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        let operation = FileOperation.start(0, 0 - 1, path, mode, 0, [], 0L)?;
+        let operation = FileOperation.start(0, 0 - 1, path, mode.wire(), 0, [], 0L)?;
         operation.wait(effective_token).await?;
-        return FileHandle.from_id((int)operation.result(), path, mode);
+        return FileHandle.from_id((int)operation.result(), path, mode.wire());
     }
 
     // Reads up to `n` bytes from the current position, advancing the cursor.

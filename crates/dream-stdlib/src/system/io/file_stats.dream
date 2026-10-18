@@ -11,7 +11,7 @@ public class FileStats {
     _ctime_millis: long;
     _atime_millis: long;
     _mode: int;
-    _kind: int;
+    _kind: FileKind;
 
     internal constructor(
         size: long,
@@ -26,7 +26,12 @@ public class FileStats {
         this._ctime_millis = ctime_millis;
         this._atime_millis = atime_millis;
         this._mode = mode;
-        this._kind = kind;
+        this._kind = switch (kind) {
+            0 => FileKind.File,
+            1 => FileKind.Directory,
+            2 => FileKind.Symlink,
+            _ => FileKind.Other,
+        };
     }
 
     /// File size in bytes.
@@ -54,23 +59,23 @@ public class FileStats {
         return this._mode;
     }
 
-    /// File kind: 0 for a file, 1 for a directory, 2 for a symlink, and 3 for other entries.
-    public get kind(): int {
+    /// The kind of filesystem entry.
+    public get kind(): FileKind {
         return this._kind;
     }
 
     /// Returns whether the entry is a regular file.
     public get is_file(): bool {
-        return this._kind == 0;
+        return this._kind == FileKind.File;
     }
 
     /// Returns whether the path refers to a directory.
     public get is_dir(): bool {
-        return this._kind == 1;
+        return this._kind == FileKind.Directory;
     }
 
     /// Returns whether the entry is a symbolic link.
     public get is_symlink(): bool {
-        return this._kind == 2;
+        return this._kind == FileKind.Symlink;
     }
 }

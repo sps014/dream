@@ -5,27 +5,27 @@ import system.gpu;
 @test
 @timeout(180000)
 fun gpu_dispatch_groups(): void {
-    let line = GpuDispatch.threads_1d(100).group_counts(GpuIVec3.of(64, 1, 1));
+    let line = GpuDispatch.threads_1d(100).group_counts(GpuIVec3(64, 1, 1));
     Assert.eq(line.x, 2);
     Assert.eq(line.y, 1);
     Assert.eq(line.z, 1);
 
-    let exact = GpuDispatch.threads_1d(128).group_counts(GpuIVec3.of(64, 1, 1));
+    let exact = GpuDispatch.threads_1d(128).group_counts(GpuIVec3(64, 1, 1));
     Assert.eq(exact.x, 2);
 
-    let image = GpuDispatch.threads_2d(800, 601).group_counts(GpuIVec3.of(8, 8, 1));
+    let image = GpuDispatch.threads_2d(800, 601).group_counts(GpuIVec3(8, 8, 1));
     Assert.eq(image.x, 100);
     Assert.eq(image.y, 76);
     Assert.eq(image.z, 1);
 
-    let volume = GpuDispatch.threads_3d(5, 5, 5).group_counts(GpuIVec3.of(4, 4, 4));
-    Assert.is_true(volume == GpuIVec3.of(2, 2, 2));
+    let volume = GpuDispatch.threads_3d(5, 5, 5).group_counts(GpuIVec3(4, 4, 4));
+    Assert.is_true(volume == GpuIVec3(2, 2, 2));
 
-    let groups = GpuDispatch.groups(3, 2, 1).group_counts(GpuIVec3.of(64, 1, 1));
-    Assert.is_true(groups == GpuIVec3.of(3, 2, 1));
+    let groups = GpuDispatch.groups(3, 2, 1).group_counts(GpuIVec3(64, 1, 1));
+    Assert.is_true(groups == GpuIVec3(3, 2, 1));
 
-    let empty = GpuDispatch.threads_1d(0).group_counts(GpuIVec3.of(64, 1, 1));
+    let empty = GpuDispatch.threads_1d(0).group_counts(GpuIVec3(64, 1, 1));
     Assert.eq(empty.x, 0);
-    let negative = GpuDispatch.groups(-1, 1, 1).group_counts(GpuIVec3.of(1, 1, 1));
+    let negative = GpuDispatch.groups(-1, 1, 1).group_counts(GpuIVec3(1, 1, 1));
     Assert.eq(negative.x, 0);
 }

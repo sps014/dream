@@ -34,8 +34,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 | Member | Returns | Effect |
 | --- | --- | --- |
 | `List<T>(capacity = 8)` | `List<T>` | Empty list with room for `capacity` items (at least 4). |
-| `List.with_capacity(capacity)` | `List<T>` | Same as `List<T>(capacity)`. |
-| `List.from_array(items)` | `List<T>` | New list holding the array's items in order. List literals work the same way. |
+| `List(items)` | `List<T>` | New list holding the array's items in order. List literals work the same way. |
 | `.length` | `int` | Number of items. |
 | `.capacity` | `int` | Items that fit before the list must grow. |
 | `is_empty()` | `bool` | `true` when the list has no items. |

@@ -47,3 +47,6 @@ General compile-time source generation. See the [generator guide](../../language
 - [SyntaxBlockAttribute](codegen-syntax-block-attribute.md)
 - [TypeRefKind](codegen-type-ref-kind.md)
 - [UsesToolAttribute](codegen-uses-tool-attribute.md)
+
+- [GenValueKind](codegen-gen-value-kind.md)
+- [GenSymbolKind](codegen-gen-symbol-kind.md)

@@ -58,7 +58,6 @@ fun backward_central(f: fun(double): double, x: double): double {
     return (f(x + h) - f(x - h)) / (2.0d * h);
 }
 
-@gpu
 @differentiable
 fun loss(weight: float, input: float, target: float): float {
     let prediction = weight * input;
@@ -81,14 +80,13 @@ fun train_step(
     if i >= n {
         return;
     }
-    let w = GpuDiffPair.of(weights[0], 0.0f);
-    let x = GpuDiffPair.constant(inputs[i]);
-    let t = GpuDiffPair.constant(targets[i]);
+    let w = GpuDiffPair(weights[0], 0.0f);
+    let x = GpuDiffPair(inputs[i]);
+    let t = GpuDiffPair(targets[i]);
     GpuDiff.backward3(loss, ref w, ref x, ref t, 1.0f);
     GpuAtomic.add_float(gradients, 0, w.derivative());
 }
 
-@gpu
 @differentiable
 fun radial(p: GpuVec2): float {
     return GpuMath.sin(p.x) * p.y * p.y;
@@ -102,7 +100,7 @@ fun radial_gradient(@readonly points: GpuBuffer<GpuVec2>, out: GpuBuffer<GpuVec2
     if i >= n {
         return;
     }
-    let p = GpuDiffPair.of(points[i], GpuVec2.splat(0.0f));
+    let p = GpuDiffPair(points[i], GpuVec2(0.0f));
     GpuDiff.backward(radial, ref p, 1.0f);
     out[i] = p.derivative();
 }
@@ -112,7 +110,6 @@ public struct Line {
     public offset: float;
 }
 
-@gpu
 @differentiable
 fun line_loss(line: Line, input: float, target: float): float {
     let error = line.slope * input + line.offset - target;
@@ -137,11 +134,11 @@ fun line_gradient(
     let line = Line();
     line.slope = slope;
     line.offset = offset;
-    let l = GpuDiffPair.of(line, Line());
-    let x = GpuDiffPair.constant(samples[i].x);
-    let t = GpuDiffPair.constant(samples[i].y);
+    let l = GpuDiffPair(line, Line());
+    let x = GpuDiffPair(samples[i].x);
+    let t = GpuDiffPair(samples[i].y);
     GpuDiff.backward3(line_loss, ref l, ref x, ref t, 1.0f);
-    out[i] = GpuVec2.of(l.derivative().slope, l.derivative().offset);
+    out[i] = GpuVec2(l.derivative().slope, l.derivative().offset);
 }
 
 fun total_loss(w: double, inputs: float[], targets: float[]): double {
@@ -205,7 +202,7 @@ async fun backward_vector(device: GpuDevice, label: string): void {
     let n = 96;
     let points = Array.alloc<GpuVec2>(n);
     for (let i = 0; i < n; i = i + 1) {
-        points[i] = GpuVec2.of(-1.5f + 0.03f * (float)i, 1.0f - 0.02f * (float)i);
+        points[i] = GpuVec2(-1.5f + 0.03f * (float)i, 1.0f - 0.02f * (float)i);
     }
     let out = backward_ok(device.buffer_alloc<GpuVec2>(n), "radial out");
     backward_ok(
@@ -240,7 +237,7 @@ async fun backward_struct(device: GpuDevice, label: string): void {
     let samples = Array.alloc<GpuVec2>(n);
     for (let i = 0; i < n; i = i + 1) {
         let input = 0.1f * (float)i - 3.0f;
-        samples[i] = GpuVec2.of(input, 1.5f * input + 0.25f);
+        samples[i] = GpuVec2(input, 1.5f * input + 0.25f);
     }
     let slope = 0.5f;
     let offset = -0.75f;

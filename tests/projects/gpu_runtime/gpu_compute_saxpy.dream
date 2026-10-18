@@ -56,7 +56,6 @@ fun saxpy(
     }
 }
 
-@gpu
 fun switch_value(index: int): int {
     let result = 0;
     switch (index % 4) {

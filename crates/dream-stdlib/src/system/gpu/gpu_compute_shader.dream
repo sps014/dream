@@ -11,7 +11,7 @@ public class GpuComputeShader {
     internal constructor(library: GpuShaderLibrary, entry: string, x: int, y: int, z: int) {
         this.library = library;
         this.entry = entry;
-        this.workgroup = GpuIVec3.of(x, y, z);
+        this.workgroup = GpuIVec3(x, y, z);
     }
 
     /// The shader function's name.

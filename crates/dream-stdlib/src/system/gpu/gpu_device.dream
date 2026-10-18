@@ -142,7 +142,7 @@ public class GpuDevice {
                 GpuError.InvalidResource("texture width and height must be positive")
             );
         }
-        let desc = GpuTextureDesc.of(width, height, format).storage(true);
+        let desc = GpuTextureDesc(width, height, format).storage(true);
         let handle = GpuHost.texture_create(this.handle, desc.encode());
         if handle <= 0 {
             return Result.Err(GpuHost.error());

@@ -2,22 +2,22 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuInstance`
 
-One placed copy of a bottom-level acceleration structure inside a top-level one.  Start from `GpuInstance.of` and chain the settings you want to change.
+One placed copy of a bottom-level acceleration structure inside a top-level one.  Start from `GpuInstance(...)` and chain the settings you want to change.
 
 ```dream
 public class GpuInstance
 ```
 
-## `of`
+## `constructor`
 
-Places `bottom_level` with the object-to-world `transform`. Only the affine part of the transform is used.
+Places a bottom-level acceleration structure with the supplied object-to-world transform.
 
 ```dream
-public static fun of(bottom_level: GpuAccelerationStructure, transform: GpuMat4): GpuInstance
+public constructor(bottom_level: GpuAccelerationStructure, transform: GpuMat4)
 ```
 
 ## `with_id`

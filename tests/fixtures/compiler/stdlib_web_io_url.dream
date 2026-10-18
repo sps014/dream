@@ -6,11 +6,15 @@ async fun main(): void {
     let url = Url.parse("HTTPS://Example.COM:443/a/../v1/").unwrap().resolve("users").unwrap();
     url.query.append("role", "admin");
     url.query.append("role", "editor");
-    if url.to_string() != "https://example.com/v1/users?role=admin&role=editor" { System.panic("URL mismatch"); }
-    let file = FileHandle.open_async("browser.txt", "w+").await.unwrap();
+    if url.to_string() != "https://example.com/v1/users?role=admin&role=editor" {
+        System.panic("URL mismatch");
+    }
+    let file = FileHandle.open_async("browser.txt", FileMode.WriteRead).await.unwrap();
     file.write_async(Encoding.utf8_encode("hello browser")).await.unwrap();
     file.seek_async(0L).await.unwrap();
-    if Encoding.utf8_decode(file.read_async(100).await.unwrap()) != "hello browser" { System.panic("file mismatch"); }
+    if Encoding.utf8_decode(file.read_async(100).await.unwrap()) != "hello browser" {
+        System.panic("file mismatch");
+    }
     file.close().unwrap();
     File.delete("browser.txt");
     System.println("browser URL and async file fixture passed");

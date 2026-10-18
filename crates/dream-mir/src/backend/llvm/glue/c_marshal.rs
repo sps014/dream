@@ -106,13 +106,15 @@ pub(super) fn trampoline(l: &mut Lcx<'_>, imp: &HImport) {
         fx.c_arg(imp, i, *ty, &a, &mut args, &mut frees);
     }
     let r = fx.call(&shim, &args);
-    for f in frees {
-        fx.call("free", &[f]);
-    }
     let r = match out {
         Some(b) => Some(b),
         None => r.map(|r| fx.c_result(imp, &r)),
     };
+    // Returned strings can alias a converted argument (for example strstr's suffix).
+    // Copy the result while every temporary argument buffer is still alive.
+    for f in frees {
+        fx.call("free", &[f]);
+    }
     match r {
         Some(r) if !fx.w.ret.is_void() => {
             let t = fx.w.ret.clone();

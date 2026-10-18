@@ -30,7 +30,7 @@ public class TempFile {
     // Creates a private file on the selected directory's filesystem.
     public static fun create_in(directory: string): Result<TempFile, IoError> {
         let temporary = TempDirectory.create_in(directory)?;
-        let opened = FileHandle.open(temporary.path + "/contents", "w+");
+        let opened = FileHandle.open(temporary.path + "/contents", FileMode.WriteRead);
         if opened.is_err() {
             temporary.close();
             return Result.Err(opened.unwrap_err());

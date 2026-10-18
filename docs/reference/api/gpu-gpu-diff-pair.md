@@ -2,7 +2,7 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuDiffPair`
 
@@ -12,20 +12,20 @@ A value together with its derivative, the argument type of `GpuDiff.forward` and
 public struct GpuDiffPair<T>
 ```
 
-## `of`
+## `constructor`
 
 A pair of `value` and `derivative`.
 
 ```dream
-public static extern fun of(value: T, derivative: T): GpuDiffPair<T>
+public constructor(value: T, derivative: T)
 ```
 
-## `constant`
+## `constructor`
 
 A pair whose derivative is zero, for inputs that are held constant.
 
 ```dream
-public static extern fun constant(value: T): GpuDiffPair<T>
+public constructor(value: T)
 ```
 
 ## `value`

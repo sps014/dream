@@ -3,7 +3,7 @@ import system.io;
 import system.testing;
 
 async fun copy_one(path: string): Result<bool, IoError> {
-    let file = FileHandle.open_async(path, "w+").await?;
+    let file = FileHandle.open_async(path, FileMode.WriteRead).await?;
     let bytes = Encoding.utf8_encode("hello 日本語");
     let count = file.write_async(bytes).await?;
     Assert.eq(count, bytes.length);
@@ -32,11 +32,13 @@ async fun async_file_lifecycle(): void {
     let cancellation = CancellationSource();
     cancellation.cancel();
     Assert.is_true(
-        FileHandle.open_async("async_lifecycle_a.tmp", "r", Option.Some(cancellation.token))
-            .await
-            .is_err()
+        FileHandle.open_async(
+            "async_lifecycle_a.tmp",
+            FileMode.Read,
+            Option.Some(cancellation.token)
+        ).await.is_err()
     );
-    let file = FileHandle.open("async_lifecycle_a.tmp", "r").unwrap();
+    let file = FileHandle.open("async_lifecycle_a.tmp", FileMode.Read).unwrap();
     Assert.is_true(file.read_async(1, Option.Some(cancellation.token)).await.is_err());
     Assert.eq(file.tell().unwrap(), 0L);
     file.close().unwrap();
@@ -47,13 +49,15 @@ async fun async_file_lifecycle(): void {
 }
 
 async fun async_file_copy_and_read_ahead(): void {
-    let source = FileHandle.open("async_copy_source.tmp", "w+").unwrap();
+    let source = FileHandle.open("async_copy_source.tmp", FileMode.WriteRead).unwrap();
     source.write_all(Encoding.utf8_encode("first\r\nsecond\nlast")).unwrap();
     source.seek(0L).unwrap();
     Assert.eq(source.read_line().unwrap().unwrap(), "first");
     Assert.eq(Encoding.utf8_decode(source.read_async(6).await.unwrap()), "second");
     source.seek_async(0L).await.unwrap();
-    let destination = FileHandle.open_async("async_copy_destination.tmp", "w+").await.unwrap();
+    let destination = FileHandle.open_async("async_copy_destination.tmp", FileMode.WriteRead)
+        .await
+        .unwrap();
     Assert.eq(Streams.copy_async(source, destination, 3).await.unwrap(), 18L);
     destination.seek_async(0L).await.unwrap();
     Assert.eq(

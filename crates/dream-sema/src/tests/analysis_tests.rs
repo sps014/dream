@@ -2519,3 +2519,23 @@ fn ownership_protocol_attributes_cannot_be_forged() {
         );
     }
 }
+
+#[test]
+fn generic_constructor_infers_types_and_contextualizes_array_overloads() {
+    let code = r#"
+        @allow_cycle
+        class Bucket<T> {
+            public items: T[];
+            public constructor(capacity: int) { this.items = []; }
+            public constructor(items: T[]) { this.items = items; }
+        }
+        fun main(): void {
+            let empty = Bucket<int>([]);
+            let inferred = Bucket([1, 2]);
+            let values: int[] = inferred.items;
+            let objects = Bucket<object>([1, "two"]);
+        }
+    "#;
+    let diagnostics = analyze_code(code);
+    assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
+}

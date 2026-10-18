@@ -116,7 +116,7 @@ A dependency is a bare version requirement string, or a table with these keys:
     `target/test/node` for test runners, and next
     to the executable in `dreamer pack` output.
   - A program with assets runs with its output folder as the working directory, so it opens them
-    with the same relative paths it uses in the project (`File.open("data/words.txt")`).
+    with the same relative paths it uses in the project (`FileHandle.open("data/words.txt", FileMode.Read)`).
   - Paths must stay inside the project: no absolute paths and no `..`.
 - `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
 - Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native

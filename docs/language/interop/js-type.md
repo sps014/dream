@@ -175,9 +175,6 @@ async fun load(): void {
 
 `await` may appear anywhere in an `async` function, including loops and branches.
 
-For a typed extern that returns a Promise (`@js(...) extern async fun getUser(...): string`), see
-[Async/Await](../concurrency/async.md#awaiting-javascript-promises).
-
 ## Where it runs
 
 `js` needs a JavaScript host (browser or Node). Referencing `js` APIs when targeting native is a compile error.

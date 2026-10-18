@@ -41,7 +41,7 @@ async fun download(url: string, path: string, timeout: int): Result<long, string
 
     let client = HttpClient();
     let sent = client.send(
-        HttpRequest.get(parsed.unwrap()),
+        HttpRequest(HttpMethod.Get, parsed.unwrap()),
         options: HttpOptions(timeout_ms: timeout, max_redirects: 5)
     ).await;
     if sent.is_err() {
@@ -55,7 +55,7 @@ async fun download(url: string, path: string, timeout: int): Result<long, string
         return Result.Err("HTTP status " + response.status);
     }
 
-    let opened = FileHandle.open_async(path, "w").await;
+    let opened = FileHandle.open_async(path, FileMode.Write).await;
     if opened.is_err() {
         response.close();
         client.close();

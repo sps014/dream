@@ -5,22 +5,22 @@ import system.text;
 @test
 @timeout(180000)
 fun regex_replace(): void {
-    let swap = Regex("(\\w+)\\s+(\\w+)");
+    let swap = Regex.compile("(\\w+)\\s+(\\w+)").unwrap();
     Assert.eq((swap.replace("hello world", "$2 $1")).to_string(), "world hello");
     Assert.eq((swap.replace("hello world", "[$&]")).to_string(), "[hello world]");
     Assert.eq((swap.replace("hello world", "$$1")).to_string(), "$1");
 
-    let digits = Regex("\\d+", RegexFlags.Global);
+    let digits = Regex.compile("\\d+", RegexFlags.Global).unwrap();
     Assert.eq((digits.replace("a1b22c333", "#")).to_string(), "a#b#c#");
 
-    let first_only = Regex("\\d+");
+    let first_only = Regex.compile("\\d+").unwrap();
     Assert.eq((first_only.replace("a1b22c333", "#")).to_string(), "a#b22c333");
 
     // Global replace of a pattern that can match the empty string must terminate and still make
     // forward progress.
-    let maybe_a = Regex("a*", RegexFlags.Global);
+    let maybe_a = Regex.compile("a*", RegexFlags.Global).unwrap();
     Assert.eq((maybe_a.replace("bab", "-")).to_string(), "-b--b-");
 
-    let no_match = Regex("zzz", RegexFlags.Global);
+    let no_match = Regex.compile("zzz", RegexFlags.Global).unwrap();
     Assert.eq((no_match.replace("hello", "#")).to_string(), "hello");
 }

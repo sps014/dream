@@ -5,7 +5,7 @@ import system.codegen;
 /// Traces `ray` against `scene` and waits for the hit or miss shader to fill in `payload`.
 /// Hits run the first hit group plus the instance's hit group offset; misses run the first
 /// miss shader. `mask` is compared with each instance's mask, so `255` sees everything.
-@generator_only(RayGenerationAttribute, ClosestHitAttribute, MissAttribute, GpuAttribute)
+@generator_only(RayGenerationAttribute, ClosestHitAttribute, MissAttribute)
 public extern fun trace_ray<P>(
     scene: GpuAccelerationStructure,
     flags: GpuRayFlags,
@@ -17,7 +17,7 @@ public extern fun trace_ray<P>(
 /// Like `trace_ray`, selecting hit groups as `hit_group_offset + instance offset *
 /// hit_group_stride` and the miss shader by `miss_index`, for several ray types in one
 /// pipeline.
-@generator_only(RayGenerationAttribute, ClosestHitAttribute, MissAttribute, GpuAttribute)
+@generator_only(RayGenerationAttribute, ClosestHitAttribute, MissAttribute)
 public extern fun trace_ray_indexed<P>(
     scene: GpuAccelerationStructure,
     flags: GpuRayFlags,
@@ -30,13 +30,7 @@ public extern fun trace_ray_indexed<P>(
 ): void;
 
 /// Runs the pipeline's callable shader number `index` with `data`.
-@generator_only(
-    RayGenerationAttribute,
-    ClosestHitAttribute,
-    MissAttribute,
-    CallableAttribute,
-    GpuAttribute
-)
+@generator_only(RayGenerationAttribute, ClosestHitAttribute, MissAttribute, CallableAttribute)
 public extern fun call_shader<D>(index: int, ref data: D): void;
 
 /// This thread's position in the ray tracing dispatch grid, for example its pixel.
@@ -46,8 +40,7 @@ public extern fun call_shader<D>(index: int, ref data: D): void;
     AnyHitAttribute,
     MissAttribute,
     IntersectionAttribute,
-    CallableAttribute,
-    GpuAttribute
+    CallableAttribute
 )
 public extern fun dispatch_ray_index(): GpuIVec3;
 
@@ -58,81 +51,56 @@ public extern fun dispatch_ray_index(): GpuIVec3;
     AnyHitAttribute,
     MissAttribute,
     IntersectionAttribute,
-    CallableAttribute,
-    GpuAttribute
+    CallableAttribute
 )
 public extern fun dispatch_ray_dimensions(): GpuIVec3;
 
 /// The current ray's origin in world space.
-@generator_only(
-    ClosestHitAttribute,
-    AnyHitAttribute,
-    MissAttribute,
-    IntersectionAttribute,
-    GpuAttribute
-)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, MissAttribute, IntersectionAttribute)
 public extern fun world_ray_origin(): GpuVec3;
 
 /// The current ray's direction in world space.
-@generator_only(
-    ClosestHitAttribute,
-    AnyHitAttribute,
-    MissAttribute,
-    IntersectionAttribute,
-    GpuAttribute
-)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, MissAttribute, IntersectionAttribute)
 public extern fun world_ray_direction(): GpuVec3;
 
 /// The current ray's origin in the hit instance's object space.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute)
 public extern fun object_ray_origin(): GpuVec3;
 
 /// The current ray's direction in the hit instance's object space.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute)
 public extern fun object_ray_direction(): GpuVec3;
 
 /// The current ray's `t_min`.
-@generator_only(
-    ClosestHitAttribute,
-    AnyHitAttribute,
-    MissAttribute,
-    IntersectionAttribute,
-    GpuAttribute
-)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, MissAttribute, IntersectionAttribute)
 public extern fun ray_t_min(): float;
 
 /// The distance to the current hit, or the ray's `t_max` in miss shaders.
-@generator_only(
-    ClosestHitAttribute,
-    AnyHitAttribute,
-    MissAttribute,
-    IntersectionAttribute,
-    GpuAttribute
-)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, MissAttribute, IntersectionAttribute)
 public extern fun ray_t_current(): float;
 
 /// The `GpuInstance.with_id` value of the hit instance.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute)
 public extern fun hit_instance_id(): int;
 
 /// The index of the hit triangle or box within its geometry.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute, IntersectionAttribute)
 public extern fun hit_primitive_index(): int;
 
 /// The value the intersection shader passed to `report_hit` as `kind`, or `254` and `255`
 /// for front- and back-facing triangles.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute)
 public extern fun hit_kind(): int;
 
 /// Rejects the current candidate hit; the ray continues as if it was not there.
-@generator_only(AnyHitAttribute, GpuAttribute)
+@generator_only(AnyHitAttribute)
 public extern fun ignore_hit(): void;
 
 /// Accepts the current candidate hit and stops searching; the closest-hit shader runs for it.
-@generator_only(AnyHitAttribute, GpuAttribute)
+@generator_only(AnyHitAttribute)
 public extern fun accept_hit_and_end_search(): void;
 
 /// Reports a hit on custom geometry at distance `t` with a `kind` from `0` to `127` and
 /// the `attributes` the hit shaders receive. Returns true when the hit was accepted.
-@generator_only(IntersectionAttribute, GpuAttribute)
+@generator_only(IntersectionAttribute)
 public extern fun report_hit<A>(t: float, kind: int, attributes: A): bool;

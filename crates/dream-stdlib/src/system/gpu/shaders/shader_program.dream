@@ -5,19 +5,21 @@ import system.collections;
 import system.codegen;
 import system.gpu;
 
-// Every GPU function of the program: entry points in declaration order, `@gpu` helpers, their
+// Every GPU function of the program: entry points in declaration order, inferred helpers, their
 // bodies, and the entries grouped by Dream shader_module.
 internal class ShaderProgram {
     internal entries: List<ShaderEntry>;
     internal functions: List<GenFunction>;
     internal bodies: Map<string, List<ShaderNode>>;
     internal modules: List<ShaderModule>;
+    constructor_bodies: Map<string, List<ShaderNode>>;
 
     internal constructor() {
         this.entries = List<ShaderEntry>();
         this.functions = List<GenFunction>();
         this.bodies = Map<string, List<ShaderNode>>();
         this.modules = List<ShaderModule>();
+        this.constructor_bodies = Map<string, List<ShaderNode>>();
     }
 
     internal static fun collect(ctx: GenContext): ShaderProgram {
@@ -69,19 +71,56 @@ internal class ShaderProgram {
             program.functions.push(e.function);
             program.bodies[e.function.id] = e.body;
         }
-        let helpers = ctx.functions_with<GpuAttribute>();
-        helpers.sort_by(
-            (a, b) => {
-                return ShaderProgram.compare_location(a.location, b.location);
+        let index = 0;
+        while index < program.functions.length {
+            let caller = program.functions[index];
+            let nodes = program.nodes(caller.id);
+            let cursor = 0;
+            while cursor < nodes.length {
+                let n = nodes[cursor];
+                cursor = cursor + 1;
+                if n.symbol_kind
+                    == GenSymbolKind.Type
+                    && SlangTypes.is_user(n.ty) && !program.constructor_bodies.contains(n.overload) {
+                    let constructor_nodes = List<ShaderNode>();
+                    program.constructor_bodies[n.overload] = constructor_nodes;
+                    switch (ctx.find_decl(n.ty.decl)) {
+                        Some(declaration) => {
+                            for (let method in declaration.methods) {
+                                if method.name == "constructor" && method.overload == n.overload {
+                                    for (let statement in ShaderNode.body_of(method)) {
+                                        constructor_nodes.push(statement);
+                                        statement.walk(constructor_nodes);
+                                    }
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                    for (let node in constructor_nodes) {
+                        nodes.push(node);
+                    }
+                }
+                if !Builtins.key_of(n).is_empty() || n.symbol_kind == GenSymbolKind.Type {
+                    continue;
+                }
+                let call = n.is_expr(ExprKind.FunctionCall)
+                    || n.is_statement(StmtKind.FunctionInvocation)
+                    || (n.is_expr(ExprKind.Identifier) && n.symbol_kind == GenSymbolKind.Function);
+                if !call || program.is_user_function(n.symbol) {
+                    continue;
+                }
+                switch (ctx.find_function(n.symbol)) {
+                    Some(helper) => {
+                        if !helper.id.starts_with("system.") && helper.body.is_some() {
+                            program.functions.push(helper);
+                            program.bodies[helper.id] = ShaderNode.body_of(helper);
+                        }
+                    }
+                    None => {}
+                }
             }
-        );
-        for (let h in helpers) {
-            if program.is_entry(h.id) {
-                ctx.error_at(h.id, "@gpu marks helpers; a shader entry point does not need it");
-                continue;
-            }
-            program.functions.push(h);
-            program.bodies[h.id] = ShaderNode.body_of(h);
+            index = index + 1;
         }
         return program;
     }
@@ -156,6 +195,23 @@ internal class ShaderProgram {
             out.push(s);
             s.walk(out);
         }
+        let seen = List<string>();
+        let index = 0;
+        while index < out.length {
+            let node = out[index];
+            index = index + 1;
+            if node.symbol_kind == GenSymbolKind.Type && !seen.contains(node.overload) {
+                seen.push(node.overload);
+                switch (this.constructor_bodies.get(node.overload)) {
+                    Some(nodes) => {
+                        for (let child in nodes) {
+                            out.push(child);
+                        }
+                    },
+                    None => {},
+                }
+            }
+        }
         return out;
     }
 
@@ -165,7 +221,7 @@ internal class ShaderProgram {
         for (let n in this.nodes(id)) {
             let call = n.is_expr(ExprKind.FunctionCall)
                 || n.is_statement(StmtKind.FunctionInvocation)
-                || (n.is_expr(ExprKind.Identifier) && n.symbol_kind == "function");
+                || (n.is_expr(ExprKind.Identifier) && n.symbol_kind == GenSymbolKind.Function);
             if call && this.is_user_function(n.symbol) {
                 out.push(n);
             }

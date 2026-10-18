@@ -2,7 +2,7 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuIVec3`
 
@@ -36,12 +36,12 @@ The third component.
 public z: int
 ```
 
-## `of`
+## `constructor`
 
 Creates the vector `(x, y, z)`.
 
 ```dream
-public static fun of(x: int, y: int, z: int): GpuIVec3
+public constructor(x: int, y: int, z: int)
 ```
 
 ## `xy`

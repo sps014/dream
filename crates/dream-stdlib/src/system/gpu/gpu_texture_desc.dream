@@ -2,7 +2,7 @@ module system.gpu;
 
 /// The settings a new texture is created with.
 ///
-/// Start from `GpuTextureDesc.of` and chain the settings you want to change. Every texture
+/// Start from `GpuTextureDesc(...)` and chain the settings you want to change. Every texture
 /// can be sampled by shaders and copied to and from the CPU.
 public class GpuTextureDesc {
     desc_width: int;
@@ -14,7 +14,8 @@ public class GpuTextureDesc {
     desc_render_target: bool;
     desc_storage: bool;
 
-    constructor(width: int, height: int, format: GpuTextureFormat) {
+    /// Creates a 2D texture description with one mip, layer, and sample; width and height are texels.
+    public constructor(width: int, height: int, format: GpuTextureFormat) {
         this.desc_width = width;
         this.desc_height = height;
         this.desc_format = format;
@@ -23,11 +24,6 @@ public class GpuTextureDesc {
         this.desc_samples = 1;
         this.desc_render_target = false;
         this.desc_storage = false;
-    }
-
-    /// Describes a `width` by `height` texture of `format` with one mip level and one layer.
-    public static fun of(width: int, height: int, format: GpuTextureFormat): GpuTextureDesc {
-        return GpuTextureDesc(width, height, format);
     }
 
     /// Width in texels.

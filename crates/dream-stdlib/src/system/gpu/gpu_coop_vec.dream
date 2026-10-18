@@ -9,7 +9,7 @@ import system.codegen;
 /// fields, from the constant passed to `zeros`, or from the layer that produced it. `T` is
 /// usually `float16`. `GpuTarget.Metal` and `WebGpu` cannot run cooperative vectors; using
 /// them with only those targets is a build error.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public struct GpuCoopVec<T> {
     /// A vector of `length` zeros; `length` must be a constant.
     public static extern fun zeros(length: int): GpuCoopVec<T>;

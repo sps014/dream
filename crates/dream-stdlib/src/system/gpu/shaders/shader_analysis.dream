@@ -31,7 +31,8 @@ internal static class ShaderAnalysis {
             changed = false;
             for (let f in program.functions) {
                 for (let call in program.calls_from(f.id)) {
-                    if call.symbol_kind != "function" || call.is_expr(ExprKind.Identifier) {
+                    if call.symbol_kind
+                        != GenSymbolKind.Function || call.is_expr(ExprKind.Identifier) {
                         continue;
                     }
                     switch (program.function(call.symbol)) {

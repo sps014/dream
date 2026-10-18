@@ -2,22 +2,22 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuVertexLayout`
 
-How the vertex shader's `@location` inputs are read from one vertex buffer.  Start from `GpuVertexLayout.of` with the byte size of one element, usually `sizeof` of the vertex struct, and add one `attribute` per input.
+How the vertex shader's `@location` inputs are read from one vertex buffer.  Start from `GpuVertexLayout(...)` with the byte size of one element, usually `sizeof` of the vertex struct, and add one `attribute` per input.
 
 ```dream
 public class GpuVertexLayout
 ```
 
-## `of`
+## `constructor`
 
-Describes a buffer whose elements are `stride` bytes apart.
+Creates a vertex layout with the supplied byte stride.
 
 ```dream
-public static fun of(stride: int): GpuVertexLayout
+public constructor(stride: int)
 ```
 
 ## `stride`

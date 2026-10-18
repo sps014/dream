@@ -19,7 +19,6 @@ import system.gpu;
     ComputeAttribute,
     VertexAttribute,
     FragmentAttribute,
-    GpuAttribute,
     RayGenerationAttribute,
     ClosestHitAttribute,
     AnyHitAttribute,
@@ -41,7 +40,7 @@ public fun gpu_shaders(ctx: GenContext): void {
     for (let m in program.modules) {
         for (let e in m.entries) {
             let nodes = program.nodes(e.function.id);
-            for (let h in program.reachable(List<string>.from_array([e.function.id]))) {
+            for (let h in program.reachable(List<string>([e.function.id]))) {
                 for (let n in program.nodes(h.id)) {
                     nodes.push(n);
                 }
@@ -72,7 +71,15 @@ fun consume_help(borrow program: ShaderProgram, borrow f: GenFunction): string {
         }
         return "pass GpuShaders." + f.name + " to GpuDevice.ray_tracing_pipeline";
     }
-    return "@gpu helpers run only on the GPU; call it from a shader";
+    for (let entry in program.entries) {
+        for (let helper in program.reachable(List<string>([entry.function.id]))) {
+            if helper.id == f.id {
+                return "this helper runs only on the GPU because shader '"
+                    + entry.function.name + "' reaches it; call it from a shader";
+            }
+        }
+    }
+    return "this helper runs only on the GPU; call it from a shader";
 }
 
 fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
@@ -141,7 +148,10 @@ fun check_webgpu_storage(ctx: GenContext, borrow m: ShaderModule): void {
             if compute {
                 ctx.warning_at(
                     e.function.id,
-                    "'" + e.name() + "' binds " + count.to_string()
+                    "'"
+                        + e.name()
+                        + "' binds "
+                        + count.to_string()
                         + " storage buffers, more than the 8 per stage WebGPU guarantees; pass some data in fewer buffers"
                 );
             } else {

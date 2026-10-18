@@ -43,7 +43,7 @@ async fun main(): void {
     let key = System.env("API_JWT_KEY").unwrap();
     let password = System.env("DEMO_PASSWORD").unwrap();
     let auth = AuthService(
-        JwtOptions("https://api.example.com", "example-api", key, key, "HS256"),
+        JwtOptions("https://api.example.com", "example-api", key, key, JwtAlgorithm.HS256),
         Accounts(Password.hash(password).unwrap()),
         MemoryAuthStore()
     );

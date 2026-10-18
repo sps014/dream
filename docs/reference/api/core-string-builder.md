@@ -44,38 +44,6 @@ Appends a Unicode scalar as one or two UTF-16 units.
 public fun append_char(c: char): void
 ```
 
-## `push_raw`
-
-Appends `text` to the builder.
-
-```dream
-public static extern fun push_raw(borrow sb: StringBuilder, borrow text: string): void
-```
-
-## `new_buffer`
-
-Only initialized bytes below `count` can become a built string.
-
-```dream
-public static extern fun new_buffer(capacity: int): byte[]
-```
-
-## `push_int`
-
-Appends the decimal representation of `n`.
-
-```dream
-public static extern fun push_int(borrow sb: StringBuilder, n: int): void
-```
-
-## `push_long`
-
-Appends the decimal representation of `n`.
-
-```dream
-public static extern fun push_long(borrow sb: StringBuilder, n: long): void
-```
-
 ## `append`
 
 Appends every UTF-16 unit of `text`, growing at most once.
@@ -146,14 +114,6 @@ Removes every appended character, keeping the backing buffer for reuse.
 
 ```dream
 public fun clear(): void
-```
-
-## `view_raw`
-
-Creates a string from the first `len` bytes in the builder buffer. The range must be valid.
-
-```dream
-public static extern fun view_raw(borrow bytes: byte[], len: int): string
 ```
 
 ## `as_span`

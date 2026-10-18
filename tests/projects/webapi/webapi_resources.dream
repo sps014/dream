@@ -98,14 +98,16 @@ async fun webapi_resources(): void {
     Assert.eq(webapi_get(client, base2, "/resource", 200).await, "overrideoverride");
     Assert.eq(resource_order, "");
     resource_order = "";
-    let stream = client.send(HttpRequest.get(Url.parse(base + "/resource-stream").unwrap()))
-        .await
-        .unwrap();
+    let stream = client.send(
+        HttpRequest(HttpMethod.Get, Url.parse(base + "/resource-stream").unwrap())
+    ).await.unwrap();
     stream.body.read_async(32).await.unwrap();
     stream.close();
     await_resource_order("acquire;release;").await;
     resource_order = "";
-    let pending = client.send(HttpRequest.get(Url.parse(base + "/resource-wait").unwrap()));
+    let pending = client.send(
+        HttpRequest(HttpMethod.Get, Url.parse(base + "/resource-wait").unwrap())
+    );
     Promise.start(pending);
     await_resource_order("acquire;").await;
     app.shutdown();

@@ -20,7 +20,9 @@ internal static class Verify {
         if program.is_entry(f.id) && Names.is_reserved(f.name) {
             ctx.error_at(
                 f.id,
-                "'" + f.name + "' is a reserved word in the Slang shader language; rename this shader"
+                "'"
+                    + f.name
+                    + "' is a reserved word in the Slang shader language; rename this shader"
             );
         }
         if !f.generics.is_empty() {
@@ -118,7 +120,8 @@ internal static class Verify {
             return;
         } else if n.expr == ExprKind.Literal {
             if n.literal_kind
-                == "string" || n.literal_kind == "char" || n.ty.is_primitive(Primitive.String) {
+                == GenValueKind.String
+                || n.literal_kind == GenValueKind.Char || n.ty.is_primitive(Primitive.String) {
                 ctx.error_at(n.id, "strings are not allowed in GPU shaders");
             }
             return;
@@ -186,7 +189,7 @@ internal static class Verify {
             Verify.unsupported(ctx, n, "patterns");
             return;
         } else if n.expr == ExprKind.Identifier {
-            if n.symbol_kind == "function" && !function_value_ok {
+            if n.symbol_kind == GenSymbolKind.Function && !function_value_ok {
                 ctx.error_at(
                     n.id,
                     "'"
@@ -319,7 +322,7 @@ internal static class Verify {
             if n.symbol.is_empty() && n.ty.kind == TypeRefKind.Unknown {
                 return;
             }
-            if n.symbol_kind == "type" {
+            if n.symbol_kind == GenSymbolKind.Type {
                 Verify.value_type(ctx, program, n.ty, n.id);
             } else if program.is_user_function(n.symbol) {
                 Verify.user_call(ctx, program, f, n, differentiable);
@@ -336,7 +339,7 @@ internal static class Verify {
                     n.id,
                     "methods of '"
                         + receiver.ty.source_name()
-                        + "' cannot be called in GPU shaders; move the code into a @gpu helper"
+                        + "' cannot be called in GPU shaders; move the code into a shader helper"
                 );
             } else {
                 ctx.error_at(
@@ -374,14 +377,7 @@ internal static class Verify {
                         n.id,
                         "'"
                             + callee.name
-                            + "' is a shader entry point and cannot be called; move the shared code into a @gpu helper"
-                    );
-                } else if !callee.has<GpuAttribute>() {
-                    ctx.error_at(
-                        n.id,
-                        "'"
-                            + callee.name
-                            + "' runs on the CPU; mark it @gpu to call it from GPU shaders"
+                            + "' is a shader entry point and cannot be called; move the shared code into a helper"
                     );
                 } else if differentiable && !callee.has<DifferentiableAttribute>() {
                     ctx.error_at(

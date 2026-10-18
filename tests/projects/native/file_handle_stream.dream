@@ -1,24 +1,25 @@
 import system.testing;
-// Exercises FileHandle streaming and FileStream over a live handle (no whole-file preload).
+// Exercises FileHandle streaming over a live handle (no whole-file preload).
 import system;
 import system.io;
+import system.encoding;
 
 async fun cd1_body(): void {
     let path = "dream_file_handle_e2e.tmp";
 
     File.write(path, "Dream\nrocks\n").await;
 
-    // FileStream via File.open (OS-backed; no whole-file preload).
-    let stream = File.open(path).unwrap();
-    cd1_verify_observation((stream.read(5).unwrap()).to_string());
+    // FileHandle.open (OS-backed; no whole-file preload).
+    let stream = FileHandle.open(path, FileMode.Read).unwrap();
+    cd1_verify_observation(Encoding.utf8_decode(stream.read(5).unwrap()));
     cd1_verify_observation((stream.tell().unwrap()).to_string());
     stream.seek(6L).unwrap();
-    cd1_verify_observation((stream.read_all().unwrap()).to_string());
+    cd1_verify_observation((Streams.read_text(stream).unwrap()).to_string());
     stream.close().unwrap();
 
     // FileHandle write mode (sync primary API).
     let write_path = "dream_file_handle_write.tmp";
-    let writer = FileHandle.open(write_path, "w").unwrap();
+    let writer = FileHandle.open(write_path, FileMode.Write).unwrap();
     let data = Array.alloc<byte>(3);
     data[0] = (byte)65;
     data[1] = (byte)66;
@@ -29,7 +30,7 @@ async fun cd1_body(): void {
     cd1_verify_observation((echoed.unwrap_or("")).to_string());
 
     // Async variants still work.
-    let reader = (FileHandle.open_async(path, "r").await).unwrap();
+    let reader = (FileHandle.open_async(path, FileMode.Read).await).unwrap();
     let chunk = reader.read_async(5).await;
     cd1_verify_observation((chunk.unwrap_or(Array.alloc<byte>(0)).length).to_string());
     reader.close().unwrap();
@@ -55,5 +56,29 @@ fun cd1_verify_observation(borrow value: string): void {
 async fun file_handle_stream(): void {
     cd1_cursor = 0;
     cd1_body().await;
+    file_modes_preserve_truncate_and_append().await;
     Assert.eq(cd1_cursor, ("Dream\n5\nrocks\n\nABC\n5\n").length);
+}
+
+async fun file_modes_preserve_truncate_and_append(): void {
+    let path = "dream_file_modes.tmp";
+    let file = FileHandle.open(path, FileMode.WriteRead).unwrap();
+    file.write_text("first").unwrap();
+    file.seek(0L).unwrap();
+    Assert.eq(Streams.read_text(file).unwrap(), "first");
+    file.close().unwrap();
+    let append = FileHandle.open_async(path, FileMode.AppendRead).await.unwrap();
+    append.seek(0L).unwrap();
+    append.write_text("second").unwrap();
+    append.seek(0L).unwrap();
+    Assert.eq(Streams.read_text(append).unwrap(), "firstsecond");
+    append.close().unwrap();
+    let existing = FileHandle.open(path, FileMode.ReadWrite).unwrap();
+    Assert.eq(existing.length().unwrap(), 11L);
+    existing.close().unwrap();
+    Assert.is_true(File.stat(path).unwrap().kind == FileKind.File);
+    let truncated = FileHandle.open(path, FileMode.Write).unwrap();
+    Assert.eq(truncated.length().unwrap(), 0L);
+    truncated.close().unwrap();
+    File.delete(path).await.unwrap();
 }

@@ -54,10 +54,10 @@ public get mode(): int
 
 ## `kind`
 
-File kind: 0 for a file, 1 for a directory, 2 for a symlink, and 3 for other entries.
+The kind of filesystem entry.
 
 ```dream
-public get kind(): int
+public get kind(): FileKind
 ```
 
 ## `is_file`

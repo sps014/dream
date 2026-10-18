@@ -118,7 +118,7 @@ async fun application_utilities(): void {
     let replacement = TempFile.create_in(directory.path).unwrap();
     replacement.file.write_all(Encoding.utf8_encode("new contents")).unwrap();
     replacement.persist_replace(destination).unwrap();
-    let existing = FileHandle.open(destination, "r").unwrap();
+    let existing = FileHandle.open(destination, FileMode.Read).unwrap();
     Assert.eq(Encoding.utf8_decode(existing.read(100).unwrap()), "new contents");
     existing.close().unwrap();
     directory.close().unwrap();

@@ -9,8 +9,8 @@ fun asset_is_copied_next_to_the_runner(): void {
 
 @test
 fun asset_lines_are_readable(): void {
-    let stream = File.open("data/words.txt").unwrap();
-    let text = stream.read_all();
+    let stream = FileHandle.open("data/words.txt", FileMode.Read).unwrap();
+    let text = Streams.read_text(stream);
     stream.close();
     Assert.eq(text.split("\n").length, 4);
     Assert.is_true(text.starts_with("alpha"));

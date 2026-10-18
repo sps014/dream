@@ -13,51 +13,50 @@ public struct GpuVec2 {
     public y: float;
 
     /// Creates the vector `(x, y)`.
-    public static fun of(x: float, y: float): GpuVec2 {
-        let v = GpuVec2();
-        v.x = x;
-        v.y = y;
-        return v;
+    public constructor(x: float, y: float) {
+        this.x = x;
+        this.y = y;
     }
 
     /// Creates a vector with both components equal to `value`.
-    public static fun splat(value: float): GpuVec2 {
-        return GpuVec2.of(value, value);
+    public constructor(value: float) {
+        this.x = value;
+        this.y = value;
     }
 
     /// Adds component by component.
     fun operator +(other: GpuVec2): GpuVec2 {
-        return GpuVec2.of(this.x + other.x, this.y + other.y);
+        return GpuVec2(this.x + other.x, this.y + other.y);
     }
 
     /// Subtracts component by component.
     fun operator -(other: GpuVec2): GpuVec2 {
-        return GpuVec2.of(this.x - other.x, this.y - other.y);
+        return GpuVec2(this.x - other.x, this.y - other.y);
     }
 
     /// Multiplies component by component.
     fun operator *(other: GpuVec2): GpuVec2 {
-        return GpuVec2.of(this.x * other.x, this.y * other.y);
+        return GpuVec2(this.x * other.x, this.y * other.y);
     }
 
     /// Multiplies every component by `scale`.
     fun operator *(scale: float): GpuVec2 {
-        return GpuVec2.of(this.x * scale, this.y * scale);
+        return GpuVec2(this.x * scale, this.y * scale);
     }
 
     /// Divides component by component.
     fun operator /(other: GpuVec2): GpuVec2 {
-        return GpuVec2.of(this.x / other.x, this.y / other.y);
+        return GpuVec2(this.x / other.x, this.y / other.y);
     }
 
     /// Divides every component by `divisor`.
     fun operator /(divisor: float): GpuVec2 {
-        return GpuVec2.of(this.x / divisor, this.y / divisor);
+        return GpuVec2(this.x / divisor, this.y / divisor);
     }
 
     /// Negates every component.
     fun operator -(): GpuVec2 {
-        return GpuVec2.of(-this.x, -this.y);
+        return GpuVec2(-this.x, -this.y);
     }
 
     /// True when both components are equal.

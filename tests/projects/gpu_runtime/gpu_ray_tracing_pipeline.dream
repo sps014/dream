@@ -18,22 +18,22 @@ fun trace_camera(scene: GpuAccelerationStructure, output: GpuStorageTexture<GpuV
     let size = dispatch_ray_dimensions().xy;
     let u = ((float)pixel.x + 0.5f) / (float)size.x * 2.0f - 1.0f;
     let v = 1.0f - ((float)pixel.y + 0.5f) / (float)size.y * 2.0f;
-    let ray = GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.001f, 100.0f);
+    let ray = GpuRay(GpuVec3(u, v, -2.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0.001f, 100.0f);
     let payload = TracePayload();
     trace_ray(scene, GpuRayFlags.None, 255u, ray, ref payload);
-    output[pixel] = GpuVec4.of(payload.color.x, payload.color.y, payload.color.z, 1.0f);
+    output[pixel] = GpuVec4(payload.color.x, payload.color.y, payload.color.z, 1.0f);
 }
 
 @gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
 @closest_hit
 fun trace_shade(ref payload: TracePayload, attributes: GpuTriangleHit): void {
-    payload.color = GpuVec3.of(1.0f, attributes.barycentrics.x, attributes.barycentrics.y);
+    payload.color = GpuVec3(1.0f, attributes.barycentrics.x, attributes.barycentrics.y);
 }
 
 @gpu_targets(GpuTarget.Vulkan, GpuTarget.Dx12)
 @miss
 fun trace_sky(ref payload: TracePayload): void {
-    payload.color = GpuVec3.of(0.0f, 0.0f, 1.0f);
+    payload.color = GpuVec3(0.0f, 0.0f, 1.0f);
 }
 
 fun traced_label(backend: GpuBackend): string {
@@ -90,9 +90,9 @@ async fun gpu_ray_tracing_pipeline(): void {
                 let positions = traced_ok(
                     device.buffer_from(
                         [
-                            GpuVec3.of(-0.5f, -0.5f, 0.0f),
-                            GpuVec3.of(0.5f, -0.5f, 0.0f),
-                            GpuVec3.of(0.0f, 0.5f, 0.0f)
+                            GpuVec3(-0.5f, -0.5f, 0.0f),
+                            GpuVec3(0.5f, -0.5f, 0.0f),
+                            GpuVec3(0.0f, 0.5f, 0.0f)
                         ]
                     ),
                     "positions"
@@ -102,7 +102,7 @@ async fun gpu_ray_tracing_pipeline(): void {
                     "bottom level"
                 );
                 let tlas = traced_ok(
-                    device.build_top_level([GpuInstance.of(blas, GpuMat4.identity())]).await,
+                    device.build_top_level([GpuInstance(blas, GpuMat4.identity())]).await,
                     "top level"
                 );
                 let image = traced_ok(device.storage_texture<GpuVec4>(size, size), "image");

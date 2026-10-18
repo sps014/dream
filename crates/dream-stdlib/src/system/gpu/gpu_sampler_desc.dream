@@ -2,7 +2,7 @@ module system.gpu;
 
 /// The settings a new sampler is created with.
 ///
-/// Start from `GpuSamplerDesc.linear` or `GpuSamplerDesc.nearest` and chain the settings
+/// Start from `GpuSamplerDesc(GpuFilter.Linear)` or `GpuSamplerDesc(GpuFilter.Nearest)` and chain the settings
 /// you want to change.
 public class GpuSamplerDesc {
     desc_filter: GpuFilter;
@@ -10,21 +10,12 @@ public class GpuSamplerDesc {
     desc_compare: Option<GpuCompare>;
     desc_anisotropy: int;
 
-    constructor(filter: GpuFilter) {
+    /// Creates a sampler with the selected filter, clamp-to-edge addressing, and no comparison.
+    public constructor(filter: GpuFilter) {
         this.desc_filter = filter;
         this.desc_address = GpuAddressMode.ClampToEdge;
         this.desc_compare = Option.None;
         this.desc_anisotropy = 1;
-    }
-
-    /// Smooth filtering within and between mip levels, clamped at the edges.
-    public static fun linear(): GpuSamplerDesc {
-        return GpuSamplerDesc(GpuFilter.Linear);
-    }
-
-    /// Sharp nearest-texel filtering, clamped at the edges, for pixel art and data textures.
-    public static fun nearest(): GpuSamplerDesc {
-        return GpuSamplerDesc(GpuFilter.Nearest);
     }
 
     /// The filter used when magnifying, minifying and between mip levels.

@@ -10,7 +10,7 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         match expression {
             ExpressionNode::ArrayLiteral(open, elements) => {
-                // `[e1, e2, ...]` lowers to `List<T>.from_array([e1, e2, ...])` (one bulk call, no
+                // `[e1, e2, ...]` lowers to `List<T>([e1, e2, ...])` (one bulk call, no
                 // per-element codegen) whenever the surrounding context expects a `List<T>`; the
                 // `T[]` array form below is otherwise completely unaffected.
                 if let Some(elem_ty) = self
@@ -25,7 +25,6 @@ impl<'a> Analyzer<'a> {
                     return self.lower_collection_literal_call(
                         "List",
                         vec![elem_ty],
-                        "from_array",
                         vec![ExpressionNode::ArrayLiteral(open.clone(), elements.clone())],
                         &ctx,
                         diagnostics,
@@ -101,7 +100,7 @@ impl<'a> Analyzer<'a> {
             }
             ExpressionNode::ArrayRepeat(open, value, len) => {
                 // `[v; n]` in a `List<T>` context composes with the collection-literal desugar:
-                // replay as `List<T>.from_array([v; n])`, re-entering this arm for the inner
+                // replay as `List<T>([v; n])`, re-entering this arm for the inner
                 // repeat once the callee signature publishes its `T[]` parameter expectation.
                 if let Some(elem_ty) = self
                     .current_expected_type
@@ -115,7 +114,6 @@ impl<'a> Analyzer<'a> {
                     return self.lower_collection_literal_call(
                         "List",
                         vec![elem_ty],
-                        "from_array",
                         vec![ExpressionNode::ArrayRepeat(
                             open.clone(),
                             Box::new((**value).clone()),
@@ -245,7 +243,6 @@ impl<'a> Analyzer<'a> {
                         self.lower_collection_literal_call(
                             "Set",
                             vec![elem_ty],
-                            "from_array",
                             vec![ExpressionNode::ArrayLiteral(bracket, elements.clone())],
                             &ctx,
                             diagnostics,
@@ -287,7 +284,6 @@ impl<'a> Analyzer<'a> {
                 self.lower_collection_literal_call(
                     "Map",
                     vec![key_ty, val_ty],
-                    "from_arrays",
                     vec![
                         ExpressionNode::ArrayLiteral(bracket.clone(), keys),
                         ExpressionNode::ArrayLiteral(bracket, values),

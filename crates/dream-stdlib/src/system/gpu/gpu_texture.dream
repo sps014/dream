@@ -82,7 +82,7 @@ public class GpuTexture {
     /// Samples the texture at `uv`, where `(0, 0)` is the top-left corner and `(1, 1)` the
     /// bottom-right, filtered by `sampler`. The mip level follows the on-screen size, which
     /// only fragment shaders know.
-    @generator_only(FragmentAttribute, GpuAttribute)
+    @generator_only(FragmentAttribute)
     public extern fun sample(sampler: GpuSampler, uv: GpuVec2): GpuVec4;
 
     /// Samples the texture at `uv` from mip level `level`; fractional levels blend two
@@ -91,7 +91,6 @@ public class GpuTexture {
         ComputeAttribute,
         VertexAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,
@@ -104,7 +103,7 @@ public class GpuTexture {
     /// Compares `reference` with the depth texture at `uv` using the comparison sampler's
     /// `GpuCompare`, and returns the filtered fraction of texels that passed. Used for
     /// shadow maps.
-    @generator_only(FragmentAttribute, GpuAttribute)
+    @generator_only(FragmentAttribute)
     public extern fun sample_compare(sampler: GpuSampler, uv: GpuVec2, reference: float): float;
 
     /// Reads the texel at integer `coordinate` of mip level `level`, without filtering.
@@ -112,7 +111,6 @@ public class GpuTexture {
         ComputeAttribute,
         VertexAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,
@@ -127,7 +125,6 @@ public class GpuTexture {
         ComputeAttribute,
         VertexAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,

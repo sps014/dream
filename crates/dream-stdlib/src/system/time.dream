@@ -4,7 +4,7 @@ module system;
 public static class Time {
     /// Suspends for at least `ms` milliseconds.
     @intrinsic(Intrinsic.Sleep)
-    public static extern async fun sleep_host(ms: int): void;
+    internal static extern async fun sleep_host(ms: int): void;
 
     @async_host
     @runtime("delayMs")

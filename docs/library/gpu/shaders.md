@@ -25,16 +25,15 @@ one-dimensional work and 8 by 8 for images unless you have measured something be
 
 ## Helper functions
 
-Mark a function that shaders call with `@gpu`. A helper can call other helpers but not itself,
+Functions reached from shader entry points are inferred as GPU-only helpers; no helper annotation is needed. CPU calls to these helpers are rejected. A helper can call other helpers but not itself,
 because GPUs have no call stack:
 
 ```dream
 import system;
 import system.gpu;
 
-@gpu
 fun luminance(color: GpuVec3): float {
-    return color.dot(GpuVec3.of(0.2126f, 0.7152f, 0.0722f));
+    return color.dot(GpuVec3(0.2126f, 0.7152f, 0.0722f));
 }
 
 @compute(64, 1, 1)
@@ -42,12 +41,12 @@ fun grayscale(@readonly colors: GpuBuffer<GpuVec4>, out: GpuBuffer<float>, n: in
     let i = global_id().x;
     if i < n {
         let c = colors[i];
-        out[i] = luminance(GpuVec3.of(c.x, c.y, c.z));
+        out[i] = luminance(GpuVec3(c.x, c.y, c.z));
     }
 }
 ```
 
-A `@gpu` helper exists only on the GPU, so CPU code cannot call it. When the CPU needs the same
+A inferred shader helper exists only on the GPU, so CPU code cannot call it. When the CPU needs the same
 calculation, write an ordinary function for it as well.
 
 ## Parameters
@@ -76,7 +75,7 @@ Shader bodies use a subset of Dream that maps directly onto GPU hardware:
 - `if`/`else`, `while`, `break`, `continue`, `return`, and C-style `switch` with `case`/`default`
 - `for (let i in 0..n)` over integer ranges, and C-style `for` loops
 - structs and enums declared in your program, created with their constructors and passed by value
-- `@gpu` helpers, `GpuMath`, vector methods such as `GpuVec3.normalize`, and the built-ins below
+- inferred shader helpers, `GpuMath`, vector methods such as `GpuVec3.normalize`, and the built-ins below
 
 The generator rejects everything that needs a heap, a call stack or the operating system, and
 reports each problem at its line in your Dream file:

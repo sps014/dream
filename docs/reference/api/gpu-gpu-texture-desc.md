@@ -2,22 +2,22 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuTextureDesc`
 
-The settings a new texture is created with.  Start from `GpuTextureDesc.of` and chain the settings you want to change. Every texture can be sampled by shaders and copied to and from the CPU.
+The settings a new texture is created with.  Start from `GpuTextureDesc(...)` and chain the settings you want to change. Every texture can be sampled by shaders and copied to and from the CPU.
 
 ```dream
 public class GpuTextureDesc
 ```
 
-## `of`
+## `constructor`
 
-Describes a `width` by `height` texture of `format` with one mip level and one layer.
+Creates a 2D texture description with one mip, layer, and sample; width and height are texels.
 
 ```dream
-public static fun of(width: int, height: int, format: GpuTextureFormat): GpuTextureDesc
+public constructor(width: int, height: int, format: GpuTextureFormat)
 ```
 
 ## `width`

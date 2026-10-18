@@ -12,22 +12,6 @@ A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_d
 public class NativeCallback<F>
 ```
 
-## `register`
-
-Keeps a callback available to foreign code until `unregister` is called.
-
-```dream
-public static extern fun register(borrow callback: object): void
-```
-
-## `unregister`
-
-Releases a previously registered callback after foreign code has stopped using it.
-
-```dream
-public static extern fun unregister(borrow callback: object): void
-```
-
 ## `constructor`
 
 Creates a `NativeCallback` with `f`.

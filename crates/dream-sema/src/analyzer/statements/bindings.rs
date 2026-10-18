@@ -97,7 +97,7 @@ impl<'a> Analyzer<'a> {
         // array-typed (`int[]`) or `List<T>` annotation (e.g. `let xs: int[] = [];` / `let xs:
         // List<int> = [];`). With a valid annotation the literal is handled on the normal path
         // below (the annotation is published as the expected type, which the array-literal
-        // analysis uses to allocate a zero-length array, or lower to `List<T>.from_array([])`).
+        // analysis uses to allocate a zero-length array, or lower to `List<T>([])`).
         if let ExpressionNode::ArrayLiteral(_, elements) = right
             && elements.is_empty()
             && !type_annotation

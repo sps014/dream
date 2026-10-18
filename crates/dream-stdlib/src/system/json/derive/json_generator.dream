@@ -5,7 +5,7 @@ import system.text;
 
 // Builds `extend Type { to_json / write_json / from_json }` source from [`JsonTypeSpec`]s
 // (see `json_derive`).
-public static class JsonGenerator {
+internal static class JsonGenerator {
     // Emits `extend … { to_json / write_json / from_json }` source for each snapshot in `types`.
     public static fun expand(
         borrow types: List<JsonTypeSpec>,

@@ -11,7 +11,6 @@ import system.codegen;
     ComputeAttribute,
     VertexAttribute,
     FragmentAttribute,
-    GpuAttribute,
     RayGenerationAttribute,
     ClosestHitAttribute,
     AnyHitAttribute,
@@ -113,14 +112,14 @@ public static class GpuMath {
     public static extern fun refract<T>(incident: T, normal: T, eta: float): T;
 
     /// How fast `x` changes between horizontally neighboring pixels. Fragment shaders only.
-    @generator_only(FragmentAttribute, GpuAttribute)
+    @generator_only(FragmentAttribute)
     public static extern fun ddx<T>(x: T): T;
 
     /// How fast `x` changes between vertically neighboring pixels. Fragment shaders only.
-    @generator_only(FragmentAttribute, GpuAttribute)
+    @generator_only(FragmentAttribute)
     public static extern fun ddy<T>(x: T): T;
 
     /// `abs(ddx(x)) + abs(ddy(x))`, for antialiasing procedural edges. Fragment shaders only.
-    @generator_only(FragmentAttribute, GpuAttribute)
+    @generator_only(FragmentAttribute)
     public static extern fun fwidth<T>(x: T): T;
 }

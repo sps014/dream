@@ -2,7 +2,7 @@ module system.gpu;
 
 /// One placed copy of a bottom-level acceleration structure inside a top-level one.
 ///
-/// Start from `GpuInstance.of` and chain the settings you want to change.
+/// Start from `GpuInstance(...)` and chain the settings you want to change.
 public class GpuInstance {
     internal bottom_level: GpuAccelerationStructure;
     transform: GpuMat4;
@@ -10,18 +10,13 @@ public class GpuInstance {
     mask: int;
     hit_group: int;
 
-    constructor(bottom_level: GpuAccelerationStructure, transform: GpuMat4) {
+    /// Places a bottom-level acceleration structure with the supplied object-to-world transform.
+    public constructor(bottom_level: GpuAccelerationStructure, transform: GpuMat4) {
         this.bottom_level = bottom_level;
         this.transform = transform;
         this.id = 0;
         this.mask = 255;
         this.hit_group = 0;
-    }
-
-    /// Places `bottom_level` with the object-to-world `transform`. Only the affine part of
-    /// the transform is used.
-    public static fun of(bottom_level: GpuAccelerationStructure, transform: GpuMat4): GpuInstance {
-        return GpuInstance(bottom_level, transform);
     }
 
     /// Sets the value hit shaders read with `hit_instance_id()`, and returns this instance.

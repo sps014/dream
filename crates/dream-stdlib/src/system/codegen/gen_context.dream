@@ -266,7 +266,7 @@ public class GenContext {
     public fun implementations_of(borrow id: string): List<GenSymbol> {
         let out = List<GenSymbol>();
         for (let s in this.subtypes_of(id)) {
-            if s.kind == "class" || s.kind == "struct" {
+            if s.kind == GenSymbolKind.Class || s.kind == GenSymbolKind.Struct {
                 out.push(s);
             }
         }

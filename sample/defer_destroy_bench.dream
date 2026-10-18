@@ -255,7 +255,7 @@ fun run_ui(mode: string, frames: int, nodes: int, budget: uint, use_defer: bool)
 }
 
 fun fill_particles(n: int, id0: int): List<Particle> {
-    let slots = List<Particle>.with_capacity(n);
+    let slots = List<Particle>(n);
     let i = 0;
     while i < n {
         slots.push(Particle(id0 + i));

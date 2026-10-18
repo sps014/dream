@@ -28,10 +28,10 @@ public get path(): string
 
 ## `open`
 
-Opens `path` with `mode` ("r", "w", "a", "r+", "w+", "a+").
+Opens a file with the selected access, creation, and truncation behavior.
 
 ```dream
-public static fun open(path: string, mode: string): Result<FileHandle, IoError>
+public static fun open(path: string, mode: FileMode): Result<FileHandle, IoError>
 ```
 
 ## `open_async`
@@ -41,7 +41,7 @@ Opens using host async facilities or the bounded filesystem executor. Cancellati
 ```dream
 public static async fun open_async(
     path: string,
-    mode: string,
+    mode: FileMode,
     token: Option<CancellationToken> = Option.None
 ): Result<FileHandle, IoError>
 ```

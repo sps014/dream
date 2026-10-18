@@ -3,7 +3,7 @@ module system.gpu;
 import system.codegen;
 
 /// Where a ray hit a triangle, received by `@closest_hit` and `@any_hit` shaders.
-@generator_only(ClosestHitAttribute, AnyHitAttribute, GpuAttribute)
+@generator_only(ClosestHitAttribute, AnyHitAttribute)
 public struct GpuTriangleHit {
     /// The weights of the triangle's second and third corners at the hit point; the first
     /// corner's weight is `1 - barycentrics.x - barycentrics.y`.

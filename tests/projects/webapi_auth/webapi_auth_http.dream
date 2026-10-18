@@ -26,7 +26,7 @@ class PrivateRoutes {
 async fun webapi_auth_http(): void {
     let key = "0123456789abcdef0123456789abcdef";
     let auth = AuthService(
-        JwtOptions("issuer", "api", key, key, "HS256"),
+        JwtOptions("issuer", "api", key, key, JwtAlgorithm.HS256),
         TestAccounts(Password.hash("password").unwrap()),
         MemoryAuthStore(),
         browser_sessions: true,
@@ -47,7 +47,7 @@ async fun webapi_auth_http(): void {
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     let base = "http://127.0.0.1:" + port.to_string();
     let client = HttpClient();
-    let login = HttpRequest("POST", Url.parse(base + "/auth/login").unwrap());
+    let login = HttpRequest(HttpMethod.Post, Url.parse(base + "/auth/login").unwrap());
     login.headers.set("Content-Type", "application/json");
     login.body = Encoding.utf8_encode("{\"username\":\"dream\",\"password\":\"password\"}");
     login.headers.set("Origin", "https://wrong.example");
@@ -63,7 +63,7 @@ async fun webapi_auth_http(): void {
     response.close();
     let secret = tokens.get_str("refresh_token").unwrap();
     let csrf = tokens.get_str("csrf_token").unwrap();
-    let request = HttpRequest("POST", Url.parse(base + "/private").unwrap());
+    let request = HttpRequest(HttpMethod.Post, Url.parse(base + "/private").unwrap());
     request.headers.set("Cookie", "__Host-dream_session=" + secret);
     let blocked = client.send(request).await.unwrap();
     Assert.eq(blocked.status, 403);
@@ -73,7 +73,7 @@ async fun webapi_auth_http(): void {
     Assert.eq(allowed.status, 200);
     Assert.eq(allowed.read_text().await.unwrap(), "1");
     allowed.close();
-    let bearer = HttpRequest.get(Url.parse(base + "/private").unwrap());
+    let bearer = HttpRequest(HttpMethod.Get, Url.parse(base + "/private").unwrap());
     bearer.headers.set("Authorization", "Bearer " + tokens.get_str("access_token").unwrap());
     let authorized = client.send(bearer).await.unwrap();
     Assert.eq(authorized.status, 200);
@@ -82,7 +82,8 @@ async fun webapi_auth_http(): void {
     let invalid = client.send(bearer).await.unwrap();
     Assert.eq(invalid.status, 401);
     invalid.close();
-    let callback = HttpRequest.get(
+    let callback = HttpRequest(
+        HttpMethod.Get,
         Url.parse(base + "/auth/oidc/company/callback?state=unknown&code=code").unwrap()
     );
     callback.headers.set("Cookie", "__Host-dream_oidc=unknown");

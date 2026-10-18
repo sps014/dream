@@ -1,0 +1,59 @@
+module system.gpu.shaders;
+
+import system;
+import system.collections;
+import system.codegen;
+
+extend SlangEmit {
+    fun constructors(borrow d: GenDecl): void {
+        let w = this.w;
+        for (let constructor in d.methods) {
+            if constructor.name != "constructor" || constructor.body.is_none() {
+                continue;
+            }
+            let used = false;
+            for (let function in this.module_functions()) {
+                for (let node in this.program.nodes(function.id)) {
+                    if node.overload == constructor.overload && !node.overload.is_empty() {
+                        used = true;
+                    }
+                }
+            }
+            if !used {
+                continue;
+            }
+            let body = ShaderNode.body_of(constructor);
+            Verify.function(this.ctx, this.program, constructor, body);
+            this.body.begin(constructor.id);
+            this.body.names["this"] = "this";
+            w.open();
+            w.text("__init(");
+            let separator = "";
+            for (let parameter in constructor.params) {
+                if parameter.name == "this" {
+                    continue;
+                }
+                w.text(
+                    separator
+                        + SlangTypes.of(parameter.ty, List<int>())
+                        + " " + Names.ident(parameter.name)
+                );
+                separator = ", ";
+            }
+            w.text(")");
+            w.close(constructor.id);
+            w.newline();
+            w.line_of("{");
+            w.indent();
+            for (let field in d.fields) {
+                let ty = SlangTypes.of(field.ty, List<int>());
+                w.line_of("this." + Names.ident(field.name) + " = (" + ty + ")0;");
+            }
+            for (let statement in body) {
+                this.body.statement(statement);
+            }
+            w.dedent();
+            w.line_of("}");
+        }
+    }
+}

@@ -68,12 +68,12 @@ Inserts corresponding entries from `keys` and `values`; the arrays must have equ
 public fun set_all(borrow keys: K[], borrow values: V[]): void
 ```
 
-## `from_arrays`
+## `constructor`
 
-Creates a map from corresponding keys and values; the arrays must have equal lengths.
+Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.
 
 ```dream
-public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V>
+public constructor(borrow keys: K[], borrow values: V[])
 ```
 
 ## `get`
@@ -126,8 +126,7 @@ public fun get_or(borrow key: K, fallback: V): V
 
 ## `get_or_insert`
 
-Returns the existing value, or inserts and returns the result of `factory` when absent.
-The key is borrowed for the lookup and copied only on a miss.
+Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.
 
 ```dream
 public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V

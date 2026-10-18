@@ -1,0 +1,36 @@
+module system.io;
+
+/// Access, creation, and truncation behavior when opening a file.
+public enum FileMode {
+    /// Read an existing file without changing it.
+    Read,
+    /// Create or truncate a file for writing.
+    Write,
+    /// Create a file if needed and append writes to its end.
+    Append,
+    /// Read and write an existing file without truncating it.
+    ReadWrite,
+    /// Create or truncate a file for reading and writing.
+    WriteRead,
+    /// Read a file and append writes, creating it if needed.
+    AppendRead,
+
+    internal fun wire(): string {
+        if this == FileMode.Read {
+            return "r";
+        }
+        if this == FileMode.Write {
+            return "w";
+        }
+        if this == FileMode.Append {
+            return "a";
+        }
+        if this == FileMode.ReadWrite {
+            return "r+";
+        }
+        if this == FileMode.WriteRead {
+            return "w+";
+        }
+        return "a+";
+    }
+}

@@ -81,16 +81,13 @@ internal static class Builtins {
         t["GpuAtomic.compare_exchange"] = "$0[$1].compareExchange($2, $3)";
         t["GpuAtomic.add_float"] = "dream_atomic_add_float($0, $1, $2)";
 
-        t["GpuVec2.of"] = "float2($*)";
-        t["GpuVec3.of"] = "float3($*)";
-        t["GpuVec4.of"] = "float4($*)";
-        t["GpuVec2.splat"] = "float2($0)";
-        t["GpuVec3.splat"] = "float3($0)";
-        t["GpuVec4.splat"] = "float4($0)";
-        t["GpuIVec2.of"] = "int2($*)";
-        t["GpuIVec3.of"] = "int3($*)";
-        t["GpuUVec4.of"] = "uint4($*)";
-        t["GpuMat4.of"] = "float4x4($*)";
+        t["GpuVec2"] = "float2($*)";
+        t["GpuVec3"] = "float3($*)";
+        t["GpuVec4"] = "float4($*)";
+        t["GpuIVec2"] = "int2($*)";
+        t["GpuIVec3"] = "int3($*)";
+        t["GpuUVec4"] = "uint4($*)";
+        t["GpuMat4"] = "float4x4($*)";
         t["GpuMat4.identity"] = "float4x4(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f)";
         for (let v in "GpuVec2 GpuVec3 GpuVec4".split(' ')) {
             t[v + ".dot"] = "dot($r, $0)";
@@ -109,7 +106,7 @@ internal static class Builtins {
         t["GpuTexture.size"] = "dream_texture_size($r, $0)";
         t["GpuHandle.get"] = "(*$r)";
 
-        t["GpuRay.of"] = "dream_ray($0, $1, $2, $3)";
+        t["GpuRay"] = "dream_ray($0, $1, $2, $3)";
         t["GpuRayQuery.trace"] = "$r.TraceRayInline($0, 0, $1, $2)";
         t["GpuRayQuery.proceed"] = "$r.Proceed()";
         t["GpuRayQuery.commit_triangle"] = "$r.CommitNonOpaqueTriangleHit()";
@@ -121,8 +118,7 @@ internal static class Builtins {
         t["GpuRayQuery.hit_instance_id"] = "int($r.CommittedInstanceID())";
         t["GpuRayQuery.hit_primitive_index"] = "int($r.CommittedPrimitiveIndex())";
 
-        t["GpuDiffPair.of"] = "diffPair($0, $1)";
-        t["GpuDiffPair.constant"] = "diffPair($0)";
+        t["GpuDiffPair"] = "diffPair($*)";
         t["GpuDiffPair.value"] = "$r.p";
         t["GpuDiffPair.derivative"] = "$r.d";
         t["GpuDiff.forward"] = "fwd_diff($0)($1)";
@@ -142,6 +138,9 @@ internal static class Builtins {
     // static members can lack a resolved symbol, so the receiver's type name is used then.
     internal static fun key_of(borrow n: ShaderNode): string {
         if n.is_expr(ExprKind.FunctionCall) || n.is_statement(StmtKind.FunctionInvocation) {
+            if n.symbol_kind == GenSymbolKind.Type && n.ty.decl.starts_with("system.gpu::") {
+                return n.ty.decl.substring(12, n.ty.decl.length);
+            }
             if n.symbol.starts_with("system.gpu::") {
                 return n.symbol.substring(12, n.symbol.length);
             }
@@ -209,7 +208,7 @@ internal static class Builtins {
             return "atomic_add_float";
         }
         if key
-            == "GpuRay.of"
+            == "GpuRay"
             || key == "GpuRayQuery.trace" || key == "trace_ray" || key == "trace_ray_indexed" {
             return "ray";
         }

@@ -6,18 +6,21 @@ Read the [usage guide](../../library/text/string.md) for examples and common tas
 
 ## `Regex`
 
-A compiled regular expression. An invalid pattern never matches.
+A compiled regular expression. Use `Regex.compile` to report invalid patterns.
 
 ```dream
 public class Regex
 ```
 
-## `constructor`
+## `compile`
 
-Compiles `pattern` with optional matching flags. Invalid patterns never match.
+Compiles a pattern with optional flags, returning an error for invalid patterns.
 
 ```dream
-public constructor(pattern: string, flags: RegexFlags = 0)
+public static fun compile(
+    pattern: string,
+    flags: RegexFlags = RegexFlags.None
+): Result<Regex, RegexError>
 ```
 
 ## `test`

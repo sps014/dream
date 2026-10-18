@@ -15,7 +15,7 @@ public class GenConstant
 Category of this entry.
 
 ```dream
-public kind: string
+public kind: GenValueKind
 ```
 
 ## `value`

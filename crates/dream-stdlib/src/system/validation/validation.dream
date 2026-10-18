@@ -174,11 +174,15 @@ public static class Validation {
                 errors.add(location, "max_length", "value is too long");
             }
             let pattern = schema.get_or("pattern", JsonValue.none()).as_string();
-            if kind
-                == "string"
-                && pattern.is_some() && !Regex(pattern.unwrap())
-                .test(value.as_string().unwrap()) {
-                errors.add(location, "pattern", "value does not match pattern");
+            if kind == "string" && pattern.is_some() {
+                switch (Regex.compile(pattern.unwrap())) {
+                    Ok(regex) => {
+                        if !regex.test(value.as_string().unwrap()) {
+                            errors.add(location, "pattern", "value does not match pattern");
+                        }
+                    }
+                    Err(error) => errors.add(location, "pattern", error.message()),
+                }
             }
         }
         if kind == "number" || kind == "integer" {

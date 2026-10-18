@@ -39,7 +39,7 @@ import system; // System, DateTime, Stopwatch, Random, …
 import system.collections; // List, Map, Set, Queue, Stack
 import system.text; // string methods, StringBuilder, Regex
 import system.json; // Json, JsonValue
-import system.io; // File, FileStream, Path, IoError
+import system.io; // File, FileHandle, Path, IoError
 import system.encoding; // Encoding (UTF-8 / hex / Base64)
 import system.logging; // Logger, LogLevel, handlers
 import system.crypto; // Sha256, HmacSha256, SecureRandom

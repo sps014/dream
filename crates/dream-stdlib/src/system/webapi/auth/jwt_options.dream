@@ -15,7 +15,7 @@ public class JwtOptions {
     public verification_key: string;
 
     /// Signature algorithm name, such as `RS256`.
-    public algorithm: string;
+    public algorithm: JwtAlgorithm;
 
     /// Creates a `JwtOptions` with `issuer`, `audience`, `signing_key`, `verification_key`,
     /// `algorithm`.
@@ -24,7 +24,7 @@ public class JwtOptions {
         audience: string,
         signing_key: string,
         verification_key: string,
-        algorithm: string = "RS256"
+        algorithm: JwtAlgorithm = JwtAlgorithm.RS256
     ) {
         this.issuer = issuer;
         this.audience = audience;

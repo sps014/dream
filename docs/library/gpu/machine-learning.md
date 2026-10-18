@@ -9,7 +9,7 @@ api: reference/api/system-gpu.md
 
 Three features help with training and running models inside shaders:
 
-- automatic differentiation computes derivatives of `@gpu` helpers for you
+- automatic differentiation computes derivatives of inferred shader helpers for you
 - `float16` halves memory traffic
 - cooperative vectors and matrices use the GPU's tensor hardware for small neural networks
 
@@ -28,7 +28,6 @@ computes the gradient of one sample's squared error, and the CPU takes a gradien
 import system;
 import system.gpu;
 
-@gpu
 @differentiable
 fun squared_error(weight: float, input: float, target: float): float {
     let error = weight * input - target;
@@ -47,9 +46,9 @@ fun gradient(
     if i >= n {
         return;
     }
-    let w = GpuDiffPair.of(weight, 0.0f);
-    let x = GpuDiffPair.constant(inputs[i]);
-    let t = GpuDiffPair.constant(targets[i]);
+    let w = GpuDiffPair(weight, 0.0f);
+    let x = GpuDiffPair(inputs[i]);
+    let t = GpuDiffPair(targets[i]);
     GpuDiff.backward3(squared_error, ref w, ref x, ref t, 1.0f);
     GpuAtomic.add_float(sums, 0, w.derivative());
 }
@@ -115,7 +114,6 @@ by a derivative of `1` and the others `0`:
 import system;
 import system.gpu;
 
-@gpu
 @differentiable
 fun bump(x: float): float {
     return x * x * x;
@@ -125,7 +123,7 @@ fun bump(x: float): float {
 fun slopes(@readonly xs: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void {
     let i = global_id().x;
     if i < n {
-        let result = GpuDiff.forward(bump, GpuDiffPair.of(xs[i], 1.0f));
+        let result = GpuDiff.forward(bump, GpuDiffPair(xs[i], 1.0f));
         out[i] = result.derivative();
     }
 }
@@ -139,7 +137,7 @@ Parameters and results can be `float`, `float16`, GPU vectors, and structs whose
 those. A struct parameter's gradient is a struct of the same type, with one derivative per field.
 
 - `@no_diff` on a parameter leaves it out: it takes a plain value instead of a pair.
-- `@custom_derivative(name)` replaces the automatic backward derivative with your own `@gpu`
+- `@custom_derivative(name)` replaces the automatic backward derivative with your own shader
   helper. Use it when the automatic one is slow or numerically unstable.
 - Most of `GpuMath` is differentiable. `step`, `sign`, `floor`, `ceil`, `round` and `fract` are
   not, and calling them from a `@differentiable` helper is a build error.

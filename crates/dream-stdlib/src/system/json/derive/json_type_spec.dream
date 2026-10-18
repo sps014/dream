@@ -1,7 +1,7 @@
 module system.json.derive;
 
 // Class or discriminated-union type snapshot for `@json` codegen.
-public class JsonTypeSpec {
+internal class JsonTypeSpec {
     /// Name identifying this entry.
     public name: string;
 

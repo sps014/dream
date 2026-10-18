@@ -28,6 +28,37 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
+        let inferred_args = generic_args.clone().or_else(|| {
+            let def = self.type_ctx.resolve(DefKind::Struct, &name.text)?;
+            let template = *self.generic_struct(def)?;
+            let parameters = template.generic_parameters.as_ref()?;
+            let scope = self.type_ctx.scope();
+            self.type_ctx
+                .set_scope(self.graph.module_for_file(template.file_path.as_deref()));
+            let inferred = template
+                .methods
+                .iter()
+                .filter(|method| {
+                    method.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME
+                        && method.parameters.len() == params_types.len()
+                })
+                .find_map(|method| {
+                    parameters
+                        .iter()
+                        .map(|parameter| {
+                            method.parameters.iter().zip(params_types.iter()).find_map(
+                                |(formal, actual)| {
+                                    self.match_generic_type(&formal.type_, *actual, &parameter.text)
+                                        .map(|ty| self.type_ctx.syntax_type(ty))
+                                },
+                            )
+                        })
+                        .collect::<Option<Vec<_>>>()
+                });
+            self.type_ctx.set_scope(scope);
+            inferred
+        });
+        let generic_args = &inferred_args;
         if let Some(args) = generic_args {
             self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics);
         }

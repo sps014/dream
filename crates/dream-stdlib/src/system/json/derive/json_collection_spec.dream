@@ -1,7 +1,7 @@
 module system.json.derive;
 
 // Snapshot of a collection type that needs top-level `Json.serialize` / `deserialize` adapters.
-public class JsonCollectionSpec {
+internal class JsonCollectionSpec {
     /// Category of this entry.
     public kind: CollectionKind;
 

@@ -20,6 +20,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/gpu/shaders/slang_constructors.dream",
+            include_str!("../system/gpu/shaders/slang_constructors.dream"),
+        ),
+        (
             "<std>/system/gpu/shaders/builtins.dream",
             include_str!("../system/gpu/shaders/builtins.dream"),
         ),

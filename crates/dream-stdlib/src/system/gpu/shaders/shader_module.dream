@@ -11,7 +11,7 @@ internal class ShaderModule {
     internal name: string;
     internal entries: List<ShaderEntry>;
 
-    // `@gpu` helpers and every user function the entries reach, callees first.
+    // inferred shader helpers and every user function the entries reach, callees first.
     internal helpers: List<GenFunction>;
 
     // User structs and enums the shaders use, dependencies first.

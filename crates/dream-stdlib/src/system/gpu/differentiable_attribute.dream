@@ -1,6 +1,6 @@
 module system.gpu;
 
-/// Makes a `@gpu` helper differentiable, so `GpuDiff.forward` and `GpuDiff.backward` can
+/// Makes a inferred shader helper differentiable, so `GpuDiff.forward` and `GpuDiff.backward` can
 /// compute its derivatives automatically.
 ///
 /// Every function it calls must itself be differentiable: another `@differentiable` helper

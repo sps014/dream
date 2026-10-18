@@ -1,0 +1,81 @@
+module system.codegen;
+
+/// The category of a symbol in a generator snapshot.
+public enum GenSymbolKind {
+    /// No recognized symbol category was supplied by the snapshot.
+    Unknown,
+    /// A reference type declaration.
+    Class,
+    /// A value type declaration.
+    Struct,
+    /// An enum declaration or enum symbol.
+    Enum,
+    /// A discriminated union declaration.
+    Union,
+    /// An interface declaration.
+    Interface,
+    /// A function that can be referenced or called.
+    Function,
+    /// A type name used in a construction or type expression.
+    Type,
+    /// A variable declared inside a function.
+    Local,
+    /// An argument binding declared by a function.
+    Parameter,
+    /// A variable declared at module level.
+    Global,
+    /// A stored member of an instance.
+    Field,
+    /// A callable member of a type.
+    Method,
+    /// An enum member or discriminated-union choice.
+    Variant,
+    /// A namespace containing declarations.
+    Module,
+}
+
+internal fun gen_symbol_kind(name: string): GenSymbolKind {
+    if name == "class" {
+        return GenSymbolKind.Class;
+    }
+    if name == "struct" {
+        return GenSymbolKind.Struct;
+    }
+    if name == "enum" {
+        return GenSymbolKind.Enum;
+    }
+    if name == "union" {
+        return GenSymbolKind.Union;
+    }
+    if name == "interface" {
+        return GenSymbolKind.Interface;
+    }
+    if name == "function" {
+        return GenSymbolKind.Function;
+    }
+    if name == "type" {
+        return GenSymbolKind.Type;
+    }
+    if name == "local" {
+        return GenSymbolKind.Local;
+    }
+    if name == "parameter" {
+        return GenSymbolKind.Parameter;
+    }
+    if name == "global" {
+        return GenSymbolKind.Global;
+    }
+    if name == "field" {
+        return GenSymbolKind.Field;
+    }
+    if name == "method" {
+        return GenSymbolKind.Method;
+    }
+    if name == "module" {
+        return GenSymbolKind.Module;
+    }
+    if name == "variant" {
+        return GenSymbolKind.Variant;
+    }
+    return GenSymbolKind.Unknown;
+}

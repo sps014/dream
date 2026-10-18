@@ -29,7 +29,10 @@ async fun health_test(): void {
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     let client = HttpClient();
     let response = client.send(
-        HttpRequest.get(Url.parse("http://127.0.0.1:" + port.to_string() + "/health").unwrap())
+        HttpRequest(
+            HttpMethod.Get,
+            Url.parse("http://127.0.0.1:" + port.to_string() + "/health").unwrap()
+        )
     ).await.unwrap();
     Assert.eq(response.status, 200);
     Assert.eq(response.read_text().await.unwrap(), "ok");

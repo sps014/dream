@@ -21,39 +21,37 @@ public struct GpuMat4 {
     public c3: GpuVec4;
 
     /// Creates a matrix from its four columns.
-    public static fun of(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4): GpuMat4 {
-        let m = GpuMat4();
-        m.c0 = c0;
-        m.c1 = c1;
-        m.c2 = c2;
-        m.c3 = c3;
-        return m;
+    public constructor(c0: GpuVec4, c1: GpuVec4, c2: GpuVec4, c3: GpuVec4) {
+        this.c0 = c0;
+        this.c1 = c1;
+        this.c2 = c2;
+        this.c3 = c3;
     }
 
     /// The identity matrix, which leaves vectors unchanged.
     public static fun identity(): GpuMat4 {
-        return GpuMat4.of(
-            GpuVec4.of(1.0f, 0.0f, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, 1.0f, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, 1.0f, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        return GpuMat4(
+            GpuVec4(1.0f, 0.0f, 0.0f, 0.0f),
+            GpuVec4(0.0f, 1.0f, 0.0f, 0.0f),
+            GpuVec4(0.0f, 0.0f, 1.0f, 0.0f),
+            GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)
         );
     }
 
     /// A transform that moves points by `offset`.
     public static fun translation(offset: GpuVec3): GpuMat4 {
         let m = GpuMat4.identity();
-        m.c3 = GpuVec4.of(offset.x, offset.y, offset.z, 1.0f);
+        m.c3 = GpuVec4(offset.x, offset.y, offset.z, 1.0f);
         return m;
     }
 
     /// A transform that scales each axis by the matching component of `factors`.
     public static fun scaling(factors: GpuVec3): GpuMat4 {
-        return GpuMat4.of(
-            GpuVec4.of(factors.x, 0.0f, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, factors.y, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, factors.z, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        return GpuMat4(
+            GpuVec4(factors.x, 0.0f, 0.0f, 0.0f),
+            GpuVec4(0.0f, factors.y, 0.0f, 0.0f),
+            GpuVec4(0.0f, 0.0f, factors.z, 0.0f),
+            GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)
         );
     }
 
@@ -64,11 +62,11 @@ public struct GpuMat4 {
         let c = (float)Math.cos((double)radians);
         let s = (float)Math.sin((double)radians);
         let t = 1.0f - c;
-        return GpuMat4.of(
-            GpuVec4.of(t * a.x * a.x + c, t * a.x * a.y + s * a.z, t * a.x * a.z - s * a.y, 0.0f),
-            GpuVec4.of(t * a.x * a.y - s * a.z, t * a.y * a.y + c, t * a.y * a.z + s * a.x, 0.0f),
-            GpuVec4.of(t * a.x * a.z + s * a.y, t * a.y * a.z - s * a.x, t * a.z * a.z + c, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)
+        return GpuMat4(
+            GpuVec4(t * a.x * a.x + c, t * a.x * a.y + s * a.z, t * a.x * a.z - s * a.y, 0.0f),
+            GpuVec4(t * a.x * a.y - s * a.z, t * a.y * a.y + c, t * a.y * a.z + s * a.x, 0.0f),
+            GpuVec4(t * a.x * a.z + s * a.y, t * a.y * a.z - s * a.x, t * a.z * a.z + c, 0.0f),
+            GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)
         );
     }
 
@@ -83,11 +81,11 @@ public struct GpuMat4 {
     ): GpuMat4 {
         let f = 1.0f / (float)Math.tan((double)(fov_y_radians * 0.5f));
         let range = 1.0f / (near - far);
-        return GpuMat4.of(
-            GpuVec4.of(f / aspect, 0.0f, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, f, 0.0f, 0.0f),
-            GpuVec4.of(0.0f, 0.0f, far * range, -1.0f),
-            GpuVec4.of(0.0f, 0.0f, near * far * range, 0.0f)
+        return GpuMat4(
+            GpuVec4(f / aspect, 0.0f, 0.0f, 0.0f),
+            GpuVec4(0.0f, f, 0.0f, 0.0f),
+            GpuVec4(0.0f, 0.0f, far * range, -1.0f),
+            GpuVec4(0.0f, 0.0f, near * far * range, 0.0f)
         );
     }
 
@@ -97,31 +95,31 @@ public struct GpuMat4 {
         let forward = (eye - target).normalize();
         let right = up.cross(forward).normalize();
         let camera_up = forward.cross(right);
-        return GpuMat4.of(
-            GpuVec4.of(right.x, camera_up.x, forward.x, 0.0f),
-            GpuVec4.of(right.y, camera_up.y, forward.y, 0.0f),
-            GpuVec4.of(right.z, camera_up.z, forward.z, 0.0f),
-            GpuVec4.of(-right.dot(eye), -camera_up.dot(eye), -forward.dot(eye), 1.0f)
+        return GpuMat4(
+            GpuVec4(right.x, camera_up.x, forward.x, 0.0f),
+            GpuVec4(right.y, camera_up.y, forward.y, 0.0f),
+            GpuVec4(right.z, camera_up.z, forward.z, 0.0f),
+            GpuVec4(-right.dot(eye), -camera_up.dot(eye), -forward.dot(eye), 1.0f)
         );
     }
 
     /// The row at `index` (`0` to `3`) as a vector.
     public fun row(index: int): GpuVec4 {
         if index == 0 {
-            return GpuVec4.of(this.c0.x, this.c1.x, this.c2.x, this.c3.x);
+            return GpuVec4(this.c0.x, this.c1.x, this.c2.x, this.c3.x);
         }
         if index == 1 {
-            return GpuVec4.of(this.c0.y, this.c1.y, this.c2.y, this.c3.y);
+            return GpuVec4(this.c0.y, this.c1.y, this.c2.y, this.c3.y);
         }
         if index == 2 {
-            return GpuVec4.of(this.c0.z, this.c1.z, this.c2.z, this.c3.z);
+            return GpuVec4(this.c0.z, this.c1.z, this.c2.z, this.c3.z);
         }
-        return GpuVec4.of(this.c0.w, this.c1.w, this.c2.w, this.c3.w);
+        return GpuVec4(this.c0.w, this.c1.w, this.c2.w, this.c3.w);
     }
 
     /// The matrix with rows and columns swapped.
     public fun transpose(): GpuMat4 {
-        return GpuMat4.of(this.row(0), this.row(1), this.row(2), this.row(3));
+        return GpuMat4(this.row(0), this.row(1), this.row(2), this.row(3));
     }
 
     /// Transforms the column vector `v`.
@@ -131,7 +129,7 @@ public struct GpuMat4 {
 
     /// The product `this * other`, which applies `other` first.
     fun operator *(other: GpuMat4): GpuMat4 {
-        return GpuMat4.of(this * other.c0, this * other.c1, this * other.c2, this * other.c3);
+        return GpuMat4(this * other.c0, this * other.c1, this * other.c2, this * other.c3);
     }
 
     /// True when all sixteen elements are equal.

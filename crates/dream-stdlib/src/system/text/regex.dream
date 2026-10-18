@@ -1,7 +1,7 @@
 module system.text;
 
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
-// PCRE2-compatible engine. Invalid patterns compile to a dead engine that never matches.
+// PCRE2-compatible engine.
 @intrinsic(Intrinsic.RegexCompile)
 static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usize;
 
@@ -29,7 +29,7 @@ static extern fun regex_name_at(h: usize, i: int): string;
 @intrinsic(Intrinsic.RegexNameNumber)
 static extern fun regex_name_number(h: usize, i: int): int;
 
-/// A compiled regular expression. An invalid pattern never matches.
+/// A compiled regular expression. Use `Regex.compile` to report invalid patterns.
 public class Regex {
     engine: usize;
     global: bool;
@@ -37,10 +37,21 @@ public class Regex {
     group_names: string[];
     group_name_numbers: int[];
 
-    /// Compiles `pattern` with optional matching flags. Invalid patterns never match.
-    public constructor(pattern: string, flags: RegexFlags = 0) {
+    /// Compiles a pattern with optional flags, returning an error for invalid patterns.
+    public static fun compile(
+        pattern: string,
+        flags: RegexFlags = RegexFlags.None
+    ): Result<Regex, RegexError> {
+        let engine = regex_compile(pattern, flags);
+        if engine == 0 {
+            return Result.Err(RegexError(pattern));
+        }
+        return Result.Ok(Regex(engine, flags));
+    }
+
+    constructor(engine: usize, flags: RegexFlags) {
         this.global = flags.has(RegexFlags.Global);
-        this.engine = regex_compile(pattern, flags);
+        this.engine = engine;
         this.ngroup = regex_group_count(this.engine);
         let nc = regex_name_count(this.engine);
         this.group_names = Buffer.alloc<string>(nc);

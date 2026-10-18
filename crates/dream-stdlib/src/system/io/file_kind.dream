@@ -1,0 +1,13 @@
+module system.io;
+
+/// The kind of filesystem entry described by metadata.
+public enum FileKind {
+    /// A regular file.
+    File,
+    /// A directory.
+    Directory,
+    /// A symbolic link.
+    Symlink,
+    /// Another filesystem entry, such as a device.
+    Other,
+}

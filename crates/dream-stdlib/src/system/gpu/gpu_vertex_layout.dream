@@ -2,22 +2,18 @@ module system.gpu;
 
 /// How the vertex shader's `@location` inputs are read from one vertex buffer.
 ///
-/// Start from `GpuVertexLayout.of` with the byte size of one element, usually `sizeof` of
+/// Start from `GpuVertexLayout(...)` with the byte size of one element, usually `sizeof` of
 /// the vertex struct, and add one `attribute` per input.
 public class GpuVertexLayout {
     layout_stride: int;
     instanced: bool;
     internal attributes: List<int>;
 
-    constructor(stride: int) {
+    /// Creates a vertex layout with the supplied byte stride.
+    public constructor(stride: int) {
         this.layout_stride = stride;
         this.instanced = false;
         this.attributes = List<int>();
-    }
-
-    /// Describes a buffer whose elements are `stride` bytes apart.
-    public static fun of(stride: int): GpuVertexLayout {
-        return GpuVertexLayout(stride);
     }
 
     /// Bytes from one element to the next.

@@ -4,11 +4,11 @@ import system.text;
 
 @test
 fun regex_boolean_test(): void {
-    let regex = Regex("(foo|bar)+");
+    let regex = Regex.compile("(foo|bar)+").unwrap();
     Assert.is_true(regex.test("prefix foobar suffix"));
     Assert.is_false(regex.test("neither"));
     Assert.is_true(regex.test("bar"));
-    let unicode = Regex("é+");
+    let unicode = Regex.compile("é+").unwrap();
     Assert.is_true(unicode.test("déjà"));
     Assert.is_false(unicode.test("plain"));
 }

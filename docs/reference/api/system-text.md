@@ -12,3 +12,5 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Unicode](text-unicode.md)
 - [UnicodeNormForm](text-unicode-norm-form.md)
 - [Utf8Decoder](text-utf8-decoder.md)
+
+- [RegexError](text-regex-error.md)

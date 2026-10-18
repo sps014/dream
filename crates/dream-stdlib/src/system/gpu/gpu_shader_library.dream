@@ -14,7 +14,7 @@ internal class GpuShaderLibrary {
     constructor(name: string, bundle: byte[], backends: GpuBackend[]) {
         this.name = name;
         this.bundle = bundle;
-        this.backends = List<GpuBackend>.from_array(backends);
+        this.backends = List<GpuBackend>(backends);
     }
 
     internal static fun register(

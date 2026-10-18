@@ -233,22 +233,3 @@ One `stat` of `path`. Follows symlinks. Missing paths are `Err`.
 ```dream
 public static fun stat(borrow path: string): Result<FileStats, IoError>
 ```
-
-## `open`
-
-Opens a seekable read stream over `path` (OS-backed; no whole-file preload).
-
-```dream
-public static fun open(borrow path: string): Result<FileStream, IoError>
-```
-
-## `open_async`
-
-Async wrapper around `open`.
-
-```dream
-public static async fun open_async(
-    borrow path: string,
-    token: Option<CancellationToken> = Option.None
-): Result<FileStream, IoError>
-```

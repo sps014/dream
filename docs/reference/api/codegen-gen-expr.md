@@ -79,7 +79,7 @@ public literal: string
 Category of the literal, such as a number or string.
 
 ```dream
-public literal_kind: string
+public literal_kind: GenValueKind
 ```
 
 ## `ty`
@@ -103,7 +103,7 @@ public symbol: string
 Category of the referenced symbol.
 
 ```dream
-public symbol_kind: string
+public symbol_kind: GenSymbolKind
 ```
 
 ## `overload`

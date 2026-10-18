@@ -1,0 +1,40 @@
+module system.net;
+
+/// An HTTP request method supported by the HTTP client.
+public enum HttpMethod {
+    /// Get request.
+    Get,
+    /// Post request.
+    Post,
+    /// Put request.
+    Put,
+    /// Patch request.
+    Patch,
+    /// Delete request.
+    Delete,
+    /// Head request.
+    Head,
+    /// Options request.
+    Options,
+    internal fun wire(): string {
+        if this == HttpMethod.Get {
+            return "GET";
+        }
+        if this == HttpMethod.Post {
+            return "POST";
+        }
+        if this == HttpMethod.Put {
+            return "PUT";
+        }
+        if this == HttpMethod.Patch {
+            return "PATCH";
+        }
+        if this == HttpMethod.Delete {
+            return "DELETE";
+        }
+        if this == HttpMethod.Head {
+            return "HEAD";
+        }
+        return "OPTIONS";
+    }
+}

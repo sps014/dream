@@ -40,6 +40,6 @@ public class GpuMlpWeights<T: unmanaged> {
 
     /// Computes `weights * input + biases` inside a shader. `input` has `inputs` elements and
     /// the result `outputs` elements.
-    @generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+    @generator_only(ComputeAttribute, FragmentAttribute)
     public extern fun apply(input: GpuCoopVec<T>): GpuCoopVec<T>;
 }

@@ -1,0 +1,66 @@
+module system.codegen;
+
+/// The category of a literal, constant, or attribute argument.
+public enum GenValueKind {
+    /// No recognized value category was supplied by the snapshot.
+    Unknown,
+    /// A string value, with its unquoted contents in the value field.
+    String,
+    /// A signed integer constant represented as decimal text.
+    Int,
+    /// An unsigned integer constant represented as decimal text.
+    UInt,
+    /// A single-precision floating-point value.
+    Float,
+    /// A double-precision floating-point value.
+    Double,
+    /// A Boolean value represented as true or false.
+    Bool,
+    /// A character literal.
+    Char,
+    /// A signed 64-bit integer literal.
+    Long,
+    /// An unsigned 64-bit integer literal.
+    ULong,
+    /// A half-precision floating-point literal.
+    Float16,
+    /// An enum member represented by its qualified source name.
+    Enum,
+}
+
+internal fun gen_value_kind(name: string): GenValueKind {
+    if name == "string" {
+        return GenValueKind.String;
+    }
+    if name == "int" {
+        return GenValueKind.Int;
+    }
+    if name == "uint" {
+        return GenValueKind.UInt;
+    }
+    if name == "float" {
+        return GenValueKind.Float;
+    }
+    if name == "double" {
+        return GenValueKind.Double;
+    }
+    if name == "bool" {
+        return GenValueKind.Bool;
+    }
+    if name == "char" {
+        return GenValueKind.Char;
+    }
+    if name == "enum" {
+        return GenValueKind.Enum;
+    }
+    if name == "long" {
+        return GenValueKind.Long;
+    }
+    if name == "ulong" {
+        return GenValueKind.ULong;
+    }
+    if name == "float16" {
+        return GenValueKind.Float16;
+    }
+    return GenValueKind.Unknown;
+}

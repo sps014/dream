@@ -297,11 +297,7 @@ internal static class Wrappers {
         );
         b.line("/// until the GPU finished.");
         b.line("public async fun dispatch(");
-        Wrappers.parameters(
-            b,
-            List<string>.from_array(["device: GpuDevice", "dispatch: GpuDispatch"]),
-            e
-        );
+        Wrappers.parameters(b, List<string>(["device: GpuDevice", "dispatch: GpuDispatch"]), e);
         b.line("): Result<bool, GpuError> {");
         b.indent();
         b.line("return this.shader.dispatch(device, dispatch, " + Wrappers.args(e) + ").await;");
@@ -315,9 +311,7 @@ internal static class Wrappers {
         b.line("public fun encode(");
         Wrappers.parameters(
             b,
-            List<string>.from_array(
-                ["device: GpuDevice", "pass: GpuComputePass", "dispatch: GpuDispatch"]
-            ),
+            List<string>(["device: GpuDevice", "pass: GpuComputePass", "dispatch: GpuDispatch"]),
             e
         );
         b.line("): void {");
@@ -369,7 +363,7 @@ internal static class Wrappers {
             b.line("public async fun trace(");
             Wrappers.parameters(
                 b,
-                List<string>.from_array(
+                List<string>(
                     [
                         "device: GpuDevice",
                         "pipeline: GpuRayTracingPipeline",

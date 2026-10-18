@@ -71,10 +71,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/gpu/gpu_atomic.dream"),
         ),
         (
-            "<std>/system/gpu/gpu_attribute.dream",
-            include_str!("../system/gpu/gpu_attribute.dream"),
-        ),
-        (
             "<std>/system/gpu/gpu_backend.dream",
             include_str!("../system/gpu/gpu_backend.dream"),
         ),

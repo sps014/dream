@@ -32,7 +32,7 @@ public class GenExpr {
     public literal: string;
 
     /// Category of the literal, such as a number or string.
-    public literal_kind: string;
+    public literal_kind: GenValueKind;
 
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
@@ -41,7 +41,7 @@ public class GenExpr {
     public symbol: string;
 
     /// Category of the referenced symbol.
-    public symbol_kind: string;
+    public symbol_kind: GenSymbolKind;
 
     /// Identifier distinguishing this function's overload.
     public overload: string;
@@ -73,11 +73,11 @@ public class GenExpr {
         this.text = gen_str(v, "text");
         this.op = gen_str(v, "operator");
         this.literal = gen_str(v, "literal");
-        this.literal_kind = gen_str(v, "literal_kind");
+        this.literal_kind = gen_value_kind(gen_str(v, "literal_kind"));
         this.types = gen_type_refs(v, "types");
         this.ty = gen_type_ref(gen_obj(v, "ty"));
         this.symbol = gen_str(v, "symbol");
-        this.symbol_kind = gen_str(v, "symbol_kind");
+        this.symbol_kind = gen_symbol_kind(gen_str(v, "symbol_kind"));
         this.overload = gen_str(v, "overload");
         this.type_args = gen_type_refs(v, "type_args");
         this.nodes = List<GenExpr>();

@@ -54,7 +54,7 @@ internal class SlangBody {
         return key
             == "workgroup_array"
             || key
-            == "GpuRayQuery.of"
+            == "GpuRayQuery"
             || key
             == "GpuWorkgroupArray.length"
             || key
@@ -133,7 +133,7 @@ internal class SlangBody {
         if n.is_statement(StmtKind.Block) {
             this.block(n.children);
         } else {
-            this.block(List<ShaderNode>.from_array([n]));
+            this.block(List<ShaderNode>([n]));
         }
     }
 
@@ -277,14 +277,14 @@ internal class SlangBody {
         }
         let init = n.child(0);
         let key = Builtins.key_of(init);
-        if key == "GpuRayQuery.of" {
+        if key == "GpuRayQuery" {
             let flags = "0";
-            if init.children.length > 1 && init.child(1).is_expr(ExprKind.Member) {
-                flags = Builtins.ray_flag_value(init.child(1).text).to_string();
+            if !init.children.is_empty() && init.child(0).is_expr(ExprKind.Member) {
+                flags = Builtins.ray_flag_value(init.child(0).text).to_string();
             } else {
                 this.ctx.error_at(
                     init.id,
-                    "GpuRayQuery.of needs a GpuRayFlags member such as GpuRayFlags.None"
+                    "GpuRayQuery needs a GpuRayFlags member such as GpuRayFlags.None"
                 );
             }
             w.text("RayQuery<" + flags + "> " + name);
@@ -431,5 +431,4 @@ internal class SlangBody {
         }
         this.expr(index);
     }
-
 }

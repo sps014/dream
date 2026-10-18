@@ -5,15 +5,21 @@ import system.text;
 @test
 @timeout(180000)
 fun regex_global_batch(): void {
-    let digits = Regex("(?<digit>\\d)", RegexFlags.Global);
+    let digits = Regex.compile("(?<digit>\\d)", RegexFlags.Global).unwrap();
     let matches = digits.match("123456789012345678901");
     Assert.eq((matches.length).to_string(), "21");
     Assert.eq((matches[0]).to_string(), "1");
     Assert.eq((matches[20]).to_string(), "1");
     Assert.eq((digits.match("none").length).to_string(), "0");
-    Assert.eq((Regex("(?:)", RegexFlags.Global).match("😀a").length).to_string(), "3");
-    Assert.eq((Regex("(?:)", RegexFlags.Global).match("").length).to_string(), "1");
-    let groups = Regex("(a)(b)").match("ab");
+    Assert.eq(
+        (Regex.compile("(?:)", RegexFlags.Global).unwrap().match("😀a").length).to_string(),
+        "3"
+    );
+    Assert.eq(
+        (Regex.compile("(?:)", RegexFlags.Global).unwrap().match("").length).to_string(),
+        "1"
+    );
+    let groups = Regex.compile("(a)(b)").unwrap().match("ab");
     Assert.eq((groups.length).to_string(), "3");
     Assert.eq((groups[1]).to_string(), "a");
     Assert.eq((groups[2]).to_string(), "b");

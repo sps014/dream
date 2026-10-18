@@ -5,7 +5,7 @@ import system.text;
 @test
 @timeout(180000)
 fun regex_basics(): void {
-    let digits = Regex("\\d+", RegexFlags.Global);
+    let digits = Regex.compile("\\d+", RegexFlags.Global).unwrap();
     Assert.eq((digits.test("abc123")).to_string(), "true");
     Assert.eq((digits.test("no digits here")).to_string(), "false");
 
@@ -15,29 +15,29 @@ fun regex_basics(): void {
     Assert.eq((parts[1]).to_string(), "22");
     Assert.eq((parts[2]).to_string(), "333");
 
-    let lazy = Regex("<.+?>");
+    let lazy = Regex.compile("<.+?>").unwrap();
     Assert.eq((lazy.match("<a><b>")[0]).to_string(), "<a>");
 
-    let greedy = Regex("<.+>");
+    let greedy = Regex.compile("<.+>").unwrap();
     Assert.eq((greedy.match("<a><b>")[0]).to_string(), "<a><b>");
 
-    let counted = Regex("a{2,3}");
+    let counted = Regex.compile("a{2,3}").unwrap();
     Assert.eq((counted.match("aaaa")[0]).to_string(), "aaa");
 
-    let unbounded = Regex("a{2,}");
+    let unbounded = Regex.compile("a{2,}").unwrap();
     Assert.eq((unbounded.match("aaaaa")[0]).to_string(), "aaaaa");
 
-    let exact = Regex("a{3}");
+    let exact = Regex.compile("a{3}").unwrap();
     Assert.eq((exact.test("aa")).to_string(), "false");
     Assert.eq((exact.test("aaa")).to_string(), "true");
 
-    let dot_default = Regex("a.b");
+    let dot_default = Regex.compile("a.b").unwrap();
     Assert.eq((dot_default.test("a\nb")).to_string(), "false");
     Assert.eq((dot_default.test("axb")).to_string(), "true");
 
-    let dot_all = Regex("a.b", RegexFlags.DotAll);
+    let dot_all = Regex.compile("a.b", RegexFlags.DotAll).unwrap();
     Assert.eq((dot_all.test("a\nb")).to_string(), "true");
 
-    let empty = Regex("");
+    let empty = Regex.compile("").unwrap();
     Assert.eq((empty.test("anything")).to_string(), "true");
 }

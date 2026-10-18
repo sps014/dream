@@ -57,7 +57,7 @@ internal static class AuthCrypto {
         let request = AuthCrypto.request(action);
         request["issuer"] = JsonValue.from_string(options.issuer);
         request["audience"] = JsonValue.from_string(options.audience);
-        request["algorithm"] = JsonValue.from_string(options.algorithm);
+        request["algorithm"] = JsonValue.from_string(options.algorithm.to_string());
         let key = options.verification_key;
         if action == "sign" {
             key = options.signing_key;

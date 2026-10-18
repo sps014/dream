@@ -67,8 +67,8 @@ fun offscreen_vertex(scale: float): TriangleVarying {
         y = 0.5f;
     }
     let result = TriangleVarying();
-    result.position = GpuVec4.of(x * scale, y * scale, 0.0f, 1.0f);
-    result.color = GpuVec4.of(1.0f, 0.5f, 0.0f, 1.0f);
+    result.position = GpuVec4(x * scale, y * scale, 0.0f, 1.0f);
+    result.color = GpuVec4(1.0f, 0.5f, 0.0f, 1.0f);
     return result;
 }
 
@@ -106,8 +106,7 @@ async fun gpu_offscreen_triangle(): void {
                 let label = triangle_label(backend);
                 let target = triangle_ok(
                     device.texture(
-                        GpuTextureDesc.of(size, size, GpuTextureFormat.Rgba8Unorm)
-                            .render_target(true)
+                        GpuTextureDesc(size, size, GpuTextureFormat.Rgba8Unorm).render_target(true)
                     ),
                     "target"
                 );
@@ -122,16 +121,13 @@ async fun gpu_offscreen_triangle(): void {
 
                 let encoder = device.command_encoder();
                 let pass = encoder.begin_render_pass(
-                    GpuRenderPassDesc.color(
-                        target,
-                        GpuLoad.Clear(GpuVec4.of(0.0f, 0.0f, 1.0f, 1.0f))
-                    )
+                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 1.0f, 1.0f)))
                 );
                 pass.set_pipeline(pipeline);
                 pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
                 pass.bind_value(
                     GpuShaders.offscreen_fragment.tint,
-                    GpuVec4.of(1.0f, 0.4f, 1.0f, 1.0f)
+                    GpuVec4(1.0f, 0.4f, 1.0f, 1.0f)
                 );
                 pass.draw(3);
                 pass.end();

@@ -31,7 +31,7 @@ public id: string
 Category of this entry.
 
 ```dream
-public kind: string
+public kind: GenSymbolKind
 ```
 
 ## `declaration`

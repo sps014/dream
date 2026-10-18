@@ -25,7 +25,6 @@ Functions cross the Dream/JavaScript boundary in both directions: hand a Dream f
 
 | Form | Direction | Result |
 |------|-----------|--------|
-| Named `fun` or captureless lambda passed to a function-typed `extern` parameter | Dream to JS | JS receives an ordinary callable function |
 | Named `fun` passed to a dynamic `js` call | Dream to JS | Wrapped automatically, with the same wrapper each time for the same function |
 | `js.func(handler)` | Dream to JS | An explicit `js` callable for a `fun(js): void` |
 | `js.func0(handler)` | Dream to JS | An explicit `js` callable for a `fun(): void` |
@@ -33,34 +32,6 @@ Functions cross the Dream/JavaScript boundary in both directions: hand a Dream f
 | JavaScript function received as a `js` value | JS to Dream | Called with ordinary call syntax |
 
 Handlers with two or more `js` parameters, such as `fun(js, js): void`, are also wrapped automatically when passed to a dynamic `js` call.
-
-## Dream to JS
-
-Declare an `extern` parameter with a function type, then pass a Dream function where it is expected:
-
-```dream
-fun on_tick(n: int): void {
-    System.println("tick " + n);
-}
-
-extern fun run_callback(cb: fun(int): void, times: int): void;
-
-fun main(): void {
-    run_callback(on_tick, 3); // on_tick crosses as a JS-callable wrapper
-}
-```
-
-The host receives `cb` already wrapped and calls it like any JS function:
-
-```js
-await run("callbacks.wasm", {
-  imports: {
-    run_callback: (cb, times) => {
-      for (let i = 0; i < times; i++) cb(i);
-    },
-  },
-});
-```
 
 ## Registering DOM handlers
 
@@ -96,7 +67,7 @@ await run("callbacks.wasm");
 
 ## Marshaling
 
-Callback arguments and results follow the same conversion rules as ordinary externs and dynamic `js` calls (see [Value marshaling](index.md#value-marshaling) and [Passing values to JS](js-type.md#passing-values-to-js)): primitives and `string` convert automatically, and JS values travel as `js` handles.
+Callback arguments and results follow the same conversion rules as dynamic `js` calls (see [Value marshaling](js-type.md#passing-values-to-js) and [Passing values to JS](js-type.md#passing-values-to-js)): primitives and `string` convert automatically, and JS values travel as `js` handles.
 
 ## Try it
 

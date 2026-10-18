@@ -17,7 +17,7 @@ public class HttpRequest
 HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.
 
 ```dream
-public method: string
+public method: HttpMethod
 ```
 
 ## `url`
@@ -49,47 +49,7 @@ public body: byte[]
 Creates a request with empty headers and body.
 
 ```dream
-public constructor(method: string, url: Url)
-```
-
-## `get`
-
-Creates a GET request.
-
-```dream
-public static fun get(url: Url): HttpRequest
-```
-
-## `post`
-
-Creates a POST request.
-
-```dream
-public static fun post(url: Url): HttpRequest
-```
-
-## `put`
-
-Creates a PUT request.
-
-```dream
-public static fun put(url: Url): HttpRequest
-```
-
-## `patch`
-
-Creates a PATCH request.
-
-```dream
-public static fun patch(url: Url): HttpRequest
-```
-
-## `delete`
-
-Creates a DELETE request.
-
-```dream
-public static fun delete(url: Url): HttpRequest
+public constructor(method: HttpMethod, url: Url)
 ```
 
 ## `set_text`

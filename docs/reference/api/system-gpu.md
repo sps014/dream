@@ -14,7 +14,6 @@ Import `system.gpu` to run compute and render shaders written in Dream on the GP
 - [GpuAccelerationStructure](gpu-gpu-acceleration-structure.md)
 - [GpuAddressMode](gpu-gpu-address-mode.md)
 - [GpuAtomic](gpu-gpu-atomic.md)
-- [GpuAttribute](gpu-gpu-attribute.md)
 - [GpuBackend](gpu-gpu-backend.md)
 - [GpuBindingSlot](gpu-gpu-binding-slot.md)
 - [GpuBlendMode](gpu-gpu-blend-mode.md)

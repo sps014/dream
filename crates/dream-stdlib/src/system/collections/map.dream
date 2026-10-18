@@ -236,11 +236,15 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
     }
 
-    /// Creates a map from corresponding keys and values; the arrays must have equal lengths.
-    public static fun from_arrays(borrow keys: K[], borrow values: V[]): Map<K, V> {
-        let result = Map<K, V>(keys.length);
-        result.set_all(keys, values);
-        return result;
+    /// Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.
+    public constructor(borrow keys: K[], borrow values: V[]) {
+        let c = hash_capacity_for(keys.length);
+        this.cap = c;
+        this.slots = Buffer.alloc<MapSlot<K, V>>(c);
+        this.count = 0;
+        this.used = 0;
+        this.epoch = hash_epoch_initial();
+        this.set_all(keys, values);
     }
 
     // Value for `key`, or `None` when absent.

@@ -22,8 +22,8 @@ public class GpuStageDescriptor {
         this.library = library;
         this.entry = entry;
         this.shader_stage = stage;
-        this.inputs = List<int>.from_array(inputs);
-        this.outputs = List<int>.from_array(outputs);
+        this.inputs = List<int>(inputs);
+        this.outputs = List<int>(outputs);
     }
 
     /// The shader function's name.

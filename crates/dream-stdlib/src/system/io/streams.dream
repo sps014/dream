@@ -2,6 +2,18 @@ module system.io;
 
 // Copy helpers that leave ownership and closure of both streams with the caller.
 public static class Streams {
+    /// Reads all remaining bytes and decodes them as UTF-8. Memory grows with the input.
+    public static fun read_text(source: Reader): Result<string, IoError> {
+        let bytes = List<byte>();
+        while true {
+            let chunk = source.read(8192)?;
+            if chunk.length == 0 {
+                return Result.Ok(Encoding.utf8_decode(bytes.take_array()));
+            }
+            bytes.push_all(chunk);
+        }
+    }
+
     internal static fun slice(data: byte[], start: int, count: int): byte[] {
         let output = Buffer.alloc<byte>(count);
         for (let i = 0; i < count; i = i + 1) {

@@ -5,14 +5,14 @@ import system.json;
 /// A constant value and its kind, as seen by a source generator.
 public class GenConstant {
     /// Category of this entry.
-    public kind: string;
+    public kind: GenValueKind;
 
     /// Value carried by this entry.
     public value: string;
 
     // Decodes an exact compile-time scalar value; absence means no safe constant was inferred.
     public constructor(borrow v: JsonValue) {
-        this.kind = gen_str(v, "kind");
+        this.kind = gen_value_kind(gen_str(v, "kind"));
         this.value = gen_str(v, "value");
     }
 }

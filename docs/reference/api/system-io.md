@@ -9,7 +9,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [File](io-file.md)
 - [FileHandle](io-file-handle.md)
 - [FileStats](io-file-stats.md)
-- [FileStream](io-file-stream.md)
 - [IoError](io-io-error.md)
 - [MemoryStream](io-memory-stream.md)
 - [Path](io-path.md)
@@ -23,3 +22,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [TempDirectory](io-temp-directory.md)
 - [TempFile](io-temp-file.md)
 - [Writer](io-writer.md)
+
+- [FileMode](io-file-mode.md)
+- [FileKind](io-file-kind.md)

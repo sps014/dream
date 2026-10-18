@@ -58,7 +58,6 @@ fun forward_central(f: fun(double): double, x: double): double {
     return (f(x + h) - f(x - h)) / (2.0d * h);
 }
 
-@gpu
 @differentiable
 fun wave(x: float, y: float): float {
     return GpuMath.sin(x) * y + GpuMath.exp(0.5f * x) * y * y;
@@ -78,14 +77,13 @@ fun wave_tangents(
     if i >= n {
         return;
     }
-    let by_x = GpuDiff.forward2(wave, GpuDiffPair.of(xs[i], 1.0f), GpuDiffPair.of(ys[i], 0.0f));
-    let by_y = GpuDiff.forward2(wave, GpuDiffPair.of(xs[i], 0.0f), GpuDiffPair.of(ys[i], 1.0f));
+    let by_x = GpuDiff.forward2(wave, GpuDiffPair(xs[i], 1.0f), GpuDiffPair(ys[i], 0.0f));
+    let by_y = GpuDiff.forward2(wave, GpuDiffPair(xs[i], 0.0f), GpuDiffPair(ys[i], 1.0f));
     out[3 * i] = by_x.value();
     out[3 * i + 1] = by_x.derivative();
     out[3 * i + 2] = by_y.derivative();
 }
 
-@gpu
 @differentiable
 fun bump(p: GpuVec2): float {
     return GpuMath.exp(-(p.x * p.x)) * GpuMath.cos(p.y);
@@ -99,9 +97,9 @@ fun bump_tangents(@readonly points: GpuBuffer<GpuVec2>, out: GpuBuffer<GpuVec2>,
     if i >= n {
         return;
     }
-    let along_x = GpuDiff.forward(bump, GpuDiffPair.of(points[i], GpuVec2.of(1.0f, 0.0f)));
-    let along_y = GpuDiff.forward(bump, GpuDiffPair.of(points[i], GpuVec2.of(0.0f, 1.0f)));
-    out[i] = GpuVec2.of(along_x.derivative(), along_y.derivative());
+    let along_x = GpuDiff.forward(bump, GpuDiffPair(points[i], GpuVec2(1.0f, 0.0f)));
+    let along_y = GpuDiff.forward(bump, GpuDiffPair(points[i], GpuVec2(0.0f, 1.0f)));
+    out[i] = GpuVec2(along_x.derivative(), along_y.derivative());
 }
 
 fun wave_cpu(x: double, y: double): double {
@@ -154,7 +152,7 @@ async fun forward_vector(device: GpuDevice, label: string): void {
     let n = 80;
     let points = Array.alloc<GpuVec2>(n);
     for (let i = 0; i < n; i = i + 1) {
-        points[i] = GpuVec2.of(-2.0f + 0.05f * (float)i, 0.04f * (float)i - 1.0f);
+        points[i] = GpuVec2(-2.0f + 0.05f * (float)i, 0.04f * (float)i - 1.0f);
     }
     let out = forward_ok(device.buffer_alloc<GpuVec2>(n), "bump out");
     forward_ok(

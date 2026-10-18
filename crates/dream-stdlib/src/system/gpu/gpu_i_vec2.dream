@@ -9,21 +9,19 @@ public struct GpuIVec2 {
     public y: int;
 
     /// Creates the vector `(x, y)`.
-    public static fun of(x: int, y: int): GpuIVec2 {
-        let v = GpuIVec2();
-        v.x = x;
-        v.y = y;
-        return v;
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
     }
 
     /// Adds component by component.
     fun operator +(other: GpuIVec2): GpuIVec2 {
-        return GpuIVec2.of(this.x + other.x, this.y + other.y);
+        return GpuIVec2(this.x + other.x, this.y + other.y);
     }
 
     /// Subtracts component by component.
     fun operator -(other: GpuIVec2): GpuIVec2 {
-        return GpuIVec2.of(this.x - other.x, this.y - other.y);
+        return GpuIVec2(this.x - other.x, this.y - other.y);
     }
 
     /// True when both components are equal.

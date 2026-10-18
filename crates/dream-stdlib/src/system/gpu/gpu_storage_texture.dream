@@ -91,7 +91,6 @@ public class GpuStorageTexture<T: unmanaged> {
     @generator_only(
         ComputeAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,
@@ -105,7 +104,6 @@ public class GpuStorageTexture<T: unmanaged> {
     @generator_only(
         ComputeAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,

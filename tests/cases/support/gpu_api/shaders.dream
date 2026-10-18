@@ -75,8 +75,8 @@ fun triangle_vertex(): VertexOutput {
         y = 0.5f;
     }
     let result = VertexOutput();
-    result.position = GpuVec4.of(x, y, 0.0f, 1.0f);
-    result.color = GpuVec4.of(1.0f, 0.3f, 0.1f, 1.0f);
+    result.position = GpuVec4(x, y, 0.0f, 1.0f);
+    result.color = GpuVec4(1.0f, 0.3f, 0.1f, 1.0f);
     return result;
 }
 
@@ -84,7 +84,7 @@ fun triangle_vertex(): VertexOutput {
 fun triangle_fragment(input: VertexOutput, albedo: GpuTexture, linear: GpuSampler): GpuVec4 {
     let tex = albedo.sample(linear, input.position.xy);
     let lit = GpuMath.saturate(tex * input.color);
-    return lit + GpuVec4.splat(GpuMath.sin(0.5f));
+    return lit + GpuVec4(GpuMath.sin(0.5f));
 }
 
 @ray_generation
@@ -92,22 +92,22 @@ fun triangle_fragment(input: VertexOutput, albedo: GpuTexture, linear: GpuSample
 fun camera(scene: GpuAccelerationStructure, output: GpuStorageTexture<GpuVec4>): void {
     let pixel = dispatch_ray_index().xy;
     let size = dispatch_ray_dimensions().xy;
-    let uv = GpuVec2.of((float)pixel.x / (float)size.x, (float)pixel.y / (float)size.y);
-    let ray = GpuRay.of(
-        GpuVec3.of(0.0f, 0.0f, -2.0f),
-        GpuVec3.of(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f),
+    let uv = GpuVec2((float)pixel.x / (float)size.x, (float)pixel.y / (float)size.y);
+    let ray = GpuRay(
+        GpuVec3(0.0f, 0.0f, -2.0f),
+        GpuVec3(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f),
         0.001f,
         1000.0f
     );
     let hit = HitInfo();
     trace_ray(scene, GpuRayFlags.None, 255u, ray, ref hit);
-    output[pixel] = GpuVec4.of(hit.color.x, hit.color.y, hit.color.z, 1.0f);
+    output[pixel] = GpuVec4(hit.color.x, hit.color.y, hit.color.z, 1.0f);
 }
 
 @closest_hit
 @gpu_targets(GpuTarget.Vulkan)
 fun shade(ref hit: HitInfo, attributes: GpuTriangleHit): void {
-    hit.color = GpuVec3.of(
+    hit.color = GpuVec3(
         attributes.barycentrics.x,
         attributes.barycentrics.y,
         1.0f - attributes.barycentrics.x - attributes.barycentrics.y
@@ -117,10 +117,9 @@ fun shade(ref hit: HitInfo, attributes: GpuTriangleHit): void {
 @miss
 @gpu_targets(GpuTarget.Vulkan)
 fun sky(ref hit: HitInfo): void {
-    hit.color = GpuVec3.of(0.2f, 0.4f, 0.8f);
+    hit.color = GpuVec3(0.2f, 0.4f, 0.8f);
 }
 
-@gpu
 @differentiable
 fun loss(weight: float, input: float, target: float): float {
     let prediction = weight * input;
@@ -140,9 +139,9 @@ fun train_step(
     if i >= n {
         return;
     }
-    let w = GpuDiffPair.of(weights[0], 0.0f);
-    let x = GpuDiffPair.constant(inputs[i]);
-    let t = GpuDiffPair.constant(targets[i]);
+    let w = GpuDiffPair(weights[0], 0.0f);
+    let x = GpuDiffPair(inputs[i]);
+    let t = GpuDiffPair(targets[i]);
     GpuDiff.backward3(loss, ref w, ref x, ref t, 1.0f);
     GpuAtomic.add_float(gradients, 0, w.derivative());
 }

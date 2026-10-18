@@ -378,22 +378,4 @@ public static class File {
         let kind = int.parse(parts[5]).unwrap_or(3);
         return Result.Ok(FileStats(size, mtime, ctime, atime, mode, kind));
     }
-
-    // Opens a seekable read stream over `path` (OS-backed; no whole-file preload).
-    public static fun open(borrow path: string): Result<FileStream, IoError> {
-        return switch (FileHandle.open(path, "r")) {
-            Ok(h) => Result.Ok(FileStream(h)),
-            Err(e) => Result.Err(e),
-        };
-    }
-
-    // Async wrapper around `open`.
-    public static async fun open_async(
-        borrow path: string,
-        token: Option<CancellationToken> = Option.None
-    ): Result<FileStream, IoError> {
-        let effective_token = CancellationToken.resolve(token);
-        CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        return File.open(path);
-    }
 }

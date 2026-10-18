@@ -16,13 +16,11 @@ public struct GpuUVec4 {
     public w: uint;
 
     /// Creates the vector `(x, y, z, w)`.
-    public static fun of(x: uint, y: uint, z: uint, w: uint): GpuUVec4 {
-        let v = GpuUVec4();
-        v.x = x;
-        v.y = y;
-        v.z = z;
-        v.w = w;
-        return v;
+    public constructor(x: uint, y: uint, z: uint, w: uint) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
     }
 
     /// True when all components are equal.

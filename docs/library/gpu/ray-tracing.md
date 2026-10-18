@@ -32,18 +32,12 @@ import system.gpu;
 
 async fun scene(device: GpuDevice): Result<GpuAccelerationStructure, GpuError> {
     let corners = device.buffer_from(
-        [
-            GpuVec3.of(-0.8f, -0.8f, 0.0f),
-            GpuVec3.of(0.8f, -0.8f, 0.0f),
-            GpuVec3.of(0.0f, 0.8f, 0.0f)
-        ]
+        [GpuVec3(-0.8f, -0.8f, 0.0f), GpuVec3(0.8f, -0.8f, 0.0f), GpuVec3(0.0f, 0.8f, 0.0f)]
     )?;
     let triangle = device.build_bottom_level(GpuGeometry.triangles(corners)).await?;
 
-    let near = GpuInstance.of(triangle, GpuMat4.identity()).with_id(1);
-    let far = GpuInstance.of(triangle, GpuMat4.translation(GpuVec3.of(0.0f, 0.0f, 5.0f))).with_id(
-        2
-    );
+    let near = GpuInstance(triangle, GpuMat4.identity()).with_id(1);
+    let far = GpuInstance(triangle, GpuMat4.translation(GpuVec3(0.0f, 0.0f, 5.0f))).with_id(2);
     return device.build_top_level([near, far]).await;
 }
 ```
@@ -70,9 +64,9 @@ fun shadow_mask(scene: GpuAccelerationStructure, hits: GpuBuffer<int>, size: int
 
     let u = ((float)cell.x + 0.5f) / (float)size * 2.0f - 1.0f;
     let v = 1.0f - ((float)cell.y + 0.5f) / (float)size * 2.0f;
-    let ray = GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.0f, 100.0f);
+    let ray = GpuRay(GpuVec3(u, v, -2.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0.0f, 100.0f);
 
-    let query = GpuRayQuery.of(GpuRayFlags.ForceOpaque);
+    let query = GpuRayQuery(GpuRayFlags.ForceOpaque);
     query.trace(scene, 255u, ray);
     while query.proceed() {
         query.commit_triangle();
@@ -93,14 +87,10 @@ async fun run(): Result<bool, GpuError> {
     }
 
     let corners = device.buffer_from(
-        [
-            GpuVec3.of(-0.8f, -0.8f, 0.0f),
-            GpuVec3.of(0.8f, -0.8f, 0.0f),
-            GpuVec3.of(0.0f, 0.8f, 0.0f)
-        ]
+        [GpuVec3(-0.8f, -0.8f, 0.0f), GpuVec3(0.8f, -0.8f, 0.0f), GpuVec3(0.0f, 0.8f, 0.0f)]
     )?;
     let triangle = device.build_bottom_level(GpuGeometry.triangles(corners)).await?;
-    let scene = device.build_top_level([GpuInstance.of(triangle, GpuMat4.identity())]).await?;
+    let scene = device.build_top_level([GpuInstance(triangle, GpuMat4.identity())]).await?;
 
     let size = 16;
     let hits = device.buffer_alloc<int>(size * size)?;
@@ -178,23 +168,23 @@ fun camera(scene: GpuAccelerationStructure, image: GpuStorageTexture<GpuVec4>): 
     let size = dispatch_ray_dimensions().xy;
     let u = ((float)pixel.x + 0.5f) / (float)size.x * 2.0f - 1.0f;
     let v = 1.0f - ((float)pixel.y + 0.5f) / (float)size.y * 2.0f;
-    let ray = GpuRay.of(GpuVec3.of(u, v, -2.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.001f, 100.0f);
+    let ray = GpuRay(GpuVec3(u, v, -2.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0.001f, 100.0f);
 
     let shade = Shade();
     trace_ray(scene, GpuRayFlags.None, 255u, ray, ref shade);
-    image[pixel] = GpuVec4.of(shade.color.x, shade.color.y, shade.color.z, 1.0f);
+    image[pixel] = GpuVec4(shade.color.x, shade.color.y, shade.color.z, 1.0f);
 }
 
 @gpu_targets(GpuTarget.Vulkan)
 @closest_hit
 fun surface(ref shade: Shade, hit: GpuTriangleHit): void {
-    shade.color = GpuVec3.of(1.0f, hit.barycentrics.x, hit.barycentrics.y);
+    shade.color = GpuVec3(1.0f, hit.barycentrics.x, hit.barycentrics.y);
 }
 
 @gpu_targets(GpuTarget.Vulkan)
 @miss
 fun sky(ref shade: Shade): void {
-    shade.color = GpuVec3.of(0.0f, 0.0f, 1.0f);
+    shade.color = GpuVec3(0.0f, 0.0f, 1.0f);
 }
 
 async fun render(

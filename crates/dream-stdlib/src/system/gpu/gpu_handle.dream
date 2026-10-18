@@ -23,7 +23,6 @@ public struct GpuHandle<T> {
         ComputeAttribute,
         VertexAttribute,
         FragmentAttribute,
-        GpuAttribute,
         RayGenerationAttribute,
         ClosestHitAttribute,
         AnyHitAttribute,

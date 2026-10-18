@@ -8,8 +8,8 @@ foundations from the remaining release work; it does not declare v1 readiness.
 
 Phase 1 adds error-bearing file reads, idempotent explicit closure, nonthrowing
 handle destruction, closed-handle errors, handle-based length queries, and long
-stream offsets. `FileStream` no longer caches an independently mutable position
-or converts errors into empty data. Failed seeks preserve unread bytes.
+stream offsets. `FileHandle` is the sole file stream; shared text helpers use its
+reader interface. Failed seeks preserve unread bytes.
 
 Process launch arguments and `System.args` use counted, length-prefixed UTF-8
 bytes. Native and Node decode argument boundaries without delimiters, validate

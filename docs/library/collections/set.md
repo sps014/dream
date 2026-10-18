@@ -34,7 +34,7 @@ Output: `2`, then `true` on a new line. Adding an existing value does not add a 
 | Member | Returns | Effect |
 | --- | --- | --- |
 | `Set<T>(capacity = 8)` | `Set<T>` | Empty set sized for `capacity` values. |
-| `Set.from_array(items)` | `Set<T>` | New set of the array's distinct values. Set literals work the same way. |
+| `Set(items)` | `Set<T>` | New set of the array's distinct values. Set literals work the same way. |
 | `add(value)` | `bool` | Adds the value; `false` when it was already present. |
 | `add_all(items)` | `void` | Adds every value of an array, ignoring duplicates. |
 | `contains(value)` | `bool` | Whether the value is present. |

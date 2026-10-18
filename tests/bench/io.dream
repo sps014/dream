@@ -67,7 +67,7 @@ fun buffered_writes(iters: int): int {
         let writer = BufferedWriter(stream, 8);
         writer.write_all(bytes).unwrap();
         writer.finish().unwrap();
-        total = total + (int)stream.length;
+        total = total + (int)stream.length().unwrap();
     }
     return total;
 }
@@ -77,8 +77,8 @@ fun file_reads(iters: int): int {
     let path = System.env_or("DREAM_BENCH_IO_FILE", "tests/bench/io.dream");
     let total = 0;
     for (let i = 0; i < iters; i++) {
-        let file = File.open(path).unwrap();
-        total = total + file.read_all().unwrap().length;
+        let file = FileHandle.open(path, FileMode.Read).unwrap();
+        total = total + Streams.read_text(file).unwrap().length;
         file.close().unwrap();
     }
     return total;

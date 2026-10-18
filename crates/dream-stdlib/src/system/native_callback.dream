@@ -10,11 +10,11 @@ public class NativeCallback<F> {
 
     /// Keeps a callback available to foreign code until `unregister` is called.
     @intrinsic(Intrinsic.DreamCallbackRegister)
-    public static extern fun register(borrow callback: object): void;
+    internal static extern fun register(borrow callback: object): void;
 
     /// Releases a previously registered callback after foreign code has stopped using it.
     @intrinsic(Intrinsic.DreamCallbackUnregister)
-    public static extern fun unregister(borrow callback: object): void;
+    internal static extern fun unregister(borrow callback: object): void;
 
     /// Creates a `NativeCallback` with `f`.
     public constructor(f: F) {

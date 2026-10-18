@@ -5,57 +5,57 @@ import system.codegen;
 /// The number of threads in a subgroup, the group of threads the GPU runs in lockstep: for
 /// example 32 on NVIDIA, 32 or 64 on AMD and 32 on Apple GPUs. Subgroup functions need
 /// `GpuFeature.Subgroups` and are not available with `GpuTarget.Dx11`.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_size(): uint;
 
 /// This thread's lane within its subgroup, from `0` to `subgroup_size() - 1`.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_invocation_id(): uint;
 
 /// The sum of `value` over every active lane of the subgroup.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_add<T>(value: T): T;
 
 /// The smallest `value` among the active lanes.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_min<T>(value: T): T;
 
 /// The largest `value` among the active lanes.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_max<T>(value: T): T;
 
 /// The sum of `value` over the active lanes below this one.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_prefix_add<T>(value: T): T;
 
 /// The number of active lanes below this one where `condition` is true.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_prefix_count(condition: bool): uint;
 
 /// The number of active lanes where `condition` is true.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_count(condition: bool): uint;
 
 /// One bit per lane, set where `condition` is true.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_ballot(condition: bool): GpuUVec4;
 
 /// `value` from lane `lane`, the same lane for every thread.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_broadcast<T>(value: T, lane: uint): T;
 
 /// `value` from lane `lane`, which may differ per thread.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_shuffle<T>(value: T, lane: uint): T;
 
 /// True when `condition` is true on every active lane.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_all(condition: bool): bool;
 
 /// True when `condition` is true on any active lane.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_any(condition: bool): bool;
 
 /// True on exactly one active lane, the lowest.
-@generator_only(ComputeAttribute, FragmentAttribute, GpuAttribute)
+@generator_only(ComputeAttribute, FragmentAttribute)
 public extern fun subgroup_elect(): bool;

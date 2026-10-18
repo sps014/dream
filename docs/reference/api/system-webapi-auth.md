@@ -16,3 +16,5 @@ Read the [Web APIs guide](../../web-server/index.md) for behavior and complete e
 - [OidcOptions](webapi-auth-oidc-options.md)
 - [OidcTransaction](webapi-auth-oidc-transaction.md)
 - [Password](webapi-auth-password.md)
+
+- [JwtAlgorithm](webapi-auth-jwt-algorithm.md)

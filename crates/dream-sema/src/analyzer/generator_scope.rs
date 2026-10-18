@@ -178,9 +178,32 @@ impl Analyzer<'_> {
         if let Some(context) = def.and_then(|d| self.generator_scope.inherited.get(&d)) {
             return context.clone();
         }
+        let consumed = def.and_then(|d| self.generator_scope.consumed.get(&d));
+        let mut carries = carried(&function.attributes);
+        if let Some(owner) = consumed.and_then(|id| self.graph.consumed.get(id)) {
+            // A consumed helper belongs to the same checked domain as its generator's roots.
+            for file in &self.graph.files {
+                let module = &self.graph.modules[file.module.0 as usize].path;
+                for root in &file.program.functions {
+                    let id = dream_abi::attributes::decl_identity(module, &root.name.text);
+                    if self
+                        .graph
+                        .consumed
+                        .get(&id)
+                        .is_some_and(|by| by.generator == owner.generator)
+                    {
+                        for attribute in carried(&root.attributes) {
+                            if !carries.contains(&attribute) {
+                                carries.push(attribute);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         GeneratorContext {
-            carries: carried(&function.attributes),
-            consumed: def.is_some_and(|d| self.generator_scope.consumed.contains_key(&d)),
+            carries,
+            consumed: consumed.is_some(),
         }
     }
 

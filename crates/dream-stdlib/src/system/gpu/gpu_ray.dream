@@ -8,7 +8,6 @@ import system.codegen;
     ComputeAttribute,
     VertexAttribute,
     FragmentAttribute,
-    GpuAttribute,
     RayGenerationAttribute,
     ClosestHitAttribute,
     AnyHitAttribute,
@@ -32,10 +31,10 @@ public struct GpuRay {
     public t_max: float;
 
     /// Creates a ray from `origin` along `direction` that counts hits from `t_min` to `t_max`.
-    public static extern fun of(
-        origin: GpuVec3,
-        direction: GpuVec3,
-        t_min: float,
-        t_max: float
-    ): GpuRay;
+    public constructor(origin: GpuVec3, direction: GpuVec3, t_min: float, t_max: float) {
+        this.origin = origin;
+        this.direction = direction;
+        this.t_min = t_min;
+        this.t_max = t_max;
+    }
 }

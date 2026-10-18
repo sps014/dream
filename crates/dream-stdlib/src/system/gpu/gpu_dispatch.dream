@@ -45,13 +45,13 @@ public struct GpuDispatch {
     /// runs nothing.
     public fun group_counts(workgroup: GpuIVec3): GpuIVec3 {
         if !this.in_threads {
-            return GpuIVec3.of(
+            return GpuIVec3(
                 GpuDispatch.non_negative(this.count_x),
                 GpuDispatch.non_negative(this.count_y),
                 GpuDispatch.non_negative(this.count_z)
             );
         }
-        return GpuIVec3.of(
+        return GpuIVec3(
             GpuDispatch.round_up(this.count_x, workgroup.x),
             GpuDispatch.round_up(this.count_y, workgroup.y),
             GpuDispatch.round_up(this.count_z, workgroup.z)

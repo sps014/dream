@@ -33,7 +33,7 @@ fun cover_vertex(): Pixel {
         y = 3.0f;
     }
     let pixel = Pixel();
-    pixel.position = GpuVec4.of(x, y, 0.0f, 1.0f);
+    pixel.position = GpuVec4(x, y, 0.0f, 1.0f);
     return pixel;
 }
 
@@ -55,8 +55,8 @@ async fun run(window: Window): Result<bool, GpuError> {
         GpuRenderPipelineDesc.defaults(surface.color_format)
     )?;
 
-    let warm = GpuVec4.of(1.0f, 0.6f, 0.2f, 1.0f);
-    let cool = GpuVec4.of(0.2f, 0.6f, 1.0f, 1.0f);
+    let warm = GpuVec4(1.0f, 0.6f, 0.2f, 1.0f);
+    let cool = GpuVec4(0.2f, 0.6f, 1.0f, 1.0f);
     let color = warm;
     while window.is_open {
         let input = window.poll();
@@ -83,9 +83,9 @@ async fun run(window: Window): Result<bool, GpuError> {
         }
 
         let scale = window.scale_factor;
-        let center = GpuVec2.of(input.mouse.position.x * scale, input.mouse.position.y * scale);
+        let center = GpuVec2(input.mouse.position.x * scale, input.mouse.position.y * scale);
 
-        let frame = surface.begin_frame(GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f)).await?;
+        let frame = surface.begin_frame(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)).await?;
         let pass = frame.pass;
         pass.set_pipeline(pipeline);
         pass.bind_value(GpuShaders.spotlight_fragment.center, center);

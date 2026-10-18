@@ -12,7 +12,6 @@ import system.codegen;
     ComputeAttribute,
     VertexAttribute,
     FragmentAttribute,
-    GpuAttribute,
     RayGenerationAttribute,
     ClosestHitAttribute,
     AnyHitAttribute,
@@ -22,7 +21,7 @@ import system.codegen;
 )
 public struct GpuRayQuery {
     /// Creates a query with `flags` applied to every trace.
-    public static extern fun of(flags: GpuRayFlags): GpuRayQuery;
+    public constructor(flags: GpuRayFlags) {}
 
     /// Starts tracing `ray` against `scene`, seeing only instances whose mask shares a bit
     /// with `mask`.

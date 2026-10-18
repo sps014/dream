@@ -20,14 +20,6 @@ Allocates an empty list with an initial backing buffer capacity (defaults to 8).
 public constructor(capacity: int = 8)
 ```
 
-## `with_capacity`
-
-Allocates an empty list with backing capacity `capacity`.
-
-```dream
-public static fun with_capacity(capacity: int): List<T>
-```
-
 ## `length`
 
 Number of elements currently stored.
@@ -76,12 +68,12 @@ Appends every element of `items` in order.
 public fun push_all(borrow items: T[]): void
 ```
 
-## `from_array`
+## `constructor`
 
 Creates a list containing the elements of `items` in order. List literals such as `[1, 2, 3]` create lists in the same way.
 
 ```dream
-public static fun from_array(borrow items: T[]): List<T>
+public constructor(borrow items: T[])
 ```
 
 ## `take_array`
@@ -194,4 +186,12 @@ Removes all elements and releases the references they held. Capacity is unchange
 
 ```dream
 public fun clear(): void where T: unmanaged
+```
+
+## `insert`
+
+Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
+
+```dream
+public fun insert(index: int, value: T): bool
 ```

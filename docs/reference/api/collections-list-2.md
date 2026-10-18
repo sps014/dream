@@ -9,14 +9,6 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
 
 ```dream
-public fun insert(index: int, value: T): bool
-```
-
-## `insert`
-
-Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
-
-```dream
 public fun insert(index: int, value: T): bool where T: unmanaged
 ```
 

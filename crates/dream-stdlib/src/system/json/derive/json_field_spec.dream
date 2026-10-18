@@ -3,7 +3,7 @@ module system.json.derive;
 // Input model of [`JsonGenerator`], built by `json_derive` from the codegen model.
 
 // One serializable field on a class or union variant.
-public class JsonFieldSpec {
+internal class JsonFieldSpec {
     /// Name identifying this entry.
     public name: string;
 

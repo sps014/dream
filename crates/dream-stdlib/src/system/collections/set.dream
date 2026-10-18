@@ -236,10 +236,15 @@ public class Set<T>: Collection<T> {
     // set-literal syntax (e.g. `let s: Set<int> = {1, 2, 3};`) desugars to this.
     /// Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2,
     /// 3}` create sets in the same way.
-    public static fun from_array(borrow items: T[]): Set<T> {
-        let result = Set<T>(items.length);
-        result.add_all(items);
-        return result;
+    public constructor(borrow items: T[]) {
+        let c = hash_capacity_for(items.length);
+        this.cap = c;
+        this.keys = Buffer.alloc<T>(c);
+        this.states = Buffer.alloc<int>(c);
+        this.count = 0;
+        this.used = 0;
+        this.epoch = hash_epoch_initial();
+        this.add_all(items);
     }
 
     // Removes a value and returns true if it was removed.

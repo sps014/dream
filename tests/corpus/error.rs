@@ -94,7 +94,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "gpu_builtin_outside_shader",
-        "'global_id' is only available inside functions marked @compute or @gpu",
+        "'global_id' is only available inside functions marked @compute",
         true,
     ),
     Case::error(

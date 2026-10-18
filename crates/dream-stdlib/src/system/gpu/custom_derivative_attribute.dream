@@ -3,7 +3,7 @@ module system.gpu;
 /// Supplies a hand-written backward derivative for a `@differentiable` helper, replacing
 /// the automatic one. Use it when the automatic derivative is slow or numerically unstable.
 ///
-/// `function` names a `@gpu` helper whose parameters are the original parameters as `ref`
+/// `function` names a inferred shader helper whose parameters are the original parameters as `ref`
 /// `GpuDiffPair` values, followed by the derivative of the result. It writes each
 /// parameter's derivative into its pair.
 @attribute(AttributeTarget.Function)

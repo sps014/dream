@@ -488,30 +488,18 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Lowers a collection literal (`[...]` as `List<T>`, `{...}` as `Set<T>`/`Map<K, V>`) into a
-    /// single synthetic static-factory call `{base}<{type_args}>.{method}(args)` and replays it
-    /// through the ordinary `analyze_expression` path, reusing the existing generic-class
-    /// static-dispatch machinery (the same one `Cache<int>.make(...)` uses) verbatim — no new HIR
-    /// shape, no per-element codegen. `args` are typically one or two synthetic `ArrayLiteral`
-    /// nodes wrapping the literal's original element/key/value sub-expressions; their element types
-    /// are inferred from the (now type-argument-aware, see `analyze_static_call`) callee signature,
-    /// so an empty literal like `let s: Set<int> = {};` still resolves correctly.
+    /// Replays collection literals through their array-taking constructors, preserving the
+    /// expected element types for empty and nested literals.
     fn lower_collection_literal_call(
         &mut self,
         base: &str,
         type_args: Vec<Type>,
-        method: &str,
         args: Vec<ExpressionNode<'a>>,
         ctx: &super::super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let receiver = self.arena.alloc(ExpressionNode::Identifier(synthetic_token(
-            TokenKind::IdentifierToken,
-            base,
-        )));
-        let call = ExpressionNode::MethodCall(
-            receiver,
-            synthetic_token(TokenKind::IdentifierToken, method),
+        let call = ExpressionNode::FunctionCall(
+            synthetic_token(TokenKind::IdentifierToken, base),
             Some(type_args),
             args,
         );

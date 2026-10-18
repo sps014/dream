@@ -5,7 +5,7 @@ import system.gpu;
 @test
 @timeout(180000)
 fun gpu_desc_builders(): void {
-    let texture = GpuTextureDesc.of(256, 128, GpuTextureFormat.Depth32Float)
+    let texture = GpuTextureDesc(256, 128, GpuTextureFormat.Depth32Float)
         .render_target(true)
         .mip_levels(3);
     Assert.eq(texture.width, 256);
@@ -16,15 +16,19 @@ fun gpu_desc_builders(): void {
     Assert.is_true(texture.is_render_target);
     Assert.is_false(texture.is_storage);
 
-    let sampler = GpuSamplerDesc.nearest().address(GpuAddressMode.Repeat).max_anisotropy(64);
+    let sampler = GpuSamplerDesc(GpuFilter.Nearest)
+        .address(GpuAddressMode.Repeat)
+        .max_anisotropy(64);
     Assert.is_true(sampler.filter == GpuFilter.Nearest);
     Assert.is_true(sampler.address_mode == GpuAddressMode.Repeat);
     Assert.eq(sampler.anisotropy, 16);
     Assert.is_true(sampler.compare.is_none());
-    Assert.is_true(GpuSamplerDesc.linear().comparing(GpuCompare.LessEqual).compare.is_some());
-    Assert.eq(GpuSamplerDesc.linear().max_anisotropy(0).anisotropy, 1);
+    Assert.is_true(
+        GpuSamplerDesc(GpuFilter.Linear).comparing(GpuCompare.LessEqual).compare.is_some()
+    );
+    Assert.eq(GpuSamplerDesc(GpuFilter.Linear).max_anisotropy(0).anisotropy, 1);
 
-    let layout = GpuVertexLayout.of(20)
+    let layout = GpuVertexLayout(20)
         .attribute(0, GpuVertexFormat.Float32x3, 0)
         .attribute(1, GpuVertexFormat.Float32x2, 12);
     Assert.eq(layout.stride, 20);

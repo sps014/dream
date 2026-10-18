@@ -19,63 +19,64 @@ public struct GpuVec4 {
     public w: float;
 
     /// Creates the vector `(x, y, z, w)`.
-    public static fun of(x: float, y: float, z: float, w: float): GpuVec4 {
-        let v = GpuVec4();
-        v.x = x;
-        v.y = y;
-        v.z = z;
-        v.w = w;
-        return v;
+    public constructor(x: float, y: float, z: float, w: float) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
     }
 
     /// Creates a vector with every component equal to `value`.
-    public static fun splat(value: float): GpuVec4 {
-        return GpuVec4.of(value, value, value, value);
+    public constructor(value: float) {
+        this.x = value;
+        this.y = value;
+        this.z = value;
+        this.w = value;
     }
 
     /// The first two components.
     public get xy(): GpuVec2 {
-        return GpuVec2.of(this.x, this.y);
+        return GpuVec2(this.x, this.y);
     }
 
     /// The first three components.
     public get xyz(): GpuVec3 {
-        return GpuVec3.of(this.x, this.y, this.z);
+        return GpuVec3(this.x, this.y, this.z);
     }
 
     /// Adds component by component.
     fun operator +(other: GpuVec4): GpuVec4 {
-        return GpuVec4.of(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
+        return GpuVec4(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
     }
 
     /// Subtracts component by component.
     fun operator -(other: GpuVec4): GpuVec4 {
-        return GpuVec4.of(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
+        return GpuVec4(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
     }
 
     /// Multiplies component by component.
     fun operator *(other: GpuVec4): GpuVec4 {
-        return GpuVec4.of(this.x * other.x, this.y * other.y, this.z * other.z, this.w * other.w);
+        return GpuVec4(this.x * other.x, this.y * other.y, this.z * other.z, this.w * other.w);
     }
 
     /// Multiplies every component by `scale`.
     fun operator *(scale: float): GpuVec4 {
-        return GpuVec4.of(this.x * scale, this.y * scale, this.z * scale, this.w * scale);
+        return GpuVec4(this.x * scale, this.y * scale, this.z * scale, this.w * scale);
     }
 
     /// Divides component by component.
     fun operator /(other: GpuVec4): GpuVec4 {
-        return GpuVec4.of(this.x / other.x, this.y / other.y, this.z / other.z, this.w / other.w);
+        return GpuVec4(this.x / other.x, this.y / other.y, this.z / other.z, this.w / other.w);
     }
 
     /// Divides every component by `divisor`.
     fun operator /(divisor: float): GpuVec4 {
-        return GpuVec4.of(this.x / divisor, this.y / divisor, this.z / divisor, this.w / divisor);
+        return GpuVec4(this.x / divisor, this.y / divisor, this.z / divisor, this.w / divisor);
     }
 
     /// Negates every component.
     fun operator -(): GpuVec4 {
-        return GpuVec4.of(-this.x, -this.y, -this.z, -this.w);
+        return GpuVec4(-this.x, -this.y, -this.z, -this.w);
     }
 
     /// True when all components are equal.

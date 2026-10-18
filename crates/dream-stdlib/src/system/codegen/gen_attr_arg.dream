@@ -8,7 +8,7 @@ import system.json;
 // `enum`; `value` is the unquoted string, literal text, or dotted enum path.
 public class GenAttrArg {
     /// Category of this entry.
-    public kind: string;
+    public kind: GenValueKind;
 
     /// Value carried by this entry.
     public value: string;
@@ -17,7 +17,7 @@ public class GenAttrArg {
     public symbol: string;
 
     // Creates the snapshot model from the supplied values.
-    public constructor(kind: string, value: string, symbol: string) {
+    public constructor(kind: GenValueKind, value: string, symbol: string) {
         this.kind = kind;
         this.value = value;
         this.symbol = symbol;

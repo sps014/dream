@@ -16,14 +16,14 @@ Open a file with `FileHandle.open(path, mode)` or `FileHandle.open_async(path, m
 
 | Mode | Access | If the file exists | If it is missing |
 |---|---|---|---|
-| `r` | read | Opens at the start | `ENOENT` |
-| `w` | write | Truncates it | Creates it |
-| `a` | append | Writes go to the end | Creates it |
-| `r+` | read and write | Opens at the start | `ENOENT` |
-| `w+` | read and write | Truncates it | Creates it |
-| `a+` | read and append | Writes go to the end | Creates it |
+| `FileMode.Read` | read | Opens at the start | `ENOENT` |
+| `FileMode.Write` | write | Truncates it | Creates it |
+| `FileMode.Append` | append | Writes go to the end | Creates it |
+| `FileMode.ReadWrite` | read and write | Opens at the start | `ENOENT` |
+| `FileMode.WriteRead` | read and write | Truncates it | Creates it |
+| `FileMode.AppendRead` | read and append | Writes go to the end | Creates it |
 
-Any other mode returns an `EIO` error. Reads, writes, seeking, length queries, and
+The mode is a `FileMode` enum. Reads, writes, seeking, length queries, and
 explicit closure return `Result`. A successful empty read at a positive requested
 size means EOF; a read failure returns `IoError`.
 
@@ -31,7 +31,7 @@ size means EOF; a read failure returns `IoError`.
 import system.io;
 
 fun main(): Result<bool, IoError> {
-    let file = FileHandle.open("input.txt", "r")?;
+    let file = FileHandle.open("input.txt", FileMode.Read)?;
     while true {
         let line = file.read_line()?;
         if line.is_none() {
@@ -64,23 +64,9 @@ The async forms `read_async(n, token)`, `write_async(data, token)`,
 `seek_async(pos, token)`, and `flush_async(token)` return the same results.
 Neither `flush()` nor `flush_async()` forces data to durable storage.
 
-`File.open(path)` returns a read-only `FileStream`, a text-oriented wrapper over a
-handle:
-
-| `FileStream` member | Returns | Effect |
-|---|---|---|
-| `read_bytes(n)` | `Result<byte[], IoError>` | Reads up to `n` bytes. |
-| `read(n)` | `Result<string, IoError>` | Reads up to `n` bytes and decodes UTF-8. |
-| `read_all()` | `Result<string, IoError>` | Reads the rest of the file as UTF-8. |
-| `read_line()` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
-| `has_more()` | `Result<bool, IoError>` | Whether the position is before the end. |
-| `position` / `length` | `Result<long, IoError>` | Current offset and file length. |
-| `seek(offset)` / `seek_end()` / `reset()` | `Result<bool, IoError>` | Moves to an offset, the end, or byte zero. |
-| `tell()` | `Result<long, IoError>` | Current offset. |
-| `close()` | `Result<bool, IoError>` | Closes the underlying handle. |
-
-`FileStream.read(n)` limits bytes, not characters, and can split a UTF-8
-sequence; use an incremental decoder for streamed text.
+Use `Streams.read_text(file)` to read the remaining bytes as UTF-8 text, or `file.read_line()`
+for line-by-line input. Byte reads use `file.read(n)`. For chunked Unicode input use an
+incremental decoder so a chunk boundary cannot split a character.
 
 `close()` is idempotent. Operations after closure return `ECLOSED`. Dropping the
 last reference also closes the handle, but only explicit closure can report an
@@ -89,7 +75,7 @@ different file after the descriptor has been reused.
 
 File positions and lengths use `long`. `tell()` includes buffered read-ahead, so
 mixing line and byte reads preserves the logical position. Failed seeks preserve
-the position and any unread bytes. `FileStream.tell()` and `.length` return
+the position and any unread bytes. `FileHandle.tell()` and `.length()` return
 `Result<long, IoError>`; use `seek()` to change position.
 
 Async opens, reads, writes, and seeks use a bounded native executor or Node's
@@ -114,8 +100,8 @@ cancelled seek from leaving the logical cursor inconsistent.
 import system.io;
 
 fun main(): Result<bool, IoError> {
-    let source = FileHandle.open("input.bin", "r")?;
-    let destination = FileHandle.open("output.bin", "w")?;
+    let source = FileHandle.open("input.bin", FileMode.Read)?;
+    let destination = FileHandle.open("output.bin", FileMode.Write)?;
     Streams.copy(source, destination, buffer_size: 65536)?;
     destination.close()?;
     return source.close();
@@ -241,7 +227,7 @@ import system.encoding;
 
 async fun main(): Result<bool, IoError> {
     let source = MemoryStream(Encoding.utf8_encode("hello"));
-    let destination = FileHandle.open_async("async-copy.txt", "w+").await?;
+    let destination = FileHandle.open_async("async-copy.txt", FileMode.WriteRead).await?;
     Streams.copy_async(source, destination).await?;
     destination.seek_async(0L).await?;
     let bytes = destination.read_async(5).await?;

@@ -2,30 +2,22 @@
 
 **Import:** `import system.gpu;`
 
-This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside `@compute`, `@vertex`, `@fragment`, `@gpu` and ray tracing shader functions; using them elsewhere is a compile error.
+This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation. Shader-only declarations can be used only inside shader entry points and helpers reached from them; using them elsewhere is a compile error.
 
 ## `GpuSamplerDesc`
 
-The settings a new sampler is created with.  Start from `GpuSamplerDesc.linear` or `GpuSamplerDesc.nearest` and chain the settings you want to change.
+The settings a new sampler is created with.  Start from `GpuSamplerDesc(GpuFilter.Linear)` or `GpuSamplerDesc(GpuFilter.Nearest)` and chain the settings you want to change.
 
 ```dream
 public class GpuSamplerDesc
 ```
 
-## `linear`
+## `constructor`
 
-Smooth filtering within and between mip levels, clamped at the edges.
-
-```dream
-public static fun linear(): GpuSamplerDesc
-```
-
-## `nearest`
-
-Sharp nearest-texel filtering, clamped at the edges, for pixel art and data textures.
+Creates a sampler with the selected filter, clamp-to-edge addressing, and no comparison.
 
 ```dream
-public static fun nearest(): GpuSamplerDesc
+public constructor(filter: GpuFilter)
 ```
 
 ## `filter`

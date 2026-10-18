@@ -16,57 +16,57 @@ public struct GpuVec3 {
     public z: float;
 
     /// Creates the vector `(x, y, z)`.
-    public static fun of(x: float, y: float, z: float): GpuVec3 {
-        let v = GpuVec3();
-        v.x = x;
-        v.y = y;
-        v.z = z;
-        return v;
+    public constructor(x: float, y: float, z: float) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
     }
 
     /// Creates a vector with every component equal to `value`.
-    public static fun splat(value: float): GpuVec3 {
-        return GpuVec3.of(value, value, value);
+    public constructor(value: float) {
+        this.x = value;
+        this.y = value;
+        this.z = value;
     }
 
     /// The first two components.
     public get xy(): GpuVec2 {
-        return GpuVec2.of(this.x, this.y);
+        return GpuVec2(this.x, this.y);
     }
 
     /// Adds component by component.
     fun operator +(other: GpuVec3): GpuVec3 {
-        return GpuVec3.of(this.x + other.x, this.y + other.y, this.z + other.z);
+        return GpuVec3(this.x + other.x, this.y + other.y, this.z + other.z);
     }
 
     /// Subtracts component by component.
     fun operator -(other: GpuVec3): GpuVec3 {
-        return GpuVec3.of(this.x - other.x, this.y - other.y, this.z - other.z);
+        return GpuVec3(this.x - other.x, this.y - other.y, this.z - other.z);
     }
 
     /// Multiplies component by component.
     fun operator *(other: GpuVec3): GpuVec3 {
-        return GpuVec3.of(this.x * other.x, this.y * other.y, this.z * other.z);
+        return GpuVec3(this.x * other.x, this.y * other.y, this.z * other.z);
     }
 
     /// Multiplies every component by `scale`.
     fun operator *(scale: float): GpuVec3 {
-        return GpuVec3.of(this.x * scale, this.y * scale, this.z * scale);
+        return GpuVec3(this.x * scale, this.y * scale, this.z * scale);
     }
 
     /// Divides component by component.
     fun operator /(other: GpuVec3): GpuVec3 {
-        return GpuVec3.of(this.x / other.x, this.y / other.y, this.z / other.z);
+        return GpuVec3(this.x / other.x, this.y / other.y, this.z / other.z);
     }
 
     /// Divides every component by `divisor`.
     fun operator /(divisor: float): GpuVec3 {
-        return GpuVec3.of(this.x / divisor, this.y / divisor, this.z / divisor);
+        return GpuVec3(this.x / divisor, this.y / divisor, this.z / divisor);
     }
 
     /// Negates every component.
     fun operator -(): GpuVec3 {
-        return GpuVec3.of(-this.x, -this.y, -this.z);
+        return GpuVec3(-this.x, -this.y, -this.z);
     }
 
     /// True when all components are equal.
@@ -81,7 +81,7 @@ public struct GpuVec3 {
 
     /// The cross product, perpendicular to both vectors, following the right-hand rule.
     public fun cross(other: GpuVec3): GpuVec3 {
-        return GpuVec3.of(
+        return GpuVec3(
             this.y * other.z - this.z * other.y,
             this.z * other.x - this.x * other.z,
             this.x * other.y - this.y * other.x

@@ -10,14 +10,6 @@ Timing utilities.
 public static class Time
 ```
 
-## `sleep_host`
-
-Suspends for at least `ms` milliseconds.
-
-```dream
-public static extern async fun sleep_host(ms: int): void
-```
-
 ## `sleep`
 
 Suspends on the scheduler timer and returns cancellation instead of panicking.

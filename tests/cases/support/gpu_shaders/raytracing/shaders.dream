@@ -12,21 +12,21 @@ public struct HitInfo {
 public fun camera(scene: GpuAccelerationStructure, output: GpuStorageTexture<GpuVec4>): void {
     let pixel = dispatch_ray_index().xy;
     let size = dispatch_ray_dimensions().xy;
-    let uv = GpuVec2.of((float)pixel.x / (float)size.x, (float)pixel.y / (float)size.y);
-    let ray = GpuRay.of(
-        GpuVec3.of(0.0f, 0.0f, -2.0f),
-        GpuVec3.of(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f),
+    let uv = GpuVec2((float)pixel.x / (float)size.x, (float)pixel.y / (float)size.y);
+    let ray = GpuRay(
+        GpuVec3(0.0f, 0.0f, -2.0f),
+        GpuVec3(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f),
         0.001f,
         1000.0f
     );
     let hit = HitInfo();
     trace_ray(scene, GpuRayFlags.None, 255u, ray, ref hit);
-    output[pixel] = GpuVec4.of(hit.color.x, hit.color.y, hit.color.z, 1.0f);
+    output[pixel] = GpuVec4(hit.color.x, hit.color.y, hit.color.z, 1.0f);
 }
 
 @closest_hit
 public fun shade(ref hit: HitInfo, attributes: GpuTriangleHit): void {
-    hit.color = GpuVec3.of(
+    hit.color = GpuVec3(
         attributes.barycentrics.x,
         attributes.barycentrics.y,
         1.0f - attributes.barycentrics.x - attributes.barycentrics.y
@@ -35,17 +35,13 @@ public fun shade(ref hit: HitInfo, attributes: GpuTriangleHit): void {
 
 @miss
 public fun sky(ref hit: HitInfo): void {
-    hit.color = GpuVec3.of(0.2f, 0.4f, 0.8f);
+    hit.color = GpuVec3(0.2f, 0.4f, 0.8f);
 }
 
 @compute(1)
 public fun first_hit(scene: GpuAccelerationStructure, distances: GpuBuffer<float>): void {
-    let query = GpuRayQuery.of(GpuRayFlags.ForceOpaque);
-    query.trace(
-        scene,
-        255u,
-        GpuRay.of(GpuVec3.splat(0.0f), GpuVec3.of(0.0f, 0.0f, 1.0f), 0.0f, 100.0f)
-    );
+    let query = GpuRayQuery(GpuRayFlags.ForceOpaque);
+    query.trace(scene, 255u, GpuRay(GpuVec3(0.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0.0f, 100.0f));
     while query.proceed() {
         query.commit_triangle();
     }

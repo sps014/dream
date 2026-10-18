@@ -71,8 +71,8 @@ fun bindless_vertex(): BindlessVarying {
         y = -3.0f;
     }
     let result = BindlessVarying();
-    result.position = GpuVec4.of(x, y, 0.0f, 1.0f);
-    result.uv = GpuVec2.of((x + 1.0f) * 0.5f, (1.0f - y) * 0.5f);
+    result.position = GpuVec4(x, y, 0.0f, 1.0f);
+    result.uv = GpuVec2((x + 1.0f) * 0.5f, (1.0f - y) * 0.5f);
     return result;
 }
 
@@ -91,7 +91,7 @@ fun bindless_fragment(
 
 fun solid_texture(device: GpuDevice, r: int, g: int, b: int): GpuTexture {
     let texture = bindless_ok(
-        device.texture(GpuTextureDesc.of(2, 2, GpuTextureFormat.Rgba8Unorm)),
+        device.texture(GpuTextureDesc(2, 2, GpuTextureFormat.Rgba8Unorm)),
         "texture"
     );
     let texels = Array.alloc<byte>(16);
@@ -136,7 +136,10 @@ async fun gpu_bindless_sampling(): void {
                 }
                 let red = solid_texture(device, 255, 0, 0);
                 let green = solid_texture(device, 0, 255, 0);
-                let sampler = bindless_ok(device.sampler(GpuSamplerDesc.nearest()), "sampler");
+                let sampler = bindless_ok(
+                    device.sampler(GpuSamplerDesc(GpuFilter.Nearest)),
+                    "sampler"
+                );
 
                 let left = BindlessMaterial();
                 left.albedo = bindless_ok(device.handle(red), "red handle");
@@ -148,8 +151,7 @@ async fun gpu_bindless_sampling(): void {
 
                 let target = bindless_ok(
                     device.texture(
-                        GpuTextureDesc.of(size, size, GpuTextureFormat.Rgba8Unorm)
-                            .render_target(true)
+                        GpuTextureDesc(size, size, GpuTextureFormat.Rgba8Unorm).render_target(true)
                     ),
                     "target"
                 );
@@ -163,7 +165,7 @@ async fun gpu_bindless_sampling(): void {
                 );
                 let encoder = device.command_encoder();
                 let pass = encoder.begin_render_pass(
-                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4.splat(0.0f)))
+                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f)))
                 );
                 pass.set_pipeline(pipeline);
                 pass.bind_buffer(GpuShaders.bindless_fragment.materials, materials);

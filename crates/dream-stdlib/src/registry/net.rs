@@ -14,6 +14,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/net/http_method.dream",
+            include_str!("../system/net/http_method.dream"),
+        ),
+        (
             "<std>/system/net/web_socket.dream",
             include_str!("../system/net/web_socket.dream"),
         ),

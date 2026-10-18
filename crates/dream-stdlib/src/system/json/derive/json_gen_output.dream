@@ -2,7 +2,7 @@ module system.json.derive;
 
 // Outcome of a `@json` source-generator expand pass.
 // Optional `error_type` / `error_field` name the type / field the error is reported at.
-public class JsonGenOutput {
+internal class JsonGenOutput {
     /// Whether the operation succeeded.
     public ok: bool;
 

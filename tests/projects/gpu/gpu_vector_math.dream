@@ -10,46 +10,40 @@ fun gpu_vec_near(a: float, b: float): bool {
 @test
 @timeout(180000)
 fun gpu_vector_math(): void {
-    let a = GpuVec3.of(1.0f, 2.0f, 3.0f);
-    let b = GpuVec3.of(4.0f, 5.0f, 6.0f);
-    Assert.is_true(a + b == GpuVec3.of(5.0f, 7.0f, 9.0f));
-    Assert.is_true(b - a == GpuVec3.splat(3.0f));
-    Assert.is_true(a * 2.0f == GpuVec3.of(2.0f, 4.0f, 6.0f));
-    Assert.is_true(-a == GpuVec3.of(-1.0f, -2.0f, -3.0f));
+    let a = GpuVec3(1.0f, 2.0f, 3.0f);
+    let b = GpuVec3(4.0f, 5.0f, 6.0f);
+    Assert.is_true(a + b == GpuVec3(5.0f, 7.0f, 9.0f));
+    Assert.is_true(b - a == GpuVec3(3.0f));
+    Assert.is_true(a * 2.0f == GpuVec3(2.0f, 4.0f, 6.0f));
+    Assert.is_true(-a == GpuVec3(-1.0f, -2.0f, -3.0f));
     Assert.eq(a.dot(b), 32.0f);
     Assert.is_true(
-        GpuVec3.of(1.0f, 0.0f, 0.0f)
-            .cross(GpuVec3.of(0.0f, 1.0f, 0.0f)) == GpuVec3.of(0.0f, 0.0f, 1.0f)
+        GpuVec3(1.0f, 0.0f, 0.0f).cross(GpuVec3(0.0f, 1.0f, 0.0f)) == GpuVec3(0.0f, 0.0f, 1.0f)
     );
-    Assert.is_true(gpu_vec_near(GpuVec3.of(3.0f, 0.0f, 4.0f).length(), 5.0f));
+    Assert.is_true(gpu_vec_near(GpuVec3(3.0f, 0.0f, 4.0f).length(), 5.0f));
     Assert.is_true(gpu_vec_near(b.normalize().length(), 1.0f));
-    Assert.is_true(GpuVec4.of(1.0f, 2.0f, 3.0f, 4.0f).xyz == a);
-    Assert.is_true(GpuVec2.of(6.0f, 8.0f) / 2.0f == GpuVec2.of(3.0f, 4.0f));
+    Assert.is_true(GpuVec4(1.0f, 2.0f, 3.0f, 4.0f).xyz == a);
+    Assert.is_true(GpuVec2(6.0f, 8.0f) / 2.0f == GpuVec2(3.0f, 4.0f));
 
-    let point = GpuVec4.of(1.0f, 2.0f, 3.0f, 1.0f);
+    let point = GpuVec4(1.0f, 2.0f, 3.0f, 1.0f);
     Assert.is_true(GpuMat4.identity() * point == point);
-    let moved = GpuMat4.translation(GpuVec3.of(10.0f, 0.0f, -1.0f)) * point;
-    Assert.is_true(moved == GpuVec4.of(11.0f, 2.0f, 2.0f, 1.0f));
-    let scaled = GpuMat4.scaling(GpuVec3.splat(2.0f))
-        * GpuMat4.translation(GpuVec3.of(1.0f, 0.0f, 0.0f));
-    Assert.is_true(scaled * point == GpuVec4.of(4.0f, 4.0f, 6.0f, 1.0f));
-    Assert.is_true(GpuMat4.translation(a).transpose().row(3) == GpuVec4.of(1.0f, 2.0f, 3.0f, 1.0f));
+    let moved = GpuMat4.translation(GpuVec3(10.0f, 0.0f, -1.0f)) * point;
+    Assert.is_true(moved == GpuVec4(11.0f, 2.0f, 2.0f, 1.0f));
+    let scaled = GpuMat4.scaling(GpuVec3(2.0f)) * GpuMat4.translation(GpuVec3(1.0f, 0.0f, 0.0f));
+    Assert.is_true(scaled * point == GpuVec4(4.0f, 4.0f, 6.0f, 1.0f));
+    Assert.is_true(GpuMat4.translation(a).transpose().row(3) == GpuVec4(1.0f, 2.0f, 3.0f, 1.0f));
 
-    let quarter = GpuMat4.rotation(GpuVec3.of(0.0f, 0.0f, 1.0f), 1.5707964f)
-        * GpuVec4.of(1.0f, 0.0f, 0.0f, 0.0f);
+    let quarter = GpuMat4.rotation(GpuVec3(0.0f, 0.0f, 1.0f), 1.5707964f)
+        * GpuVec4(1.0f, 0.0f, 0.0f, 0.0f);
     Assert.is_true(gpu_vec_near(quarter.x, 0.0f) && gpu_vec_near(quarter.y, 1.0f));
 
     let projection = GpuMat4.perspective(1.0f, 1.5f, 0.5f, 100.0f);
-    let near_clip = projection * GpuVec4.of(0.0f, 0.0f, -0.5f, 1.0f);
-    let far_clip = projection * GpuVec4.of(0.0f, 0.0f, -100.0f, 1.0f);
+    let near_clip = projection * GpuVec4(0.0f, 0.0f, -0.5f, 1.0f);
+    let far_clip = projection * GpuVec4(0.0f, 0.0f, -100.0f, 1.0f);
     Assert.is_true(gpu_vec_near(near_clip.z / near_clip.w, 0.0f));
     Assert.is_true(gpu_vec_near(far_clip.z / far_clip.w, 1.0f));
 
-    let view = GpuMat4.look_at(
-        GpuVec3.of(0.0f, 0.0f, 5.0f),
-        GpuVec3.splat(0.0f),
-        GpuVec3.of(0.0f, 1.0f, 0.0f)
-    );
-    let origin = view * GpuVec4.of(0.0f, 0.0f, 0.0f, 1.0f);
+    let view = GpuMat4.look_at(GpuVec3(0.0f, 0.0f, 5.0f), GpuVec3(0.0f), GpuVec3(0.0f, 1.0f, 0.0f));
+    let origin = view * GpuVec4(0.0f, 0.0f, 0.0f, 1.0f);
     Assert.is_true(gpu_vec_near(origin.z, -5.0f));
 }

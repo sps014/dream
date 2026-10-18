@@ -13,7 +13,6 @@ import system.codegen;
     ComputeAttribute,
     VertexAttribute,
     FragmentAttribute,
-    GpuAttribute,
     RayGenerationAttribute,
     ClosestHitAttribute,
     AnyHitAttribute,
@@ -23,10 +22,10 @@ import system.codegen;
 )
 public struct GpuDiffPair<T> {
     /// A pair of `value` and `derivative`.
-    public static extern fun of(value: T, derivative: T): GpuDiffPair<T>;
+    public constructor(value: T, derivative: T) {}
 
     /// A pair whose derivative is zero, for inputs that are held constant.
-    public static extern fun constant(value: T): GpuDiffPair<T>;
+    public constructor(value: T) {}
 
     /// The value.
     public extern fun value(): T;

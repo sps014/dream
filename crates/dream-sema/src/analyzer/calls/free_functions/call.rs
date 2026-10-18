@@ -203,6 +203,18 @@ impl<'a> Analyzer<'a> {
                             let matching: Vec<_> = ctors
                                 .into_iter()
                                 .filter(|c| c.parameters.len() == params.len())
+                                .filter(|c| {
+                                    c.parameters
+                                        .iter()
+                                        .zip(params)
+                                        .all(|(parameter, argument)| {
+                                            !matches!(
+                                                argument,
+                                                ExpressionNode::ArrayLiteral(..)
+                                                    | ExpressionNode::ArrayRepeat(..)
+                                            ) || matches!(parameter.type_, Type::Array(_))
+                                        })
+                                })
                                 .collect();
                             Self::prefer_fun_overload_for_args(matching, params)?
                         }
@@ -391,6 +403,22 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             )?;
             let concrete_type = self.type_ctx.lower(&t);
+            if let (Some(def), Some(identity)) = (nominal_def, resolved_ctor_name.as_ref()) {
+                let owner = self.type_ctx.defs.get(def);
+                let symbol = dream_abi::attributes::decl_identity(&owner.module_path, &owner.name);
+                let overload = format!(
+                    "{symbol}.constructor#{}",
+                    self.function_table.emitted_name(&self.type_ctx, identity)
+                );
+                let file = self.current_file.as_deref().unwrap_or_default().to_string();
+                if let Some(facts) = &mut self.generator_facts {
+                    facts
+                        .expressions
+                        .entry((file, name.position.start))
+                        .or_default()
+                        .overload = overload;
+                }
+            }
             if self.struct_info(concrete_type).is_some() {
                 let ctor = resolved_ctor_name.as_ref().map(|key| key.0);
                 let ctor_summary = self.ide_summary(&t);

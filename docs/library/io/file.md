@@ -48,7 +48,7 @@ async fun main(): void {
 | `File.create_dir.await` / `create_dir_all` | directories |
 | `File.list(path).await` / `list_paths` | names, or joined paths |
 | `File.exists` / `size` / `is_dir` / `is_file` / `stat` | sync probes |
-| `File.open` / `File.open_async.await` | a `FileStream` |
+| `FileHandle.open` / `FileHandle.open_async.await` | a `FileHandle` |
 
 `File.stat` returns `FileStats` (`size`, `mtime_millis` / `ctime_millis` / `atime_millis`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified()` / `created()` yield `DateTime`.
 

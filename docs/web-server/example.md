@@ -115,7 +115,7 @@ import routes;
 
 public fun create_app(key: string, password: string): Result<WebApp, AuthError> {
     let auth = AuthService(
-        JwtOptions("dream-example", "messages-api", key, key, "HS256"),
+        JwtOptions("dream-example", "messages-api", key, key, JwtAlgorithm.HS256),
         DemoAccounts(Password.hash(password)?),
         MemoryAuthStore()
     );

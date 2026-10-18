@@ -202,7 +202,7 @@ async fun convert(url: string, output: string): Result<long, IoError> {
     if parsed_url.is_err() {
         return Result.Err(IoError.invalid(url, parsed_url.unwrap_err().message()));
     }
-    let received = client.send(HttpRequest.get(parsed_url.unwrap())).await;
+    let received = client.send(HttpRequest(HttpMethod.Get, parsed_url.unwrap())).await;
     if received.is_err() {
         client.close();
         return Result.Err(IoError.other(url, received.unwrap_err().message()));

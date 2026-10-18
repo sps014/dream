@@ -12,6 +12,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/io/file_kind.dream",
+            include_str!("../system/io/file_kind.dream"),
+        ),
+        (
+            "<std>/system/io/file_mode.dream",
+            include_str!("../system/io/file_mode.dream"),
+        ),
+        (
             "<std>/system/io/system.dream",
             include_str!("../system/io/system.dream"),
         ),
@@ -86,10 +94,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/io/file_operation.dream",
             include_str!("../system/io/file_operation.dream"),
-        ),
-        (
-            "<std>/system/io/file_stream.dream",
-            include_str!("../system/io/file_stream.dream"),
         ),
         (
             "<std>/system/io/file_stats.dream",

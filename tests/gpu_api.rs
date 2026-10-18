@@ -41,7 +41,7 @@ fn shader_declarations_type_check_inside_consumed_shaders() {
         dir.path().join("main.dream"),
         MAIN.replace(
             "fun main(): void {",
-            "fun read(buffer: GpuBuffer<float>, scene: GpuAccelerationStructure): float {\n    let ray = GpuRay.of(GpuVec3.splat(0.0f), GpuVec3.splat(1.0f), 0.0f, 1.0f);\n    return GpuMath.sin(buffer[0]);\n}\n\nfun main(): void {",
+            "fun read(buffer: GpuBuffer<float>, scene: GpuAccelerationStructure): float {\n    let ray = GpuRay(GpuVec3(0.0f), GpuVec3(1.0f), 0.0f, 1.0f);\n    return GpuMath.sin(buffer[0]);\n}\n\nfun main(): void {",
         ),
     )
     .unwrap();

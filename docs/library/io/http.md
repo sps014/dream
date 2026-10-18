@@ -20,7 +20,7 @@ async fun main(): Result<bool, HttpError> {
         return Result.Err(HttpError("EINVAL", "invalid URL"));
     }
     let client = HttpClient();
-    let request = HttpRequest.get(parsed.unwrap());
+    let request = HttpRequest(HttpMethod.Get, parsed.unwrap());
     request.headers.set("Accept", "text/html");
     let response = client.send(request, options: HttpOptions(timeout_ms: 10000)).await?;
     System.println(response.status);
@@ -50,11 +50,11 @@ transport responses; inspect `status` yourself.
 | Member | Kind | Effect |
 |---|---|---|
 | `HttpRequest(method, url)` | constructor | Creates a request with empty headers and body. |
-| `HttpRequest.get(url)` | static | Creates a `GET` request. |
-| `HttpRequest.post(url)` | static | Creates a `POST` request. |
-| `HttpRequest.put(url)` | static | Creates a `PUT` request. |
-| `HttpRequest.patch(url)` | static | Creates a `PATCH` request. |
-| `HttpRequest.delete(url)` | static | Creates a `DELETE` request. |
+| `HttpRequest(HttpMethod.Get, url)` | static | Creates a `GET` request. |
+| `HttpRequest(HttpMethod.Post, url)` | static | Creates a `POST` request. |
+| `HttpRequest(HttpMethod.Put, url)` | static | Creates a `PUT` request. |
+| `HttpRequest(HttpMethod.Patch, url)` | static | Creates a `PATCH` request. |
+| `HttpRequest(HttpMethod.Delete, url)` | static | Creates a `DELETE` request. |
 | `method` | `string` field | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, or `OPTIONS`. |
 | `url` | `Url` field | Absolute `http`/`https` destination. |
 | `headers` | `HttpHeaders` field | Request headers. |
@@ -198,7 +198,7 @@ async fun main(): Result<bool, HttpError> {
     let client = HttpClient();
     let cancellation = CancellationSource();
     cancellation.cancel();
-    let request = HttpRequest.get(Url.parse("https://example.com/").unwrap());
+    let request = HttpRequest(HttpMethod.Get, Url.parse("https://example.com/").unwrap());
     request.headers.append("X-Role", "reader");
     request.headers.append("x-role", "editor");
     System.println(request.headers.get_all("X-ROLE").length);

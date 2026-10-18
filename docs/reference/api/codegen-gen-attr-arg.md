@@ -15,7 +15,7 @@ public class GenAttrArg
 Category of this entry.
 
 ```dream
-public kind: string
+public kind: GenValueKind
 ```
 
 ## `value`
@@ -39,5 +39,5 @@ public symbol: string
 Creates the snapshot model from the supplied values.
 
 ```dream
-public constructor(kind: string, value: string, symbol: string)
+public constructor(kind: GenValueKind, value: string, symbol: string)
 ```

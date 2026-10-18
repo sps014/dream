@@ -5,7 +5,7 @@ import system.codegen;
 /// Fast memory shared by the threads of one compute workgroup, created with
 /// `workgroup_array<T>(length)`. Threads exchange values through it; call
 /// `workgroup_barrier()` between writing and reading another thread's elements.
-@generator_only(ComputeAttribute, GpuAttribute)
+@generator_only(ComputeAttribute)
 public struct GpuWorkgroupArray<T> {
     /// The number of elements.
     public extern fun length(): int;

@@ -51,13 +51,13 @@ When the key type is `string`, `get`, `get_or`, and `contains` also accept a `Re
 
 ## Combine and inspect
 
-`set_all(keys, values)` adds entries from two arrays, pairing matching positions and using the shorter array's length. `from_arrays(keys, values)` creates a map that way. `merge(other)` copies another map's entries into the current map. Existing entries with matching keys are replaced.
+`set_all(keys, values)` adds entries from two arrays, pairing matching positions and using the shorter array's length. `Map<K, V>(keys, values)` creates a map that way. `merge(other)` copies another map's entries into the current map. Existing entries with matching keys are replaced.
 
 `keys()`, `values()`, and `entries()` return new copies, so changing the map later does not change them. A `for` loop gives `KeyValuePair<K, V>` values with `.key` and `.value`. Entries come out in no guaranteed order.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
-| `Map.from_arrays(keys, values)` | `Map<K, V>` | New map pairing matching array positions. |
+| `Map(keys, values)` | `Map<K, V>` | New map pairing matching array positions. |
 | `set_all(keys, values)` | `void` | Adds or replaces entries from two arrays. |
 | `merge(other)` | `void` | Copies `other`'s entries, replacing matching keys. |
 | `.length` | `int` | Number of entries. |

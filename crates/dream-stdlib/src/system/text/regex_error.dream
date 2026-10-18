@@ -1,0 +1,21 @@
+module system.text;
+
+/// Failure to compile a regular expression.
+public class RegexError: Error {
+    /// Pattern that could not be compiled.
+    public pattern: string;
+
+    internal constructor(pattern: string) {
+        this.pattern = pattern;
+    }
+
+    /// A description of the compilation failure.
+    public fun message(): string {
+        return "invalid regular expression: " + this.pattern;
+    }
+
+    /// Stable compilation-failure code.
+    public fun code(): string {
+        return "EREGEX";
+    }
+}

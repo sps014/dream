@@ -20,3 +20,5 @@ For usage and target behavior, read the [URL guide](../../library/io/url.md) and
 - [UrlQuery](net-url-query.md)
 - [WebSocket](net-web-socket.md)
 - [WebSocketMessage](net-web-socket-message.md)
+
+- [HttpMethod](net-http-method.md)

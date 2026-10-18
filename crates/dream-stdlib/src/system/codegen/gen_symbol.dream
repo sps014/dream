@@ -13,7 +13,7 @@ public class GenSymbol {
     public id: string;
 
     /// Category of this entry.
-    public kind: string;
+    public kind: GenSymbolKind;
 
     /// Declaration associated with this entry.
     public declaration: Option<GenDecl>;
@@ -28,7 +28,7 @@ public class GenSymbol {
             this.instances.push(GenSymbolInstance(instance));
         }
         this.id = gen_str(v, "id");
-        this.kind = gen_str(v, "kind");
+        this.kind = gen_symbol_kind(gen_str(v, "kind"));
         this.declaration = Option.None;
         this.function = Option.None;
         let decl = gen_obj(v, "declaration");

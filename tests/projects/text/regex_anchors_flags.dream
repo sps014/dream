@@ -5,33 +5,33 @@ import system.text;
 @test
 @timeout(180000)
 fun regex_anchors_flags(): void {
-    let anchored = Regex("^abc$");
+    let anchored = Regex.compile("^abc$").unwrap();
     Assert.eq((anchored.test("abc")).to_string(), "true");
     Assert.eq((anchored.test("xabc")).to_string(), "false");
     Assert.eq((anchored.test("abcx")).to_string(), "false");
 
-    let multiline = Regex("^b", RegexFlags.Multiline | RegexFlags.Global);
+    let multiline = Regex.compile("^b", RegexFlags.Multiline | RegexFlags.Global).unwrap();
     Assert.eq((multiline.match("a\nb\nc").length).to_string(), "1");
 
-    let single_line = Regex("^b", RegexFlags.Global);
+    let single_line = Regex.compile("^b", RegexFlags.Global).unwrap();
     Assert.eq((single_line.match("a\nb\nc").length).to_string(), "0");
 
-    let word_boundary = Regex("\\bcat\\b");
+    let word_boundary = Regex.compile("\\bcat\\b").unwrap();
     Assert.eq((word_boundary.test("a cat sat")).to_string(), "true");
     Assert.eq((word_boundary.test("category")).to_string(), "false");
 
-    let non_word_boundary = Regex("\\Bcat");
+    let non_word_boundary = Regex.compile("\\Bcat").unwrap();
     Assert.eq((non_word_boundary.test("concatenate")).to_string(), "true");
     Assert.eq((non_word_boundary.test("a cat")).to_string(), "false");
 
-    let case_insensitive = Regex("hello", RegexFlags.IgnoreCase);
+    let case_insensitive = Regex.compile("hello", RegexFlags.IgnoreCase).unwrap();
     Assert.eq((case_insensitive.test("HELLO world")).to_string(), "true");
     Assert.eq((case_insensitive.test("goodbye")).to_string(), "false");
 
-    let case_sensitive = Regex("hello");
+    let case_sensitive = Regex.compile("hello").unwrap();
     Assert.eq((case_sensitive.test("HELLO world")).to_string(), "false");
 
-    let combined = Regex("[a-z]+", RegexFlags.Global | RegexFlags.IgnoreCase);
+    let combined = Regex.compile("[a-z]+", RegexFlags.Global | RegexFlags.IgnoreCase).unwrap();
     Assert.eq((combined.match("ABC def")[0]).to_string(), "ABC");
     Assert.eq((combined.match("ABC def")[1]).to_string(), "def");
 }

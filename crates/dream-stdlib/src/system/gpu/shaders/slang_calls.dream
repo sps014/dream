@@ -16,6 +16,10 @@ internal static class SlangCalls {
         if !free {
             first = 1;
         }
+        if n.symbol_kind == GenSymbolKind.Type && n.children.is_empty() {
+            w.text("(" + SlangTypes.of(n.ty, List<int>()) + ")0");
+            return;
+        }
         if !key.is_empty() {
             if SlangBody.special(key) {
                 SlangCalls.special_call(b, n, key, first);
@@ -31,7 +35,7 @@ internal static class SlangCalls {
             }
             return;
         }
-        if n.symbol_kind == "type" {
+        if n.symbol_kind == GenSymbolKind.Type {
             let ty = SlangTypes.of(n.ty, List<int>());
             if n.children.is_empty() {
                 w.text("(" + ty + ")0");
@@ -181,7 +185,7 @@ internal static class SlangCalls {
                     "GpuMlpWeights parameter '"
                         + receiver.text + "' needs @coop_shape(inputs, outputs)"
                 );
-                shape = List<int>.from_array([1, 1]);
+                shape = List<int>([1, 1]);
             }
             let element = SlangTypes.of(receiver.ty.arg(0), List<int>());
             let component = "CoopVecComponentType::Float32";

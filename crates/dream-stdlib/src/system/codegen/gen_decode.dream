@@ -109,7 +109,11 @@ internal fun gen_attributes(borrow v: JsonValue): List<GenAttribute> {
         let args = List<GenAttrArg>();
         for (let arg in gen_items(a, "args")) {
             args.push(
-                GenAttrArg(gen_str(arg, "kind"), gen_str(arg, "value"), gen_str(arg, "symbol"))
+                GenAttrArg(
+                    gen_value_kind(gen_str(arg, "kind")),
+                    gen_str(arg, "value"),
+                    gen_str(arg, "symbol")
+                )
             );
         }
         out.push(GenAttribute(gen_str(a, "id"), gen_str(a, "name"), args));

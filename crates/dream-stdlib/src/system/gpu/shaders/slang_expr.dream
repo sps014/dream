@@ -26,7 +26,7 @@ extend SlangBody {
         if n.expr == ExprKind.Literal {
             w.text(SlangBody.literal(n));
         } else if n.expr == ExprKind.Identifier {
-            if n.symbol_kind == "function" {
+            if n.symbol_kind == GenSymbolKind.Function {
                 w.text(Names.ident(n.text));
             } else {
                 w.text(this.local(n.text));
@@ -172,7 +172,7 @@ extend SlangBody {
     internal static fun literal(borrow n: ShaderNode): string {
         let kind = n.literal_kind;
         let text = n.literal.replace("_", "");
-        if kind == "bool" || kind == "int" {
+        if kind == GenValueKind.Bool || kind == GenValueKind.Int {
             return text;
         }
         let digits = text;
@@ -180,22 +180,22 @@ extend SlangBody {
             && SlangBody.suffix_char(digits.substring(digits.length - 1, digits.length), digits) {
             digits = digits.substring(0, digits.length - 1);
         }
-        if kind == "uint" {
+        if kind == GenValueKind.UInt {
             return digits + "u";
         }
-        if kind == "long" {
+        if kind == GenValueKind.Long {
             return digits + "ll";
         }
-        if kind == "ulong" {
+        if kind == GenValueKind.ULong {
             return digits + "ull";
         }
         if !digits.contains(".") && !digits.contains("e") && !digits.contains("E") {
             digits = digits + ".0";
         }
-        if kind == "float16" {
+        if kind == GenValueKind.Float16 {
             return digits + "h";
         }
-        if kind == "double" {
+        if kind == GenValueKind.Double {
             return digits + "l";
         }
         return digits + "f";

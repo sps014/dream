@@ -125,7 +125,7 @@ There is no extra runtime wrapper for value structs.
 ### Static methods on a generic class
 
 If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`).
-Write `List.from_array(items)` or `Task.spawn(() => n * n)` (`TOut` is a method type argument).
+Write `List(items)` or `Task.spawn(() => n * n)` (`TOut` is a method type argument).
 Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below):
 
 ```dream

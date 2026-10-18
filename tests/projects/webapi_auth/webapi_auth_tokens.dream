@@ -36,7 +36,7 @@ async fun webapi_auth_tokens(): void {
     Assert.is_true(!Password.verify("wrong", hash).unwrap());
     let key = "0123456789abcdef0123456789abcdef";
     let service = AuthService(
-        JwtOptions("dream-test", "api", key, key, "HS256"),
+        JwtOptions("dream-test", "api", key, key, JwtAlgorithm.HS256),
         TestAccounts(hash),
         MemoryAuthStore()
     );

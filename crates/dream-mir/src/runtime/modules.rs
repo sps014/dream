@@ -118,6 +118,7 @@ pub const CORE_C: &[&str] = &[
     "ffi.c",
     "object.c",
     "format.c",
+    "float16.c",
     "panic.c",
     "weak.c",
     "closure.c",

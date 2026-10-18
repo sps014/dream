@@ -168,13 +168,19 @@ jobs:
             cargo build --locked -p dream --bin dream --manifest-path "$baseline_tree/Cargo.toml" --target-dir "$PWD/target"
             cp target/debug/dream "$RUNNER_TEMP/dream-compile-baseline-bin"
             cp "$RUNNER_TEMP/dream-compile-candidate" target/debug/dream
-            git worktree remove --force "$baseline_tree"
           fi
+          # The baseline compiler reads its C runtime sources from the worktree it was built in,
+          # so the worktree must outlive the measurement.
+          status=0
           python3 scripts/check_compile_budget.py \
             --baseline "$RUNNER_TEMP/dream-compile-baseline-bin" \
             --candidate "$RUNNER_TEMP/dream-compile-candidate" \
             --baseline-revision "$baseline_commit" --candidate-revision "$GITHUB_SHA" \
-            --report target/compile-budget.json
+            --report target/compile-budget.json || status=$?
+          if [ -d "$baseline_tree" ]; then
+            git worktree remove --force "$baseline_tree"
+          fi
+          exit "$status"
       - name: Preserve compile budget measurements
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@v7

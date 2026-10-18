@@ -89,5 +89,10 @@ public static extern fun exchange<T>(buffer: GpuBuffer<T>, index: int, value: T)
 Stores `value` in element `index` only if the element equals `expected`.
 
 ```dream
-public static extern fun compare_exchange<T>( buffer: GpuBuffer<T>, index: int, expected: T, value: T ): T
+public static extern fun compare_exchange<T>(
+    buffer: GpuBuffer<T>,
+    index: int,
+    expected: T,
+    value: T
+): T
 ```

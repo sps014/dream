@@ -25,7 +25,13 @@ public static extern fun zeros(rows: int, columns: int): GpuCoopMat<T>
 Loads a `rows` by `columns` tile whose first element is `buffer[offset]` and whose rows are `row_stride` elements apart. The sizes must be constants.
 
 ```dream
-public static extern fun load( buffer: GpuBuffer<T>, offset: int, row_stride: int, rows: int, columns: int ): GpuCoopMat<T>
+public static extern fun load(
+    buffer: GpuBuffer<T>,
+    offset: int,
+    row_stride: int,
+    rows: int,
+    columns: int
+): GpuCoopMat<T>
 ```
 
 ## `multiply_add`
@@ -33,7 +39,11 @@ public static extern fun load( buffer: GpuBuffer<T>, offset: int, row_stride: in
 `a * b + c`, where `a` is M by K, `b` K by N, and `c` and the result M by N.
 
 ```dream
-public static extern fun multiply_add( a: GpuCoopMat<T>, b: GpuCoopMat<T>, c: GpuCoopMat<T> ): GpuCoopMat<T>
+public static extern fun multiply_add(
+    a: GpuCoopMat<T>,
+    b: GpuCoopMat<T>,
+    c: GpuCoopMat<T>
+): GpuCoopMat<T>
 ```
 
 ## `store`

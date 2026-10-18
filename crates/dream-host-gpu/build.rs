@@ -256,12 +256,14 @@ fn stage_dawn(extracted: &Path) {
     }
 }
 
+// CMake's verify step strips a literal `file://`, which turns `file:///D:/x` into `/D:/x`;
+// ExternalProject accepts a bare local path, so drive-letter paths are passed without a scheme.
 fn file_url(path: &Path) -> String {
     let path = path.to_string_lossy().replace('\\', "/");
     if path.starts_with('/') {
         format!("file://{path}")
     } else {
-        format!("file:///{path}")
+        path
     }
 }
 

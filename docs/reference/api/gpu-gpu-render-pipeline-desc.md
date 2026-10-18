@@ -105,7 +105,11 @@ public fun with_blend_mode(mode: GpuBlendMode): GpuRenderPipelineDesc
 Enables depth testing against a `format` depth buffer: a fragment is kept when `compare` passes against the stored depth, and its depth is stored when `write` is true. Returns this description.
 
 ```dream
-public fun with_depth( format: GpuTextureFormat, compare: GpuCompare, write: bool ): GpuRenderPipelineDesc
+public fun with_depth(
+    format: GpuTextureFormat,
+    compare: GpuCompare,
+    write: bool
+): GpuRenderPipelineDesc
 ```
 
 ## `with_samples`

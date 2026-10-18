@@ -97,7 +97,10 @@ public fun texture(desc: GpuTextureDesc): Result<GpuTexture, GpuError>
 Creates a `width` by `height` texture that shaders write texel by texel.  `T` chooses the format: `GpuVec4` stores four floats, `GpuVec2` two, `float` one and `uint` one unsigned integer. Other element types return `GpuError.InvalidResource`.
 
 ```dream
-public fun storage_texture<T: unmanaged>( width: int, height: int ): Result<GpuStorageTexture<T>, GpuError>
+public fun storage_texture<T: unmanaged>(
+    width: int,
+    height: int
+): Result<GpuStorageTexture<T>, GpuError>
 ```
 
 ## `sampler`
@@ -137,7 +140,11 @@ public fun create_surface(window: Window): Result<GpuSurface, GpuError>
 Creates a render pipeline from a `@vertex` and a `@fragment` shader, both given as their `GpuShaders` descriptors. Every `@location` the fragment shader reads must be written by the vertex shader; otherwise the result is `GpuError.Validation`.
 
 ```dream
-public fun render_pipeline( vertex_shader: GpuStageShader, fragment_shader: GpuStageShader, desc: GpuRenderPipelineDesc ): Result<GpuRenderPipeline, GpuError>
+public fun render_pipeline(
+    vertex_shader: GpuStageShader,
+    fragment_shader: GpuStageShader,
+    desc: GpuRenderPipelineDesc
+): Result<GpuRenderPipeline, GpuError>
 ```
 
 ## `ray_tracing_pipeline`
@@ -145,7 +152,12 @@ public fun render_pipeline( vertex_shader: GpuStageShader, fragment_shader: GpuS
 Creates a ray tracing pipeline from a `@ray_generation` shader, the `@miss` shaders `trace_ray` selects by index, the hit groups instances select by their hit group offset, and the `@callable` shaders `call_shader` selects by index. Needs `GpuFeature.RayTracing`.
 
 ```dream
-public fun ray_tracing_pipeline( ray_generation: GpuStageShader, misses: GpuStageShader[], hit_groups: GpuHitGroup[], callables: GpuStageShader[] ): Result<GpuRayTracingPipeline, GpuError>
+public fun ray_tracing_pipeline(
+    ray_generation: GpuStageShader,
+    misses: GpuStageShader[],
+    hit_groups: GpuHitGroup[],
+    callables: GpuStageShader[]
+): Result<GpuRayTracingPipeline, GpuError>
 ```
 
 ## `build_bottom_level`
@@ -153,7 +165,9 @@ public fun ray_tracing_pipeline( ray_generation: GpuStageShader, misses: GpuStag
 Builds a bottom-level acceleration structure, the ray tracing index of one mesh. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.
 
 ```dream
-public async fun build_bottom_level( geometry: GpuGeometry ): Result<GpuAccelerationStructure, GpuError>
+public async fun build_bottom_level(
+    geometry: GpuGeometry
+): Result<GpuAccelerationStructure, GpuError>
 ```
 
 ## `build_top_level`
@@ -161,7 +175,9 @@ public async fun build_bottom_level( geometry: GpuGeometry ): Result<GpuAccelera
 Builds a top-level acceleration structure from mesh instances. Shaders trace rays against it. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.
 
 ```dream
-public async fun build_top_level( instances: GpuInstance[] ): Result<GpuAccelerationStructure, GpuError>
+public async fun build_top_level(
+    instances: GpuInstance[]
+): Result<GpuAccelerationStructure, GpuError>
 ```
 
 ## `upload_mlp`
@@ -169,7 +185,12 @@ public async fun build_top_level( instances: GpuInstance[] ): Result<GpuAccelera
 Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. The host repacks them into the fastest layout for this device. `T` is usually `float16`.
 
 ```dream
-public fun upload_mlp<T: unmanaged>( weights: T[], biases: T[], inputs: int, outputs: int ): Result<GpuMlpWeights<T>, GpuError>
+public fun upload_mlp<T: unmanaged>(
+    weights: T[],
+    biases: T[],
+    inputs: int,
+    outputs: int
+): Result<GpuMlpWeights<T>, GpuError>
 ```
 
 ## `command_encoder`

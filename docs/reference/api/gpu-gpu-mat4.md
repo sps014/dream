@@ -89,7 +89,12 @@ public static fun rotation(axis: GpuVec3, radians: float): GpuMat4
 A perspective projection with a vertical field of view of `fov_y_radians`, a width-to-height `aspect` ratio, and clipping planes at distances `near` and `far` in front of the camera. Both distances must be positive and `near` below `far`.
 
 ```dream
-public static fun perspective( fov_y_radians: float, aspect: float, near: float, far: float ): GpuMat4
+public static fun perspective(
+    fov_y_radians: float,
+    aspect: float,
+    near: float,
+    far: float
+): GpuMat4
 ```
 
 ## `look_at`

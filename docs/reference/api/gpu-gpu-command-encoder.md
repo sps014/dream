@@ -33,7 +33,13 @@ public fun begin_compute_pass(): GpuComputePass
 Copies `count` elements from `source`, starting at element `source_offset`, into `destination` starting at `destination_offset`. Both ranges must lie inside their buffers. Record copies outside passes.
 
 ```dream
-public fun copy_buffer<T: unmanaged>( source: GpuBuffer<T>, source_offset: int, destination: GpuBuffer<T>, destination_offset: int, count: int ): void
+public fun copy_buffer<T: unmanaged>(
+    source: GpuBuffer<T>,
+    source_offset: int,
+    destination: GpuBuffer<T>,
+    destination_offset: int,
+    count: int
+): void
 ```
 
 ## `finish`

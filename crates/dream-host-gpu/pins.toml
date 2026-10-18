@@ -51,6 +51,7 @@ blake3 = "17ff165dc32c2c5735afecdea82f88cf680fd41fb85e56684899e615444d9e90"
 patches = [
     "0001-metal-accept-msl-source-as-precompiled-code.patch",
     "0002-vulkan-leave-unbound-acceleration-structure-slots-unwritten.patch",
+    "0003-include-cstring-for-memcpy-in-acceleration-structure-utils.patch",
 ]
 
 # Prebuilt Dawn that slang-rhi's CMake pins for its WebGPU backend.

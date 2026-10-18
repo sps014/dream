@@ -9,7 +9,13 @@ This reference lists the public declarations for this part of the library. See [
 Traces `ray` against `scene` and waits for the hit or miss shader to fill in `payload`. Hits run the first hit group plus the instance's hit group offset; misses run the first miss shader. `mask` is compared with each instance's mask, so `255` sees everything.
 
 ```dream
-public extern fun trace_ray<P>( scene: GpuAccelerationStructure, flags: GpuRayFlags, mask: uint, ray: GpuRay, ref payload: P ): void
+public extern fun trace_ray<P>(
+    scene: GpuAccelerationStructure,
+    flags: GpuRayFlags,
+    mask: uint,
+    ray: GpuRay,
+    ref payload: P
+): void
 ```
 
 ## `trace_ray_indexed`
@@ -17,7 +23,16 @@ public extern fun trace_ray<P>( scene: GpuAccelerationStructure, flags: GpuRayFl
 Like `trace_ray`, selecting hit groups as `hit_group_offset + instance offset * hit_group_stride` and the miss shader by `miss_index`, for several ray types in one pipeline.
 
 ```dream
-public extern fun trace_ray_indexed<P>( scene: GpuAccelerationStructure, flags: GpuRayFlags, mask: uint, hit_group_offset: int, hit_group_stride: int, miss_index: int, ray: GpuRay, ref payload: P ): void
+public extern fun trace_ray_indexed<P>(
+    scene: GpuAccelerationStructure,
+    flags: GpuRayFlags,
+    mask: uint,
+    hit_group_offset: int,
+    hit_group_stride: int,
+    miss_index: int,
+    ray: GpuRay,
+    ref payload: P
+): void
 ```
 
 ## `call_shader`

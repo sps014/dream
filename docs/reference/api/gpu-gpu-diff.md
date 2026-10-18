@@ -25,7 +25,11 @@ public static extern fun forward<A, R>(f: fun(A): R, a: GpuDiffPair<A>): GpuDiff
 Forward-mode derivative of a two-parameter helper.
 
 ```dream
-public static extern fun forward2<A, B, R>( f: fun(A, B): R, a: GpuDiffPair<A>, b: GpuDiffPair<B> ): GpuDiffPair<R>
+public static extern fun forward2<A, B, R>(
+    f: fun(A, B): R,
+    a: GpuDiffPair<A>,
+    b: GpuDiffPair<B>
+): GpuDiffPair<R>
 ```
 
 ## `forward3`
@@ -33,7 +37,12 @@ public static extern fun forward2<A, B, R>( f: fun(A, B): R, a: GpuDiffPair<A>, 
 Forward-mode derivative of a three-parameter helper.
 
 ```dream
-public static extern fun forward3<A, B, C, R>( f: fun(A, B, C): R, a: GpuDiffPair<A>, b: GpuDiffPair<B>, c: GpuDiffPair<C> ): GpuDiffPair<R>
+public static extern fun forward3<A, B, C, R>(
+    f: fun(A, B, C): R,
+    a: GpuDiffPair<A>,
+    b: GpuDiffPair<B>,
+    c: GpuDiffPair<C>
+): GpuDiffPair<R>
 ```
 
 ## `backward`
@@ -49,7 +58,12 @@ public static extern fun backward<A, R>(f: fun(A): R, ref a: GpuDiffPair<A>, d_o
 Reverse-mode gradient of a two-parameter helper.
 
 ```dream
-public static extern fun backward2<A, B, R>( f: fun(A, B): R, ref a: GpuDiffPair<A>, ref b: GpuDiffPair<B>, d_output: R ): void
+public static extern fun backward2<A, B, R>(
+    f: fun(A, B): R,
+    ref a: GpuDiffPair<A>,
+    ref b: GpuDiffPair<B>,
+    d_output: R
+): void
 ```
 
 ## `backward3`
@@ -57,5 +71,11 @@ public static extern fun backward2<A, B, R>( f: fun(A, B): R, ref a: GpuDiffPair
 Reverse-mode gradient of a three-parameter helper.
 
 ```dream
-public static extern fun backward3<A, B, C, R>( f: fun(A, B, C): R, ref a: GpuDiffPair<A>, ref b: GpuDiffPair<B>, ref c: GpuDiffPair<C>, d_output: R ): void
+public static extern fun backward3<A, B, C, R>(
+    f: fun(A, B, C): R,
+    ref a: GpuDiffPair<A>,
+    ref b: GpuDiffPair<B>,
+    ref c: GpuDiffPair<C>,
+    d_output: R
+): void
 ```

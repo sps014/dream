@@ -149,8 +149,8 @@ fn check_saxpy(out: i32, x: &[f32], y: &[f32], a: f32) -> Result<(), String> {
     if result.len() != 4 * x.len() {
         return Err(format!("readback returned {} bytes: {}", result.len(), error::last_text()));
     }
-    for (i, chunk) in result.chunks_exact(4).enumerate() {
-        let got = f32::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in result.as_chunks::<4>().0.iter().enumerate() {
+        let got = f32::from_le_bytes(*chunk);
         let expected = a * x[i] + y[i];
         if (got - expected).abs() > 1e-3 {
             return Err(format!("result[{i}] = {got}, expected {expected}"));
@@ -421,8 +421,8 @@ fn scale(device: i32) -> Result<(), String> {
         .op(3, &[]);
     commands.submit(device)?;
     let result = read_buffer(data, 0, 400);
-    for (i, chunk) in result.chunks_exact(4).enumerate() {
-        let got = f32::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in result.as_chunks::<4>().0.iter().enumerate() {
+        let got = f32::from_le_bytes(*chunk);
         let expected = if i < 90 { i as f32 * 3.0 } else { i as f32 };
         if got != expected {
             return Err(format!("scale[{i}] = {got}, expected {expected}"));
@@ -464,8 +464,8 @@ fn generated(device: i32) -> Result<(), String> {
     if result.len() != 64 * 4 {
         return Err(format!("generated readback returned {} bytes", result.len()));
     }
-    for (i, chunk) in result.chunks_exact(4).enumerate() {
-        let got = u32::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in result.as_chunks::<4>().0.iter().enumerate() {
+        let got = u32::from_le_bytes(*chunk);
         let expected = if i < 48 { 1000 + i as u32 + 7 } else { 7 };
         if got != expected {
             return Err(format!("generated[{i}] = {got}, expected {expected}"));
@@ -506,7 +506,7 @@ fn triangle(device: i32) -> Result<(), String> {
     if pixels.len() != (width * height * 4) as usize {
         return Err(format!("texture readback returned {} bytes: {}", pixels.len(), error::last_text()));
     }
-    for (i, pixel) in pixels.chunks_exact(4).enumerate() {
+    for (i, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
         let red_ok = (126..=129).contains(&pixel[0]);
         if !red_ok || pixel[1] != 0 || pixel[2] != 0 || pixel[3] != 255 {
             return Err(format!("pixel {i} is {pixel:?}, expected [127/128, 0, 0, 255]"));

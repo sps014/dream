@@ -22,6 +22,7 @@ fn dream(dir: &Path, envs: &[(&str, &Path)], args: &[&str]) -> Output {
     command.args(args).output().unwrap()
 }
 
+#[cfg(unix)]
 fn files_under(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap().flatten() {
         let path = entry.path();

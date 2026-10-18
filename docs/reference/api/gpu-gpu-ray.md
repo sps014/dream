@@ -49,5 +49,10 @@ public t_max: float
 Creates a ray from `origin` along `direction` that counts hits from `t_min` to `t_max`.
 
 ```dream
-public static extern fun of( origin: GpuVec3, direction: GpuVec3, t_min: float, t_max: float ): GpuRay
+public static extern fun of(
+    origin: GpuVec3,
+    direction: GpuVec3,
+    t_min: float,
+    t_max: float
+): GpuRay
 ```

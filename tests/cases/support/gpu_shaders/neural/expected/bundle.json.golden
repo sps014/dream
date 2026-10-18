@@ -6,13 +6,13 @@
     {
       "name": "spirv",
       "code_format": "spirv",
-      "layouts": [{"offset": 0, "size": 11595, "sha256": "3d39915a35129b8065962f6799d59c527efc27bd1a99de2ca8a9561d4abccf11"}, {"offset": 11595, "size": 9394, "sha256": "dd3589839646228aa6f6e6bed0f918bfadceefb7caad24f5e5c295de06378fa1"}],
+      "layouts": [{"offset": 0, "size": 11645, "sha256": "e848da04e85aff0257aafb089a5b51e7edee809f418010ffa40cdccbb18ba95f"}, {"offset": 11645, "size": 9394, "sha256": "dd3589839646228aa6f6e6bed0f918bfadceefb7caad24f5e5c295de06378fa1"}],
       "entries": [
         {
           "name": "evaluate_mlp",
           "stage": "compute",
           "layout": 0,
-          "code": {"offset": 20989, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
+          "code": {"offset": 21039, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
           "thread_group_size": [32, 1, 1],
           "params": [
             {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
@@ -26,7 +26,7 @@
           "name": "tile_multiply",
           "stage": "compute",
           "layout": 1,
-          "code": {"offset": 23173, "size": 1312, "sha256": "ab2a394668bd1b07e26bda8e2a07f5f90b94994e9e042dc80556fe44b6084511"},
+          "code": {"offset": 23223, "size": 1312, "sha256": "345a089aee10f05ce3f9c671b1b5929c44ae0f2bb86a12bf9e2ebde9cbed17bc"},
           "thread_group_size": [32, 1, 1],
           "params": [
             {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},

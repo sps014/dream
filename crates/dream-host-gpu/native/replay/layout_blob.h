@@ -33,6 +33,8 @@ enum class Query : uint16_t
     EntryPointStage = 12,
     EntryPointVarLayout = 13,
     EntryPointThreadGroupSize = 14,
+    EntryPointParameterCount = 15,
+    EntryPointParameterByIndex = 16,
 
     TypeLayoutType = 20,
     TypeLayoutKind = 21,

@@ -63,6 +63,7 @@ extern "C" int dgpu_enc_build_bottom_level(
     DgpuObject** scratch
 )
 {
+    DeviceScope deviceScope(e->device->device);
     *out = nullptr;
     *scratch = nullptr;
     AccelerationStructureGeometryFlags flags =
@@ -107,6 +108,7 @@ extern "C" int dgpu_enc_build_top_level(
     DgpuObject** instance_buffer
 )
 {
+    DeviceScope deviceScope(e->device->device);
     *out = nullptr;
     *scratch = nullptr;
     *instance_buffer = nullptr;
@@ -161,6 +163,7 @@ extern "C" int dgpu_ray_tracing_pipeline_create(
     DgpuPipeline** out
 )
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     auto pipeline = std::make_unique<DgpuPipeline>();
     pipeline->rayTracing = true;

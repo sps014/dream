@@ -61,6 +61,8 @@ struct DgpuProgramData;
 
 } // namespace dream::gpu
 
+// Device creation, guest calls and completion waits run on different threads. Driver-facing
+// glue enters rhi::DeviceScope because CUDA's current context belongs to the calling thread.
 struct DgpuDevice
 {
     int backend = 0;

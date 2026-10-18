@@ -5,6 +5,7 @@
 //! host C++ compiler is located the way Cargo build scripts locate it (the `cc` crate).
 
 use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
@@ -22,6 +23,22 @@ const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../crates/dream-host-gpu/native/replay/layout_blob.h"),
     ),
 ];
+
+const STAMP: &str = "share/dream-slang-layout/source.sha256";
+
+fn fingerprint() -> String {
+    let mut hash = Sha256::new();
+    hash.update(include_str!("slang_layout.rs"));
+    for (path, source) in SOURCES {
+        hash.update(path.as_bytes());
+        hash.update(source.as_bytes());
+    }
+    format!("{:x}", hash.finalize())
+}
+
+pub fn is_current(root: &Path) -> bool {
+    fs::read_to_string(root.join(STAMP)).is_ok_and(|stamp| stamp == fingerprint())
+}
 
 /// The Rust target triple of this dreamer build, which is the host the tool runs on.
 fn host_triple() -> Result<&'static str> {
@@ -105,5 +122,6 @@ pub fn build(root: &Path) -> Result<()> {
         );
     }
     let _ = fs::remove_dir_all(&objects);
+    fs::write(root.join(STAMP), fingerprint())?;
     Ok(())
 }

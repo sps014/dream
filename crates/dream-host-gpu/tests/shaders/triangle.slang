@@ -1,4 +1,9 @@
-// A full-target triangle: vertices from SV_VertexID, color from a fragment `uniform`.
+// Vulkan's explicit index avoids Slang synthesizing a second, unordered base-vertex input.
+#if defined(DREAM_TARGET_DXIL) || defined(DREAM_TARGET_DXBC)
+#define DREAM_VERTEX_ID SV_VertexID
+#else
+#define DREAM_VERTEX_ID SV_VulkanVertexID
+#endif
 
 struct VertexOutput
 {
@@ -7,7 +12,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput triangle_vertex(uint vertex_id : SV_VulkanVertexID)
+VertexOutput triangle_vertex(uint vertex_id : DREAM_VERTEX_ID)
 {
     float2 corners[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
     VertexOutput output;

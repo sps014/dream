@@ -63,6 +63,7 @@ extern "C" int dgpu_program_create(
     DgpuProgram** out
 )
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     std::vector<dream::slang_replay::PrecompiledEntryPoint> code;
     for (uint32_t i = 0; i < entry_count; i++)
@@ -104,6 +105,7 @@ extern "C" int dgpu_compute_pipeline_create(
     DgpuPipeline** out
 )
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     auto pipeline = std::make_unique<DgpuPipeline>();
     int status = resolveBindings(program, stage, 1, pipeline->stages);
@@ -126,6 +128,7 @@ extern "C" int dgpu_render_pipeline_create(
     DgpuPipeline** out
 )
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     auto pipeline = std::make_unique<DgpuPipeline>();
     pipeline->render = true;

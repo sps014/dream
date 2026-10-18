@@ -185,10 +185,6 @@ fn parent(exe: &str) {
                 .expect("running the loader self-test");
             assert!(status.success(), "the loader check missed a mapped Slang compiler");
             println!("loader self-test: a deliberately mapped {} is detected", library.display());
-            // The Windows loader self-test maps nothing, so there is nothing to stop there.
-            if cfg!(windows) {
-                return run_backends(exe);
-            }
             let output = Command::new(exe)
                 .args(["--strict-aot-self-test", &library.to_string_lossy()])
                 .env("DREAM_GPU_STRICT_AOT", "1")
@@ -245,7 +241,10 @@ fn run_backends(exe: &str) {
 fn slang_compiler_library() -> Option<PathBuf> {
     let root = std::env::var_os("DREAM_SLANG")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".dream/toolchains/slang-2026.20")))?;
+        .or_else(|| {
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .map(|h| PathBuf::from(h).join(".dream/toolchains/slang-2026.20"))
+        })?;
     let name = if cfg!(target_os = "macos") {
         "lib/libslang-compiler.dylib"
     } else if cfg!(windows) {
@@ -270,8 +269,29 @@ fn loader_self_test(library: &str) -> i32 {
 }
 
 #[cfg(windows)]
-fn loader_self_test(_library: &str) -> i32 {
-    0
+fn loader_self_test(library: &str) -> i32 {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::LibraryLoader::{
+        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LoadLibraryExW,
+    };
+
+    if testing::loaded_slang_compilers().0 != 0 {
+        return 1;
+    }
+    let path: Vec<u16> = std::ffi::OsStr::new(library).encode_wide().chain(Some(0)).collect();
+    // Slang's companion DLLs live next to the compiler, outside the test executable's PATH.
+    let handle = unsafe {
+        LoadLibraryExW(
+            path.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        )
+    };
+    if handle.is_null() {
+        eprintln!("loading {library}: {}", std::io::Error::last_os_error());
+        return 1;
+    }
+    if testing::loaded_slang_compilers().0 > 0 { 0 } else { 1 }
 }
 
 /// Maps the Slang compiler, then opens a device: with `DREAM_GPU_STRICT_AOT` set the host must
@@ -352,7 +372,12 @@ fn child(backend: Backend) -> i32 {
         return 0;
     }
     // The committed bundles come from a machine without dxc, fxc or NVRTC.
-    let compiled = [SAXPY, TRIANGLE, GENERATED, QUAD]
+    let required: &[&[u8]] = if backend == Backend::Cuda {
+        &[SAXPY, GENERATED]
+    } else {
+        &[SAXPY, TRIANGLE, GENERATED, QUAD]
+    };
+    let compiled = required
         .iter()
         .all(|b| bundle::parse(b).is_ok_and(|b| b.target_for(backend).is_some()));
     if !compiled {
@@ -393,23 +418,33 @@ fn run_suite(backend: Backend, device: i32) -> Result<String, String> {
     assert_eq!(devices::backend(device).unwrap(), backend as i32);
     let features = devices::features(device).unwrap();
     devices::check(device).map_err(|e| e.text())?;
+    println!("CHECK saxpy");
     saxpy(device)?;
+    println!("CHECK entry parameters");
     scale(device)?;
+    println!("CHECK generated compute");
     generated(device)?;
-    triangle(device)?;
-    quad(device)?;
+    if backend != Backend::Cuda {
+        triangle(device)?;
+        quad(device)?;
+    }
     errors(device)?;
     let deferred = testing::deferred_releases();
-    let surface_check = if std::env::var_os("DREAM_GPU_SURFACE_TEST").is_some() {
+    let surface_check = if backend == Backend::Cuda {
+        "CUDA is compute only"
+    } else if std::env::var_os("DREAM_GPU_SURFACE_TEST").is_some() {
         surface(device)?;
         "3 frames presented to a real window, resized"
     } else {
         "window surface skipped (set DREAM_GPU_SURFACE_TEST=1)"
     };
     device_loss(device)?;
-    Ok(format!(
-        "saxpy, entry-parameter and generator-style compute, offscreen triangle, textured indexed quad with depth and error mapping verified; {surface_check} (features {features:#010b}, {deferred} deferred releases left)"
-    ))
+    let checks = if backend == Backend::Cuda {
+        "saxpy, entry-parameter and generator-style compute and error mapping verified"
+    } else {
+        "saxpy, entry-parameter and generator-style compute, offscreen triangle, textured indexed quad with depth and error mapping verified"
+    };
+    Ok(format!("{checks}; {surface_check} (features {features:#010b}, {deferred} deferred releases left)"))
 }
 
 fn scale(device: i32) -> Result<(), String> {
@@ -677,7 +712,8 @@ fn surface(device: i32) -> Result<(), String> {
     testing::set_window_surface_fn(dream_window_surface_v1);
     let window = host::open("dream-host-gpu surface", 320, 200, 4).map_err(|e| e.code.to_string())?;
     host::poll(window);
-    let surface = surfaces::surface_create(device, window, true).map_err(|e| e.text())?;
+    let surface = surfaces::surface_create(device, window, true)
+        .map_err(|e| format!("surface create: {}", e.text()))?;
     let [format, width, height] = surfaces::surface_info(surface).map_err(|e| e.text())?;
     if !(0..=3).contains(&format) || width <= 0 || height <= 0 {
         return Err(format!("surface info [{format}, {width}, {height}]"));
@@ -702,7 +738,8 @@ fn surface(device: i32) -> Result<(), String> {
         }
         host::poll(window);
     }
-    surfaces::surface_resize(surface, 640, 400).map_err(|e| e.text())?;
+    surfaces::surface_resize(surface, 640, 400)
+        .map_err(|e| format!("surface resize: {}", e.text()))?;
     let resized = surfaces::surface_info(surface).map_err(|e| e.text())?;
     if resized[1..] != [640, 400] {
         return Err(format!("resized surface reports {resized:?}"));

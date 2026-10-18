@@ -41,7 +41,7 @@ fun saxpy_ok<T>(result: Result<T, GpuError>, what: string): T {
     }
 }
 
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu, GpuTarget.Dx12, GpuTarget.Dx11)
 @compute(64, 1, 1)
 fun saxpy(
     @readonly x: GpuBuffer<float>,
@@ -53,6 +53,30 @@ fun saxpy(
     let i = global_id().x;
     if i < n {
         out[i] = a * x[i] + y[i];
+    }
+}
+
+@gpu
+fun switch_value(index: int): int {
+    let result = 0;
+    switch (index % 4) {
+        case 0:
+            result = 10;
+        case 1,
+        2:
+            result = 20;
+        default:
+            result = 30;
+    }
+    return result;
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu, GpuTarget.Dx12, GpuTarget.Dx11)
+@compute(64)
+fun switch_fill(out: GpuBuffer<int>, n: int): void {
+    let i = (int)global_id().x;
+    if i < n {
+        out[i] = switch_value(i);
     }
 }
 
@@ -108,6 +132,19 @@ async fun gpu_compute_saxpy(): void {
                 );
                 let again = saxpy_ok(out.read().await, "second read");
                 Assert.eq(again[10], -5.0f);
+                let switched = saxpy_ok(device.buffer_alloc<int>(n), "switch output");
+                saxpy_ok(
+                    GpuShaders.switch_fill.dispatch(device, GpuDispatch.threads_1d(n), switched, n)
+                        .await,
+                    "switch on " + label
+                );
+                let selected = saxpy_ok(switched.read().await, "switch read");
+                Assert.eq(selected.length, n);
+                for (let i = 0; i < n; i = i + 1) {
+                    let expected = i % 4 == 0 ? 10 : (i % 4 == 3 ? 30 : 20);
+                    Assert.eq(selected[i], expected);
+                }
+                System.println(label + " saxpy and switch match the CPU");
             }
             None => {}
         }

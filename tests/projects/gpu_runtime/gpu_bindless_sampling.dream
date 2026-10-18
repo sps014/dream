@@ -60,7 +60,7 @@ public struct BindlessVarying {
 
 // One triangle that covers the whole target; `uv` runs from (0, 0) at the top-left to (1, 1)
 // at the bottom-right.
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan)
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12)
 @vertex
 fun bindless_vertex(): BindlessVarying {
     let x = -1.0f;
@@ -78,7 +78,7 @@ fun bindless_vertex(): BindlessVarying {
 
 // The left half samples material 0 and the right half material 1, picked at run time from a
 // buffer of bindless handles.
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan)
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12)
 @fragment
 fun bindless_fragment(
     @readonly materials: GpuBuffer<BindlessMaterial>,
@@ -179,6 +179,7 @@ async fun gpu_bindless_sampling(): void {
                 Assert.eq((int)bytes[at_right], 0);
                 Assert.eq((int)bytes[at_right + 1], 255);
                 Assert.eq((int)bytes[at_right + 3], 255);
+                System.println(label + " bindless textures match both materials");
             }
             None => {}
         }

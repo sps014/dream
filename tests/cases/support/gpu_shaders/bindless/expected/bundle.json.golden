@@ -6,13 +6,13 @@
     {
       "name": "spirv",
       "code_format": "spirv",
-      "layouts": [{"offset": 0, "size": 15855, "sha256": "294d7fa9fd1f78ef41f9d4d980d7ca641c466afdd803b8723aeaae4426281c60"}],
+      "layouts": [{"offset": 0, "size": 15905, "sha256": "552c9097e0e8251ebced126931847c7aa0f3633f298a32c8d6fa801c3ab61e50"}],
       "entries": [
         {
           "name": "shade_material",
           "stage": "fragment",
           "layout": 0,
-          "code": {"offset": 15855, "size": 1656, "sha256": "99d7c48ece6e3148095eed6f8c7832e370ee8e50bb659f3b5f16a590329d86ee"},
+          "code": {"offset": 15905, "size": 1656, "sha256": "99d7c48ece6e3148095eed6f8c7832e370ee8e50bb659f3b5f16a590329d86ee"},
           "thread_group_size": [0, 0, 0],
           "params": [
             {"name": "materials", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0}

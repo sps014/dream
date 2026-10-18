@@ -111,21 +111,14 @@ void spReflectionEntryPoint_getComputeThreadGroupSize(
         outSizeAlongAxis[axis] = axis < 3 ? SlangUInt(ask(e, Query::EntryPointThreadGroupSize, int64_t(axis))) : 1;
 }
 
-// An entry point's variable layout is a struct whose fields are its parameters, so the CUDA
-// backend's parameter walk reads the recorded fields.
 unsigned spReflectionEntryPoint_getParameterCount(SlangReflectionEntryPoint* e)
 {
-    return unsigned(spReflectionTypeLayout_GetFieldCount(
-        spReflectionVariableLayout_GetTypeLayout(spReflectionEntryPoint_getVarLayout(e))
-    ));
+    return unsigned(ask(e, Query::EntryPointParameterCount));
 }
 
 SlangReflectionVariableLayout* spReflectionEntryPoint_getParameterByIndex(SlangReflectionEntryPoint* e, unsigned index)
 {
-    return spReflectionTypeLayout_GetFieldByIndex(
-        spReflectionVariableLayout_GetTypeLayout(spReflectionEntryPoint_getVarLayout(e)),
-        index
-    );
+    return askNode<SlangReflectionVariableLayout>(e, Query::EntryPointParameterByIndex, index);
 }
 
 // Type layouts

@@ -38,6 +38,7 @@ Extent3D mipExtent(ITexture* texture, uint32_t mip)
 
 extern "C" int dgpu_encoder_begin(DgpuDevice* device, DgpuEncoder** out)
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     auto encoder = new DgpuEncoder();
     encoder->device = device;
@@ -55,12 +56,14 @@ extern "C" void dgpu_encoder_abort(DgpuEncoder* e)
 {
     if (!e)
         return;
+    DeviceScope deviceScope(e->device->device);
     endPass(e);
     delete e;
 }
 
 extern "C" int dgpu_encoder_submit(DgpuEncoder* e, uint64_t* fence_value)
 {
+    DeviceScope deviceScope(e->device->device);
     std::unique_ptr<DgpuEncoder> owned(e);
     DgpuDevice* device = e->device;
     endPass(e);
@@ -86,6 +89,7 @@ extern "C" int dgpu_encoder_submit(DgpuEncoder* e, uint64_t* fence_value)
 
 extern "C" int dgpu_enc_write_buffer(DgpuEncoder* e, DgpuObject* buffer, uint64_t offset, const void* data, uint64_t size)
 {
+    DeviceScope deviceScope(e->device->device);
     Result result = e->encoder->uploadBufferData(static_cast<IBuffer*>(buffer), offset, size, data);
     return SLANG_FAILED(result) ? failResult(e->device, result, "buffer upload failed") : DGPU_OK;
 }
@@ -99,6 +103,7 @@ extern "C" int dgpu_enc_write_texture(
     uint64_t size
 )
 {
+    DeviceScope deviceScope(e->device->device);
     ITexture* t = static_cast<ITexture*>(texture);
     SubresourceLayout tight;
     if (SLANG_FAILED(t->getSubresourceLayout(mip, 1, &tight)))
@@ -119,12 +124,14 @@ extern "C" int dgpu_enc_copy_buffer(
     uint64_t size
 )
 {
+    DeviceScope deviceScope(e->device->device);
     e->encoder->copyBuffer(static_cast<IBuffer*>(dst), dst_offset, static_cast<IBuffer*>(src), src_offset, size);
     return DGPU_OK;
 }
 
 extern "C" int dgpu_enc_read_texture(DgpuEncoder* e, DgpuObject* texture, uint32_t mip, uint32_t layer, DgpuObject* readback)
 {
+    DeviceScope deviceScope(e->device->device);
     ITexture* t = static_cast<ITexture*>(texture);
     SubresourceLayout layout;
     if (SLANG_FAILED(t->getSubresourceLayout(mip, &layout)))
@@ -154,6 +161,7 @@ extern "C" int dgpu_enc_begin_render_pass(
     float depth_value
 )
 {
+    DeviceScope deviceScope(e->device->device);
     if (e->render || e->compute || e->rayTracing)
         return passError("a pass is already open");
     ITexture* target = static_cast<ITexture*>(color);
@@ -189,6 +197,7 @@ extern "C" int dgpu_enc_begin_render_pass(
 
 extern "C" int dgpu_enc_begin_compute_pass(DgpuEncoder* e)
 {
+    DeviceScope deviceScope(e->device->device);
     if (e->render || e->compute || e->rayTracing)
         return passError("a pass is already open");
     e->compute = e->encoder->beginComputePass();
@@ -201,6 +210,7 @@ extern "C" int dgpu_enc_begin_compute_pass(DgpuEncoder* e)
 
 extern "C" int dgpu_enc_end_pass(DgpuEncoder* e)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->render && !e->compute && !e->rayTracing)
         return passError("no pass is open");
     endPass(e);
@@ -209,6 +219,7 @@ extern "C" int dgpu_enc_end_pass(DgpuEncoder* e)
 
 extern "C" int dgpu_enc_set_pipeline(DgpuEncoder* e, DgpuPipeline* pipeline)
 {
+    DeviceScope deviceScope(e->device->device);
     if (pipeline->rayTracing)
     {
         // The command stream traces rays inside a compute pass; slang-rhi records them in a
@@ -237,6 +248,7 @@ extern "C" int dgpu_enc_set_pipeline(DgpuEncoder* e, DgpuPipeline* pipeline)
 
 extern "C" int dgpu_enc_bind(DgpuEncoder* e, uint32_t entry, uint32_t index, DgpuObject* resource, const void* data, uint32_t size)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->pipeline || !e->root)
         return passError("bind needs a pipeline");
     if (entry >= e->pipeline->stages.size() || index >= e->pipeline->stages[entry].size())
@@ -281,6 +293,7 @@ extern "C" int dgpu_enc_bind(DgpuEncoder* e, uint32_t entry, uint32_t index, Dgp
 
 extern "C" int dgpu_enc_set_vertex_buffer(DgpuEncoder* e, uint32_t slot, DgpuObject* buffer, uint64_t offset)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->render || slot >= 16)
         return passError("vertex buffers need a render pass and a slot below 16");
     e->state.vertexBuffers[slot] = {static_cast<IBuffer*>(buffer), offset};
@@ -290,6 +303,7 @@ extern "C" int dgpu_enc_set_vertex_buffer(DgpuEncoder* e, uint32_t slot, DgpuObj
 
 extern "C" int dgpu_enc_set_index_buffer(DgpuEncoder* e, DgpuObject* buffer, uint32_t format, uint64_t offset)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->render)
         return passError("index buffers need a render pass");
     e->state.indexBuffer = {static_cast<IBuffer*>(buffer), offset};
@@ -299,6 +313,7 @@ extern "C" int dgpu_enc_set_index_buffer(DgpuEncoder* e, DgpuObject* buffer, uin
 
 extern "C" int dgpu_enc_set_viewport(DgpuEncoder* e, const float* v)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->render)
         return passError("viewports need a render pass");
     e->state.viewports[0] = {v[0], v[1], v[2], v[3], v[4], v[5]};
@@ -309,6 +324,7 @@ extern "C" int dgpu_enc_set_viewport(DgpuEncoder* e, const float* v)
 
 extern "C" int dgpu_enc_set_scissor(DgpuEncoder* e, int32_t x, int32_t y, int32_t width, int32_t height)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->render)
         return passError("scissors need a render pass");
     e->state.scissorRects[0] = {uint32_t(x), uint32_t(y), uint32_t(x + width), uint32_t(y + height)};
@@ -342,6 +358,7 @@ int prepareDraw(DgpuEncoder* e)
 
 extern "C" int dgpu_enc_draw(DgpuEncoder* e, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance)
 {
+    DeviceScope deviceScope(e->device->device);
     int status = prepareDraw(e);
     if (status != DGPU_OK)
         return status;
@@ -363,6 +380,7 @@ extern "C" int dgpu_enc_draw_indexed(
     uint32_t first_instance
 )
 {
+    DeviceScope deviceScope(e->device->device);
     int status = prepareDraw(e);
     if (status != DGPU_OK)
         return status;
@@ -380,6 +398,7 @@ extern "C" int dgpu_enc_draw_indexed(
 
 extern "C" int dgpu_enc_dispatch(DgpuEncoder* e, uint32_t x, uint32_t y, uint32_t z)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->compute || !e->pipeline || e->pipeline->render)
         return passError("dispatch needs a compute pass with a compute pipeline");
     e->compute->dispatchCompute(x, y, z);
@@ -388,6 +407,7 @@ extern "C" int dgpu_enc_dispatch(DgpuEncoder* e, uint32_t x, uint32_t y, uint32_
 
 extern "C" int dgpu_enc_trace_rays(DgpuEncoder* e, uint32_t width, uint32_t height, uint32_t depth)
 {
+    DeviceScope deviceScope(e->device->device);
     if (!e->rayTracing || !e->pipeline || !e->pipeline->rayTracing)
         return passError("trace_rays needs a ray tracing pipeline");
     e->rayTracing->dispatchRays(0, width, height, depth);

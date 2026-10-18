@@ -179,7 +179,10 @@ extern "C" void dgpu_device_destroy(DgpuDevice* device)
     if (!device)
         return;
     if (device->queue)
+    {
+        DeviceScope deviceScope(device->device);
         device->queue->waitOnHost();
+    }
     delete device;
 }
 
@@ -196,6 +199,7 @@ static bool samplerHandlesWork(IDevice* d)
 
 extern "C" uint32_t dgpu_device_features(DgpuDevice* device)
 {
+    DeviceScope deviceScope(device->device);
     IDevice* d = device->device;
     // GpuFeature order: RayTracing, RayQuery, Bindless, Subgroups, CooperativeVectors,
     // CooperativeMatrices, Float16, Atomics64.
@@ -231,6 +235,7 @@ extern "C" int dgpu_device_lost(DgpuDevice* device)
 
 extern "C" int dgpu_fence_wait(DgpuDevice* device, uint64_t value, uint64_t timeout_ns)
 {
+    DeviceScope deviceScope(device->device);
     IFence* fence = device->fence;
     Result result = device->device->waitForFences(1, &fence, &value, true, timeout_ns);
     if (result == SLANG_E_TIME_OUT)

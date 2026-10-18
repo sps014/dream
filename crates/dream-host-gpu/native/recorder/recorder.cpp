@@ -120,6 +120,10 @@ private:
         putString(id, Query::EntryPointNameOverride, e->getNameOverride());
         put(id, Query::EntryPointStage, e->getStage());
         putNode(id, Query::EntryPointVarLayout, NodeKind::VariableLayout, e->getVarLayout());
+        unsigned parameterCount = e->getParameterCount();
+        put(id, Query::EntryPointParameterCount, parameterCount);
+        for (unsigned i = 0; i < parameterCount; i++)
+            putNode(id, Query::EntryPointParameterByIndex, NodeKind::VariableLayout, e->getParameterByIndex(i), int32_t(i));
         SlangUInt size[3] = {};
         e->getComputeThreadGroupSize(3, size);
         for (int axis = 0; axis < 3; axis++)

@@ -22,6 +22,21 @@ dreamer toolchain install slang
 
 Programs without shaders, such as one that only lists devices, build without it.
 
+On Windows, DXIL targets also need the Windows SDK's DirectX compiler inside the Slang tool
+root so the generator sandbox can read it. From an x64 Visual Studio Developer PowerShell:
+
+```powershell
+$sdkBin = Join-Path $env:WindowsSdkVerBinPath x64
+$slangBin = Join-Path $env:USERPROFILE '.dream/toolchains/slang-2026.20/bin'
+foreach ($library in @('dxcompiler.dll', 'dxil.dll')) {
+    Copy-Item -LiteralPath (Join-Path $sdkBin $library) -Destination $slangBin
+}
+```
+
+The generator fingerprints these libraries together with the tool installation. They are
+build tools and are not shipped with the game. Dream chooses the shader model required by
+each pipeline group: ray queries need Shader Model 6.5 and bindless handles need 6.6.
+
 At run time, native programs use the GPU drivers already on the machine. Browser builds use the
 browser's WebGPU support; include the JavaScript host with `--runtime --web` (see
 [JavaScript interop](../../language/interop/index.md)).

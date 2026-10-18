@@ -73,6 +73,7 @@ jobs:
           (cd "$baseline_tree" && CARGO_TARGET_DIR="$PWD/target" \
             cargo build --locked --release -p dream -p dream-host)
           echo "dream=$baseline_tree/target/release/dream" >> "$GITHUB_OUTPUT"
+          echo "runtime=$baseline_tree/crates/dream-mir/src/runtime/c" >> "$GITHUB_OUTPUT"
           echo "available=true" >> "$GITHUB_OUTPUT"
       # Paired rounds on one runner: a non-overlapping slowdown past the 10% budget against the
       # base revision fails the job.
@@ -80,6 +81,7 @@ jobs:
         if: ${{ !cancelled() && steps.baseline.outputs.available == 'true' }}
         env:
           BASELINE_DREAM: ${{ steps.baseline.outputs.dream }}
+          BASELINE_RUNTIME: ${{ steps.baseline.outputs.runtime }}
         shell: bash
         run: |
           failed=0
@@ -89,7 +91,8 @@ jobs:
             python3 scripts/bench.py --target native --suite "$suite" \
               --arms baseline current --current-dream target/release/dream \
               --baseline-dream "$BASELINE_DREAM" \
-              --warmup 2 --rounds 12 --passes 5 --fail-on-regression --out "$output" \
+              --baseline-runtime "$BASELINE_RUNTIME" \
+              --warmup 2 --rounds 12 --passes 5 --diagnostics --fail-on-regression --out "$output" \
               2>&1 | tee "$output/comparison.txt" || failed=1
           done
           exit "$failed"
@@ -118,5 +121,7 @@ jobs:
           path: |
             target/bench-gate/*/*.txt
             target/bench-gate/*/*.json*
+            target/bench-gate/**/*.opt.ll
+            target/bench-gate/**/*.remarks.yaml
           retention-days: 30
           if-no-files-found: warn

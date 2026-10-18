@@ -51,6 +51,10 @@ internal class Reflection {
                 } else {
                     r.binding = binding.get_int_or("index", 0);
                     r.space = binding.get_int_or("space", 0);
+                    // CUDA resources and constant buffers are pointers in the uniform block.
+                    if kind == "uniform" {
+                        r.binding = binding.get_int_or("offset", 0);
+                    }
                 }
                 r.found = true;
                 if p.is_value() {

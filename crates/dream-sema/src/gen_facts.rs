@@ -75,6 +75,33 @@ mod tests {
     use dream_syntax::{lexer::Lexer, parser::Parser};
 
     #[test]
+    fn check_only_switch_labels_keep_constant_validation() {
+        for (labels, expected) in [
+            ("case -1: return; case 0, 1: return;", None),
+            ("case 1: return; case 1: return;", Some("duplicate case label '1'")),
+            ("case input: return;", Some("switch case labels must be constant")),
+        ] {
+            let arena = Bump::new();
+            let source = format!("fun choose(input: int): void {{ switch (input) {{ {labels} }} }}");
+            let mut diagnostics = DiagnosticBag::new(None);
+            let mut parser = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics);
+            let program = parser.parse().unwrap().get_root().clone();
+            assert!(!diagnostics.has_errors());
+            let graph = crate::module_graph::ModuleGraph::new(
+                vec![("switch.dream".into(), source, program)],
+                &IndexMap::new(),
+            );
+            let facts = crate::analyzer::Analyzer::new(&graph, &arena).analyze_for_generators();
+            let messages: Vec<_> = facts.diagnostics.iter().map(|d| d.message.as_str()).collect();
+            if let Some(expected) = expected {
+                assert!(messages.iter().any(|m| m.contains(expected)), "{messages:?}");
+            } else {
+                assert!(messages.is_empty(), "{messages:?}");
+            }
+        }
+    }
+
+    #[test]
     fn facts_survive_poison_and_preserve_overload_and_constants() {
         let arena = Bump::new();
         let source = "interface View<T> { fun read(): T; } class Box<T> : View<T> { public value: T; public constructor(value: T) { this.value = value; } public fun read(): T { return this.value; } } fun pick(x: int): int { return x; }\nfun pick(x: string): string { return x; }\nfun main(): void { let inferred = 1 + 2; let selected = pick(inferred); let box = Box<int>(5); let read = box.read(); let poison = not_generated_yet(); }";

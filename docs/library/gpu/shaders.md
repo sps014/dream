@@ -73,7 +73,7 @@ Vertex and fragment shaders also take stage inputs: the struct returned by the v
 Shader bodies use a subset of Dream that maps directly onto GPU hardware:
 
 - `let` bindings, assignments, arithmetic and comparisons on numbers, vectors and structs
-- `if`/`else`, `while`, `break`, `continue` and `return`
+- `if`/`else`, `while`, `break`, `continue`, `return`, and C-style `switch` with `case`/`default`
 - `for (let i in 0..n)` over integer ranges, and C-style `for` loops
 - structs and enums declared in your program, created with their constructors and passed by value
 - `@gpu` helpers, `GpuMath`, vector methods such as `GpuVec3.normalize`, and the built-ins below
@@ -83,7 +83,7 @@ reports each problem at its line in your Dream file:
 
 - classes, unions, interfaces, strings, closures, `List`, `Map` and other library types
 - recursion, `async`, `await` and generators
-- `switch`, tuples, `?`, `is`, `sizeof` and labeled loops
+- pattern switch expressions, tuples, `?`, `is`, `sizeof` and labeled loops
 - methods and operator overloads on your own structs, named arguments and explicit enum values
 - generic shaders, and CPU functions such as `System.println`
 

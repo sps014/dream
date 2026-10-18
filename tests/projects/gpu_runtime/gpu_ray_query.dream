@@ -43,7 +43,7 @@ fun rays_ok<T>(result: Result<T, GpuError>, what: string): T {
 
 // One ray per cell of a `size` by `size` grid, straight down +z from z = -2 over the square
 // [-1, 1] x [-1, 1]; records the hit distance (-1 on a miss) and the instance id.
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan)
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12)
 @compute(8, 8, 1)
 fun ray_query_grid(
     scene: GpuAccelerationStructure,
@@ -143,6 +143,7 @@ async fun gpu_ray_query(): void {
                 }
                 // The triangle covers about an eighth of the grid's area.
                 Assert.is_true(hits >= 4 && hits <= 16);
+                System.println(label + " ray queries match distances and instance IDs");
             }
             None => {}
         }

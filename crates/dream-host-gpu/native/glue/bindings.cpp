@@ -52,7 +52,7 @@ bool bindingMatches(slang::VariableLayoutReflection* field, const DgpuParam& par
     for (unsigned i = 0; i < layout->getCategoryCount(); i++)
     {
         auto category = layout->getCategoryByIndex(i);
-        if (category == slang::ParameterCategory::Uniform || category == slang::ParameterCategory::VaryingInput ||
+        if (category == slang::ParameterCategory::VaryingInput ||
             category == slang::ParameterCategory::VaryingOutput)
             continue;
         size_t offset = field->getOffset(category);
@@ -67,8 +67,9 @@ bool bindingMatches(slang::VariableLayoutReflection* field, const DgpuParam& par
 
 // Whether a field can hold a parameter of GpuArgKind `kind`. Binding numbers alone are not
 // unique: Metal numbers buffers, textures and samplers in separate index spaces.
-bool kindMatches(slang::TypeLayoutReflection* layout, int32_t kind)
+bool kindMatches(slang::TypeLayoutReflection* layout, const DgpuParam& param)
 {
+    int32_t kind = param.kind;
     using Kind = slang::TypeReflection::Kind;
     Kind k = layout->getKind();
     if (kind == kValue)
@@ -86,10 +87,13 @@ bool kindMatches(slang::TypeLayoutReflection* layout, int32_t kind)
     {
     case 1: // Buffer
     case 7: // MlpWeights
-        return buffer;
+        // D3D numbers SRVs and UAVs independently, so t0 and u0 may both be buffers.
+        return buffer && ((param.flags & 1) != 0) ==
+                             (layout->getType()->getResourceAccess() == SLANG_RESOURCE_ACCESS_READ);
     case 2: // Texture
+        return texture && layout->getType()->getResourceAccess() == SLANG_RESOURCE_ACCESS_READ;
     case 4: // StorageTexture
-        return texture;
+        return texture && layout->getType()->getResourceAccess() != SLANG_RESOURCE_ACCESS_READ;
     case 5: // AccelerationStructure
         return shape == SLANG_ACCELERATION_STRUCTURE;
     default:
@@ -115,7 +119,7 @@ bool resolveOne(const std::vector<Scope>& scopes, const DgpuParam& param, Bindin
     path.size = param.size;
     bool value = param.kind == kValue;
     auto fits = [&](slang::VariableLayoutReflection* field)
-    { return field && field->getName() && field->getTypeLayout() && kindMatches(field->getTypeLayout(), param.kind); };
+    { return field && field->getName() && field->getTypeLayout() && kindMatches(field->getTypeLayout(), param); };
     auto named = [&](slang::VariableLayoutReflection* field)
     { return param.name && std::strcmp(field->getName(), param.name) == 0; };
     auto bound = [&](slang::VariableLayoutReflection* field)

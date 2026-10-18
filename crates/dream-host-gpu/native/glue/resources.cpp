@@ -85,6 +85,7 @@ using namespace dream::gpu;
 
 extern "C" int dgpu_buffer_create(DgpuDevice* device, uint64_t size, uint32_t usage, int readback, DgpuObject** out)
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     BufferDesc desc;
     // Zero-length buffers are valid in Dream; backends reject them.
@@ -136,6 +137,7 @@ extern "C" int dgpu_buffer_read_mapped(
     uint32_t rows
 )
 {
+    DeviceScope deviceScope(device->device);
     IBuffer* staging = static_cast<IBuffer*>(buffer);
     void* mapped = nullptr;
     Result result = device->device->mapBuffer(staging, CpuAccessMode::Read, &mapped);
@@ -151,6 +153,7 @@ extern "C" int dgpu_buffer_read_mapped(
 
 extern "C" int dgpu_texture_create(DgpuDevice* device, const DgpuTextureDesc* d, DgpuObject** out)
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     Format format = textureFormat(d->format);
     if (format == Format::Undefined)
@@ -199,6 +202,7 @@ extern "C" int dgpu_texture_readback_layout(DgpuObject* texture, uint32_t mip, D
 
 extern "C" int dgpu_sampler_create(DgpuDevice* device, const int32_t* d, DgpuObject** out)
 {
+    DeviceScope deviceScope(device->device);
     *out = nullptr;
     SamplerDesc desc;
     desc.minFilter = filter(d[0]);
@@ -223,6 +227,7 @@ extern "C" int dgpu_sampler_create(DgpuDevice* device, const int32_t* d, DgpuObj
 
 extern "C" int dgpu_descriptor_handle(DgpuDevice* device, DgpuObject* resource, int kind, uint64_t* out)
 {
+    DeviceScope deviceScope(device->device);
     *out = 0;
     DescriptorHandle handle;
     Result result = SLANG_E_INVALID_ARG;
@@ -282,6 +287,7 @@ CooperativeVectorMatrixDesc mlpMatrix(
 
 extern "C" int dgpu_mlp_optimal_size(DgpuDevice* device, uint32_t rows, uint32_t columns, int component, uint64_t* out)
 {
+    DeviceScope deviceScope(device->device);
     *out = 0;
     size_t size = 0;
     Result result = device->device->getCooperativeVectorMatrixSize(
@@ -308,6 +314,7 @@ extern "C" int dgpu_mlp_convert_optimal(
     uint64_t dst_size
 )
 {
+    DeviceScope deviceScope(device->device);
     size_t element = component == 0 ? 2 : 4;
     size_t src_size = size_t(rows) * columns * element;
     CooperativeVectorMatrixDesc from =

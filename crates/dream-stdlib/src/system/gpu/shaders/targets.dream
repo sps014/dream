@@ -187,7 +187,8 @@ internal static class Targets {
     internal static fun common(
         borrow shader_module: ShaderModule,
         target: GpuTarget,
-        slang_target: string
+        slang_target: string,
+        borrow group: string
     ): List<string> {
         let args = List<string>();
         args.push(shader_module.stem() + ".slang");
@@ -195,6 +196,31 @@ internal static class Targets {
         args.push("-D" + Targets.define(target));
         args.push("-target");
         args.push(slang_target);
+        if target == GpuTarget.Dx11 {
+            args.push("-profile");
+            args.push("sm_5_0");
+        } else if target == GpuTarget.Dx12 {
+            let minor = 0;
+            for (let entry in shader_module.group_entries(target, group)) {
+                for (let capability in entry.capabilities) {
+                    let required = 0;
+                    if capability == "half" {
+                        required = 2;
+                    } else if capability == "raytracing" {
+                        required = 3;
+                    } else if capability == "rayquery" {
+                        required = 5;
+                    } else if capability == "descriptor_handle" || capability == "atomic64" {
+                        required = 6;
+                    }
+                    if required > minor {
+                        minor = required;
+                    }
+                }
+            }
+            args.push("-profile");
+            args.push("sm_6_" + minor.to_string());
+        }
         return args;
     }
 
@@ -257,7 +283,7 @@ internal static class Targets {
             }
             for (let kind in kinds) {
                 for (let entry in shader_module.entries_for(target)) {
-                    let args = Targets.common(shader_module, target, kind);
+                    let args = Targets.common(shader_module, target, kind, entry.pipeline_group());
                     args.push("-D" + entry.pipeline_group());
                     args.push("-entry");
                     args.push(entry.name());
@@ -284,7 +310,7 @@ internal static class Targets {
                 continue;
             }
             for (let group in shader_module.groups_for(target)) {
-                let args = Targets.common(shader_module, target, Targets.name(target));
+                let args = Targets.common(shader_module, target, Targets.name(target), group);
                 args.push("-D" + group);
                 for (let entry in shader_module.group_entries(target, group)) {
                     args.push("-entry");

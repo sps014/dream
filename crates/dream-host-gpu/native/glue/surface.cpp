@@ -72,6 +72,11 @@ extern "C" int dgpu_surface_create(DgpuDevice* device, const DgpuWindow* window,
 
 extern "C" int dgpu_surface_configure(DgpuSurface* s, uint32_t width, uint32_t height, int vsync, uint32_t* format)
 {
+    // DXGI cannot replace a flip-model swapchain while queued command buffers retain its
+    // images. Waiting also retires slang-rhi's completed command buffers and their views.
+    Result idle = s->device->queue->waitOnHost();
+    if (SLANG_FAILED(idle))
+        return failResult(s->device, idle, "waiting before surface configuration failed");
     const SurfaceInfo& info = s->surface->getInfo();
     Format chosen = Format::Undefined;
     // Dream surfaces present 8-bit RGBA or BGRA, linear or sRGB (GpuTextureFormat 0 to 3).
@@ -87,6 +92,8 @@ extern "C" int dgpu_surface_configure(DgpuSurface* s, uint32_t width, uint32_t h
     config.width = width;
     config.height = height;
     config.vsync = vsync != 0;
+    // Acquired images are exposed only as render attachments.
+    config.usage = TextureUsage::RenderTarget | TextureUsage::Present;
     Result result = s->surface->configure(config);
     if (SLANG_FAILED(result))
     {

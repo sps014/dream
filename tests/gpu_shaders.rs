@@ -84,10 +84,37 @@ fn golden(case: &str, native: bool) {
         }
         let want = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("{}: {e} (bless with DREAM_BLESS_GPU=1)", path.display()));
-        assert_eq!(actual, want, "{case}/{golden} differs");
+        if native && file == "shaders.bundle.json" {
+            // Slang's SPIR-V ID assignment can differ across host platforms. Keep layouts,
+            // sizes and bindings golden; two_builds_are_byte_identical checks the raw bytes.
+            let mut actual: serde_json::Value = serde_json::from_str(&actual).unwrap();
+            let mut want: serde_json::Value = serde_json::from_str(&want).unwrap();
+            without_blob_hashes(&mut actual);
+            without_blob_hashes(&mut want);
+            assert_eq!(actual, want, "{case}/{golden} differs");
+        } else {
+            assert_eq!(actual, want, "{case}/{golden} differs");
+        }
     }
     let bundle = std::fs::read(out.join("shaders.bundle")).unwrap();
     assert_eq!(&bundle[..4], b"DGPB");
+}
+
+fn without_blob_hashes(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            fields.remove("sha256");
+            for child in fields.values_mut() {
+                without_blob_hashes(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                without_blob_hashes(child);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[test]
@@ -183,11 +210,21 @@ fn web_bundles_drive_the_browser_host() {
 #[test]
 #[ignore = "needs the pinned slang toolchain"]
 fn two_builds_are_byte_identical() {
-    let source = std::fs::read_to_string(support("triangle").join("shaders.dream")).unwrap();
+    builds_are_identical("triangle", false);
+}
+
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn native_shader_bundles_are_byte_identical() {
+    builds_are_identical("neural", true);
+}
+
+fn builds_are_identical(case: &str, native: bool) {
+    let source = std::fs::read_to_string(support(case).join("shaders.dream")).unwrap();
     let mut runs = Vec::new();
     for _ in 0..2 {
         let dir = project(&source, MAIN);
-        let output = build(dir.path(), false);
+        let output = build(dir.path(), native);
         assert!(output.status.success(), "{}", log(&output));
         let out = generated(dir.path());
         let files: Vec<(String, Vec<u8>)> = [

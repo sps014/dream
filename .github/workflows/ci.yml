@@ -29,6 +29,26 @@ permissions:
   contents: read
 
 jobs:
+  gpu-browser:
+    name: Browser WebGPU execution and surfaces
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tooling/gpu-browser/package-lock.json
+      - run: npm ci
+        working-directory: tooling/gpu-browser
+      - run: npx playwright install --with-deps chromium
+        working-directory: tooling/gpu-browser
+      - run: npm test
+        working-directory: tooling/gpu-browser
+        env:
+          GPU_BROWSER_SOFTWARE: "1"
+
   hygiene:
     runs-on: ubuntu-24.04
     steps:
@@ -54,7 +74,7 @@ jobs:
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
-            libvulkan1 mesa-vulkan-drivers bubblewrap
+            libvulkan1 mesa-vulkan-drivers bubblewrap xvfb xauth
           # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
           # sandbox generator tools.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -130,14 +150,31 @@ jobs:
           path: ~/.dream/toolchains/slang-2026.20
           key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
       - run: cargo run --locked -p dreamer -- toolchain install slang
+      - name: Stage Windows SDK shader compilers inside the Slang sandbox
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sdkBin = Join-Path $env:WindowsSdkVerBinPath x64
+          $slangBin = Join-Path $env:USERPROFILE '.dream/toolchains/slang-2026.20/bin'
+          foreach ($library in @('dxcompiler.dll', 'dxil.dll')) {
+            Copy-Item -LiteralPath (Join-Path $sdkBin $library) -Destination $slangBin
+          }
       # Linux and macOS skip the same targets (dxil, dxbc and ptx need dxc, fxc and NVRTC), so
       # their bundles must match the committed fixtures byte for byte.
       - name: Check GPU host test bundles are fresh
         if: runner.os != 'Windows'
         run: python3 crates/dream-host-gpu/tests/fixtures/make_bundles.py --check
+      - name: Build GPU host bundles with Windows shader targets
+        if: runner.os == 'Windows'
+        run: python crates/dream-host-gpu/tests/fixtures/make_bundles.py
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
+      - name: X11 windows and GPU presentation under a real display server
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a env DREAM_WINDOW_DISPLAY_TEST=1 cargo test -p dream-host-window --test main_thread
+          xvfb-run -a env DREAM_GPU_SURFACE_TEST=1 cargo test -p dream-host-gpu --test backends
       - uses: actions/setup-node@v7
         with:
           node-version: "22"

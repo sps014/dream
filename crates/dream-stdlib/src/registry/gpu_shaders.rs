@@ -80,6 +80,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/gpu/shaders/slang_body.dream"),
         ),
         (
+            "<std>/system/gpu/shaders/slang_expr.dream",
+            include_str!("../system/gpu/shaders/slang_expr.dream"),
+        ),
+        (
             "<std>/system/gpu/shaders/slang_calls.dream",
             include_str!("../system/gpu/shaders/slang_calls.dream"),
         ),

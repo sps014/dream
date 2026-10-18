@@ -109,10 +109,11 @@ impl<'a> Analyzer<'a> {
         for (labels, body) in cases.iter() {
             let mut label_hirs: Vec<Option<HExpr>> = Vec::new();
             for label in labels.iter() {
+                let saved = self.hir_expression_probe_begin();
                 let label_type = self
                     .analyze_expression(label, ctx.parent_function, ctx.symbol_table, diagnostics)
                     .unwrap_or(Type::Unknown);
-                let label_hir = self.hir_take();
+                let label_hir = self.hir_expression_probe_end(saved);
 
                 // Labels must be compile-time constants: a literal, negative literal, or (for enum switches) an
                 // enum member access like `Color.Red`. `analyze_expression` evaluates these to pure HIR

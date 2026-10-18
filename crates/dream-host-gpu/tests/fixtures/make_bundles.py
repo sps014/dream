@@ -51,7 +51,7 @@ MODULES = {
             ("params.n", VALUE, 0),
         ]),
         ("scale", "compute", [
-            ("data", BUFFER, READ_ONLY | WRITTEN),
+            ("data", BUFFER, WRITTEN),
             ("factor", VALUE, 0),
             ("count", VALUE, 0),
         ]),
@@ -65,7 +65,7 @@ MODULES = {
             ("fill_params.count", VALUE, 0, "count"),
         ]),
         ("offset", "compute", [
-            ("offset_data", BUFFER, READ_ONLY | WRITTEN, "data"),
+            ("offset_data", BUFFER, WRITTEN, "data"),
             ("offset_params.amount", VALUE, 0, "amount"),
         ]),
     ],
@@ -104,6 +104,8 @@ def binding_of(node: dict) -> dict:
 
 
 def space_binding(binding: dict) -> tuple[int, int]:
+    if binding.get("kind") == "uniform":
+        return 0, binding.get("offset", 0)
     if binding.get("kind") in ("subElementRegisterSpace", "registerSpace"):
         return binding.get("index", 0), 0
     return binding.get("space", 0), binding.get("index", 0)
@@ -133,6 +135,8 @@ def slang_row(reflection: dict, entry: dict, path: str, kind: int, flags: int) -
         sys.exit(f"{entry['name']}: no parameter {name} in the reflection")
     bound = binding_of(node)
     if bound.get("kind") == "uniform":
+        if kind != VALUE:
+            return (name, kind, flags, 0, bound["offset"], 0, 0)
         # An entry-point `uniform`: report the entry block it was packed into.
         space, binding = space_binding(binding_of(entry.get("scope", {})))
         return (name, kind, flags, space, binding, bound["offset"], bound["size"])
@@ -143,24 +147,27 @@ def slang_row(reflection: dict, entry: dict, path: str, kind: int, flags: int) -
 def compile_target(root: Path, module: str, target: str, work: Path) -> dict | None:
     code_format, extra = TARGETS[target]
     source = SHADERS / f"{module}.slang"
-    options = [*COMMON, "-target", target, *extra]
+    options = [*COMMON, "-target", target, *extra, "-D", f"DREAM_TARGET_{target.upper()}"]
     entries = MODULES[module]
-    entry_args = [arg for name, _, _ in entries for arg in ("-entry", name)]
-    reflection_path = work / f"{module}.{target}.json"
-    combined = run([root / "bin" / "slangc", source, *entry_args, *options,
-                    "-o", work / f"{module}.{target}.all", "-reflection-json", reflection_path])
-    if combined.returncode != 0:
-        return None
-    layout = work / f"{module}.{target}.layout"
     code_args = []
     for name, _, _ in entries:
         code_args += ["-entry", name, "-o", work / f"{module}.{name}.{target}"]
+    reflections = {}
+    for name, stage, _ in entries:
+        reflection_path = work / f"{module}.{name}.{target}.json"
+        compiled = run([root / "bin" / "slangc", source, *options, "-entry", name,
+                        "-stage", stage, "-o", work / f"{module}.{name}.{target}",
+                        "-reflection-json", reflection_path])
+        if compiled.returncode != 0:
+            return None
+        reflections[name] = json.loads(reflection_path.read_text())
+    layout = work / f"{module}.{target}.layout"
     recorded = run([root / "bin" / "dream-slang-layout", source, *code_args, *options, "-o", layout])
     if recorded.returncode != 0:
         sys.exit(f"dream-slang-layout failed for {module}/{target}:\n{recorded.stderr}")
-    reflection = json.loads(reflection_path.read_text())
     out_entries = []
     for name, stage, params in entries:
+        reflection = reflections[name]
         entry = find(reflection["entryPoints"], name)
         size = entry.get("threadGroupSize", [0, 0, 0]) if stage == "compute" else [0, 0, 0]
         rows = [param_row(reflection, entry, *p) for p in params]
@@ -265,13 +272,22 @@ def main():
                 (built if compiled else skipped).append(compiled or target)
             path = HERE / f"{module}.dgpb"
             bundle = write_bundle(built)
+            if not built:
+                sys.exit(f"{module}: no shader target compiled; refusing to write an empty bundle")
             if check:
                 if not path.exists():
                     stale.append(f"{path.name} (missing)")
                 elif path.read_bytes() != bundle:
                     stale.append(f"{path.name} ({describe_difference(path.read_bytes(), bundle)})")
             else:
-                path.write_bytes(bundle)
+                # Rust/editor builds may be reading the old fixture while it is regenerated.
+                with tempfile.NamedTemporaryFile(dir=HERE, delete=False) as output:
+                    staged = Path(output.name)
+                    output.write(bundle)
+                try:
+                    staged.replace(path)
+                finally:
+                    staged.unlink(missing_ok=True)
             print(f"{module}.dgpb: {', '.join(t['name'] for t in built)}"
                   + (f" (skipped {', '.join(skipped)})" if skipped else ""))
     if stale:

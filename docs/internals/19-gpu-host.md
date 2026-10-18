@@ -46,6 +46,23 @@ Vulkan, CUDA and WebGPU on Windows. Vulkan and CUDA drivers are loaded at run ti
 Vulkan needs the Khronos loader in front of MoltenVK, because MoltenVK alone rejects
 `VK_KHR_portability_enumeration`.
 
+## Manual hardware qualification
+
+`python scripts/qualify-gpu.py --backend dx12` (or `vulkan`) runs the existing compute, bindless,
+ray-query and ray-pipeline assertions on that backend alone. `--backend cuda` runs the compute
+assertions. The command preserves its project and log under `target/gpu-qualification/` and
+fails when a requested check skips, so missing drivers cannot count as hardware qualification.
+
+On Windows, install the CUDA toolkit and make its `bin` directory available through `PATH` and
+`CUDA_PATH` for the CUDA host. Copy the toolkit's `nvrtc*.dll` files, including the builtins DLL,
+into the Slang toolchain's `bin` directory so the tool sandbox can compile PTX. Windows
+qualification used NVRTC/NVCC 12.9.86 with runtime headers 12.9.79. CUDA cooperative vectors
+are unavailable in the pinned build without OptiX.
+
+The CUDA host uses NVRTC for slang-rhi's internal texture-clear kernels at device creation;
+Dream's shader entry points are precompiled PTX. CUDA does not have the same compiler-free
+runtime dependency set as Vulkan, D3D12 or Metal.
+
 ## `dream-slang-layout`
 
 `dreamer toolchain install slang` extracts the Slang release, then builds
@@ -55,6 +72,10 @@ host C++ compiler is found the way Cargo build scripts find it (the `cc` crate).
 the exact compiler it reflects, so it is built at install time rather than shipped. It is the
 second executable of the `slang` pinned tool, so generators reach it with
 `@uses_tool("dream-slang-layout")`.
+
+Re-running `dreamer toolchain install slang` refreshes the recorder when its embedded C++
+sources or build instructions change, even if the Slang release is already installed. The
+source fingerprint is written only after a successful build.
 
 The tool takes slangc's options: positional `.slang` modules, `-entry` with an optional `-stage`,
 and `-target`. The last `-o` names the layout. An earlier `-o` right after an entry writes that

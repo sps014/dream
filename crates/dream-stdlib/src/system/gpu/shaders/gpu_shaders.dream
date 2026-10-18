@@ -239,7 +239,8 @@ fun file_bytes(borrow result: GenToolResult, borrow path: string): Option<byte[]
                 }
             }
         }
-        return Option.Some(Encoding.utf8_encode(f.contents));
+        // Slang's Windows text outputs use CRLF; bundles keep one spelling on every host.
+        return Option.Some(Encoding.utf8_encode(f.contents.replace("\r\n", "\n")));
     }
     return Option.None;
 }

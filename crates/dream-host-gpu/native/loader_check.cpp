@@ -1,6 +1,7 @@
 #include "loader_check.h"
 
 #include <algorithm>
+#include <cctype>
 #include <mutex>
 #include <set>
 
@@ -91,16 +92,34 @@ std::vector<std::string> loadedImages()
         &images
     );
 #elif defined(_WIN32)
-    HMODULE modules[1024];
+    std::vector<HMODULE> modules(128);
     DWORD needed = 0;
-    if (EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &needed))
+    for (;;)
     {
+        if (!EnumProcessModules(
+                GetCurrentProcess(), modules.data(), DWORD(modules.size() * sizeof(HMODULE)), &needed
+            ))
+            break;
+        if (needed > modules.size() * sizeof(HMODULE))
+        {
+            modules.resize((needed + sizeof(HMODULE) - 1) / sizeof(HMODULE));
+            continue;
+        }
         for (DWORD i = 0; i < needed / sizeof(HMODULE); i++)
         {
-            char name[MAX_PATH];
-            if (GetModuleFileNameA(modules[i], name, MAX_PATH))
-                images.emplace_back(name);
+            // Extended Windows paths can exceed MAX_PATH, including toolchain roots.
+            std::vector<wchar_t> name(32768);
+            DWORD length = GetModuleFileNameW(modules[i], name.data(), DWORD(name.size()));
+            if (length == 0 || length >= name.size())
+                continue;
+            int bytes = WideCharToMultiByte(CP_UTF8, 0, name.data(), int(length), nullptr, 0, nullptr, nullptr);
+            if (bytes <= 0)
+                continue;
+            std::string path(size_t(bytes), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, name.data(), int(length), path.data(), bytes, nullptr, nullptr);
+            images.push_back(std::move(path));
         }
+        break;
     }
 #endif
     return images;

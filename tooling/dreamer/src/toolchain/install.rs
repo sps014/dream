@@ -19,6 +19,10 @@ pub fn install(tools: &[&'static PinnedTool]) -> Result<()> {
     lock.lock()?;
     for tool in tools {
         if is_installed(tool) {
+            if tool.name == "slang" && !super::slang_layout::is_current(&tool_dir(tool)) {
+                println!("Rebuilding dream-slang-layout for the current recorder sources …");
+                super::slang_layout::build(&tool_dir(tool))?;
+            }
             println!(
                 "{} already installed at {}",
                 tool.name,

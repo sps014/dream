@@ -588,6 +588,32 @@ impl<'a> Analyzer<'a> {
         self.hir.last.take()
     }
 
+    /// Constant-label validation needs resolved expression HIR even in check-only functions.
+    /// Isolate that capture so it cannot emit a consumed function or change its enclosing state.
+    pub(in crate::analyzer) fn hir_expression_probe_begin(&mut self) -> Option<HirEmit> {
+        if self.active() {
+            return None;
+        }
+        let probe = HirEmit {
+            collecting: true,
+            ok: true,
+            blocks: vec![Vec::new()],
+            ..Default::default()
+        };
+        Some(std::mem::replace(&mut self.hir, probe))
+    }
+
+    pub(in crate::analyzer) fn hir_expression_probe_end(
+        &mut self,
+        saved: Option<HirEmit>,
+    ) -> Option<HExpr> {
+        let expression = self.hir_take();
+        if let Some(saved) = saved {
+            self.hir = saved;
+        }
+        expression
+    }
+
     /// Resolves a [`LocalId`] back to its source name in the current function (parameters and
     /// `let`s). Used by JS-boundary capture checks to consult [`Analyzer::capturing_fun_locals`].
     pub(in crate::analyzer) fn hir_local_name(&self, id: LocalId) -> Option<&str> {

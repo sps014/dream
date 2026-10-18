@@ -47,6 +47,14 @@ layout. `dreamer toolchain install slang` rebuilds the recorder when its embedde
   This does not establish Linux performance parity: executable layout and the runner still
   need checking. Benchmark CI now records the matching baseline runtime sources and retains
   optimized IR and optimization remarks alongside the timing samples.
+
+  The comparison now applies 64-byte function alignment to both compiler arms, recorded in
+  the benchmark identity. Matched-layout micro and macro qualification passes on Zen 3,
+  Zen 4 and Emerald Rapids; the 10% budget and result checks stay unchanged. Integer string
+  formatting now writes pairs of UTF-16 digits per division and uses unsigned magnitude for
+  signed minima. A paired Windows run improves `string_concat` from 3.92 to 2.48 ns/op
+  (12 measured rounds, five passes per process); three million differential decimal encodings
+  and output-boundary checks pass. The updated Linux gate still needs qualification.
 - **D3D11** at run time: pinned slang-rhi has no D3D11 fence implementation, so device setup fails. CUDA compute and DXIL/DXBC/PTX output are now verified on Windows. CUDA cooperative vectors remain unavailable without OptiX in the pinned build.
 - **Metal full ray-tracing pipelines** remain unavailable through Slang 2026.20 and MoltenVK. Vulkan and D3D12 pipelines now pass on the RTX 4080.
 - **CUDA cooperative matrices/vectors** and D3D12 cooperative vectors. Vulkan cooperative vectors, optimal MLP layout conversion and 16x16 cooperative matrices now pass on the RTX 4080; Metal's 8x8 tiles were verified earlier.

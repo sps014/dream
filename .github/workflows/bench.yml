@@ -92,7 +92,8 @@ jobs:
               --arms baseline current --current-dream target/release/dream \
               --baseline-dream "$BASELINE_DREAM" \
               --baseline-runtime "$BASELINE_RUNTIME" \
-              --warmup 2 --rounds 12 --passes 5 --diagnostics --fail-on-regression --out "$output" \
+              --warmup 2 --rounds 12 --passes 5 --function-alignment 64 \
+              --diagnostics --fail-on-regression --out "$output" \
               2>&1 | tee "$output/comparison.txt" || failed=1
           done
           exit "$failed"

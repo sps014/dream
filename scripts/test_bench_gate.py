@@ -18,10 +18,25 @@ import bench
 
 from benchmarks.process import peak_working_set, with_exe
 
-from benchmarks import gate as bench_gate, stats
+from benchmarks import gate as bench_gate, layout, stats
 
 
 class GateTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native Linux toolchain wrapper")
+    def test_alignment_wrapper_preserves_tool_arguments_and_resource_directory(self):
+        llvm = self.root / "LLVM ' tools"
+        (llvm / 'bin').mkdir(parents=True)
+        (llvm / 'lib').mkdir()
+        (llvm / 'lib/header').write_text('resource')
+        executable = llvm / 'bin/llc'
+        executable.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+        executable.chmod(0o755)
+        binary = layout.toolchain(llvm, self.root / 'comparison', 64)
+        result = subprocess.check_output([str(binary / 'llc'), '-O3', 'input with spaces.bc'], text=True)
+        self.assertEqual(result.splitlines(), ['-align-all-functions=6', '-O3', 'input with spaces.bc'])
+        self.assertEqual((binary.parent / 'lib/header').read_text(), 'resource')
+        self.assertEqual(layout.toolchain(llvm, self.root / 'comparison', 64), binary)
+
     def test_two_arm_order_is_balanced(self):
         spec = importlib.util.spec_from_file_location('comparison', Path(__file__).with_name('bench.py'))
         comparison = importlib.util.module_from_spec(spec)
@@ -250,7 +265,7 @@ class MeasurementTests(unittest.TestCase):
     def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=()):
         args = argparse.Namespace(
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
-            fail_on_regression=False,
+            fail_on_regression=False, function_alignment=0,
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
             regression_threshold=.1, benchmark=self.fixture, runner_id='test',
             filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',

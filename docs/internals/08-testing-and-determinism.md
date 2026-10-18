@@ -90,6 +90,18 @@ python3 scripts/check_compile_budget.py --baseline /path/to/base/dream \
 python3 scripts/test_compile_budget.py
 ```
 
+The native runtime benchmark gate uses `scripts/bench.py --function-alignment 64` for both
+the base and current compiler. A wrapper around the same pinned `llc` applies identical
+function-boundary alignment to both benchmark builds, keeping unchanged kernels at matching
+cache-line offsets when unrelated code changes. This control applies only to benchmark
+compilations. The comparison identity records the alignment, and saved references with a
+different policy are rejected. The 10% budget, paired rounds and result checks are unchanged.
+
+Matched-layout micro and macro comparisons pass on Zen 3, Zen 4 and Emerald Rapids in
+[qualification run 39127117087](https://github.com/sps014/dream/actions/runs/39127117087).
+Uncontrolled comparisons on the same runners reported different slow rows despite identical
+optimized kernels. CI retains optimized IR and optimization remarks with its measurements.
+
 ## The test pyramid
 
 ```mermaid

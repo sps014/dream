@@ -31,7 +31,7 @@ def identity(bench, runner, seed, passes, target="native", benchmark_source=None
     return {
         "benchmark": hashlib.sha256(source).hexdigest(),
         "harness": {name: digest(Path(__file__).resolve().parents[1] / name)
-                    for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py')},
+                    for name in ('bench.py', 'benchmarks/gate.py', 'benchmarks/stats.py', 'benchmarks/layout.py')},
         "hardware": {"platform": platform.platform(), "machine": platform.machine(),
                      "processor": model, "cpus": os.cpu_count(), "runner": runner},
         "target": target,

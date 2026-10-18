@@ -935,29 +935,29 @@ DREAM_ALWAYS_INLINE int32_t dream_i32_utf16_len(int32_t v) {
     return dream_u32_ndigits((uint32_t)v);
 }
 
+/* Two UTF-16 digits per division shorten the dependency chain in integer interpolation. */
 DREAM_ALWAYS_INLINE void dream_write_i32_utf16_n(uint16_t *out, int32_t v, int32_t n) {
-    uint32_t u;
-    if (v == 0) {
-        out[0] = 48;
-        return;
-    }
+    static const uint16_t pairs[] =
+        u"0001020304050607080910111213141516171819"
+        u"2021222324252627282930313233343536373839"
+        u"4041424344454647484950515253545556575859"
+        u"6061626364656667686970717273747576777879"
+        u"8081828384858687888990919293949596979899";
+    uint32_t u = (uint32_t)v;
     if (v < 0) {
         out[0] = 45;
-        if (v == (int32_t)0x80000000) {
-            static const char min[] = "2147483648";
-            int32_t i;
-            for (i = 0; i < 10; i++) {
-                out[1 + i] = (uint16_t)min[i];
-            }
-            return;
-        }
-        u = (uint32_t)-v;
-    } else {
-        u = (uint32_t)v;
+        u = 0u - u;
     }
-    while (u != 0) {
-        out[--n] = (uint16_t)(48u + u % 10u);
-        u /= 10u;
+    while (u >= 100u) {
+        uint32_t remainder = u % 100u;
+        u /= 100u;
+        n -= 2;
+        memcpy(out + n, pairs + remainder * 2u, 2 * sizeof(uint16_t));
+    }
+    if (u >= 10u) {
+        memcpy(out + n - 2, pairs + u * 2u, 2 * sizeof(uint16_t));
+    } else {
+        out[n - 1] = (uint16_t)(48u + u);
     }
 }
 

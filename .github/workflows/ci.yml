@@ -54,7 +54,10 @@ jobs:
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
-            libvulkan1 mesa-vulkan-drivers
+            libvulkan1 mesa-vulkan-drivers bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -265,7 +268,10 @@ jobs:
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
-            libvulkan1 mesa-vulkan-drivers
+            libvulkan1 mesa-vulkan-drivers bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
       - name: Locate the GPU host input cache
         shell: bash
@@ -360,7 +366,10 @@ jobs:
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
-            libvulkan1 mesa-vulkan-drivers
+            libvulkan1 mesa-vulkan-drivers bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
+          # sandbox generator tools.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: actions/checkout@v7
       - name: Locate the GPU host input cache
         shell: bash

@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev bubblewrap && sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - uses: actions/setup-python@v7
@@ -69,7 +69,7 @@ jobs:
           node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils
+      - run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev bubblewrap && sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: scripts/fetch-dev-llvm.sh
       - run: cargo build --workspace
       - run: npm ci --prefix tooling/qualification

@@ -111,6 +111,23 @@ void spReflectionEntryPoint_getComputeThreadGroupSize(
         outSizeAlongAxis[axis] = axis < 3 ? SlangUInt(ask(e, Query::EntryPointThreadGroupSize, int64_t(axis))) : 1;
 }
 
+// An entry point's variable layout is a struct whose fields are its parameters, so the CUDA
+// backend's parameter walk reads the recorded fields.
+unsigned spReflectionEntryPoint_getParameterCount(SlangReflectionEntryPoint* e)
+{
+    return unsigned(spReflectionTypeLayout_GetFieldCount(
+        spReflectionVariableLayout_GetTypeLayout(spReflectionEntryPoint_getVarLayout(e))
+    ));
+}
+
+SlangReflectionVariableLayout* spReflectionEntryPoint_getParameterByIndex(SlangReflectionEntryPoint* e, unsigned index)
+{
+    return spReflectionTypeLayout_GetFieldByIndex(
+        spReflectionVariableLayout_GetTypeLayout(spReflectionEntryPoint_getVarLayout(e)),
+        index
+    );
+}
+
 // Type layouts
 
 SlangReflectionType* spReflectionTypeLayout_GetType(SlangReflectionTypeLayout* t)
@@ -439,4 +456,20 @@ SlangReflectionVariable* spReflectionVariableLayout_GetVariable(SlangReflectionV
 char const* spReflectionVariable_GetName(SlangReflectionVariable* v)
 {
     return askString(v, Query::VariableLayoutName);
+}
+
+// Generated shaders carry no user attributes (the D3D12 backend only asks for `[root]`), and
+// D3D12 treats a missing leaf variable as "no attributes".
+SlangReflectionVariable* spReflectionTypeLayout_getBindingRangeLeafVariable(SlangReflectionTypeLayout*, SlangInt)
+{
+    return nullptr;
+}
+
+SlangReflectionUserAttribute* spReflectionVariable_FindUserAttributeByName(
+    SlangReflectionVariable*,
+    SlangSession*,
+    char const*
+)
+{
+    return nullptr;
 }

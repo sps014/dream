@@ -1,0 +1,286 @@
+module gpu_cooperative;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun coop_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun coop_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println("SKIP gpu_cooperative on " + coop_label(backend) + ": " + reason);
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println("SKIP gpu_cooperative on " + coop_label(backend) + ": " + reason);
+        }
+        Err(e) => {
+            Assert.fail("gpu_cooperative on " + coop_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun coop_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+// A dispatch on a device without `feature` must fail with UnsupportedCapability(feature).
+fun coop_expect_unsupported(
+    result: Result<bool, GpuError>,
+    feature: GpuFeature,
+    what: string
+): void {
+    switch (result) {
+        Ok(_) => {
+            Assert.fail(what + " ran on a device without the feature");
+        }
+        Err(GpuError.UnsupportedCapability(missing)) => {
+            Assert.eq(missing, feature);
+        }
+        Err(e) => {
+            Assert.fail(what + ": expected UnsupportedCapability, got " + e.message());
+        }
+    }
+}
+
+// Cooperative vectors compile for Vulkan, D3D12 and CUDA, cooperative matrices for Vulkan,
+// Metal (8 by 8 tiles) and CUDA. This suite leaves out D3D12 and CUDA so that every build host
+// can compile it: they need dxc and NVRTC.
+@gpu_targets(GpuTarget.Vulkan)
+@compute(32, 1, 1)
+fun evaluate_mlp(
+    @readonly @coop_shape(16, 32)layer0: GpuMlpWeights<float16>,
+    @readonly @coop_shape(32, 4)layer1: GpuMlpWeights<float16>,
+    @readonly @coop_shape(16)features: GpuBuffer<GpuCoopVec<float16>>,
+    @coop_shape(4)out: GpuBuffer<GpuCoopVec<float16>>
+): void {
+    let i = global_id().x;
+    let hidden = GpuCoopVec.relu(layer0.apply(features[i]));
+    out[i] = layer1.apply(hidden);
+}
+
+// One 16x16 tile product per subgroup: c = a * b.
+@gpu_targets(GpuTarget.Vulkan)
+@compute(32, 1, 1)
+fun tile_multiply_16(
+    @readonly a: GpuBuffer<float16>,
+    @readonly b: GpuBuffer<float16>,
+    c: GpuBuffer<float16>
+): void {
+    let left = GpuCoopMat.load(a, 0, 16, 16, 16);
+    let right = GpuCoopMat.load(b, 0, 16, 16, 16);
+    let zero = GpuCoopMat<float16>.zeros(16, 16);
+    let product = GpuCoopMat.multiply_add(left, right, zero);
+    product.store(c, 0, 16);
+}
+
+// The same product in 8x8 tiles, the only size Metal's SIMD-group matrices have.
+@gpu_targets(GpuTarget.Metal)
+@compute(32, 1, 1)
+fun tile_multiply_8(
+    @readonly a: GpuBuffer<float16>,
+    @readonly b: GpuBuffer<float16>,
+    c: GpuBuffer<float16>
+): void {
+    let left = GpuCoopMat.load(a, 0, 8, 8, 8);
+    let right = GpuCoopMat.load(b, 0, 8, 8, 8);
+    let zero = GpuCoopMat<float16>.zeros(8, 8);
+    let product = GpuCoopMat.multiply_add(left, right, zero);
+    product.store(c, 0, 8);
+}
+
+// Small values keep every float16 product and sum well inside the format's precision.
+fun coop_value(seed: int): float16 {
+    return (float16)((float)((seed * 7 + 3) % 17 - 8) * 0.0625f);
+}
+
+fun coop_layer(
+    weights: float16[],
+    biases: float16[],
+    input: double[],
+    inputs: int,
+    outputs: int,
+    relu: bool
+): double[] {
+    let out = Array.alloc<double>(outputs);
+    for (let o = 0; o < outputs; o = o + 1) {
+        let sum = (double)biases[o];
+        for (let k = 0; k < inputs; k = k + 1) {
+            sum = sum + (double)weights[o * inputs + k] * input[k];
+        }
+        if relu && sum < 0.0d {
+            sum = 0.0d;
+        }
+        out[o] = sum;
+    }
+    return out;
+}
+
+fun coop_close(actual: float16, expected: double, what: string): void {
+    let tolerance = 2e-2d * Math.max(1.0d, Math.abs(expected));
+    if Math.abs((double)actual - expected) > tolerance {
+        Assert.fail(what + ": got " + actual.to_string() + ", expected " + expected.to_string());
+    }
+}
+
+async fun coop_mlp(device: GpuDevice, label: string): void {
+    let rows = 32;
+    let w0 = Array.alloc<float16>(32 * 16);
+    let b0 = Array.alloc<float16>(32);
+    let w1 = Array.alloc<float16>(4 * 32);
+    let b1 = Array.alloc<float16>(4);
+    for (let i = 0; i < w0.length; i = i + 1) {
+        w0[i] = coop_value(i);
+    }
+    for (let i = 0; i < w1.length; i = i + 1) {
+        w1[i] = coop_value(i + 5);
+    }
+    for (let i = 0; i < b0.length; i = i + 1) {
+        b0[i] = coop_value(i + 11);
+    }
+    for (let i = 0; i < b1.length; i = i + 1) {
+        b1[i] = coop_value(i + 13);
+    }
+    let features = Array.alloc<float16>(rows * 16);
+    for (let i = 0; i < features.length; i = i + 1) {
+        features[i] = coop_value(i * 3 + 1);
+    }
+
+    // Uploading needs no feature: devices without cooperative vectors keep row-major weights.
+    let layer0 = coop_ok(device.upload_mlp(w0, b0, 16, 32), "layer0 on " + label);
+    let layer1 = coop_ok(device.upload_mlp(w1, b1, 32, 4), "layer1 on " + label);
+    let input = coop_ok(device.buffer_from(features), "features");
+    let out = coop_ok(device.buffer_alloc<float16>(rows * 4), "mlp out");
+
+    // Layers must have the sizes the shader's @coop_shape fixed.
+    let swapped = GpuShaders.evaluate_mlp.dispatch(
+        device,
+        GpuDispatch.threads_1d(rows),
+        layer1,
+        layer0,
+        input,
+        out
+    ).await;
+    switch (swapped) {
+        Err(GpuError.InvalidResource(reason)) => {
+            Assert.is_true(reason.contains("MLP layer from 32 to 4 values"));
+        }
+        _ => {
+            Assert.fail("swapped MLP layers were not rejected on " + label);
+        }
+    }
+
+    let run = GpuShaders.evaluate_mlp.dispatch(
+        device,
+        GpuDispatch.threads_1d(rows),
+        layer0,
+        layer1,
+        input,
+        out
+    ).await;
+    if !device.supports(GpuFeature.CooperativeVectors) {
+        coop_expect_unsupported(run, GpuFeature.CooperativeVectors, "evaluate_mlp on " + label);
+        System.println("SKIP gpu_cooperative vectors on " + label + ": no CooperativeVectors");
+        return;
+    }
+    coop_ok(run, "evaluate_mlp on " + label);
+    let results = coop_ok(out.read().await, "read mlp on " + label);
+    for (let r = 0; r < rows; r = r + 1) {
+        let x = Array.alloc<double>(16);
+        for (let k = 0; k < 16; k = k + 1) {
+            x[k] = (double)features[r * 16 + k];
+        }
+        let hidden = coop_layer(w0, b0, x, 16, 32, true);
+        let expected = coop_layer(w1, b1, hidden, 32, 4, false);
+        for (let o = 0; o < 4; o = o + 1) {
+            coop_close(results[r * 4 + o], expected[o], "mlp output on " + label);
+        }
+    }
+    System.println(label + " cooperative-vector MLP matches the CPU");
+}
+
+async fun coop_tiles(device: GpuDevice, label: string): void {
+    let size = 16;
+    if device.backend == GpuBackend.Metal {
+        size = 8;
+    }
+    let count = size * size;
+    let a = Array.alloc<float16>(count);
+    let b = Array.alloc<float16>(count);
+    for (let i = 0; i < count; i = i + 1) {
+        a[i] = coop_value(i);
+        b[i] = coop_value(i * 5 + 2);
+    }
+    let left = coop_ok(device.buffer_from(a), "tile a");
+    let right = coop_ok(device.buffer_from(b), "tile b");
+    let c = coop_ok(device.buffer_alloc<float16>(count), "tile out");
+    let run: Result<bool, GpuError> = Result.Ok(true);
+    if size == 8 {
+        run = GpuShaders.tile_multiply_8.dispatch(
+            device,
+            GpuDispatch.threads_1d(32),
+            left,
+            right,
+            c
+        ).await;
+    } else {
+        run = GpuShaders.tile_multiply_16.dispatch(
+            device,
+            GpuDispatch.threads_1d(32),
+            left,
+            right,
+            c
+        ).await;
+    }
+    if !device.supports(GpuFeature.CooperativeMatrices) {
+        coop_expect_unsupported(run, GpuFeature.CooperativeMatrices, "tile multiply on " + label);
+        System.println("SKIP gpu_cooperative matrices on " + label + ": no CooperativeMatrices");
+        return;
+    }
+    coop_ok(run, "tile multiply on " + label);
+    let product = coop_ok(c.read().await, "read tile on " + label);
+    for (let row = 0; row < size; row = row + 1) {
+        for (let column = 0; column < size; column = column + 1) {
+            let sum = 0.0d;
+            for (let k = 0; k < size; k = k + 1) {
+                sum = sum + (double)a[row * size + k] * (double)b[k * size + column];
+            }
+            coop_close(product[row * size + column], sum, "tile product on " + label);
+        }
+    }
+    System.println(label + " cooperative-matrix tile matches the CPU");
+}
+
+@test
+@timeout(180000)
+async fun gpu_cooperative(): void {
+    for (let backend in GpuShaders.backends()) {
+        switch (coop_device(backend).await) {
+            Some(device) => {
+                let label = coop_label(backend);
+                if device.backend == GpuBackend.Vulkan {
+                    coop_mlp(device, label).await;
+                }
+                coop_tiles(device, label).await;
+            }
+            None => {}
+        }
+    }
+}

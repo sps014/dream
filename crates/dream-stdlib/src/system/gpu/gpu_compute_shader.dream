@@ -31,6 +31,13 @@ public class GpuComputeShader {
         dispatch: GpuDispatch,
         args: GpuArgs
     ): void {
+        switch (args.mismatch) {
+            Some(e) => {
+                pass.encoder.fail(e);
+                return;
+            }
+            None => {}
+        }
         switch (device.compute_pipeline(this)) {
             Ok(pipeline) => {
                 pass.dispatch(pipeline, dispatch.group_counts(this.workgroup), args);

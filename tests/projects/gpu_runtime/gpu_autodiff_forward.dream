@@ -1,0 +1,201 @@
+module gpu_autodiff_forward;
+
+import system.testing;
+import system;
+import system.gpu;
+
+fun forward_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun forward_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_autodiff_forward on " + forward_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_autodiff_forward on " + forward_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail("gpu_autodiff_forward on " + forward_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun forward_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+// GPU results are single precision; the references are double-precision central differences.
+fun forward_close(actual: float, expected: double, what: string): void {
+    let tolerance = 2e-3d * Math.max(1.0d, Math.abs(expected));
+    if Math.abs((double)actual - expected) > tolerance {
+        Assert.fail(what + ": got " + actual.to_string() + ", expected " + expected.to_string());
+    }
+}
+
+fun forward_central(f: fun(double): double, x: double): double {
+    let h = 1e-4d;
+    return (f(x + h) - f(x - h)) / (2.0d * h);
+}
+
+@gpu
+@differentiable
+fun wave(x: float, y: float): float {
+    return GpuMath.sin(x) * y + GpuMath.exp(0.5f * x) * y * y;
+}
+
+// The value of `wave` and both partial derivatives at each sample, one forward pass per
+// input direction.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64, 1, 1)
+fun wave_tangents(
+    @readonly xs: GpuBuffer<float>,
+    @readonly ys: GpuBuffer<float>,
+    out: GpuBuffer<float>,
+    n: int
+): void {
+    let i = global_id().x;
+    if i >= n {
+        return;
+    }
+    let by_x = GpuDiff.forward2(wave, GpuDiffPair.of(xs[i], 1.0f), GpuDiffPair.of(ys[i], 0.0f));
+    let by_y = GpuDiff.forward2(wave, GpuDiffPair.of(xs[i], 0.0f), GpuDiffPair.of(ys[i], 1.0f));
+    out[3 * i] = by_x.value();
+    out[3 * i + 1] = by_x.derivative();
+    out[3 * i + 2] = by_y.derivative();
+}
+
+@gpu
+@differentiable
+fun bump(p: GpuVec2): float {
+    return GpuMath.exp(-(p.x * p.x)) * GpuMath.cos(p.y);
+}
+
+// Directional derivatives of `bump` along each axis, through a vector parameter.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64, 1, 1)
+fun bump_tangents(@readonly points: GpuBuffer<GpuVec2>, out: GpuBuffer<GpuVec2>, n: int): void {
+    let i = global_id().x;
+    if i >= n {
+        return;
+    }
+    let along_x = GpuDiff.forward(bump, GpuDiffPair.of(points[i], GpuVec2.of(1.0f, 0.0f)));
+    let along_y = GpuDiff.forward(bump, GpuDiffPair.of(points[i], GpuVec2.of(0.0f, 1.0f)));
+    out[i] = GpuVec2.of(along_x.derivative(), along_y.derivative());
+}
+
+fun wave_cpu(x: double, y: double): double {
+    return Math.sin(x) * y + Math.exp(0.5d * x) * y * y;
+}
+
+fun bump_cpu(x: double, y: double): double {
+    return Math.exp(-(x * x)) * Math.cos(y);
+}
+
+async fun forward_scalar(device: GpuDevice, label: string): void {
+    let n = 128;
+    let xs = Array.alloc<float>(n);
+    let ys = Array.alloc<float>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        xs[i] = -2.0f + 4.0f * (float)i / (float)n;
+        ys[i] = 0.5f + (float)(i % 7) * 0.25f;
+    }
+    let out = forward_ok(device.buffer_alloc<float>(3 * n), "wave out");
+    forward_ok(
+        GpuShaders.wave_tangents.dispatch(
+            device,
+            GpuDispatch.threads_1d(n),
+            forward_ok(device.buffer_from(xs), "xs"),
+            forward_ok(device.buffer_from(ys), "ys"),
+            out,
+            n
+        ).await,
+        "wave_tangents on " + label
+    );
+    let values = forward_ok(out.read().await, "read wave");
+    for (let i = 0; i < n; i = i + 1) {
+        let x = (double)xs[i];
+        let y = (double)ys[i];
+        forward_close(values[3 * i], wave_cpu(x, y), "wave on " + label);
+        forward_close(
+            values[3 * i + 1],
+            forward_central((v: double) => wave_cpu(v, y), x),
+            "d wave / dx on " + label
+        );
+        forward_close(
+            values[3 * i + 2],
+            forward_central((v: double) => wave_cpu(x, v), y),
+            "d wave / dy on " + label
+        );
+    }
+}
+
+async fun forward_vector(device: GpuDevice, label: string): void {
+    let n = 80;
+    let points = Array.alloc<GpuVec2>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        points[i] = GpuVec2.of(-2.0f + 0.05f * (float)i, 0.04f * (float)i - 1.0f);
+    }
+    let out = forward_ok(device.buffer_alloc<GpuVec2>(n), "bump out");
+    forward_ok(
+        GpuShaders.bump_tangents.dispatch(
+            device,
+            GpuDispatch.threads_1d(n),
+            forward_ok(device.buffer_from(points), "points"),
+            out,
+            n
+        ).await,
+        "bump_tangents on " + label
+    );
+    let tangents = forward_ok(out.read().await, "read bump");
+    for (let i = 0; i < n; i = i + 1) {
+        let x = (double)points[i].x;
+        let y = (double)points[i].y;
+        forward_close(
+            tangents[i].x,
+            forward_central((v: double) => bump_cpu(v, y), x),
+            "d bump / dx on " + label
+        );
+        forward_close(
+            tangents[i].y,
+            forward_central((v: double) => bump_cpu(x, v), y),
+            "d bump / dy on " + label
+        );
+    }
+}
+
+@test
+@timeout(240000)
+async fun gpu_autodiff_forward(): void {
+    for (let backend in GpuShaders.backends()) {
+        switch (forward_device(backend).await) {
+            Some(device) => {
+                let label = forward_label(backend);
+                forward_scalar(device, label).await;
+                forward_vector(device, label).await;
+                System.println(label + " forward-mode derivatives match finite differences");
+            }
+            None => {}
+        }
+    }
+}

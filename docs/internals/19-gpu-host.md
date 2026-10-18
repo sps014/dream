@@ -102,13 +102,31 @@ completion thread, so a device is destroyed only after all of its work and resou
   number. One that cannot open (no adapter or driver, or a host built without it) reports
   `EUNAVAILABLE` with the reason. Neither ever falls back to another backend.
 - Cooperative vectors (`GpuFeature.CooperativeVectors`) are reported only on Vulkan, D3D12 and
-  CUDA devices whose slang-rhi `Feature::CooperativeVector` is present.
+  CUDA devices whose slang-rhi `Feature::CooperativeVector` is present. The pinned build leaves
+  out NVAPI and OptiX, so in practice only Vulkan devices with `VK_NV_cooperative_vector` report it.
 - slang-rhi's Metal device reports neither wave operations nor half precision, which every GPU it
-  opens has, so Metal devices report `Subgroups` and `Float16` themselves. Bindless handles exist
-  only where slang-rhi implements descriptor handles (Vulkan, D3D12, CUDA).
+  opens has, so Metal devices report `Subgroups` and `Float16` themselves. It never reports
+  cooperative matrices either; Metal devices in the Apple7 family or later (Apple silicon) report
+  `CooperativeMatrices`, because Slang lowers 8x8 `CoopMat` to `simdgroup_matrix`. Bindless
+  handles exist only where slang-rhi implements descriptor handles (Vulkan, D3D12, CUDA).
 - Creating a pipeline checks the bundle capabilities of its entries (see
   [GPU shader bundle](18-gpu-shader-bundle.md)) and reports `EUNSUPPORTED` with the missing
   feature.
+
+## Buffers and MLP layers
+
+- Buffers are allocated in whole 4-byte words on every backend, because WebGPU sizes buffers,
+  fills and copies that way. Reads copy whole words into the padding. A write that ends the
+  buffer is zero-padded into the padding; on WebGPU any other write must start and end on a
+  word boundary (`EINVALID` otherwise). The browser host follows the same rules.
+- `gpuMlpUpload` (`src/mlp.rs`) stores one layer as biases at offset 0 and the matrix at the
+  next multiple of 64 bytes, the layout the generated `coopVecMatMulAdd` reads (see
+  [GPU shader bundle](18-gpu-shader-bundle.md)). `mlp::layout_for` picks the matrix layout. On
+  Vulkan and D3D12 devices with cooperative vectors it is the inferencing-optimal layout, which
+  `dgpu_mlp_convert_optimal` produces on the CPU through slang-rhi's
+  `getCooperativeVectorMatrixSize` and `convertCooperativeVectorMatrix`. Everything else keeps
+  row-major weights: CUDA, because its PTX is compiled without OptiX and Slang emulates the
+  multiply on row-major data, and devices without the feature, which cannot run the code anyway.
 
 ## Bindings
 
@@ -165,7 +183,9 @@ image's path. `scripts/test_corpus.py` sets it and removes `DREAM_SLANG` for eve
 
 ## Errors
 
-The glue returns a status and a thread-local message. The Rust side maps these to the
+The glue returns a status and a thread-local message. Driver messages reach a per-device sink,
+which keeps the first error since the last failure was reported: later errors are usually
+consequences of it, such as Dawn's "invalid pipeline" after a pipeline creation failed. The Rust side maps these to the
 `CODE\ndetail` text that `gpuLastError` returns (see `gpu_error_from_host`). Driver messages that
 report device loss make the device sticky-lost, and every later call on it reports `EDEVICELOST`.
 `testing::simulate_device_loss` drives the same path in tests.
@@ -197,8 +217,10 @@ report device loss make the device sticky-lost, and every later call on it repor
   checks that device creation ends the process.
 - The Dream suites in `tests/projects/gpu_runtime/` run real programs through the generator and
   this host on every compiled backend: compute, workgroup and subgroup reductions, an offscreen
-  render read back pixel by pixel, bindless sampling, inline ray queries, a ray tracing pipeline
-  and backend selection. A backend the machine cannot run prints `SKIP <test> on <backend>:
+  render read back pixel by pixel, bindless sampling, inline ray queries, a ray tracing pipeline,
+  backend selection, forward- and reverse-mode autodiff checked against finite differences,
+  `float16` buffers and half arithmetic, and cooperative vectors and matrices (which also check
+  that devices without them report `UnsupportedCapability`). A backend the machine cannot run prints `SKIP <test> on <backend>:
   <reason>` and the test continues, so machines without a GPU pass. On macOS the corpus script
   points Vulkan at the GPU cache's Khronos loader and MoltenVK.
 
@@ -209,8 +231,12 @@ report device loss make the device sticky-lost, and every later call on it repor
   The pipeline suite skips on devices without `GpuFeature.RayTracing`.
 - Payload size, hit attribute size and recursion depth are fixed (128 bytes, 32 bytes, 1); the
   bundle does not record them yet.
-- `gpuMlpUpload` stores weights row-major in a storage buffer. It does not yet repack into the
-  device's cooperative-vector layout.
+- The inferencing-optimal MLP conversion has not run on hardware: no available machine has a
+  Vulkan or D3D12 device with cooperative vectors.
+- WebGPU pipelines bind the globals of every shader in their module, because a bundle records
+  one layout per module and target and slang-rhi builds the bind group layout from it. A module
+  whose shaders together use more storage buffers than the device's per-stage limit (8 by
+  default, 10 on Dawn over Metal) fails at dispatch; the generator warns past 8.
 - Vertex and fragment shaders of one pipeline must come from the same shader module.
 - Vertex attribute locations must be dense (`0..n-1`): slang-rhi's Vulkan, Metal and WebGPU
   backends take attribute `i` as shader location `i`. D3D binds by the generator's `LOCATION<n>`

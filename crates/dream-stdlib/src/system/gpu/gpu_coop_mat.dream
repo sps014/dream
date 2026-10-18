@@ -6,8 +6,9 @@ import system.codegen;
 /// hardware, for compute shaders that tile their own matrix multiplications.
 ///
 /// Its size is fixed when the shader is built from the constant sizes passed to `zeros` or
-/// `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Dx12` and
-/// `Cuda` can provide; using it with only other targets is a build error.
+/// `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Metal` and
+/// `Cuda` can provide. Metal tiles are 8 by 8, so a shader that targets `GpuTarget.Metal`
+/// must use that size. Using it with only other targets is a build error.
 @generator_only(ComputeAttribute, GpuAttribute)
 public struct GpuCoopMat<T> {
     /// A `rows` by `columns` tile of zeros; both sizes must be constants.

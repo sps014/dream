@@ -1,6 +1,7 @@
 //! Buffers, textures, samplers and their CPU transfers. Writes are queued in submission order;
 //! reads resolve their future once the GPU finished every earlier submission.
 
+use crate::backend::Backend;
 use crate::error::{self, Code, HostError, HostResult, check, feature};
 use crate::ffi;
 use crate::guest::OutBytes;
@@ -24,6 +25,36 @@ pub fn encode(
     Ok(fence)
 }
 
+/// WebGPU sizes buffers, fills, writes and copies in multiples of 4 bytes. Every backend
+/// allocates the padded size, so `float16` and byte buffers of any length work everywhere.
+fn padded(size: u64) -> u64 {
+    size.next_multiple_of(4)
+}
+
+/// The bytes a write of `data` at `offset` sends to a buffer of `size` bytes. A write that
+/// runs to the end of the buffer is zero-padded into the allocation's slack. Other writes that
+/// start or end inside a 4-byte word cannot be expressed on WebGPU.
+fn write_bytes(
+    backend: Backend,
+    offset: u64,
+    data: &[u8],
+    size: u64,
+) -> HostResult<std::borrow::Cow<'_, [u8]>> {
+    let len = data.len() as u64;
+    let mut bytes = std::borrow::Cow::Borrowed(data);
+    if offset.is_multiple_of(4) && !len.is_multiple_of(4) && offset + len == size {
+        let mut owned = data.to_vec();
+        owned.resize(padded(len) as usize, 0);
+        bytes = std::borrow::Cow::Owned(owned);
+    }
+    if backend == Backend::WebGpu && (!offset.is_multiple_of(4) || !bytes.len().is_multiple_of(4)) {
+        return Err(HostError::invalid(
+            "WebGPU buffer writes must start at a multiple of 4 bytes and end at one or at the end of the buffer",
+        ));
+    }
+    Ok(bytes)
+}
+
 fn non_negative(value: i32, what: &str) -> HostResult<u64> {
     u64::try_from(value).map_err(|_| HostError::invalid(format!("{what} must not be negative")))
 }
@@ -41,7 +72,7 @@ pub fn buffer_create(device: i32, byte_size: i32, usage: i32) -> HostResult<i32>
     }
     let mut state = state::lock();
     let core = state.device(device)?;
-    let obj = new_buffer(&core, size, usage as u32, false)?;
+    let obj = new_buffer(&core, padded(size), usage as u32, false)?;
     state.insert(Entry {
         kind: Kind::Buffer(BufferEntry { obj, size }),
         device,
@@ -88,6 +119,7 @@ pub fn buffer_write(handle: i32, byte_offset: i32, data: &[u8]) -> HostResult<()
     if data.is_empty() {
         return Ok(());
     }
+    let data = write_bytes(entry.core.backend, offset, data, buffer.size)?;
     let raw = buffer.obj.raw();
     let fence = encode(&entry.core, |e| {
         check(unsafe {
@@ -170,18 +202,25 @@ fn buffer_read_now(future: usize, handle: i32, byte_offset: i32, byte_size: i32)
         waiter::complete(future, out.finish());
         return Ok(());
     }
+    if entry.core.backend == Backend::WebGpu && !offset.is_multiple_of(4) {
+        return Err(HostError::invalid(
+            "WebGPU buffer reads must start at a multiple of 4 bytes",
+        ));
+    }
+    // An aligned copy may run into the allocation's padding, which `padded` guarantees exists.
+    let copied = if offset.is_multiple_of(4) { padded(size) } else { size };
     let core = entry.core.clone();
     let source = buffer.obj.raw();
-    let staging = new_buffer(&core, size, 0, true)?;
+    let staging = new_buffer(&core, copied, 0, true)?;
     let target = staging.raw();
     let fence = encode(&core, |e| {
-        check(unsafe { ffi::dgpu_enc_copy_buffer(e, target, 0, source, offset, size) })
+        check(unsafe { ffi::dgpu_enc_copy_buffer(e, target, 0, source, offset, copied) })
     })?;
     state.touch(handle, fence);
     let readback = Readback {
         staging,
         out,
-        rows: (size, size, 1),
+        rows: (copied, size, 1),
     };
     finish_read(core, future, fence, readback)
 }
@@ -333,25 +372,32 @@ pub fn descriptor_handle(resource: i32) -> HostResult<u64> {
     Ok(bits)
 }
 
-/// Stores one MLP layer as a storage buffer: row-major `outputs x inputs` weights followed by
-/// `outputs` biases, `element_bytes` each.
-pub fn mlp_upload(device: i32, weights: &[u8], layout: &[i32]) -> HostResult<i32> {
-    let &[inputs, outputs, element] = layout else {
-        return Err(HostError::invalid("an MLP layout has 3 values"));
-    };
-    if inputs <= 0 || outputs <= 0 || !(element == 2 || element == 4) {
-        return Err(HostError::invalid("malformed MLP layer layout"));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allocations_round_up_to_whole_words() {
+        assert_eq!(padded(0), 0);
+        assert_eq!(padded(514), 516);
+        assert_eq!(padded(516), 516);
     }
-    let expected = (inputs as u64 * outputs as u64 + outputs as u64) * element as u64;
-    if weights.len() as u64 != expected {
-        return Err(HostError::invalid(
-            "MLP data must hold inputs * outputs weights and one bias per output",
-        ));
+
+    #[test]
+    fn writes_that_end_the_buffer_are_padded() {
+        let data = [1u8, 2, 3, 4, 5, 6];
+        let bytes = write_bytes(Backend::WebGpu, 8, &data, 14).unwrap();
+        assert_eq!(&*bytes, &[1, 2, 3, 4, 5, 6, 0, 0]);
+        let whole = write_bytes(Backend::WebGpu, 0, &data[..4], 14).unwrap();
+        assert!(matches!(whole, std::borrow::Cow::Borrowed(_)));
     }
-    let handle = buffer_create(device, weights.len() as i32, 1)?;
-    if let Err(e) = buffer_write(handle, 0, weights) {
-        state::lock().release(handle);
-        return Err(e);
+
+    #[test]
+    fn unaligned_writes_fail_only_on_webgpu() {
+        let data = [1u8, 2];
+        assert!(write_bytes(Backend::WebGpu, 2, &data, 14).is_err());
+        assert!(write_bytes(Backend::WebGpu, 0, &data, 14).is_err());
+        assert_eq!(&*write_bytes(Backend::Metal, 2, &data, 14).unwrap(), &data);
+        assert_eq!(&*write_bytes(Backend::Vulkan, 0, &data, 14).unwrap(), &data);
     }
-    Ok(handle)
 }

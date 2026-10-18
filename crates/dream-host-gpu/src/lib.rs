@@ -10,6 +10,7 @@ mod exports;
 mod ffi;
 pub mod guest;
 mod handles;
+pub mod mlp;
 pub mod pipelines;
 pub mod raytracing;
 pub mod resources;

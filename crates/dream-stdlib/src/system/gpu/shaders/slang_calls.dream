@@ -190,15 +190,20 @@ internal static class SlangCalls {
                 component = "CoopVecComponentType::Float16";
                 size = 2;
             }
-            w.text("coopVecMatMul<" + element + ", " + shape[1].to_string() + ">(");
+            // The host's layer buffer: biases at 0, the matrix at the next multiple of 64
+            // bytes (crates/dream-host-gpu/src/mlp.rs).
+            let bias_bytes = shape[1] * size;
+            let matrix_offset = (bias_bytes + 63) / 64 * 64;
+            w.text("coopVecMatMulAdd<" + element + ", " + shape[1].to_string() + ">(");
             b.expr(n.child(1));
             w.text(", " + component + ", ");
+            b.expr(receiver);
+            w.text(", " + matrix_offset.to_string() + ", " + component + ", ");
             b.expr(receiver);
             w.text(
                 ", 0, "
                     + component
-                    + ", CoopVecMatrixLayout::RowMajor, false, "
-                    + (shape[0] * size)
+                    + ", DREAM_MLP_LAYOUT, false, " + (shape[0] * size)
                     .to_string() + ")"
             );
             return;

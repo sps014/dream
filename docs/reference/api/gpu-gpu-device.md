@@ -182,7 +182,7 @@ public async fun build_top_level(
 
 ## `upload_mlp`
 
-Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. The host repacks them into the fastest layout for this device. `T` is usually `float16`.
+Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. On Vulkan and D3D12 devices with `GpuFeature.CooperativeVectors` the host converts the weights into the device's own matrix layout; elsewhere it keeps them row by row. Uploading works on any device. `T` is `float16` or `float`; other element sizes fail with `GpuError.InvalidResource`.
 
 ```dream
 public fun upload_mlp<T: unmanaged>(

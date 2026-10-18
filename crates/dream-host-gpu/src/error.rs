@@ -41,6 +41,7 @@ pub mod feature {
     pub const RAY_TRACING: u32 = 0;
     pub const RAY_QUERY: u32 = 1;
     pub const BINDLESS: u32 = 2;
+    pub const COOPERATIVE_VECTORS: u32 = 4;
 
     /// The GpuFeature behind a bundle capability name (docs/internals/18-gpu-shader-bundle.md).
     pub fn of_capability(name: &str) -> Option<u32> {
@@ -49,7 +50,7 @@ pub mod feature {
             "rayquery" => RAY_QUERY,
             "descriptor_handle" => BINDLESS,
             "subgroup_basic" => 3,
-            "cooperative_vector" => 4,
+            "cooperative_vector" => COOPERATIVE_VECTORS,
             "cooperative_matrix" => 5,
             "half" => 6,
             "atomic64" => 7,

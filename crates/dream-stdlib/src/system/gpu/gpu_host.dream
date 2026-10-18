@@ -115,7 +115,8 @@ internal static class GpuHost {
     ): int;
 
     // `layout` is [inputs, outputs, element_bytes]; `weights` is row-major outputs x inputs
-    // followed by `outputs` biases. The host repacks them into the device's optimal layout.
+    // followed by `outputs` biases. The host stores the biases first and the matrix, in the
+    // layout the device's shader code reads, at the next multiple of 64 bytes.
     @runtime("gpuMlpUpload")
     internal static extern fun mlp_upload(
         device: int,

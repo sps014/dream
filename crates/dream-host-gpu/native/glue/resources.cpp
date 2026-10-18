@@ -251,3 +251,71 @@ extern "C" int dgpu_descriptor_handle(DgpuDevice* device, DgpuObject* resource, 
     *out = handle.value;
     return DGPU_OK;
 }
+
+namespace {
+
+CooperativeVectorComponentType mlpComponent(int component)
+{
+    return component == 0 ? CooperativeVectorComponentType::Float16 : CooperativeVectorComponentType::Float32;
+}
+
+CooperativeVectorMatrixDesc mlpMatrix(
+    uint32_t rows,
+    uint32_t columns,
+    int component,
+    CooperativeVectorMatrixLayout layout,
+    size_t size
+)
+{
+    CooperativeVectorMatrixDesc desc = {};
+    desc.rowCount = rows;
+    desc.colCount = columns;
+    desc.componentType = mlpComponent(component);
+    desc.layout = layout;
+    desc.size = size;
+    desc.offset = 0;
+    desc.rowColumnStride = layout == CooperativeVectorMatrixLayout::RowMajor ? size / rows : 0;
+    return desc;
+}
+
+} // namespace
+
+extern "C" int dgpu_mlp_optimal_size(DgpuDevice* device, uint32_t rows, uint32_t columns, int component, uint64_t* out)
+{
+    *out = 0;
+    size_t size = 0;
+    Result result = device->device->getCooperativeVectorMatrixSize(
+        rows,
+        columns,
+        mlpComponent(component),
+        CooperativeVectorMatrixLayout::InferencingOptimal,
+        0,
+        &size
+    );
+    if (SLANG_FAILED(result) || size == 0)
+        return failResult(device, result, "the device reported no cooperative-vector matrix size");
+    *out = size;
+    return DGPU_OK;
+}
+
+extern "C" int dgpu_mlp_convert_optimal(
+    DgpuDevice* device,
+    const void* src,
+    uint32_t rows,
+    uint32_t columns,
+    int component,
+    void* dst,
+    uint64_t dst_size
+)
+{
+    size_t element = component == 0 ? 2 : 4;
+    size_t src_size = size_t(rows) * columns * element;
+    CooperativeVectorMatrixDesc from =
+        mlpMatrix(rows, columns, component, CooperativeVectorMatrixLayout::RowMajor, src_size);
+    CooperativeVectorMatrixDesc to =
+        mlpMatrix(rows, columns, component, CooperativeVectorMatrixLayout::InferencingOptimal, size_t(dst_size));
+    Result result = device->device->convertCooperativeVectorMatrix(dst, size_t(dst_size), &to, src, src_size, &from, 1);
+    if (SLANG_FAILED(result))
+        return failResult(device, result, "converting the MLP weights to the device layout failed");
+    return DGPU_OK;
+}

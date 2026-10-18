@@ -11,7 +11,7 @@
         {
           "name": "evaluate_mlp",
           "stage": "compute",
-          "code": {"offset": 20274, "size": 2088, "sha256": "14590efebaa782f9d8313cf83a29144eb701b04928dab137b9a0d5cd030257fe"},
+          "code": {"offset": 20274, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
           "thread_group_size": [32, 1, 1],
           "params": [
             {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
@@ -24,7 +24,7 @@
         {
           "name": "tile_multiply",
           "stage": "compute",
-          "code": {"offset": 22362, "size": 1312, "sha256": "638cc221a5eee2a040fbf50003843a762246c104e1aa8d88957861f9eed98241"},
+          "code": {"offset": 22458, "size": 1312, "sha256": "638cc221a5eee2a040fbf50003843a762246c104e1aa8d88957861f9eed98241"},
           "thread_group_size": [32, 1, 1],
           "params": [
             {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 4, "offset": 0, "size": 0},

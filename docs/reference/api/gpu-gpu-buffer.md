@@ -30,7 +30,7 @@ public fun write(data: T[]): Result<bool, GpuError>
 
 ## `write_at`
 
-Replaces the elements starting at `offset` with `data`. The range must lie inside the buffer.
+Replaces the elements starting at `offset` with `data`. The range must lie inside the buffer. On `GpuBackend.WebGpu` it must also start at a multiple of 4 bytes and end at one or at the end of the buffer, which matters for `float16` and `byte` elements.
 
 ```dream
 public fun write_at(offset: int, data: T[]): Result<bool, GpuError>

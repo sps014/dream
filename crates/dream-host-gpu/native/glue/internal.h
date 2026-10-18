@@ -30,12 +30,14 @@ public:
     SLANG_NO_THROW void SLANG_MCALL
     handleMessage(rhi::DebugMessageType type, rhi::DebugMessageSource source, const char* message) override;
 
-    std::string takeLastError();
+    /// The first error reported since the previous call. Later errors are usually consequences of
+    /// it (a failed pipeline creation is followed by "invalid pipeline" when it is used).
+    std::string takeFirstError();
     bool lost(std::string* reason);
 
 private:
     std::mutex m_mutex;
-    std::string m_lastError;
+    std::string m_firstError;
     std::string m_lostReason;
     std::atomic<bool> m_lost{false};
 };

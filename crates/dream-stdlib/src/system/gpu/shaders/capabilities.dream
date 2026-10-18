@@ -43,6 +43,8 @@ internal static class Capabilities {
                 }
             } else if key == "workgroup_count" {
                 feature = "workgroup_count";
+            } else if key == "GpuCoopMat.zeros" || key == "GpuCoopMat.load" {
+                Capabilities.check_metal_tile(ctx, entry, n, key);
             }
             let input = Builtins.input_of(key);
             if !input.is_empty() {
@@ -67,6 +69,35 @@ internal static class Capabilities {
                 return a.compare(b);
             }
         );
+    }
+
+    // Slang lowers cooperative matrices on Metal to simdgroup_matrix, which is 8 by 8 only.
+    static fun check_metal_tile(
+        ctx: GenContext,
+        borrow entry: ShaderEntry,
+        borrow n: ShaderNode,
+        borrow key: string
+    ): void {
+        if !entry.targets.contains(GpuTarget.Metal) {
+            return;
+        }
+        let rows = 0;
+        if !n.is_expr(ExprKind.FunctionCall) && !n.is_statement(StmtKind.FunctionInvocation) {
+            rows = 1;
+        }
+        if key == "GpuCoopMat.load" {
+            rows = rows + 3;
+        }
+        for (let i in [rows, rows + 1]) {
+            if i < n.children.length && n.child(i).has_constant && n.child(i).constant != "8" {
+                ctx.error_at(
+                    n.id,
+                    "cooperative matrices are 8 by 8 on GpuTarget.Metal; use 8 by 8 tiles or give '"
+                        + entry.name() + "' its own @gpu_targets without GpuTarget.Metal"
+                );
+                return;
+            }
+        }
     }
 
     static fun from_type(
@@ -139,7 +170,7 @@ internal static class Capabilities {
             } else if feature == "cooperative_vector" {
                 ok = t == GpuTarget.Dx12 || t == GpuTarget.Vulkan || t == GpuTarget.Cuda;
             } else if feature == "cooperative_matrix" {
-                ok = t == GpuTarget.Vulkan || t == GpuTarget.Cuda;
+                ok = t == GpuTarget.Vulkan || t == GpuTarget.Metal || t == GpuTarget.Cuda;
             } else if feature == "workgroup_count" {
                 ok = t != GpuTarget.Metal && t != GpuTarget.WebGpu;
             } else {

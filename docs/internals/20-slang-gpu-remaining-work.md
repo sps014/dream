@@ -15,7 +15,7 @@ Status of the generator-based Slang GPU work on the `feat/slang-gpu-shaders` bra
 | Native host (`dream-host-gpu`) | slang-rhi C++ glue, strict backend selection, fence-based resource lifetime, async completions, window surfaces, ray-tracing pipelines and acceleration structures, `DREAM_GPU_STRICT_AOT=1`. |
 | Browser host (`gpu.js`) | WebGPU over the WGSL bundle target, canvas surfaces, selective runtime inclusion. |
 
-Verified on an Apple M3 with real Dream programs: compute (saxpy, workgroup reduction), offscreen render readback, subgroups, and backend selection on Metal, Vulkan (MoltenVK) and WebGPU (Dawn); inline ray queries on Metal.
+Verified on an Apple M3 with real Dream programs: compute (saxpy, workgroup reduction), offscreen render readback, subgroups, backend selection, forward- and reverse-mode autodiff against finite differences, and `float16` buffers with half arithmetic on Metal, Vulkan (MoltenVK) and WebGPU (Dawn); inline ray queries and 8x8 cooperative matrices on Metal.
 
 ## Not yet verified
 
@@ -23,6 +23,7 @@ Verified on an Apple M3 with real Dream programs: compute (saxpy, workgroup redu
 - **Windows and Linux builds** of `dream-host-gpu` and `dream-host-window`. The `gpu` and `window` features are default-on, so CI is their first build.
 - **D3D12, D3D11 and CUDA** at run time, and DXIL/DXBC/PTX output (needs `dxc`, `fxc`, NVRTC reachable from the tool sandbox).
 - **Ray-tracing pipelines** on hardware (no RT on Metal through Slang 2026.20 or on MoltenVK). Linux CI installs lavapipe and may exercise Vulkan paths; unconfirmed.
+- **Cooperative vectors** on any device, including the inferencing-optimal MLP layout conversion, and **cooperative matrices** on Vulkan or CUDA (only Metal's 8x8 tiles have run).
 - **Bindless** on any backend (slang-rhi has no Metal descriptor handles; MoltenVK lacks required features).
 - **Real browser WebGPU.** `gpu.js` is tested against a fake `navigator.gpu` and the real generator bundles only.
 - **Windows generator sandbox** (job object + AppContainer) has never executed.
@@ -31,13 +32,13 @@ Verified on an Apple M3 with real Dream programs: compute (saxpy, workgroup redu
 
 ### M7: machine learning features
 
-The declarations and generator lowering exist (`@differentiable` → `[Differentiable]`, `GpuDiff.*` → `fwd_diff`/`bwd_diff`, `GpuCoopVec`/`GpuCoopMat`/`GpuMlpWeights` → `CoopVec`/`CoopMat`/`coopVecMatMul`). Left:
+The declarations and generator lowering exist (`@differentiable` → `[Differentiable]`, `GpuDiff.*` → `fwd_diff`/`bwd_diff`, `GpuCoopVec`/`GpuCoopMat`/`GpuMlpWeights` → `CoopVec`/`CoopMat`/`coopVecMatMulAdd`). Status of the items:
 
-1. Runtime suites in `tests/projects/gpu_runtime/` for forward and backward autodiff (`train_step` from the plan) on Metal, Vulkan and WebGPU, checked against CPU finite differences.
-2. `gpuMlpUpload`: replace the row-major store with slang-rhi's device-specific matrix layout conversion on Vulkan (NV cooperative vector), D3D12 and CUDA/OptiX; keep row-major for the emulated path.
-3. Cooperative vector/matrix suites that skip when `GpuFeature.CooperativeVectors`/`CooperativeMatrices` is missing; generator errors at first use when only Metal/WGSL targets are selected (Slang E36107) stay covered by goldens.
-4. `float16` GPU buffers: `GpuBuffer<float16>` upload/readback, `shader-f16` on WebGPU, half arithmetic in shaders, and the `Float16` feature gate.
-5. Decide whether `GpuCoopVec<T>`/`GpuMlpWeights<T>` sizes stay on `@coop_shape` or need const generics in the language.
+1. **Done.** `gpu_autodiff_forward.dream` (two-input scalar and `GpuVec2` tangents) and `gpu_autodiff_backward.dream` (the plan's `train_step`, driven for eight gradient-descent steps, plus `GpuVec2` and struct gradients) pass on Metal, Vulkan (MoltenVK) and WebGPU (Dawn), checked against double-precision central differences on the CPU. The suite is two modules because of the WebGPU storage-buffer limit under "Native host" below.
+2. **Done, unverified on hardware.** `gpuMlpUpload` (`crates/dream-host-gpu/src/mlp.rs`) converts the matrix to slang-rhi's inferencing-optimal layout on Vulkan and D3D12 devices with cooperative vectors and keeps it row-major elsewhere. The generated Slang reads it through `DREAM_MLP_LAYOUT`, which is optimal on `spirv`/`dxil` and row-major elsewhere, and the layer buffer holds biases at 0 and the matrix at the next 64-byte boundary. Layout selection and packing are unit-tested. CUDA stays row-major: the PTX target is compiled without OptiX, so Slang emulates cooperative vectors there, and the pinned slang-rhi build leaves out OptiX and NVAPI, so CUDA and D3D12 devices never report the feature. No available machine has a cooperative-vector device, so the conversion and the native multiply have never run.
+3. **Done.** `gpu_cooperative.dream` evaluates a two-layer `float16` MLP (Vulkan) and multiplies a tile (16x16 on Vulkan, 8x8 on Metal) against CPU references. It skips when the feature is missing, after checking that such a device reports `UnsupportedCapability`. Cooperative matrices now also target Metal: Slang lowers 8x8 `CoopMat` to `simdgroup_matrix`, and Apple-silicon Metal devices report `CooperativeMatrices`. The generator rejects other tile sizes on Metal, and rejects cooperative vectors on Metal/WebGPU-only shaders and cooperative matrices on WebGPU-only shaders at their first use, before Slang's E36107 (goldens in `tests/gpu_shaders.rs`).
+4. **Done.** `gpu_float16_buffers.dream` uploads and reads back `GpuBuffer<float16>`, runs half arithmetic with a `float16` value parameter, widens to `float`, and runs `sqrt` on Metal, Vulkan and WebGPU (Dawn's `shader-f16`), with an odd element count. Shaders skip without `GpuFeature.Float16`. `gpu.js` requests `shader-f16` and gates `half` entries on it (`scripts/test-gpu-host.mjs`). `float16` cannot cross `extern`/`@export`, so buffers travel as binary16 bytes, which are 2 bytes on wasm32 as well.
+5. **Decided: sizes stay on `@coop_shape`; no const generics.** The sizes matter only inside shaders, where the generator already knows them: from `@coop_shape` on parameters and fields, from the constant passed to `GpuCoopVec.zeros` or `GpuCoopMat.zeros`/`load`, and from the layer that `apply` uses. On the CPU every size is a runtime value. `upload_mlp` takes `inputs`/`outputs`, and a `GpuBuffer<GpuCoopVec<T>>` parameter is a flat `GpuBuffer<T>` in the generated wrapper, so const generics would add nothing that CPU code can use. The one check they would have given, that an uploaded layer matches the shader, is now made by the generated wrapper: `GpuArgs.mlp_weights` receives the parameter's `@coop_shape`, and a layer of other sizes fails with `GpuError.InvalidResource` before the pipeline is created. Value generics would need a new kind of generic parameter through the parser, sema, `dream-types` interning and monomorphization keys (which stay `(DefId, type args)` per [the stack-allocation and mono note](10-stack-alloc-and-mono-design-note.md)), all for generator-only types. Revisit only if a CPU-side API needs a size in a type, such as fixed-length vectors outside shaders.
 
 ### Test coverage on other platforms
 
@@ -74,6 +75,7 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 
 - Unsupported in shaders: user struct methods, operator overloads, explicit enum values, named arguments, switch expressions, `for` loops over non-ranges.
 - Structs passed by value or stored in buffers use Slang's GPU layout (`GpuVec3` padding differs from the CPU layout).
+- Cooperative types: cooperative matrices are 8x8 only on Metal and unavailable on D3D12 (Slang lowers `CoopMat` only for SPIR-V, Metal and CUDA); cooperative vectors have no Metal or WebGPU lowering. Shaders that use them cannot also target D3D12 or CUDA in a portable test, because those targets need `dxc` and NVRTC on the build machine.
 - Ray-tracing stages cannot target Metal; non-raygen stages cannot take resource parameters; `workgroup_count()` is rejected on Metal and WebGPU.
 - Target errors point at the module or function declaration because attribute nodes have no ids.
 - `slang_body.dream` is ~650 lines; split it.
@@ -84,7 +86,9 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 - Ray-tracing payload, hit-attribute size and recursion depth are fixed at 128 bytes, 32 bytes and 1.
 - Slang 2026.20 emits invalid MSL for a module with both a `GpuHandle` buffer and ray queries.
 - Native Wayland windows are unsupported (XWayland only).
-- `gpuMlpUpload` stores weights row-major without device repacking (M7 item 2).
+- The inferencing-optimal MLP conversion and native cooperative-vector multiply have not run on hardware (no Vulkan/D3D12 device with cooperative vectors available); CUDA and D3D12 never report cooperative vectors because the pinned slang-rhi build leaves out OptiX and NVAPI.
+- WebGPU (Dawn) pipelines bind the globals of every shader in their module: the bundle records one layout per module and target. A module whose shaders together use more storage buffers than the per-stage limit (8 by default, 10 on Dawn over Metal) fails at dispatch. The generator warns past 8; the fix is per-pipeline layouts in the bundle plus a filtered replay layout.
+- On WebGPU, buffer writes that start or end inside a 4-byte word fail unless they run to the end of the buffer; allocations are padded to whole words on every backend.
 
 ### Browser host
 

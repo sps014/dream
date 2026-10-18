@@ -1,5 +1,5 @@
 use crate::error::{self, HostResult};
-use crate::{devices, pipelines, raytracing, resources, submit, surfaces};
+use crate::{devices, mlp, pipelines, raytracing, resources, submit, surfaces};
 use dream_host_abi::{DreamPtr, alloc_i32s, alloc_string, read_bytes, read_i32s, read_string};
 
 fn handle(result: HostResult<i32>) -> i32 {
@@ -195,7 +195,7 @@ pub unsafe extern "C" fn gpuTopLevelBuildAsync(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gpuMlpUpload(device: i32, weights: DreamPtr, layout: DreamPtr) -> i32 {
     let (weights, layout) = unsafe { (read_bytes(weights), read_i32s(layout)) };
-    handle(resources::mlp_upload(device, &weights, &layout))
+    handle(mlp::upload(device, &weights, &layout))
 }
 
 #[unsafe(no_mangle)]

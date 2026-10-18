@@ -219,6 +219,9 @@ internal static class Builtins {
         if key == "GpuCoopVec.relu" {
             return "coop_relu";
         }
+        if key == "GpuMlpWeights.apply" {
+            return "mlp_layout";
+        }
         return "";
     }
 

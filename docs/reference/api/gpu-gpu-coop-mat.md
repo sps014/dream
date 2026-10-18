@@ -6,7 +6,7 @@ This reference lists the public declarations for this part of the library. See [
 
 ## `GpuCoopMat`
 
-A matrix tile that a subgroup of threads holds and multiplies together on tensor hardware, for compute shaders that tile their own matrix multiplications.  Its size is fixed when the shader is built from the constant sizes passed to `zeros` or `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Dx12` and `Cuda` can provide; using it with only other targets is a build error.
+A matrix tile that a subgroup of threads holds and multiplies together on tensor hardware, for compute shaders that tile their own matrix multiplications.  Its size is fixed when the shader is built from the constant sizes passed to `zeros` or `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Metal` and `Cuda` can provide. Metal tiles are 8 by 8, so a shader that targets `GpuTarget.Metal` must use that size. Using it with only other targets is a build error.
 
 ```dream
 public struct GpuCoopMat<T>

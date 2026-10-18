@@ -98,12 +98,38 @@ fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
         }
     }
     for (let m in program.modules) {
+        if !Targets.is_wasm(ctx.target) {
+            check_webgpu_storage(ctx, m);
+        }
         let artifact = SlangEmit(ctx, program, m).emit();
         if ctx.has_errors() {
             return;
         }
         ctx.emit_artifact(m.stem() + ".slang", artifact.to_string(), artifact.source_map, true);
         Targets.request(ctx, m, layouts);
+    }
+}
+
+// Native WebGPU (Dawn) pipelines bind the globals of every shader in their module, because a
+// bundle records one layout per module and target, so the module's storage buffers together
+// count toward each pipeline's per-stage limit. WebGPU guarantees 8.
+fun check_webgpu_storage(ctx: GenContext, borrow m: ShaderModule): void {
+    let count = 0;
+    for (let e in m.entries_for(GpuTarget.WebGpu)) {
+        for (let p in e.params) {
+            if p.kind == ParamKinds.buffer() || p.kind == ParamKinds.mlp_weights() {
+                count = count + 1;
+            }
+        }
+        if count > 8 {
+            ctx.warning_at(
+                e.function.id,
+                "the shaders of this module bind "
+                    + count.to_string()
+                    + " storage buffers together, more than the 8 per stage WebGPU guarantees; native GpuBackend.WebGpu pipelines bind every shader's buffers of a module, so move some shaders to another module"
+            );
+            return;
+        }
     }
 }
 

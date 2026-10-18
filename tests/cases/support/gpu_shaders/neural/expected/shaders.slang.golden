@@ -3,6 +3,14 @@
 
 using namespace linalg;
 
+// GpuDevice.upload_mlp stores weights in the device's own layout where this code
+// multiplies natively (Vulkan and D3D12), and row-major for Slang's emulation (CUDA).
+#if defined(DREAM_TARGET_SPIRV) || defined(DREAM_TARGET_DXIL)
+#define DREAM_MLP_LAYOUT CoopVecMatrixLayout::InferencingOptimal
+#else
+#define DREAM_MLP_LAYOUT CoopVecMatrixLayout::RowMajor
+#endif
+
 CoopVec<T, N> dream_coop_relu<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> v)
 {
     return max(v, CoopVec<T, N>(T(0)));
@@ -21,8 +29,8 @@ void evaluate_mlp(uint3 dream_in_global_id : SV_DispatchThreadID)
 {
     dream_global_id = dream_in_global_id;
     var i = int3(dream_global_id).x;
-    var hidden = dream_coop_relu(coopVecMatMul<half, 32>(evaluate_mlp_features[i], CoopVecComponentType::Float16, evaluate_mlp_layer0, 0, CoopVecComponentType::Float16, CoopVecMatrixLayout::RowMajor, false, 32));
-    var result = coopVecMatMul<half, 4>(hidden, CoopVecComponentType::Float16, evaluate_mlp_layer1, 0, CoopVecComponentType::Float16, CoopVecMatrixLayout::RowMajor, false, 64);
+    var hidden = dream_coop_relu(coopVecMatMulAdd<half, 32>(evaluate_mlp_features[i], CoopVecComponentType::Float16, evaluate_mlp_layer0, 64, CoopVecComponentType::Float16, evaluate_mlp_layer0, 0, CoopVecComponentType::Float16, DREAM_MLP_LAYOUT, false, 32));
+    var result = coopVecMatMulAdd<half, 4>(hidden, CoopVecComponentType::Float16, evaluate_mlp_layer1, 64, CoopVecComponentType::Float16, evaluate_mlp_layer1, 0, CoopVecComponentType::Float16, DREAM_MLP_LAYOUT, false, 64);
     result[0] = max(result[0], 0.0h);
     evaluate_mlp_out[i] = result;
 }

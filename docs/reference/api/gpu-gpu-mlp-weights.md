@@ -6,7 +6,7 @@ This reference lists the public declarations for this part of the library. See [
 
 ## `GpuMlpWeights`
 
-One uploaded neural network layer: a weight matrix plus biases, stored in the device's fastest layout for cooperative vector math.  Create one with `GpuDevice.upload_mlp` and pass it to a shader parameter, giving its sizes with `@coop_shape(inputs, outputs)`. Inside the shader, `apply` evaluates the layer. Hardware acceleration needs `GpuFeature.CooperativeVectors`, which `GpuTarget.Vulkan`, `Dx12` and `Cuda` can provide.
+One uploaded neural network layer: a weight matrix plus biases, stored in the layout the device's cooperative vector math reads fastest.  Create one with `GpuDevice.upload_mlp` and pass it to a shader parameter, giving its sizes with `@coop_shape(inputs, outputs)`. Dispatching a layer whose sizes differ from the parameter's fails with `GpuError.InvalidResource`. Inside the shader, `apply` evaluates the layer. Shaders that use it compile for `GpuTarget.Vulkan`, `Dx12` and `Cuda`, and run on devices with `GpuFeature.CooperativeVectors`; elsewhere dispatching fails with `GpuError.UnsupportedCapability`.
 
 ```dream
 public class GpuMlpWeights<T: unmanaged>

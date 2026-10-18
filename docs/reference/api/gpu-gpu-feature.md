@@ -46,7 +46,7 @@ Subgroups = 3
 
 ## `CooperativeVectors`
 
-Hardware cooperative vectors (`GpuCoopVec`, `GpuMlpWeights`).
+Hardware cooperative vectors (`GpuCoopVec`, `GpuMlpWeights`), on Vulkan and D3D12 devices whose drivers expose them.
 
 ```dream
 CooperativeVectors = 4
@@ -54,7 +54,7 @@ CooperativeVectors = 4
 
 ## `CooperativeMatrices`
 
-Hardware cooperative matrices (`GpuCoopMat`).
+Hardware cooperative matrices (`GpuCoopMat`): Vulkan devices with the cooperative matrix extension, and Metal on Apple-silicon GPUs (8 by 8 tiles).
 
 ```dream
 CooperativeMatrices = 5
@@ -62,7 +62,7 @@ CooperativeMatrices = 5
 
 ## `Float16`
 
-`float16` arithmetic in shaders.
+`float16` arithmetic and `float16` buffer elements in shaders. On WebGPU this is the optional `shader-f16` feature. `GpuBuffer<float16>` uploads and downloads work without it.
 
 ```dream
 Float16 = 6

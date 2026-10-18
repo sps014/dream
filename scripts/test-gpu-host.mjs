@@ -590,14 +590,19 @@ test('features WebGPU lacks report UnsupportedCapability with the GpuFeature num
     assert.equal(host.gpuLastError(), 'EUNSUPPORTED\n3');
     // Requirements are per entry: the module's other shaders still run.
     assert.ok(host.gpuComputePipelineCreate(needsSubgroups, 'plain') > 0, host.gpuLastError());
+    const needsHalf = host.gpuLibraryLoad(device, wgsl([{ ...SAXPY, capabilities: ['half'] }]));
+    assert.equal(host.gpuComputePipelineCreate(needsHalf, 'saxpy'), 0);
+    assert.equal(host.gpuLastError(), 'EUNSUPPORTED\n6');
     const unknown = host.gpuLibraryLoad(device, wgsl([{ ...SAXPY, capabilities: ['wave_ops'] }]));
     assert.equal(host.gpuComputePipelineCreate(unknown, 'saxpy'), 0);
     assert.match(host.gpuLastError(), /^EINVALID\nsaxpy needs the unknown capability wave_ops/);
   } finally { uninstall(); }
-  const granted = await openDevice(host, ['subgroups']);
+  const granted = await openDevice(host, ['subgroups', 'shader-f16']);
   try {
     const library = host.gpuLibraryLoad(granted.device, wgsl([{ ...SAXPY, capabilities: ['subgroup_basic'] }]));
     assert.ok(host.gpuComputePipelineCreate(library, 'saxpy') > 0, host.gpuLastError());
+    const half = host.gpuLibraryLoad(granted.device, wgsl([{ ...SAXPY, capabilities: ['half'] }]));
+    assert.ok(host.gpuComputePipelineCreate(half, 'saxpy') > 0, host.gpuLastError());
   } finally { uninstall(); }
 });
 

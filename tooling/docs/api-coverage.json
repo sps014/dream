@@ -8426,14 +8426,14 @@
     "declarations": [
       {
         "signature": "public struct CoopShapeAttribute",
-        "description": "Gives the fixed dimensions of a cooperative vector or matrix parameter or field.  Write one number for a `GpuCoopVec` element count, or input and output sizes for a `GpuMlpWeights` layer: `@coop_shape(16, 32)` is a layer from 16 inputs to 32 outputs. On a `GpuBuffer<GpuCoopVec<T>>` it is the length of each element. The sizes must match the data uploaded from the CPU.",
-        "line": 10,
+        "description": "Gives the fixed dimensions of a cooperative vector or matrix parameter or field.  Write one number for a `GpuCoopVec` element count, or input and output sizes for a `GpuMlpWeights` layer: `@coop_shape(16, 32)` is a layer from 16 inputs to 32 outputs. Dispatching a layer of other sizes fails with `GpuError.InvalidResource`. On a `GpuBuffer<GpuCoopVec<T>>` parameter it is the length of each element, and the CPU passes a `GpuBuffer<T>` that holds that many values per element.",
+        "line": 11,
         "page": "reference/api/gpu-coop-shape-attribute.md"
       },
       {
         "signature": "public dimensions: List<int>",
         "description": "The dimensions, outermost first.",
-        "line": 12,
+        "line": 13,
         "page": "reference/api/gpu-coop-shape-attribute.md"
       }
     ]
@@ -8755,32 +8755,32 @@
       },
       {
         "signature": "public fun write_at(offset: int, data: T[]): Result<bool, GpuError>",
-        "description": "Replaces the elements starting at `offset` with `data`. The range must lie inside the buffer.",
-        "line": 49,
+        "description": "Replaces the elements starting at `offset` with `data`. The range must lie inside the buffer. On `GpuBackend.WebGpu` it must also start at a multiple of 4 bytes and end at one or at the end of the buffer, which matters for `float16` and `byte` elements.",
+        "line": 50,
         "page": "reference/api/gpu-gpu-buffer.md"
       },
       {
         "signature": "public async fun read(): Result<T[], GpuError>",
         "description": "Downloads every element. It waits for submitted GPU work that writes the buffer.",
-        "line": 67,
+        "line": 68,
         "page": "reference/api/gpu-gpu-buffer.md"
       },
       {
         "signature": "public fun destroy(): void",
         "description": "Releases the GPU memory as soon as submitted work that uses it has finished. Later uses return `GpuError.InvalidResource`. Releasing the last reference does the same.",
-        "line": 84,
+        "line": 85,
         "page": "reference/api/gpu-gpu-buffer.md"
       },
       {
         "signature": "public extern fun this[index: int]: T",
         "description": "Reads element `index` inside a shader. Indexes outside the buffer read zero on most backends; never rely on it.",
-        "line": 102,
+        "line": 103,
         "page": "reference/api/gpu-gpu-buffer.md"
       },
       {
         "signature": "public extern fun this[index: int] = value: T",
         "description": "Writes element `index` inside a shader. Not allowed on `@readonly` parameters. Writes outside the buffer are dropped.",
-        "line": 118,
+        "line": 119,
         "page": "reference/api/gpu-gpu-buffer.md"
       }
     ]
@@ -8947,32 +8947,32 @@
     "declarations": [
       {
         "signature": "public struct GpuCoopMat<T>",
-        "description": "A matrix tile that a subgroup of threads holds and multiplies together on tensor hardware, for compute shaders that tile their own matrix multiplications.  Its size is fixed when the shader is built from the constant sizes passed to `zeros` or `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Dx12` and `Cuda` can provide; using it with only other targets is a build error.",
-        "line": 12,
+        "description": "A matrix tile that a subgroup of threads holds and multiplies together on tensor hardware, for compute shaders that tile their own matrix multiplications.  Its size is fixed when the shader is built from the constant sizes passed to `zeros` or `load`. Needs `GpuFeature.CooperativeMatrices`, which `GpuTarget.Vulkan`, `Metal` and `Cuda` can provide. Metal tiles are 8 by 8, so a shader that targets `GpuTarget.Metal` must use that size. Using it with only other targets is a build error.",
+        "line": 13,
         "page": "reference/api/gpu-gpu-coop-mat.md"
       },
       {
         "signature": "public static extern fun zeros(rows: int, columns: int): GpuCoopMat<T>",
         "description": "A `rows` by `columns` tile of zeros; both sizes must be constants.",
-        "line": 14,
+        "line": 15,
         "page": "reference/api/gpu-gpu-coop-mat.md"
       },
       {
         "signature": "public static extern fun load( buffer: GpuBuffer<T>, offset: int, row_stride: int, rows: int, columns: int ): GpuCoopMat<T>",
         "description": "Loads a `rows` by `columns` tile whose first element is `buffer[offset]` and whose rows are `row_stride` elements apart. The sizes must be constants.",
-        "line": 18,
+        "line": 19,
         "page": "reference/api/gpu-gpu-coop-mat.md"
       },
       {
         "signature": "public static extern fun multiply_add( a: GpuCoopMat<T>, b: GpuCoopMat<T>, c: GpuCoopMat<T> ): GpuCoopMat<T>",
         "description": "`a * b + c`, where `a` is M by K, `b` K by N, and `c` and the result M by N.",
-        "line": 27,
+        "line": 28,
         "page": "reference/api/gpu-gpu-coop-mat.md"
       },
       {
         "signature": "public extern fun store(buffer: GpuBuffer<T>, offset: int, row_stride: int): void",
         "description": "Stores the tile into `buffer` starting at `buffer[offset]`, rows `row_stride` elements apart.",
-        "line": 35,
+        "line": 36,
         "page": "reference/api/gpu-gpu-coop-mat.md"
       }
     ]
@@ -9178,20 +9178,20 @@
       },
       {
         "signature": "public fun upload_mlp<T: unmanaged>( weights: T[], biases: T[], inputs: int, outputs: int ): Result<GpuMlpWeights<T>, GpuError>",
-        "description": "Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. The host repacks them into the fastest layout for this device. `T` is usually `float16`.",
-        "line": 385,
+        "description": "Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. On Vulkan and D3D12 devices with `GpuFeature.CooperativeVectors` the host converts the weights into the device's own matrix layout; elsewhere it keeps them row by row. Uploading works on any device. `T` is `float16` or `float`; other element sizes fail with `GpuError.InvalidResource`.",
+        "line": 388,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun command_encoder(): GpuCommandEncoder",
         "description": "Starts recording GPU commands. Submit them with `submit`.",
-        "line": 416,
+        "line": 419,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun submit(commands: GpuCommandBuffer): Result<bool, GpuError>",
         "description": "Runs recorded commands and waits until the GPU finished them. Recording errors, such as a resource from another device, are reported here.",
-        "line": 422,
+        "line": 425,
         "page": "reference/api/gpu-gpu-device.md"
       }
     ]
@@ -9447,26 +9447,26 @@
       },
       {
         "signature": "CooperativeVectors = 4",
-        "description": "Hardware cooperative vectors (`GpuCoopVec`, `GpuMlpWeights`).",
-        "line": 16,
+        "description": "Hardware cooperative vectors (`GpuCoopVec`, `GpuMlpWeights`), on Vulkan and D3D12 devices whose drivers expose them.",
+        "line": 17,
         "page": "reference/api/gpu-gpu-feature.md"
       },
       {
         "signature": "CooperativeMatrices = 5",
-        "description": "Hardware cooperative matrices (`GpuCoopMat`).",
-        "line": 18,
+        "description": "Hardware cooperative matrices (`GpuCoopMat`): Vulkan devices with the cooperative matrix extension, and Metal on Apple-silicon GPUs (8 by 8 tiles).",
+        "line": 20,
         "page": "reference/api/gpu-gpu-feature.md"
       },
       {
         "signature": "Float16 = 6",
-        "description": "`float16` arithmetic in shaders.",
-        "line": 20,
+        "description": "`float16` arithmetic and `float16` buffer elements in shaders. On WebGPU this is the optional `shader-f16` feature. `GpuBuffer<float16>` uploads and downloads work without it.",
+        "line": 23,
         "page": "reference/api/gpu-gpu-feature.md"
       },
       {
         "signature": "Atomics64 = 7",
         "description": "64-bit atomic operations on buffers.",
-        "line": 22,
+        "line": 25,
         "page": "reference/api/gpu-gpu-feature.md"
       }
     ]
@@ -10096,26 +10096,26 @@
     "declarations": [
       {
         "signature": "public class GpuMlpWeights<T: unmanaged>",
-        "description": "One uploaded neural network layer: a weight matrix plus biases, stored in the device's fastest layout for cooperative vector math.  Create one with `GpuDevice.upload_mlp` and pass it to a shader parameter, giving its sizes with `@coop_shape(inputs, outputs)`. Inside the shader, `apply` evaluates the layer. Hardware acceleration needs `GpuFeature.CooperativeVectors`, which `GpuTarget.Vulkan`, `Dx12` and `Cuda` can provide.",
-        "line": 12,
+        "description": "One uploaded neural network layer: a weight matrix plus biases, stored in the layout the device's cooperative vector math reads fastest.  Create one with `GpuDevice.upload_mlp` and pass it to a shader parameter, giving its sizes with `@coop_shape(inputs, outputs)`. Dispatching a layer whose sizes differ from the parameter's fails with `GpuError.InvalidResource`. Inside the shader, `apply` evaluates the layer. Shaders that use it compile for `GpuTarget.Vulkan`, `Dx12` and `Cuda`, and run on devices with `GpuFeature.CooperativeVectors`; elsewhere dispatching fails with `GpuError.UnsupportedCapability`.",
+        "line": 14,
         "page": "reference/api/gpu-gpu-mlp-weights.md"
       },
       {
         "signature": "public get inputs(): int",
         "description": "The number of values the layer reads.",
-        "line": 30,
+        "line": 32,
         "page": "reference/api/gpu-gpu-mlp-weights.md"
       },
       {
         "signature": "public get outputs(): int",
         "description": "The number of values the layer produces.",
-        "line": 35,
+        "line": 37,
         "page": "reference/api/gpu-gpu-mlp-weights.md"
       },
       {
         "signature": "public extern fun apply(input: GpuCoopVec<T>): GpuCoopVec<T>",
         "description": "Computes `weights * input + biases` inside a shader. `input` has `inputs` elements and the result `outputs` elements.",
-        "line": 42,
+        "line": 44,
         "page": "reference/api/gpu-gpu-mlp-weights.md"
       }
     ]

@@ -12,12 +12,16 @@ internal class GpuArgs {
     // The argument resources, kept alive until the commands that use them are submitted.
     internal keep: List<GpuOwnedHandle>;
 
+    // The first argument whose shape differs from the shader's, found while adding it.
+    internal mismatch: Option<GpuError>;
+
     internal constructor() {
         this.items = List<int>();
         this.devices = List<int>();
         this.names = List<string>();
         this.data = List<byte>();
         this.keep = List<GpuOwnedHandle>();
+        this.mismatch = Option.None;
     }
 
     fun resource(kind: GpuArgKind, owner: GpuOwnedHandle, device_id: int, name: string): GpuArgs {
@@ -65,7 +69,26 @@ internal class GpuArgs {
         );
     }
 
-    internal fun mlp_weights<T: unmanaged>(weights: GpuMlpWeights<T>): GpuArgs {
+    // `inputs` and `outputs` are the parameter's `@coop_shape`, fixed when the shader was built.
+    internal fun mlp_weights<T: unmanaged>(
+        weights: GpuMlpWeights<T>,
+        inputs: int,
+        outputs: int
+    ): GpuArgs {
+        if this.mismatch.is_none() && (weights.inputs != inputs || weights.outputs != outputs) {
+            this.mismatch = Option.Some(
+                GpuError.InvalidResource(
+                    "argument "
+                        + this.devices.length.to_string()
+                        + " is an MLP layer from "
+                        + weights.inputs.to_string()
+                        + " to "
+                        + weights.outputs.to_string()
+                        + " values; the shader was built for "
+                        + inputs.to_string() + " to " + outputs.to_string()
+                )
+            );
+        }
         return this.resource(
             GpuArgKind.MlpWeights,
             weights.owner,
@@ -83,6 +106,9 @@ internal class GpuArgs {
 
     // The first argument that cannot be used with `device_id`, if any.
     internal fun check(device_id: int): Option<GpuError> {
+        if this.mismatch.is_some() {
+            return this.mismatch;
+        }
         for (let i = 0; i < this.devices.length; i = i + 1) {
             let kind = this.items[i * 3];
             if kind != GpuArgKind.Value && this.items[i * 3 + 1] == 0 {

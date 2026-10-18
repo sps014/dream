@@ -344,6 +344,20 @@ internal class SlangEmit {
             w.dedent();
             w.line_of("}");
         }
+        if helpers.contains("mlp_layout") {
+            w.blank();
+            w.line_of(
+                "// GpuDevice.upload_mlp stores weights in the device's own layout where this code"
+            );
+            w.line_of(
+                "// multiplies natively (Vulkan and D3D12), and row-major for Slang's emulation (CUDA)."
+            );
+            w.line_of("#if defined(DREAM_TARGET_SPIRV) || defined(DREAM_TARGET_DXIL)");
+            w.line_of("#define DREAM_MLP_LAYOUT CoopVecMatrixLayout::InferencingOptimal");
+            w.line_of("#else");
+            w.line_of("#define DREAM_MLP_LAYOUT CoopVecMatrixLayout::RowMajor");
+            w.line_of("#endif");
+        }
         if helpers.contains("coop_relu") {
             w.blank();
             w.line_of(

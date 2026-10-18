@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <cctype>
 
+#if defined(__APPLE__)
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
+
 using namespace rhi;
 
 namespace dream::gpu {
@@ -22,6 +27,27 @@ bool mentionsLoss(const char* message)
            lower.find("device removed") != std::string::npos || lower.find("device_removed") != std::string::npos;
 }
 
+// Slang lowers 8x8 cooperative matrices on Metal to simdgroup_matrix, which needs an Apple7
+// (M1) or later GPU. slang-rhi's Metal device never reports CooperativeMatrix itself.
+bool metalHasSimdgroupMatrix(IDevice* device)
+{
+#if defined(__APPLE__)
+    DeviceNativeHandles handles;
+    if (SLANG_FAILED(device->getNativeDeviceHandles(&handles)) || handles.handles[0].value == 0)
+        return false;
+    constexpr long kGpuFamilyApple7 = 1007;
+    auto supportsFamily = reinterpret_cast<BOOL (*)(id, SEL, long)>(objc_msgSend);
+    return supportsFamily(
+        reinterpret_cast<id>(handles.handles[0].value),
+        sel_registerName("supportsFamily:"),
+        kGpuFamilyApple7
+    );
+#else
+    (void)device;
+    return false;
+#endif
+}
+
 } // namespace
 
 int fail(int status, std::string message)
@@ -35,7 +61,7 @@ int failResult(DgpuDevice* device, Result result, const char* what)
     std::string reason;
     if (device && device->sink.lost(&reason))
         return fail(DGPU_DEVICE_LOST, reason);
-    std::string detail = device ? device->sink.takeLastError() : std::string();
+    std::string detail = device ? device->sink.takeFirstError() : std::string();
     std::string message = std::string(what) + (detail.empty() ? "" : ": " + detail);
     if (result == SLANG_E_OUT_OF_MEMORY)
         return fail(DGPU_OUT_OF_MEMORY, message);
@@ -51,15 +77,16 @@ void DebugSink::handleMessage(DebugMessageType type, DebugMessageSource, const c
     if (type != DebugMessageType::Error || !message)
         return;
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_lastError = message;
+    if (m_firstError.empty())
+        m_firstError = message;
     if (mentionsLoss(message) && !m_lost.exchange(true))
         m_lostReason = message;
 }
 
-std::string DebugSink::takeLastError()
+std::string DebugSink::takeFirstError()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return std::exchange(m_lastError, std::string());
+    return std::exchange(m_firstError, std::string());
 }
 
 bool DebugSink::lost(std::string* reason)
@@ -124,7 +151,7 @@ extern "C" int dgpu_device_create(int backend, DgpuDevice** out)
     Result result = getRHI()->createDevice(desc, device->device.writeRef());
     if (SLANG_FAILED(result) || !device->device)
     {
-        std::string detail = device->sink.takeLastError();
+        std::string detail = device->sink.takeFirstError();
         delete device;
         return fail(
             DGPU_UNSUPPORTED,
@@ -156,6 +183,17 @@ extern "C" void dgpu_device_destroy(DgpuDevice* device)
     delete device;
 }
 
+// Some drivers (Mesa lavapipe) report Feature::Bindless yet fail to hand out sampler
+// descriptor handles, so bindless is only advertised when one can actually be obtained.
+static bool samplerHandlesWork(IDevice* d)
+{
+    ComPtr<ISampler> sampler;
+    if (SLANG_FAILED(d->createSampler(SamplerDesc{}, sampler.writeRef())) || !sampler)
+        return false;
+    DescriptorHandle handle;
+    return SLANG_SUCCEEDED(sampler->getDescriptorHandle(&handle));
+}
+
 extern "C" uint32_t dgpu_device_features(DgpuDevice* device)
 {
     IDevice* d = device->device;
@@ -169,13 +207,13 @@ extern "C" uint32_t dgpu_device_features(DgpuDevice* device)
     };
     set(0, d->hasFeature(Feature::RayTracing));
     set(1, d->hasFeature(Feature::RayQuery));
-    set(2, d->hasFeature(Feature::Bindless));
+    set(2, d->hasFeature(Feature::Bindless) && samplerHandlesWork(d));
     // slang-rhi's Metal device never reports WaveOps, but every GPU it opens (Metal 3) has the
     // SIMD-group functions Slang lowers subgroup operations to.
     set(3, d->hasFeature(Feature::WaveOps) || device->backend == 4);
     bool coopVecBackend = device->backend == 1 || device->backend == 3 || device->backend == 5;
     set(4, coopVecBackend && d->hasFeature(Feature::CooperativeVector));
-    set(5, d->hasFeature(Feature::CooperativeMatrix));
+    set(5, d->hasFeature(Feature::CooperativeMatrix) || (device->backend == 4 && metalHasSimdgroupMatrix(d)));
     // Likewise, slang-rhi's Metal device never reports Half, which every Apple GPU has.
     set(6, d->hasFeature(Feature::Half) || device->backend == 4);
     set(7, d->hasFeature(Feature::AtomicInt64));

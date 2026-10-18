@@ -6,7 +6,7 @@ This reference lists the public declarations for this part of the library. See [
 
 ## `CoopShapeAttribute`
 
-Gives the fixed dimensions of a cooperative vector or matrix parameter or field.  Write one number for a `GpuCoopVec` element count, or input and output sizes for a `GpuMlpWeights` layer: `@coop_shape(16, 32)` is a layer from 16 inputs to 32 outputs. On a `GpuBuffer<GpuCoopVec<T>>` it is the length of each element. The sizes must match the data uploaded from the CPU.
+Gives the fixed dimensions of a cooperative vector or matrix parameter or field.  Write one number for a `GpuCoopVec` element count, or input and output sizes for a `GpuMlpWeights` layer: `@coop_shape(16, 32)` is a layer from 16 inputs to 32 outputs. Dispatching a layer of other sizes fails with `GpuError.InvalidResource`. On a `GpuBuffer<GpuCoopVec<T>>` parameter it is the length of each element, and the CPU passes a `GpuBuffer<T>` that holds that many values per element.
 
 ```dream
 public struct CoopShapeAttribute

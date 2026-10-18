@@ -203,6 +203,22 @@ unsafe extern "C" {
         kind: c_int,
         out: *mut u64,
     ) -> c_int;
+    pub fn dgpu_mlp_optimal_size(
+        device: *mut DgpuDevice,
+        rows: u32,
+        columns: u32,
+        component: c_int,
+        out: *mut u64,
+    ) -> c_int;
+    pub fn dgpu_mlp_convert_optimal(
+        device: *mut DgpuDevice,
+        src: *const c_void,
+        rows: u32,
+        columns: u32,
+        component: c_int,
+        dst: *mut c_void,
+        dst_size: u64,
+    ) -> c_int;
 
     pub fn dgpu_program_create(
         device: *mut DgpuDevice,

@@ -268,7 +268,11 @@ internal static class Wrappers {
         let out = StringBuilder();
         out.append("GpuArgs()");
         for (let p in e.bindable()) {
-            out.append("." + ParamKinds.builder(p.kind) + "(" + Wrappers.arg_name(p.name) + ")");
+            out.append("." + ParamKinds.builder(p.kind) + "(" + Wrappers.arg_name(p.name));
+            if p.kind == ParamKinds.mlp_weights() && p.coop.length == 2 {
+                out.append(", " + p.coop[0].to_string() + ", " + p.coop[1].to_string());
+            }
+            out.append(")");
         }
         return out.to_string();
     }

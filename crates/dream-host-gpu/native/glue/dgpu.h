@@ -101,6 +101,21 @@ int dgpu_sampler_create(DgpuDevice* device, const int32_t* desc, DgpuObject** ou
 /// `kind` is the GpuArgKind of `resource`.
 int dgpu_descriptor_handle(DgpuDevice* device, DgpuObject* resource, int kind, uint64_t* out);
 
+/// Bytes of a `rows` x `columns` cooperative-vector matrix in the device's inferencing-optimal
+/// layout. `component` is slang-rhi's CooperativeVectorComponentType (0 = Float16, 1 = Float32).
+int dgpu_mlp_optimal_size(DgpuDevice* device, uint32_t rows, uint32_t columns, int component, uint64_t* out);
+/// Converts a tightly packed row-major matrix into the inferencing-optimal layout on the CPU.
+/// `dst_size` must be the size `dgpu_mlp_optimal_size` reported.
+int dgpu_mlp_convert_optimal(
+    DgpuDevice* device,
+    const void* src,
+    uint32_t rows,
+    uint32_t columns,
+    int component,
+    void* dst,
+    uint64_t dst_size
+);
+
 typedef struct DgpuEntryCode
 {
     const char* name;

@@ -29,17 +29,24 @@ fn project(shaders: &str, main: &str) -> tempfile::TempDir {
     dir
 }
 
-/// Builds `main.dream`: a wasm32 module, or an unlinked Linux object so the native targets
-/// (Vulkan, Dx12) are kept on any build host.
+/// An unlinked Linux object, so the native targets (Vulkan, Dx12) are kept on any build host.
+const LINUX: &[&str] = &["--target", "x86_64-unknown-linux-gnu", "--object"];
+/// An unlinked Apple object, which keeps the Metal target.
+const APPLE: &[&str] = &["--target", "aarch64-apple-darwin", "--object"];
+
+/// Builds `main.dream`: a wasm32 module, or a native Linux object.
 fn build(dir: &Path, native: bool) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_dream"));
-    command.current_dir(dir).arg("build");
-    if native {
-        command.args(["--target", "x86_64-unknown-linux-gnu", "--object"]);
-    } else {
-        command.arg("--wasm");
-    }
-    command.arg("main.dream").output().unwrap()
+    build_with(dir, if native { LINUX } else { &["--wasm"] })
+}
+
+fn build_with(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_dream"))
+        .current_dir(dir)
+        .arg("build")
+        .args(args)
+        .arg("main.dream")
+        .output()
+        .unwrap()
 }
 
 fn generated(dir: &Path) -> PathBuf {
@@ -199,10 +206,19 @@ fn two_builds_are_byte_identical() {
 
 /// Builds a failing program and checks each expected message and its `shaders.dream` line.
 fn rejects(shaders: &str, native: bool, expected: &[(&str, usize)]) {
+    rejects_with(shaders, if native { LINUX } else { &["--wasm"] }, expected);
+}
+
+fn rejects_with(shaders: &str, args: &[&str], expected: &[(&str, usize)]) {
     let dir = project(shaders, MAIN);
-    let output = build(dir.path(), native);
+    let output = build_with(dir.path(), args);
     let text = log(&output);
     assert!(!output.status.success(), "{text}");
+    reports(&text, expected);
+}
+
+/// Checks that each expected message appears in `text` at its `shaders.dream` line.
+fn reports(text: &str, expected: &[(&str, usize)]) {
     for (message, line) in expected {
         assert!(text.contains(message), "missing `{message}` in {text}");
         let location = format!("shaders.dream:{line}:");
@@ -270,6 +286,56 @@ fn cooperative_vectors_need_a_target_that_has_them() {
             5,
         )],
     );
+}
+
+/// Metal and WebGPU have no cooperative vectors and WebGPU no cooperative matrices (Slang would
+/// stop with E36107); the generator reports them at their first use instead. Metal's
+/// cooperative matrices are 8 by 8.
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn cooperative_types_on_metal_and_webgpu_are_rejected_at_first_use() {
+    rejects_with(
+        "module shaders;\nimport system.gpu;\n\n@gpu_targets(GpuTarget.Metal, GpuTarget.WebGpu)\n@compute(32)\npublic fun layer(@readonly @coop_shape(16, 4) weights: GpuMlpWeights<float16>, @readonly @coop_shape(16) input: GpuBuffer<GpuCoopVec<float16>>, @coop_shape(4) out: GpuBuffer<GpuCoopVec<float16>>): void {\n    let i = global_id().x;\n    out[i] = weights.apply(input[i]);\n}\n\n@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan)\n@compute(32)\npublic fun tile(@readonly a: GpuBuffer<float16>, c: GpuBuffer<float16>): void {\n    let m = GpuCoopMat.load(a, 0, 16, 16, 16);\n    m.store(c, 0, 16);\n}\n\n@gpu_targets(GpuTarget.WebGpu)\n@compute(32)\npublic fun web_tile(c: GpuBuffer<float16>): void {\n    let m = GpuCoopMat<float16>.zeros(8, 8);\n    m.store(c, 0, 8);\n}\n",
+        APPLE,
+        &[
+            (
+                "cooperative vectors needs GpuTarget.Dx12, Vulkan or Cuda; add one to @gpu_targets",
+                6,
+            ),
+            (
+                "cooperative matrices are 8 by 8 on GpuTarget.Metal; use 8 by 8 tiles or give 'tile' its own @gpu_targets without GpuTarget.Metal",
+                14,
+            ),
+            (
+                "cooperative matrices needs GpuTarget.Vulkan, Metal or Cuda; add one to @gpu_targets",
+                21,
+            ),
+        ],
+    );
+}
+
+/// Native WebGPU pipelines bind every shader's buffers of a module, so a module past WebGPU's
+/// guaranteed 8 storage buffers builds with a warning at the shader that crosses the limit.
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn too_many_storage_buffers_for_native_webgpu_warn() {
+    let dir = project(
+        "module shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun first(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i];\n}\n\n@compute(64)\npublic fun second(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i] + d[i];\n}\n",
+        MAIN,
+    );
+    let output = build(dir.path(), true);
+    let text = log(&output);
+    assert!(output.status.success(), "{text}");
+    reports(
+        &text,
+        &[(
+            "the shaders of this module bind 9 storage buffers together, more than the 8 per stage WebGPU guarantees",
+            11,
+        )],
+    );
+    let web = build(dir.path(), false);
+    assert!(web.status.success(), "{}", log(&web));
+    assert!(!log(&web).contains("storage buffers together"), "{}", log(&web));
 }
 
 #[test]

@@ -98,9 +98,7 @@ fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
         }
     }
     for (let m in program.modules) {
-        if !Targets.is_wasm(ctx.target) {
-            check_webgpu_storage(ctx, m);
-        }
+        check_webgpu_storage(ctx, m);
         let artifact = SlangEmit(ctx, program, m).emit();
         if ctx.has_errors() {
             return;
@@ -118,25 +116,49 @@ fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
     finish(ctx, program);
 }
 
-// Native WebGPU (Dawn) pipelines bind the globals of every shader in their module, because a
-// bundle records one layout per module and target, so the module's storage buffers together
-// count toward each pipeline's per-stage limit. WebGPU guarantees 8.
+// WebGPU guarantees 8 storage buffers per stage. A pipeline binds the globals of its pipeline
+// group: a compute shader's own, or natively all of the module's render or ray-tracing
+// shaders together, because they share one recorded layout. The browser lays out each render
+// pipeline from its two shaders alone, so wasm builds check compute shaders only.
 fun check_webgpu_storage(ctx: GenContext, borrow m: ShaderModule): void {
-    let count = 0;
-    for (let e in m.entries_for(GpuTarget.WebGpu)) {
-        for (let p in e.params) {
-            if p.kind == ParamKinds.buffer() || p.kind == ParamKinds.mlp_weights() {
-                count = count + 1;
-            }
+    let wasm = Targets.is_wasm(ctx.target);
+    for (let group in m.groups_for(GpuTarget.WebGpu)) {
+        let entries = m.group_entries(GpuTarget.WebGpu, group);
+        let compute = entries[0].is_compute();
+        if wasm && !compute {
+            continue;
         }
-        if count > 8 {
-            ctx.warning_at(
-                e.function.id,
-                "the shaders of this module bind "
-                    + count.to_string()
-                    + " storage buffers together, more than the 8 per stage WebGPU guarantees; native GpuBackend.WebGpu pipelines bind every shader's buffers of a module, so move some shaders to another module"
-            );
-            return;
+        let count = 0;
+        for (let e in entries) {
+            for (let p in e.params) {
+                if p.kind == ParamKinds.buffer() || p.kind == ParamKinds.mlp_weights() {
+                    count = count + 1;
+                }
+            }
+            if count <= 8 {
+                continue;
+            }
+            if compute {
+                ctx.warning_at(
+                    e.function.id,
+                    "'" + e.name() + "' binds " + count.to_string()
+                        + " storage buffers, more than the 8 per stage WebGPU guarantees; pass some data in fewer buffers"
+                );
+            } else {
+                let stages = "ray-tracing";
+                if e.is_render() {
+                    stages = "vertex and fragment";
+                }
+                ctx.warning_at(
+                    e.function.id,
+                    "the "
+                        + stages
+                        + " shaders of this module bind "
+                        + count.to_string()
+                        + " storage buffers together, more than the 8 per stage WebGPU guarantees; native GpuBackend.WebGpu pipelines bind the buffers of all of them, so move some shaders to another module"
+                );
+            }
+            break;
         }
     }
 }
@@ -266,29 +288,39 @@ fun finish(ctx: GenContext, borrow program: ShaderProgram): void {
                     format = "msl";
                 }
             }
-            let layout = Buffer.alloc<byte>(0);
-            switch (result_of(results, Targets.layout_id(m, target))) {
-                Some(r) => {
-                    if r.exit != 0 {
-                        ctx.error(
-                            "dream-slang-layout failed for target " + name + ": " + r.stderr.trim()
-                        );
-                        ok = false;
-                    } else {
-                        layout = file_bytes(r, Targets.layout_path(m, target)).unwrap_or(layout);
+            let section = BundleTarget(name, format);
+            let groups = m.groups_for(target);
+            for (let group in groups) {
+                switch (result_of(results, Targets.layout_id(m, target, group))) {
+                    Some(r) => {
+                        if r.exit != 0 {
+                            ctx.error(
+                                "dream-slang-layout failed for target "
+                                    + name + ": " + r.stderr.trim()
+                            );
+                            ok = false;
+                        } else {
+                            let path = Targets.layout_path(m, target, group);
+                            section.layouts.push(
+                                file_bytes(r, path).unwrap_or(Buffer.alloc<byte>(0))
+                            );
+                        }
                     }
+                    None => {}
                 }
-                None => {}
             }
-            let section = BundleTarget(name, format, layout);
             for (let e in m.entries_for(target)) {
+                let layout = 0;
+                if !section.layouts.is_empty() {
+                    layout = groups.index_of(e.pipeline_group()).unwrap_or(0);
+                }
                 switch (result_of(results, Targets.slangc_id(m, kind, e))) {
                     Some(r) => {
                         if r.exit != 0 {
                             ok = false;
                             report_failure(ctx, r, e, target, artifact, reported);
                         } else {
-                            add_code(ctx, section, r, m, kind, e);
+                            add_code(ctx, section, r, m, kind, e, layout);
                         }
                     }
                     None => {
@@ -346,12 +378,13 @@ fun add_code(
     borrow r: GenToolResult,
     borrow m: ShaderModule,
     borrow kind: string,
-    e: ShaderEntry
+    e: ShaderEntry,
+    layout: int
 ): void {
     switch (file_bytes(r, Targets.code_path(m, kind, e))) {
         Some(code) => {
             let reflection = Reflection.parse(file_text(r, Targets.reflection_path(m, kind, e)), e);
-            section.add(e, code, reflection);
+            section.add(e, layout, code, reflection);
         }
         None => {
             ctx.error("slangc produced no " + kind + " code for '" + e.name() + "'");

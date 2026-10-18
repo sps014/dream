@@ -222,16 +222,25 @@ internal static class Targets {
         return shader_module.stem() + "/" + kind + "/" + entry.name() + ".json";
     }
 
-    internal static fun layout_id(borrow shader_module: ShaderModule, target: GpuTarget): string {
-        return shader_module.stem() + "." + Targets.name(target) + ".layout";
+    internal static fun layout_id(
+        borrow shader_module: ShaderModule,
+        target: GpuTarget,
+        borrow group: string
+    ): string {
+        return shader_module.stem() + "." + Targets.name(target) + ".layout." + group;
     }
 
-    internal static fun layout_path(borrow shader_module: ShaderModule, target: GpuTarget): string {
-        return shader_module.stem() + "/" + Targets.name(target) + "/layout.bin";
+    internal static fun layout_path(
+        borrow shader_module: ShaderModule,
+        target: GpuTarget,
+        borrow group: string
+    ): string {
+        return shader_module.stem() + "/" + Targets.name(target) + "/" + group + ".layout";
     }
 
-    // Requests one `slangc` run per entry point and target, plus one layout recording per
-    // target for native builds (wasm builds bind from the parameter table instead). Metal is compiled to a metallib when the build host has Apple's `metal`
+    // Requests one `slangc` run per entry point and target, plus, for native builds, one
+    // layout recording per target and pipeline group (wasm builds bind from the parameter
+    // table instead). Metal is compiled to a metallib when the build host has Apple's `metal`
     // tool and to MSL source otherwise, so both are requested.
     internal static fun request(
         ctx: GenContext,
@@ -249,6 +258,7 @@ internal static class Targets {
             for (let kind in kinds) {
                 for (let entry in shader_module.entries_for(target)) {
                     let args = Targets.common(shader_module, target, kind);
+                    args.push("-D" + entry.pipeline_group());
                     args.push("-entry");
                     args.push(entry.name());
                     args.push("-stage");
@@ -270,20 +280,24 @@ internal static class Targets {
                     );
                 }
             }
-            if layouts {
+            if !layouts {
+                continue;
+            }
+            for (let group in shader_module.groups_for(target)) {
                 let args = Targets.common(shader_module, target, Targets.name(target));
-                for (let entry in shader_module.entries_for(target)) {
+                args.push("-D" + group);
+                for (let entry in shader_module.group_entries(target, group)) {
                     args.push("-entry");
                     args.push(entry.name());
                     args.push("-stage");
                     args.push(entry.stage_name());
                 }
                 args.push("-o");
-                args.push(Targets.layout_path(shader_module, target));
+                args.push(Targets.layout_path(shader_module, target, group));
                 let outputs = List<string>();
-                outputs.push(Targets.layout_path(shader_module, target));
+                outputs.push(Targets.layout_path(shader_module, target, group));
                 ctx.run_tool(
-                    Targets.layout_id(shader_module, target),
+                    Targets.layout_id(shader_module, target, group),
                     "dream-slang-layout",
                     args,
                     inputs,

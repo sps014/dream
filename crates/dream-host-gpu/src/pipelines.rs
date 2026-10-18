@@ -18,9 +18,9 @@ pub fn library_load(device: i32, bytes: &[u8]) -> HostResult<i32> {
             (core.backend as i32).to_string(),
         ));
     };
-    if target.layout.is_empty() {
+    if target.layouts.is_empty() || target.layouts.iter().any(|l| l.is_empty()) {
         return Err(HostError::invalid(format!(
-            "the bundle's {} target has no layout; native hosts need one",
+            "the bundle's {} target has no layouts; native hosts need them",
             target.name
         )));
     }
@@ -73,7 +73,20 @@ pub(crate) fn require_capabilities(core: &DeviceCore, entry: &bundle::Entry) -> 
     Ok(())
 }
 
+/// One program per pipeline: the entries must come from one pipeline group, whose recorded
+/// layout binds exactly their globals.
 pub(crate) fn program(core: &DeviceCore, target: &bundle::Target, entries: &[&bundle::Entry]) -> HostResult<Program> {
+    let group = entries.first().map_or(0, |e| e.layout);
+    if let Some(other) = entries.iter().find(|e| e.layout != group) {
+        return Err(HostError::invalid(format!(
+            "`{}` and `{}` have different layouts, so they cannot share a pipeline",
+            entries[0].name, other.name
+        )));
+    }
+    let layout = target
+        .layouts
+        .get(group)
+        .ok_or_else(|| HostError::invalid(format!("the bundle's {} target has no layout {group}", target.name)))?;
     let names: Vec<CString> = entries
         .iter()
         .map(|e| CString::new(e.name.as_str()).map_err(|_| HostError::invalid("entry point name contains NUL")))
@@ -91,8 +104,8 @@ pub(crate) fn program(core: &DeviceCore, target: &bundle::Target, entries: &[&bu
     check(unsafe {
         ffi::dgpu_program_create(
             core.raw(),
-            target.layout.as_ptr().cast(),
-            target.layout.len(),
+            layout.as_ptr().cast(),
+            layout.len(),
             code.as_ptr(),
             code.len() as u32,
             &mut raw,

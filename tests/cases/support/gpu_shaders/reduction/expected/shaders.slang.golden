@@ -21,6 +21,7 @@ float dream_atomic_add_float(RWStructuredBuffer<Atomic<uint>> buffer, int index,
 static uint3 dream_global_id;
 static uint3 dream_local_id;
 
+#if defined(DREAM_SHADER_reduce_sum)
 StructuredBuffer<float> reduce_sum_input;
 RWStructuredBuffer<Atomic<uint>> reduce_sum_out;
 struct reduce_sum_Params
@@ -56,7 +57,9 @@ void reduce_sum(uint3 dream_in_global_id : SV_DispatchThreadID, uint3 dream_in_l
         dream_atomic_add_float(reduce_sum_out, 0, reduce_sum_partial[0]);
     }
 }
+#endif
 
+#if defined(DREAM_SHADER_histogram)
 StructuredBuffer<uint> histogram_values;
 RWStructuredBuffer<Atomic<uint>> histogram_bins;
 struct histogram_Params
@@ -81,3 +84,4 @@ void histogram(uint3 dream_in_global_id : SV_DispatchThreadID)
         }
     }
 }
+#endif

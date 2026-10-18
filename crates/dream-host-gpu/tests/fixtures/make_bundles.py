@@ -165,7 +165,8 @@ def compile_target(root: Path, module: str, target: str, work: Path) -> dict | N
         size = entry.get("threadGroupSize", [0, 0, 0]) if stage == "compute" else [0, 0, 0]
         rows = [param_row(reflection, entry, *p) for p in params]
         out_entries.append((name, stage, (work / f"{module}.{name}.{target}").read_bytes(), size, rows, []))
-    return {"name": target, "code_format": code_format, "layout": layout.read_bytes(),
+    # One layout recorded with every entry; the generator records one per pipeline group.
+    return {"name": target, "code_format": code_format, "layouts": [layout.read_bytes()],
             "entries": out_entries}
 
 
@@ -188,10 +189,11 @@ def write_bundle(targets: list[dict]) -> bytes:
 
     header = bytearray(u32(len(targets)))
     for t in sorted(targets, key=lambda t: t["name"]):
-        header += string(t["name"]) + string(t["code_format"]) + blob(t["layout"])
+        header += string(t["name"]) + string(t["code_format"])
+        header += u32(len(t["layouts"])) + b"".join(blob(layout) for layout in t["layouts"])
         header += u32(len(t["entries"]))
         for name, stage, code, size, params, capabilities in t["entries"]:
-            header += string(name) + string(stage) + blob(code) + b"".join(u32(v) for v in size)
+            header += string(name) + string(stage) + u32(0) + blob(code) + b"".join(u32(v) for v in size)
             header += u32(len(params))
             for pname, kind, flags, space, binding, offset, psize in params:
                 header += string(pname) + b"".join(u32(v) for v in (kind, flags, space, binding, offset, psize))

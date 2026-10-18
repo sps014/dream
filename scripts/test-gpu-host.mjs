@@ -43,10 +43,11 @@ function buildBundle(targets, { corrupt = null } = {}) {
   };
   const parts = [];
   for (const target of [...targets].sort((a, b) => a.name.localeCompare(b.name))) {
-    parts.push(str(target.name), str(target.codeFormat || target.name), blob(target.layout || []));
+    const layouts = target.layouts || [];
+    parts.push(str(target.name), str(target.codeFormat || target.name), u32(layouts.length), ...layouts.map(blob));
     parts.push(u32(target.entries.length));
     for (const entry of target.entries) {
-      parts.push(str(entry.name), str(entry.stage), blob(Buffer.from(entry.code, 'utf8')));
+      parts.push(str(entry.name), str(entry.stage), u32(entry.layout || 0), blob(Buffer.from(entry.code, 'utf8')));
       for (const n of entry.threadGroupSize || [0, 0, 0]) parts.push(u32(n));
       parts.push(u32(entry.params.length));
       for (const p of entry.params) {
@@ -245,7 +246,8 @@ test('bundles parse per the documented layout and malformed bytes never throw pa
   assert.equal(parsed.targets.length, 1);
   const [target] = parsed.targets;
   assert.equal(target.name, 'wgsl');
-  assert.equal(target.layout.size, 0);
+  assert.deepEqual(target.layouts, []);
+  assert.equal(target.entries[0].layout, 0);
   assert.deepEqual(target.entries[0].capabilities, ['half', 'subgroup_basic']);
   assert.deepEqual(target.entries[0].threadGroupSize, [64, 1, 1]);
   assert.deepEqual(target.entries[0].params[4], { name: 'alpha', kind: 6, flags: 0, group: 0, binding: 3, offset: 8, size: 4 });
@@ -712,7 +714,7 @@ test('generator bundles translate into WebGPU pipelines', {
     const parsed = gpuParseBundle(bytes);
     assert.deepEqual(parsed.targets.map(t => t.name), ['wgsl'], file + ': wasm bundles carry WGSL only');
     const [target] = parsed.targets;
-    assert.equal(target.layout.size, 0, file + ': wasm bundles omit the layout');
+    assert.deepEqual(target.layouts, [], file + ': wasm bundles omit the layouts');
     const checked = [];
     for (const entry of target.entries) {
       const code = new TextDecoder().decode(entry.code.bytes);

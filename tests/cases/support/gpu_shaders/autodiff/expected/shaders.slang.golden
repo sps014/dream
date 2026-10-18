@@ -28,6 +28,7 @@ float loss(float weight, float input, float target)
     return error * error;
 }
 
+#if defined(DREAM_SHADER_train_step)
 StructuredBuffer<float> train_step_inputs;
 StructuredBuffer<float> train_step_targets;
 RWStructuredBuffer<float> train_step_weights;
@@ -55,3 +56,4 @@ void train_step(uint3 dream_in_global_id : SV_DispatchThreadID)
     bwd_diff(loss)(w, x, t, 1.0f);
     dream_atomic_add_float(train_step_gradients, 0, w.d);
 }
+#endif

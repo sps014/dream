@@ -24,11 +24,12 @@ fn sample() -> Vec<u8> {
         TargetSpec {
             name: "metal",
             code_format: "msl",
-            layout: b"metal layout",
+            layouts: vec![b"saxpy layout", b"copy layout"],
             entries: vec![
                 EntrySpec {
                     name: "saxpy",
                     stage: "compute",
+                    layout: 0,
                     code: b"kernel void saxpy() {}",
                     thread_group_size: [64, 1, 1],
                     params: vec![
@@ -40,6 +41,7 @@ fn sample() -> Vec<u8> {
                 EntrySpec {
                     name: "copy",
                     stage: "compute",
+                    layout: 1,
                     code: shared,
                     thread_group_size: [1, 1, 1],
                     params: vec![],
@@ -50,10 +52,11 @@ fn sample() -> Vec<u8> {
         TargetSpec {
             name: "wgsl",
             code_format: "wgsl",
-            layout: &[],
+            layouts: vec![],
             entries: vec![EntrySpec {
                 name: "copy",
                 stage: "compute",
+                layout: 0,
                 code: shared,
                 thread_group_size: [1, 1, 1],
                 params: vec![],
@@ -69,15 +72,17 @@ fn round_trips_targets_entries_and_parameters() {
     assert_eq!(bundle.targets.len(), 2);
     let metal = bundle.target_for(Backend::Metal).unwrap();
     assert_eq!(metal.code_format, "msl");
-    assert_eq!(&*metal.layout, b"metal layout");
+    assert_eq!(metal.layouts.len(), 2);
     let saxpy = metal.entry("saxpy").unwrap();
+    assert_eq!(&*metal.layouts[saxpy.layout], b"saxpy layout");
+    assert_eq!(&*metal.layouts[metal.entry("copy").unwrap().layout], b"copy layout");
     assert_eq!(saxpy.capabilities, vec!["subgroup_basic".to_string()]);
     assert!(metal.entry("copy").unwrap().capabilities.is_empty());
     assert_eq!(saxpy.stage, Stage::Compute);
     assert_eq!(saxpy.thread_group_size, [64, 1, 1]);
     assert_eq!(saxpy.params[1], param("n", ArgKind::Value, 3));
     let wgsl = bundle.target_for(Backend::WebGpu).unwrap();
-    assert!(wgsl.layout.is_empty(), "wasm targets omit the layout");
+    assert!(wgsl.layouts.is_empty(), "wasm targets omit the layouts");
     assert_eq!(
         wgsl.entry("copy").unwrap().code,
         metal.entry("copy").unwrap().code
@@ -121,7 +126,7 @@ fn rejects_tampering_and_contract_violations() {
     let unknown_target = write::bundle(&[TargetSpec {
         name: "glsl",
         code_format: "glsl",
-        layout: b"",
+        layouts: vec![],
         entries: vec![],
     }]);
     assert!(parse(&unknown_target).is_err());
@@ -129,7 +134,7 @@ fn rejects_tampering_and_contract_violations() {
     let wrong_format = write::bundle(&[TargetSpec {
         name: "spirv",
         code_format: "wgsl",
-        layout: b"",
+        layouts: vec![],
         entries: vec![],
     }]);
     assert!(parse(&wrong_format).is_err());
@@ -137,10 +142,11 @@ fn rejects_tampering_and_contract_violations() {
     let unknown_stage = write::bundle(&[TargetSpec {
         name: "spirv",
         code_format: "spirv",
-        layout: b"l",
+        layouts: vec![b"l"],
         entries: vec![EntrySpec {
             name: "main",
             stage: "geometry",
+            layout: 0,
             code: b"c",
             thread_group_size: [0, 0, 0],
             params: vec![],
@@ -148,6 +154,22 @@ fn rejects_tampering_and_contract_violations() {
         }],
     }]);
     assert!(parse(&unknown_stage).is_err());
+
+    let missing_layout = write::bundle(&[TargetSpec {
+        name: "spirv",
+        code_format: "spirv",
+        layouts: vec![b"l"],
+        entries: vec![EntrySpec {
+            name: "main",
+            stage: "compute",
+            layout: 1,
+            code: b"c",
+            thread_group_size: [1, 1, 1],
+            params: vec![],
+            capabilities: vec![],
+        }],
+    }]);
+    assert!(parse(&missing_layout).unwrap_err().to_string().contains("names layout 1 of 1"));
 }
 
 #[test]
@@ -157,10 +179,11 @@ fn rejects_unknown_kinds_and_flags() {
         write::bundle(&[TargetSpec {
             name: "spirv",
             code_format: "spirv",
-            layout: b"l",
+            layouts: vec![b"l"],
             entries: vec![EntrySpec {
                 name: "main",
                 stage: "compute",
+                layout: 0,
                 code: b"c",
                 thread_group_size: [1, 1, 1],
                 params: vec![p],

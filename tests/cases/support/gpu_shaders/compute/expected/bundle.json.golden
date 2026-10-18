@@ -6,11 +6,12 @@
     {
       "name": "wgsl",
       "code_format": "wgsl",
-      "layout": {"offset": 0, "size": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      "layouts": [],
       "entries": [
         {
           "name": "saxpy",
           "stage": "compute",
+          "layout": 0,
           "code": {"offset": 0, "size": 794, "sha256": "ede72d921a67266bc7d06df8a8bf030e2e64faa04a11597a3ecfec8788aa9a51"},
           "thread_group_size": [64, 1, 1],
           "params": [

@@ -347,28 +347,53 @@ fn cooperative_types_on_metal_and_webgpu_are_rejected_at_first_use() {
     );
 }
 
-/// Native WebGPU pipelines bind every shader's buffers of a module, so a module past WebGPU's
-/// guaranteed 8 storage buffers builds with a warning at the shader that crosses the limit.
+/// WebGPU guarantees 8 storage buffers per stage, counted per pipeline: each compute shader on
+/// its own, and natively a module's render shaders together, because they share one layout.
 #[test]
 #[ignore = "needs the pinned slang toolchain"]
-fn too_many_storage_buffers_for_native_webgpu_warn() {
-    let dir = project(
+fn storage_buffers_past_the_webgpu_limit_warn_per_pipeline() {
+    let separate = project(
         "module shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun first(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i];\n}\n\n@compute(64)\npublic fun second(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i] + d[i];\n}\n",
         MAIN,
     );
-    let output = build(dir.path(), true);
+    let output = build(separate.path(), true);
+    assert!(output.status.success(), "{}", log(&output));
+    assert!(!log(&output).contains("storage buffers"), "{}", log(&output));
+
+    let many = project(
+        "module shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun many(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, @readonly e: GpuBuffer<float>, @readonly f: GpuBuffer<float>, @readonly g: GpuBuffer<float>, @readonly h: GpuBuffer<float>, out: GpuBuffer<float>): void {\n    let i = global_id().x;\n    out[i] = a[i] + b[i] + c[i] + d[i] + e[i] + f[i] + g[i] + h[i];\n}\n",
+        MAIN,
+    );
+    for native in [true, false] {
+        let output = build(many.path(), native);
+        let text = log(&output);
+        assert!(output.status.success(), "{text}");
+        reports(
+            &text,
+            &[(
+                "'many' binds 9 storage buffers, more than the 8 per stage WebGPU guarantees",
+                5,
+            )],
+        );
+    }
+
+    let render = project(
+        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>): GpuVec4 {\n    let i = (int)vertex_id();\n    return GpuVec4.of(a[i], b[i], c[i] + d[i], 1.0f);\n}\n\n@fragment\npublic fun paint(@readonly a: GpuBuffer<float>, @readonly b: GpuBuffer<float>, @readonly c: GpuBuffer<float>, @readonly d: GpuBuffer<float>, @readonly e: GpuBuffer<float>): GpuVec4 {\n    return GpuVec4.of(a[0], b[0], c[0], d[0] + e[0]);\n}\n",
+        MAIN,
+    );
+    let output = build(render.path(), true);
     let text = log(&output);
     assert!(output.status.success(), "{text}");
     reports(
         &text,
         &[(
-            "the shaders of this module bind 9 storage buffers together, more than the 8 per stage WebGPU guarantees",
+            "the vertex and fragment shaders of this module bind 9 storage buffers together",
             11,
         )],
     );
-    let web = build(dir.path(), false);
+    let web = build(render.path(), false);
     assert!(web.status.success(), "{}", log(&web));
-    assert!(!log(&web).contains("storage buffers together"), "{}", log(&web));
+    assert!(!log(&web).contains("storage buffers"), "{}", log(&web));
 }
 
 /// A shader limited to targets the build cannot use is left out with a warning, so one program

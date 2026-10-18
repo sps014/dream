@@ -64,6 +64,27 @@ internal class ShaderModule {
         return out;
     }
 
+    // The pipeline groups of the entries compiled for `target`, in declaration order.
+    internal fun groups_for(target: GpuTarget): List<string> {
+        let out = List<string>();
+        for (let e in this.entries_for(target)) {
+            if !out.contains(e.pipeline_group()) {
+                out.push(e.pipeline_group());
+            }
+        }
+        return out;
+    }
+
+    internal fun group_entries(target: GpuTarget, borrow group: string): List<ShaderEntry> {
+        let out = List<ShaderEntry>();
+        for (let e in this.entries_for(target)) {
+            if e.pipeline_group() == group {
+                out.push(e);
+            }
+        }
+        return out;
+    }
+
     internal fun has_helper(borrow id: string): bool {
         for (let h in this.helpers) {
             if h.id == id {

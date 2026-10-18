@@ -3,6 +3,7 @@
 
 static uint3 dream_global_id;
 
+#if defined(DREAM_SHADER_prefix_count)
 StructuredBuffer<uint> prefix_count_flags;
 RWStructuredBuffer<uint> prefix_count_offsets;
 RWStructuredBuffer<Atomic<uint>> prefix_count_counts;
@@ -29,3 +30,4 @@ void prefix_count(uint3 dream_in_global_id : SV_DispatchThreadID)
         prefix_count_offsets[i] = prefix_count_offsets[i] + WaveReadLaneAt(before, 0u);
     }
 }
+#endif

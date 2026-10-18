@@ -47,11 +47,21 @@ internal class Bundle {
             b.json.append("\n    {\n");
             Bundle.text_field(section, target.name);
             Bundle.text_field(section, target.code_format);
-            let layout = b.blob(target.layout);
-            b.reference(section, layout);
             b.json.append("      \"name\": " + Bundle.quote(target.name) + ",\n");
             b.json.append("      \"code_format\": " + Bundle.quote(target.code_format) + ",\n");
-            b.json.append("      \"layout\": " + b.view(layout) + ",\n");
+            b.json.append("      \"layouts\": [");
+            Bundle.u32(section, target.layouts.length);
+            let l = 0;
+            for (let bytes in target.layouts) {
+                let layout = b.blob(bytes);
+                b.reference(section, layout);
+                if l > 0 {
+                    b.json.append(", ");
+                }
+                b.json.append(b.view(layout));
+                l = l + 1;
+            }
+            b.json.append("],\n");
             b.json.append("      \"entries\": [");
             Bundle.u32(section, target.entries.length);
             let i = 0;
@@ -62,6 +72,7 @@ internal class Bundle {
                 }
                 Bundle.text_field(section, entry.name());
                 Bundle.text_field(section, entry.stage_name());
+                Bundle.u32(section, target.entry_layouts[i]);
                 let code = b.blob(target.codes[i]);
                 b.reference(section, code);
                 Bundle.u32(section, entry.x);
@@ -70,6 +81,9 @@ internal class Bundle {
                 b.json.append("\n        {\n");
                 b.json.append("          \"name\": " + Bundle.quote(entry.name()) + ",\n");
                 b.json.append("          \"stage\": " + Bundle.quote(entry.stage_name()) + ",\n");
+                b.json.append(
+                    "          \"layout\": " + target.entry_layouts[i].to_string() + ",\n"
+                );
                 b.json.append("          \"code\": " + b.view(code) + ",\n");
                 b.json.append(
                     "          \"thread_group_size\": ["

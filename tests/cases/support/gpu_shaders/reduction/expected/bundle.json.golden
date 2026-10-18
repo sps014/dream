@@ -6,11 +6,12 @@
     {
       "name": "wgsl",
       "code_format": "wgsl",
-      "layout": {"offset": 0, "size": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      "layouts": [],
       "entries": [
         {
           "name": "reduce_sum",
           "stage": "compute",
+          "layout": 0,
           "code": {"offset": 0, "size": 2069, "sha256": "adaf1c358c730857287a9fa11b0e7f6be949b665adb1a888cc9bb8e5804430d9"},
           "thread_group_size": [256, 1, 1],
           "params": [
@@ -23,12 +24,13 @@
         {
           "name": "histogram",
           "stage": "compute",
-          "code": {"offset": 2069, "size": 1022, "sha256": "4ec4f621f8f230ca88b8304e2d1ac89a590025b50993d5694eaae6b4a01aadb9"},
+          "layout": 0,
+          "code": {"offset": 2069, "size": 1022, "sha256": "142c515fc7172a5e07ed1dc8d62afbbfd96256318edd6ebb06be9b1487f3c38e"},
           "thread_group_size": [64, 1, 1],
           "params": [
-            {"name": "values", "kind": 1, "flags": 1, "space": 0, "binding": 3, "offset": 0, "size": 0},
-            {"name": "bins", "kind": 1, "flags": 2, "space": 0, "binding": 4, "offset": 0, "size": 0},
-            {"name": "count", "kind": 6, "flags": 0, "space": 0, "binding": 5, "offset": 0, "size": 4}
+            {"name": "values", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "bins", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "count", "kind": 6, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 4}
           ],
           "capabilities": []
         }

@@ -130,8 +130,9 @@ completion thread, so a device is destroyed only after all of its work and resou
 
 ## Bindings
 
-A pipeline's program contains exactly the entries it uses. The replay library re-points the
-module layout's entry list at them by name (`createPrecompiledProgram`). Each bundle parameter
+A pipeline's program contains exactly the entries it uses, which come from one pipeline group
+(see [GPU shader bundle](18-gpu-shader-bundle.md)). The replay library re-points the group
+layout's entry list at them by name (`createPrecompiledProgram`). Each bundle parameter
 row is resolved once, at pipeline creation, to a slang-rhi cursor path. The rules, in priority
 order:
 
@@ -145,8 +146,8 @@ Metal numbers buffers, textures and samplers in separate index spaces. The entry
 searched before the globals, because reflection reports entry-point bindings relative to the
 entry. A value parameter matches the uniform block it was packed into, and its
 bytes land at the recorded offset inside that block. WebGPU rejects a bind group with an empty
-slot, while the other backends ignore slots the code never reads. Because a module's layout covers
-the globals of all its entry points, the glue fills every slot with per-device placeholders right
+slot, while the other backends ignore slots the code never reads. Because a render or ray-tracing
+group's layout covers the globals of all its shaders, the glue fills every slot with per-device placeholders right
 after binding a WebGPU pipeline, and the real bindings then overwrite them. Read-only slots share
 one placeholder per kind; each writable slot gets its own, because WebGPU rejects one buffer or
 texture bound to two writable slots.
@@ -233,10 +234,10 @@ report device loss make the device sticky-lost, and every later call on it repor
   bundle does not record them yet.
 - The inferencing-optimal MLP conversion has not run on hardware: no available machine has a
   Vulkan or D3D12 device with cooperative vectors.
-- WebGPU pipelines bind the globals of every shader in their module, because a bundle records
-  one layout per module and target and slang-rhi builds the bind group layout from it. A module
-  whose shaders together use more storage buffers than the device's per-stage limit (8 by
-  default, 10 on Dawn over Metal) fails at dispatch; the generator warns past 8.
+- A render or ray tracing pipeline binds the globals of all of its module's shaders of those
+  stages, because they share one recorded layout. On WebGPU, their storage buffers together
+  count toward the per-stage limit (8 by default, 10 on Dawn over Metal); the generator warns
+  past 8. Compute pipelines bind only their own shader's globals.
 - Vertex and fragment shaders of one pipeline must come from the same shader module.
 - Vertex attribute locations must be dense (`0..n-1`): slang-rhi's Vulkan, Metal and WebGPU
   backends take attribute `i` as shader location `i`. D3D binds by the generator's `LOCATION<n>`

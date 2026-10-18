@@ -6,12 +6,13 @@
     {
       "name": "spirv",
       "code_format": "spirv",
-      "layout": {"offset": 0, "size": 20799, "sha256": "4dabd4f68cd7dac20e465e879b60adc0be73df1dbec06f753b71553c8cdb4d01"},
+      "layouts": [{"offset": 0, "size": 15810, "sha256": "264a857fd120be8589ae55688671cc3c61a9d81c8b4d2b320a82894fa4e7670a"}, {"offset": 15810, "size": 5983, "sha256": "abf68c3b242abaec0d0f18f487a31a148d4ab8c004dbada9cca40c6fb0d21516"}],
       "entries": [
         {
           "name": "camera",
           "stage": "raygeneration",
-          "code": {"offset": 20799, "size": 1628, "sha256": "d64e74a29b1265037769c7373d33a7c01f5da69c64d1fcad9dea24f944d91291"},
+          "layout": 0,
+          "code": {"offset": 21793, "size": 1628, "sha256": "d64e74a29b1265037769c7373d33a7c01f5da69c64d1fcad9dea24f944d91291"},
           "thread_group_size": [0, 0, 0],
           "params": [
             {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0},
@@ -22,7 +23,8 @@
         {
           "name": "shade",
           "stage": "closesthit",
-          "code": {"offset": 22427, "size": 800, "sha256": "43ef9cc262859403876df5c9ef75f6a48c31f6d944ce199020beef516b75763a"},
+          "layout": 0,
+          "code": {"offset": 23421, "size": 800, "sha256": "43ef9cc262859403876df5c9ef75f6a48c31f6d944ce199020beef516b75763a"},
           "thread_group_size": [0, 0, 0],
           "params": [],
           "capabilities": ["raytracing"]
@@ -30,7 +32,8 @@
         {
           "name": "sky",
           "stage": "miss",
-          "code": {"offset": 23227, "size": 448, "sha256": "bac4cc4f081ad5df59b0fd9cb403c7e47f1d7fdebd10501c5320fd5eac1a0369"},
+          "layout": 0,
+          "code": {"offset": 24221, "size": 448, "sha256": "bac4cc4f081ad5df59b0fd9cb403c7e47f1d7fdebd10501c5320fd5eac1a0369"},
           "thread_group_size": [0, 0, 0],
           "params": [],
           "capabilities": ["raytracing"]
@@ -38,11 +41,12 @@
         {
           "name": "first_hit",
           "stage": "compute",
-          "code": {"offset": 23675, "size": 1240, "sha256": "f412a68d3df1023bbf1f0c49126af541a7912bdb65b0aca9c634c0b27099520a"},
+          "layout": 1,
+          "code": {"offset": 24669, "size": 1240, "sha256": "6e93909f8729e2e98a5ed55effac1bc50a239a196636a23ab4957d585530cc00"},
           "thread_group_size": [1, 1, 1],
           "params": [
-            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 0},
-            {"name": "distances", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0}
+            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "distances", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0}
           ],
           "capabilities": ["rayquery"]
         }

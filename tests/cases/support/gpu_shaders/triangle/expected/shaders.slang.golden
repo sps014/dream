@@ -15,6 +15,7 @@ float4 tint(float4 color, float amount)
     return lerp(color, float4(1.0f), float4(saturate(amount)));
 }
 
+#if defined(DREAM_SHADERS_RENDER)
 struct triangle_vertex_Params
 {
     float4x4 transform;
@@ -43,7 +44,9 @@ VertexOutput triangle_vertex(uint dream_in_vertex_id : SV_VertexID)
     result.uv = float2(x + 0.5f, y + 0.5f);
     return result;
 }
+#endif
 
+#if defined(DREAM_SHADERS_RENDER)
 Texture2D<float4> triangle_fragment_albedo;
 SamplerState triangle_fragment_linear;
 struct triangle_fragment_Params
@@ -59,3 +62,4 @@ float4 triangle_fragment(VertexOutput input) : SV_Target0
     var texel = triangle_fragment_albedo.Sample(triangle_fragment_linear, input.uv);
     return tint(texel * input.color, highlight);
 }
+#endif

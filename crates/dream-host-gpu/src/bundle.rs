@@ -84,6 +84,8 @@ pub struct Param {
 pub struct Entry {
     pub name: String,
     pub stage: Stage,
+    /// Indexes [`Target::layouts`]: the recorded layout of this entry's pipeline group.
+    pub layout: usize,
     pub code: Arc<[u8]>,
     pub thread_group_size: [u32; 3],
     pub params: Vec<Param>,
@@ -96,7 +98,8 @@ pub struct Target {
     pub name: String,
     pub code_format: String,
     pub backend: Backend,
-    pub layout: Arc<[u8]>,
+    /// One recorded layout per pipeline group; none in wasm bundles.
+    pub layouts: Vec<Arc<[u8]>>,
     pub entries: Vec<Entry>,
 }
 
@@ -232,8 +235,9 @@ impl Blobs<'_> {
 
 // Smallest encodings, used to bound counts before allocating.
 const MIN_PARAM: usize = 4 + 6 * 4;
-const MIN_ENTRY: usize = 4 + 4 + 40 + 12 + 4 + 4;
-const MIN_TARGET: usize = 4 + 4 + 40 + 4;
+const MIN_BLOB: usize = 40;
+const MIN_ENTRY: usize = 4 + 4 + 4 + MIN_BLOB + 12 + 4 + 4;
+const MIN_TARGET: usize = 4 + 4 + 4 + 4;
 
 pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
     let mut r = Reader { bytes, pos: 0 };
@@ -266,7 +270,11 @@ pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
         if targets.iter().any(|t| t.name == name) {
             return err(format!("target `{name}` appears twice"));
         }
-        let layout = blobs.read(&mut r)?;
+        let layout_count = r.count(MIN_BLOB, "layout")?;
+        let mut layouts = Vec::with_capacity(layout_count);
+        for _ in 0..layout_count {
+            layouts.push(blobs.read(&mut r)?);
+        }
         let entry_count = r.count(MIN_ENTRY, "entry")?;
         let mut entries: Vec<Entry> = Vec::with_capacity(entry_count);
         for _ in 0..entry_count {
@@ -277,6 +285,10 @@ pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
             };
             if entries.iter().any(|e| e.name == entry_name) {
                 return err(format!("entry `{entry_name}` appears twice in `{name}`"));
+            }
+            let layout = r.u32()? as usize;
+            if layout >= layout_count.max(1) {
+                return err(format!("entry `{entry_name}` names layout {layout} of {layout_count}"));
             }
             let code = blobs.read(&mut r)?;
             let thread_group_size = [r.u32()?, r.u32()?, r.u32()?];
@@ -310,6 +322,7 @@ pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
             entries.push(Entry {
                 name: entry_name,
                 stage,
+                layout,
                 code,
                 thread_group_size,
                 params,
@@ -320,7 +333,7 @@ pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
             name,
             code_format,
             backend,
-            layout,
+            layouts,
             entries,
         });
     }
@@ -337,6 +350,7 @@ pub mod write {
     pub struct EntrySpec<'a> {
         pub name: &'a str,
         pub stage: &'a str,
+        pub layout: u32,
         pub code: &'a [u8],
         pub thread_group_size: [u32; 3],
         pub params: Vec<Param>,
@@ -346,7 +360,7 @@ pub mod write {
     pub struct TargetSpec<'a> {
         pub name: &'a str,
         pub code_format: &'a str,
-        pub layout: &'a [u8],
+        pub layouts: Vec<&'a [u8]>,
         pub entries: Vec<EntrySpec<'a>>,
     }
 
@@ -377,11 +391,15 @@ pub mod write {
         for target in targets {
             string(&mut header, target.name);
             string(&mut header, target.code_format);
-            blob(&mut header, target.layout);
+            u32s(&mut header, target.layouts.len() as u32);
+            for layout in &target.layouts {
+                blob(&mut header, layout);
+            }
             u32s(&mut header, target.entries.len() as u32);
             for entry in &target.entries {
                 string(&mut header, entry.name);
                 string(&mut header, entry.stage);
+                u32s(&mut header, entry.layout);
                 blob(&mut header, entry.code);
                 for axis in entry.thread_group_size {
                     u32s(&mut header, axis);

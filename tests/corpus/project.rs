@@ -263,6 +263,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("gpu_cooperative", "gpu_runtime", false),
     Case::project("gpu_float16_buffers", "gpu_runtime", false),
     Case::project("gpu_offscreen_triangle", "gpu_runtime", false),
+    Case::project("gpu_pipeline_layouts", "gpu_runtime", false),
     Case::project("gpu_ray_query", "gpu_runtime", false),
     Case::project("gpu_ray_tracing_pipeline", "gpu_runtime", false),
     Case::project("gpu_workgroup_reduction", "gpu_runtime", false),

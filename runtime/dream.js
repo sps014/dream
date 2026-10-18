@@ -3344,7 +3344,7 @@ function makeWindowHost() {
 // ----- hosts/gpu_bundle.js -----
 // Reader for the generated shader bundle (DGPB v0, docs/internals/18-gpu-shader-bundle.md).
 // The browser only drives the `wgsl` target; it binds from the parameter table, so the layout
-// blob is never read.
+// blobs are never read (wasm bundles carry none).
 
 const GPU_BUNDLE_STAGES = new Set(["compute", "vertex", "fragment", "raygeneration", "closesthit",
   "anyhit", "miss", "intersection", "callable"]);
@@ -3420,13 +3420,14 @@ function gpuParseEntry(r, dataStart) {
   const name = r.str();
   const stage = r.str();
   if (!GPU_BUNDLE_STAGES.has(stage)) throw new GpuBundleError("entry " + name + " has unknown stage '" + stage + "'");
+  const layout = r.u32();
   const code = r.blob(dataStart);
   const threadGroupSize = [r.u32(), r.u32(), r.u32()];
   const params = [];
   for (let i = 0, n = r.count("parameter"); i < n; i++) params.push(gpuParseParam(r));
   const capabilities = [];
   for (let i = 0, n = r.count("capability"); i < n; i++) capabilities.push(r.str());
-  return { name, stage, code, threadGroupSize, params, capabilities };
+  return { name, stage, layout, code, threadGroupSize, params, capabilities };
 }
 
 /**
@@ -3450,10 +3451,11 @@ function gpuParseBundle(bytes) {
   for (let t = 0; t < targetCount; t++) {
     const name = r.str();
     const codeFormat = r.str();
-    const layout = r.blob(headerSize);
+    const layouts = [];
+    for (let i = 0, n = r.count("layout"); i < n; i++) layouts.push(r.blob(headerSize));
     const entries = [];
     for (let i = 0, n = r.count("entry"); i < n; i++) entries.push(gpuParseEntry(r, headerSize));
-    targets.push({ name, codeFormat, layout, entries });
+    targets.push({ name, codeFormat, layouts, entries });
   }
   return { version, targets };
 }

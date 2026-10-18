@@ -6,11 +6,12 @@
     {
       "name": "wgsl",
       "code_format": "wgsl",
-      "layout": {"offset": 0, "size": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      "layouts": [],
       "entries": [
         {
           "name": "train_step",
           "stage": "compute",
+          "layout": 0,
           "code": {"offset": 0, "size": 3190, "sha256": "1474ab964579404d139905fd34a400b58507b791edb7550a50eb7fe5f2be1908"},
           "thread_group_size": [64, 1, 1],
           "params": [

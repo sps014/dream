@@ -65,6 +65,20 @@ internal class ShaderEntry {
         return !this.is_compute() && !this.is_render();
     }
 
+    // The preprocessor symbol of the shaders that can share a pipeline with this one, which
+    // share one recorded layout. A compute shader runs alone; a pipeline pairs any vertex
+    // shader with any fragment shader of the module, and combines any of its ray-tracing
+    // shaders, so those stages are grouped per module.
+    internal fun pipeline_group(): string {
+        if this.is_compute() {
+            return "DREAM_SHADER_" + this.name();
+        }
+        if this.is_render() {
+            return "DREAM_SHADERS_RENDER";
+        }
+        return "DREAM_SHADERS_RAY_TRACING";
+    }
+
     // The Slang `[shader(...)]` and bundle spelling of the stage.
     internal fun stage_name(): string {
         return ShaderEntry.stage_spelling(this.stage);

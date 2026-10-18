@@ -435,24 +435,26 @@ internal class SlangEmit {
 
     fun entry(entry: ShaderEntry): void {
         let w = this.w;
-        let guarded = entry.targets.length < this.shader_module.targets().length;
-        if guarded {
-            let condition = StringBuilder();
+        // Every compile defines one pipeline group, so its code and layout bind only the
+        // globals of that group's shaders.
+        let condition = StringBuilder();
+        condition.append("defined(" + entry.pipeline_group() + ")");
+        if entry.targets.length < this.shader_module.targets().length {
+            let targets = StringBuilder();
             for (let t in entry.targets) {
-                if condition.length > 0 {
-                    condition.append(" || ");
+                if targets.length > 0 {
+                    targets.append(" || ");
                 }
-                condition.append("defined(" + Targets.define(t) + ")");
+                targets.append("defined(" + Targets.define(t) + ")");
             }
-            if condition.length == 0 {
-                condition.append("0");
+            if targets.length == 0 {
+                targets.append("0");
             }
-            w.line_of("#if " + condition.to_string());
+            condition.append(" && (" + targets.to_string() + ")");
         }
+        w.line_of("#if " + condition.to_string());
         this.entry_body(entry);
-        if guarded {
-            w.line_of("#endif");
-        }
+        w.line_of("#endif");
     }
 
     fun entry_body(entry: ShaderEntry): void {

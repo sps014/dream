@@ -6,12 +6,13 @@
     {
       "name": "spirv",
       "code_format": "spirv",
-      "layout": {"offset": 0, "size": 20274, "sha256": "0b9c56fd74a042ea61565af086462cea8b7335850915fcafc39f48544ba6a9c8"},
+      "layouts": [{"offset": 0, "size": 11595, "sha256": "3d39915a35129b8065962f6799d59c527efc27bd1a99de2ca8a9561d4abccf11"}, {"offset": 11595, "size": 9394, "sha256": "dd3589839646228aa6f6e6bed0f918bfadceefb7caad24f5e5c295de06378fa1"}],
       "entries": [
         {
           "name": "evaluate_mlp",
           "stage": "compute",
-          "code": {"offset": 20274, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
+          "layout": 0,
+          "code": {"offset": 20989, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
           "thread_group_size": [32, 1, 1],
           "params": [
             {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
@@ -24,12 +25,13 @@
         {
           "name": "tile_multiply",
           "stage": "compute",
-          "code": {"offset": 22458, "size": 1312, "sha256": "638cc221a5eee2a040fbf50003843a762246c104e1aa8d88957861f9eed98241"},
+          "layout": 1,
+          "code": {"offset": 23173, "size": 1312, "sha256": "ab2a394668bd1b07e26bda8e2a07f5f90b94994e9e042dc80556fe44b6084511"},
           "thread_group_size": [32, 1, 1],
           "params": [
-            {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 4, "offset": 0, "size": 0},
-            {"name": "b", "kind": 1, "flags": 1, "space": 0, "binding": 5, "offset": 0, "size": 0},
-            {"name": "c", "kind": 1, "flags": 2, "space": 0, "binding": 6, "offset": 0, "size": 0}
+            {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
+            {"name": "b", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
+            {"name": "c", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0}
           ],
           "capabilities": ["cooperative_matrix", "half"]
         }

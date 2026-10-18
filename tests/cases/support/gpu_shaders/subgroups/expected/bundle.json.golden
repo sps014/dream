@@ -6,11 +6,12 @@
     {
       "name": "wgsl",
       "code_format": "wgsl",
-      "layout": {"offset": 0, "size": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      "layouts": [],
       "entries": [
         {
           "name": "prefix_count",
           "stage": "compute",
+          "layout": 0,
           "code": {"offset": 0, "size": 1897, "sha256": "8946be319d8877fb0ee017469d92a5747362d0effc75115f21c2e7c56d7110d4"},
           "thread_group_size": [256, 1, 1],
           "params": [

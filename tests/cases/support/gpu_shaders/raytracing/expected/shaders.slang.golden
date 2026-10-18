@@ -16,6 +16,7 @@ RayDesc dream_ray(float3 origin, float3 direction, float t_min, float t_max)
     return ray;
 }
 
+#if defined(DREAM_SHADERS_RAY_TRACING)
 RaytracingAccelerationStructure camera_scene;
 RWTexture2D<float4> camera_output;
 
@@ -30,19 +31,25 @@ void camera()
     TraceRay(camera_scene, RAY_FLAG_NONE, 255u, 0, 1, 0, ray, hit);
     camera_output[uint2(pixel)] = float4(hit.color.x, hit.color.y, hit.color.z, 1.0f);
 }
+#endif
 
+#if defined(DREAM_SHADERS_RAY_TRACING)
 [shader("closesthit")]
 void shade(inout HitInfo hit, BuiltInTriangleIntersectionAttributes attributes)
 {
     hit.color = float3(attributes.barycentrics.x, attributes.barycentrics.y, (1.0f - attributes.barycentrics.x) - attributes.barycentrics.y);
 }
+#endif
 
+#if defined(DREAM_SHADERS_RAY_TRACING)
 [shader("miss")]
 void sky(inout HitInfo hit)
 {
     hit.color = float3(0.2f, 0.4f, 0.8f);
 }
+#endif
 
+#if defined(DREAM_SHADER_first_hit)
 RaytracingAccelerationStructure first_hit_scene;
 RWStructuredBuffer<float> first_hit_distances;
 
@@ -61,3 +68,4 @@ void first_hit()
         first_hit_distances[0] = query.CommittedRayT();
     }
 }
+#endif

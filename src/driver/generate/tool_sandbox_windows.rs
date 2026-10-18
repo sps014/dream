@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
     ERROR_ALREADY_EXISTS, ERROR_SUCCESS, HANDLE, HANDLE_FLAG_INHERIT, LocalFree,
-    SetHandleInformation, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
+    SetHandleInformation, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
 };
 use windows_sys::Win32::Security::Authorization::{
     EXPLICIT_ACCESS_W, GRANT_ACCESS, GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT,
@@ -38,12 +38,12 @@ use windows_sys::Win32::System::SystemInformation::{
     GetSystemDirectoryW, GetSystemWindowsDirectoryW,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateMutexW, CreateProcessW,
     DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess,
     InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
     PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-    PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess,
-    UpdateProcThreadAttribute, WaitForSingleObject,
+    INFINITE, PROCESS_INFORMATION, ReleaseMutex, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject,
 };
 use windows_sys::core::HRESULT;
 
@@ -52,6 +52,9 @@ use super::{Invocation, capture, joined, spawn_error, timeout_message};
 /// Every tool shares one AppContainer identity, so install-root grants made for one run stay
 /// valid for the next instead of being rewritten per invocation.
 const PROFILE_NAME: &str = "Dream.GeneratorTool";
+/// Serializes profile creation across compiler processes: while one process is creating the
+/// profile, another gets `ERROR_ALREADY_EXISTS` before its folder exists and cannot start tools.
+const PROFILE_LOCK: &str = "Local\\Dream.GeneratorTool.Profile";
 const PROFILE_EXISTS: HRESULT = (0x8007_0000 | (ERROR_ALREADY_EXISTS & 0xFFFF)) as HRESULT;
 const COMMAND_LINE_LIMIT: usize = 32_767;
 
@@ -178,12 +181,40 @@ fn within(root: &Path, path: &Path) -> bool {
     matches!((folded(root), folded(path)), (Some(root), Some(path)) if path.starts_with(&root))
 }
 
+struct ProfileLock(OwnedHandle);
+
+impl ProfileLock {
+    fn acquire() -> Result<Self, String> {
+        let name = wide(OsStr::new(PROFILE_LOCK))?;
+        let handle = unsafe { CreateMutexW(null(), 0, name.as_ptr()) };
+        if handle.is_null() {
+            return Err(os_error("creating the generator tool profile lock"));
+        }
+        let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+        // An abandoned lock is still acquired; profile creation is idempotent, so the holder
+        // that died left nothing half done that this process cannot redo.
+        match unsafe { WaitForSingleObject(handle.as_raw_handle(), INFINITE) } {
+            WAIT_OBJECT_0 | WAIT_ABANDONED => Ok(Self(handle)),
+            _ => Err(os_error("waiting for the generator tool profile lock")),
+        }
+    }
+}
+
+impl Drop for ProfileLock {
+    fn drop(&mut self) {
+        unsafe {
+            ReleaseMutex(self.0.as_raw_handle());
+        }
+    }
+}
+
 struct AppContainer {
     sid: PSID,
 }
 
 impl AppContainer {
     fn open() -> Result<Self, String> {
+        let _lock = ProfileLock::acquire()?;
         let name = wide(OsStr::new(PROFILE_NAME))?;
         let description = wide(OsStr::new("Dream compiler generator tools"))?;
         let mut sid: PSID = null_mut();

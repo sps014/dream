@@ -72,7 +72,8 @@ internal static class GpuHost {
     @runtime("gpuSamplerCreate")
     internal static extern fun sampler_create(device: int, borrow desc: int[]): int;
 
-    // The bindless descriptor handle bits of a texture, storage texture, buffer or sampler.
+    // The bindless descriptor handle bits of a texture, storage texture, buffer or sampler, or
+    // all ones on failure: 0 is the first slot of a Vulkan or D3D12 descriptor heap.
     @runtime("gpuDescriptorHandle")
     internal static extern fun descriptor_handle(resource: int): ulong;
 

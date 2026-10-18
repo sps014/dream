@@ -201,6 +201,55 @@ def write_bundle(targets: list[dict]) -> bytes:
     return b"DGPB" + u32(0) + u32(12 + len(header)) + bytes(header) + bytes(data)
 
 
+def blob_digests(bundle: bytes) -> dict[str, str]:
+    """`target/layout<i>` and `target/<entry>` -> SHA-256 of each blob, to say what changed."""
+    pos = 16
+
+    def u32() -> int:
+        nonlocal pos
+        pos += 4
+        return struct.unpack_from("<I", bundle, pos - 4)[0]
+
+    def string() -> str:
+        nonlocal pos
+        n = u32()
+        pos += n
+        return bundle[pos - n:pos].decode()
+
+    def digest() -> str:
+        nonlocal pos
+        pos += 40
+        return bundle[pos - 32:pos].hex()
+
+    out = {}
+    for _ in range(struct.unpack_from("<I", bundle, 12)[0]):
+        target = string()
+        string()
+        for i in range(u32()):
+            out[f"{target}/layout{i}"] = digest()
+        for _ in range(u32()):
+            name = string()
+            string()
+            u32()
+            out[f"{target}/{name}"] = digest()
+            pos += 12
+            for _ in range(u32()):
+                string()
+                pos += 24
+            for _ in range(u32()):
+                string()
+    return out
+
+
+def describe_difference(old: bytes, new: bytes) -> str:
+    try:
+        before, after = blob_digests(old), blob_digests(new)
+    except (struct.error, UnicodeDecodeError, IndexError):
+        return "the committed bundle does not parse"
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    return ", ".join(changed) if changed else "header fields only"
+
+
 def main():
     check = "--check" in sys.argv[1:]
     root = tool_root()
@@ -217,8 +266,10 @@ def main():
             path = HERE / f"{module}.dgpb"
             bundle = write_bundle(built)
             if check:
-                if not path.exists() or path.read_bytes() != bundle:
-                    stale.append(path.name)
+                if not path.exists():
+                    stale.append(f"{path.name} (missing)")
+                elif path.read_bytes() != bundle:
+                    stale.append(f"{path.name} ({describe_difference(path.read_bytes(), bundle)})")
             else:
                 path.write_bytes(bundle)
             print(f"{module}.dgpb: {', '.join(t['name'] for t in built)}"

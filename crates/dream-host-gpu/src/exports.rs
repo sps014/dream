@@ -109,11 +109,12 @@ pub unsafe extern "C" fn gpuSamplerCreate(device: i32, desc: DreamPtr) -> i32 {
     handle(resources::sampler_create(device, &desc))
 }
 
+/// All ones on failure, because 0 is the first slot of a Vulkan or D3D12 descriptor heap.
 #[unsafe(no_mangle)]
 pub extern "C" fn gpuDescriptorHandle(resource: i32) -> u64 {
     resources::descriptor_handle(resource).unwrap_or_else(|e| {
         error::record(&e);
-        0
+        u64::MAX
     })
 }
 

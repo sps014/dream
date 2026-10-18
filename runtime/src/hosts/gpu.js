@@ -448,7 +448,7 @@ export function makeGpuHost() {
       if (compare > 0) options.compare = GPU_COMPARES[compare - 1];
       return register({ type: "sampler", dev, obj: dev.device.createSampler(options) });
     }),
-    gpuDescriptorHandle: () => fail("EUNSUPPORTED", GPU_FEATURE.BINDLESS, 0n),
+    gpuDescriptorHandle: () => fail("EUNSUPPORTED", GPU_FEATURE.BINDLESS, 0xffffffffffffffffn),
     gpuComputePipelineCreate: (library, entry) => guard(0, () => {
       const lib = recordOf(library, "library", "shader library");
       const shader = shaderOf(lib, entry, "compute");

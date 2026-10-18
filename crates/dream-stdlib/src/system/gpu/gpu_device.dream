@@ -170,7 +170,7 @@ public class GpuDevice {
             return Result.Err(GpuError.WrongDevice("bindless handle"));
         }
         let bits = GpuHost.descriptor_handle(resource);
-        if bits == 0ul {
+        if bits == 18446744073709551615ul {
             return Result.Err(GpuHost.error());
         }
         return Result.Ok(bits);

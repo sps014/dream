@@ -581,7 +581,7 @@ test('features WebGPU lacks report UnsupportedCapability with the GpuFeature num
     assert.equal(await host.gpuTopLevelBuild(device, [], []), 0);
     assert.equal(host.gpuMlpUpload(device, [], [1, 1, 2]), 0);
     assert.equal(host.gpuLastError(), 'EUNSUPPORTED\n4');
-    assert.equal(host.gpuDescriptorHandle(1), 0n);
+    assert.equal(host.gpuDescriptorHandle(1), 0xffffffffffffffffn);
     assert.equal(host.gpuLastError(), 'EUNSUPPORTED\n2');
     const scene = { ...SAXPY, name: 'trace', params: [{ name: 'scene', kind: KIND.AccelerationStructure, binding: 0 }] };
     assert.equal(host.gpuComputePipelineCreate(host.gpuLibraryLoad(device, wgsl([scene])), 'trace'), 0);

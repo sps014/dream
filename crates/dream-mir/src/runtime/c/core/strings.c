@@ -280,17 +280,43 @@ static dream_ptr utf8_to_utf16(const uint8_t *src, int32_t n) {
     u = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
     while (i < n) {
         uint32_t c = src[i++];
-        if (c < 0x80) {
-            u[o++] = (uint16_t)c;
-        } else if ((c & 0xe0) == 0xc0 && i < n) {
-            c = ((c & 0x1f) << 6) | (src[i++] & 0x3f);
-            u[o++] = (uint16_t)c;
-        } else if ((c & 0xf0) == 0xe0 && i + 1 < n) {
-            c = ((c & 0x0f) << 12) | ((src[i] & 0x3f) << 6) | (src[i + 1] & 0x3f);
-            i += 2;
-            u[o++] = (uint16_t)c;
+        if (c >= 0x80) {
+            int32_t remaining;
+            uint32_t lower = 0x80, upper = 0xbf;
+            if (c >= 0xc2 && c <= 0xdf) {
+                remaining = 1;
+                c &= 0x1f;
+            } else if (c >= 0xe0 && c <= 0xef) {
+                remaining = 2;
+                if (c == 0xe0) { lower = 0xa0; }
+                if (c == 0xed) { upper = 0x9f; }
+                c &= 0x0f;
+            } else if (c >= 0xf0 && c <= 0xf4) {
+                remaining = 3;
+                if (c == 0xf0) { lower = 0x90; }
+                if (c == 0xf4) { upper = 0x8f; }
+                c &= 0x07;
+            } else {
+                remaining = 0;
+                c = 0xfffd;
+            }
+            while (remaining > 0) {
+                if (i >= n || src[i] < lower || src[i] > upper) {
+                    c = 0xfffd;
+                    break;
+                }
+                c = (c << 6) | (src[i++] & 0x3f);
+                remaining--;
+                lower = 0x80;
+                upper = 0xbf;
+            }
+        }
+        if (c >= 0x10000) {
+            c -= 0x10000;
+            u[o++] = (uint16_t)(0xd800 | (c >> 10));
+            u[o++] = (uint16_t)(0xdc00 | (c & 0x3ff));
         } else {
-            u[o++] = 0xfffd;
+            u[o++] = (uint16_t)c;
         }
     }
     dream_i32(p)[0] = o;
@@ -372,8 +398,7 @@ char *dream_string_to_utf8(dream_ptr s) {
     const uint16_t *u = dream_str_units(s);
     size_t cap = (size_t)(n > 0 ? n : 0) * 3 + 1;
     char *out = (char *)dream_platform_current->allocate(cap);
-    size_t o = 0;
-    int32_t i;
+    size_t written;
     if (!out) {
         return NULL;
     }
@@ -381,20 +406,7 @@ char *dream_string_to_utf8(dream_ptr s) {
         out[0] = 0;
         return out;
     }
-    for (i = 0; i < n; i++) {
-        uint32_t c = u[i];
-        if (c < 0x80) {
-            out[o++] = (char)c;
-        } else if (c < 0x800) {
-            out[o++] = (char)(0xc0 | (c >> 6));
-            out[o++] = (char)(0x80 | (c & 0x3f));
-        } else {
-            out[o++] = (char)(0xe0 | (c >> 12));
-            out[o++] = (char)(0x80 | ((c >> 6) & 0x3f));
-            out[o++] = (char)(0x80 | (c & 0x3f));
-        }
-    }
-    out[o] = 0;
+    dream_utf8_chunk(u, n, out, cap, 0, &written, 0);
     return out;
 }
 

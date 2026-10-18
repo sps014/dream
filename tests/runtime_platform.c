@@ -64,6 +64,60 @@ static void panic_hook(const char *text, const char *location) {
     assert(strcmp(location, "host/library.dream:17") == 0);
     fputs("HOOK\n", stderr);
 }
+static void check_utf8_roundtrip(void) {
+    const char text[] = "A\xC3\xA9\xE6\x97\xA5\xF0\x9F\x98\x80\xF0\x90\x80\x80\xF4\x8F\xBF\xBF!";
+    const uint16_t expected[] = u"A\u00E9\u65E5\U0001F600\U00010000\U0010FFFF!";
+    int32_t count = (int32_t)(sizeof(expected) / sizeof(expected[0])) - 1;
+    dream_ptr decoded = dream_utf8_to_string(text);
+    assert(dream_str_len(decoded) == count);
+    assert(memcmp(dream_str_units(decoded), expected, (size_t)count * 2) == 0);
+    dream_ptr bytes = dream_array_new(sizeof(text) - 1, 1);
+    memcpy((char *)dream_p(bytes) + 4, text, sizeof(text) - 1);
+    dream_ptr full = string_from_utf8(bytes);
+    dream_ptr prefix = string_from_utf8_prefix(bytes, sizeof(text) - 2);
+    assert(dream_str_len(full) == count);
+    assert(memcmp(dream_str_units(full), expected, (size_t)count * 2) == 0);
+    assert(dream_str_len(prefix) == count - 1);
+    assert(memcmp(dream_str_units(prefix), expected, (size_t)(count - 1) * 2) == 0);
+    dream_ptr original = dream_string_alloc(count);
+    memcpy((char *)dream_p(original) + STRING_UNITS_OFFSET, expected, (size_t)count * 2);
+    char *encoded = dream_string_to_utf8(original);
+    assert(encoded != NULL && strcmp(encoded, text) == 0);
+    dream_platform_current->deallocate(encoded);
+    dream_release(original);
+    dream_release(prefix);
+    dream_release(full);
+    dream_release(bytes);
+    dream_release(decoded);
+}
+static void check_invalid_utf8(void) {
+    const struct { const char *bytes; const uint16_t *expected; } cases[] = {
+        {"\xF0\x9F\x98", u"\uFFFD"},
+        {"\xF0\x9F!", u"\uFFFD!"},
+        {"\xF0\x80\x80\x80", u"\uFFFD\uFFFD\uFFFD\uFFFD"},
+        {"\xF4\x90\x80\x80", u"\uFFFD\uFFFD\uFFFD\uFFFD"},
+        {"\xED\xA0\x80", u"\uFFFD\uFFFD\uFFFD"},
+        {"\xC0\x80", u"\uFFFD\uFFFD"},
+        {"\xE2\x82!", u"\uFFFD!"},
+        {"\x80", u"\uFFFD"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        dream_ptr text = dream_utf8_to_string(cases[i].bytes);
+        int32_t count = 0;
+        while (cases[i].expected[count]) { count++; }
+        assert(dream_str_len(text) == count);
+        assert(memcmp(dream_str_units(text), cases[i].expected, (size_t)count * 2) == 0);
+        dream_release(text);
+    }
+    const uint16_t units[] = {0xd800, 'a', 0xdc00, 0, 0xd83d, 0xde00};
+    const char expected[] = "\xEF\xBF\xBD" "a\xEF\xBF\xBD\0\xF0\x9F\x98\x80";
+    dream_ptr text = dream_string_alloc(6);
+    memcpy((char *)dream_p(text) + STRING_UNITS_OFFSET, units, sizeof(units));
+    char *encoded = dream_string_to_utf8(text);
+    assert(encoded != NULL && memcmp(encoded, expected, sizeof(expected)) == 0);
+    dream_platform_current->deallocate(encoded);
+    dream_release(text);
+}
 int main(int argc, char **argv) {
     assert(argc == 2);
     dream_platform platform = {allocate, resize, deallocate, map, terminal_abort, write_bytes,
@@ -179,6 +233,8 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 3000; ++i) { text[i] = 'x'; }
         dream_panic_at(message, NULL);
     }
+    check_utf8_roundtrip();
+    check_invalid_utf8();
     char *copy = dream_string_to_utf8(hello);
     assert(strcmp(copy, "hello") == 0);
     platform.deallocate(copy);

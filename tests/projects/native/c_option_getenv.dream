@@ -9,6 +9,9 @@ extern fun c5e_getenv(name: string): Option<string>;
 @c("c", "strlen")
 extern fun c5e_strlen(s: string): usize;
 
+@c("c", "strstr")
+extern fun c5e_strstr(s: string, needle: string): Option<string>;
+
 @test
 @timeout(180000)
 fun c_option_getenv(): void {
@@ -18,4 +21,7 @@ fun c_option_getenv(): void {
     );
     Assert.eq((c5e_getenv("PATH").is_some()).to_string(), "true");
     Assert.eq((c5e_strlen("dream")).to_string(), "5");
+    Assert.eq((c5e_strlen("😀")).to_string(), "4");
+    Assert.eq((c5e_strlen("Aé日本😀!")).to_string(), "14");
+    Assert.eq(c5e_strstr("prefix😀日本!", "😀").unwrap(), "😀日本!");
 }

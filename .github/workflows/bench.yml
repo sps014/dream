@@ -1,4 +1,4 @@
-name: Dream vs .NET 10 Native AOT
+name: Benchmark regression gate
 
 on:
   pull_request:
@@ -10,19 +10,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: bench-dotnet-${{ github.ref }}
+  group: bench-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_INCREMENTAL: "0"
   RUSTC_WRAPPER: sccache
   SCCACHE_GHA_ENABLED: "true"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  DOTNET_NOLOGO: "1"
 
 jobs:
   compare:
-    name: Native micro and macro vs .NET 10 Native AOT
+    name: Native micro and macro vs the base revision
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -39,24 +37,15 @@ jobs:
           version: "v0.16.0"
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: bench-dotnet-release
-      - uses: actions/setup-dotnet@v5
-        id: dotnet
+          shared-key: bench-release
+      # dream-host-gpu's build.rs downloads its pinned, hash-verified inputs once into this cache;
+      # outside target/ so rust-cache's pruning cannot leave partial extractions behind.
+      - name: Locate the GPU host cache
+        run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
+      - uses: actions/cache@v6
         with:
-          dotnet-version: '10.0.x'
-      - name: Select the installed .NET 10 SDK
-        env:
-          DOTNET_SDK_VERSION: ${{ steps.dotnet.outputs.dotnet-version }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          Path("global.json").write_text(json.dumps({"sdk": {
-              "version": os.environ["DOTNET_SDK_VERSION"], "rollForward": "disable"
-          }}) + "\n")
-          PY
+          path: ${{ runner.temp }}/dream-gpu-cache
+          key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: actions/cache@v6
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
@@ -85,8 +74,8 @@ jobs:
             cargo build --locked --release -p dream -p dream-host)
           echo "dream=$baseline_tree/target/release/dream" >> "$GITHUB_OUTPUT"
           echo "available=true" >> "$GITHUB_OUTPUT"
-      # Paired Dream-only rounds on one runner: the C# comparison stays informational, but a
-      # non-overlapping slowdown past the 10% budget against the base revision fails the job.
+      # Paired rounds on one runner: a non-overlapping slowdown past the 10% budget against the
+      # base revision fails the job.
       - name: Gate micro and macro against the base revision
         if: ${{ !cancelled() && steps.baseline.outputs.available == 'true' }}
         env:
@@ -104,34 +93,6 @@ jobs:
               2>&1 | tee "$output/comparison.txt" || failed=1
           done
           exit "$failed"
-      - name: Compare micro Dream and .NET 10
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        env:
-          BENCH_SUITE: micro
-        shell: bash
-        run: |
-          output="target/bench-dotnet/$BENCH_SUITE"
-          mkdir -p "$output"
-          git rev-parse HEAD > "$output/revision.txt"
-          dotnet --info > "$output/dotnet-info.txt"
-          python3 scripts/bench.py --target native --suite "$BENCH_SUITE" \
-            --arms current csharp --current-dream target/release/dream \
-            --warmup 2 --rounds 20 --passes 10 --out "$output" \
-            2>&1 | tee "$output/comparison.txt"
-      - name: Compare macro Dream and .NET 10
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        env:
-          BENCH_SUITE: macro
-        shell: bash
-        run: |
-          output="target/bench-dotnet/$BENCH_SUITE"
-          mkdir -p "$output"
-          git rev-parse HEAD > "$output/revision.txt"
-          dotnet --info > "$output/dotnet-info.txt"
-          python3 scripts/bench.py --target native --suite "$BENCH_SUITE" \
-            --arms current csharp --current-dream target/release/dream \
-            --warmup 2 --rounds 20 --passes 10 --out "$output" \
-            2>&1 | tee "$output/comparison.txt"
       - name: Publish comparison in the job summary
         if: always()
         run: |
@@ -140,19 +101,6 @@ jobs:
           from pathlib import Path
 
           for suite in ("micro", "macro"):
-              output = Path("target/bench-dotnet") / suite
-              report = output / "comparison.txt"
-              if report.exists():
-                  revision = (output / "revision.txt").read_text().strip()
-                  with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-                      summary.write(f"## Dream vs .NET 10 Native AOT: {suite}\n\nRevision: `{revision}`\n\n")
-                      summary.write("C# uses a speed-optimized Native AOT executable. "
-                                    "Both arms were built and measured on this runner in this run. "
-                                    "`cur/C#` below 1 means Dream took less time. "
-                                    "Hosted measurements are informational; lifecycle/engine differences "
-                                    "are recorded in summary.json.\n\n```text\n")
-                      summary.write(report.read_text())
-                      summary.write("\n```\n")
               gate = Path("target/bench-gate") / suite / "comparison.txt"
               if gate.exists():
                   with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
@@ -166,12 +114,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: dream-dotnet10-${{ github.sha }}
+          name: dream-bench-${{ github.sha }}
           path: |
-            target/bench-dotnet/*/*.txt
-            target/bench-dotnet/*/*.json*
-            target/bench-dotnet/*/*/build.json
-            target/bench-dotnet/*/csharp/publish.txt
             target/bench-gate/*/*.txt
             target/bench-gate/*/*.json*
           retention-days: 30

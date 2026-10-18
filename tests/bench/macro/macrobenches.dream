@@ -8,7 +8,7 @@ import system.text;
 // allocation, ARC, collections, strings and scheduling together instead of one isolated loop.
 // Run: `scripts/bench.py --suite macro`; profile: `scripts/bench.py profile --suite macro`.
 // Output lines follow tests/bench/microbenches.dream: `bench <name> ns_total=… iters=… checksum=…`.
-// Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`), matched by the C# twin.
+// Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`).
 let measuring: bool = true;
 let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
 let last_allocations: long = 0;

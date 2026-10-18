@@ -1,20 +1,9 @@
-"""Process-level benchmark statistics and cross-language result validation."""
+"""Process-level benchmark statistics and current/baseline result validation."""
 import math
 import random
 import statistics
 
 from . import gate as bench_gate
-
-
-# These public APIs differ in lifecycle or engine, even when results agree.
-COMPARABILITY = {
-    "binary_trees": "Dream completes ARC reclamation; C# may defer collection",
-    "binary_trees_reclaim": "C# forces whole-heap collections; Dream reclaims each tree",
-    "weak_tree": "weak registration and reclamation contracts differ",
-    "regex_find": "PCRE2 JIT versus interpreted .NET Regex",
-    "substring": "Dream owns a retained slice; C# copies its payload",
-    "fib_rec": "LLVM proves fib pure and merges the repeated fib(n-3) call; C# executes every call",
-}
 
 
 def processes(samples, arm, passes, rounds):
@@ -66,23 +55,16 @@ def summarize(samples, rss, arms, passes, rounds, threshold=0.10):
                         "checksum": results[arm][name], "process_medians": vals,
                         **({"counters": counters} if counters else {})}
         comparisons = row["comparisons"] = {}
-        for control in ("baseline", "csharp"):
-            if "current" not in row or control not in row:
-                continue
-            if results["current"][name] != results[control][name]:
-                raise ValueError(f"{name}: current/{control} checksum mismatch")
-            if counts["current"][name] != counts[control][name]:
-                raise ValueError(f"{name}: current/{control} iteration count mismatch")
-            ratios = [a / b for a, b in zip(processed["current"][name], processed[control][name], strict=True)]
+        if "current" in row and "baseline" in row:
+            if results["current"][name] != results["baseline"][name]:
+                raise ValueError(f"{name}: current/baseline checksum mismatch")
+            if counts["current"][name] != counts["baseline"][name]:
+                raise ValueError(f"{name}: current/baseline iteration count mismatch")
+            ratios = [a / b for a, b in zip(processed["current"][name], processed["baseline"][name], strict=True)]
             lo, hi = bench_gate.interval(ratios, rng)
-            comparable = control == "baseline" or name not in COMPARABILITY
-            decision = ("win" if hi < 1 else "loss" if lo > 1 else "inconclusive")
-            if control == "baseline":
-                decision = "regression" if lo > 1 + threshold else "pass" if hi <= 1 + threshold else "inconclusive"
-            comparisons[control] = {
+            comparisons["baseline"] = {
                 "ratio": statistics.median(ratios), "ci_low": lo, "ci_high": hi,
-                "decision": decision if comparable else "different-contract",
-                "comparable": comparable, "improvement": hi < 1,
-                **({"reason": COMPARABILITY[name]} if not comparable else {}),
+                "decision": "regression" if lo > 1 + threshold else "pass" if hi <= 1 + threshold else "inconclusive",
+                "improvement": hi < 1,
             }
     return summary, {arm: max(rss[arm]) for arm in arms}

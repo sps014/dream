@@ -13,7 +13,7 @@ on:
         required: true
       symbols:
         description: Regex of function names extracted from the optimized asm
-        default: bench_string_eq|bench_split_span|StringSplit|dream_string_eq|string_view_find_char
+        default: bench_string_eq|bench_split_span|dream_string_eq|string_view_find_char
         required: true
 
 permissions:
@@ -21,8 +21,6 @@ permissions:
 
 env:
   CARGO_INCREMENTAL: "0"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  DOTNET_NOLOGO: "1"
 
 jobs:
   profile:
@@ -58,10 +56,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: bench-dotnet-release
-      - uses: actions/setup-dotnet@v5
+          shared-key: bench-release
+      # dream-host-gpu's build.rs downloads its pinned, hash-verified inputs once into this cache;
+      # outside target/ so rust-cache's pruning cannot leave partial extractions behind.
+      - name: Locate the GPU host cache
+        run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
         with:
-          dotnet-version: '10.0.x'
+          path: ${{ runner.temp }}/dream-gpu-cache
+          key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: actions/cache@v4
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
@@ -83,7 +86,7 @@ jobs:
           rm -rf scripts/benchmarks && cp -r harness/scripts/benchmarks scripts/benchmarks
           # shellcheck disable=SC2086
           python3 scripts/bench.py --target native --suite micro --diagnostics \
-            --arms current csharp --current-dream target/release/dream \
+            --arms current --current-dream target/release/dream \
             --warmup 1 --rounds 8 --passes 5 --filter $BENCHES --out "$out" \
             2>&1 | tee "$out/comparison.txt"
       - name: Extract hot functions from the asm
@@ -144,9 +147,6 @@ jobs:
           path: |
             target/bench-profile/*.txt
             target/bench-profile/*.s
-            target/bench-profile/csharp/native-map.xml
-            target/bench-profile/csharp/build.json
-            target/bench-profile/csharp/publish.txt
             target/bench-profile/current/target/release/*.opt.ll
             target/bench-profile/current/target/release/*.s
           retention-days: 14

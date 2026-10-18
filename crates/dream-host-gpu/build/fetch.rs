@@ -87,9 +87,28 @@ pub fn download(cache: &Path, pin: &Pin, name: Option<&str>) -> PathBuf {
     dest
 }
 
+/// Written last into a finished cache directory. CI caches that prune `target/` can leave a
+/// directory behind without its files; one without the marker is rebuilt.
+const COMPLETE: &str = ".dream-complete";
+
+fn reuse(dir: &Path) -> bool {
+    if dir.join(COMPLETE).is_file() {
+        return true;
+    }
+    if dir.exists() {
+        fs::remove_dir_all(dir).expect("removing an incomplete cache directory");
+    }
+    false
+}
+
+fn finish(staging: &Path, dest: &Path) {
+    File::create(staging.join(COMPLETE)).expect("marking a cache directory complete");
+    fs::rename(staging, dest).expect("finishing a cache directory");
+}
+
 /// Extracts `archive` into `into` once, keeping only entries `keep` accepts. Returns `into`.
 pub fn extract(archive: &Path, into: &Path, keep: impl Fn(&Path) -> bool) -> PathBuf {
-    if into.is_dir() {
+    if reuse(into) {
         return into.to_path_buf();
     }
     let staging = into.with_extension("tmp");
@@ -135,14 +154,20 @@ pub fn extract(archive: &Path, into: &Path, keep: impl Fn(&Path) -> bool) -> Pat
                 .unwrap_or_else(|e| panic!("{}: {e}", archive.display()));
         }
     }
-    fs::rename(&staging, into).expect("finishing an extraction");
+    finish(&staging, into);
     into.to_path_buf()
 }
 
 /// The single top-level directory of an extracted archive, or the directory itself.
 pub fn single_child(path: &Path) -> PathBuf {
     let children: Vec<_> = fs::read_dir(path)
-        .map(|entries| entries.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_name() != COMPLETE)
+                .map(|e| e.path())
+                .collect()
+        })
         .unwrap_or_default();
     match children.as_slice() {
         [only] if only.is_dir() => only.clone(),
@@ -152,7 +177,7 @@ pub fn single_child(path: &Path) -> PathBuf {
 
 /// Copies `source` to `dest` and applies `patches` there, once per patch-set digest.
 pub fn patched(source: &Path, dest: &Path, patches: &[PathBuf]) -> PathBuf {
-    if dest.is_dir() {
+    if reuse(dest) {
         return dest.to_path_buf();
     }
     let staging = dest.with_extension("tmp");
@@ -170,7 +195,7 @@ pub fn patched(source: &Path, dest: &Path, patches: &[PathBuf]) -> PathBuf {
             .expect("running `git apply` (git is required to patch slang-rhi)");
         assert!(status.success(), "applying {} failed", patch.display());
     }
-    fs::rename(&staging, dest).expect("finishing the patched source");
+    finish(&staging, dest);
     dest.to_path_buf()
 }
 

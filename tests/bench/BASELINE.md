@@ -1,22 +1,16 @@
 # Benchmark measurement protocol
 
-## CI comparison with .NET 10 Native AOT
+## CI regression gate
 
-The **Dream vs .NET 10 Native AOT** workflow runs on pull requests, pushes to `main`, and manual
-dispatches. Each micro/macro job builds Dream and its host libraries from the checked-out
-revision, installs the latest stable .NET 10 SDK, and uses `bench.py --arms current csharp`
-to compile both implementations and compare them on the same runner. C# is published with
-`PublishAot=true`, `OptimizationPreference=Speed`, and `IlcInstructionSet=native`; the harness
-runs the self-contained native executable directly. There is no JIT compilation in the measured
-C# process. It uses two warmups, 20 measured process starts per arm, and ten passes per process.
-The micro and macro jobs run one at a time; within each job Dream and .NET processes also
-run sequentially, alternating order between rounds.
+The **Benchmark regression gate** workflow runs on pull requests, pushes to `main`, and manual
+dispatches. It builds Dream and its host libraries from the checked-out revision and from the
+base revision, then runs `bench.py --arms baseline current --fail-on-regression` for the micro
+and macro suites on the same runner. Arms alternate order between rounds. A row whose paired
+current/base interval lies entirely above the 10% budget fails the job.
 
-The job summary includes timings, confidence intervals, ratios, and peak RSS. Download the
-`dream-dotnet10-<suite>-<revision>` artifact for raw samples, `summary.json` (including
-tool/runtime fingerprints and comparability notes), build identities, and the commit SHA.
-These hosted comparisons report measurements; they do not replace the controlled reference
-gate below. Invalid results or failed benchmark commands still fail the job.
+The job summary includes timings, confidence intervals, ratios, and peak RSS. The
+`dream-bench-<revision>` artifact keeps the comparison reports. Hosted runners are noisy, so
+the controlled reference gate below remains the acceptance measurement.
 
 ## Measurement protocol (read before comparing numbers)
 
@@ -30,11 +24,7 @@ and Binaryen identities. Native and wasm references are incompatible; Node proce
 includes the engine and JIT. Rebuild references after changing the fixture or harness.
 `--benchmark <path>` selects a preserved fixture snapshot; each invocation reads it once for
 all arms and fingerprints those exact bytes, so editing the live fixture cannot mix arm inputs.
-`--diagnostics` also saves first-pass remarks and optimized IR, plus native assembly or WAT;
-C# diagnostics save a Native AOT code map (`csharp/native-map.xml`). The .NET SDK and host
-are fingerprinted alongside the native executable; `csharp/build.json` records the publish
-command, runtime targets and resolved package versions, including the Native AOT compiler.
-Historical DLL/JIT results are a different deployment mode and must be rerun for AOT comparisons.
+`--diagnostics` also saves first-pass remarks and optimized IR, plus native assembly or WAT.
 `build.json` records compile duration and artifact size. Compile duration includes diagnostic
 emission when requested and must be compared with matching flags.
 
@@ -80,42 +70,30 @@ linked host libraries available. References from another runner or fixture versi
 executables, invalid timing rows and incomplete measurements are rejected. Old median-only
 reference files must be regenerated. Peak current RSS must remain within the configured regression budget of the live control.
 
-Dream and C# comparisons are reported separately from Dream regression decisions. Both arms use
-`DREAM_BENCH_SEED` for matched runtime-generated inputs. The comparator derives fractional
+Both arms use `DREAM_BENCH_SEED` for matched runtime-generated inputs. The comparator derives fractional
 ns/op from `ns_total/iters`; zero-time workloads invalidate a reference or gate. Hosted CI publishes
 raw measurements for inspection; hard gates require a controlled runner.
 
-## API fairness notes
+## Result validation
 
-`regex_find` measures public result APIs: Dream returns matched strings, while C# reads
-`Match.Length` without materializing those strings. Native Dream uses PCRE2 JIT.
-`binary_trees` includes immediate ARC reclamation in Dream but permits deferred C# GC.
-`binary_trees_reclaim` is a separate measurement with C# collection explicitly inside
-the timer and a clean heap beforehand. Forced full collections add synthetic overhead;
-this row does not model normal GC scheduling or establish a general ARC/GC ranking.
-The reclamation row runs last so its forced GC cannot perturb other rows in that pass.
-
-The span rows use stack views on both sides. Owned substring is a separate contract: Dream
-retains a slice and C# copies. Array and vector addition consume checksums of every output
-outside the timer. Every row emits exact elapsed nanoseconds, iteration counts and a result
-checksum; mismatched outputs or counts invalidate the comparison. Confidence intervals use
-process medians, never independent resampling of correlated passes.
+Every row emits exact elapsed nanoseconds, iteration counts and a result checksum; mismatched
+outputs or counts between arms invalidate the comparison. Confidence intervals use process
+medians, never independent resampling of correlated passes. `binary_trees_reclaim` runs last so
+its reclamation work cannot perturb other rows in that pass.
 
 There is one entry point:
 
 ```sh
 scripts/bench.py                       # native Dream, 20 rounds × 10 passes
-scripts/bench.py --arms current csharp # explicit Dream/C# micro comparison
-scripts/bench.py --suite macro --arms current csharp # application comparison
-scripts/bench.py --arms current        # Dream inventory without .NET
+scripts/bench.py --arms baseline current # paired comparison against a reference build
+scripts/bench.py --suite macro         # application workloads
 scripts/bench.py build --help          # cold, edited and cached compiler builds
 scripts/bench.py generators --help     # isolated source-generator cache measurements
 ```
 
 The old minimum-based C hotpath harness is retired as a measurement entry point. Language
 workloads exercise the allocator, weak references, strings and queues with matched inputs.
-Counter runs attribute mechanisms but cannot establish latency wins. Different lifecycle/engine
-contracts are explicitly marked and excluded from suite-wide C# victory claims.
+Counter runs attribute mechanisms but cannot establish latency wins.
 
 
 Preserve machine-specific results as immutable JSON with raw samples and runner identities
@@ -124,16 +102,12 @@ the deployment hardware; results from one runner are not acceptance for another.
 
 ## Parallel task attribution
 
-`task_parallel` submits sixteen CPU jobs per batch. Dream uses `Task.scope` and
-`scope.spawn_parallel` on the runtime's shared worker threads; C# uses
-`Task.Run` and `Task.WhenAll` on its process-wide thread pool. Both time submission,
-completion and reduction, including Dream's per-job session ownership. Both runtimes
-reuse threads between jobs. Dream may run a worker per active job; C# controls its
-worker count dynamically, so the row does not establish equal worker utilization.
-Each job executes the same integer kernel and both arms validate
-the same final checksum.
+`task_parallel` submits sixteen CPU jobs per batch through `Task.scope` and
+`scope.spawn_parallel` on the runtime's shared worker threads. It times submission,
+completion and reduction, including the per-job session ownership. Each job executes the
+same integer kernel and the final checksum is validated.
 
-The Dream-only `workers` suite also measures sequential `task_spawn` calls and tiny structured
+The `workers` suite also measures sequential `task_spawn` calls and tiny structured
 bursts. `task_scope_16` and `task_scope_64` report nanoseconds per whole batch of sixteen or
 sixty-four jobs, respectively; the other worker rows report nanoseconds per dispatch/session.
 Keep those units separate when comparing submission overhead with the CPU-heavy macro row.

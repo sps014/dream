@@ -89,18 +89,16 @@ class GateTests(unittest.TestCase):
         fixture = self.root / 'fixture.dream'
         source = b'report("work", elapsed, iterations);'
         fixture.write_bytes(source)
-        expected = bench_gate.identity(fixture, fixture, 'test', 1, 5)
+        expected = bench_gate.identity(fixture, 'test', 1, 5)
         fixture.write_bytes(b'report("changed", elapsed, iterations);')
-        actual = bench_gate.identity(fixture, fixture, 'test', 1, 5, benchmark_source=source)
+        actual = bench_gate.identity(fixture, 'test', 1, 5, benchmark_source=source)
         self.assertEqual(actual['benchmark'], expected['benchmark'])
         self.assertEqual(actual['names'], expected['names'])
 
-    def test_dream_only_identity_has_no_unrelated_fixture_or_workloads(self):
+    def test_identity_lists_only_the_fixture_workloads(self):
         fixture = self.root / 'collections.dream'
         fixture.write_bytes(b'report("collection_churn", elapsed, iterations);')
-        identity = bench_gate.identity(fixture, None, 'test', 1, 5)
-        self.assertIsNone(identity['csharp'])
-        self.assertIsNone(identity['csharp_project'])
+        identity = bench_gate.identity(fixture, 'test', 1, 5)
         self.assertEqual(identity['names'], ['collection_churn'])
 
     def test_wasm_reference_preserves_and_checks_entire_bundle(self):
@@ -201,33 +199,20 @@ class GateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
 
-    def test_csharp_is_paired_and_process_clustered(self):
+    def test_comparison_is_paired_and_process_clustered(self):
         samples = copy.deepcopy(self.samples)
         for sample in samples:
             if sample['arm'] == 'baseline':
-                sample['arm'] = 'csharp'
                 sample['ns_per_op'] *= 2
-        rss = {'current': self.rss['current'], 'csharp': self.rss['baseline']}
-        rows, _ = stats.summarize(samples, rss, ['current', 'csharp'], 5, 10)
+        rows, _ = stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
         self.assertEqual(rows['work']['current']['processes'], 10)
-        self.assertEqual(rows['work']['comparisons']['csharp']['decision'], 'win')
-        self.assertEqual(rows['work']['comparisons']['csharp']['ci_high'], .5)
+        self.assertEqual(rows['work']['comparisons']['baseline']['decision'], 'pass')
+        self.assertTrue(rows['work']['comparisons']['baseline']['improvement'])
         # More samples inside a process do not create independent process starts.
         repeated = [dict(s, pass_index=s['pass_index'] + offset)
                     for offset in (0, 5) for s in samples]
-        more, _ = stats.summarize(repeated, rss, ['current', 'csharp'], 10, 10)
+        more, _ = stats.summarize(repeated, self.rss, ['baseline', 'current'], 10, 10)
         self.assertEqual(rows['work']['comparisons'], more['work']['comparisons'])
-
-    def test_contract_differences_cannot_claim_csharp_victory(self):
-        samples = copy.deepcopy(self.samples)
-        for sample in samples:
-            sample['name'] = 'binary_trees'
-            if sample['arm'] == 'baseline':
-                sample['arm'] = 'csharp'
-                sample['ns_per_op'] *= 2
-        rss = {'current': self.rss['current'], 'csharp': self.rss['baseline']}
-        rows, _ = stats.summarize(samples, rss, ['current', 'csharp'], 5, 10)
-        self.assertEqual(rows['binary_trees']['comparisons']['csharp']['decision'], 'different-contract')
 
     def test_with_exe_keeps_an_existing_file(self):
         path = self.root / "tool"
@@ -252,61 +237,6 @@ class GateTests(unittest.TestCase):
                 stats.summarize(samples, self.rss, ['baseline', 'current'], 5, 10)
 
 
-class CSharpPublishTests(unittest.TestCase):
-    def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
-        self.args = argparse.Namespace(csharp_source=b"class Program {}",
-                                       csharp_project=b"<Project />", diagnostics=False)
-
-    def publish(self, command, cwd):
-        self.command = command
-        artifact = cwd / "publish/DreamBench"
-        artifact.parent.mkdir()
-        artifact.write_bytes(b"native executable")
-        (cwd / "obj").mkdir(exist_ok=True)
-        (cwd / "obj/project.assets.json").write_text(json.dumps({
-            "libraries": {"Microsoft.DotNet.ILCompiler/10.0.2": {}},
-            "targets": {"net10.0/osx-arm64": {}},
-        }))
-        if self.args.diagnostics:
-            (cwd / "obj/DreamBench.map.xml").write_text("<map />")
-        return "publish succeeded"
-
-    def test_publishes_native_aot_and_runs_executable_directly(self):
-        with patch.object(bench.shutil, "which", return_value="dotnet"), \
-             patch.object(bench, "run", side_effect=self.publish):
-            command = bench.prepare_csharp(self.root, self.args)
-        self.assertEqual(command, [str(self.root.resolve() / "csharp/publish/DreamBench")])
-        self.assertEqual(self.command[:2], ["dotnet", "publish"])
-        for flag in ("-p:PublishAot=true", "-p:OptimizationPreference=Speed", "-p:IlcInstructionSet=native"):
-            self.assertIn(flag, self.command)
-        metadata = json.loads((self.root / "csharp/build.json").read_text())
-        self.assertEqual(metadata["deployment"], "native-aot")
-        self.assertEqual(metadata["sha256"], bench_gate.digest(command[0]))
-        self.assertIn("Microsoft.DotNet.ILCompiler/10.0.2", metadata["packages"])
-
-    def test_managed_only_publish_cannot_reuse_old_native_binary(self):
-        stale = self.root / "csharp/publish/DreamBench"
-        stale.parent.mkdir(parents=True)
-        stale.write_bytes(b"stale native binary")
-        with patch.object(bench.shutil, "which", return_value="dotnet"), \
-             patch.object(bench, "run", return_value=""), \
-             self.assertRaisesRegex(SystemExit, "Native AOT executable not found"):
-            bench.prepare_csharp(self.root, self.args)
-        self.assertFalse(stale.exists())
-
-    def test_diagnostics_preserve_native_code_map_without_running_jit(self):
-        self.args.diagnostics = True
-        with patch.object(bench.shutil, "which", return_value="dotnet"), \
-             patch.object(bench, "run", side_effect=self.publish) as run:
-            bench.prepare_csharp(self.root, self.args)
-        self.assertEqual(run.call_count, 1)
-        self.assertIn("-p:IlcGenerateMapFile=true", self.command)
-        self.assertEqual((self.root / "csharp/native-map.xml").read_text(), "<map />")
-
-
 class MeasurementTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -322,7 +252,7 @@ class MeasurementTests(unittest.TestCase):
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
             fail_on_regression=False,
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
-            regression_threshold=.1, benchmark=self.fixture, csharp=bench.SUITES['micro'][1], runner_id='test',
+            regression_threshold=.1, benchmark=self.fixture, runner_id='test',
             filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',
             baseline_dream='compiler',
         )

@@ -40,6 +40,12 @@ belongs at. The steps are:
    library that links it. `HostCapability::companion_library_names` makes the compiler's runtime
    staging and `dreamer pack` ship Dawn next to the host library.
 
+Downloaded archives and verified source trees are shared in the GPU cache. CMake build directories,
+including FetchContent's dependency subbuilds, stay under Cargo's `OUT_DIR`. Generator and CMake
+toolchain environment settings select separate directories, so Ninja and Visual Studio never reuse
+one another's `CMakeCache.txt`. The build respects `CMAKE_GENERATOR` and otherwise uses CMake's
+platform default; installing Ninja on `PATH` does not silently change that choice.
+
 The build needs CMake, a C++20 compiler and git. Building the backends needs no SDK beyond the
 platform's: Metal, Vulkan and WebGPU on macOS; Vulkan, CUDA and WebGPU on Linux; D3D12, D3D11,
 Vulkan, CUDA and WebGPU on Windows. Vulkan and CUDA drivers are loaded at run time. On macOS,

@@ -4,6 +4,8 @@
 
 include!("../dream-host-abi/link.rs");
 
+#[path = "build/cmake_config.rs"]
+mod cmake_config;
 #[path = "build/fetch.rs"]
 mod fetch;
 
@@ -28,7 +30,11 @@ fn main() {
             "windows" => "windows",
             other => panic!("dream-host-gpu does not support {other}"),
         },
-        if arch == "aarch64" { "aarch64" } else { "x86_64" }
+        if arch == "aarch64" {
+            "aarch64"
+        } else {
+            "x86_64"
+        }
     );
     let pins: toml::Table = std::fs::read_to_string(manifest.join("pins.toml"))
         .expect("reading pins.toml")
@@ -97,10 +103,10 @@ fn main() {
 
     let mut config = cmake::Config::new(manifest.join("native"));
     config
+        .out_dir(cmake_config::output_dir())
         .profile("Release")
         .define("DREAM_SLANG_INCLUDE_DIR", &slang_include)
         .define("DREAM_SLANG_RHI_DIR", &rhi_source)
-        .define("FETCHCONTENT_BASE_DIR", cache.join("fetchcontent"))
         .define("FETCHCONTENT_FULLY_DISCONNECTED", "OFF")
         .define("SLANG_RHI_DAWN_URL", file_url(&dawn_archive))
         .define(
@@ -132,9 +138,6 @@ fn main() {
                 format!("SHA256={}", winpix_pin.sha256),
             );
     }
-    if which("ninja") {
-        config.generator("Ninja");
-    }
     let installed = config.build();
 
     let lib = installed.join("lib");
@@ -157,7 +160,9 @@ fn main() {
             println!("cargo:rustc-link-lib=dylib=pthread");
         }
         "windows" => {
-            for system in ["d3d12", "d3d11", "dxgi", "dxguid", "user32", "advapi32", "psapi"] {
+            for system in [
+                "d3d12", "d3d11", "dxgi", "dxguid", "user32", "advapi32", "psapi",
+            ] {
                 println!("cargo:rustc-link-lib=dylib={system}");
             }
         }
@@ -265,11 +270,4 @@ fn file_url(path: &Path) -> String {
     } else {
         path
     }
-}
-
-fn which(program: &str) -> bool {
-    std::process::Command::new(program)
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }

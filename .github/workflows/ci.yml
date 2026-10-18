@@ -44,10 +44,11 @@ jobs:
         working-directory: tooling/gpu-browser
       - run: npx playwright install --with-deps chromium
         working-directory: tooling/gpu-browser
-      - run: npm test
+      - run: xvfb-run -a npm test
         working-directory: tooling/gpu-browser
         env:
           GPU_BROWSER_SOFTWARE: "1"
+          GPU_BROWSER_HEADLESS: "0"
 
   hygiene:
     runs-on: ubuntu-24.04

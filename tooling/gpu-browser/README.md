@@ -16,6 +16,8 @@ Missing WebGPU support fails the test. No GPU calls are mocked.
 `GPU_BROWSER_EXECUTABLE` selects an installed Chromium browser, such as Microsoft Edge.
 On Linux without a GPU, set `GPU_BROWSER_SOFTWARE=1` to use Chromium's SwiftShader Vulkan
 adapter. CI installs Chromium and its system dependencies through Playwright and uses this mode.
+CI runs a headed browser under Xvfb so canvas presentation has a display. Set
+`GPU_BROWSER_HEADLESS=0` to select this mode locally.
 Windows qualification uses the default hardware adapter; its Chromium builds do not expose a
 SwiftShader WebGPU adapter.
 

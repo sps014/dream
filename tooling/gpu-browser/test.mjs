@@ -32,11 +32,12 @@ timeout.unref();
 try {
   browser = await chromium.launch({
     channel: 'chromium',
-    headless: true,
+    headless: process.env.GPU_BROWSER_HEADLESS !== '0',
+    dumpio: process.env.GPU_BROWSER_SOFTWARE === '1',
     executablePath: process.env.GPU_BROWSER_EXECUTABLE || undefined,
     args: [
       '--enable-unsafe-webgpu',
-      ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--use-angle=swiftshader', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader'] : []),
+      ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface'] : []),
     ],
   });
   const page = await browser.newPage();

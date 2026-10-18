@@ -5,6 +5,7 @@ nav:
   - text
   - collections
   - system
+  - gpu
   - io
   - serialization
   - security

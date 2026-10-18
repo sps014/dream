@@ -19,14 +19,13 @@ Verified on an Apple M3 with real Dream programs: compute (saxpy, workgroup redu
 
 ## Not yet verified
 
-- **Full gate on the combined tree.** Each workstream ran focused tests only. `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace -- --ignored` and the full corpus (`python3 scripts/test_corpus.py --both`) have not run on this branch. `cargo check --workspace --all-targets` passes.
-- **Windows and Linux builds** of `dream-host-gpu` and `dream-host-window`. The `gpu` and `window` features are default-on, so CI is their first build.
+- **Full gate on Windows.** On [PR #56](https://github.com/sps014/dream/pull/56), Linux and macOS CI pass the workspace tests, clippy and the full corpus, and `dream-host-gpu`/`dream-host-window` build on all three platforms. Windows still has to pass the generator sandbox tests and the GPU host matrix after the fixes below.
 - **D3D12, D3D11 and CUDA** at run time, and DXIL/DXBC/PTX output (needs `dxc`, `fxc`, NVRTC reachable from the tool sandbox).
 - **Ray-tracing pipelines** on hardware (no RT on Metal through Slang 2026.20 or on MoltenVK). Linux CI installs lavapipe and may exercise Vulkan paths; unconfirmed.
 - **Cooperative vectors** on any device, including the inferencing-optimal MLP layout conversion, and **cooperative matrices** on Vulkan or CUDA (only Metal's 8x8 tiles have run).
 - **Bindless** on any backend (slang-rhi has no Metal descriptor handles; MoltenVK lacks required features).
 - **Real browser WebGPU.** `gpu.js` is tested against a fake `navigator.gpu` and the real generator bundles only.
-- **Windows generator sandbox** (job object + AppContainer) has never executed.
+- **Windows generator sandbox** (job object + AppContainer). Its first CI run failed with `ERROR_ENVVAR_NOT_FOUND` (203): `CreateProcessW` finds the AppContainer profile through `LOCALAPPDATA` in the child's environment block, which the minimal block left out. The block now passes the compiler's `LOCALAPPDATA` through; Windows reroutes it, `TEMP` and `TMP` into the profile.
 
 ## Remaining milestones
 
@@ -51,10 +50,10 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 
 ### Docs and final gate
 
-1. Learn guide, cookbook (compute, render loop with `system.window`, ray query, autodiff) and reference pages for the generated `GpuShaders` wrapper shape.
-2. Refresh `tooling/docs/api-coverage.json` after reviewing reference pages; run the docs gate from `AGENTS.md`.
-3. Bundle freshness: a CI check that the committed `crates/dream-host-gpu/tests/fixtures/*.dgpb` match `make_bundles.py`.
-4. CI workflow gaps: X11 dev packages in `release.yml` and `phase34.yml`; `release.yml` does not ship the window capability library.
+1. **Done.** The guide is `docs/library/gpu/` (setup and compute, shaders and the generated `GpuShaders` class, rendering with `system.window`, ray tracing, machine learning). Full ray-query and autodiff programs live in those pages; the cookbook adds a histogram (atomics) and a mouse-driven fragment shader. Every full program is compile-checked by `tooling/docs/check_examples.py`.
+2. **Done.** The inventory is refreshed and the docs gate passes.
+3. **Done.** `make_bundles.py --check` runs in the Linux and macOS build jobs, which skip the same targets as the machine that wrote the fixtures. Windows is skipped because Slang can reach `fxc` (and `dxc` when installed) there, which adds targets the fixtures leave out.
+4. **Done.** X11 packages and the window capability library are in `release.yml` and `phase34.yml`.
 5. The full pre-commit gate from `AGENTS.md` on native and Node.
 
 ## Known limitations and follow-up bugs
@@ -73,6 +72,10 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 
 ### Generator
 
+- Shaders whose `@gpu_targets` fit none of the build's targets (a Metal-only shader in a Linux build) are left out with a warning; the module still gets its wrapper, and running the shader returns `GpuError.BackendNotCompiled`. The hosts cannot tell such an entry from an unknown name, which only raw host calls could produce.
+- Shader functions cannot be named after Slang keywords (`unused`, `double`, `layout`, ...), because entry points keep their Dream name; helpers and locals are renamed instead.
+- `switch` statements are unsupported in shaders; use `if`/`else if`.
+- Outside a shader, `GpuMath` and the other shader-only types do not exist, and the analyzer reports "variable GpuMath does not exist" rather than pointing at the shader requirement.
 - Unsupported in shaders: user struct methods, operator overloads, explicit enum values, named arguments, switch expressions, `for` loops over non-ranges.
 - Structs passed by value or stored in buffers use Slang's GPU layout (`GpuVec3` padding differs from the CPU layout).
 - Cooperative types: cooperative matrices are 8x8 only on Metal and unavailable on D3D12 (Slang lowers `CoopMat` only for SPIR-V, Metal and CUDA); cooperative vectors have no Metal or WebGPU lowering. Shaders that use them cannot also target D3D12 or CUDA in a portable test, because those targets need `dxc` and NVRTC on the build machine.

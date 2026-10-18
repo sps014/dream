@@ -12,7 +12,7 @@ Declare a provider function and inject its value with `@dep(provider)`.
 import system;
 import system.webapi;
 
-fun request_key(@header("X-Key")key: string): Result<string, HttpStatus> {
+fun request_key(@header("X-Key") key: string): Result<string, HttpStatus> {
     if key.is_empty() {
         return Result.Err(HttpStatus.unauthorized());
     }
@@ -22,7 +22,7 @@ fun request_key(@header("X-Key")key: string): Result<string, HttpStatus> {
 @router("")
 class Routes {
     @get("/key")
-    public static fun key(@dep(request_key)value: string): string {
+    public static fun key(@dep(request_key) value: string): string {
         return value;
     }
 }

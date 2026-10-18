@@ -6,7 +6,7 @@ This reference lists the public declarations for this part of the library. See [
 
 ## `GpuTargetsAttribute`
 
-Chooses which GPU APIs shaders are compiled for. This is the only place targets are chosen; there are no command-line flags for it.  On a `module` declaration it applies to every shader in the module. On a shader function it replaces the module's list for that shader. Without any `@gpu_targets`, shaders are compiled for `GpuTarget.WebGpu`, which runs in browsers and natively. Each build keeps only the listed targets it can use: wasm builds keep `WebGpu`, and native builds keep `WebGpu` plus the native APIs of the platform being built for. It is a build error when none of the listed targets fits the build.
+Chooses which GPU APIs shaders are compiled for. This is the only place targets are chosen; there are no command-line flags for it.  On a `module` declaration it applies to every shader in the module. On a shader function it replaces the module's list for that shader. Without any `@gpu_targets`, shaders are compiled for `GpuTarget.WebGpu`, which runs in browsers and natively. Each build keeps only the listed targets it can use: wasm builds keep `WebGpu`, and native builds keep `WebGpu` plus the native APIs of the platform being built for. A shader whose list fits none of them is left out of that build with a warning, and running it returns `GpuError.BackendNotCompiled`, so one program can carry platform-specific shaders.
 
 ```dream
 public struct GpuTargetsAttribute

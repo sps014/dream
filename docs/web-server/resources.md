@@ -31,7 +31,7 @@ class Overrides {
 @router("")
 class Routes {
     @get("/resource")
-    public static fun resource(@dep(connection)value: string): string {
+    public static fun resource(@dep(connection) value: string): string {
         return value;
     }
 }

@@ -17,7 +17,7 @@ import system.webapi.auth;
 class Routes {
     @requires_scopes("read")
     @get("/")
-    public static fun reports(@dep(CurrentUser)user: AuthPrincipal): string {
+    public static fun reports(@dep(CurrentUser) user: AuthPrincipal): string {
         return "Reports for " + user.subject;
     }
 }

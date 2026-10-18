@@ -10,13 +10,13 @@ import webapi_auth_tokens;
 class PrivateRoutes {
     @get("/")
     @requires_scopes("read")
-    public static fun read(@dep(CurrentUser)user: AuthPrincipal): string {
+    public static fun read(@dep(CurrentUser) user: AuthPrincipal): string {
         return user.subject;
     }
 
     @post("/")
     @requires_scopes("read")
-    public static fun write(@dep(CurrentUser)user: AuthPrincipal): string {
+    public static fun write(@dep(CurrentUser) user: AuthPrincipal): string {
         return user.subject;
     }
 }

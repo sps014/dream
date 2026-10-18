@@ -8,7 +8,7 @@
 
 use dream_host_gpu::backend::Backend;
 use dream_host_gpu::error::{self, Code, HostResult};
-use dream_host_gpu::{devices, guest, pipelines, resources, submit, surfaces, testing};
+use dream_host_gpu::{bundle, devices, guest, pipelines, resources, submit, surfaces, testing};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -351,6 +351,14 @@ fn child(backend: Backend) -> i32 {
         println!("RESULT skip: this host was built without {}", backend.name());
         return 0;
     }
+    // The committed bundles come from a machine without dxc, fxc or NVRTC.
+    let compiled = [SAXPY, TRIANGLE, GENERATED, QUAD]
+        .iter()
+        .all(|b| bundle::parse(b).is_ok_and(|b| b.target_for(backend).is_some()));
+    if !compiled {
+        println!("RESULT skip: the test bundles have no {} code", backend.name());
+        return 0;
+    }
     let mask = 1 << (backend as i32);
     let device = match devices::create_now(backend as i32, mask) {
         Ok(device) => device,
@@ -594,7 +602,11 @@ fn errors(device: i32) -> Result<(), String> {
 
     expect_err(pipelines::library_load(device, b"not a bundle"), Code::Invalid, "garbage bundle");
     let library = pipelines::library_load(device, SAXPY).map_err(|e| e.text())?;
-    expect_err(pipelines::compute_pipeline_create(library, "missing"), Code::Invalid, "unknown entry");
+    expect_err(
+        pipelines::compute_pipeline_create(library, "missing"),
+        Code::NotCompiled,
+        "entry without code for this backend",
+    );
     expect_err(
         pipelines::render_pipeline_create(library, "saxpy", library, "scale", &[0, 0, 0, 0, 0, 0, 0, 1, 0]),
         Code::Validation,

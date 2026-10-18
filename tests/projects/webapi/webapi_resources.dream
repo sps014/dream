@@ -21,35 +21,35 @@ fun resource_provider(): DependencyResource<string> {
 class ResourceRoutes {
     @get("/resource")
     public static fun resource(
-        @dep(resource_provider)first: string,
-        @dep(resource_provider)second: string
+        @dep(resource_provider) first: string,
+        @dep(resource_provider) second: string
     ): string {
         return first + second;
     }
 
     @get("/uncached")
     public static fun uncached(
-        @dep(resource_provider, false)first: string,
-        @dep(resource_provider, false)second: string
+        @dep(resource_provider, false) first: string,
+        @dep(resource_provider, false) second: string
     ): string {
         return first + second;
     }
 
     @get("/resource-stream")
-    public static async fun stream(@dep(resource_provider)resource: string): AsyncIterable<string> {
+    public static async fun stream(@dep(resource_provider) resource: string): AsyncIterable<string> {
         yield resource;
         Time.sleep(60000).await;
         yield "later";
     }
 
     @get("/resource-wait")
-    public static async fun wait(@dep(resource_provider)resource: string): string {
+    public static async fun wait(@dep(resource_provider) resource: string): string {
         Time.sleep(60000).await;
         return resource;
     }
 
     @get("/resource-fail")
-    public static fun fail(@dep(resource_provider)first: string, @query number: int): string {
+    public static fun fail(@dep(resource_provider) first: string, @query number: int): string {
         return first;
     }
 }

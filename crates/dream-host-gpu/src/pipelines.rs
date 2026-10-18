@@ -46,9 +46,11 @@ pub(crate) fn library(state: &State, handle: i32) -> HostResult<(Arc<bundle::Tar
 }
 
 pub(crate) fn entry<'a>(target: &'a bundle::Target, name: &str, stage: Stage) -> HostResult<&'a bundle::Entry> {
+    // Entry names come from wrappers generated with this bundle, so a missing one is a shader
+    // whose `@gpu_targets` leave out this backend.
     let found = target
         .entry(name)
-        .ok_or_else(|| HostError::invalid(format!("the shader library has no entry point `{name}`")))?;
+        .ok_or_else(|| HostError::new(Code::NotCompiled, (target.backend as i32).to_string()))?;
     if found.stage != stage {
         return Err(HostError::new(
             Code::Validation,

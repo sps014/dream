@@ -444,6 +444,9 @@ internal class SlangEmit {
                 }
                 condition.append("defined(" + Targets.define(t) + ")");
             }
+            if condition.length == 0 {
+                condition.append("0");
+            }
             w.line_of("#if " + condition.to_string());
         }
         this.entry_body(entry);

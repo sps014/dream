@@ -150,10 +150,10 @@ fun train_step(
 @compute(32, 1, 1)
 @gpu_targets(GpuTarget.Vulkan)
 fun evaluate_mlp(
-    @readonly @coop_shape(16, 32)layer0: GpuMlpWeights<float16>,
-    @readonly @coop_shape(32, 4)layer1: GpuMlpWeights<float16>,
-    @readonly @coop_shape(16)features: GpuBuffer<GpuCoopVec<float16>>,
-    @coop_shape(4)out: GpuBuffer<GpuCoopVec<float16>>
+    @readonly @coop_shape(16, 32) layer0: GpuMlpWeights<float16>,
+    @readonly @coop_shape(32, 4) layer1: GpuMlpWeights<float16>,
+    @readonly @coop_shape(16) features: GpuBuffer<GpuCoopVec<float16>>,
+    @coop_shape(4) out: GpuBuffer<GpuCoopVec<float16>>
 ): void {
     let i = global_id().x;
     let hidden = GpuCoopVec.relu(layer0.apply(features[i]));

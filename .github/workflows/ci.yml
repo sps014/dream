@@ -130,6 +130,11 @@ jobs:
           path: ~/.dream/toolchains/slang-2026.20
           key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
       - run: cargo run --locked -p dreamer -- toolchain install slang
+      # Linux and macOS skip the same targets (dxil, dxbc and ptx need dxc, fxc and NVRTC), so
+      # their bundles must match the committed fixtures byte for byte.
+      - name: Check GPU host test bundles are fresh
+        if: runner.os != 'Windows'
+        run: python3 crates/dream-host-gpu/tests/fixtures/make_bundles.py --check
       - name: Check runnable documentation examples
         run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings

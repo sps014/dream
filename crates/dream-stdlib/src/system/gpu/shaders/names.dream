@@ -9,15 +9,21 @@ let shader_reserved_words: List<string> = List<string>();
 // translation calls get a trailing underscore; everything else keeps its Dream spelling.
 internal static class Names {
     internal static fun ident(name: string): string {
+        if Names.is_reserved(name) {
+            return name + "_";
+        }
+        return name;
+    }
+
+    // Entry points keep their Dream name in the compiled code, so a reserved one cannot be
+    // renamed and is rejected instead.
+    internal static fun is_reserved(name: string): bool {
         if shader_reserved_words.is_empty() {
             for (let w in Names.reserved()) {
                 shader_reserved_words.push(w);
             }
         }
-        if name.starts_with("dream_") || shader_reserved_words.contains(name) {
-            return name + "_";
-        }
-        return name;
+        return name.starts_with("dream_") || shader_reserved_words.contains(name);
     }
 
     static fun reserved(): List<string> {
@@ -33,7 +39,12 @@ internal static class Names {
             + "sin cos tan asin acos atan atan2 exp exp2 log log2 pow sqrt rsqrt abs sign "
             + "floor ceil round frac min max clamp saturate lerp step smoothstep mad reflect "
             + "refract ddx ddy fwidth dot cross length normalize transpose mul all any asfloat "
-            + "asuint diffPair fwd_diff bwd_diff linalg main";
+            + "asuint diffPair fwd_diff bwd_diff linalg main "
+            + "unused inline require param dynamic_uniform override layout noperspective coherent "
+            + "restrict readonly writeonly dyn unorm snorm globallycoherent no_diff nonuniform "
+            + "each expand func operator highp mediump lowp vertices InputPatch OutputPatch "
+            + "PointStream LineStream TriangleStream none nullptr countof Ptr Ref Optional "
+            + "Tuple Array printf static_assert select spirv_asm";
         let out = List<string>();
         for (let w in words.split(' ')) {
             if !w.is_empty() {

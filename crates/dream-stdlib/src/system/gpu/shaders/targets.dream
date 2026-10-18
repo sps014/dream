@@ -115,7 +115,8 @@ internal static class Targets {
     }
 
     // Reads `@gpu_targets` for `entry`: its own attribute wins over its module's, and
-    // `GpuTarget.WebGpu` is the default. Reports a list that no target of this build can use.
+    // `GpuTarget.WebGpu` is the default. A list that no target of this build can use leaves
+    // the shader out of this build, so platform-specific shaders can share a program.
     internal static fun select(ctx: GenContext, entry: ShaderEntry): void {
         let found = false;
         switch (entry.function.attribute<GpuTargetsAttribute>()) {
@@ -163,9 +164,14 @@ internal static class Targets {
             if platform == "macOS" {
                 hint = "GpuTarget.Metal or GpuTarget.WebGpu";
             }
-            ctx.error_at(
+            ctx.warning_at(
                 entry.targets_at,
-                "no @gpu_targets entry can run on " + platform + "; add " + hint
+                "'"
+                    + entry.name()
+                    + "' has no @gpu_targets that can run on "
+                    + platform
+                    + ", so this build leaves it out and running it fails with "
+                    + "GpuError.BackendNotCompiled; add " + hint + " to include it"
             );
         }
     }

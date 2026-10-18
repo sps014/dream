@@ -264,6 +264,39 @@ fn heap_classes_strings_and_closures_are_rejected() {
 
 #[test]
 #[ignore = "needs the pinned slang toolchain"]
+fn an_unknown_builtin_does_not_cascade_into_its_siblings() {
+    let dir = project(
+        "module shaders;\nimport system.gpu;\n\n@vertex\npublic fun corner(): GpuVec4 {\n    let x = GpuMath.radians(1.0f) * (float)vertex_id();\n    return GpuVec4.of(x, 0.0f, 0.0f, 1.0f);\n}\n",
+        MAIN,
+    );
+    let output = build_with(dir.path(), &["--wasm"]);
+    let text = log(&output);
+    assert!(!output.status.success(), "{text}");
+    reports(&text, &[("'radians' is not available in GPU shaders", 6)]);
+    assert!(!text.contains("'vertex_id' is a CPU function"), "{text}");
+}
+
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn slang_reserved_words_are_renamed_in_helpers_and_rejected_as_shader_names() {
+    rejects(
+        "module shaders;\nimport system.gpu;\n\n@gpu\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun unused(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
+        false,
+        &[(
+            "'unused' is a reserved word in the Slang shader language; rename this shader",
+            11,
+        )],
+    );
+    let dir = project(
+        "module shaders;\nimport system.gpu;\n\n@gpu\nfun inline(layout: int): int {\n    let each = layout + 1;\n    return each;\n}\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    out[0] = inline(1);\n}\n",
+        MAIN,
+    );
+    let output = build_with(dir.path(), &["--wasm"]);
+    assert!(output.status.success(), "{}", log(&output));
+}
+
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
 fn unsupported_types_and_labeled_break_are_rejected() {
     rejects(
         "module shaders;\nimport system.gpu;\n\n@compute(1)\npublic fun run(out: GpuBuffer<int>): void {\n    let wide: usize = 1;\n    outer: while true {\n        break outer;\n    }\n    out[0] = 1;\n}\n",
@@ -338,6 +371,45 @@ fn too_many_storage_buffers_for_native_webgpu_warn() {
     assert!(!log(&web).contains("storage buffers together"), "{}", log(&web));
 }
 
+/// A shader limited to targets the build cannot use is left out with a warning, so one program
+/// can carry platform-specific shaders, even when that leaves a module with no shader at all.
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn shaders_for_other_platforms_are_left_out_with_a_warning() {
+    let dir = project(
+        "module shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun twice(data: GpuBuffer<float>): void {\n    let i = global_id().x;\n    data[i] = data[i] * 2.0f;\n}\n\n@gpu_targets(GpuTarget.Metal)\n@compute(64)\npublic fun halve(data: GpuBuffer<float>): void {\n    let i = global_id().x;\n    data[i] = data[i] * 0.5f;\n}\n",
+        MAIN,
+    );
+    let output = build(dir.path(), true);
+    let text = log(&output);
+    assert!(output.status.success(), "{text}");
+    reports(
+        &text,
+        &[(
+            "'halve' has no @gpu_targets that can run on Linux, so this build leaves it out",
+            12,
+        )],
+    );
+    let apple = build_with(dir.path(), APPLE);
+    assert!(apple.status.success(), "{}", log(&apple));
+    assert!(!log(&apple).contains("leaves it out"), "{}", log(&apple));
+
+    let dir = project(
+        "@gpu_targets(GpuTarget.Metal)\nmodule shaders;\nimport system.gpu;\n\n@compute(64)\npublic fun halve(data: GpuBuffer<float>): void {\n    let i = global_id().x;\n    data[i] = data[i] * 0.5f;\n}\n",
+        MAIN,
+    );
+    let web = build(dir.path(), false);
+    let text = log(&web);
+    assert!(web.status.success(), "{text}");
+    reports(
+        &text,
+        &[(
+            "'halve' has no @gpu_targets that can run on wasm32, so this build leaves it out",
+            2,
+        )],
+    );
+}
+
 #[test]
 #[ignore = "needs the pinned slang toolchain"]
 fn cuda_render_stages_and_unusable_targets_are_rejected() {
@@ -350,7 +422,7 @@ fn cuda_render_stages_and_unusable_targets_are_rejected() {
                 6,
             ),
             (
-                "no @gpu_targets entry can run on wasm32; add GpuTarget.WebGpu",
+                "'corner' has no @gpu_targets that can run on wasm32, so this build leaves it out",
                 2,
             ),
         ],

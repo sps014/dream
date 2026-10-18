@@ -3969,7 +3969,8 @@ function makeGpuHost() {
   const shaderOf = (library, name, stage) => {
     if (library.bad) throw new GpuFailure("EINVALID", library.bad);
     const entry = library.target.entries.find(e => e.name === name);
-    if (!entry) throw new GpuFailure("EINVALID", "the shader bundle has no entry point " + name);
+    // A shader whose @gpu_targets leave out WebGPU (GpuBackend 6) has no WGSL entry.
+    if (!entry) throw new GpuFailure("ENOTCOMPILED", "6");
     if (entry.stage !== stage) throw new GpuFailure("EVALIDATION", name + " is a " + entry.stage + " shader, not " + stage);
     for (const capability of entry.capabilities) {
       const feature = GPU_CAPABILITY_FEATURES.get(capability);

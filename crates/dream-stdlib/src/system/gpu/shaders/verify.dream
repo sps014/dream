@@ -17,6 +17,12 @@ internal static class Verify {
         if f.is_async {
             ctx.error_at(f.id, "GPU shaders cannot be async");
         }
+        if program.is_entry(f.id) && Names.is_reserved(f.name) {
+            ctx.error_at(
+                f.id,
+                "'" + f.name + "' is a reserved word in the Slang shader language; rename this shader"
+            );
+        }
         if !f.generics.is_empty() {
             ctx.error_at(f.id, "GPU shaders cannot be generic");
         }
@@ -308,6 +314,11 @@ internal static class Verify {
                 );
             }
         } else if free {
+            // An unresolved call has already been reported, by the analyzer or as the error
+            // that left this expression unchecked.
+            if n.symbol.is_empty() && n.ty.kind == TypeRefKind.Unknown {
+                return;
+            }
             if n.symbol_kind == "type" {
                 Verify.value_type(ctx, program, n.ty, n.id);
             } else if program.is_user_function(n.symbol) {

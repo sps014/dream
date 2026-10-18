@@ -108,6 +108,14 @@ fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
         ctx.emit_artifact(m.stem() + ".slang", artifact.to_string(), artifact.source_map, true);
         Targets.request(ctx, m, layouts);
     }
+    // Without a tool request there is no next phase, so a program whose shaders all target
+    // other platforms gets its empty bundles and wrappers now.
+    for (let m in program.modules) {
+        if !m.targets().is_empty() {
+            return;
+        }
+    }
+    finish(ctx, program);
 }
 
 // Native WebGPU (Dawn) pipelines bind the globals of every shader in their module, because a

@@ -565,11 +565,17 @@ fn environment(system: &SystemDirs, scratch: &Path) -> Result<Vec<u16>, String> 
     path.push(system.system32.join("Wbem"));
     let root = system.root.as_os_str();
     let scratch = scratch.as_os_str();
+    // CreateProcessW finds the AppContainer profile under this block's LOCALAPPDATA and fails
+    // with ERROR_ENVVAR_NOT_FOUND without it; the child then sees LOCALAPPDATA, TEMP and TMP
+    // rerouted into that profile.
+    let local_app_data = std::env::var_os("LOCALAPPDATA")
+        .ok_or("sandboxing a generator tool needs the LOCALAPPDATA environment variable")?;
     // CreateProcessW expects the block sorted case-insensitively by name.
-    let vars: [(&str, &OsStr); 9] = [
+    let vars: [(&str, &OsStr); 10] = [
         ("HOME", scratch),
         ("LANG", OsStr::new("C")),
         ("LC_ALL", OsStr::new("C")),
+        ("LOCALAPPDATA", &local_app_data),
         ("PATH", &path),
         ("SystemRoot", root),
         ("TEMP", scratch),

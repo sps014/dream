@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the DGPB v0 test bundles in this directory (docs/internals/18-gpu-shader-bundle.md).
 
-    python3 make_bundles.py [<slang toolchain root>]
+    python3 make_bundles.py [--check] [<slang toolchain root>]
 
 The root defaults to $DREAM_SLANG, else ~/.dream/toolchains/slang-<version>; it must contain
 bin/slangc and bin/dream-slang-layout (`dreamer toolchain install slang`). This stands in for the
@@ -84,8 +84,9 @@ MODULES = {
 
 
 def tool_root() -> Path:
-    if len(sys.argv) > 1:
-        return Path(sys.argv[1])
+    roots = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if roots:
+        return Path(roots[0])
     if os.environ.get("DREAM_SLANG"):
         return Path(os.environ["DREAM_SLANG"])
     return Path.home() / ".dream" / "toolchains" / f"slang-{VERSION}"
@@ -199,19 +200,29 @@ def write_bundle(targets: list[dict]) -> bytes:
 
 
 def main():
+    check = "--check" in sys.argv[1:]
     root = tool_root()
     for tool in ("slangc", "dream-slang-layout"):
         if not (root / "bin" / tool).exists() and not (root / "bin" / f"{tool}.exe").exists():
             sys.exit(f"{root}/bin/{tool} is missing; run `dreamer toolchain install slang`")
+    stale = []
     with tempfile.TemporaryDirectory() as tmp:
         for module in MODULES:
             built, skipped = [], []
             for target in TARGETS:
                 compiled = compile_target(root, module, target, Path(tmp))
                 (built if compiled else skipped).append(compiled or target)
-            (HERE / f"{module}.dgpb").write_bytes(write_bundle(built))
+            path = HERE / f"{module}.dgpb"
+            bundle = write_bundle(built)
+            if check:
+                if not path.exists() or path.read_bytes() != bundle:
+                    stale.append(path.name)
+            else:
+                path.write_bytes(bundle)
             print(f"{module}.dgpb: {', '.join(t['name'] for t in built)}"
                   + (f" (skipped {', '.join(skipped)})" if skipped else ""))
+    if stale:
+        sys.exit(f"stale bundles: {', '.join(stale)}; run `python3 {Path(__file__).name}` and commit them")
 
 
 if __name__ == "__main__":

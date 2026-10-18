@@ -66,10 +66,10 @@ fun coop_expect_unsupported(
 @gpu_targets(GpuTarget.Vulkan)
 @compute(32, 1, 1)
 fun evaluate_mlp(
-    @readonly @coop_shape(16, 32)layer0: GpuMlpWeights<float16>,
-    @readonly @coop_shape(32, 4)layer1: GpuMlpWeights<float16>,
-    @readonly @coop_shape(16)features: GpuBuffer<GpuCoopVec<float16>>,
-    @coop_shape(4)out: GpuBuffer<GpuCoopVec<float16>>
+    @readonly @coop_shape(16, 32) layer0: GpuMlpWeights<float16>,
+    @readonly @coop_shape(32, 4) layer1: GpuMlpWeights<float16>,
+    @readonly @coop_shape(16) features: GpuBuffer<GpuCoopVec<float16>>,
+    @coop_shape(4) out: GpuBuffer<GpuCoopVec<float16>>
 ): void {
     let i = global_id().x;
     let hidden = GpuCoopVec.relu(layer0.apply(features[i]));
@@ -232,6 +232,27 @@ async fun coop_tiles(device: GpuDevice, label: string): void {
     let right = coop_ok(device.buffer_from(b), "tile b");
     let c = coop_ok(device.buffer_alloc<float16>(count), "tile out");
     let run: Result<bool, GpuError> = Result.Ok(true);
+    if size != 8 {
+        // The 8x8 shader is built for Metal only, so other devices have no code for it.
+        let foreign = GpuShaders.tile_multiply_8.dispatch(
+            device,
+            GpuDispatch.threads_1d(32),
+            left,
+            right,
+            c
+        ).await;
+        switch (foreign) {
+            Err(GpuError.BackendNotCompiled(backend)) => {
+                Assert.is_true(backend == device.backend);
+            }
+            Ok(_) => {
+                Assert.fail("the Metal-only tile shader ran on " + label);
+            }
+            Err(e) => {
+                Assert.fail("expected BackendNotCompiled on " + label + ", got " + e.message());
+            }
+        }
+    }
     if size == 8 {
         run = GpuShaders.tile_multiply_8.dispatch(
             device,

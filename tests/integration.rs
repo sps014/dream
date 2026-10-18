@@ -21,6 +21,7 @@ mod e2e_tests;
 mod generator_cache;
 mod generator_extensions;
 mod generator_framework;
+mod generator_scope;
 mod gpu_api;
 mod gpu_shaders;
 mod host_capability_tests;

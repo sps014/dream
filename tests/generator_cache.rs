@@ -81,7 +81,11 @@ fn untriggered_generator_is_skipped_without_a_process() {
     }
     let dir = project("skip", PLAIN_JSON_IMPORT);
     let (lines, _) = compile(&dir);
-    assert!(has(&lines, "gen json_derive: skipped"), "{:?}", lines);
+    assert!(
+        has(&lines, "gen system.json.derive::json_derive: skipped"),
+        "{:?}",
+        lines
+    );
     assert!(
         !lines
             .iter()
@@ -101,7 +105,11 @@ fn unchanged_incremental_input_replays_and_survives_relocation() {
     let dir = project("replay", JSON_PROGRAM);
     let (_, first_ir) = compile(&dir);
     let (warm, warm_ir) = compile(&dir);
-    assert!(has(&warm, "gen json_derive: result hit"), "{:?}", warm);
+    assert!(
+        has(&warm, "gen system.json.derive::json_derive: result hit"),
+        "{:?}",
+        warm
+    );
     assert!(
         !warm
             .iter()
@@ -117,7 +125,10 @@ fn unchanged_incremental_input_replays_and_survives_relocation() {
     let moved = project("replay_moved", JSON_PROGRAM);
     let (relocated, _) = compile(&moved);
     assert!(
-        has(&relocated, "gen json_derive: result hit"),
+        has(
+            &relocated,
+            "gen system.json.derive::json_derive: result hit"
+        ),
         "{:?}",
         relocated
     );

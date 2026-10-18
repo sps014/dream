@@ -465,6 +465,7 @@ pub fn corpus_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
         if path.is_dir() {
             let name = path.file_name().unwrap();
             if name != "target"
+                && name != "generated"
                 && name != "dream_packages"
                 && !name.to_string_lossy().starts_with('.')
             {

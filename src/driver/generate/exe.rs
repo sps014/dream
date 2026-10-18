@@ -1,6 +1,6 @@
 //! Cached generator executables: one linked, debuggable binary per generator module (a user
 //! file or a std generator package), dispatching on `--generator <name>`. Entries live under
-//! `<generator cache>/exe/<key>/` and are built at most once at a time per key (a file lock).
+//! `<project>/target/obj/generators/exe/<key>/` and are built at most once at a time per key (a file lock).
 //! They are built in place, never moved: the macOS debug map names `gen.o` by absolute path.
 //! `meta.json` is written last, so an interrupted build is never mistaken for a finished one.
 
@@ -77,6 +77,9 @@ pub fn group<'g>(gens: &[&'g RegisteredGenerator]) -> Vec<ExeGroup<'g>> {
 
 fn harness_source(group: &ExeGroup<'_>) -> String {
     let mut src = String::new();
+    if !group.first().module.is_empty() {
+        let _ = writeln!(src, "module {};", group.first().module);
+    }
     let _ = writeln!(
         src,
         "import system;\nimport system.io;\nimport system.collections;\nimport system.codegen;\nimport {};\n",
@@ -86,10 +89,10 @@ fn harness_source(group: &ExeGroup<'_>) -> String {
     src.push_str("    let loaded = GenContext.load(System.args).await;\n");
     src.push_str("    switch (loaded) {\n");
     src.push_str("        Ok(gen_ctx) => {\n");
-    src.push_str("            let name = gen_ctx.generator_name;\n");
+    src.push_str("            let name = gen_ctx.generator_id;\n");
     for (i, registered) in group.gens.iter().enumerate() {
         let kw = if i == 0 { "if" } else { "} else if" };
-        let _ = writeln!(src, "            {kw} name == \"{}\" {{", registered.name);
+        let _ = writeln!(src, "            {kw} name == \"{}\" {{", registered.id);
         // A sink `ctx: GenContext` parameter moves `arg`, so `gen_ctx` still owns the
         // context for `finish()`.
         let _ = writeln!(
@@ -151,7 +154,12 @@ fn user_sources(entry: &str, harness: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-pub fn plan(config: &ToolchainConfig, identity: &str, group: &ExeGroup<'_>) -> ExePlan {
+pub fn plan(
+    config: &ToolchainConfig,
+    identity: &str,
+    paths: &super::paths::ProjectPaths,
+    group: &ExeGroup<'_>,
+) -> ExePlan {
     let cache_root = config.generator_cache_root();
     let harness = harness_source(group);
     let entry = group.entry_path(&cache_root).to_string_lossy().into_owned();
@@ -176,12 +184,12 @@ pub fn plan(config: &ToolchainConfig, identity: &str, group: &ExeGroup<'_>) -> E
     }
     let key = hash.finalize().to_hex().to_string();
     ExePlan {
-        dir: cache_root.join("exe").join(&key),
+        dir: paths.build_dir().join("exe").join(&key),
         key,
         entry,
         harness,
         stage,
-        generators: group.gens.iter().map(|g| g.name.clone()).collect(),
+        generators: group.gens.iter().map(|g| g.id.clone()).collect(),
         components,
     }
 }

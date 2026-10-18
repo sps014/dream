@@ -78,7 +78,7 @@ fn report(
         Some((file, span)) => (file.map(str::to_string), Some(span)),
         None => (Some(registered.file.clone()), registered.span),
     };
-    let note = format!("reported by generator '{}'", registered.name);
+    let note = format!("reported by generator '{}'", registered.id);
     let diagnostic = if error {
         Diagnostic::new(message, span, file)
     } else {
@@ -94,12 +94,20 @@ pub fn apply(
 ) -> Applied {
     let mut applied = Applied::default();
     let mut publish_owner: IndexMap<String, String> = IndexMap::new();
-    let mut file_owner: IndexMap<String, String> = IndexMap::new();
+    let mut file_owner: IndexMap<std::path::PathBuf, String> = runs
+        .iter()
+        .map(|run| {
+            (
+                super::paths::generator_dir(root, &run.registered.id).join("outputs.json"),
+                run.registered.id.clone(),
+            )
+        })
+        .collect();
     for run in runs {
         let registered = run.registered;
         let mut failed = false;
         if run.result.version != super::model::SNAPSHOT_VERSION
-            || run.result.generator != registered.name
+            || run.result.generator != registered.id
         {
             report(
                 diagnostics,
@@ -108,12 +116,12 @@ pub fn apply(
                 "generator result has an invalid protocol identity".to_string(),
                 "",
             );
-            applied.failed.push(registered.name.clone());
+            applied.failed.push(registered.id.clone());
             continue;
         }
         if let Err(message) = super::transcript::validate(&run.result, &registered.tools) {
             report(diagnostics, run, true, message, "");
-            applied.failed.push(registered.name.clone());
+            applied.failed.push(registered.id.clone());
             continue;
         }
         for d in &run.result.diagnostics {
@@ -138,8 +146,7 @@ pub fn apply(
                     {
                         report(diagnostics, run, error, d.message.clone(), &mapping.target);
                     } else {
-                        let path = root
-                            .join(&registered.name)
+                        let path = super::paths::generator_dir(root, &registered.id)
                             .join(&d.artifact)
                             .to_string_lossy()
                             .into_owned();
@@ -151,7 +158,7 @@ pub fn apply(
                         };
                         diagnostics.report(
                             diagnostic
-                                .with_note(format!("reported by generator '{}'", registered.name)),
+                                .with_note(format!("reported by generator '{}'", registered.id)),
                         );
                     }
                 } else {
@@ -169,6 +176,29 @@ pub fn apply(
             }
         }
         for output in &run.result.outputs {
+            if let Output::File { path, .. } | Output::Artifact { path, .. } = output {
+                let own = super::paths::generator_dir(root, &registered.id);
+                let location = own.join(path);
+                if runs.iter().any(|other| {
+                    let directory = super::paths::generator_dir(root, &other.registered.id);
+                    other.registered.id != registered.id
+                        && directory.starts_with(&own)
+                        && location.starts_with(directory)
+                }) {
+                    report(
+                        diagnostics,
+                        run,
+                        true,
+                        format!(
+                            "generator '{}' output '{path}' overlaps another generator's folder",
+                            registered.id
+                        ),
+                        "",
+                    );
+                    failed = true;
+                    continue;
+                }
+            }
             match output {
                 Output::Replace { site, source } => match run.sites.get(site) {
                     Some(key) => {
@@ -183,7 +213,7 @@ pub fn apply(
                                 true,
                                 format!(
                                     "generator '{}' replaced syntax block '{site}' twice",
-                                    registered.name
+                                    registered.id
                                 ),
                                 site,
                             );
@@ -197,7 +227,7 @@ pub fn apply(
                             true,
                             format!(
                                 "generator '{}' replaced unknown syntax block '{site}'",
-                                registered.name
+                                registered.id
                             ),
                             "",
                         );
@@ -211,7 +241,7 @@ pub fn apply(
                     publish,
                     binary,
                 } => {
-                    let key = format!("{}/{path}", registered.name);
+                    let key = super::paths::generator_dir(root, &registered.id).join(path);
                     let bytes = super::artifacts::artifact_bytes(contents, *binary);
                     let valid = super::artifacts::valid_artifact_path(path)
                         && bytes.is_some()
@@ -221,10 +251,10 @@ pub fn apply(
                                 && run.spans.get(&m.target).is_some()
                         });
                     if !valid
-                        || file_owner.insert(key, registered.name.clone()).is_some()
+                        || file_owner.insert(key, registered.id.clone()).is_some()
                         || (*publish
                             && publish_owner
-                                .insert(path.clone(), registered.name.clone())
+                                .insert(path.clone(), registered.id.clone())
                                 .is_some())
                     {
                         report(
@@ -233,7 +263,7 @@ pub fn apply(
                             true,
                             format!(
                                 "generator '{}' emitted invalid or duplicate artifact '{path}'",
-                                registered.name
+                                registered.id
                             ),
                             "",
                         );
@@ -241,7 +271,7 @@ pub fn apply(
                         continue;
                     }
                     applied.artifacts.push(GeneratedArtifact {
-                        generator: registered.name.clone(),
+                        generator: registered.id.clone(),
                         path: path.clone(),
                         contents: bytes.unwrap_or_default(),
                         publish: *publish,
@@ -265,7 +295,7 @@ pub fn apply(
                             applied.consumed.insert(
                                 target.clone(),
                                 dream_sema::module_graph::ConsumedBy {
-                                    generator: registered.name.clone(),
+                                    generator: registered.id.clone(),
                                     file: file.clone(),
                                     span: *span,
                                     help: help.clone(),
@@ -332,7 +362,7 @@ pub fn apply(
                         Some(Ok(bytes))
                             if super::artifacts::valid_artifact_path(path)
                                 && publish_owner
-                                    .insert(path.clone(), registered.name.clone())
+                                    .insert(path.clone(), registered.id.clone())
                                     .is_none() =>
                         {
                             applied.published.push(PublishedOutput {
@@ -347,7 +377,7 @@ pub fn apply(
                                 true,
                                 format!(
                                     "generator '{}' published '{path}' from an unknown tool output or to an invalid or duplicate path",
-                                    registered.name
+                                    registered.id
                                 ),
                                 "",
                             );
@@ -363,27 +393,27 @@ pub fn apply(
                             true,
                             format!(
                                 "generator '{}' emitted file '{path}'; generated paths must be relative '.dream' paths without '..'",
-                                registered.name
+                                registered.id
                             ),
                             "",
                         );
                         failed = true;
                         continue;
                     }
-                    let key = format!("{}/{path}", registered.name);
-                    if file_owner.insert(key, registered.name.clone()).is_some() {
+                    let key = super::paths::generator_dir(root, &registered.id).join(path);
+                    if file_owner.insert(key, registered.id.clone()).is_some() {
                         report(
                             diagnostics,
                             run,
                             true,
-                            format!("generator '{}' emitted '{path}' twice", registered.name),
+                            format!("generator '{}' emitted '{path}' twice", registered.id),
                             "",
                         );
                         failed = true;
                         continue;
                     }
                     applied.files.push(GeneratedFile {
-                        generator: registered.name.clone(),
+                        generator: registered.id.clone(),
                         path: path.clone(),
                         source: source.clone(),
                     });
@@ -391,7 +421,7 @@ pub fn apply(
             }
         }
         if failed {
-            applied.failed.push(registered.name.clone());
+            applied.failed.push(registered.id.clone());
         }
     }
     applied
@@ -468,7 +498,7 @@ mod tests {
             sites: Default::default(),
             result: super::GenResult {
                 version: super::super::model::SNAPSHOT_VERSION,
-                generator: generator.name.clone(),
+                generator: generator.id.clone(),
                 outputs,
                 ..Default::default()
             },
@@ -545,7 +575,7 @@ mod tests {
         b.result = serde_json::from_str(&serde_json::to_string(&b.result).unwrap()).unwrap();
         let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
         let applied = super::apply(&[a, b], std::path::Path::new("generated"), &mut diagnostics);
-        assert_eq!(applied.consumed["::selected"].generator, "first");
+        assert_eq!(applied.consumed["::selected"].generator, "::first");
         assert_eq!(diagnostics.diagnostics.len(), 2);
         assert!(
             diagnostics

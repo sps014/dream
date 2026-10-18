@@ -528,6 +528,12 @@ impl<'a> Analyzer<'a> {
             &store_sig.declaring_file,
             store_sig.visibility,
             parent_function.file_path.as_ref(),
+        ) && !self.generator_can_access(
+            &dream_abi::attributes::decl_identity(
+                &self.type_ctx.defs.get(store_sig.identity.0).module_path,
+                &self.type_ctx.defs.get(store_sig.identity.0).name,
+            ),
+            parent_function.file_path.as_ref(),
         ) {
             self.report_not_public(
                 "Function",

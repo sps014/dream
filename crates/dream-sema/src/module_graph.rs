@@ -72,9 +72,14 @@ pub struct ConsumedBy {
 pub struct ModuleGraph<'a> {
     pub modules: Vec<SourceModule>,
     pub files: Vec<SourceFile<'a>>,
-    /// Files written by source generators. Their code belongs to the declarations it was
-    /// generated for, so it sees file-private declarations of every file.
+    /// Compiler-made sources, including harnesses, helper declarations and generator outputs.
     pub generated_files: IndexSet<String>,
+    /// Generator outputs follow module visibility; compiler harnesses retain their explicit privileges.
+    pub generator_output_files: IndexMap<String, String>,
+    /// Embedded derives may use internal stdlib helpers without exposing them to user generators.
+    pub std_generator_output_files: IndexSet<String>,
+    /// Declarations explicitly selected by a generator and their resolved input dependencies.
+    pub generator_access: IndexMap<String, IndexSet<String>>,
     pub embedded_assets: IndexMap<String, Vec<u8>>,
     pub consumed: IndexMap<String, ConsumedBy>,
 }
@@ -179,6 +184,9 @@ impl<'a> ModuleGraph<'a> {
             modules,
             files,
             generated_files: IndexSet::new(),
+            generator_output_files: IndexMap::new(),
+            std_generator_output_files: IndexSet::new(),
+            generator_access: IndexMap::new(),
             consumed: IndexMap::new(),
             embedded_assets: IndexMap::new(),
         };

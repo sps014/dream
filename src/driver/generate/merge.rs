@@ -23,6 +23,8 @@ pub fn merge_generated_file<'a>(
 ) -> Result<(), Error> {
     acc.file_contents.insert(path.to_string(), text.clone());
     acc.generated_files.insert(path.to_string());
+    acc.generator_output_files
+        .insert(path.to_string(), generator.to_string());
     let mut local = DiagnosticBag::new(Some(path.to_string()));
     let lexer = dream_syntax::lexer::Lexer::new(text);
     let mut parser = dream_syntax::parser::Parser::new(lexer, arena, &mut local);

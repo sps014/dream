@@ -31,7 +31,12 @@ pub struct GenInspection {
 
 impl GenInspection {
     pub fn find(&self, name: &str) -> Option<&InspectedGenerator> {
-        self.generators.iter().find(|g| g.registered.name == name)
+        if let Some(generator) = self.generators.iter().find(|g| g.registered.id == name) {
+            return Some(generator);
+        }
+        let mut matches = self.generators.iter().filter(|g| g.registered.name == name);
+        let first = matches.next()?;
+        matches.next().is_none().then_some(first)
     }
 }
 
@@ -47,14 +52,11 @@ pub fn inspect(
     let groups = super::exe::group(&refs);
     let plans: Vec<ExePlan> = groups
         .iter()
-        .map(|g| super::exe::plan(req.config, &identity, g))
+        .map(|g| super::exe::plan(req.config, &identity, &inputs.paths, g))
         .collect();
     let mut generators = Vec::with_capacity(inputs.gens.len());
     for registered in &inputs.gens {
-        let Some(plan) = plans
-            .iter()
-            .find(|p| p.generators.contains(&registered.name))
-        else {
+        let Some(plan) = plans.iter().find(|p| p.generators.contains(&registered.id)) else {
             continue;
         };
         let applicable = inputs.applicable(registered, acc, attributes);
@@ -75,7 +77,7 @@ pub fn inspect(
             sites: inputs
                 .sites
                 .iter()
-                .filter(|s| s.name == registered.name)
+                .filter(|s| s.generator.as_deref() == Some(registered.id.as_str()))
                 .count(),
             calls: inputs
                 .calls
@@ -94,7 +96,7 @@ pub fn inspect(
     }
     GenInspection {
         entry: req.entry_file.to_string(),
-        generated_root: inputs.generated_root(req.config, req.entry_file),
+        generated_root: inputs.generated_root(req.entry_file),
         generators,
     }
 }

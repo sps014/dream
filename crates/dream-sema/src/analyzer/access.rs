@@ -1,6 +1,60 @@
 use super::*;
 
 impl<'a> Analyzer<'a> {
+    pub(in crate::analyzer) fn trusted_generated_file(&self, file: &str) -> bool {
+        self.generated_files.contains(file) && !self.graph.generator_output_files.contains_key(file)
+    }
+
+    pub(in crate::analyzer) fn generator_can_access(
+        &self,
+        id: &str,
+        caller: Option<&Rc<str>>,
+    ) -> bool {
+        caller
+            .and_then(|file| self.graph.generator_output_files.get(file.as_ref()))
+            .and_then(|generator| self.graph.generator_access.get(generator))
+            .is_some_and(|access| access.contains(id))
+    }
+
+    pub(in crate::analyzer) fn generator_can_access_type(
+        &self,
+        name: &str,
+        caller: Option<&Rc<str>>,
+    ) -> bool {
+        let Some(generator) =
+            caller.and_then(|file| self.graph.generator_output_files.get(file.as_ref()))
+        else {
+            return false;
+        };
+        let Some(kind) = self.type_ctx.nominal_kind(name) else {
+            return false;
+        };
+        let Some(def) = self.type_ctx.resolve(kind, name) else {
+            return false;
+        };
+        let info = self.type_ctx.defs.get(def);
+        let id = dream_abi::attributes::decl_identity(&info.module_path, &info.name);
+        if self
+            .graph
+            .generator_access
+            .get(generator)
+            .is_some_and(|access| access.contains(&id))
+        {
+            return true;
+        }
+        self.graph
+            .files
+            .iter()
+            .filter(|file| self.graph.generator_output_files.get(&file.path) == Some(generator))
+            .any(|file| {
+                file.program.extends.iter().any(|extension| {
+                    self.type_ctx
+                        .resolve_from(file.module, kind, &extension.target.text)
+                        == Some(def)
+                })
+            })
+    }
+
     /// The declared module path of `file`, or `None` for a file with no `module` declaration (the
     /// implicit root module). Two `None`s are *not* automatically "the same module" by identity —
     /// callers compare `(file, module_of(file))` pairs (see [`Self::same_module`]) so unmoded files
@@ -31,7 +85,7 @@ impl<'a> Analyzer<'a> {
         caller_file: Option<&Rc<str>>,
     ) -> bool {
         self.same_module(decl_file, caller_file)
-            || caller_file.is_some_and(|c| self.generated_files.contains(c))
+            || caller_file.is_some_and(|c| self.trusted_generated_file(c))
             // A generated file belongs to the module it was emitted into; one emitted into the
             // unnamed root module serves the unmoded user files.
             || (decl_file.is_some_and(|d| self.generated_files.contains(d))
@@ -39,7 +93,8 @@ impl<'a> Analyzer<'a> {
                 && self.module_of(decl_file) == self.module_of(caller_file))
             // Embedded modules share compiler/runtime plumbing without exposing it to imports.
             || (decl_file.is_some_and(|p| self.stdlib_files.contains(p))
-                && caller_file.is_some_and(|p| self.stdlib_files.contains(p)))
+                && caller_file.is_some_and(|p| self.stdlib_files.contains(p)
+                    || self.graph.std_generator_output_files.contains(p.as_ref())))
     }
 
     /// File/module-level visibility test (Axis 1). `Public` is visible everywhere. `Internal` is
@@ -55,7 +110,7 @@ impl<'a> Analyzer<'a> {
     ) -> bool {
         use dream_syntax::nodes::Visibility;
         if visibility == Visibility::Public
-            || caller_file.is_some_and(|c| self.generated_files.contains(c))
+            || caller_file.is_some_and(|c| self.trusted_generated_file(c))
         {
             return true;
         }
@@ -126,6 +181,7 @@ impl<'a> Analyzer<'a> {
             .and_then(|kind| self.type_ctx.resolve(kind, type_name));
         if let Some((decl_file, visibility)) = def.and_then(|def| self.type_visibility.get(&def))
             && !self.visible_across_files(decl_file, *visibility, caller_file)
+            && !self.generator_can_access_type(type_name, caller_file)
         {
             self.report_not_public("Type", type_name, decl_file, position, diagnostics);
         }

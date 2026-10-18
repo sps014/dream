@@ -37,7 +37,11 @@ fn files_under(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 #[test]
 fn module_attributes_generator_only_names_and_check_only_consumption() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("dream.toml"), "[package]\nname = \"kernels\"\n").unwrap();
+    std::fs::write(
+        dir.path().join("dream.toml"),
+        "[package]\nname = \"kernels\"\n",
+    )
+    .unwrap();
     std::fs::write(dir.path().join("gen.dream"), KERNELS_GEN).unwrap();
     std::fs::write(dir.path().join("shaders.dream"), KERNELS_SHADERS).unwrap();
     std::fs::write(dir.path().join("main.dream"), KERNELS_MAIN).unwrap();
@@ -75,7 +79,9 @@ fn module_attributes_generator_only_names_and_check_only_consumption() {
         "{log}"
     );
     assert!(
-        log.contains("'saxpy' was consumed by generator 'kernels' and is not available as a function"),
+        log.contains(
+            "'saxpy' was consumed by generator 'gen::kernels' and is not available as a function"
+        ),
         "{log}"
     );
     assert!(
@@ -114,10 +120,7 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     };
     let toolchains = root.path().join("toolchains");
-    let slang = toolchains.join(format!(
-        "slang-{}",
-        dream_abi::toolchain::SLANG_VERSION
-    ));
+    let slang = toolchains.join(format!("slang-{}", dream_abi::toolchain::SLANG_VERSION));
     executable(
         &slang.join("bin/slangc"),
         include_bytes!("cases/support/generator_framework/tools/slangc.sh"),
@@ -160,13 +163,16 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
         let result = run();
         let log = String::from_utf8_lossy(&result.stderr);
         assert!(result.status.success(), "{log}");
-        assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), expected("v1"));
+        assert_eq!(
+            String::from_utf8_lossy(&result.stdout).trim(),
+            expected("v1")
+        );
         if iteration == 1 {
             assert!(log.contains("gen compiled: result hit"), "{log}");
         }
     }
 
-    let manifest = project.join(".dream/generated/main/compiled/outputs.json");
+    let manifest = project.join("generated/main/gen/compiled/outputs.json");
     let transcript: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&manifest).unwrap()).unwrap();
     let order: Vec<_> = transcript["phases"][1]["tool_results"]
@@ -198,14 +204,24 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
     assert!(changed.status.success(), "{log}");
     assert!(log.contains("gen compiled: run "), "{log}");
     assert!(!log.contains("gen compiled: result hit"), "{log}");
-    assert_eq!(String::from_utf8_lossy(&changed.stdout).trim(), expected("v2"));
+    assert_eq!(
+        String::from_utf8_lossy(&changed.stdout).trim(),
+        expected("v2")
+    );
 
     if Command::new("node").arg("--version").output().is_ok() {
         std::fs::write(project.join("package.json"), "{\"type\":\"module\"}").unwrap();
         let compiled = dream(
             &project,
             &envs,
-            &["--wasm", "--runtime", "--node", "-o", "opaque.wat", "main.dream"],
+            &[
+                "--wasm",
+                "--runtime",
+                "--node",
+                "-o",
+                "opaque.wat",
+                "main.dream",
+            ],
         );
         assert!(
             compiled.status.success(),

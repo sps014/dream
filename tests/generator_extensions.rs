@@ -91,15 +91,12 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
         );
         assert_eq!(String::from_utf8_lossy(&node.stdout).trim(), "3\n65");
     }
-    let manifest = dir
-        .path()
-        .join(".dream/generated/main/resources/outputs.json");
+    let manifest = dir.path().join("generated/main/gen/resources/outputs.json");
     let result: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
     assert_eq!(result["phases"].as_array().unwrap().len(), 2);
     assert_eq!(
-        std::fs::read_to_string(dir.path().join(".dream/generated/main/resources/input.txt"))
-            .unwrap(),
+        std::fs::read_to_string(dir.path().join("generated/main/gen/resources/input.txt")).unwrap(),
         "ABC"
     );
     for (mode, expected) in [
@@ -134,7 +131,7 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
     let log = String::from_utf8_lossy(&result.stderr);
     assert!(!result.status.success());
     assert!(
-        log.contains("was consumed by generator 'resources'"),
+        log.contains("was consumed by generator 'gen::resources'"),
         "{log}"
     );
 }

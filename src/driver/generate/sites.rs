@@ -14,6 +14,7 @@ pub type SiteKey = (String, usize);
 pub struct Site {
     pub key: SiteKey,
     pub name: String,
+    pub generator: Option<String>,
     pub name_span: TextSpan,
     /// Reconstructed body text; splices appear as `{expr}`.
     pub body: String,
@@ -54,6 +55,7 @@ impl<'a> Visitor<'a> for SiteCollector {
             self.sites.push(Site {
                 key: site_key(self.file.as_deref(), block),
                 name: block.name.text.clone(),
+                generator: None,
                 name_span: block.name.position,
                 body,
                 splices,
@@ -73,14 +75,14 @@ pub fn collect_sites(acc: &ProgramAccumulator<'_>) -> Vec<Site> {
 /// Reports every site no registered syntax generator claims.
 pub fn report_unexpanded(
     sites: &[Site],
-    claimed: &dyn Fn(&str) -> bool,
+    claimed: &dyn Fn(&Site) -> bool,
     diagnostics: &mut DiagnosticBag,
 ) {
-    for site in sites.iter().filter(|s| !claimed(&s.name)) {
+    for site in sites.iter().filter(|s| !claimed(s)) {
         diagnostics.file_path = Some(site.key.0.clone()).filter(|f| !f.is_empty());
         diagnostics.report_error(
             format!(
-                "unexpanded syntax block '{}'; no generator registered for this introducer (declare '@generator @syntax_block fun {}(ctx: GenContext)' and import its module)",
+                "unexpanded syntax block '{}'; no unambiguous visible generator registered for this introducer (declare '@generator @syntax_block fun {}(ctx: GenContext)' and import its module)",
                 site.name, site.name
             ),
             Some(site.name_span),

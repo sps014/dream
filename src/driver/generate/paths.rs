@@ -1,4 +1,4 @@
-//! Project-relative spellings for snapshot locations and the `.dream/generated` output tree.
+//! Project-relative spellings for snapshot locations and the `generated` output tree.
 
 use std::path::{Path, PathBuf};
 
@@ -45,21 +45,57 @@ impl ProjectPaths {
             .replace('\\', "/")
     }
 
-    /// Where generated sources are materialized: `<root>/.dream/generated` inside a project, or a
-    /// per-directory folder under the generator cache for a manifest-less program (so compiling
-    /// a loose file never writes next to it).
-    pub fn generated_dir(&self, cache_root: &Path) -> PathBuf {
-        if self.has_manifest {
-            return self.root.join(".dream").join("generated");
-        }
-        let key = blake3::hash(self.root.to_string_lossy().as_bytes()).to_hex();
-        cache_root.join("generated").join(&key.as_str()[..16])
+    pub fn generated_dir(&self) -> PathBuf {
+        self.root.join("generated")
     }
+
+    pub fn build_dir(&self) -> PathBuf {
+        self.root.join("target/obj/generators")
+    }
+}
+
+/// The module and declaration segments are identifiers, never arbitrary output paths.
+pub(super) fn generator_dir(root: &Path, id: &str) -> PathBuf {
+    let (module, name) = id.rsplit_once("::").unwrap_or(("", id));
+    let mut dir = root.to_path_buf();
+    for segment in module.split('.').filter(|s| !s.is_empty()) {
+        dir.push(segment);
+    }
+    dir.join(name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn outputs_follow_the_manifest_or_loose_entry_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src/nested");
+        std::fs::create_dir_all(&src).unwrap();
+        let entry = src.join("main.dream");
+        let loose = ProjectPaths::for_entry(entry.to_str().unwrap());
+        let src = dunce::canonicalize(src).unwrap();
+        assert_eq!(loose.generated_dir(), src.join("generated"));
+        assert_eq!(loose.build_dir(), src.join("target/obj/generators"));
+        std::fs::write(
+            dir.path().join("dream.toml"),
+            "[package]\nname = \"test\"\n",
+        )
+        .unwrap();
+        let project = ProjectPaths::for_entry(entry.to_str().unwrap());
+        let root = dunce::canonicalize(dir.path()).unwrap();
+        assert_eq!(project.generated_dir(), root.join("generated"));
+        assert_eq!(project.build_dir(), root.join("target/obj/generators"));
+        assert_eq!(
+            generator_dir(&project.generated_dir(), "a.b::emit"),
+            root.join("generated/a/b/emit")
+        );
+        assert_eq!(
+            generator_dir(&project.generated_dir(), "::emit"),
+            root.join("generated/emit")
+        );
+    }
 
     #[test]
     fn bare_entry_file_is_relative_to_the_working_directory() {

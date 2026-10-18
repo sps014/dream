@@ -16,15 +16,13 @@ pub fn materialized_text(file: &GeneratedFile) -> String {
     format!("{}{}", header(&file.generator), file.source)
 }
 
-/// `entry_dir` is the per-entry folder; `ran` lists generators that produced a result this
-/// build (their folders are pruned to exactly `files`). Write failures are not fatal: the
-/// compile uses the in-memory text, only tooling loses the on-disk copy.
+/// Persist each result before merging it, so diagnostic paths always name the compiled text.
 pub fn materialize(
     entry_dir: &Path,
     runs: &[GenRun<'_>],
     files: &[GeneratedFile],
     artifacts: &[GeneratedArtifact],
-) -> Vec<(PathBuf, String)> {
+) -> std::io::Result<Vec<(PathBuf, String)>> {
     let out = located(entry_dir, files);
     let mut persisted: Vec<(PathBuf, Vec<u8>)> = out
         .iter()
@@ -32,41 +30,71 @@ pub fn materialize(
         .collect();
     for artifact in artifacts {
         persisted.push((
-            entry_dir.join(&artifact.generator).join(&artifact.path),
+            super::paths::generator_dir(entry_dir, &artifact.generator).join(&artifact.path),
             artifact.contents.clone(),
         ));
     }
     for run in runs {
-        if let Ok(json) = serde_json::to_string(&run.result) {
-            persisted.push((
-                entry_dir.join(&run.registered.name).join("outputs.json"),
-                json.into_bytes(),
-            ));
-        }
+        let json = serde_json::to_vec(&run.result).map_err(std::io::Error::other)?;
+        persisted.push((
+            super::paths::generator_dir(entry_dir, &run.registered.id).join("outputs.json"),
+            json,
+        ));
     }
     for (path, text) in &persisted {
         let unchanged = std::fs::read(path).is_ok_and(|old| old == *text);
         if !unchanged {
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                std::fs::create_dir_all(parent).map_err(|e| io_error(parent, e))?;
             }
-            let _ = std::fs::write(path, text);
+            std::fs::write(path, text).map_err(|e| io_error(path, e))?;
         }
     }
     for run in runs {
-        let dir = entry_dir.join(&run.registered.name);
+        let dir = super::paths::generator_dir(entry_dir, &run.registered.id);
         let keep: Vec<&PathBuf> = persisted
             .iter()
             .map(|(p, _)| p)
             .filter(|p| p.starts_with(&dir))
             .collect();
-        for stale in crate::driver::rt_stamp::files_under(&dir) {
+        for stale in files_under(&dir, &run.registered.id)? {
             if !keep.contains(&&stale) {
-                let _ = std::fs::remove_file(&stale);
+                std::fs::remove_file(&stale).map_err(|e| io_error(&stale, e))?;
             }
         }
     }
-    out
+    Ok(out)
+}
+
+fn io_error(path: &Path, error: std::io::Error) -> std::io::Error {
+    std::io::Error::new(error.kind(), format!("{}: {error}", path.display()))
+}
+
+fn files_under(root: &Path, generator: &str) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        // A nested module may own a directory below this generator's namespace.
+        if dir != root
+            && std::fs::read(dir.join("outputs.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<super::model::GenResult>(&bytes).ok())
+                .is_some_and(|result| result.generator != generator)
+        {
+            continue;
+        }
+        for entry in std::fs::read_dir(&dir).map_err(|e| io_error(&dir, e))? {
+            let entry = entry.map_err(|e| io_error(&dir, e))?;
+            let path = entry.path();
+            if entry.file_type().map_err(|e| io_error(&path, e))?.is_dir() {
+                pending.push(path);
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Where each file lives on disk and its text, without touching the disk.
@@ -75,7 +103,7 @@ pub fn located(entry_dir: &Path, files: &[GeneratedFile]) -> Vec<(PathBuf, Strin
         .iter()
         .map(|f| {
             (
-                entry_dir.join(&f.generator).join(&f.path),
+                super::paths::generator_dir(entry_dir, &f.generator).join(&f.path),
                 materialized_text(f),
             )
         })
@@ -89,4 +117,66 @@ pub fn entry_dir(generated_root: &Path, entry_file: &str) -> PathBuf {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "main".to_string());
     generated_root.join(stem)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pruning_does_not_descend_into_another_generators_namespace() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("child");
+        std::fs::create_dir_all(&nested).unwrap();
+        let result = super::super::model::GenResult {
+            generator: "parent.child::emit".into(),
+            ..Default::default()
+        };
+        std::fs::write(
+            nested.join("outputs.json"),
+            serde_json::to_vec(&result).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(nested.join("model.dream"), "class Model {}").unwrap();
+        let own = dir.path().join("stale.dream");
+        std::fs::write(&own, "stale").unwrap();
+        assert_eq!(files_under(dir.path(), "parent::child").unwrap(), [own]);
+    }
+
+    #[test]
+    fn source_write_failures_include_the_output_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("generated");
+        std::fs::write(&root, "blocked").unwrap();
+        let file = GeneratedFile {
+            generator: "models::derive".into(),
+            path: "model.dream".into(),
+            source: "class Model {}".into(),
+        };
+        let error = materialize(&root, &[], &[file], &[]).unwrap_err();
+        assert!(error.to_string().contains("generated"), "{error}");
+    }
+
+    #[test]
+    fn unchanged_sources_keep_their_timestamp() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = GeneratedFile {
+            generator: "models::derive".into(),
+            path: "model.dream".into(),
+            source: "class Model {}".into(),
+        };
+        let files = [file];
+        let output = materialize(dir.path(), &[], &files, &[]).unwrap();
+        let path = &output[0].0;
+        let timestamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(timestamp))
+            .unwrap();
+        let before = std::fs::metadata(path).unwrap().modified().unwrap();
+        materialize(dir.path(), &[], &files, &[]).unwrap();
+        assert_eq!(std::fs::metadata(path).unwrap().modified().unwrap(), before);
+    }
 }

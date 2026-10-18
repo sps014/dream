@@ -15,9 +15,20 @@ fn find<'i>(insp: &'i GenInspection, name: &str) -> Result<&'i InspectedGenerato
         let known: Vec<&str> = insp
             .generators
             .iter()
-            .map(|g| g.registered.name.as_str())
+            .map(|g| g.registered.id.as_str())
             .collect();
-        if known.is_empty() {
+        let matches: Vec<_> = insp
+            .generators
+            .iter()
+            .filter(|g| g.registered.name == name)
+            .map(|g| g.registered.id.as_str())
+            .collect();
+        if matches.len() > 1 {
+            format!(
+                "ambiguous generator '{name}'; use a qualified identity: {}",
+                matches.join(", ")
+            )
+        } else if known.is_empty() {
             format!("no generator named '{name}': this program registers no generators")
         } else {
             format!(
@@ -32,7 +43,7 @@ fn snapshot_of(g: &InspectedGenerator) -> Result<&str, String> {
     g.snapshot_json.as_deref().ok_or_else(|| {
         format!(
             "generator '{}' has nothing to do in this program (no trigger matches)",
-            g.registered.name
+            g.registered.id
         )
     })
 }
@@ -75,7 +86,7 @@ pub fn list(insp: &GenInspection) -> String {
         let _ = writeln!(
             out,
             "{}{}  ({})",
-            g.registered.name,
+            g.registered.id,
             if g.registered.incremental {
                 " @incremental"
             } else {
@@ -130,7 +141,7 @@ pub fn explain(
     let _ = writeln!(
         out,
         "generator '{}' ({})",
-        g.registered.name, g.registered.file
+        g.registered.id, g.registered.file
     );
     let _ = writeln!(
         out,
@@ -247,7 +258,7 @@ pub fn summarize(result: &GenResult) -> String {
     out
 }
 
-/// The default `--capture` directory: `<project or entry dir>/target/generators/<gen>`.
+/// The default `--capture` directory: `<project or entry dir>/target/obj/generators/captures/<gen>`.
 pub fn default_capture_dir(entry: &str, generator: &str) -> PathBuf {
     let entry_path = Path::new(entry);
     let root = super::manifest::find_project_root(entry).unwrap_or_else(|| {
@@ -257,7 +268,7 @@ pub fn default_capture_dir(entry: &str, generator: &str) -> PathBuf {
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf()
     });
-    root.join("target").join("generators").join(generator)
+    super::paths::generator_dir(&root.join("target/obj/generators/captures"), generator)
 }
 
 /// `--capture <gen>`: builds the executable, runs the generator once, and writes the snapshot,
@@ -274,7 +285,7 @@ pub fn capture(
     write_capture(
         dir,
         &exe,
-        name,
+        &g.registered.id,
         snapshot,
         timeout_of(g),
         &super::paths::ProjectPaths::for_entry(&insp.entry).root,
@@ -282,7 +293,7 @@ pub fn capture(
     let result = super::phases::run(
         config,
         &exe,
-        &g.registered.name,
+        &g.registered.id,
         &g.registered.tools,
         snapshot,
         timeout_of(g),
@@ -372,14 +383,14 @@ pub fn verify_incremental(
     let cache_root = config.generator_cache_root();
     for g in insp.generators.iter().filter(|g| g.registered.incremental) {
         let (Some(key), Some(snapshot)) = (&g.result_key, &g.snapshot_json) else {
-            let _ = writeln!(out, "{}: skipped, no trigger matches", g.registered.name);
+            let _ = writeln!(out, "{}: skipped, no trigger matches", g.registered.id);
             continue;
         };
         let Some(cached) = super::incremental::load(&cache_root, key) else {
             let _ = writeln!(
                 out,
                 "{}: no cached result yet (build once first)",
-                g.registered.name
+                g.registered.id
             );
             continue;
         };
@@ -387,7 +398,7 @@ pub fn verify_incremental(
         let fresh = super::phases::run(
             config,
             &exe,
-            &g.registered.name,
+            &g.registered.id,
             &g.registered.tools,
             snapshot,
             timeout_of(g),
@@ -397,15 +408,15 @@ pub fn verify_incremental(
             let _ = writeln!(
                 out,
                 "{}: ok, fresh run matches the cached result",
-                g.registered.name
+                g.registered.id
             );
         } else {
             let _ = writeln!(
                 out,
                 "{}: MISMATCH, fresh run differs from the cached result",
-                g.registered.name
+                g.registered.id
             );
-            mismatched.push(g.registered.name.clone());
+            mismatched.push(g.registered.id.clone());
         }
     }
     if mismatched.is_empty() {
@@ -432,10 +443,10 @@ fn launch_files(
     exe: GenExe,
     snapshot_text: &str,
 ) -> Result<DebugLaunch, String> {
-    let dir = config.generator_cache_root().join("debug");
+    let dir = super::paths::generator_dir(&config.generator_cache_root().join("debug"), name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-    let snapshot_path = dir.join(format!("{name}.snapshot.json"));
-    let result = dir.join(format!("{name}.result.json"));
+    let snapshot_path = dir.join("snapshot.json");
+    let result = dir.join("result.json");
     let _ = std::fs::remove_file(&result);
     std::fs::write(&snapshot_path, snapshot_text)
         .map_err(|e| format!("write {}: {e}", snapshot_path.display()))?;
@@ -454,7 +465,7 @@ pub fn debug_launch_from_capture(
     name: &str,
 ) -> Result<DebugLaunch, String> {
     let (meta, snapshot) = read_capture(dir)?;
-    if meta.generator != name {
+    if meta.generator != name && meta.generator.rsplit_once("::").map(|(_, n)| n) != Some(name) {
         return Err(format!(
             "{} captured generator '{}', not '{name}'",
             dir.display(),
@@ -471,7 +482,7 @@ pub fn debug_launch_from_capture(
         ll: meta.ll,
         bin: meta.bin,
     };
-    launch_files(config, name, exe, &snapshot)
+    launch_files(config, &meta.generator, exe, &snapshot)
 }
 
 /// Prepares a debug session: the cached executable plus the snapshot (`snapshot`, or the one
@@ -495,7 +506,7 @@ pub fn debug_launch(
         None => snapshot_of(g)?.to_string(),
     };
     let exe = executable(config, &g.plan)?;
-    launch_files(config, name, exe, &snapshot_text)
+    launch_files(config, &g.registered.id, exe, &snapshot_text)
 }
 
 /// The result a finished debug session left behind, summarized.

@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use dream_abi::library::LibraryKind;
 use std::path::{Path, PathBuf};
 
-const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/"];
+const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/", "generated/"];
 
 const HELLO_MAIN: &str =
     "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";
@@ -289,6 +289,20 @@ mod tests {
         let main = fs::read_to_string(dest.join("src/main.dream")).unwrap();
         assert!(main.contains("Hello, world!"));
         assert!(dest.join("dream.toml").is_file());
+    }
+
+    #[test]
+    fn gitignore_preserves_user_entries_and_adds_generated_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".gitignore");
+        fs::write(&path, "custom/\ngenerated/").unwrap();
+        write_gitignore(dir.path()).unwrap();
+        write_gitignore(dir.path()).unwrap();
+        let text = fs::read_to_string(path).unwrap();
+        assert!(text.starts_with("custom/\ngenerated/\n"));
+        for entry in GITIGNORE_ENTRIES {
+            assert_eq!(text.lines().filter(|line| line == entry).count(), 1);
+        }
     }
 
     #[test]

@@ -35,7 +35,7 @@ pub struct Index {
     pub decls: Vec<Decl>,
     pub refs: Vec<Ref>,
     pub inlay_hints: Vec<InlayHintOut>,
-    /// `@generator` functions declared in this document, by name and name span.
+    /// `@generator` functions declared in this document, by qualified identity and name span.
     pub generators: Vec<(String, usize, usize)>,
     /// Attribute types this document declares or imports from non-std files.
     pub attributes: Vec<DeclaredAttribute>,
@@ -71,7 +71,16 @@ impl Index {
             for func in &program.functions {
                 if func.attributes.iter().any(|a| a.name.text == "generator") {
                     let span = func.name.position;
-                    generators.push((func.name.text.clone(), span.start, span.end));
+                    let module = program
+                        .module
+                        .as_ref()
+                        .map(|m| m.path.text.as_str())
+                        .unwrap_or_default();
+                    generators.push((
+                        dream_abi::attributes::decl_identity(module, &func.name.text),
+                        span.start,
+                        span.end,
+                    ));
                 }
             }
 

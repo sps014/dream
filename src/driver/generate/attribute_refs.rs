@@ -3,7 +3,7 @@ use crate::driver::source_loader::ProgramAccumulator;
 use dream_syntax::nodes::Visibility;
 use indexmap::{IndexMap, IndexSet};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct Scope {
     module: String,
     imports: IndexSet<String>,
@@ -45,7 +45,83 @@ pub(super) fn scopes(acc: &ProgramAccumulator<'_>) -> IndexMap<String, Scope> {
         .collect()
 }
 
+fn std_generator_scopes() -> &'static IndexMap<&'static str, Scope> {
+    static SCOPES: std::sync::OnceLock<IndexMap<&'static str, Scope>> = std::sync::OnceLock::new();
+    SCOPES.get_or_init(|| {
+        let mut scopes = IndexMap::new();
+        for owner in dream_stdlib::STD_PACKAGES {
+            for package in owner
+                .generators
+                .iter()
+                .filter_map(|name| dream_stdlib::find_package(name))
+            {
+                for &(file, source) in package.files {
+                    let arena = bumpalo::Bump::new();
+                    let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+                    let lexer = dream_syntax::lexer::Lexer::new(source.to_string());
+                    let mut parser =
+                        dream_syntax::parser::Parser::new(lexer, &arena, &mut diagnostics);
+                    let Ok(ast) = parser.parse() else { continue };
+                    let program = ast.get_root();
+                    let mut scope = Scope {
+                        module: program
+                            .module
+                            .as_ref()
+                            .map(|m| m.path.text.clone())
+                            .unwrap_or_default(),
+                        ..Default::default()
+                    };
+                    for import in &program.imports {
+                        let module = &import.module_name.text;
+                        if let Some(alias) = &import.alias {
+                            if let Some((module, item)) = module.rsplit_once('.') {
+                                scope
+                                    .aliases
+                                    .insert(alias.text.clone(), format!("{module}::{item}"));
+                            }
+                        } else {
+                            scope.imports.insert(module.clone());
+                        }
+                    }
+                    scopes.insert(file, scope);
+                }
+            }
+        }
+        scopes
+    })
+}
+
 impl DeclIndex {
+    pub(super) fn add_std_generator_scopes(&mut self, acc: &ProgramAccumulator<'_>) {
+        let mut prelude: Vec<_> = acc
+            .file_modules
+            .iter()
+            .filter(|(file, _)| dream_stdlib::is_std_source(file))
+            .map(|(_, module)| module.to_string())
+            .collect();
+        prelude.sort();
+        prelude.dedup();
+        for scope in self.scopes.values_mut() {
+            scope.imports.extend(prelude.iter().cloned());
+        }
+        let cached = std_generator_scopes();
+        for owner in dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages) {
+            for package in owner
+                .generators
+                .iter()
+                .filter_map(|name| dream_stdlib::find_package(name))
+            {
+                for &(file, _) in package.files {
+                    if let Some(scope) = cached.get(file) {
+                        let mut scope = scope.clone();
+                        scope.imports.extend(prelude.iter().cloned());
+                        self.scopes.insert(file.to_string(), scope);
+                    }
+                }
+            }
+        }
+    }
+
     /// DeclarationPath is resolved in its source file, before import aliases disappear from snapshots.
     pub(super) fn attribute_reference(&self, path: &str, file: Option<&str>) -> Option<String> {
         let scope = self.scopes.get(file?)?;
@@ -56,6 +132,11 @@ impl DeclIndex {
             } else if entry.visibility == Visibility::Internal {
                 entry.file.as_deref() == file
                     || (!scope.module.is_empty() && entry.module == scope.module)
+                    || (entry
+                        .file
+                        .as_deref()
+                        .is_some_and(dream_stdlib::is_std_source)
+                        && file.is_some_and(dream_stdlib::is_std_source))
             } else {
                 entry.module == scope.module
                     || scope.imports.contains(&entry.module)

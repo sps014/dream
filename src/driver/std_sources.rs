@@ -39,7 +39,14 @@ pub fn materialize(root: &Path) -> io::Result<PathBuf> {
     if dir.is_dir() {
         return Ok(dir);
     }
-    let staged = root.join(format!(".staging-{}-{}", digest(), std::process::id()));
+    // Generator executables compile in parallel inside the same compiler process.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let staged = root.join(format!(
+        ".staging-{}-{}-{}",
+        digest(),
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let _ = std::fs::remove_dir_all(&staged);
     for (rel, source) in embedded() {
         let target = staged.join(rel);
@@ -64,6 +71,24 @@ pub fn materialize(root: &Path) -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_compiles_publish_complete_source_trees() {
+        let root = tempfile::tempdir().unwrap();
+        let barrier = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    barrier.wait();
+                    let dir = materialize(root.path()).unwrap();
+                    for (relative, source) in embedded() {
+                        assert_eq!(std::fs::read_to_string(dir.join(relative)).unwrap(), source);
+                    }
+                });
+            }
+        });
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn writes_every_std_file_once() {

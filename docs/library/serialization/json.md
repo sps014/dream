@@ -143,5 +143,5 @@ System.println(Json.serialize(mixed)); // {"n":42,"s":"text"}
 
 ## How `@json` works
 
-`@json` is an ordinary Dream source generator, `json_derive` in `system.json`. Importing `system.json` registers it, so it works the same in single files, packages, dependencies, `dream test`, and wasm builds. It runs only when the program has a `@json` type or calls `Json.serialize`, `Json.deserialize`, or `Json.from_value`. It is `@incremental`, so unchanged programs replay its cached output. The generated code is written to `.dream/generated/<entry>/json_derive/json.dream`; to step through the derive itself, see [Debugging a generator](../../language/metaprogramming/generators.md#debugging-a-generator).
+`@json` is an ordinary Dream source generator, `json_derive` in `system.json`. Importing `system.json` registers it, so it works the same in single files, packages, dependencies, `dream test`, and wasm builds. It runs only when the program has a `@json` type or calls `Json.serialize`, `Json.deserialize`, or `Json.from_value`. It is `@incremental`, so unchanged programs replay its cached output. The generated code is written to `generated/<entry>/system/json/derive/json_derive/json.dream`; to step through the derive itself, see [Debugging a generator](../../language/metaprogramming/generators.md#debugging-a-generator).
 

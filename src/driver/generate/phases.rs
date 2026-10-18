@@ -19,7 +19,7 @@ pub(super) fn run(
         serde_json::from_str(json).map_err(|e| e.to_string())?;
     let mut aggregate = GenResult {
         version: snapshot.version,
-        generator: snapshot.generator.clone(),
+        generator: snapshot.generator_id.clone(),
         base_snapshot: blake3::hash(json.as_bytes()).to_hex().to_string(),
         ..Default::default()
     };

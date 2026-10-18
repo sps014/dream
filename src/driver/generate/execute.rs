@@ -19,17 +19,19 @@ enum Outcome {
 
 pub fn execute<'g>(
     config: &Arc<ToolchainConfig>,
+    paths: &super::paths::ProjectPaths,
     jobs: Vec<Job<'g>>,
     diagnostics: &mut DiagnosticBag,
 ) -> (Vec<GenRun<'g>>, Vec<String>) {
     let identity = super::identity::compiler_identity(config);
     let gens: Vec<&RegisteredGenerator> = jobs.iter().map(|j| j.registered).collect();
     let groups = exe::group(&gens);
-    let plans: Vec<ExePlan> = super::parallel::map(&groups, |g| exe::plan(config, &identity, g));
+    let plans: Vec<ExePlan> =
+        super::parallel::map(&groups, |g| exe::plan(config, &identity, paths, g));
     let plan_of = |registered: &RegisteredGenerator| {
         plans
             .iter()
-            .position(|p| p.generators.contains(&registered.name))
+            .position(|p| p.generators.contains(&registered.id))
             .unwrap_or_default()
     };
     let cache_root = config.generator_cache_root();
@@ -43,7 +45,7 @@ pub fn execute<'g>(
             let key = incremental::result_key(&plans[plan_of(job.registered)].key, &job.json);
             incremental::load(&cache_root, &key).map(|r| {
                 record(Event::Replay);
-                tracing::info!("gen {}: result hit", job.registered.name);
+                tracing::info!("gen {}: result hit", job.registered.id);
                 Outcome::Done(r, true)
             })
         })
@@ -79,14 +81,11 @@ pub fn execute<'g>(
         let job = &jobs[i];
         let p = plan_of(job.registered);
         let Some((_, exe)) = built.iter().find(|(bp, _)| *bp == p) else {
-            return Outcome::Failed(format!(
-                "generator '{}': no executable",
-                job.registered.name
-            ));
+            return Outcome::Failed(format!("generator '{}': no executable", job.registered.id));
         };
         let exe = match exe {
             Ok(exe) => exe,
-            Err(e) => return Outcome::Failed(format!("generator '{}': {e}", job.registered.name)),
+            Err(e) => return Outcome::Failed(format!("generator '{}': {e}", job.registered.id)),
         };
         let timeout = job
             .registered
@@ -99,7 +98,7 @@ pub fn execute<'g>(
         let outcome = match super::phases::run(
             config,
             exe,
-            &job.registered.name,
+            &job.registered.id,
             &job.registered.tools,
             &job.json,
             timeout,
@@ -108,7 +107,7 @@ pub fn execute<'g>(
             Ok(result) => Outcome::Done(result, false),
             Err(e) => Outcome::Failed(e),
         };
-        tracing::info!("gen {}: run {:?}", job.registered.name, started.elapsed());
+        tracing::info!("gen {}: run {:?}", job.registered.id, started.elapsed());
         outcome
     });
     for (i, outcome) in pending.into_iter().zip(fresh) {
@@ -134,7 +133,7 @@ pub fn execute<'g>(
                 });
             }
             Some(Outcome::Failed(message)) => {
-                failed.push(job.registered.name.clone());
+                failed.push(job.registered.id.clone());
                 diagnostics.report(Diagnostic::new(
                     message,
                     job.registered.span,

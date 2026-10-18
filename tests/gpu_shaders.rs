@@ -50,7 +50,7 @@ fn build_with(dir: &Path, args: &[&str]) -> Output {
 }
 
 fn generated(dir: &Path) -> PathBuf {
-    dir.join(".dream/generated/main/gpu_shaders")
+    dir.join("generated/main/system/gpu/shaders/gpu_shaders")
 }
 
 fn log(output: &Output) -> String {
@@ -594,7 +594,7 @@ fn consumed_shaders_point_at_their_generated_entry() {
     let text = log(&output);
     assert!(!output.status.success(), "{text}");
     assert!(
-        text.contains("'saxpy' was consumed by generator 'gpu_shaders'")
+        text.contains("'saxpy' was consumed by generator 'system.gpu.shaders::gpu_shaders'")
             && text.contains("dispatch it with GpuShaders.saxpy.dispatch(device, ...)"),
         "{text}"
     );

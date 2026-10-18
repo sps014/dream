@@ -24,7 +24,7 @@ pub(super) fn ranges(runs: &[GenRun<'_>]) -> Vec<(String, String, TextSpan)> {
                 };
                 run.spans.consumable.get(target)?;
                 let (file, span) = run.spans.get(&format!("{target}#b.0"))?;
-                Some((run.registered.name.clone(), file?.to_string(), span))
+                Some((run.registered.id.clone(), file?.to_string(), span))
             })
         })
         .collect()
@@ -58,7 +58,7 @@ pub(super) fn stabilize<'g>(
             let excluded = |id: &str| {
                 built.spans.get(id).is_some_and(|(file, point)| {
                     consumed.iter().any(|(owner, source, span)| {
-                        owner != &registered.name
+                        owner != &registered.id
                             && file == Some(source.as_str())
                             && span.start <= point.start
                             && point.start < span.end
@@ -97,7 +97,7 @@ pub(super) fn stabilize<'g>(
                     sites: job.built.sites,
                     result: GenResult {
                         version: SNAPSHOT_VERSION,
-                        generator: job.registered.name.clone(),
+                        generator: job.registered.id.clone(),
                         base_snapshot: blake3::hash(job.json.as_bytes()).to_hex().to_string(),
                         phases: vec![GenPhase {
                             tool_results: Vec::new(),
@@ -108,18 +108,19 @@ pub(super) fn stabilize<'g>(
                 });
             }
         }
-        let (mut replacements, errors) = super::execute::execute(req.config, pending, diagnostics);
+        let (mut replacements, errors) =
+            super::execute::execute(req.config, &inputs.paths, pending, diagnostics);
         failed.extend(errors.iter().cloned());
         replacements.extend(skipped);
         for replacement in replacements {
             if let Some(run) = runs
                 .iter_mut()
-                .find(|r| r.registered.name == replacement.registered.name)
+                .find(|r| r.registered.id == replacement.registered.id)
             {
                 *run = replacement;
             }
         }
-        runs.retain(|r| !errors.contains(&r.registered.name));
+        runs.retain(|r| !errors.contains(&r.registered.id));
     }
     diagnostics.report(Diagnostic::new(
         "generator consumption did not stabilize after excluding consumed-body sites".to_string(),

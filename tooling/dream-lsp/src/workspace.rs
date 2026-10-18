@@ -15,6 +15,7 @@ use crate::index::SymKind;
 /// Directories never descended into during the workspace scan.
 const SKIPPED_DIRS: &[&str] = &[
     "target",
+    "generated",
     "node_modules",
     ".git",
     ".dream",

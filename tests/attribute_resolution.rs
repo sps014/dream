@@ -170,7 +170,7 @@ public fun extend_probe(ctx: GenContext): void {
     for (let declaration in ctx.types_with<ExtendProbeAttribute>()) {
         ctx.emit_extend(declaration, "public static fun generated(): int { return ModuleInternal.answer(); }");
     }
-    ctx.emit_file("bridge.dream", "import models.hidden as selected;\npublic fun generated_bridge(): int { return selected(); }\n");
+    ctx.emit_file("bridge.dream", "import models.answer as selected;\npublic fun generated_bridge(): int { return selected(); }\n");
 }
 "#).unwrap();
     std::fs::write(
@@ -179,7 +179,7 @@ public fun extend_probe(ctx: GenContext): void {
 module models;
 import gen;
 internal class ModuleInternal { internal static fun answer(): int { return 21; } }
-fun hidden(): int { return 21; }
+public fun answer(): int { return 21; }
 @extend_probe
 public class Extended {}
 "#,

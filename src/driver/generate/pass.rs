@@ -23,7 +23,7 @@ pub struct GenerateRequest<'r> {
     pub stage: GeneratorStage,
     pub entry_file: &'r str,
     pub target: &'r dream_abi::target::TargetSpec,
-    /// Use the files the last build wrote under `.dream/generated` instead of running anything,
+    /// Use the files the last build wrote under `generated` instead of running anything,
     /// and leave them untouched (the language server, which must not race a build).
     pub replay_materialized: bool,
 }
@@ -54,7 +54,28 @@ pub fn gather(
     } else {
         Vec::new()
     };
-    let index = DeclIndex::build(acc);
+    let mut index = DeclIndex::build(acc);
+    let scope_arena = Bump::new();
+    for (file, _) in &manifest {
+        if acc.file_contents.contains_key(file) {
+            continue;
+        }
+        if let Ok(source) = std::fs::read_to_string(file) {
+            let mut auxiliary = ProgramAccumulator::default();
+            let mut scratch = DiagnosticBag::new(Some(file.clone()));
+            let _ = crate::driver::source_loader::parse_source_recursive(
+                file.clone(),
+                source,
+                &mut auxiliary,
+                &scope_arena,
+                &mut scratch,
+            );
+            index
+                .scopes
+                .extend(super::attribute_refs::scopes(&auxiliary));
+        }
+    }
+    index.add_std_generator_scopes(acc);
     let gens = Registration {
         index: &index,
         attributes,
@@ -67,10 +88,18 @@ pub fn gather(
             call_triggers.push(t.clone());
         }
     }
-    let sites = collect_sites(acc);
+    let mut sites = collect_sites(acc);
+    for site in &mut sites {
+        site.generator = index
+            .attribute_reference(&site.name, Some(&site.key.0))
+            .filter(|id| gens.iter().any(|g| g.syntax_block && &g.id == id));
+    }
     let calls = collect_calls(acc, &call_triggers, None);
     let applies = gens.iter().any(|g| {
-        (g.syntax_block && sites.iter().any(|s| s.name == g.name))
+        (g.syntax_block
+            && sites
+                .iter()
+                .any(|s| s.generator.as_deref() == Some(g.id.as_str())))
             || g.call_triggers
                 .iter()
                 .any(|t| calls.iter().any(|c| call_triggers[c.trigger].id == t.id))
@@ -121,7 +150,11 @@ impl PassInputs {
         acc: &ProgramAccumulator<'_>,
         attributes: &UserAttributes,
     ) -> bool {
-        (registered.syntax_block && self.sites.iter().any(|s| s.name == registered.name))
+        (registered.syntax_block
+            && self
+                .sites
+                .iter()
+                .any(|s| s.generator.as_deref() == Some(registered.id.as_str())))
             || self.calls.iter().any(|c| {
                 let id = &self.call_triggers[c.trigger].id;
                 registered.call_triggers.iter().any(|t| &t.id == id)
@@ -152,11 +185,8 @@ impl PassInputs {
         build_snapshot(acc, &facts, registered)
     }
 
-    pub fn generated_root(&self, config: &ToolchainConfig, entry_file: &str) -> std::path::PathBuf {
-        super::materialize::entry_dir(
-            &self.paths.generated_dir(&config.generator_cache_root()),
-            entry_file,
-        )
+    pub fn generated_root(&self, entry_file: &str) -> std::path::PathBuf {
+        super::materialize::entry_dir(&self.paths.generated_dir(), entry_file)
     }
 
     fn report_sites(
@@ -166,7 +196,7 @@ impl PassInputs {
         consumed: &[(String, String, dream_text::text_span::TextSpan)],
         diagnostics: &mut DiagnosticBag,
     ) {
-        let claimed = |name: &str| self.gens.iter().any(|g| g.syntax_block && g.name == name);
+        let claimed = |site: &Site| site.generator.is_some();
         let sites: Vec<_> = self
             .sites
             .iter()
@@ -181,7 +211,13 @@ impl PassInputs {
             .collect();
         report_unexpanded(&sites, &claimed, diagnostics);
         for site in &sites {
-            if claimed(&site.name) && !done(site) && !failed.contains(&site.name) {
+            if claimed(site)
+                && !done(site)
+                && !site
+                    .generator
+                    .as_ref()
+                    .is_some_and(|id| failed.contains(id))
+            {
                 diagnostics.report(Diagnostic::new(
                     format!(
                         "generator '{}' did not expand this syntax block (call ctx.replace(block, ...))",
@@ -210,7 +246,7 @@ pub fn run_generators<'a>(
         if inputs.applicable(g, acc, attributes) {
             applicable.push(g);
         } else {
-            tracing::info!("gen {}: skipped", g.name);
+            tracing::info!("gen {}: skipped", g.id);
         }
     }
     if applicable.is_empty() {
@@ -222,6 +258,26 @@ pub fn run_generators<'a>(
     for registered in applicable {
         match inputs.snapshot(acc, attributes, registered) {
             Ok(built) if has_inputs(&built.snapshot) => {
+                let access = acc
+                    .generator_access
+                    .entry(registered.id.clone())
+                    .or_default();
+                access.extend(
+                    built
+                        .snapshot
+                        .decls
+                        .iter()
+                        .chain(&built.snapshot.referenced)
+                        .map(|decl| decl.id.clone()),
+                );
+                access.extend(
+                    built
+                        .snapshot
+                        .functions
+                        .iter()
+                        .chain(&built.snapshot.referenced_functions)
+                        .map(|function| function.id.clone()),
+                );
                 acc.untracked_generator_inputs |= !registered.incremental;
                 for file in &built.snapshot.additional_files {
                     acc.resolution_inputs
@@ -254,11 +310,11 @@ pub fn run_generators<'a>(
         }
     }
     let snapshotted = started.elapsed();
-    let root = inputs.generated_root(req.config, req.entry_file);
+    let root = inputs.generated_root(req.entry_file);
     let (runs, mut failed) = if req.replay_materialized || !cfg!(feature = "native") {
         replay_materialized(&root, jobs)
     } else {
-        run_jobs(req.config, jobs, diagnostics)
+        run_jobs(req.config, &inputs.paths, jobs, diagnostics)
     };
     #[cfg(feature = "native")]
     let runs = if !req.replay_materialized {
@@ -288,7 +344,7 @@ pub fn run_generators<'a>(
         }
         if let Ok(text) = std::str::from_utf8(&artifact.contents) {
             acc.file_contents.insert(
-                root.join(&artifact.generator)
+                super::paths::generator_dir(&root, &artifact.generator)
                     .join(&artifact.path)
                     .to_string_lossy()
                     .into_owned(),
@@ -317,14 +373,31 @@ pub fn run_generators<'a>(
             .map(|(id, by)| (id.clone(), by.clone())),
     );
     record_consumed_artifacts(acc, &runs, &applied.consumed, &root);
-    let ran: Vec<String> = runs.iter().map(|r| r.registered.name.clone()).collect();
+    let ran: Vec<String> = runs.iter().map(|r| r.registered.id.clone()).collect();
     let files = if req.replay_materialized || !cfg!(feature = "native") {
         super::materialize::located(&root, &applied.files)
     } else {
-        super::materialize::materialize(&root, &runs, &applied.files, &applied.artifacts)
+        match super::materialize::materialize(&root, &runs, &applied.files, &applied.artifacts) {
+            Ok(files) => files,
+            Err(error) => {
+                diagnostics.report(Diagnostic::new(
+                    format!("cannot materialize generator output: {error}"),
+                    None,
+                    Some(req.entry_file.to_string()),
+                ));
+                return Ok(());
+            }
+        }
     };
     for ((path, text), generated) in files.into_iter().zip(&applied.files) {
         acc.resolution_inputs.insert(path.clone());
+        if runs
+            .iter()
+            .any(|run| run.registered.id == generated.generator && run.registered.is_std())
+        {
+            acc.std_generator_output_files
+                .insert(path.to_string_lossy().into_owned());
+        }
         super::merge::merge_generated_file(
             arena,
             acc,
@@ -370,12 +443,11 @@ fn record_consumed_artifacts(
                             .strip_prefix(id.as_str())
                             .is_some_and(|rest| rest.starts_with(['#', '.']))
                 };
-                if by.generator != run.registered.name
-                    || !mappings.iter().any(|m| inside(&m.target))
+                if by.generator != run.registered.id || !mappings.iter().any(|m| inside(&m.target))
                 {
                     continue;
                 }
-                let artifact = root.join(&run.registered.name).join(path);
+                let artifact = super::paths::generator_dir(root, &run.registered.id).join(path);
                 let artifacts = acc.consumed_artifacts.entry(id.clone()).or_default();
                 if !artifacts.contains(&artifact) {
                     artifacts.push(artifact);
@@ -387,14 +459,15 @@ fn record_consumed_artifacts(
 
 fn run_jobs<'g>(
     config: &Arc<ToolchainConfig>,
+    paths: &ProjectPaths,
     jobs: Vec<super::apply::Job<'g>>,
     diagnostics: &mut DiagnosticBag,
 ) -> (Vec<super::apply::GenRun<'g>>, Vec<String>) {
     #[cfg(feature = "native")]
-    return super::execute::execute(config, jobs, diagnostics);
+    return super::execute::execute(config, paths, jobs, diagnostics);
     #[cfg(not(feature = "native"))]
     {
-        let _ = (config, diagnostics);
+        let _ = (config, paths, diagnostics);
         unreachable!(
             "generators run only with the native toolchain; got {} jobs",
             jobs.len()
@@ -410,13 +483,13 @@ fn replay_materialized<'g>(
     let mut failed = Vec::new();
     let mut runs = Vec::new();
     for job in jobs {
-        let dir = entry_root.join(&job.registered.name);
+        let dir = super::paths::generator_dir(entry_root, &job.registered.id);
         let Ok(text) = std::fs::read_to_string(dir.join("outputs.json")) else {
-            failed.push(job.registered.name.clone());
+            failed.push(job.registered.id.clone());
             continue;
         };
         let Ok(result) = serde_json::from_str::<super::model::GenResult>(&text) else {
-            failed.push(job.registered.name.clone());
+            failed.push(job.registered.id.clone());
             continue;
         };
         runs.push(super::apply::GenRun {
@@ -469,7 +542,7 @@ mod tests {
         };
         let result = GenResult {
             version: SNAPSHOT_VERSION,
-            generator: generator.name.clone(),
+            generator: generator.id.clone(),
             outputs: vec![
                 Output::Consume {
                     target: "::selected".into(),
@@ -504,7 +577,8 @@ mod tests {
             &fresh,
             &applied.files,
             &applied.artifacts,
-        );
+        )
+        .unwrap();
         let jobs = vec![super::super::apply::Job {
             registered: &generator,
             json: String::new(),

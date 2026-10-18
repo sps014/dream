@@ -44,7 +44,8 @@ impl<'a> Analyzer<'a> {
                 });
             diagnostics.file_path = Some(importing_file.clone());
             if visibility == Some(Visibility::Private)
-                && !self.generated_files.contains(importing_file.as_str())
+                && !self.trusted_generated_file(importing_file.as_str())
+                && !self.generator_can_access(&qualified, Some(&Rc::from(importing_file.as_str())))
             {
                 diagnostics.report_error(format!("'{item}' in module '{module_path}' is private; only 'public'/'internal' items can be imported with 'as'"), Some(alias.position));
                 continue;
@@ -60,7 +61,7 @@ impl<'a> Analyzer<'a> {
         {
             let scope = self.graph.module_for_file(Some(&importing_file));
             self.type_ctx.set_scope(scope);
-            let generated = self.generated_files.contains(importing_file.as_str());
+            let generated = self.trusted_generated_file(importing_file.as_str());
             diagnostics.file_path = Some(importing_file);
             let qualified = format!("{module_path}::{item}");
             if self.type_ctx.nominal_kind(&qualified).is_some() {
@@ -75,6 +76,10 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             if !generated
+                && !self.generator_can_access(
+                    &qualified,
+                    diagnostics.file_path.as_deref().map(Rc::from).as_ref(),
+                )
                 && identities.iter().any(|key| {
                     self.function_table
                         .functions

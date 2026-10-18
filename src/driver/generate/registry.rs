@@ -204,16 +204,11 @@ impl Registration<'_> {
                         let Some(parts) = path_parts(arg) else {
                             continue;
                         };
-                        let resolved = parts.last().and_then(|name| {
-                            let key = if parts.len() == 1 {
-                                (*name).to_string()
-                            } else {
-                                decl_identity(&parts[..parts.len() - 1].join("."), name)
-                            };
-                            self.attributes
-                                .get(&key)
-                                .filter(|attribute| attribute.type_name == *name)
-                        });
+                        let resolved_id =
+                            self.index.attribute_reference(&parts.join("."), Some(file));
+                        let resolved = resolved_id
+                            .as_deref()
+                            .and_then(|id| self.attributes.get(id));
                         match resolved {
                             Some(a) => {
                                 if !registered.attribute_triggers.contains(&a.id) {
@@ -240,7 +235,8 @@ impl Registration<'_> {
                         let Some(parts) = path_parts(arg) else {
                             continue;
                         };
-                        match self.index.resolve_path(&parts) {
+                        let resolved = self.index.attribute_reference(&parts.join("."), Some(file));
+                        match resolved {
                             Some(id) => {
                                 let (owner, name) = match parts.as_slice() {
                                     [.., owner, name] if id.ends_with(&format!(".{name}")) => {
@@ -353,14 +349,14 @@ impl Registration<'_> {
                 out.extend(self.register(decl, file, module, Some(package), None, diagnostics));
             }
         }
-        out.sort_by(|a, b| a.name.cmp(&b.name).then(a.file.cmp(&b.file)));
+        out.sort_by(|a, b| a.id.cmp(&b.id).then(a.file.cmp(&b.file)));
         for pair in out.windows(2) {
-            if pair[0].name == pair[1].name {
+            if pair[0].id == pair[1].id {
                 diagnostics.file_path = Some(pair[1].file.clone());
                 diagnostics.report_error(
                     format!(
-                        "generator '{}' is declared twice ('{}' and '{}'); generator names must be unique",
-                        pair[0].name, pair[0].file, pair[1].file
+                        "generator '{}' is declared twice ('{}' and '{}'); generator identities must be unique within a module",
+                        pair[0].id, pair[0].file, pair[1].file
                     ),
                     pair[1].span,
                 );

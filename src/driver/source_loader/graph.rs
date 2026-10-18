@@ -81,6 +81,9 @@ impl<'a> ProgramAccumulator<'a> {
             .collect();
         let mut graph = ModuleGraph::new(inputs, &edges);
         graph.generated_files = self.generated_files.clone();
+        graph.generator_output_files = self.generator_output_files.clone();
+        graph.std_generator_output_files = self.std_generator_output_files.clone();
+        graph.generator_access = self.generator_access.clone();
         graph.embedded_assets = self.embedded_assets.clone();
         graph.consumed = self.consumed.clone();
         graph

@@ -237,7 +237,13 @@ A path that resolves to nothing is a compile error.
 
 1. Generated files
 
-Emitted files are written to `.dream/generated/<entry>/<generator>/` next to your project (add `.dream/` to `.gitignore`; `dreamer init` does). Diagnostics in generated code point at those files, so you can open and read exactly what was compiled. The language server reads the same files for go-to-definition and hover.
+Emitted files are written to `generated/<entry>/<module-path>/<generator>/` next to your project (add `generated/` to `.gitignore`; `dreamer init` does). Diagnostics in generated code point at those files, so you can open and read exactly what was compiled. The language server reads the same files for go-to-definition and hover. The module path uses one directory per module segment and is omitted for an unnamed module. For a loose file without `dream.toml`, `generated/` is created in the entry file's directory.
+
+Generator executables and their build intermediates live in `target/obj/generators/exe/<key>/` under the same project or entry directory. Deleting this directory rebuilds executables when they are next needed. Unchanged incremental results are still cached by the toolchain.
+
+Generators in different modules may share a name. Syntax blocks resolve their generator through the source file's module, imports, and visibility; an ambiguous introducer produces a diagnostic. Generator commands accept a `module::name` identity, such as `dream generate main.dream --explain system.json.derive::json_derive`. A short name is accepted only when it identifies one registered generator.
+
+Emitted files use the module declared in their source. Generated extension methods can access the extended type's private members. A generator's output may also use declarations explicitly selected for generation and their resolved dependencies, such as a web route's dependency provider. Unrelated file-private functions and internal declarations remain inaccessible to user-generated code.
 
 ## Building source with `CodeBuilder`
 
@@ -269,8 +275,8 @@ let body = b.to_string();
 ```bash
 dream generate app.dream                         # list generators, triggers, and whether each runs
 dream generate --explain json_derive app.dream   # each cache-key component and what changed
-dream generate --capture json_derive app.dream   # save snapshot + result to target/generators/json_derive
-dream generate --replay target/generators/json_derive   # rerun the capture and diff against its result
+dream generate --capture json_derive app.dream   # save snapshot + result to target/obj/generators/captures/json_derive
+dream generate --replay target/obj/generators/captures/json_derive   # rerun the capture and diff against its result
 dream generate --verify-incremental app.dream    # rerun cached @incremental generators and diff results
 dream generate --prewarm                         # build std generator executables into the cache
 ```
@@ -511,7 +517,7 @@ ctx.emit_asset("kernels", "kernels.bundle");
 
 Artifact paths are relative to the generator directory, cannot contain `..`, and cannot
 end in `.dream`. `outputs.json` is reserved for the compiler. Artifacts are materialized
-under `.dream/generated/<entry>/<generator>/` without a generated-source header.
+under `generated/<entry>/<module-path>/<generator>/` without a generated-source header.
 Pass `publish: true` to `emit_artifact` to also copy an artifact beside the build output.
 Published artifacts cannot overwrite source inputs or compiler outputs.
 

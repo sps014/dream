@@ -77,6 +77,7 @@ tests/bench/out/
 
 # Materialized generator output
 .dream/
+generated/
 
 !tests/runtime_cycles.c
 

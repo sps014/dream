@@ -60,7 +60,7 @@ public fun replace(borrow block: GenSyntaxBlock, source: string): void
 
 ## `emit_file`
 
-Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
+Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `generated/<entry>/<module-path>/<generator>/` and compiled with the program.
 
 ```dream
 public fun emit_file(path: string, source: string): void

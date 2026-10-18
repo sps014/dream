@@ -95,7 +95,7 @@ fn generated_members_resolve_from_materialized_files() {
     };
     assert!(unresolved(&analyze_document(Some(&main), src).diagnostics));
 
-    let generated = dir.join(".dream/generated/main/dto_derive");
+    let generated = dir.join("generated/main/gen/dto_derive");
     fs::create_dir_all(&generated).unwrap();
     let source = "extend Point {\npublic fun describe(): string {\n    return \"dto\";\n}\n}\n";
     fs::write(
@@ -107,7 +107,7 @@ fn generated_members_resolve_from_materialized_files() {
         generated.join("outputs.json"),
         serde_json::to_vec(&serde_json::json!({
             "version": dream::driver::generate::SNAPSHOT_VERSION,
-            "generator": "dto_derive",
+            "generator": "gen::dto_derive",
             "outputs": [{"kind": "file", "path": "extends.dream", "source": source}]
         }))
         .unwrap(),
@@ -142,6 +142,12 @@ fn scans_workspace_files_for_symbols() {
     // Skipped directories must not contribute.
     fs::create_dir_all(root.join("target")).unwrap();
     fs::write(root.join("target/junk.dream"), "class ShouldNotAppear {}\n").unwrap();
+    fs::create_dir_all(root.join("generated/main/gen")).unwrap();
+    fs::write(
+        root.join("generated/main/gen/output.dream"),
+        "class GeneratedShouldNotAppear {}\n",
+    )
+    .unwrap();
 
     let symbols = dream_lsp::workspace::scan(&root);
     let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
@@ -149,12 +155,23 @@ fn scans_workspace_files_for_symbols() {
     assert!(names.contains(&"Helper"), "{names:?}");
     assert!(names.contains(&"util_add"), "{names:?}");
     assert!(!names.contains(&"ShouldNotAppear"), "{names:?}");
+    assert!(!names.contains(&"GeneratedShouldNotAppear"), "{names:?}");
 
     let main_sym = symbols.iter().find(|s| s.name == "main").unwrap();
     let text = fs::read_to_string(root.join("main.dream")).unwrap();
     assert_eq!(&text[main_sym.start..main_sym.end], "main");
 
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn generator_debug_targets_include_the_declaring_module() {
+    let source = "module tools.codegen;\nimport system.codegen;\n@generator\npublic fun derive(ctx: GenContext): void {\n    ctx.log(\"ready\");\n}\n";
+    let index = dream_lsp::index::Index::build(None, source);
+    assert_eq!(index.generators.len(), 1);
+    let (id, start, end) = &index.generators[0];
+    assert_eq!(id, "tools.codegen::derive");
+    assert_eq!(&source[*start..*end], "derive");
 }
 
 // ------------------------------------------------- type-safe (identity) references

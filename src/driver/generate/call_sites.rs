@@ -19,6 +19,7 @@ pub struct FoundCall {
 
 struct CallCollector<'t> {
     triggers: &'t [CallTrigger],
+    index: super::decls::DeclIndex,
     file: Option<String>,
     facts: Option<&'t dream_sema::gen_facts::GenFacts>,
     found: Vec<FoundCall>,
@@ -41,7 +42,14 @@ impl CallCollector<'_> {
             if let Some(f) = fact.filter(|f| !f.symbol.is_empty()) {
                 f.symbol == t.id
             } else {
-                t.owner.as_deref() == owner && t.name == name.text
+                let path = match owner {
+                    Some(owner) => format!("{owner}.{}", name.text),
+                    None => name.text.clone(),
+                };
+                self.index
+                    .attribute_reference(&path, self.file.as_deref())
+                    .as_deref()
+                    == Some(t.id.as_str())
             }
         }) else {
             return;
@@ -125,6 +133,7 @@ pub fn collect_calls(
     }
     let mut c = CallCollector {
         triggers,
+        index: super::decls::DeclIndex::build(acc),
         file: None,
         facts,
         found: Vec::new(),

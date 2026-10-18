@@ -61,7 +61,9 @@ impl<'a> Analyzer<'a> {
                 &info.file_path,
                 info.visibility,
                 ctx.parent_function.file_path.as_ref(),
-            ) {
+            ) && !self
+                .generator_can_access_type(&type_name, ctx.parent_function.file_path.as_ref())
+            {
                 let decl_file = info.file_path.clone();
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
@@ -71,7 +73,9 @@ impl<'a> Analyzer<'a> {
                 &decl_file,
                 visibility,
                 ctx.parent_function.file_path.as_ref(),
-            ) {
+            ) && !self
+                .generator_can_access_type(&type_name, ctx.parent_function.file_path.as_ref())
+            {
                 self.report_not_public("Type", &type_name, &decl_file, id.position, diagnostics);
             }
         } else {

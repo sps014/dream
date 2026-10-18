@@ -253,7 +253,7 @@ enum Command {
         #[arg(long, value_name = "GEN")]
         explain: Option<String>,
         /// Run a generator once and save its snapshot and result (into -o, or
-        /// target/generators/<GEN>)
+        /// target/obj/generators/captures/<GEN>)
         #[arg(long, value_name = "GEN")]
         capture: Option<String>,
         /// Rerun a --capture directory without compiling, comparing against its result
@@ -1120,7 +1120,7 @@ fn collect_dream_files(path: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<(
             if kind.is_dir()
                 && matches!(
                     entry.file_name().to_str(),
-                    Some("target" | ".git" | ".dream" | "node_modules" | "site")
+                    Some("target" | "generated" | ".git" | ".dream" | "node_modules" | "site")
                 )
             {
                 continue;

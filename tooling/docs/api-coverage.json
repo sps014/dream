@@ -1175,7 +1175,7 @@
       },
       {
         "signature": "public fun emit_file(path: string, source: string): void",
-        "description": "Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.",
+        "description": "Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `generated/<entry>/<module-path>/<generator>/` and compiled with the program.",
         "line": 371,
         "page": "reference/api/codegen-gen-context-2.md"
       },

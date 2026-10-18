@@ -366,8 +366,8 @@ public class GenContext {
         this.outputs.push(out);
     }
 
-    // Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`).
-    // It is written under `.dream/generated/<entry>/<generator>/` and compiled with the program.
+    /// Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`).
+    /// It is written under `generated/<entry>/<module-path>/<generator>/` and compiled with the program.
     public fun emit_file(path: string, source: string): void {
         let out = JsonValue.dict();
         out["kind"] = JsonValue.from_string("file");
@@ -591,7 +591,7 @@ public class GenContext {
         }
         let root = JsonValue.dict();
         root["version"] = JsonValue.from_int(gen_snapshot_version());
-        root["generator"] = JsonValue.from_string(this.generator_name);
+        root["generator"] = JsonValue.from_string(this.generator_id);
         root["outputs"] = this.outputs;
         root["diagnostics"] = this.diagnostics;
         root["logs"] = this.logs;

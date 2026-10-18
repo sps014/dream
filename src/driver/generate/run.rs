@@ -22,6 +22,7 @@ impl RunFiles {
         let dir = cache_root.join("runs");
         std::fs::create_dir_all(&dir)?;
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let generator = blake3::hash(generator.as_bytes()).to_hex();
         let stem = format!("{generator}-{}-{n}", std::process::id());
         Ok(RunFiles {
             snapshot: dir.join(format!("{stem}.snapshot.json")),
@@ -208,7 +209,7 @@ fn keep_failed_run(
     snapshot_json: &str,
     timeout_secs: u64,
 ) -> PathBuf {
-    let dir = cache_root.join("failed").join(generator);
+    let dir = super::paths::generator_dir(&cache_root.join("failed"), generator);
     let _ = write_capture(
         &dir,
         exe,

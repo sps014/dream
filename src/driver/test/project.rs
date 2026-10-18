@@ -177,7 +177,10 @@ fn collect_into(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
         let entry = entry.map_err(|e| format!("read {}: {e}", dir.display()))?;
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name == "target" || name == dream_stdlib::PACKAGES_DIR || name.starts_with('.') {
+        if matches!(name.as_str(), "target" | "generated")
+            || name == dream_stdlib::PACKAGES_DIR
+            || name.starts_with('.')
+        {
             continue;
         }
         if path.is_dir() {
@@ -210,6 +213,7 @@ mod tests {
         write(&root.join("a_tests.dream"), "");
         write(&root.join("nested/b_tests.dream"), "");
         write(&root.join("target/test/debug/stale.dream"), "");
+        write(&root.join("generated/main/derive/stale.dream"), "");
         write(&root.join("dream_packages/dep/src/dep.dream"), "");
         let project = TestProject::locate(&root).unwrap();
         assert_eq!(project.name, "suite");

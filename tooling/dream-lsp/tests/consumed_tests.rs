@@ -1,5 +1,5 @@
 //! Editor support inside generator-consumed functions, replayed from the last build's
-//! `.dream/generated/<entry>/<generator>/outputs.json`.
+//! `generated/<entry>/<generator>/outputs.json`.
 
 use dream_lsp::analysis::analyze_document;
 use dream_lsp::index::Index;
@@ -29,7 +29,7 @@ fn project(tag: &str) -> Project {
     fs::write(dir.join("gen.dream"), GENERATOR).unwrap();
     let main = dir.join("main.dream");
     fs::write(&main, MAIN).unwrap();
-    let generated = dir.join(".dream/generated/main/shade");
+    let generated = dir.join("generated/main/gen/shade");
     fs::create_dir_all(&generated).unwrap();
     let artifact = "float blur(float x) {\n    return x * 2.0;\n}\n";
     fs::write(generated.join("blur.slang"), artifact).unwrap();
@@ -48,7 +48,7 @@ fn project(tag: &str) -> Project {
         generated.join("outputs.json"),
         serde_json::to_vec(&serde_json::json!({
             "version": dream::driver::generate::SNAPSHOT_VERSION,
-            "generator": "shade",
+            "generator": "gen::shade",
             "outputs": outputs,
             "diagnostics": [{
                 "severity": "error",
@@ -112,7 +112,7 @@ fn artifact_diagnostics_and_lenses_point_at_the_consumed_function() {
     consumed.sort_by_key(|c| c.start);
     assert_eq!(consumed.len(), 2);
     assert_eq!(consumed[0].start, offset_of("blur", 0));
-    assert_eq!(consumed[0].generator, "shade");
+    assert_eq!(consumed[0].generator, "gen::shade");
     assert!(consumed[0].artifacts[0].ends_with("shade/blur.slang"));
     assert!(consumed[1].artifacts.is_empty());
 
@@ -124,9 +124,9 @@ fn artifact_diagnostics_and_lenses_point_at_the_consumed_function() {
     assert_eq!(
         titles,
         [
-            "consumed by generator 'shade'",
+            "consumed by generator 'gen::shade'",
             "open blur.slang",
-            "consumed by generator 'shade'"
+            "consumed by generator 'gen::shade'"
         ]
     );
     assert_eq!(lenses[1].command.as_ref().unwrap().command, "vscode.open");

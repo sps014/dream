@@ -101,7 +101,7 @@ impl<'a> Analyzer<'a> {
         // `str.char_at(i)`: built-in character accessor on strings (low-level read).
         if method.text == intrinsics::CHAR_AT && obj_type.get_type() == "string" {
             if !self.current_file.as_ref().is_some_and(|file| {
-                self.stdlib_files.contains(file) || self.generated_files.contains(file)
+                self.stdlib_files.contains(file) || self.trusted_generated_file(file)
             }) {
                 diagnostics.report_error(
                     "'string.char_at' is internal; use string[index]".to_string(),

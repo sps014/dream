@@ -130,7 +130,9 @@ fn import_path_completions(
                 };
                 let name = entry.file_name().to_string_lossy().to_string();
                 if file_type.is_dir() {
-                    if name.starts_with('.') || name == "dream_packages" {
+                    if name.starts_with('.')
+                        || matches!(name.as_str(), "dream_packages" | "target" | "generated")
+                    {
                         continue;
                     }
                     if name.starts_with(partial) || format!("{}.", name).starts_with(partial) {

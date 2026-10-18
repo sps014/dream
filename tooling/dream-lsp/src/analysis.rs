@@ -184,7 +184,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     }
 
     // Generators cannot run here; the generate pass instead merges the files the last build
-    // materialized under `.dream/generated`, so generated members resolve in the editor. A file
+    // materialized under `generated`, so generated members resolve in the editor. A file
     // other than the project entry replays the entry's build, which covers every module it imports.
     let replay_entry = file_path.map(|path| {
         std::path::Path::new(path)
@@ -270,11 +270,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             start: by.span.start,
             end: by.span.end,
             generator: by.generator.clone(),
-            artifacts: acc
-                .consumed_artifacts
-                .get(id)
-                .cloned()
-                .unwrap_or_default(),
+            artifacts: acc.consumed_artifacts.get(id).cloned().unwrap_or_default(),
         })
         .collect();
 

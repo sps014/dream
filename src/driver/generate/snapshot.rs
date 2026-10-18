@@ -548,7 +548,11 @@ pub(super) fn build_selected(
     }
     let mut site_ids = IndexMap::new();
     if registered.syntax_block {
-        for site in facts.sites.iter().filter(|s| s.name == registered.name) {
+        for site in facts
+            .sites
+            .iter()
+            .filter(|s| s.generator.as_deref() == Some(registered.id.as_str()))
+        {
             let file = Some(site.key.0.as_str()).filter(|f| !f.is_empty());
             let location = b.location(file, site.name_span);
             let id = format!(

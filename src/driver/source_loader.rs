@@ -52,6 +52,9 @@ pub struct ProgramAccumulator<'a> {
     pub requested_std_packages: IndexSet<String>,
     /// Files merged from generator output (see `ModuleGraph::generated_files`).
     pub generated_files: IndexSet<String>,
+    pub generator_output_files: indexmap::IndexMap<String, String>,
+    pub std_generator_output_files: IndexSet<String>,
+    pub generator_access: indexmap::IndexMap<String, IndexSet<String>>,
     pub published_artifacts: indexmap::IndexMap<String, Vec<u8>>,
     pub embedded_assets: indexmap::IndexMap<String, Vec<u8>>,
     pub consumed: indexmap::IndexMap<String, dream_sema::module_graph::ConsumedBy>,

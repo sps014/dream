@@ -86,6 +86,7 @@ impl<'a> Analyzer<'a> {
                 info.visibility,
                 parent_function.file_path.as_ref(),
             )
+            && !self.generator_can_access_type(&name.text, parent_function.file_path.as_ref())
         {
             let decl_file = info.file_path.clone();
             self.report_not_public("Class", &name.text, &decl_file, name.position, diagnostics);

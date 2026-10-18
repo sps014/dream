@@ -62,6 +62,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--suite", choices=sorted(SUITES), default="micro",
                    help="workload suite; --benchmark overrides the fixture")
     p.add_argument("--benchmark", type=Path, help="fixture path, including a preserved campaign snapshot")
+    p.add_argument("--baseline-benchmark", type=Path,
+                   help="matching base revision fixture when its stdlib API differs")
     p.add_argument("--node", default=shutil.which("node"), help="Node executable for wasm measurements")
     p.add_argument("--diagnostics", action="store_true", help="save optimized IR and first-pass LLVM remarks")
     p.add_argument("--arms", nargs="+", default=["current"],
@@ -157,8 +159,9 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     work = out / arm
     work.mkdir(parents=True, exist_ok=True)
     path = work / "microbenches.dream"
-    if not path.exists() or path.read_bytes() != args.benchmark_source:
-        path.write_bytes(args.benchmark_source)
+    source = args.baseline_benchmark_source if arm == "baseline" else args.benchmark_source
+    if not path.exists() or path.read_bytes() != source:
+        path.write_bytes(source)
     compile_env = dict(os.environ, DREAM_RUNTIME_COUNTERS="1" if args.counters else "0")
     if args.layout_toolchain:
         compile_env["DREAM_LLVM"] = str(args.layout_toolchain)
@@ -295,10 +298,21 @@ def main() -> int:
     if not 0 <= args.regression_threshold < 1:
         raise ValueError("invalid regression threshold")
     args.benchmark_source = args.benchmark.read_bytes()
+    if args.baseline_benchmark and (args.gate or args.save_baseline or "baseline" not in args.arms):
+        raise ValueError("a baseline fixture requires a paired comparison without saved references")
+    args.baseline_benchmark_source = (args.baseline_benchmark.read_bytes()
+                                      if args.baseline_benchmark else args.benchmark_source)
     compatibility = bench_gate.identity(args.benchmark, args.runner_id, args.input_seed, args.passes,
                                         args.target, args.benchmark_source)
     compatibility["function_alignment"] = args.function_alignment
     compatibility["loop_alignment"] = args.loop_alignment
+    if args.baseline_benchmark:
+        baseline_identity = bench_gate.identity(args.baseline_benchmark, args.runner_id,
+                                               args.input_seed, args.passes, args.target,
+                                               args.baseline_benchmark_source)
+        if baseline_identity["names"] != compatibility["names"]:
+            raise ValueError("baseline fixture has different workload names")
+        compatibility["baseline_benchmark"] = baseline_identity["benchmark"]
     if args.suite == "macro" and args.filter:
         unknown = sorted(set(args.filter) - set(compatibility["names"]))
         if unknown:

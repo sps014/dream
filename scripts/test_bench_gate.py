@@ -262,7 +262,8 @@ class MeasurementTests(unittest.TestCase):
         self.fixture = self.root / 'fixture.dream'
         self.fixture.write_text('report("work", elapsed, iterations);')
 
-    def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=()):
+    def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=(),
+                        baseline_benchmark=None):
         args = argparse.Namespace(
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
             fail_on_regression=False, function_alignment=0, loop_alignment=0,
@@ -270,6 +271,7 @@ class MeasurementTests(unittest.TestCase):
             regression_threshold=.1, benchmark=self.fixture, runner_id='test',
             filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',
             baseline_dream='compiler',
+            baseline_benchmark=baseline_benchmark,
         )
         if comparison:
             args.arms = ['baseline', 'current']
@@ -299,6 +301,41 @@ class MeasurementTests(unittest.TestCase):
         self.run_measurement(total=1000000, comparison=True, suite="macro", filters=["work"])
         self.assertTrue(self.environments)
         self.assertTrue(all(env["DREAM_BENCH_ONLY"] == "work" for env in self.environments))
+
+    def test_revision_fixtures_record_both_source_identities(self):
+        baseline = self.root / 'base.dream'
+        baseline.write_text('// previous API\nreport("work", elapsed, iterations);')
+        self.assertEqual(self.run_measurement(total=1000000, comparison=True,
+                                             baseline_benchmark=baseline), 0)
+        identity = json.loads((self.root / 'output/summary.json').read_text())['identity']
+        self.assertEqual(identity['baseline_benchmark'], bench_gate.digest(baseline))
+        self.assertEqual(identity['benchmark'], bench_gate.digest(self.fixture))
+
+    def test_each_compiler_receives_its_revision_fixture(self):
+        args = argparse.Namespace(benchmark_source=b'new API', baseline_benchmark_source=b'old API',
+                                  counters=False, layout_toolchain=None, baseline_runtime=None,
+                                  current_runtime=None, diagnostics=False, target='native')
+
+        def compile_fixture(command, cwd, env):
+            artifacts = cwd / 'target/release'
+            artifacts.mkdir(parents=True)
+            (artifacts / 'microbenches.bin').write_bytes(b'benchmark executable')
+
+        with patch.object(bench, 'run', side_effect=compile_fixture):
+            for arm, expected in [('baseline', b'old API'), ('current', b'new API')]:
+                bench.prepare_dream(arm, str(self.binary), self.root / 'output', args)
+                self.assertEqual((self.root / 'output' / arm / 'microbenches.dream').read_bytes(),
+                                 expected)
+
+    def test_revision_fixtures_require_matching_workloads(self):
+        baseline = self.root / 'base.dream'
+        baseline.write_text('report("other", elapsed, iterations);')
+        with self.assertRaisesRegex(ValueError, 'different workload names'):
+            self.run_measurement(comparison=True, baseline_benchmark=baseline)
+
+    def test_revision_fixture_cannot_override_saved_reference_identity(self):
+        with self.assertRaisesRegex(ValueError, 'paired comparison without saved references'):
+            self.run_measurement(claim='gate', baseline_benchmark=self.fixture)
 
     def test_unfiltered_run_clears_inherited_selection(self):
         with patch.dict(os.environ, {"DREAM_BENCH_ONLY": "graph_paths_class"}):

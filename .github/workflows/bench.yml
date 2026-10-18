@@ -74,6 +74,7 @@ jobs:
             cargo build --locked --release -p dream -p dream-host)
           echo "dream=$baseline_tree/target/release/dream" >> "$GITHUB_OUTPUT"
           echo "runtime=$baseline_tree/crates/dream-mir/src/runtime/c" >> "$GITHUB_OUTPUT"
+          echo "source=$baseline_tree" >> "$GITHUB_OUTPUT"
           echo "available=true" >> "$GITHUB_OUTPUT"
       # Paired rounds on one runner: a non-overlapping slowdown past the 10% budget against the
       # base revision fails the job.
@@ -82,16 +83,22 @@ jobs:
         env:
           BASELINE_DREAM: ${{ steps.baseline.outputs.dream }}
           BASELINE_RUNTIME: ${{ steps.baseline.outputs.runtime }}
+          BASELINE_SOURCE: ${{ steps.baseline.outputs.source }}
         shell: bash
         run: |
           failed=0
           for suite in micro macro; do
+            fixture="tests/bench/microbenches.dream"
+            if [ "$suite" = macro ]; then
+              fixture="tests/bench/macro/macrobenches.dream"
+            fi
             output="target/bench-gate/$suite"
             mkdir -p "$output"
             python3 scripts/bench.py --target native --suite "$suite" \
               --arms baseline current --current-dream target/release/dream \
               --baseline-dream "$BASELINE_DREAM" \
               --baseline-runtime "$BASELINE_RUNTIME" \
+              --baseline-benchmark "$BASELINE_SOURCE/$fixture" \
               --warmup 2 --rounds 12 --passes 5 --function-alignment 64 --loop-alignment 32 \
               --diagnostics --fail-on-regression --out "$output" \
               2>&1 | tee "$output/comparison.txt" || failed=1

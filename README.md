@@ -7,7 +7,7 @@
 A statically typed, ahead-of-time compiled language with automatic memory management,
 specialized generics, and a standard library built for real applications.
 
-**Optimized ARC** · **Typed web APIs** · **Seamless C, C++, and JavaScript interop** · **Native + WebAssembly**
+**Optimized ARC** · **GPU shaders in Dream** · **Typed web APIs** · **Seamless C, C++, and JavaScript interop** · **Native + WebAssembly**
 
 [Get started](#get-started) · [Documentation](https://sps014.github.io/dream/) · [Language tour](docs/learn/tour.md) · [Examples](docs/cookbook/index.md)
 
@@ -41,7 +41,7 @@ Continue with the [quickstart](docs/learn/quickstart.md), [language tour](docs/l
 
 ## A first taste
 
-```dream
+```typescript
 import system;
 import system.json;
 
@@ -78,6 +78,20 @@ Dream is for people who want familiar application code, ahead-of-time compilatio
 
 Build native executables for command-line tools and services, or compile to WebAssembly for the browser and Node. Share your core logic across targets, then use each environment's APIs where you need them. Code goes through LLVM's optimizer either way, and builds are deterministic: the same source produces byte-identical output. See [environments](docs/learn/environments.md).
 
+### Write GPU shaders in Dream.
+
+Import `system.gpu` and write compute, vertex, and fragment shaders as Dream functions. Typed buffers and generated shader calls connect your application to the GPU. Shaders compile ahead of time, so no shader source or shader compiler ships with your program.
+
+Start with WebGPU for native and browser programs, or choose Metal, Vulkan, Direct3D, or CUDA for platform-specific work. Rendering, ray tracing, automatic differentiation, and tensor hardware operations are available where the selected backend and GPU support them; CUDA is compute-only, and ray tracing requires a native backend.
+
+Install the shader compiler before building a program with shaders:
+
+```sh
+dreamer toolchain install slang
+```
+
+Follow the [GPU setup and first compute shader](docs/library/gpu/index.md), draw with the [rendering guide](docs/library/gpu/rendering.md), or try the [interactive spotlight](docs/cookbook/gpu-spotlight.md). Explore [ray tracing](docs/library/gpu/ray-tracing.md) and [machine learning](docs/library/gpu/machine-learning.md) for advanced workloads. The setup guide lists additional tools required by specific targets; GPU failures are returned as `Result` values with `GpuError` details.
+
 ### Automatic memory that mostly compiles away.
 
 Dream manages heap values with automatic reference counting (ARC). Objects are freed the moment their last owner lets go, with no garbage collector and no tracing pauses. Most of the counting is removed at compile time:
@@ -106,7 +120,7 @@ Declare a foreign function with the right attribute and call it like any Dream f
 
 `system.webapi` builds native HTTP services. Routes are typed static methods, and the router is generated at compile time, so a handler cannot receive an argument of the wrong type.
 
-```dream
+```typescript
 import system;
 import system.json;
 import system.webapi;
@@ -164,6 +178,7 @@ The standard library covers collections, files, JSON, HTTP, regex, dates, crypto
 - **CLI tools and automation:** work with [files](docs/library/io/file.md), [processes](docs/library/system/process.md), and [command-line arguments](docs/library/system/cli.md).
 - **HTTP services:** build your [first web API](docs/web-server/first-application.md), then add validation, authentication, and streaming.
 - **Browser and Node modules:** compile to WebAssembly and connect to [JavaScript APIs](docs/language/interop/js-type.md).
+- **GPU applications:** run [compute shaders](docs/library/gpu/index.md), build [renderers](docs/library/gpu/rendering.md), or explore [GPU machine learning](docs/library/gpu/machine-learning.md).
 - **Reusable libraries:** combine [collections](docs/library/collections/index.md), generics, and source generators, then [publish a package](docs/deploy/publishing.md).
 
 Each feature guide explains which environments it supports.

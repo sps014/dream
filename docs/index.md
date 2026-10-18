@@ -102,3 +102,21 @@ Generic code is specialized for each type you use, with no runtime dispatch.
 </div>
 
 </div>
+
+## GPU programming in Dream { .dream-home__heading }
+
+Write compute, vertex, and fragment shaders as Dream functions with `import system.gpu`.
+Shaders compile ahead of time, and generated calls connect them to your application with typed
+parameters and GPU buffers. Use them for parallel computation, drawing into textures, or rendering
+in a window.
+
+Install the shader compiler with `dreamer toolchain install slang`, then follow the
+[GPU setup and first compute shader](library/gpu/index.md). WebGPU supports native and browser
+programs; Metal, Vulkan, Direct3D, and CUDA provide additional native targets. CUDA is compute-only.
+Backend and hardware support determine which advanced features you can use, and GPU operations
+report failures through `Result` values with `GpuError` details.
+
+- [Rendering](library/gpu/rendering.md): draw with vertex and fragment shaders.
+- [Interactive spotlight](cookbook/gpu-spotlight.md): draw a light that follows the mouse.
+- [Ray tracing](library/gpu/ray-tracing.md): trace rays on supported native backends and hardware.
+- [Machine learning](library/gpu/machine-learning.md): differentiate shader code and use tensor hardware.

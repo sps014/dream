@@ -7,7 +7,7 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput triangle_vertex(uint vertex_id : SV_VertexID)
+VertexOutput triangle_vertex(uint vertex_id : SV_VulkanVertexID)
 {
     float2 corners[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
     VertexOutput output;

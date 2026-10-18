@@ -48,7 +48,7 @@ layout. `dreamer toolchain install slang` rebuilds the recorder when its embedde
   need checking. Benchmark CI now records the matching baseline runtime sources and retains
   optimized IR and optimization remarks alongside the timing samples.
 
-  The comparison now applies 64-byte function alignment to both compiler arms, recorded in
+  The comparison now applies 64-byte function and 32-byte loop alignment to both compiler arms, recorded in
   the benchmark identity. Matched-layout micro and macro qualification passes on Zen 3,
   Zen 4 and Emerald Rapids; the 10% budget and result checks stay unchanged. Integer string
   formatting now writes pairs of UTF-16 digits per division and uses unsigned magnitude for

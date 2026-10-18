@@ -81,6 +81,8 @@ def parse_args() -> argparse.Namespace:
                    help="exit 1 when a paired current/baseline row regresses past the threshold")
     p.add_argument("--function-alignment", type=int, choices=(0, 16, 32, 64, 128), default=0,
                    help="apply the same function alignment to both native Linux arms (bytes)")
+    p.add_argument("--loop-alignment", type=int, choices=(0, 16, 32, 64, 128), default=0,
+                   help="apply the same loop alignment to both native Linux arms (bytes)")
     p.add_argument("--save-baseline", help="save a validated immutable reference and complete samples")
     p.add_argument("--gate", help="compare current against the saved reference in paired rounds")
     p.add_argument("--runner-id", default=os.environ.get("DREAM_BENCH_RUNNER_ID"), help="controlled runner identity (required for gating)")
@@ -296,6 +298,7 @@ def main() -> int:
     compatibility = bench_gate.identity(args.benchmark, args.runner_id, args.input_seed, args.passes,
                                         args.target, args.benchmark_source)
     compatibility["function_alignment"] = args.function_alignment
+    compatibility["loop_alignment"] = args.loop_alignment
     if args.suite == "macro" and args.filter:
         unknown = sorted(set(args.filter) - set(compatibility["names"]))
         if unknown:
@@ -315,13 +318,14 @@ def main() -> int:
     commands = {}
     identities = tool_versions(args)
     args.layout_toolchain = None
-    if args.function_alignment:
+    if args.function_alignment or args.loop_alignment:
         if args.target != "native":
-            raise ValueError("function alignment requires a native measurement")
+            raise ValueError("code alignment requires a native measurement")
         llvm = Path(os.environ.get("DREAM_LLVM", str(
             Path.home() / ".dream/toolchains" / f"llvm-{identities['llvm']}" / "bin")))
-        args.layout_toolchain = layout.toolchain(llvm, out, args.function_alignment)
+        args.layout_toolchain = layout.toolchain(llvm, out, args.function_alignment, args.loop_alignment)
     identities["function_alignment"] = args.function_alignment
+    identities["loop_alignment"] = args.loop_alignment
     if reference:
         identities.update({key: value for key, value in reference['tools'].items() if key.startswith('baseline_')})
         if args.target == "wasm":

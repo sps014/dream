@@ -31,11 +31,11 @@ class GateTests(unittest.TestCase):
         executable = llvm / 'bin/llc'
         executable.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
         executable.chmod(0o755)
-        binary = layout.toolchain(llvm, self.root / 'comparison', 64)
+        binary = layout.toolchain(llvm, self.root / 'comparison', 64, 32)
         result = subprocess.check_output([str(binary / 'llc'), '-O3', 'input with spaces.bc'], text=True)
-        self.assertEqual(result.splitlines(), ['-align-all-functions=6', '-O3', 'input with spaces.bc'])
+        self.assertEqual(result.splitlines(), ['-align-all-functions=6', '-align-loops=32', '-O3', 'input with spaces.bc'])
         self.assertEqual((binary.parent / 'lib/header').read_text(), 'resource')
-        self.assertEqual(layout.toolchain(llvm, self.root / 'comparison', 64), binary)
+        self.assertEqual(layout.toolchain(llvm, self.root / 'comparison', 64, 32), binary)
 
     def test_two_arm_order_is_balanced(self):
         spec = importlib.util.spec_from_file_location('comparison', Path(__file__).with_name('bench.py'))
@@ -265,7 +265,7 @@ class MeasurementTests(unittest.TestCase):
     def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=()):
         args = argparse.Namespace(
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
-            fail_on_regression=False, function_alignment=0,
+            fail_on_regression=False, function_alignment=0, loop_alignment=0,
             warmup=1, rounds=1, passes=1, input_seed=1, target='native',
             regression_threshold=.1, benchmark=self.fixture, runner_id='test',
             filter=list(filters), out=str(self.root / 'output'), current_dream='compiler',

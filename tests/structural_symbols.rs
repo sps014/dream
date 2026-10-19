@@ -123,11 +123,12 @@ fn object_protocol_uses_resolved_definitions_after_symbol_rename() {
 }
 
 #[test]
-fn protocol_override_survives_generic_only_type_reachability() {
-    let source = format!(
-        "{}\n{}",
-        common::SYSTEM_STUB,
-        r#"
+fn generic_only_protocol_overrides_are_kept_only_for_dynamic_routing() {
+    for dynamic in [false, true] {
+        let source = format!(
+            "{}\n{}",
+            common::SYSTEM_STUB,
+            r#"
         class Label {
             public override fun to_string(): string { return "label"; }
         }
@@ -135,23 +136,32 @@ fn protocol_override_survives_generic_only_type_reachability() {
         fun touch(value: Holder<Label>): int { return 1; }
         fun main(): void { System.println(touch(Holder<Label>())); }
     "#
-    );
-    common::compile_test_pipeline(&source, |hir, interner| {
-        let ty = *hir
-            .layouts
-            .structs
-            .iter()
-            .find(|(_, l)| l.name == "Label")
-            .unwrap()
-            .0;
-        let formatter = hir.object_methods[&ty].to_string.unwrap();
-        let mut mir = dream_mir::lower::lower_program(hir, interner);
-        dream_mir::passes::optimize_module(&mut mir, interner);
-        assert!(mir.layouts.structs.contains_key(&ty));
-        assert!(mir.functions.iter().any(|f| f.def == formatter));
-        let ir = common::emit_ll(&mir, interner);
-        assert!(ir.contains("@s0_5_Label_0_to_string("));
-    });
+        );
+        let source = source.replace(
+            "return 1;",
+            if dynamic {
+                "System.println((object)value); return 1;"
+            } else {
+                "return 1;"
+            },
+        );
+        common::compile_test_pipeline(&source, |hir, interner| {
+            let ty = *hir
+                .layouts
+                .structs
+                .iter()
+                .find(|(_, l)| l.name == "Label")
+                .unwrap()
+                .0;
+            let formatter = hir.object_methods[&ty].to_string.unwrap();
+            let mut mir = dream_mir::lower::lower_program(hir, interner);
+            dream_mir::passes::optimize_module(&mut mir, interner);
+            assert!(mir.layouts.structs.contains_key(&ty));
+            assert_eq!(mir.functions.iter().any(|f| f.def == formatter), dynamic);
+            let ir = common::emit_ll(&mir, interner);
+            assert_eq!(ir.contains("@s0_5_Label_0_to_string("), dynamic);
+        });
+    }
 }
 #[test]
 fn interface_dispatch_uses_resolved_definitions_after_symbol_rename() {

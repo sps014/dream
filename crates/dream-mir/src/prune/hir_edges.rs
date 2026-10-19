@@ -21,6 +21,8 @@ pub(crate) struct HirEdges {
     pub funcrefs: Vec<FnKey>,
     /// `print` / `to_string` / `hash_code` in the body, so the emitter can splice object/format WAT.
     pub needs_format: bool,
+    pub to_string: Vec<TypeId>,
+    pub hash_code: Vec<TypeId>,
 }
 
 pub(crate) fn hir_body_edges(body: &[dream_hir::HStmt], out: &mut HirEdges) {
@@ -194,7 +196,17 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::IsType { value: x, .. }
         | K::TypeName { value: x }
         | K::ForceFree(x) => hir_expr_edges(x, out),
-        K::Cast(x) | K::HashCode(x) | K::ToString(x) | K::Print { arg: x, .. } => {
+        K::Cast(x) => {
+            out.needs_format = true;
+            hir_expr_edges(x, out);
+        }
+        K::HashCode(x) => {
+            out.needs_format = true;
+            out.hash_code.push(x.ty);
+            hir_expr_edges(x, out);
+        }
+        K::ToString(x) | K::Print { arg: x, .. } => {
+            out.to_string.push(x.ty);
             out.needs_format = true;
             hir_expr_edges(x, out);
         }

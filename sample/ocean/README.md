@@ -81,16 +81,24 @@ Measured for this sample with `--release --runtime --web -Oz`:
 
 | Artifact | Uncompressed | Gzip | Brotli |
 | --- | ---: | ---: | ---: |
-| `main.wasm` | 350.7 KiB | 65.9 KiB | 50.2 KiB |
-| `main.web.runtime.js` | 157.8 KiB | 33.9 KiB | 29.5 KiB |
-| Combined | 508.5 KiB | 99.8 KiB | 79.7 KiB |
+| `main.wasm` | 196.9 KiB | 44.0 KiB | 35.8 KiB |
+| `main.web.runtime.js` | 88.3 KiB | 22.2 KiB | 19.5 KiB |
+| Combined | 285.2 KiB | 66.2 KiB | 55.3 KiB |
+
+These sizes include compiler improvements that remove unused object formatting/hash
+methods and limit duplicated runtime and MIR code in size builds. The earlier build
+was 350.7 KiB raw / 50.2 KiB Brotli; the same ocean is now 44% smaller raw and 29%
+smaller with Brotli. Release JavaScript also uses compact printing and local-name
+mangling, reducing the host from 157.8 KiB to 88.3 KiB (29.5 KiB to 19.5 KiB Brotli).
+Together, WASM and JavaScript fall from 79.7 KiB to 55.3 KiB Brotli.
+Rendering quality and controls are unchanged.
 
 Sizes depend on the compiler and toolchain revision. The uncompressed WASM contains:
 
 | Part | Size | Contents |
 | --- | ---: | --- |
-| CPU code | 311.6 KiB | Application control flow and reachable runtime/stdlib code: window/input tracking, GPU command recording, async scheduling, memory management, strings and errors |
-| Data | 33.4 KiB | Shader bundle, strings, constants and runtime tables |
+| CPU code | 160.0 KiB | Application control flow and reachable runtime/stdlib code: window/input tracking, GPU command recording, async scheduling, memory management, strings and errors |
+| Data | 31.2 KiB | Shader bundle, strings, constants and runtime tables |
 | Other sections and metadata | 5.7 KiB | Imports, exports, types, function tables and embedded host ABI |
 
 The shader bundle is **12.1 KiB**, included in the data row. Wave evaluation runs on
@@ -99,11 +107,10 @@ download. The current CPU-side runtime and stdlib code dominate the binary size;
 `-Oz` reduces that code but does not remove the services this program reaches.
 
 For comparison, building the music-player sample with the same flags produces
-55.0 KiB of WASM, including 39.2 KiB of CPU code. It delegates the DOM, audio playback
+41.5 KiB of WASM (previously 55.0 KiB). It delegates the DOM, audio playback
 and media decoding to browser APIs through `js`. This sample compiles a shared
-native/browser window, input and GPU control path instead. A separate window/input
-probe without ocean rendering measures 116.2 KiB. These are different sets of
-reachable services, rather than a fixed runtime cost paid by every Dream program.
+native/browser window, input and GPU control path instead. These are different sets
+of reachable services, rather than a fixed runtime cost paid by every Dream program.
 
 The compiler also writes `.wasm.gz`, `.wasm.br` and compressed JavaScript files.
 Production hosting must select these files through content negotiation and send the

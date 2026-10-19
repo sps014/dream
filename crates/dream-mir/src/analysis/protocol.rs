@@ -1,4 +1,4 @@
-//! Reachability scan for the object-protocol (`to_string` / `hash_code`) emitters.
+//! Shared object-protocol (`to_string` / `hash_code`) reachability for pruning and emission.
 //!
 //! The backend otherwise emits `{Type}_to_string` / `{Type}_hash_code` for every
 //! struct, union, and array shape in the module. Most programs never stringify
@@ -11,9 +11,10 @@
 //! Set entries are the TypeId the emitter keys on: struct/union layout ids, and
 //! the *element* id for `array_to_string_t{N}`.
 
-use super::cx::Cx;
+use crate::{Mir, MirFunction};
 use crate::{Operand, Rvalue, Statement};
-use dream_types::{PrimTy, TyKind, TypeId};
+use dream_types::TypeInterner;
+use dream_types::{TyKind, TypeId};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Default)]
@@ -38,11 +39,19 @@ impl ProtocolReach {
     }
 }
 
-pub(crate) fn compute(cx: &Cx<'_>) -> ProtocolReach {
+struct Context<'a> {
+    mir: &'a Mir,
+    interner: &'a TypeInterner,
+}
+
+pub(crate) fn compute<'a>(
+    mir: &'a Mir,
+    interner: &TypeInterner,
+    functions: impl Iterator<Item = &'a MirFunction>,
+) -> ProtocolReach {
+    let cx = &Context { mir, interner };
     let mut reach = ProtocolReach::default();
-    let mut funcs: Vec<&crate::MirFunction> = cx.mir.functions.iter().collect();
-    funcs.extend(cx.mir.polls.iter());
-    for f in &funcs {
+    for f in functions {
         for block in &f.blocks {
             for stmt in &block.stmts {
                 match stmt {
@@ -53,71 +62,96 @@ pub(crate) fn compute(cx: &Cx<'_>) -> ProtocolReach {
                 }
             }
         }
+        if f.is_async
+            && let Some(hir) = &f.hir_fn
+        {
+            let mut edges = crate::HirEdges::default();
+            crate::hir_body_edges(&hir.body, &mut edges);
+            for ty in edges.to_string {
+                classify(cx, ty, &mut reach);
+            }
+            for ty in edges.hash_code {
+                classify_hash(cx, ty, &mut reach);
+            }
+        }
     }
     // The entry point renders a failing `main`'s error payload, but that call site is emitted by
     // hand after this scan, so it has to be registered here or its converter is never defined.
-    if let Some(err_ty) = super::entry::entry_error_type(cx) {
+    if let Some(err_ty) = entry_error_type(mir) {
         classify(cx, err_ty, &mut reach);
     }
     let mut dynamic = reach.dynamic;
-    close_over_layouts(cx, &mut reach.to_string, &mut dynamic);
-    close_over_layouts(cx, &mut reach.hash_code, &mut dynamic);
+    close_over_layouts(cx, &mut reach.to_string, &mut dynamic, false);
+    close_over_layouts(cx, &mut reach.hash_code, &mut dynamic, true);
     reach.dynamic = dynamic;
     reach
 }
 
-fn scan_rvalue(cx: &Cx<'_>, f: &crate::MirFunction, rv: &Rvalue, reach: &mut ProtocolReach) {
+fn scan_rvalue(cx: &Context<'_>, f: &crate::MirFunction, rv: &Rvalue, reach: &mut ProtocolReach) {
     match rv {
         Rvalue::ToString(o) => classify(cx, op_ty(cx, f, o), reach),
-        Rvalue::HashCode(o) => {
-            let ty = op_ty(cx, f, o);
-            if has_local_hash(cx, ty) {
-                reach.hash_code.insert(ty);
-            } else if !matches!(cx.interner.kind(ty), TyKind::Prim(PrimTy::String)) {
-                // Falls through to `dream_object_hash_code`.
-                reach.dynamic = true;
-            }
-        }
+        Rvalue::HashCode(o) => classify_hash(cx, op_ty(cx, f, o), reach),
         _ => {}
     }
 }
 
-fn classify(cx: &Cx<'_>, ty: TypeId, reach: &mut ProtocolReach) {
+fn classify_hash(cx: &Context<'_>, ty: TypeId, reach: &mut ProtocolReach) {
+    if has_local_hash(cx, ty) {
+        reach.hash_code.insert(ty);
+    } else if !matches!(cx.interner.kind(ty), TyKind::Prim(_) | TyKind::Enum(_)) {
+        reach.dynamic = true;
+    }
+}
+
+fn classify(cx: &Context<'_>, ty: TypeId, reach: &mut ProtocolReach) {
     match cx.interner.kind(ty) {
         TyKind::Array(e) => {
             reach.to_string.insert(*e);
         }
-        TyKind::Enum(_) => {}
-        _ if cx.nstruct(ty).is_some() || cx.nunion(ty).is_some() => {
+        TyKind::Prim(_) | TyKind::Enum(_) => {}
+        _ if cx.mir.layouts.structs.contains_key(&ty)
+            || cx.mir.layouts.unions.contains_key(&ty) =>
+        {
             reach.to_string.insert(ty);
         }
         // Layout-less (class objects / interfaces / unknown): dynamic router.
-        _ if !matches!(cx.interner.kind(ty), TyKind::Prim(PrimTy::String)) => {
-            reach.dynamic = true;
-        }
-        _ => {}
+        _ => reach.dynamic = true,
     }
 }
 
-fn has_local_hash(cx: &Cx<'_>, ty: TypeId) -> bool {
-    cx.nstruct(ty).is_some() || cx.nunion(ty).is_some()
+fn has_local_hash(cx: &Context<'_>, ty: TypeId) -> bool {
+    cx.mir.layouts.structs.contains_key(&ty) || cx.mir.layouts.unions.contains_key(&ty)
 }
 
 /// A referenced layout pulls in its fields' own protocol references (a struct's
 /// `to_string` calls each field's converter; an array's calls its element's). A field with no
 /// layout of its own converts through the router, so it makes the whole module dynamic even when
 /// no MIR statement named such a type directly.
-fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut bool) {
+fn close_over_layouts(
+    cx: &Context<'_>,
+    set: &mut BTreeSet<TypeId>,
+    dynamic: &mut bool,
+    hash: bool,
+) {
     let mut work: Vec<TypeId> = set.iter().copied().collect();
     while let Some(ty) = work.pop() {
+        if cx.mir.object_methods.get(&ty).is_some_and(|methods| {
+            if hash {
+                methods.hash_code.is_some()
+            } else {
+                methods.to_string.is_some()
+            }
+        }) {
+            continue;
+        }
         let mut deps: Vec<TypeId> = Vec::new();
         match cx.interner.kind(ty) {
             TyKind::Void | TyKind::Prim(_) => {}
             TyKind::Array(_) => deps.push(ty),
             _ => {
-                if let Some(l) = cx.nstruct(ty) {
+                if let Some(l) = cx.mir.layouts.structs.get(&ty) {
                     deps.extend(l.fields.iter().map(|f| f.ty));
-                } else if let Some(u) = cx.nunion(ty) {
+                } else if let Some(u) = cx.mir.layouts.unions.get(&ty) {
                     for v in &u.variants {
                         deps.extend(v.fields.iter().map(|f| f.ty));
                     }
@@ -137,7 +171,9 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut boo
                 }
                 _ => d,
             };
-            if cx.nstruct(dep_key).is_some() || cx.nunion(dep_key).is_some() {
+            if cx.mir.layouts.structs.contains_key(&dep_key)
+                || cx.mir.layouts.unions.contains_key(&dep_key)
+            {
                 if set.insert(dep_key) {
                     work.push(dep_key);
                 }
@@ -152,7 +188,7 @@ fn close_over_layouts(cx: &Cx<'_>, set: &mut BTreeSet<TypeId>, dynamic: &mut boo
     }
 }
 
-fn op_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &Operand) -> TypeId {
+fn op_ty(cx: &Context<'_>, f: &crate::MirFunction, o: &Operand) -> TypeId {
     match o {
         Operand::Copy(crate::Place::Local(l)) => f.local_ty(*l),
         Operand::Copy(crate::Place::Global(g)) => cx
@@ -163,7 +199,10 @@ fn op_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &Operand) -> TypeId {
             .map(|global| global.ty)
             .unwrap_or_else(|| cx.interner.int()),
         Operand::Copy(crate::Place::Field { base, field }) => cx
-            .nstruct(f.local_ty(*base))
+            .mir
+            .layouts
+            .structs
+            .get(&f.local_ty(*base))
             .and_then(|layout| layout.fields.get(*field))
             .map(|field| field.ty)
             .unwrap_or_else(|| f.local_ty(*base)),
@@ -183,4 +222,14 @@ fn op_ty(cx: &Cx<'_>, f: &crate::MirFunction, o: &Operand) -> TypeId {
         Operand::Const(crate::Const::Char(_)) => cx.interner.char(),
         Operand::Const(_) => cx.interner.int(),
     }
+}
+
+fn entry_error_type(mir: &Mir) -> Option<TypeId> {
+    let main = mir
+        .functions
+        .iter()
+        .find(|f| f.name == crate::abi::ENTRY_FN)?;
+    let layout = mir.layouts.unions.get(&main.ret)?;
+    let variant = layout.variants.iter().find(|v| v.name == "Err")?;
+    variant.fields.first().map(|f| f.ty)
 }

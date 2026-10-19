@@ -46,21 +46,6 @@ pub(crate) fn entry_reports_error(mir: &crate::Mir) -> bool {
         .any(|f| f.name == crate::abi::ENTRY_FN && mir.layouts.unions.contains_key(&f.ret))
 }
 
-/// The error payload type of a `Result`-returning `main`, for callers that must pre-register work
-/// keyed on it — `to_string` protocol reachability in particular, which is computed from MIR
-/// statements and would otherwise never see this hand-emitted call site.
-pub(crate) fn entry_error_type(cx: &Cx<'_>) -> Option<TypeId> {
-    let main = cx
-        .mir
-        .functions
-        .iter()
-        .find(|f| f.name == crate::abi::ENTRY_FN)?;
-    let EntryExit::Report(ty) = entry_exit(main, cx) else {
-        return None;
-    };
-    err_variant(cx, ty).map(|(_, field_ty)| field_ty)
-}
-
 /// `(discriminant, payload type)` of the `Result`'s failure variant.
 pub(crate) fn err_variant(cx: &Cx<'_>, ty: TypeId) -> Option<(usize, TypeId)> {
     let u = cx.nunion(ty)?;

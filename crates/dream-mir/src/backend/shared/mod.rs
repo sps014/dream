@@ -12,7 +12,6 @@ pub(crate) mod panic_msgs;
 pub(crate) mod place_policy;
 mod print;
 pub(crate) mod protocol_names;
-pub(crate) mod reach;
 mod symbols;
 pub(crate) mod tables;
 mod target;

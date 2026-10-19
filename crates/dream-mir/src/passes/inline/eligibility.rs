@@ -149,6 +149,9 @@ fn eligible(
     let prefer = g.inline == dream_hir::InlineHint::Prefer;
     let (max_stmts, max_blocks) = if prefer {
         (128, 24)
+    } else if mir.optimize_for_size && call_counts.get(key).copied().unwrap_or(0) > 1 {
+        // LLVM can still inline shared bodies after propagation gives it a target-level cost.
+        (8, 2)
     } else {
         (MAX_INLINE_STMTS, MAX_INLINE_BLOCKS)
     };

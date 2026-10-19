@@ -711,3 +711,30 @@ fn inlined_borrowed_value_parameter_does_not_drop_caller_fields() {
         "borrowed by-value arguments keep their private copy"
     );
 }
+
+#[test]
+fn size_builds_keep_shared_bodies_but_inline_single_use_and_explicit_hints() {
+    for (size, callers, hint, expected_call) in [
+        (false, 2, dream_hir::InlineHint::Default, false),
+        (true, 2, dream_hir::InlineHint::Default, true),
+        (true, 1, dream_hir::InlineHint::Default, false),
+        (true, 2, dream_hir::InlineHint::Prefer, false),
+    ] {
+        let mut ctx = TypeCtx::new();
+        let int = ctx.interner.int();
+        let def = ctx.register(DefKind::Function, "shared", vec![]);
+        let mut callee = fat_int_callee("shared", def, int, hint);
+        callee.blocks[0].stmts.truncate(20);
+        let mut mir = crate::Mir {
+            optimize_for_size: size,
+            functions: vec![callee],
+            ..Default::default()
+        };
+        for i in 0..callers {
+            let caller = ctx.register(DefKind::Function, &format!("caller{i}"), vec![]);
+            mir.functions.push(caller_of(def, caller, int));
+        }
+        Inliner.run(&mut mir, &ctx.interner);
+        assert_eq!(caller_still_calls(&mir), expected_call);
+    }
+}

@@ -151,7 +151,8 @@ fn emit_llvm_module_unchecked(
             }
         }
     }
-    let reach = crate::backend::shared::reach::compute(&l.cx);
+    let reach =
+        crate::analysis::protocol::compute(mir, interner, mir.functions.iter().chain(&mir.polls));
     let protocol = glue::protocol::plan(&l, &reach);
     glue::release::register_all(&mut l);
     glue::ownership::register_all(&mut l);

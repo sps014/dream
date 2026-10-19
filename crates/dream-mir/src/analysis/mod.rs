@@ -10,3 +10,7 @@ pub(crate) mod function_key;
 pub(crate) mod object_life;
 #[cfg(test)]
 mod object_life_tests;
+
+pub(crate) mod protocol;
+#[cfg(test)]
+mod protocol_tests;

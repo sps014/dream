@@ -64,6 +64,8 @@ pub struct Global(pub u32);
 #[derive(Debug, Default)]
 pub struct Mir {
     pub profile: dream_abi::profile::CompileProfile,
+    /// Prefer shared function bodies over duplicated MIR in size-oriented builds.
+    pub optimize_for_size: bool,
     /// Emit source/function metadata from ordinary source markers, without preserving locals
     /// or disabling production frame packing and optimization.
     pub perf_symbols: bool,

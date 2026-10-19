@@ -8,6 +8,10 @@ impl Compiler {
         dump: &mut dream_mir::passes::MirDump,
     ) -> dream_mir::Mir {
         mir.profile = self.profile();
+        mir.optimize_for_size = matches!(
+            self.effective_optimize(),
+            Some(OptLevel::Size | OptLevel::SizeAggressive)
+        );
         mir.perf_symbols = self.perf_symbols;
         mir.executable = matches!(
             self.output_kind,

@@ -177,6 +177,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .any(func_reads_type_name);
     Mir {
         profile: Default::default(),
+        optimize_for_size: false,
         perf_symbols: false,
         executable: false,
         exports: hir.exports.clone(),

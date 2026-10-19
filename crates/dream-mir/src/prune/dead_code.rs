@@ -443,8 +443,7 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             // An async function's MIR body is a stub; its real call/type edges live in the preserved
             // HIR snapshot, so walk that too (otherwise awaited helpers would be pruned).
             let f = &mir.functions[idx];
-            // Layout retention follows signatures and local types, including nested generic
-            // arguments; their protocol overrides must survive with those layouts.
+            // Ownership and dynamic dispatch need layouts named by signatures and nested generics.
             type_worklist.push(f.ret);
             type_worklist.extend(f.instance.iter().copied());
             type_worklist.extend(f.locals.iter().map(|l| l.ty));
@@ -485,9 +484,7 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
             }
         }
 
-        // Expand the live-type frontier: keep each type's destructor/`to_string` and recurse into its
-        // fields. Any newly-kept function is pushed back so its own body is walked; the outer loop
-        // reaches a fixpoint once the function worklist drains and no new type is discovered.
+        // Ownership keeps destructors and field layouts alive independently of optional protocols.
         while let Some(ty) = type_worklist.pop() {
             if !live_types.insert(ty) {
                 continue;
@@ -518,15 +515,6 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                         .flat_map(|v| v.fields.iter().map(|f| f.ty)),
                 );
             }
-            if let Some(methods) = mir.object_methods.get(&ty) {
-                for def in methods.to_string.iter().chain(methods.hash_code.iter()) {
-                    if let Some(&idx) = index.get(&(*def, vec![]))
-                        && !reachable.contains(&idx)
-                    {
-                        worklist.push(idx);
-                    }
-                }
-            }
             for def in destructors {
                 if let Some(&idx) = index.get(&(def, vec![]))
                     && !reachable.contains(&idx)
@@ -535,6 +523,29 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                 }
             }
             type_worklist.extend(field_tys);
+        }
+        let protocols = crate::analysis::protocol::compute(
+            mir,
+            interner,
+            mir.functions
+                .iter()
+                .enumerate()
+                .filter_map(|(i, f)| reachable.contains(&i).then_some(f)),
+        );
+        for ty in &live_types {
+            if let Some(methods) = mir.object_methods.get(ty) {
+                let defs = [
+                    methods.to_string.filter(|_| protocols.needs_to_string(*ty)),
+                    methods.hash_code.filter(|_| protocols.needs_hash_code(*ty)),
+                ];
+                for def in defs.into_iter().flatten() {
+                    if let Some(&idx) = index.get(&(def, vec![]))
+                        && !reachable.contains(&idx)
+                    {
+                        worklist.push(idx);
+                    }
+                }
+            }
         }
         if worklist.is_empty() {
             break;

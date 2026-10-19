@@ -309,6 +309,38 @@ that validated table. A missing entry rejects the stale runtime cache before any
   kept in lockstep with `runtime/c/include/dream_abi.h`. `core/inlines.c` holds the hot
   helpers the optimizer should see.
 
+## Download size
+
+Object-protocol reachability is shared between MIR pruning and LLVM glue planning.
+A live layout always retains its destructor and field layouts. Its custom `to_string`
+and `hash_code` methods survive only when reachable code needs the corresponding
+protocol. Generated formatters follow field/array dependencies; custom overrides
+supply their dependencies through their own bodies. Primitive formatting and hashing
+use primitive operations, without enabling dynamic object routers. Erased object
+operations retain conservative dynamic routing. Async HIR and implicit entry-error
+formatting participate in the same analysis.
+
+For `-Os` and `-Oz`, external definitions in `core/inlines.c` omit `alwaysinline`;
+whole-program LLVM optimization decides whether each helper is worth duplicating.
+Speed builds retain forced inlining. Size-oriented MIR builds restrict multi-use,
+unannotated callees to eight statements and two blocks before LLVM; single-use
+callees and explicit inline preferences keep the regular budgets. This avoids
+expanding shared code before LLVM can estimate its target-level cost.
+
+On the ocean sample, `--release --runtime --web -Oz` measured 350.7 KiB raw /
+50.2 KiB Brotli before these changes and 196.9 KiB / 35.8 KiB afterward. The shader
+bundle remains 12.1 KiB. The browser provides WebGPU; the WASM contains application
+and guest runtime code, not a native GPU driver. JavaScript host size is separate.
+These are measurements, not fixed size guarantees.
+
+The approach follows the general guidance to combine size optimization, whole-program
+dead-code elimination, restrained inlining and transfer compression in the
+[Emscripten optimization guide](https://emscripten.org/docs/optimizing/Optimizing-Code.html).
+Dream also runs the pinned [Binaryen optimizer](https://github.com/WebAssembly/binaryen)
+after LLVM and linking. Release JavaScript emission passes Oxc's returned scoping
+to code generation and enables compact printing; otherwise identifier mangling is
+lost and formatted output unnecessarily increases the host bundle.
+
 ## Optimization record
 
 Before the LLVM backend existed, Dream compiled through generated C. That C output of

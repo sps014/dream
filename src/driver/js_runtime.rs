@@ -305,10 +305,11 @@ fn minify_js_source(source: &str) -> Result<String, String> {
             .unwrap_or_else(|| "parse failed".to_string()));
     }
     let mut program = parser_return.program;
-    oxc_minifier::Minifier::new(oxc_minifier::MinifierOptions::default())
+    let minified = oxc_minifier::Minifier::new(oxc_minifier::MinifierOptions::default())
         .minify(&allocator, &mut program);
     Ok(oxc_codegen::Codegen::new()
-        .with_options(oxc_codegen::CodegenOptions::default())
+        .with_options(oxc_codegen::CodegenOptions::minify())
+        .with_scoping(minified.scoping)
         .build(&program)
         .code)
 }
@@ -316,6 +317,25 @@ fn minify_js_source(source: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_runtime_minification_renames_locals_and_removes_formatting() {
+        let source = r#"
+            export function load(unnecessarilyLongRuntimeParameter) {
+                return globalThis.callback(unnecessarilyLongRuntimeParameter + 1,
+                    unnecessarilyLongRuntimeParameter * 2);
+            }
+        "#;
+        let text = minify_js_source(source).unwrap();
+        assert!(!text.contains("unnecessarilyLongRuntimeParameter"));
+        assert!(!text.contains('\n'));
+        assert!(text.contains("load"));
+        assert_eq!(text, minify_js_source(source).unwrap());
+        let allocator = oxc_allocator::Allocator::default();
+        let parsed =
+            oxc_parser::Parser::new(&allocator, &text, oxc_span::SourceType::mjs()).parse();
+        assert!(parsed.diagnostics.is_empty());
+    }
 
     #[test]
     fn minimal_print_runtime_omits_optional_hosts() {

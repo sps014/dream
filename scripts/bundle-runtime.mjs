@@ -67,7 +67,7 @@ function collectModules(entryAbs) {
  */
 function transformModule(text, filePath) {
   const rel = path.relative(SRC_ROOT, filePath).split(path.sep).join("/");
-  let body = text;
+  let body = text.replace(/\r\n?/g, "\n");
 
   // Remove static import lines (including multi-line).
   body = body.replace(/^\s*import\s+[\s\S]*?from\s+["'][^"']+["']\s*;?\s*$/gm, "");
@@ -121,6 +121,8 @@ export function bundleRuntime(opts = {}) {
 export { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };
 export default { load, run, DreamInstance, TAGS, HEAP_HEADER_SIZE };
 `;
+
+  out = out.replace(/\r\n?/g, "\n");
 
   if (opts.outPath) {
     fs.mkdirSync(path.dirname(opts.outPath), { recursive: true });

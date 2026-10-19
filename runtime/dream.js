@@ -3820,6 +3820,9 @@ function gpuRecordCommands(dev, words, data, resource, pipelineOf, transient) {
 // WebGPU host for `system.gpu` (imports declared in crates/dream-stdlib/src/system/gpu/gpu_host.dream).
 // Shaders come only from the `wgsl` target of generated bundles; this host never compiles
 // anything but that WGSL. Canvas surfaces attach to `system.window` canvases.
+
+
+
 const GPU_BACKEND_AUTO = 0;
 const GPU_BACKEND_WEBGPU = 6;
 const GPU_BACKEND_NAMES = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];

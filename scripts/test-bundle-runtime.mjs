@@ -30,3 +30,18 @@ test("runtime bundle is independent of platform path separators", () => {
     path.sep = sep;
   }
 });
+
+test("runtime bundles are stable across checkout line endings", () => {
+  const read = fs.readFileSync;
+  try {
+    for (const ending of ["\n", "\r\n"]) {
+      fs.readFileSync = (file, options) => {
+        const value = read(file, options);
+        return typeof value === "string" ? value.replace(/\r\n?/g, "\n").replaceAll("\n", ending) : value;
+      };
+      assert.equal(bundleRuntime(), read(new URL("../runtime/dream.js", import.meta.url), "utf8"));
+    }
+  } finally {
+    fs.readFileSync = read;
+  }
+});

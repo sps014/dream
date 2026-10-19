@@ -374,6 +374,7 @@ jobs:
           key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
       - run: cargo run --locked -p dreamer -- toolchain install slang
       - name: Full native and Node assertion corpus
+        id: corpus-debug
         shell: bash
         run: |
           mkdir -p target
@@ -381,7 +382,7 @@ jobs:
       # Debug guest builds skip inlining, the release function pipeline and every late module
       # pass; only release builds exercise the ARC elision that ships.
       - name: Full native and Node assertion corpus (release guest builds)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (steps.corpus-debug.outcome == 'success' || steps.corpus-debug.outcome == 'failure') }}
         shell: bash
         run: |
           mkdir -p target

@@ -27,7 +27,9 @@ static NEXT_FUTURE: AtomicUsize = AtomicUsize::new(1);
 
 fn on_complete(future: usize, value: u64) {
     let mut results = RESULTS.lock().unwrap();
-    results.get_or_insert_with(HashMap::new).insert(future, value);
+    results
+        .get_or_insert_with(HashMap::new)
+        .insert(future, value);
     ARRIVED.notify_all();
 }
 
@@ -147,7 +149,11 @@ fn saxpy(device: i32) -> Result<(), String> {
 fn check_saxpy(out: i32, x: &[f32], y: &[f32], a: f32) -> Result<(), String> {
     let result = read_buffer(out, 0, 4 * x.len() as i32);
     if result.len() != 4 * x.len() {
-        return Err(format!("readback returned {} bytes: {}", result.len(), error::last_text()));
+        return Err(format!(
+            "readback returned {} bytes: {}",
+            result.len(),
+            error::last_text()
+        ));
     }
     for (i, chunk) in result.as_chunks::<4>().0.iter().enumerate() {
         let got = f32::from_le_bytes(*chunk);
@@ -183,8 +189,14 @@ fn parent(exe: &str) {
                 .args(["--loader-self-test", &library.to_string_lossy()])
                 .status()
                 .expect("running the loader self-test");
-            assert!(status.success(), "the loader check missed a mapped Slang compiler");
-            println!("loader self-test: a deliberately mapped {} is detected", library.display());
+            assert!(
+                status.success(),
+                "the loader check missed a mapped Slang compiler"
+            );
+            println!(
+                "loader self-test: a deliberately mapped {} is detected",
+                library.display()
+            );
             let output = Command::new(exe)
                 .args(["--strict-aot-self-test", &library.to_string_lossy()])
                 .env("DREAM_GPU_STRICT_AOT", "1")
@@ -265,7 +277,11 @@ fn loader_self_test(library: &str) -> i32 {
     if handle.is_null() {
         return 1;
     }
-    if testing::loaded_slang_compilers().0 > 0 { 0 } else { 1 }
+    if testing::loaded_slang_compilers().0 > 0 {
+        0
+    } else {
+        1
+    }
 }
 
 #[cfg(windows)]
@@ -278,7 +294,10 @@ fn loader_self_test(library: &str) -> i32 {
     if testing::loaded_slang_compilers().0 != 0 {
         return 1;
     }
-    let path: Vec<u16> = std::ffi::OsStr::new(library).encode_wide().chain(Some(0)).collect();
+    let path: Vec<u16> = std::ffi::OsStr::new(library)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
     // Slang's companion DLLs live next to the compiler, outside the test executable's PATH.
     let handle = unsafe {
         LoadLibraryExW(
@@ -291,7 +310,11 @@ fn loader_self_test(library: &str) -> i32 {
         eprintln!("loading {library}: {}", std::io::Error::last_os_error());
         return 1;
     }
-    if testing::loaded_slang_compilers().0 > 0 { 0 } else { 1 }
+    if testing::loaded_slang_compilers().0 > 0 {
+        0
+    } else {
+        1
+    }
 }
 
 /// Maps the Slang compiler, then opens a device: with `DREAM_GPU_STRICT_AOT` set the host must
@@ -306,7 +329,11 @@ fn strict_aot_self_test(library: &str) -> i32 {
 
 /// Selection and validation paths that need no GPU.
 fn device_free_checks() {
-    expect_err(devices::create_now(4, 1 << 3), Code::NotCompiled, "Metal not compiled");
+    expect_err(
+        devices::create_now(4, 1 << 3),
+        Code::NotCompiled,
+        "Metal not compiled",
+    );
     expect_err(devices::create_now(42, 0), Code::Invalid, "unknown backend");
     let foreign = if cfg!(windows) { 4 } else { 1 };
     match devices::create_now(foreign, 0) {
@@ -317,7 +344,11 @@ fn device_free_checks() {
         Ok(_) => panic!("a backend for another platform opened"),
     }
     expect_err(devices::backend(123_456), Code::Invalid, "unknown device");
-    expect_err(resources::buffer_create(123_456, 4, 1), Code::Invalid, "unknown device");
+    expect_err(
+        resources::buffer_create(123_456, 4, 1),
+        Code::Invalid,
+        "unknown device",
+    );
     let id = future();
     resources::buffer_read(id, 123_456, 0, 4);
     assert!(unsafe { guest::test_bytes(wait(id)) }.is_empty());
@@ -368,7 +399,10 @@ fn find(root: &Path, name: &str, under: &str) -> Option<PathBuf> {
 
 fn child(backend: Backend) -> i32 {
     if !testing::backend_compiled(backend as i32) {
-        println!("RESULT skip: this host was built without {}", backend.name());
+        println!(
+            "RESULT skip: this host was built without {}",
+            backend.name()
+        );
         return 0;
     }
     // The committed bundles come from a machine without dxc, fxc or NVRTC.
@@ -381,14 +415,21 @@ fn child(backend: Backend) -> i32 {
         .iter()
         .all(|b| bundle::parse(b).is_ok_and(|b| b.target_for(backend).is_some()));
     if !compiled {
-        println!("RESULT skip: the test bundles have no {} code", backend.name());
+        println!(
+            "RESULT skip: the test bundles have no {} code",
+            backend.name()
+        );
         return 0;
     }
     let mask = 1 << (backend as i32);
     let device = match devices::create_now(backend as i32, mask) {
         Ok(device) => device,
         Err(e) => {
-            println!("RESULT skip: no {} device here ({})", backend.name(), e.detail);
+            println!(
+                "RESULT skip: no {} device here ({})",
+                backend.name(),
+                e.detail
+            );
             return 0;
         }
     };
@@ -444,7 +485,9 @@ fn run_suite(backend: Backend, device: i32) -> Result<String, String> {
     } else {
         "saxpy, entry-parameter and generator-style compute, offscreen triangle, textured indexed quad with depth and error mapping verified"
     };
-    Ok(format!("{checks}; {surface_check} (features {features:#010b}, {deferred} deferred releases left)"))
+    Ok(format!(
+        "{checks}; {surface_check} (features {features:#010b}, {deferred} deferred releases left)"
+    ))
 }
 
 fn scale(device: i32) -> Result<(), String> {
@@ -505,7 +548,10 @@ fn generated(device: i32) -> Result<(), String> {
     commands.submit(device)?;
     let result = read_buffer(data, 0, 64 * 4);
     if result.len() != 64 * 4 {
-        return Err(format!("generated readback returned {} bytes", result.len()));
+        return Err(format!(
+            "generated readback returned {} bytes",
+            result.len()
+        ));
     }
     for (i, chunk) in result.as_chunks::<4>().0.iter().enumerate() {
         let got = u32::from_le_bytes(*chunk);
@@ -533,11 +579,25 @@ fn triangle(device: i32) -> Result<(), String> {
     )
     .map_err(|e| e.text())?;
     let (width, height) = (64, 32);
-    let target = resources::texture_create(device, &[width, height, 1, 1, 0, 1, 1]).map_err(|e| e.text())?;
+    let target =
+        resources::texture_create(device, &[width, height, 1, 1, 0, 1, 1]).map_err(|e| e.text())?;
     let bits = |v: f32| v.to_bits() as i32;
     let mut commands = Commands::default();
     commands
-        .op(1, &[target, 1, bits(0.0), bits(0.0), bits(1.0), bits(1.0), 0, 0, 0])
+        .op(
+            1,
+            &[
+                target,
+                1,
+                bits(0.0),
+                bits(0.0),
+                bits(1.0),
+                bits(1.0),
+                0,
+                0,
+                0,
+            ],
+        )
         .op(4, &[pipeline])
         .value(2, 0, &floats(&[0.5, 1.0, 1.0, 1.0]))
         .op(11, &[3, 1, 0, 0])
@@ -547,12 +607,18 @@ fn triangle(device: i32) -> Result<(), String> {
     resources::texture_read(id, target, 0, 0);
     let pixels = unsafe { guest::test_bytes(wait(id)) };
     if pixels.len() != (width * height * 4) as usize {
-        return Err(format!("texture readback returned {} bytes: {}", pixels.len(), error::last_text()));
+        return Err(format!(
+            "texture readback returned {} bytes: {}",
+            pixels.len(),
+            error::last_text()
+        ));
     }
     for (i, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
         let red_ok = (126..=129).contains(&pixel[0]);
         if !red_ok || pixel[1] != 0 || pixel[2] != 0 || pixel[3] != 255 {
-            return Err(format!("pixel {i} is {pixel:?}, expected [127/128, 0, 0, 255]"));
+            return Err(format!(
+                "pixel {i} is {pixel:?}, expected [127/128, 0, 0, 255]"
+            ));
         }
     }
     for handle in [target, pipeline, library] {
@@ -569,36 +635,73 @@ fn quad(device: i32) -> Result<(), String> {
     // 1 sample, one vertex buffer: stride 16, per vertex, position (Float32x2 at 0) and uv
     // (Float32x2 at 8).
     let desc = [0, 0, 0, 0, 11, 1, 1, 1, 1, 16, 0, 2, 0, 1, 0, 1, 1, 8];
-    let pipeline = pipelines::render_pipeline_create(library, "quad_vertex", library, "quad_fragment", &desc)
-        .map_err(|e| e.text())?;
+    let pipeline =
+        pipelines::render_pipeline_create(library, "quad_vertex", library, "quad_fragment", &desc)
+            .map_err(|e| e.text())?;
     let vertices = floats(&[
         -1.0, -1.0, 0.0, 1.0, //
         1.0, -1.0, 1.0, 1.0, //
         1.0, 1.0, 1.0, 0.0, //
         -1.0, 1.0, 0.0, 0.0,
     ]);
-    let vertex_buffer = resources::buffer_create(device, vertices.len() as i32, 2).map_err(|e| e.text())?;
+    let vertex_buffer =
+        resources::buffer_create(device, vertices.len() as i32, 2).map_err(|e| e.text())?;
     resources::buffer_write(vertex_buffer, 0, &vertices).map_err(|e| e.text())?;
-    let indices: Vec<u8> = [0u16, 1, 2, 0, 2, 3].iter().flat_map(|i| i.to_le_bytes()).collect();
+    let indices: Vec<u8> = [0u16, 1, 2, 0, 2, 3]
+        .iter()
+        .flat_map(|i| i.to_le_bytes())
+        .collect();
     let index_buffer = resources::buffer_create(device, 12, 4).map_err(|e| e.text())?;
     resources::buffer_write(index_buffer, 0, &indices).map_err(|e| e.text())?;
-    let texels = [[255u8, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 255]];
+    let texels = [
+        [255u8, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 255, 255],
+    ];
     let albedo = resources::texture_create(device, &[2, 2, 1, 1, 0, 0, 1]).map_err(|e| e.text())?;
     resources::texture_write(albedo, 0, 0, &texels.concat()).map_err(|e| e.text())?;
-    expect_err(resources::texture_write(albedo, 0, 0, &[0; 3]), Code::Invalid, "short texel data");
-    expect_err(resources::texture_write(albedo, 1, 0, &[0; 4]), Code::Invalid, "missing mip");
-    let nearest = resources::sampler_create(device, &[0, 0, 0, 0, 0, 0, 0, 1]).map_err(|e| e.text())?;
+    expect_err(
+        resources::texture_write(albedo, 0, 0, &[0; 3]),
+        Code::Invalid,
+        "short texel data",
+    );
+    expect_err(
+        resources::texture_write(albedo, 1, 0, &[0; 4]),
+        Code::Invalid,
+        "missing mip",
+    );
+    let nearest =
+        resources::sampler_create(device, &[0, 0, 0, 0, 0, 0, 0, 1]).map_err(|e| e.text())?;
     let (size, depth_format) = (8, 10);
-    let target = resources::texture_create(device, &[size, size, 1, 1, 0, 1, 1]).map_err(|e| e.text())?;
-    let depth = resources::texture_create(device, &[size, size, 1, 1, depth_format, 1, 1]).map_err(|e| e.text())?;
+    let target =
+        resources::texture_create(device, &[size, size, 1, 1, 0, 1, 1]).map_err(|e| e.text())?;
+    let depth = resources::texture_create(device, &[size, size, 1, 1, depth_format, 1, 1])
+        .map_err(|e| e.text())?;
     let bits = |v: f32| v.to_bits() as i32;
     let mut commands = Commands::default();
     commands
-        .op(1, &[target, 1, bits(0.5), bits(0.5), bits(0.5), bits(1.0), depth, 1, bits(1.0)])
+        .op(
+            1,
+            &[
+                target,
+                1,
+                bits(0.5),
+                bits(0.5),
+                bits(0.5),
+                bits(1.0),
+                depth,
+                1,
+                bits(1.0),
+            ],
+        )
         .op(4, &[pipeline])
         .op(7, &[0, vertex_buffer, 0])
         .op(8, &[index_buffer, 0, 0])
-        .op(9, &[0, 0, bits(size as f32), bits(size as f32), 0, bits(1.0)])
+        .op(
+            9,
+            &[0, 0, bits(size as f32), bits(size as f32), 0, bits(1.0)],
+        )
         .op(5, &[2, 0, 2, albedo, 0])
         .op(5, &[2, 1, 3, nearest, 0])
         .op(12, &[6, 1, 0, 0, 0])
@@ -608,17 +711,69 @@ fn quad(device: i32) -> Result<(), String> {
     resources::texture_read(id, target, 0, 0);
     let pixels = unsafe { guest::test_bytes(wait(id)) };
     if pixels.len() != (size * size * 4) as usize {
-        return Err(format!("quad readback returned {} bytes: {}", pixels.len(), error::last_text()));
+        return Err(format!(
+            "quad readback returned {} bytes: {}",
+            pixels.len(),
+            error::last_text()
+        ));
     }
     let at = |x: i32, y: i32| pixels[((y * size + x) * 4) as usize..][..4].to_vec();
-    let mut corners = vec![at(0, 0), at(size - 1, 0), at(0, size - 1), at(size - 1, size - 1)];
+    let mut corners = vec![
+        at(0, 0),
+        at(size - 1, 0),
+        at(0, size - 1),
+        at(size - 1, size - 1),
+    ];
     corners.sort();
     let mut expected: Vec<Vec<u8>> = texels.iter().map(|t| t.to_vec()).collect();
     expected.sort();
     if corners != expected {
-        return Err(format!("quad corners are {corners:?}, expected the four texels"));
+        return Err(format!(
+            "quad corners are {corners:?}, expected the four texels"
+        ));
     }
-    for handle in [target, depth, nearest, albedo, index_buffer, vertex_buffer, pipeline, library] {
+    if devices::backend(device).map_err(|e| e.text())? == Backend::Dx12 as i32 {
+        // Distinct sampler objects prevent shader binding caches from merging draws.
+        let stress_samplers = (0..2200)
+            .map(|_| {
+                resources::sampler_create(device, &[0, 0, 0, 0, 0, 0, 0, 1]).map_err(|e| e.text())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for draws in [1200, 1200, 1200, 2200, 1200, 1200, 1200, 1200] {
+            let mut stress = Commands::default();
+            stress.op(1, &[target, 1, 0, 0, 0, bits(1.0), depth, 1, bits(1.0)]);
+            for sampler in stress_samplers.iter().take(draws) {
+                stress
+                    .op(4, &[pipeline])
+                    .op(7, &[0, vertex_buffer, 0])
+                    .op(8, &[index_buffer, 0, 0])
+                    .op(5, &[2, 0, 2, albedo, 0])
+                    .op(5, &[2, 1, 3, *sampler, 0])
+                    .op(12, &[6, 1, 0, 0, 0]);
+            }
+            let result = stress.op(3, &[]).submit(device);
+            if draws > 2048 {
+                if result.is_ok() {
+                    return Err("oversized sampler submission unexpectedly succeeded".to_string());
+                }
+            } else {
+                result?;
+            }
+        }
+        for sampler in stress_samplers {
+            testing::gpuRelease(sampler);
+        }
+    }
+    for handle in [
+        target,
+        depth,
+        nearest,
+        albedo,
+        index_buffer,
+        vertex_buffer,
+        pipeline,
+        library,
+    ] {
         testing::gpuRelease(handle);
     }
     Ok(())
@@ -627,15 +782,33 @@ fn quad(device: i32) -> Result<(), String> {
 /// Each host failure reaches the guest as the GpuError code it promises.
 fn errors(device: i32) -> Result<(), String> {
     let buffer = resources::buffer_create(device, 16, 1).map_err(|e| e.text())?;
-    expect_err(resources::buffer_create(device, -1, 1), Code::Invalid, "negative size");
-    expect_err(resources::buffer_write(buffer, 12, &[0; 8]), Code::Invalid, "write past the end");
+    expect_err(
+        resources::buffer_create(device, -1, 1),
+        Code::Invalid,
+        "negative size",
+    );
+    expect_err(
+        resources::buffer_write(buffer, 12, &[0; 8]),
+        Code::Invalid,
+        "write past the end",
+    );
     let id = future();
     resources::buffer_read(id, buffer, 8, 16);
-    assert!(unsafe { guest::test_bytes(wait(id)) }.is_empty(), "read past the end is empty");
+    assert!(
+        unsafe { guest::test_bytes(wait(id)) }.is_empty(),
+        "read past the end is empty"
+    );
     assert_eq!(last_code(), "EINVALID");
-    assert!(read_buffer(buffer, 0, 0).is_empty(), "an empty read of an empty range succeeds");
+    assert!(
+        read_buffer(buffer, 0, 0).is_empty(),
+        "an empty read of an empty range succeeds"
+    );
 
-    expect_err(pipelines::library_load(device, b"not a bundle"), Code::Invalid, "garbage bundle");
+    expect_err(
+        pipelines::library_load(device, b"not a bundle"),
+        Code::Invalid,
+        "garbage bundle",
+    );
     let library = pipelines::library_load(device, SAXPY).map_err(|e| e.text())?;
     expect_err(
         pipelines::compute_pipeline_create(library, "missing"),
@@ -643,16 +816,30 @@ fn errors(device: i32) -> Result<(), String> {
         "entry without code for this backend",
     );
     expect_err(
-        pipelines::render_pipeline_create(library, "saxpy", library, "scale", &[0, 0, 0, 0, 0, 0, 0, 1, 0]),
+        pipelines::render_pipeline_create(
+            library,
+            "saxpy",
+            library,
+            "scale",
+            &[0, 0, 0, 0, 0, 0, 0, 1, 0],
+        ),
         Code::Validation,
         "compute entries in a render pipeline",
     );
     let pipeline = pipelines::compute_pipeline_create(library, "scale").map_err(|e| e.text())?;
 
     let mut wrong_kind = Commands::default();
-    wrong_kind.op(2, &[]).op(4, &[pipeline]).value(0, 0, &[0; 4]).op(3, &[]);
+    wrong_kind
+        .op(2, &[])
+        .op(4, &[pipeline])
+        .value(0, 0, &[0; 4])
+        .op(3, &[]);
     assert!(wrong_kind.submit(device).is_err());
-    assert_eq!(last_code(), "EVALIDATION", "a value bound to a buffer parameter");
+    assert_eq!(
+        last_code(),
+        "EVALIDATION",
+        "a value bound to a buffer parameter"
+    );
 
     let mut open_pass = Commands::default();
     open_pass.op(2, &[]);
@@ -662,14 +849,22 @@ fn errors(device: i32) -> Result<(), String> {
     let mut released = Commands::default();
     let gone = resources::buffer_create(device, 16, 1).map_err(|e| e.text())?;
     testing::gpuRelease(gone);
-    released.op(2, &[]).op(4, &[pipeline]).buffer(0, 0, gone).op(3, &[]);
+    released
+        .op(2, &[])
+        .op(4, &[pipeline])
+        .buffer(0, 0, gone)
+        .op(3, &[]);
     assert!(released.submit(device).is_err());
     assert_eq!(last_code(), "EINVALID", "a released buffer");
 
     let other = devices::create_now(devices::backend(device).unwrap(), 0).map_err(|e| e.text())?;
     let foreign = resources::buffer_create(other, 16, 1).map_err(|e| e.text())?;
     let mut wrong_device = Commands::default();
-    wrong_device.op(2, &[]).op(4, &[pipeline]).buffer(0, 0, foreign).op(3, &[]);
+    wrong_device
+        .op(2, &[])
+        .op(4, &[pipeline])
+        .buffer(0, 0, foreign)
+        .op(3, &[]);
     assert!(wrong_device.submit(device).is_err());
     assert_eq!(last_code(), "EWRONGDEVICE", "another device's buffer");
 
@@ -690,9 +885,16 @@ fn errors(device: i32) -> Result<(), String> {
 
 fn device_loss(device: i32) -> Result<(), String> {
     let buffer = resources::buffer_create(device, 16, 1).map_err(|e| e.text())?;
-    assert!(testing::simulate_device_loss(device, "simulated driver reset"));
+    assert!(testing::simulate_device_loss(
+        device,
+        "simulated driver reset"
+    ));
     expect_err(devices::check(device), Code::DeviceLost, "check after loss");
-    expect_err(resources::buffer_create(device, 16, 1), Code::DeviceLost, "create after loss");
+    expect_err(
+        resources::buffer_create(device, 16, 1),
+        Code::DeviceLost,
+        "create after loss",
+    );
     let id = future();
     resources::buffer_read(id, buffer, 0, 16);
     assert!(unsafe { guest::test_bytes(wait(id)) }.is_empty());
@@ -710,7 +912,8 @@ fn device_loss(device: i32) -> Result<(), String> {
 fn surface(device: i32) -> Result<(), String> {
     use dream_host_window::{dream_window_surface_v1, host};
     testing::set_window_surface_fn(dream_window_surface_v1);
-    let window = host::open("dream-host-gpu surface", 320, 200, 4).map_err(|e| e.code.to_string())?;
+    let window =
+        host::open("dream-host-gpu surface", 320, 200, 4).map_err(|e| e.code.to_string())?;
     host::poll(window);
     let surface = surfaces::surface_create(device, window, true)
         .map_err(|e| format!("surface create: {}", e.text()))?;
@@ -728,7 +931,20 @@ fn surface(device: i32) -> Result<(), String> {
         }
         let mut commands = Commands::default();
         commands
-            .op(1, &[image, 1, bits(0.1 * frame as f32), bits(0.2), bits(0.3), bits(1.0), 0, 0, 0])
+            .op(
+                1,
+                &[
+                    image,
+                    1,
+                    bits(0.1 * frame as f32),
+                    bits(0.2),
+                    bits(0.3),
+                    bits(1.0),
+                    0,
+                    0,
+                    0,
+                ],
+            )
             .op(3, &[]);
         commands.submit(device)?;
         let id = future();
@@ -744,9 +960,17 @@ fn surface(device: i32) -> Result<(), String> {
     if resized[1..] != [640, 400] {
         return Err(format!("resized surface reports {resized:?}"));
     }
-    expect_err(surfaces::surface_resize(surface, 0, 10), Code::Invalid, "zero-size resize");
+    expect_err(
+        surfaces::surface_resize(surface, 0, 10),
+        Code::Invalid,
+        "zero-size resize",
+    );
     testing::gpuRelease(surface);
     host::close(window);
-    expect_err(surfaces::surface_create(device, window, true), Code::Surface, "a closed window");
+    expect_err(
+        surfaces::surface_create(device, window, true),
+        Code::Surface,
+        "a closed window",
+    );
     Ok(())
 }

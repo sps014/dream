@@ -116,6 +116,18 @@ public class GpuRenderPass {
         this.bind_one(slot, GpuArgKind.Sampler, sampler.owner, sampler.device_id, "sampler");
     }
 
+    /// Binds `scene` for inline ray queries in a native render shader. The device must
+    /// support `GpuFeature.RayQuery`; WebGPU does not support acceleration structures.
+    public fun bind(slot: GpuBindingSlot, scene: GpuAccelerationStructure): void {
+        this.bind_one(
+            slot,
+            GpuArgKind.AccelerationStructure,
+            scene.owner,
+            scene.device_id,
+            "acceleration structure"
+        );
+    }
+
     /// Binds `buffer` to the `GpuBuffer` shader parameter `slot`.
     public fun bind_buffer<T: unmanaged>(slot: GpuBindingSlot, buffer: GpuBuffer<T>): void {
         this.bind_one(slot, GpuArgKind.Buffer, buffer.owner, buffer.device_id, "buffer");

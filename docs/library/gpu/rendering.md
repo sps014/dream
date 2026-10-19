@@ -10,6 +10,20 @@ api: reference/api/system-gpu.md
 Rendering runs two shaders. The vertex shader places each vertex on screen, and the fragment shader
 colors each covered pixel. A render pipeline pairs them with the format of the image they draw into.
 
+Use `GpuTextureFormat.Rgba16Float` for an HDR lighting target. Values above `1.0`
+survive rendering and texture reads; apply exposure and tone mapping in a later
+presentation shader before writing to an ordinary window surface. Create both the
+texture and its pipeline with the same format. A texture also needs
+`GpuTextureDesc(...).render_target(true)`. Floating-point scene targets store linear
+color; sRGB conversion belongs at the final surface, not between lighting passes.
+
+`R32Float`, `Rg32Float` and `Rgba32Float` are also accepted as color target formats.
+Device-specific unsupported render/blend combinations return a GPU error rather
+than silently changing the format. Integer and depth formats cannot be used as
+floating-point shader color targets. `device.adapter_name` reports a display label
+for diagnostics; browsers may return an empty label for privacy. Check capabilities
+with `device.supports` rather than matching the label.
+
 ## Vertex and fragment shaders
 
 The vertex shader returns a struct. Its `@builtin("position")` field is the vertex position in clip

@@ -13,7 +13,7 @@ Read this fully before exploring the repo. It exists so agents don't burn tokens
 - **Determinism is non-negotiable.** Two compiles of the same source to the same output path must produce byte-identical `.ll`/`.wasm`/`.wat`. Never iterate `std::collections::HashMap`/`HashSet` in anything that influences emitted output or its ordering — use `indexmap::IndexMap`/`IndexSet` (insertion order) or `BTreeMap` (sorted order) instead.
 - **No narrating comments.** Comments explain *why* (invariants, trade-offs, non-obvious constraints), never *what* the next line does. Don't add "explaining the diff" comments.
 - **Clippy is a hard gate at `-D warnings`.** Fix the root cause; don't `#[allow]` your way out except for genuine external-API constraints (with a comment saying why).
-- **Run the assertion corpus when implementing or fixing.** After language/runtime/codegen changes, run `python3 scripts/test_corpus.py` (filter by case-name substring while iterating; full native and Node runs before calling the work done). It rebuilds the workspace, compiles each Dream feature suite once, and runs isolated compiler/process fixtures through Rust assertions.
+- **Run the assertion corpus only when compiler or runtime code changes.** Language, semantic analysis, lowering, codegen, and runtime changes require `python3 scripts/test_corpus.py` (filter by case-name substring while iterating; full native and Node runs before calling the work done). Sample-only, asset-only, and documentation-only changes do not require the corpus or workspace-wide build/test/Clippy gates: build and test the affected sample or tooling instead. It rebuilds the workspace, compiles each Dream feature suite once, and runs isolated compiler/process fixtures through Rust assertions.
 - **The guest runtime is C only.** Portable units live under `runtime/c/core/`, native OS services under `runtime/c/sys/native/`, WASI/JS services under `runtime/c/sys/wasi/`, and shared scheduling under `runtime/c/sys/shared/`. The layered catalog in `runtime/modules.rs` supplies native and wasm32 inventories compiled by the pinned clang via `src/execution/llvm/runtime.rs` and `wasm.rs`. Regex/PCRE2 is `runtime/c/regex.c` + `runtime/c/pcre2/`. There is no WAT runtime — do not reintroduce one.
 
 ## What Dream is
@@ -52,7 +52,7 @@ Dream/
 │   └── vscode/                     VS Code extension
 ├── tests/                          Golden e2e, MIR pipeline, DAP tests
 ├── docs/                           learn/ + reference/ + cookbook/ + internals/
-├── scripts/dap_probe.py, test_corpus.py  # assertion corpus (agents: run on implement/fix)
+├── scripts/dap_probe.py, test_corpus.py  # assertion corpus (compiler/runtime changes only)
 ├── mkdocs.yml
 └── Cargo.toml
 ```
@@ -180,7 +180,7 @@ node scripts/bundle-runtime.mjs --check    # fails if dream.js is stale
 cargo test --workspace
 cargo test --workspace -- --ignored
 
-# Golden-corpus probe (agents: run when implementing or fixing — rebuilds + parallel cases)
+# Golden-corpus probe (compiler/runtime changes only — rebuilds + parallel cases)
 python3 scripts/test_corpus.py                 # native Dream suites + isolated Rust assertions
 python3 scripts/test_corpus.py arithmetic      # optional case-stem filter
 python3 scripts/test_corpus.py --node          # wasm32 + Node (reports native-only cases)
@@ -216,15 +216,20 @@ source ./use-toolchain.sh          # builds release dream / dream-lsp / dreamer
 
 You can still set VS Code settings `dream.home` / `dreamer.home` explicitly if you prefer.
 
-### Pre-commit / "done" gate — all four must pass
+### Pre-commit / "done" gate — compiler/runtime changes
+
+Run all four gates below when changing compiler or runtime code. For sample-only,
+asset-only, or documentation-only work, run the relevant sample builds/tests or
+documentation checks; do not run the full corpus or unrelated workspace gates.
+
 ```bash
 cargo build --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-python3 scripts/test_corpus.py            # when implementing or fixing: full assertion corpus via native run
+python3 scripts/test_corpus.py            # compiler/runtime changes: full native assertion corpus
 ```
 
-When iterating on a feature or bugfix, prefer `python3 scripts/test_corpus.py <case-name-substring>` first for a fast signal, then run the full corpus on both targets before calling the work done. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The corpus command is the full assertion run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
+When iterating on a compiler/runtime feature or bugfix, prefer `python3 scripts/test_corpus.py <case-name-substring>` first for a fast signal, then run the full corpus on both targets before calling the work done. Sample, asset, and documentation changes alone never trigger this requirement. The default `cargo test --workspace` gate is the fast suite (unit tests + e2e smoke). The corpus command is the full assertion run. DAP, wasm-opt-every-level, and dreamer compiler/pack e2e: `cargo test --workspace -- --ignored`.
 
 ### Documentation writing style
 

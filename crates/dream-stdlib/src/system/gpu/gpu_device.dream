@@ -48,6 +48,13 @@ public class GpuDevice {
         return this.device_backend;
     }
 
+    /// The driver's name for this device's graphics adapter, or an empty string when
+    /// unavailable. Browsers may hide identifying information for privacy. This is a
+    /// display label; use `supports` to decide which GPU features can run.
+    public get adapter_name(): string {
+        return GpuHost.device_adapter_name(this.handle);
+    }
+
     internal get id(): int {
         return this.handle;
     }

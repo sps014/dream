@@ -20,6 +20,12 @@ Neither runs on WebGPU. Ray queries need `GpuFeature.RayQuery` and work on Metal
 Direct3D 12 hardware that has them. Ray tracing pipelines need `GpuFeature.RayTracing` and run on
 Vulkan and Direct3D 12.
 
+For inline queries in a fragment shader, declare a `GpuAccelerationStructure`
+shader parameter and bind the top-level scene with `pass.bind(GpuShaders.<shader>.scene, scene)`
+before drawing. Check `device.supports(GpuFeature.RayQuery)` before creating that pipeline.
+Use native shader targets; a WebGPU variant cannot contain ray queries. The same
+`GpuRayQuery` operations shown below work inside the fragment shader.
+
 ## Building a scene
 
 A scene has two levels. A bottom level holds geometry: triangles whose corners are in a

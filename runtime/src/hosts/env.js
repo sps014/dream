@@ -125,6 +125,8 @@ function defaultEnv(getInstance, options) {
     atan2: Math.atan2,
     abs: Math.abs,
     sqrt: Math.sqrt,
+    // LLVM can narrow a double sqrt followed by a float cast into this libm call.
+    sqrtf: value => Math.fround(Math.sqrt(value)),
     pow: Math.pow,
     log: Math.log,
     log10: Math.log10,

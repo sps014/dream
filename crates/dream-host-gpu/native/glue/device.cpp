@@ -197,6 +197,12 @@ static bool samplerHandlesWork(IDevice* d)
     return SLANG_SUCCEEDED(sampler->getDescriptorHandle(&handle));
 }
 
+extern "C" const char* dgpu_device_adapter_name(DgpuDevice* device)
+{
+    const char* name = device->device->getInfo().adapterName;
+    return name ? name : "";
+}
+
 extern "C" uint32_t dgpu_device_features(DgpuDevice* device)
 {
     DeviceScope deviceScope(device->device);

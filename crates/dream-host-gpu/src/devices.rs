@@ -61,6 +61,14 @@ pub fn features(device: i32) -> HostResult<i32> {
     Ok(state::lock().device(device)?.features as i32)
 }
 
+pub fn adapter_name(device: i32) -> HostResult<String> {
+    let state = state::lock();
+    let core = state.device(device)?;
+    // The driver-owned name is copied while the device is held under the state lock.
+    let name = unsafe { ffi::dgpu_device_adapter_name(core.raw()) };
+    Ok(unsafe { std::ffi::CStr::from_ptr(name) }.to_string_lossy().into_owned())
+}
+
 /// `Err(EDEVICELOST)` once the device stopped working.
 pub fn check(device: i32) -> HostResult<()> {
     state::lock().device(device).map(|_| ())

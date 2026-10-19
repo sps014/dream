@@ -193,7 +193,7 @@ fn render_desc(desc: &[i32]) -> HostResult<(ffi::RenderDesc, Vec<ffi::VertexBuff
     let malformed = || HostError::invalid("malformed render pipeline description");
     let head = desc.get(..9).ok_or_else(malformed)?;
     let in_range = |v: i32, max: i32| (0..=max).contains(&v);
-    let valid = in_range(head[0], 3)
+    let valid = in_range(head[0], 8)
         && in_range(head[1], 4)
         && in_range(head[2], 2)
         && in_range(head[3], 3)
@@ -312,6 +312,17 @@ pub fn render_pipeline_create(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn floating_point_color_targets_preserve_the_requested_format() {
+        for format in [5, 6, 7, 8] {
+            let (render, _, _) = render_desc(&[format, 0, 0, 0, 0, 1, 1, 1, 0]).unwrap();
+            assert_eq!(render.color_format, format as u32);
+        }
+        for format in [9, 10, 11] {
+            assert!(render_desc(&[format, 0, 0, 0, 0, 1, 1, 1, 0]).is_err());
+        }
+    }
 
     #[test]
     fn render_descriptions_decode_vertex_layouts() {

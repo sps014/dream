@@ -71,6 +71,11 @@ extern "C" int dgpu_encoder_submit(DgpuEncoder* e, uint64_t* fence_value)
     Result result = e->encoder->finish(commands.writeRef());
     if (SLANG_FAILED(result))
         return failResult(device, result, "finishing the command buffer failed");
+    // Some recording operations report failure only through the RHI callback.
+    // Submitting after a binding allocation failed would silently omit draw state.
+    std::string recordingError = device->sink.takeFirstError();
+    if (!recordingError.empty())
+        return fail(DGPU_FAILED, std::move(recordingError));
     uint64_t value = ++device->nextFenceValue;
     ICommandBuffer* buffers[] = {commands};
     IFence* fences[] = {device->fence};

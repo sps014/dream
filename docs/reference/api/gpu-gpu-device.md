@@ -28,6 +28,16 @@ The API this device runs on; never `GpuBackend.Auto`.
 public get backend(): GpuBackend
 ```
 
+## `adapter_name`
+
+The driver's name for this device's graphics adapter, or an empty string when
+unavailable. Browsers may hide identifying information for privacy. This is a
+display label; use `supports` to decide which GPU features can run.
+
+```dream
+public get adapter_name(): string
+```
+
 ## `supports`
 
 True when the device offers `feature`.

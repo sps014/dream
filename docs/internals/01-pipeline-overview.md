@@ -114,6 +114,9 @@ fresh build is recorded only after its final artifacts exist, and only when it p
 diagnostics, so warnings are never hidden. Builds with native C/C++ sets, PGO or `--emit-mir`
 bypass the cache because their inputs live outside the key. Analysis is whole-program
 (monomorphization crosses modules), so the whole build, not a single module, is the unit of reuse.
+Import aliases remain cacheable: their declarations and targets belong to the loaded module
+graph, whose sources are already fingerprinted. This also covers aliases referring to generated
+types. Changing an alias, its target source, or a tracked generated artifact invalidates reuse.
 
 ## Where errors come from
 

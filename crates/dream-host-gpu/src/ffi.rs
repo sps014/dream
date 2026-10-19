@@ -163,6 +163,7 @@ unsafe extern "C" {
     pub fn dgpu_device_create(backend: c_int, out: *mut *mut DgpuDevice) -> c_int;
     pub fn dgpu_device_destroy(device: *mut DgpuDevice);
     pub fn dgpu_device_features(device: *mut DgpuDevice) -> u32;
+    pub fn dgpu_device_adapter_name(device: *mut DgpuDevice) -> *const c_char;
     pub fn dgpu_device_lost(device: *mut DgpuDevice) -> c_int;
     pub fn dgpu_fence_wait(device: *mut DgpuDevice, value: u64, timeout_ns: u64) -> c_int;
     pub fn dgpu_object_release(object: *mut DgpuObject);

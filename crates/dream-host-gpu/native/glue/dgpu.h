@@ -46,6 +46,7 @@ int dgpu_device_create(int backend, DgpuDevice** out);
 void dgpu_device_destroy(DgpuDevice* device);
 /// GpuFeature bit mask.
 uint32_t dgpu_device_features(DgpuDevice* device);
+const char* dgpu_device_adapter_name(DgpuDevice* device);
 /// Non-zero once the driver reported the device lost; `dgpu_message` then says why.
 int dgpu_device_lost(DgpuDevice* device);
 /// Blocks until the device's submission fence reaches `value`, or `DGPU_TIMEOUT` after

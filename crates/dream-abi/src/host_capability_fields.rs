@@ -81,6 +81,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "gpuDeviceCreate",
             "gpuLastError",
             "gpuDeviceBackend",
+            "gpuDeviceAdapterName",
             "gpuDeviceFeatures",
             "gpuDeviceCheck",
             "gpuLibraryLoad",

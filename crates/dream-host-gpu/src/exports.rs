@@ -40,6 +40,17 @@ pub extern "C" fn gpuDeviceBackend(device: i32) -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn gpuDeviceAdapterName(device: i32) -> DreamPtr {
+    match devices::adapter_name(device) {
+        Ok(name) => alloc_string(&name),
+        Err(e) => {
+            error::record(&e);
+            alloc_string("")
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn gpuDeviceFeatures(device: i32) -> i32 {
     devices::features(device).unwrap_or_else(|e| {
         error::record(&e);

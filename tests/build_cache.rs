@@ -53,6 +53,96 @@ fn unchanged_inputs_reuse_the_recorded_build_and_any_change_rebuilds() {
 }
 
 #[test]
+fn aliased_imports_reuse_builds_and_invalidate_changed_bindings_and_dependencies() {
+    let dir = tempfile::tempdir().unwrap();
+    let helper = dir.path().join("helper.dream");
+    let source = dir.path().join("main.dream");
+    let out = dir.path().join("main.ll");
+    std::fs::write(
+        &helper,
+        "module helpers; public fun answer(): int { return 42; }",
+    )
+    .unwrap();
+    let program = "import system; import helper; import helpers.answer as chosen; fun main(): void { System.println(chosen()); }";
+    std::fs::write(&source, program).unwrap();
+
+    record(build(&source, &out, "O0"), &out);
+    let modified = std::fs::metadata(&out).unwrap().modified().unwrap();
+    assert_eq!(cached(build(&source, &out, "O0")), Some(vec![out.clone()]));
+    assert_eq!(
+        std::fs::metadata(&out).unwrap().modified().unwrap(),
+        modified
+    );
+
+    std::fs::write(
+        &helper,
+        "module helpers; public fun answer(): int { return 7; }",
+    )
+    .unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+
+    std::fs::write(&source, program.replace("chosen", "renamed")).unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+
+    std::fs::write(
+        &source,
+        program.replace("helpers.answer", "helpers.missing"),
+    )
+    .unwrap();
+    let result = Compiler::new(Target::native())
+        .with_build_cache(Some("O0".into()))
+        .compile(&source.display().to_string(), &out.display().to_string());
+    assert!(
+        result.is_err(),
+        "a stale build must not hide an invalid alias"
+    );
+}
+
+#[test]
+fn aliased_types_with_incremental_generators_reuse_builds() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("main.dream");
+    let out = dir.path().join("main.ll");
+    std::fs::write(&source, "module app; import system; import system.json; import app.Point as P; @json public class Point { public x: int; public constructor(x: int) { this.x = x; } } fun main(): void { System.println(Json.serialize(P(1))); }").unwrap();
+    record(build(&source, &out, "O0"), &out);
+    assert!(cached(build(&source, &out, "O0")).is_some());
+}
+
+#[test]
+fn cli_reports_cached_builds_without_rewriting_the_artifact() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("main.dream");
+    let out = dir.path().join("main.o");
+    std::fs::write(&source, "fun main(): void {}\n").unwrap();
+    let run = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .arg("--object")
+            .arg("--output")
+            .arg(&out)
+            .arg(&source)
+            .output()
+            .unwrap()
+    };
+    let first = run();
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let modified = std::fs::metadata(&out).unwrap().modified().unwrap();
+    let second = run();
+    let log = String::from_utf8_lossy(&second.stderr);
+    assert!(second.status.success(), "{log}");
+    assert!(log.contains("Finished cached in"), "{log}");
+    assert_eq!(
+        std::fs::metadata(&out).unwrap().modified().unwrap(),
+        modified
+    );
+}
+
+#[test]
 fn builds_with_warnings_are_not_cached() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("main.dream");

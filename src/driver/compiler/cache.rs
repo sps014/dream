@@ -333,7 +333,6 @@ impl Compiler {
             || !loaded.native_graph.sets.is_empty()
             || !loaded.cpp_bridge.is_empty()
             || loaded.acc.untracked_generator_inputs
-            || !loaded.acc.aliased_imports.is_empty()
         {
             return None;
         }

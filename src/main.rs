@@ -677,7 +677,7 @@ fn main() -> ExitCode {
     }
 
     ui.step(
-        "Compiling",
+        "Building",
         &format!(
             "{}{}",
             file_name,
@@ -790,7 +790,7 @@ fn main() -> ExitCode {
     let stamp = match outcome {
         BuildOutcome::Built(stamp) => stamp,
         BuildOutcome::Cached(artifacts) => {
-            ui.finish(start.elapsed().as_secs_f64(), "", &artifacts);
+            ui.finish(start.elapsed().as_secs_f64(), "cached", &artifacts);
             let linked = native && !cli.object && !cli.emit_llvm && !output_kind.is_library();
             if unoptimized {
                 ui.debug_build_note(!linked);

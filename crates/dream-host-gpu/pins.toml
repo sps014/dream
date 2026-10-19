@@ -49,6 +49,7 @@ url = "https://github.com/shader-slang/slang-rhi/archive/b856e6350ea09f63a16a6c7
 sha256 = "4c629dc48692fadfdb9dccaa035b18bf85573a1462094823f0078d7577f64c71"
 blake3 = "17ff165dc32c2c5735afecdea82f88cf680fd41fb85e56684899e615444d9e90"
 patches = [
+    "d3d12-descriptor-reclamation.patch",
     "0001-metal-accept-msl-source-as-precompiled-code.patch",
     "0002-vulkan-leave-unbound-acceleration-structure-slots-unwritten.patch",
     "0003-include-cstring-for-memcpy-in-acceleration-structure-utils.patch",

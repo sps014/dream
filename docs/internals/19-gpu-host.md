@@ -10,7 +10,7 @@ and loads only the precompiled shader bundles described in
 | Path | Role |
 |---|---|
 | `build.rs`, `build/fetch.rs` | Downloads the pinned inputs, applies `patches/`, builds `native/` with CMake |
-| `patches/` | slang-rhi patches: MSL source as precompiled Metal code; unbound acceleration structure slots left unwritten on Vulkan devices without `nullDescriptor` |
+| `patches/` | slang-rhi patches: MSL source as precompiled Metal code; unbound acceleration structure slots left unwritten on Vulkan devices without `nullDescriptor`; D3D12 descriptor reclamation and allocation-failure cleanup |
 | `pins.toml` | URLs and SHA-256 of Slang, slang-rhi, Dawn, Vulkan-Headers, metal-cpp, WinPixEventRuntime |
 | `native/replay/` | The replay library: answers slang-rhi's reflection queries from a recorded layout |
 | `native/recorder/` | `dream-slang-layout`, the build-time recorder that writes those layouts |
@@ -202,6 +202,8 @@ texture bound to two writable slots.
   ray tracing pass.
 - Acceleration structures need `GpuFeature.RayTracing` or `GpuFeature.RayQuery`; ray tracing
   pipelines need `RayTracing`. Buffers on devices with acceleration structures may feed builds.
+  Native render passes bind top-level structures through the acceleration-structure overload
+  of `GpuRenderPass.bind`; fragment shaders can issue inline ray queries directly.
 
 ## Strict ahead-of-time check
 
@@ -217,6 +219,12 @@ consequences of it, such as Dawn's "invalid pipeline" after a pipeline creation 
 `CODE\ndetail` text that `gpuLastError` returns (see `gpu_error_from_host`). Driver messages that
 report device loss make the device sticky-lost, and every later call on it reports `EDEVICELOST`.
 `testing::simulate_device_loss` drives the same path in tests.
+
+Recording can fail through slang-rhi's debug callback even when `finish` succeeds. Submission
+checks the sink before sending the command buffer, so failed binding allocation cannot silently
+drop draw state. The D3D12 patch retires completed command buffers before a new encoder reserves
+descriptors and excludes failed arena allocations from later frees. Its regression fills the
+sampler heap, expects a recoverable error, then verifies subsequent valid submissions succeed.
 
 ## Tests
 
@@ -254,8 +262,9 @@ report device loss make the device sticky-lost, and every later call on it repor
 
 ## Not yet implemented
 
-- Ray tracing pipelines have not run on hardware: slang-rhi's Metal backend has no ray tracing
-  passes and MoltenVK no ray tracing extensions, so on macOS only inline ray queries run (Metal).
+- Ray queries and ray tracing pipelines were qualified on D3D12 and Vulkan on an RTX 4080
+  under Windows on 2026-10-19 with `scripts/qualify-gpu.py`. Metal has no ray tracing
+  passes and MoltenVK has no ray tracing extensions, so macOS uses inline queries on Metal.
   The pipeline suite skips on devices without `GpuFeature.RayTracing`.
 - Payload size, hit attribute size and recursion depth are fixed (128 bytes, 32 bytes, 1); the
   bundle does not record them yet.

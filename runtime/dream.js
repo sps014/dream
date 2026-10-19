@@ -1014,6 +1014,8 @@ function defaultEnv(getInstance, options) {
     atan2: Math.atan2,
     abs: Math.abs,
     sqrt: Math.sqrt,
+    // LLVM can narrow a double sqrt followed by a float cast into this libm call.
+    sqrtf: value => Math.fround(Math.sqrt(value)),
     pow: Math.pow,
     log: Math.log,
     log10: Math.log10,
@@ -3931,7 +3933,8 @@ function makeGpuHost() {
     } catch (error) {
       return fail("ENODEVICE", "WebGPU device request failed: " + (error?.message || error));
     }
-    const dev = { type: "device", device, lost: null, uncaptured: null, libraries: new Set(), features: 0 };
+    const adapterName = adapter.info?.description || [adapter.info?.vendor, adapter.info?.device].filter(Boolean).join(" ");
+    const dev = { type: "device", device, adapterName, lost: null, uncaptured: null, libraries: new Set(), features: 0 };
     dev.dev = dev;
     for (const [name, bit] of granted) if (device.features?.has?.(name) !== false) dev.features |= 1 << bit;
     device.lost?.then?.(info => {
@@ -3998,7 +4001,7 @@ function makeGpuHost() {
     const [colorCode, topology, cull, blend, depthCode, depthCompare, depthWrite, samples, layoutCount] =
       Array.from({ length: 9 }, (_, i) => word(i));
     const color = GPU_TEXTURE_FORMATS[colorCode];
-    if (!color) throw new GpuFailure("EINVALID", "unknown color format " + colorCode);
+    if (!color || colorCode < 0 || colorCode > 8) throw new GpuFailure("EINVALID", "unsupported floating-point shader color target " + colorCode);
     const buffers = [];
     let at = 9;
     for (let i = 0; i < layoutCount; i++) {
@@ -4133,6 +4136,7 @@ function makeGpuHost() {
     gpuDeviceCreate: asyncGuard(0, createDevice),
     gpuLastError: () => lastError || "EVALIDATION\nthe GPU host reported no error",
     gpuDeviceBackend: handle => (table.get(handle)?.type === "device" ? GPU_BACKEND_WEBGPU : 0),
+    gpuDeviceAdapterName: handle => guard("", () => deviceOf(handle).adapterName || ""),
     gpuDeviceFeatures: handle => {
       const record = table.get(handle);
       return record?.type === "device" ? record.features : 0;

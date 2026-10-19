@@ -9214,123 +9214,129 @@
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
+        "signature": "public get adapter_name(): string",
+        "description": "The driver's name for this device's graphics adapter, or an empty string when unavailable. Browsers may hide identifying information for privacy. This is a display label; use `supports` to decide which GPU features can run.",
+        "line": 54,
+        "page": "reference/api/gpu-gpu-device.md"
+      },
+      {
         "signature": "public fun supports(feature: GpuFeature): bool",
         "description": "True when the device offers `feature`.",
-        "line": 56,
+        "line": 63,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun check(): Result<bool, GpuError>",
         "description": "`Ok(true)` while the device works, or `GpuError.DeviceLost` once the driver or browser took it away. Calls that touch a lost device also fail with `DeviceLost`.",
-        "line": 63,
+        "line": 70,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a storage buffer that shaders can read and write, filled with `data`.",
-        "line": 88,
+        "line": 95,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun buffer_alloc<T: unmanaged>(length: int): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a storage buffer of `length` elements, all zero.",
-        "line": 93,
+        "line": 100,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun vertex_buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a vertex buffer filled with `data`, one element per vertex. Describe its layout to the pipeline with `GpuVertexLayout` and bind it with `GpuRenderPass.set_vertex_buffer`.",
-        "line": 100,
+        "line": 107,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun index_buffer_from(data: uint[]): Result<GpuBuffer<uint>, GpuError>",
         "description": "Creates an index buffer of 32-bit indexes for `GpuRenderPass.draw_indexed`.",
-        "line": 105,
+        "line": 112,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun index_buffer_from(data: ushort[]): Result<GpuBuffer<ushort>, GpuError>",
         "description": "Creates an index buffer of 16-bit indexes, which halves its memory when meshes have fewer than 65,536 vertices.",
-        "line": 111,
+        "line": 118,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun texture(desc: GpuTextureDesc): Result<GpuTexture, GpuError>",
         "description": "Creates a texture described by `desc`, with every texel zero.",
-        "line": 116,
+        "line": 123,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun storage_texture<T: unmanaged>( width: int, height: int ): Result<GpuStorageTexture<T>, GpuError>",
         "description": "Creates a `width` by `height` texture that shaders write texel by texel.  `T` chooses the format: `GpuVec4` stores four floats, `GpuVec2` two, `float` one and `uint` one unsigned integer. Other element types return `GpuError.InvalidResource`.",
-        "line": 135,
+        "line": 142,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun sampler(desc: GpuSamplerDesc): Result<GpuSampler, GpuError>",
         "description": "Creates a sampler, which tells shaders how to filter and wrap texture reads.",
-        "line": 154,
+        "line": 161,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun handle(texture: GpuTexture): Result<GpuHandle<GpuTexture>, GpuError>",
         "description": "A bindless handle to `texture`, which can be stored in any buffer and sampled by shaders. It stays valid while the texture is alive. Needs `GpuFeature.Bindless`.",
-        "line": 181,
+        "line": 188,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun handle(sampler: GpuSampler): Result<GpuHandle<GpuSampler>, GpuError>",
         "description": "A bindless handle to `sampler`. Needs `GpuFeature.Bindless`.",
-        "line": 187,
+        "line": 194,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun create_surface(window: Window): Result<GpuSurface, GpuError>",
         "description": "Connects the device to `window` so frames can be drawn into it. The surface follows the window's vsync hint from `WindowDesc.vsync`. Headless and closed windows return `GpuError.SurfaceLost`.",
-        "line": 195,
+        "line": 202,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun render_pipeline( vertex_shader: GpuStageShader, fragment_shader: GpuStageShader, desc: GpuRenderPipelineDesc ): Result<GpuRenderPipeline, GpuError>",
         "description": "Creates a render pipeline from a `@vertex` and a `@fragment` shader, both given as their `GpuShaders` descriptors. Every `@location` the fragment shader reads must be written by the vertex shader; otherwise the result is `GpuError.Validation`.",
-        "line": 210,
+        "line": 217,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun ray_tracing_pipeline( ray_generation: GpuStageShader, misses: GpuStageShader[], hit_groups: GpuHitGroup[], callables: GpuStageShader[] ): Result<GpuRayTracingPipeline, GpuError>",
         "description": "Creates a ray tracing pipeline from a `@ray_generation` shader, the `@miss` shaders `trace_ray` selects by index, the hit groups instances select by their hit group offset, and the `@callable` shaders `call_shader` selects by index. Needs `GpuFeature.RayTracing`.",
-        "line": 252,
+        "line": 259,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun build_bottom_level( geometry: GpuGeometry ): Result<GpuAccelerationStructure, GpuError>",
         "description": "Builds a bottom-level acceleration structure, the ray tracing index of one mesh. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.",
-        "line": 339,
+        "line": 346,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun build_top_level( instances: GpuInstance[] ): Result<GpuAccelerationStructure, GpuError>",
         "description": "Builds a top-level acceleration structure from mesh instances. Shaders trace rays against it. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.",
-        "line": 357,
+        "line": 364,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun upload_mlp<T: unmanaged>( weights: T[], biases: T[], inputs: int, outputs: int ): Result<GpuMlpWeights<T>, GpuError>",
         "description": "Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. On Vulkan and D3D12 devices with `GpuFeature.CooperativeVectors` the host converts the weights into the device's own matrix layout; elsewhere it keeps them row by row. Uploading works on any device. `T` is `float16` or `float`; other element sizes fail with `GpuError.InvalidResource`.",
-        "line": 388,
+        "line": 395,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun command_encoder(): GpuCommandEncoder",
         "description": "Starts recording GPU commands. Submit them with `submit`.",
-        "line": 419,
+        "line": 426,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun submit(commands: GpuCommandBuffer): Result<bool, GpuError>",
         "description": "Runs recorded commands and waits until the GPU finished them. Recording errors, such as a resource from another device, are reported here.",
-        "line": 425,
+        "line": 432,
         "page": "reference/api/gpu-gpu-device.md"
       }
     ]
@@ -10533,33 +10539,39 @@
         "page": "reference/api/gpu-gpu-render-pass.md"
       },
       {
+        "signature": "public fun bind(slot: GpuBindingSlot, scene: GpuAccelerationStructure): void",
+        "description": "Binds `scene` for inline ray queries in a native render shader. The device must support `GpuFeature.RayQuery`; WebGPU does not support acceleration structures.",
+        "line": 121,
+        "page": "reference/api/gpu-gpu-render-pass.md"
+      },
+      {
         "signature": "public fun bind_buffer<T: unmanaged>(slot: GpuBindingSlot, buffer: GpuBuffer<T>): void",
         "description": "Binds `buffer` to the `GpuBuffer` shader parameter `slot`.",
-        "line": 120,
+        "line": 132,
         "page": "reference/api/gpu-gpu-render-pass.md"
       },
       {
         "signature": "public fun bind_value<T: unmanaged>(slot: GpuBindingSlot, value: T): void",
         "description": "Sets the scalar, vector, matrix or struct shader parameter `slot` to `value`.",
-        "line": 125,
+        "line": 137,
         "page": "reference/api/gpu-gpu-render-pass.md"
       },
       {
         "signature": "public fun draw(vertex_count: int, instance_count: int = 1): void",
         "description": "Draws `vertex_count` vertices, `instance_count` times. The vertex shader sees `vertex_id()` from `0` and `instance_id()` from `0`.",
-        "line": 139,
+        "line": 151,
         "page": "reference/api/gpu-gpu-render-pass.md"
       },
       {
         "signature": "public fun draw_indexed(index_count: int, instance_count: int = 1): void",
         "description": "Draws `index_count` vertices chosen by the index buffer, `instance_count` times.",
-        "line": 146,
+        "line": 158,
         "page": "reference/api/gpu-gpu-render-pass.md"
       },
       {
         "signature": "public fun end(): void",
         "description": "Ends the pass. Ending it twice does nothing.",
-        "line": 153,
+        "line": 165,
         "page": "reference/api/gpu-gpu-render-pass.md"
       }
     ]

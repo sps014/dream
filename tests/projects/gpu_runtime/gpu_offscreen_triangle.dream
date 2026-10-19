@@ -55,7 +55,7 @@ public struct TriangleVarying {
     public color: GpuVec4;
 }
 
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
 @vertex
 fun offscreen_vertex(scale: float): TriangleVarying {
     let x = -0.5f;
@@ -72,7 +72,7 @@ fun offscreen_vertex(scale: float): TriangleVarying {
     return result;
 }
 
-@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
 @fragment
 fun offscreen_fragment(input: TriangleVarying, tint: GpuVec4): GpuVec4 {
     return input.color * tint;
@@ -104,6 +104,7 @@ async fun gpu_offscreen_triangle(): void {
         switch (triangle_device(backend).await) {
             Some(device) => {
                 let label = triangle_label(backend);
+                System.println(label + " HDR adapter: " + device.adapter_name);
                 let target = triangle_ok(
                     device.texture(
                         GpuTextureDesc(size, size, GpuTextureFormat.Rgba8Unorm).render_target(true)
@@ -143,6 +144,56 @@ async fun gpu_offscreen_triangle(): void {
                 // The base sits near the bottom: row 52 is inside, its outer corners outside.
                 assert_pixel(pixel(bytes, size, 32, 52), 255, 51, 0, 255, label + " base");
                 assert_pixel(pixel(bytes, size, 2, 62), 0, 0, 255, 255, label + " bottom-left");
+                for (let format in [GpuTextureFormat.Rgba16Float, GpuTextureFormat.Rgba32Float]) {
+                    let hdr = triangle_ok(
+                        device.texture(GpuTextureDesc(size, size, format).render_target(true)),
+                        "HDR target on " + label
+                    );
+                    let hdr_pipeline = triangle_ok(
+                        device.render_pipeline(
+                            GpuShaders.offscreen_vertex,
+                            GpuShaders.offscreen_fragment,
+                            GpuRenderPipelineDesc.defaults(format)
+                        ),
+                        "HDR pipeline on " + label
+                    );
+                    let hdr_encoder = device.command_encoder();
+                    let hdr_pass = hdr_encoder.begin_render_pass(
+                        GpuRenderPassDesc.color(hdr, GpuLoad.Clear(GpuVec4(0.0f)))
+                    );
+                    hdr_pass.set_pipeline(hdr_pipeline);
+                    hdr_pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
+                    hdr_pass.bind_value(
+                        GpuShaders.offscreen_fragment.tint,
+                        GpuVec4(4.0f, 4.0f, 0.0f, 1.0f)
+                    );
+                    hdr_pass.draw(3);
+                    hdr_pass.end();
+                    triangle_ok(device.submit(hdr_encoder.finish()).await, "HDR draw on " + label);
+                    let values = triangle_ok(hdr.read(0).await, "HDR read on " + label);
+                    if format == GpuTextureFormat.Rgba16Float {
+                        Assert.eq(values.length, size * size * 8);
+                        let at = (36 * size + 32) * 8;
+                        Assert.eq((int)values[at] + (int)values[at + 1] * 256, 17408);
+                        Assert.eq((int)values[at + 2] + (int)values[at + 3] * 256, 16384);
+                    } else {
+                        Assert.eq(values.length, size * size * 16);
+                        let at = (36 * size + 32) * 16;
+                        Assert.eq(
+                            Bytes.to<float>(
+                                [values[at], values[at + 1], values[at + 2], values[at + 3]]
+                            ),
+                            4.0f
+                        );
+                        Assert.eq(
+                            Bytes.to<float>(
+                                [values[at + 4], values[at + 5], values[at + 6], values[at + 7]]
+                            ),
+                            2.0f
+                        );
+                    }
+                    hdr.destroy();
+                }
             }
             None => {}
         }

@@ -1,0 +1,28 @@
+Subject: [PATCH] d3d12: reclaim completed descriptors before recording and preserve allocation failure
+
+Completed buffers can retain sampler ranges until the next submit. Reclaim before
+recording, and never retain failed arena allocations for later freeing.
+
+--- a/src/d3d12/d3d12-command.cpp
++++ b/src/d3d12/d3d12-command.cpp
+@@ -2005,5 +2005,6 @@
+ Result CommandQueueImpl::getOrCreateCommandBuffer(CommandBufferImpl** outCommandBuffer)
+ {
++    retireCommandBuffers();
+     std::lock_guard<std::mutex> lock(m_mutex);
+     RefPtr<CommandBufferImpl> commandBuffer;
+     if (m_commandBuffersPool.empty())
+--- a/src/d3d12/d3d12-descriptor-heap.cpp
++++ b/src/d3d12/d3d12-descriptor-heap.cpp
+@@ -252,7 +252,10 @@
+     if (count > m_currentChunkSpace)
+     {
+         uint32_t chunkSize = max(count, m_chunkSize);
+-        m_chunks.push_back(m_heap->allocate(chunkSize));
++        auto allocation = m_heap->allocate(chunkSize);
++        if (!allocation)
++            return {};
++        m_chunks.push_back(allocation);
+         m_currentChunkSpace = chunkSize;
+         m_currentChunkOffset = 0;
+     }

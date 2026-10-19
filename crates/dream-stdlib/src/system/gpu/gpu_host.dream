@@ -18,6 +18,9 @@ internal static class GpuHost {
     @runtime("gpuDeviceBackend")
     internal static extern fun device_backend(device: int): int;
 
+    @runtime("gpuDeviceAdapterName")
+    internal static extern fun device_adapter_name(device: int): string;
+
     // Bit mask of supported GpuFeature values.
     @runtime("gpuDeviceFeatures")
     internal static extern fun device_features(device: int): int;

@@ -65,6 +65,8 @@ try {
     const ok = (code, what) => check(code === 0, `${what}: ${host.gpuLastError()}`);
     const handle = (value, what) => { check(value > 0, `${what}: ${host.gpuLastError()}`); return value; };
     const device = handle(await host.gpuDeviceCreate(6, 1 << 6), 'device');
+    check(typeof host.gpuDeviceAdapterName(device) === 'string', 'adapter label');
+    check(host.gpuDeviceAdapterName(-1) === '' && host.gpuLastError().startsWith('EINVALID'), 'invalid adapter handle');
     const bundle = async name => new Uint8Array(await (await fetch(`/crates/dream-host-gpu/tests/fixtures/${name}.dgpb`)).arrayBuffer());
     const library = handle(host.gpuLibraryLoad(device, await bundle('generated')), 'compute library');
     const fill = handle(host.gpuComputePipelineCreate(library, 'fill'), 'fill pipeline');
@@ -91,6 +93,18 @@ try {
     for (let i = 0; i < pixels.length; i += 4) {
       check(pixels[i] >= 126 && pixels[i] <= 129 && pixels[i + 1] === 0 && pixels[i + 2] === 0 && pixels[i + 3] === 255, `render pixel ${i / 4}: ${pixels.slice(i, i + 4)}`);
     }
+    const hdrPipeline = handle(host.gpuRenderPipelineCreate(renderLibrary, 'triangle_vertex', renderLibrary, 'triangle_fragment', [7, 0, 0, 0, 0, 0, 0, 1, 0]), 'HDR pipeline');
+    const hdrTarget = handle(host.gpuTextureCreate(device, [64, 32, 1, 1, 7, 1, 1]), 'HDR target');
+    const hdrTint = Array.from(new Uint8Array(new Float32Array([4, 2, 0, 1]).buffer));
+    ok(await host.gpuSubmit(device, [1, hdrTarget, 1, 0, 0, 0, 0, 0, 0, 0, 4, hdrPipeline, 5, 2, 0, 6, 0, 16, 11, 3, 1, 0, 0, 3], hdrTint), 'HDR render submit');
+    const hdrBytes = new Uint8Array(await host.gpuTextureRead(hdrTarget, 0, 0));
+    check(hdrBytes.length === 64 * 32 * 8, 'HDR readback length');
+    const hdrView = new DataView(hdrBytes.buffer, hdrBytes.byteOffset, hdrBytes.byteLength);
+    for (let at = 0; at < hdrBytes.length; at += 8) {
+      check(hdrView.getUint16(at, true) === 0x4400 && hdrView.getUint16(at + 6, true) === 0x3c00, 'HDR values above one survive rendering');
+    }
+    host.gpuRelease(hdrTarget);
+    host.gpuRelease(hdrPipeline);
     const window = handle(windows.windowCanvas('game', 0), 'window');
     const surface = handle(host.gpuSurfaceCreate(device, window, true), 'surface');
     for (const [width, height] of [[64, 32], [128, 48]]) {

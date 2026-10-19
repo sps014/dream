@@ -168,7 +168,7 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
             expected("v1")
         );
         if iteration == 1 {
-            assert!(log.contains("gen compiled: result hit"), "{log}");
+            assert!(log.contains("gen gen::compiled: result hit"), "{log}");
         }
     }
 
@@ -202,8 +202,8 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
     let changed = run();
     let log = String::from_utf8_lossy(&changed.stderr);
     assert!(changed.status.success(), "{log}");
-    assert!(log.contains("gen compiled: run "), "{log}");
-    assert!(!log.contains("gen compiled: result hit"), "{log}");
+    assert!(log.contains("gen gen::compiled: run "), "{log}");
+    assert!(!log.contains("gen gen::compiled: result hit"), "{log}");
     assert_eq!(
         String::from_utf8_lossy(&changed.stdout).trim(),
         expected("v2")

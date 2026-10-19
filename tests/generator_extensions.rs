@@ -39,7 +39,7 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
         assert!(result.status.success(), "{log}");
         assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "3\n65");
         if iteration == 1 {
-            assert!(log.contains("gen resources: result hit"), "{log}");
+            assert!(log.contains("gen gen::resources: result hit"), "{log}");
         }
     }
     let mut changed_tool = script.to_vec();
@@ -54,9 +54,9 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
     let changed = run();
     let changed_log = String::from_utf8_lossy(&changed.stderr);
     assert!(changed.status.success(), "{changed_log}");
-    assert!(changed_log.contains("gen resources: run "), "{changed_log}");
+    assert!(changed_log.contains("gen gen::resources: run "), "{changed_log}");
     assert!(
-        !changed_log.contains("gen resources: result hit"),
+        !changed_log.contains("gen gen::resources: result hit"),
         "{changed_log}"
     );
     if Command::new("node").arg("--version").output().is_ok() {

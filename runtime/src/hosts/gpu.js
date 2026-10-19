@@ -311,7 +311,7 @@ export function makeGpuHost() {
     surface.frame = 0;
   };
 
-  const asyncGuard = (fallback, body) => async (...args) => {
+  const asyncGuard = /* @__NO_SIDE_EFFECTS__ */ (fallback, body) => async (...args) => {
     try {
       return await body(...args);
     } catch (error) {

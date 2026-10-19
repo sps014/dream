@@ -8,6 +8,8 @@
 //! generates the data-driven `defaultDreamModule` composer. The chunk table lives in
 //! `runtime/src/chunks.manifest`, shared with `scripts/bundle-runtime.mjs`.
 
+mod host_exports;
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Error;
@@ -159,7 +161,11 @@ pub(crate) fn assemble_selective_runtime(
 ) -> Result<String, Error> {
     let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
     let mut chunks: BTreeSet<&str> = BTreeSet::new();
-    for (_module, field) in live_imports {
+    let fields: BTreeSet<_> = live_imports
+        .iter()
+        .filter_map(|(module, field)| (module == "Dream").then_some(field.as_str()))
+        .collect();
+    for field in &fields {
         if let Some(c) = chunk_for_field(&manifest, field) {
             chunks.insert(c);
         }
@@ -192,12 +198,18 @@ pub(crate) fn assemble_selective_runtime(
         let Some(chunk) = manifest.chunks.iter().find(|c| &c.id == chunk_id) else {
             continue;
         };
+        let mut text = String::new();
         for file in &chunk.files {
-            let path = src.join(file);
-            let text = fs::read_to_string(&path)?;
-            out.push_str(&transform_module(&text, file)?);
-            out.push('\n');
+            text.push_str(&transform_module(
+                &fs::read_to_string(src.join(file))?,
+                file,
+            )?);
+            text.push('\n');
         }
+        if let Some(factory) = &chunk.factory {
+            text = host_exports::select(&text, factory, &fields)?;
+        }
+        out.push_str(&text);
     }
 
     // Data-driven host composer over exactly the included chunks (the full-bundle
@@ -384,6 +396,56 @@ mod tests {
         assert!(!with.contains("makeWindowHost(getInstance)"));
         let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
         assert_eq!(chunk_for_field(&manifest, "gpuSurfaceAcquire"), Some("gpu"));
+    }
+
+    #[test]
+    fn unreferenced_apis_inside_live_chunks_are_removed() {
+        for (field, unused) in [
+            ("gpuDeviceCreate", "createComputePipeline"),
+            ("jsGlobal", "jsAwait"),
+            ("netUrlParse", "netClientCreate"),
+        ] {
+            let live = vec![("Dream".into(), field.into())];
+            let assembled = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
+            let text = minify_js_source(&assembled).unwrap();
+            assert!(text.contains(field), "missing {field}");
+            assert!(!text.contains(unused), "retained {unused} for {field}");
+            if std::process::Command::new("node")
+                .arg("--version")
+                .output()
+                .is_ok()
+            {
+                let check = match field {
+                    "jsGlobal" => {
+                        "if (host.jsGlobal('Math') !== Math) throw Error('global lookup');"
+                    }
+                    "netUrlParse" => {
+                        "if (host.netUrlParse('/a?x=1', 'https://example.test')[0] !== 'https://example.test/a') throw Error('URL parsing');"
+                    }
+                    _ => {
+                        "if (typeof host.gpuDeviceCreate !== 'function') throw Error('GPU import');"
+                    }
+                };
+                let dir = tempfile::tempdir().unwrap();
+                let script = dir.path().join("selected.mjs");
+                let checked = format!(
+                    "{assembled}\nconst host=defaultDreamModule(() => ({{}}));\nif(Object.keys(host).join()!=={field:?}) throw Error('unneeded imports: '+Object.keys(host));\n{check}\n"
+                );
+                fs::write(&script, minify_js_source(&checked).unwrap()).unwrap();
+                let output = std::process::Command::new("node")
+                    .arg(script)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{field}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+        let foreign = vec![("application".into(), "gpuDeviceCreate".into())];
+        let text = assemble_selective_runtime(&foreign, JsRuntimeTarget::Web).unwrap();
+        assert!(!text.contains("makeGpuHost"));
     }
 
     #[test]

@@ -341,6 +341,20 @@ after LLVM and linking. Release JavaScript emission passes Oxc's returned scopin
 to code generation and enables compact printing; otherwise identifier mangling is
 lost and formatted output unnecessarily increases the host bundle.
 
+Selective host assembly also selects exports within each included chunk, using the
+final WASM's `Dream` import fields. Oxc parses the factory's return object; unused
+exports become empty spreads that still evaluate their initializers in order. The
+minifier removes pure initializers and their now-unreferenced helpers. GPU async
+wrapper construction is annotated as side-effect-free; invoking a wrapper retains
+its usual effects. Static spreads of local host factories are followed transitively.
+Receiver-dependent objects and opaque spreads remain intact; computed properties,
+accessors and prototype initialization are preserved. Host exports use lexical
+helpers, so their import maps need not retain unrelated sibling APIs.
+
+This further reduces the ocean host from 88.3 KiB / 19.5 KiB Brotli to 81.4 KiB /
+17.5 KiB, without changing its 196.9 KiB WASM. These numbers exclude HTML and server
+headers; the combined WASM and JS transfer is 53.3 KiB Brotli.
+
 ## Optimization record
 
 Before the LLVM backend existed, Dream compiled through generated C. That C output of

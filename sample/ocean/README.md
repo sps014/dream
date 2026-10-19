@@ -82,15 +82,16 @@ Measured for this sample with `--release --runtime --web -Oz`:
 | Artifact | Uncompressed | Gzip | Brotli |
 | --- | ---: | ---: | ---: |
 | `main.wasm` | 196.9 KiB | 44.0 KiB | 35.8 KiB |
-| `main.web.runtime.js` | 88.3 KiB | 22.2 KiB | 19.5 KiB |
-| Combined | 285.2 KiB | 66.2 KiB | 55.3 KiB |
+| `main.web.runtime.js` | 81.4 KiB | 20.0 KiB | 17.5 KiB |
+| Combined | 278.3 KiB | 64.0 KiB | 53.3 KiB |
 
 These sizes include compiler improvements that remove unused object formatting/hash
 methods and limit duplicated runtime and MIR code in size builds. The earlier build
 was 350.7 KiB raw / 50.2 KiB Brotli; the same ocean is now 44% smaller raw and 29%
 smaller with Brotli. Release JavaScript also uses compact printing and local-name
-mangling, reducing the host from 157.8 KiB to 88.3 KiB (29.5 KiB to 19.5 KiB Brotli).
-Together, WASM and JavaScript fall from 79.7 KiB to 55.3 KiB Brotli.
+mangling, and includes only the APIs this module imports within each host chunk.
+The host shrank from 157.8 KiB to 81.4 KiB (29.5 KiB to 17.5 KiB Brotli).
+Together, WASM and JavaScript fall from 79.7 KiB to 53.3 KiB Brotli.
 Rendering quality and controls are unchanged.
 
 Sizes depend on the compiler and toolchain revision. The uncompressed WASM contains:

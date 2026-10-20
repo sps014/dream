@@ -6,6 +6,7 @@ pub(crate) mod capability_abi;
 pub(crate) mod cc;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
+pub(crate) mod runtime_manifest;
 
 pub use pgo::Pgo;
 

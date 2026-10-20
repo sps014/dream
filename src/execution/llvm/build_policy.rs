@@ -49,6 +49,9 @@ pub(super) fn section_args(spec: &dream_abi::target::TargetSpec) -> &'static [&'
 pub(super) fn dead_strip_args(spec: &dream_abi::target::TargetSpec) -> &'static [&'static str] {
     if spec.is_apple() {
         &["-Wl,-dead_strip"]
+    } else if spec.is_msvc() {
+        // Content-based PE IDs keep deployment timestamps reproducible.
+        &["-Wl,/Brepro"]
     } else if !spec.is_windows() {
         &["-Wl,--gc-sections"]
     } else {
@@ -74,7 +77,7 @@ mod size_tests {
             assert_eq!(dead_strip_args(spec), &["-Wl,-dead_strip"]);
         } else {
             assert!(section_args(spec).is_empty());
-            assert!(dead_strip_args(spec).is_empty());
+            assert_eq!(dead_strip_args(spec), &["-Wl,/Brepro"]);
         }
     }
     #[test]

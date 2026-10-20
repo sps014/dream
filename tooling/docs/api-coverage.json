@@ -37,6 +37,701 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/audio/audio.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio.md",
+    "declarations": [
+      {
+        "signature": "public class Audio",
+        "description": "A web-style audio player. Constructors configure sources; load and play perform I/O.",
+        "line": 6,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty player. Assign src before calling play.",
+        "line": 10,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor(src: string)",
+        "description": "Creates a streaming player for a path or HTTP URL without starting I/O.",
+        "line": 20,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor(src: string, options: AudioOptions)",
+        "description": "Creates a streaming player for a path or URL with snapshotted buffering limits.",
+        "line": 30,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor(bytes: byte[])",
+        "description": "Snapshots encoded bytes; detection and decoding begin when loading starts.",
+        "line": 40,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor(bytes: byte[], options: AudioOptions)",
+        "description": "Snapshots encoded bytes with a configurable decoded-data limit.",
+        "line": 50,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public constructor(buffer: AudioBuffer)",
+        "description": "Creates a player from already decoded PCM without including encoded-format decoders.",
+        "line": 60,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public async fun load(): Result<bool, AudioError>",
+        "description": "Cancels prior loading and prepares the current source; returns an I/O or decoding error.",
+        "line": 74,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public async fun play(): Result<bool, AudioError>",
+        "description": "Loads if necessary and starts or resumes playback. Browser activation may be required.",
+        "line": 132,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public fun pause(): Result<bool, AudioError>",
+        "description": "Pauses without changing position; repeating pause emits no duplicate event.",
+        "line": 297,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Cancels loading and releases output. Queued events remain available after closure.",
+        "line": 313,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public fun poll_events(): AudioEvent[]",
+        "description": "Drains ordered typed notifications, including after close.",
+        "line": 323,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get src(): string",
+        "description": "Current string source; empty for PCM and encoded-byte constructors.",
+        "line": 329,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public set src(value: string)",
+        "description": "Replaces the source, cancelling prior playback and pending loads.",
+        "line": 334,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get current_time(): double",
+        "description": "Current position in seconds.",
+        "line": 345,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public set current_time(value: double)",
+        "description": "Requests an absolute seek in seconds; invalid requests preserve the current position.",
+        "line": 351,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get duration(): Option<double>",
+        "description": "Source duration in seconds, absent until metadata is loaded and for streams that do not declare one, such as streamed MP3.",
+        "line": 398,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get volume(): float",
+        "description": "Linear gain from zero to one; mute does not change this value.",
+        "line": 409,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public set volume(value: float)",
+        "description": "Sets finite gain from zero to one, preserving the previous value on error.",
+        "line": 414,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get muted(): bool",
+        "description": "Whether this player is muted.",
+        "line": 430,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public set muted(value: bool)",
+        "description": "Toggles mute without changing the stored volume.",
+        "line": 435,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get loop(): bool",
+        "description": "Whether natural completion restarts playback.",
+        "line": 454,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public set loop(value: bool)",
+        "description": "Enables repetition of a seekable source.",
+        "line": 459,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get paused(): bool",
+        "description": "Whether playback is paused, including before the first play call.",
+        "line": 473,
+        "page": "reference/api/audio-audio-1.md"
+      },
+      {
+        "signature": "public get ended(): bool",
+        "description": "Whether the source reached natural completion without looping.",
+        "line": 479,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public get seeking(): bool",
+        "description": "Whether a seek is pending.",
+        "line": 485,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public get ready_state(): AudioReadyState",
+        "description": "How much source data has been prepared for playback.",
+        "line": 490,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public get error(): Option<AudioError>",
+        "description": "Most recent operation failure, cleared when the source is reset.",
+        "line": 513,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public get sink_id(): string",
+        "description": "Opaque selected output ID; empty selects the system default.",
+        "line": 518,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public static async fun devices(): Result<AudioDevice[], AudioError>",
+        "description": "Enumerates output devices visible to the application.",
+        "line": 523,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public static async fun request_device(): Result<AudioDevice, AudioError>",
+        "description": "Prompts for browser output permission; native applications use devices instead.",
+        "line": 528,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public async fun set_sink_id(id: string): Result<bool, AudioError>",
+        "description": "Selects this player's output asynchronously; failure preserves the previous output.",
+        "line": 542,
+        "page": "reference/api/audio-audio-2.md"
+      },
+      {
+        "signature": "public fun capture(frame_count: int): Result<AudioSnapshot, AudioError>",
+        "description": "Enables an output tap and copies up to 32768 recent rendered frames. Initial calls may return no samples while capture starts. Output is stereo at the device rate.",
+        "line": 606,
+        "page": "reference/api/audio-audio-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_analysis.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-analysis.md",
+    "declarations": [
+      {
+        "signature": "public class AudioAnalysis",
+        "description": "A mono waveform and its single-sided frequency spectrum.",
+        "line": 4,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public waveform: float[]",
+        "description": "Mono samples before window weighting; short input is padded with silence.",
+        "line": 6,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public real: float[]",
+        "description": "Unnormalized real FFT components, including DC and Nyquist.",
+        "line": 9,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public imaginary: float[]",
+        "description": "Unnormalized imaginary FFT components, including DC and Nyquist.",
+        "line": 12,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public magnitudes: float[]",
+        "description": "Window-compensated single-sided amplitudes; a unit sine has amplitude one.",
+        "line": 15,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public magnitudes_db: float[]",
+        "description": "Amplitudes in dBFS, floored at -120 dBFS.",
+        "line": 18,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public peak: float",
+        "description": "Largest absolute sample in the unweighted waveform.",
+        "line": 21,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public rms: float",
+        "description": "Root mean square of the unweighted waveform, including zero padding.",
+        "line": 24,
+        "page": "reference/api/audio-audio-analysis.md"
+      },
+      {
+        "signature": "public fun frequency_hz(bin: int): Result<double, AudioError>",
+        "description": "Returns the frequency in Hz for a valid bin; invalid indices return EINVAL.",
+        "line": 52,
+        "page": "reference/api/audio-audio-analysis.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_analyzer.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-analyzer.md",
+    "declarations": [
+      {
+        "signature": "public class AudioAnalyzer",
+        "description": "Computes waveform levels and FFT data without opening an output device.",
+        "line": 4,
+        "page": "reference/api/audio-audio-analyzer.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates a 2048-sample analyzer with a Hann window.",
+        "line": 9,
+        "page": "reference/api/audio-audio-analyzer.md"
+      },
+      {
+        "signature": "public fun set_fft_size(size: int): Result<bool, AudioError>",
+        "description": "Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.",
+        "line": 18,
+        "page": "reference/api/audio-audio-analyzer.md"
+      },
+      {
+        "signature": "public fun set_window(window: AudioWindow): void",
+        "description": "Selects Hann tapering or a rectangular window.",
+        "line": 29,
+        "page": "reference/api/audio-audio-analyzer.md"
+      },
+      {
+        "signature": "public fun analyze( samples: float[], sample_rate: int, channels: int ): Result<AudioAnalysis, AudioError>",
+        "description": "Analyzes the latest FFT-sized block of interleaved mono or stereo samples. Short input is padded at the end; input must be finite with complete frames.",
+        "line": 35,
+        "page": "reference/api/audio-audio-analyzer.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_buffer.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-buffer.md",
+    "declarations": [
+      {
+        "signature": "public class AudioBuffer",
+        "description": "Immutable decoded interleaved PCM, independent of any output device.",
+        "line": 4,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public static fun decode( bytes: byte[], max_bytes: int = 268435456 ): Result<AudioBuffer, AudioError>",
+        "description": "Detects and decodes encoded bytes, limiting decoded PCM to max_bytes.",
+        "line": 23,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public static fun from_pcm( samples: float[], sample_rate: int, channels: int ): Result<AudioBuffer, AudioError>",
+        "description": "Copies finite interleaved mono/stereo PCM with complete frames and a positive sample rate.",
+        "line": 49,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public get sample_rate(): int",
+        "description": "Samples per second per channel.",
+        "line": 74,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public get channels(): int",
+        "description": "One for mono or two for stereo.",
+        "line": 79,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public get frame_count(): int",
+        "description": "Number of complete frames in this buffer.",
+        "line": 84,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public get duration(): double",
+        "description": "Total duration in seconds.",
+        "line": 89,
+        "page": "reference/api/audio-audio-buffer.md"
+      },
+      {
+        "signature": "public fun read_pcm(start_frame: int, frame_count: int): Result<float[], AudioError>",
+        "description": "Copies a frame range; invalid or overflowing ranges return EINVAL.",
+        "line": 94,
+        "page": "reference/api/audio-audio-buffer.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_device.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-device.md",
+    "declarations": [
+      {
+        "signature": "public class AudioDevice",
+        "description": "An output device visible to the current application.",
+        "line": 4,
+        "page": "reference/api/audio-audio-device.md"
+      },
+      {
+        "signature": "public id: string",
+        "description": "Opaque host-specific ID; the empty ID selects the system default.",
+        "line": 6,
+        "page": "reference/api/audio-audio-device.md"
+      },
+      {
+        "signature": "public name: string",
+        "description": "User-visible device label, possibly empty before browser permission.",
+        "line": 9,
+        "page": "reference/api/audio-audio-device.md"
+      },
+      {
+        "signature": "public is_default: bool",
+        "description": "Whether this is currently the system default output.",
+        "line": 12,
+        "page": "reference/api/audio-audio-device.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_error.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-error.md",
+    "declarations": [
+      {
+        "signature": "public class AudioError: Error",
+        "description": "A stable audio failure code and a readable explanation.",
+        "line": 4,
+        "page": "reference/api/audio-audio-error.md"
+      },
+      {
+        "signature": "public constructor(code: string, message: string)",
+        "description": "Creates a failure with a machine-readable code and message.",
+        "line": 9,
+        "page": "reference/api/audio-audio-error.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Returns the failure code, such as EINVAL, EFORMAT, ECLOSED, or ENOTSUP.",
+        "line": 15,
+        "page": "reference/api/audio-audio-error.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Returns a readable explanation of the failure.",
+        "line": 20,
+        "page": "reference/api/audio-audio-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_event.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-event.md",
+    "declarations": [
+      {
+        "signature": "public enum AudioEvent",
+        "description": "Ordered player notifications. Timestamps are monotonic nanoseconds.",
+        "line": 4,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "LoadStart(timestamp: long)",
+        "description": "Loading began.",
+        "line": 6,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "LoadedMetadata(timestamp: long)",
+        "description": "Source metadata became available.",
+        "line": 8,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "CanPlay(timestamp: long)",
+        "description": "Samples are available for playback.",
+        "line": 10,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Play(timestamp: long)",
+        "description": "Playback was requested and pause state cleared.",
+        "line": 12,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Playing(timestamp: long)",
+        "description": "Output started or recovered from buffering.",
+        "line": 14,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Pause(timestamp: long)",
+        "description": "Playback paused without changing position.",
+        "line": 16,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Seeking(timestamp: long, position: double)",
+        "description": "A seek was accepted; position is the requested time in seconds.",
+        "line": 18,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Seeked(timestamp: long, position: double)",
+        "description": "A seek completed; position is the actual time in seconds.",
+        "line": 20,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "TimeUpdate(timestamp: long, position: double)",
+        "description": "Playback position changed; emitted at most four times per second.",
+        "line": 22,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Waiting(timestamp: long)",
+        "description": "Playback is waiting for source data.",
+        "line": 24,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Ended(timestamp: long)",
+        "description": "The source reached its natural end without looping.",
+        "line": 26,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "VolumeChange(timestamp: long)",
+        "description": "Volume or mute changed.",
+        "line": 28,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "DurationChange(timestamp: long)",
+        "description": "The known duration changed.",
+        "line": 30,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Emptied(timestamp: long)",
+        "description": "Previous source state was reset.",
+        "line": 32,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Abort(timestamp: long)",
+        "description": "Pending loading was cancelled.",
+        "line": 34,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Error(timestamp: long, error: AudioError, operation: string, terminal: bool)",
+        "description": "An operation failed; terminal marks a failure that stopped playback.",
+        "line": 36,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "SinkChange(timestamp: long, sink_id: string)",
+        "description": "The selected output changed.",
+        "line": 38,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "DeviceLost(timestamp: long, error: AudioError)",
+        "description": "Output disappeared and playback paused.",
+        "line": 40,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "Closed(timestamp: long)",
+        "description": "Playback resources were released.",
+        "line": 42,
+        "page": "reference/api/audio-audio-event.md"
+      },
+      {
+        "signature": "EventsLost(timestamp: long, count: int)",
+        "description": "Queue overflow discarded count older events.",
+        "line": 44,
+        "page": "reference/api/audio-audio-event.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_options.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-options.md",
+    "declarations": [
+      {
+        "signature": "public class AudioOptions",
+        "description": "Resource limits for a player. Values are snapshotted by its constructor.",
+        "line": 4,
+        "page": "reference/api/audio-audio-options.md"
+      },
+      {
+        "signature": "public max_decoded_bytes: int",
+        "description": "Maximum decoded PCM bytes for byte sources, which decode completely; defaults to 256 MiB.",
+        "line": 6,
+        "page": "reference/api/audio-audio-options.md"
+      },
+      {
+        "signature": "public max_compressed_bytes: int",
+        "description": "Maximum encoded bytes a streamed file or URL queues ahead of its decoder; defaults to 8 MiB. An encoded element that cannot fit, such as an oversized WebM frame, fails with ELIMIT. Track length is not limited.",
+        "line": 11,
+        "page": "reference/api/audio-audio-options.md"
+      },
+      {
+        "signature": "public buffer_seconds: double",
+        "description": "Decoded audio a streamed source keeps queued for output, in seconds; defaults to one. Values are clamped between 1,024 frames and 30 seconds.",
+        "line": 15,
+        "page": "reference/api/audio-audio-options.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates the default resource limits.",
+        "line": 18,
+        "page": "reference/api/audio-audio-options.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_ready_state.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-ready-state.md",
+    "declarations": [
+      {
+        "signature": "public enum AudioReadyState",
+        "description": "How much of an audio source is available for playback.",
+        "line": 4,
+        "page": "reference/api/audio-audio-ready-state.md"
+      },
+      {
+        "signature": "Nothing",
+        "description": "No source metadata has been loaded.",
+        "line": 6,
+        "page": "reference/api/audio-audio-ready-state.md"
+      },
+      {
+        "signature": "Metadata",
+        "description": "Source metadata is available but no playable samples are buffered.",
+        "line": 8,
+        "page": "reference/api/audio-audio-ready-state.md"
+      },
+      {
+        "signature": "CurrentData",
+        "description": "Samples at the current position are available.",
+        "line": 10,
+        "page": "reference/api/audio-audio-ready-state.md"
+      },
+      {
+        "signature": "FutureData",
+        "description": "Samples at and beyond the current position are available.",
+        "line": 12,
+        "page": "reference/api/audio-audio-ready-state.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_snapshot.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-snapshot.md",
+    "declarations": [
+      {
+        "signature": "public class AudioSnapshot",
+        "description": "A copied view of a player's recent output PCM.",
+        "line": 4,
+        "page": "reference/api/audio-audio-snapshot.md"
+      },
+      {
+        "signature": "public samples: float[]",
+        "description": "Interleaved PCM after the player's volume and mute settings.",
+        "line": 6,
+        "page": "reference/api/audio-audio-snapshot.md"
+      },
+      {
+        "signature": "public sample_rate: int",
+        "description": "Samples per second per channel.",
+        "line": 9,
+        "page": "reference/api/audio-audio-snapshot.md"
+      },
+      {
+        "signature": "public channels: int",
+        "description": "One for mono or two for stereo.",
+        "line": 12,
+        "page": "reference/api/audio-audio-snapshot.md"
+      },
+      {
+        "signature": "public frame_position: long",
+        "description": "Rendered frame index since capture was enabled, at the beginning of this snapshot.",
+        "line": 15,
+        "page": "reference/api/audio-audio-snapshot.md"
+      },
+      {
+        "signature": "public overrun: bool",
+        "description": "Whether output frames were lost to queue overflow or a concurrent capture update.",
+        "line": 18,
+        "page": "reference/api/audio-audio-snapshot.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/audio/audio_window.dream",
+    "package": "system.audio",
+    "page": "reference/api/audio-audio-window.md",
+    "declarations": [
+      {
+        "signature": "public enum AudioWindow",
+        "description": "The weighting applied before computing an audio spectrum.",
+        "line": 4,
+        "page": "reference/api/audio-audio-window.md"
+      },
+      {
+        "signature": "Hann",
+        "description": "Tapers both ends to reduce leakage between frequency bins.",
+        "line": 6,
+        "page": "reference/api/audio-audio-window.md"
+      },
+      {
+        "signature": "Rectangular",
+        "description": "Leaves the input unchanged; useful for integer-period test signals.",
+        "line": 8,
+        "page": "reference/api/audio-audio-window.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/c_ptr.dream",
     "package": "system",
     "page": "reference/api/c-ptr.md",

@@ -99,3 +99,27 @@ fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
     }
     Ok(tools.bin)
 }
+
+/// LLVM response files keep large runtime inventories below the Windows command-line limit.
+pub(super) fn input_response<'a>(
+    paths: impl IntoIterator<Item = &'a std::path::PathBuf>,
+) -> std::io::Result<tempfile::NamedTempFile> {
+    use std::io::Write;
+    let mut file = tempfile::NamedTempFile::new()?;
+    for path in paths {
+        let text = path.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "tool input path is not valid UTF-8",
+            )
+        })?;
+        let text = if cfg!(windows) {
+            text.replace('\\', "/")
+        } else {
+            text.replace('\\', "\\\\")
+        };
+        writeln!(file, "\"{}\"", text.replace('"', "\\\""))?;
+    }
+    file.flush()?;
+    Ok(file)
+}

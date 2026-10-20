@@ -147,7 +147,9 @@ pub(super) fn link(
     }
     let (package_objects, libraries) =
         super::component_sources::compile(config, &clang, ll, req.wasm_opt)?;
-    command.args(objects).args(package_objects).arg(ll);
+    let inputs = super::tools::input_response(objects.iter().chain(&package_objects))
+        .map_err(|e| e.to_string())?;
+    command.arg(format!("@{}", inputs.path().display())).arg(ll);
     for library in libraries {
         command.arg(format!("-l{library}"));
     }

@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dream audio visualizer</title>
+<style>
+body { margin: 24px; background: #070b14; color: #d4e6f4; font: 15px system-ui; }
+canvas { display: block; width: 100%; max-width: 1100px; height: 65vh; margin-top: 20px; }
+input,button { padding: 8px; } #url { width: 340px; } pre { white-space: pre-wrap; }
+</style>
+<h1>Dream audio</h1>
+<p>Waveform above, spectrum below. Space: play/pause · left/right: seek · up/down: volume · M: mute · D: next output · P: output picker.</p>
+<input type="file" id="file" accept="audio/*,.webm"><input id="url" placeholder="Audio URL (CORS required)"><button id="load">Load URL</button>
+<pre id="status">Loading…</pre>
+<script type="module">
+import {load} from './target/web/main.web.runtime.js';
+const status = document.querySelector('#status');
+try {
+  const player = await load('./target/web/main.wasm', {stdout: text => status.textContent = text});
+  document.querySelector('#file').onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const pointer = player.writeArray(new Uint8Array(await file.arrayBuffer()), 'byte');
+    player.exports.audio_file(pointer);
+    document.querySelector('canvas')?.focus();
+  };
+  document.querySelector('#load').onclick = () => {
+    const pointer = player.writeString(document.querySelector('#url').value);
+    player.exports.audio_url(pointer);
+    document.querySelector('canvas')?.focus();
+  };
+  status.textContent = 'Select a file or press Space for a 440 Hz test tone.';
+  await player.run();
+} catch (error) { status.textContent = String(error); }
+</script>

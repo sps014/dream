@@ -2539,3 +2539,13 @@ fn generic_constructor_infers_types_and_contextualizes_array_overloads() {
     let diagnostics = analyze_code(code);
     assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
 }
+
+#[test]
+fn literal_dead_branches_still_report_invalid_programs() {
+    for condition in ["false", "(false)"] {
+        let source = format!("fun main(): void {{ if {condition} {{ let x: int = \"bad\"; }} }}");
+        assert!(analyze_code(&source).has_errors());
+    }
+    let source = "fun main(): void { if true {} else { let x: int = \"bad\"; } }";
+    assert!(analyze_code(source).has_errors());
+}

@@ -1,0 +1,41 @@
+import system;
+import system.audio;
+
+async fun main(): void {
+    let audio = Audio("__BASE__/tone.wav");
+    audio.volume = 0.25f;
+    let started = audio.play().await;
+    if started.is_err() {
+        System.println(started.unwrap_err().message());
+        return;
+    }
+    audio.capture(2048).unwrap();
+    Time.delay(400).await;
+    System.println("stream progress: " + (audio.current_time > 0.1d).to_string());
+
+    let captured = audio.capture(2048).unwrap();
+    let peak = 0.0f;
+    for (let sample in captured.samples) {
+        if sample > peak {
+            peak = sample;
+        }
+    }
+    System.println("stream capture: " + (peak > 0.08f && peak < 0.15f).to_string());
+
+    audio.current_time = 1.5d;
+    let seeked = false;
+    for (let attempt = 0; attempt < 200 && seeked == false; attempt = attempt + 1) {
+        for (let event in audio.poll_events()) {
+            switch (event) {
+                AudioEvent.Seeked(_, _) => {
+                    seeked = true;
+                }
+                _ => {}
+            }
+        }
+        Time.delay(10).await;
+    }
+    let position = audio.current_time;
+    System.println("stream seek: " + (seeked && position >= 1.5d && position < 2.5d).to_string());
+    audio.close();
+}

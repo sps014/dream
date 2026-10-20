@@ -27,6 +27,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("arc_slot_walk", "ownership", true),
     Case::project("arc_weak_forest", "ownership", true),
     Case::project("arithmetic", "core", true),
+    Case::project("audio_analysis", "core", true),
     Case::project("array_alloc", "collections", true),
     Case::project("array_collection", "collections", true),
     Case::project("array_repeat", "collections", true),

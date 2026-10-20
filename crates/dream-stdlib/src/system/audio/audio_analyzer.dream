@@ -1,0 +1,124 @@
+module system.audio;
+
+/// Computes waveform levels and FFT data without opening an output device.
+public class AudioAnalyzer {
+    size: int;
+    window: AudioWindow;
+
+    /// Creates a 2048-sample analyzer with a Hann window.
+    public constructor() {
+        this.size = 2048;
+        this.window = AudioWindow.Hann;
+    }
+
+    @intrinsic(Intrinsic.DreamAudioFft)
+    static extern fun fft_host(borrow samples: float[], size: int): float[];
+
+    /// Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.
+    public fun set_fft_size(size: int): Result<bool, AudioError> {
+        if size < 32 || size > 32768 || (size & (size - 1)) != 0 {
+            return Result.Err(
+                AudioError("EINVAL", "FFT size must be a power of two from 32 to 32768")
+            );
+        }
+        this.size = size;
+        return Result.Ok(true);
+    }
+
+    /// Selects Hann tapering or a rectangular window.
+    public fun set_window(window: AudioWindow): void {
+        this.window = window;
+    }
+
+    /// Analyzes the latest FFT-sized block of interleaved mono or stereo samples.
+    /// Short input is padded at the end; input must be finite with complete frames.
+    public fun analyze(
+        samples: float[],
+        sample_rate: int,
+        channels: int
+    ): Result<AudioAnalysis, AudioError> {
+        if sample_rate <= 0 || (channels != 1 && channels != 2) {
+            return Result.Err(
+                AudioError("EINVAL", "positive sample rate and mono or stereo PCM are required")
+            );
+        }
+        if samples.length % channels != 0 {
+            return Result.Err(AudioError("EINVAL", "PCM contains an incomplete frame"));
+        }
+        for (let sample in samples) {
+            if sample != sample || Math.abs((double)sample) > 3.4028234663852886e38d {
+                return Result.Err(AudioError("EINVAL", "PCM samples must be finite"));
+            }
+        }
+        let waveform = Array.alloc<float>(this.size);
+        let weighted = Array.alloc<float>(this.size);
+        let frames = samples.length / channels;
+        let start = 0;
+        if frames > this.size {
+            start = frames - this.size;
+        }
+        let peak = 0.0d;
+        let squares = 0.0d;
+        let weight_sum = 0.0d;
+        for (let i = 0; i < this.size; i = i + 1) {
+            let value = 0.0d;
+            if start + i < frames {
+                for (let channel = 0; channel < channels; channel = channel + 1) {
+                    let sample = (double)samples[(start + i) * channels + channel];
+                    value = value + sample / (double)channels;
+                }
+            }
+            waveform[i] = (float)value;
+            squares = squares + value * value;
+            if Math.abs(value) > peak {
+                peak = Math.abs(value);
+            }
+            let weight = 1.0d;
+            if this.window == AudioWindow.Hann {
+                weight = 0.5d
+                    - 0.5d * Math.cos(6.283185307179586d * (double)i / (double)(this.size - 1));
+            }
+            weight_sum = weight_sum + weight;
+            weighted[i] = (float)(value * weight);
+        }
+        let complex = AudioAnalyzer.fft_host(weighted, this.size);
+        if complex.length != this.size + 2 {
+            return Result.Err(AudioError("ENOMEM", "FFT workspace allocation failed"));
+        }
+        let bins = this.size / 2 + 1;
+        let real = Array.alloc<float>(bins);
+        let imaginary = Array.alloc<float>(bins);
+        let magnitudes = Array.alloc<float>(bins);
+        let decibels = Array.alloc<float>(bins);
+        for (let bin = 0; bin < bins; bin = bin + 1) {
+            real[bin] = complex[2 * bin];
+            imaginary[bin] = complex[2 * bin + 1];
+            let re = (double)real[bin];
+            let im = (double)imaginary[bin];
+            let scale = 2.0d;
+            if bin == 0 || bin == bins - 1 {
+                scale = 1.0d;
+            }
+            let magnitude = Math.sqrt(re * re + im * im) * scale / weight_sum;
+            magnitudes[bin] = (float)magnitude;
+            let db = -120.0d;
+            if magnitude > 0.000001d {
+                db = 20.0d * Math.log10(magnitude);
+            }
+            decibels[bin] = (float)db;
+        }
+        return Result.Ok(
+            AudioAnalysis(
+                waveform,
+                real,
+                imaginary,
+                magnitudes,
+                decibels,
+                (float)peak,
+                (float)Math.sqrt(squares / (double)this.size),
+                sample_rate,
+                this.size
+            )
+        );
+    }
+}

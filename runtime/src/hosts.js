@@ -6,6 +6,8 @@ import { makeFsHost } from "./hosts/fs.js";
 import { makeCryptoHost } from "./hosts/crypto.js";
 import { makeConsoleProcessHost } from "./hosts/console_process.js";
 import { makeDatetimeTextHost } from "./hosts/datetime_text.js";
+import { makeAudioHost } from "./hosts/audio.js";
+import { makeAudioCaptureHost } from "./hosts/audio_capture.js";
 import { makeWindowHost } from "./hosts/window.js";
 import { makeGpuHost } from "./hosts/gpu.js";
 
@@ -24,6 +26,8 @@ export function defaultDreamModule(getInstance) {
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
     ...makeWindowHost(),
+    ...makeAudioHost(),
+    ...makeAudioCaptureHost(),
     ...makeGpuHost(getInstance),
   };
 }
@@ -38,5 +42,7 @@ export {
   makeConsoleProcessHost,
   makeDatetimeTextHost,
   makeWindowHost,
+  makeAudioHost,
+  makeAudioCaptureHost,
   makeGpuHost,
 };

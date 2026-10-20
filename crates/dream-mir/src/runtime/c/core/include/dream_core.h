@@ -1308,6 +1308,16 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
 
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
+dream_ptr dream_audio_fft(dream_ptr source, int32_t size);
+dream_ptr dream_audio_decode(dream_ptr source, int32_t max_bytes);
+dream_ptr dream_audio_decode_webm(dream_ptr source, int32_t max_bytes);
+uintptr_t dream_audio_stream_open(int32_t capacity);
+int32_t dream_audio_stream_space(uintptr_t handle);
+int32_t dream_audio_stream_push(uintptr_t handle, dream_ptr source);
+void dream_audio_stream_finish(uintptr_t handle);
+dream_ptr dream_audio_stream_read(uintptr_t handle, int32_t max_frames);
+double dream_audio_stream_duration(uintptr_t handle);
+void dream_audio_stream_close(uintptr_t handle);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
 uint32_t dream_guest_abi_version(void);
 uint32_t dream_guest_length(dream_ptr reference);

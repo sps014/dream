@@ -5,6 +5,19 @@ use super::HostCapability;
 pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
     match capability {
         HostCapability::Core => &[],
+        HostCapability::Audio => &[
+            "audioOutputStart",
+            "audioOutputRequest",
+            "audioOutputCreate",
+            "audioOutputStream",
+            "audioOutputWrite",
+            "audioOutputControl",
+            "audioOutputQuery",
+            "audioOutputClose",
+            "audioOutputDevices",
+            "audioOutputSink",
+            "audioOutputCapture",
+        ],
         HostCapability::Unicode => &[
             "unicodeNormalize",
             "unicodeToLower",

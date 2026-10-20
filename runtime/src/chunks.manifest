@@ -12,7 +12,7 @@
 # none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
 # field to this chunk by prefix; a leading `=` marks an exact-match field.
 always features.js abi.js guest_contract.js platform.js binary.js urls.js core.js instance.js typed.js typed_imports.js marshal.js hosts/env.js
-order async js cancellation fs net data crypto console_process datetime_text window gpu workers
+order async js cancellation fs net data crypto console_process datetime_text window gpu audio audio_capture workers
 chunk async async.js -
 chunk js hosts/js.js makeJsHost js
 chunk fs hosts/file_operations.js,hosts/fs.js makeFsHost file dir temp
@@ -29,3 +29,6 @@ chunk data capabilities.js,hosts/data.js makeDataHost data
 chunk window hosts/window.js makeWindowHost window
 
 chunk gpu hosts/gpu_layouts.js,hosts/gpu_bundle.js,hosts/gpu_commands.js,hosts/gpu.js makeGpuHost gpu
+
+chunk audio hosts/audio.js makeAudioHost =audioOutputStart =audioOutputRequest =audioOutputCreate =audioOutputStream =audioOutputWrite =audioOutputControl =audioOutputQuery =audioOutputClose =audioOutputDevices =audioOutputSink
+chunk audio_capture hosts/audio_capture.js makeAudioCaptureHost =audioOutputCapture

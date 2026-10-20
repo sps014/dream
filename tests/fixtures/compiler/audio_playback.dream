@@ -1,0 +1,59 @@
+import system;
+import system.audio;
+
+async fun main(): void {
+    let pcm = Array.alloc<float>(48000);
+    for (let i = 0; i < pcm.length; i = i + 1) {
+        pcm[i] = (float)(0.5d * Math.sin(6.283185307179586d * 440.0d * (double)i / 48000.0d));
+    }
+    let buffer = AudioBuffer.from_pcm(pcm, 48000, 1).unwrap();
+    let audio = Audio(buffer);
+    audio.volume = 0.25f;
+    let started = audio.play().await;
+    if started.is_err() {
+        System.println(started.unwrap_err().message());
+        return;
+    }
+    audio.capture(2048).unwrap();
+    Time.delay(250).await;
+    let captured = audio.capture(2048).unwrap();
+    let peak = 0.0f;
+    for (let sample in captured.samples) {
+        if sample > peak {
+            peak = sample;
+        }
+    }
+    System.println("capture: " + (peak > 0.08f && peak < 0.15f).to_string());
+    let before_switch = audio.current_time;
+    audio.set_sink_id("").await.unwrap();
+    System.println("sink: " + (Math.abs(audio.current_time - before_switch) < 0.05d).to_string());
+    audio.muted = true;
+    Time.delay(150).await;
+    let silent = audio.capture(2048).unwrap();
+    let muted = silent.samples.length > 0;
+    for (let sample in silent.samples) {
+        if sample != 0.0f {
+            muted = false;
+        }
+    }
+    System.println("mute: " + muted.to_string());
+    audio.pause().unwrap();
+    let position = audio.current_time;
+    Time.delay(50).await;
+    System.println("pause: " + (Math.abs(audio.current_time - position) < 0.001d).to_string());
+    audio.play().await.unwrap();
+    Time.delay(750).await;
+    audio.play().await.unwrap();
+    let naturally_ended = false;
+    for (let event in audio.poll_events()) {
+        switch (event) {
+            AudioEvent.Ended(_) => {
+                naturally_ended = true;
+            }
+            _ => {}
+        }
+    }
+    System.println("ended: " + naturally_ended.to_string());
+    System.println("restart: " + (!audio.paused && audio.current_time < 0.1d).to_string());
+    audio.close();
+}

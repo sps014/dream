@@ -141,6 +141,12 @@ pub fn alloc_i64s(items: &[i64]) -> DreamPtr {
 pub fn alloc_i32s(items: &[i32]) -> DreamPtr {
     alloc_elements(items)
 }
+/// # Safety
+/// `reference` is a readable guest float array retained for this call.
+pub unsafe fn read_f32s(reference: DreamPtr) -> Vec<f32> {
+    unsafe { read_elements(reference) }
+}
+
 pub fn alloc_f32s(items: &[f32]) -> DreamPtr {
     alloc_elements(items)
 }

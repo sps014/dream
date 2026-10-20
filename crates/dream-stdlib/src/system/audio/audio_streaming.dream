@@ -1,0 +1,191 @@
+module system.audio;
+
+// Moves decoded chunks from a feed into the output ring. One task owns the feed at a
+// time: the pump while it runs, otherwise a seek task. Seeks requested during
+// playback are applied by the pump between chunks, so a stale chunk can never be
+// written after the ring is flushed. Every await rechecks the source generation.
+internal static class AudioStreaming {
+    /// Creates the output ring for the loaded feed; returns the host result code.
+    internal static fun open_output(state: AudioState): int {
+        let feed = state.feed.unwrap();
+        let seconds = state.buffer_seconds;
+        if seconds != seconds || seconds > 30.0d {
+            seconds = 30.0d;
+        }
+        let frames = (int)Math.ceil(seconds * (double)feed.rate);
+        if frames < 1024 {
+            frames = 1024;
+        }
+        let handle = AudioOutput.stream(feed.rate, feed.channels, frames);
+        if handle <= 0 {
+            return handle;
+        }
+        state.handle = handle;
+        state.ring_frames = frames;
+        let frame = (long)(state.position * (double)feed.rate);
+        AudioOutput.control(handle, 3, (double)frame);
+        state.flush_base = frame;
+        state.written = 0L;
+        state.origin = 0L;
+        state.wraps.clear();
+        return handle;
+    }
+
+    /// Starts the pump unless another task owns the feed or the source has ended.
+    internal static fun start_pump(state: AudioState): void {
+        if state.feed_owned || state.handle <= 0 || state.stream_done || state.closed {
+            return;
+        }
+        state.feed_owned = true;
+        Promise.start(AudioStreaming.pump(state, state.generation));
+    }
+
+    /// Queues a seek; the pump applies it, or a dedicated task does when no pump runs.
+    internal static fun request_seek(state: AudioState, value: double): void {
+        state.seeking = true;
+        state.seek_target = value;
+        state.events.push(AudioEvent.Seeking(AudioEvents.now(), value));
+        if state.feed_owned == false {
+            state.feed_owned = true;
+            Promise.start(AudioStreaming.seek_task(state, state.generation));
+        }
+    }
+
+    /// Waits until the ring holds a quarter second, the source ends, or the pump stops.
+    internal static async fun prefill(
+        state: AudioState,
+        generation: int,
+        play_generation: int
+    ): bool {
+        let wanted = state.feed.unwrap().rate / 4;
+        if wanted > state.ring_frames {
+            wanted = state.ring_frames;
+        }
+        while generation == state.generation && play_generation == state.play_generation {
+            if state.stream_done || AudioOutput.query(state.handle, 4) >= (double)wanted {
+                return true;
+            }
+            if state.feed_owned == false {
+                return false;
+            }
+            Time.delay(5).await;
+        }
+        return false;
+    }
+
+    static async fun seek_task(state: AudioState, generation: int): void {
+        AudioStreaming.apply_seek(state, generation).await;
+        if generation != state.generation {
+            return;
+        }
+        state.feed_owned = false;
+        if state.paused == false {
+            AudioStreaming.start_pump(state);
+        }
+    }
+
+    /// Applies the queued seek target; the caller must own the feed.
+    internal static async fun apply_seek(state: AudioState, generation: int): bool {
+        let value = state.seek_target;
+        state.seek_target = -1.0d;
+        let feed = state.feed.unwrap();
+        let frame = (long)(value * (double)feed.rate);
+        let seek = feed.seek;
+        let moved = seek(frame, state.cancellation.token).await;
+        if generation != state.generation || state.closed {
+            return false;
+        }
+        state.seeking = false;
+        if moved.is_err() {
+            let error = moved.unwrap_err();
+            state.fail(error.code(), error.message(), "seek", false);
+            return false;
+        }
+        if state.handle > 0 {
+            AudioOutput.control(state.handle, 3, (double)frame);
+        }
+        state.flush_base = frame;
+        state.written = 0L;
+        state.origin = 0L;
+        state.wraps.clear();
+        state.position = value;
+        state.ended = false;
+        state.stream_done = false;
+        state.events.push(AudioEvent.Seeked(AudioEvents.now(), value));
+        return true;
+    }
+
+    static async fun pump(state: AudioState, generation: int): void {
+        let feed = state.feed.unwrap();
+        let next = feed.next;
+        let seek = feed.seek;
+        let pending: float[] = [];
+        while generation == state.generation && state.closed == false && state.stream_done == false {
+            if state.seek_target >= 0.0d {
+                pending = [];
+                if AudioStreaming.apply_seek(state, generation).await == false {
+                    if generation != state.generation {
+                        return;
+                    }
+                }
+                continue;
+            }
+            if pending.length == 0 {
+                if AudioOutput.query(state.handle, 4) >= (double)state.ring_frames {
+                    Time.delay(15).await;
+                    continue;
+                }
+                let chunk = next(4096, state.cancellation.token).await;
+                if generation != state.generation || state.closed {
+                    return;
+                }
+                if state.seek_target >= 0.0d {
+                    continue;
+                }
+                if chunk.is_err() {
+                    let error = chunk.unwrap_err();
+                    AudioOutput.control(state.handle, 2, 0.0d);
+                    state.paused = true;
+                    state.fail(error.code(), error.message(), "stream", true);
+                    break;
+                }
+                pending = chunk.unwrap();
+                if pending.length == 0 {
+                    if state.looped {
+                        let restarted = seek(0L, state.cancellation.token).await;
+                        if generation != state.generation || state.closed {
+                            return;
+                        }
+                        if restarted.is_err() {
+                            let error = restarted.unwrap_err();
+                            state.fail(error.code(), error.message(), "loop", false);
+                            state.looped = false;
+                        } else {
+                            state.wraps.push(state.flush_base + state.written);
+                        }
+                        continue;
+                    }
+                    AudioOutput.control(state.handle, 6, 0.0d);
+                    state.stream_done = true;
+                    break;
+                }
+            }
+            let accepted = AudioOutput.write(state.handle, pending);
+            state.written = state.written + (long)accepted;
+            let used = accepted * feed.channels;
+            if used >= pending.length {
+                pending = [];
+            } else {
+                let rest = Array.alloc<float>(pending.length - used);
+                for (let i = 0; i < rest.length; i = i + 1) {
+                    rest[i] = pending[used + i];
+                }
+                pending = rest;
+                Time.delay(15).await;
+            }
+        }
+        if generation == state.generation {
+            state.feed_owned = false;
+        }
+    }
+}

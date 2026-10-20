@@ -1,0 +1,7 @@
+[package]
+name = "audio_visualizer"
+version = "0.1.0"
+type = "bin"
+entry = "main.dream"
+targets = ["native", "web"]
+description = "Audio playback, waveform and FFT spectrum using Dream audio and GPU APIs"

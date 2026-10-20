@@ -1,0 +1,16 @@
+[package]
+name = "dream-host-audio"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "dream_host_audio"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+dream-host-core = { path = "../dream-host-core" }
+dream-host-abi = { path = "../dream-host-abi" }
+serde_json = "1"
+
+[build-dependencies]
+cc = "1"

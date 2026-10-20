@@ -1,0 +1,54 @@
+module system.audio;
+
+/// An output device visible to the current application.
+public class AudioDevice {
+    /// Opaque host-specific ID; the empty ID selects the system default.
+    public id: string;
+
+    /// User-visible device label, possibly empty before browser permission.
+    public name: string;
+
+    /// Whether this is currently the system default output.
+    public is_default: bool;
+
+    internal constructor(id: string, name: string, is_default: bool) {
+        this.id = id;
+        this.name = name;
+        this.is_default = is_default;
+    }
+
+    internal static fun decode(text: string): Result<AudioDevice[], AudioError> {
+        let parsed = Json.deserialize<JsonValue>(text);
+        if parsed.is_err() {
+            return Result.Err(AudioError("EIO", "invalid output device response"));
+        }
+        let failure = parsed.unwrap().at("error");
+        if failure.at("code").as_string().is_some() {
+            return Result.Err(
+                AudioError(
+                    failure.at("code").as_string().unwrap(),
+                    failure.at("message").as_string().unwrap_or("audio device operation failed")
+                )
+            );
+        }
+        let items = parsed.unwrap().as_array();
+        if items.is_none() {
+            return Result.Err(AudioError("ENOTSUP", "audio output devices are unavailable"));
+        }
+        let result = List<AudioDevice>();
+        for (let item in items.unwrap()) {
+            result.push(
+                AudioDevice(
+                    item.at("id").as_string().unwrap_or(""),
+                    item.at("name").as_string().unwrap_or(""),
+                    item.at("is_default").as_bool().unwrap_or(false)
+                )
+            );
+        }
+        let array = Array.alloc<AudioDevice>(result.length);
+        for (let i = 0; i < array.length; i = i + 1) {
+            array[i] = result[i];
+        }
+        return Result.Ok(array);
+    }
+}

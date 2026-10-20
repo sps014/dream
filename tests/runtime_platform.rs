@@ -37,12 +37,10 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     if !cfg!(windows) {
         command.arg("-pthread");
     }
-    let mut sources = std::fs::read_dir(&core)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == "c"))
-        .collect::<Vec<_>>();
-    sources.sort();
+    let sources = dream_mir::runtime::modules::CORE_C
+        .iter()
+        .map(|name| core.join(name))
+        .chain([core.join("heap.c"), core.join("heap_maps.c")]);
     let build = command
         .args(sources)
         .arg(root.join("tests/runtime_platform.c"))

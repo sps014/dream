@@ -1,0 +1,51 @@
+module system.audio;
+
+// Queue state is separate from the player so polling never retains a playback resource.
+internal class AudioEvents {
+    queued: Queue<AudioEvent>;
+    timestamps: Queue<long>;
+    lost: int;
+    lost_timestamp: long;
+
+    internal constructor() {
+        this.queued = Queue<AudioEvent>();
+        this.timestamps = Queue<long>();
+        this.lost = 0;
+        this.lost_timestamp = 0L;
+    }
+
+    @runtime("timeNowNanos")
+    internal static extern fun now(): long;
+
+    internal fun push(event: AudioEvent): void {
+        if this.queued.length == 1024 {
+            this.queued.dequeue();
+            let discarded = this.timestamps.dequeue().unwrap();
+            if this.lost == 0 {
+                this.lost_timestamp = discarded;
+            }
+            if this.lost < 2147483647 {
+                this.lost = this.lost + 1;
+            }
+        }
+        this.queued.enqueue(event);
+        this.timestamps.enqueue(AudioEvents.now());
+    }
+
+    internal fun drain(): AudioEvent[] {
+        let events = List<AudioEvent>();
+        if this.lost > 0 {
+            events.push(AudioEvent.EventsLost(this.lost_timestamp, this.lost));
+            this.lost = 0;
+        }
+        while this.queued.length > 0 {
+            events.push(this.queued.dequeue().unwrap());
+            this.timestamps.dequeue();
+        }
+        let array = Array.alloc<AudioEvent>(events.length);
+        for (let i = 0; i < array.length; i = i + 1) {
+            array[i] = events[i];
+        }
+        return array;
+    }
+}

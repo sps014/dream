@@ -1,0 +1,170 @@
+import system;
+import system.audio;
+import system.testing;
+
+// Waits for the named event, failing on terminal errors or after two seconds.
+async fun audio_wait(audio: Audio, wanted: string): bool {
+    for (let attempt = 0; attempt < 200; attempt = attempt + 1) {
+        for (let event in audio.poll_events()) {
+            let name = "";
+            switch (event) {
+                AudioEvent.Seeked(_, _) => {
+                    name = "seeked";
+                }
+                AudioEvent.Waiting(_) => {
+                    name = "waiting";
+                }
+                AudioEvent.Playing(_) => {
+                    name = "playing";
+                }
+                AudioEvent.Ended(_) => {
+                    name = "ended";
+                }
+                AudioEvent.Error(_, error, operation, terminal) => {
+                    if terminal {
+                        System.println(operation + ": " + error.code() + " " + error.message());
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+            if name == wanted {
+                return true;
+            }
+        }
+        Time.delay(10).await;
+    }
+    return false;
+}
+
+async fun audio_streaming_sources(base: string): void {
+    let options = AudioOptions();
+    options.max_compressed_bytes = 262144;
+    let track = Audio(base + "/long.wav", options);
+    track.load().await.unwrap();
+    Assert.is_true(Math.abs(track.duration.unwrap() - 10.0d) < 0.000001d);
+    Assert.eq(track.ready_state, AudioReadyState.Metadata);
+    track.close();
+
+    let tagged = Audio(base + "/tagged.mp3", options);
+    tagged.load().await.unwrap();
+    Assert.is_true(tagged.duration.is_none());
+    tagged.close();
+}
+
+// Names the failing playback check because timing failures are otherwise hard to locate.
+fun check(value: bool, label: string): void {
+    if value == false {
+        System.println("playback check failed: " + label);
+    }
+    Assert.is_true(value);
+}
+
+async fun audio_streaming_playback(base: string): void {
+    let options = AudioOptions();
+    options.max_compressed_bytes = 262144;
+    let track = Audio(base + "/long.wav", options);
+    track.play().await.unwrap();
+    check(
+        track.ready_state == AudioReadyState.FutureData,
+        "track.ready_state == AudioReadyState.FutureData"
+    );
+    Time.delay(400).await;
+    let early = track.current_time;
+    check(early > 0.1d && early < 1.5d, "early > 0.1d && early < 1.5d");
+
+    track.current_time = 6.0d;
+    check(track.seeking, "track.seeking");
+    track.current_time = 7.0d;
+    Assert.eq(track.error.unwrap().code(), "EBUSY");
+    check(audio_wait(track, "seeked").await, "audio_wait(track, seeked).await");
+    check(
+        track.current_time >= 6.0d && track.current_time < 7.0d,
+        "track.current_time >= 6.0d && track.current_time < 7.0d"
+    );
+
+    track.current_time = 2.0d;
+    check(audio_wait(track, "seeked").await, "audio_wait(track, seeked).await");
+    check(
+        track.current_time >= 2.0d && track.current_time < 3.0d,
+        "track.current_time >= 2.0d && track.current_time < 3.0d"
+    );
+    track.current_time = 11.0d;
+    Assert.eq(track.error.unwrap().code(), "EINVAL");
+    track.close();
+
+    let looped = Audio(base + "/short.wav");
+    looped.loop = true;
+    looped.play().await.unwrap();
+    Time.delay(1000).await;
+    check(looped.ended == false, "not looped.ended");
+    check(looped.current_time < 0.35d, "looped.current_time < 0.35d");
+    looped.close();
+
+    let ending = Audio(base + "/short.wav");
+    ending.play().await.unwrap();
+    check(audio_wait(ending, "ended").await, "audio_wait(ending, ended).await");
+    check(ending.ended && ending.paused, "ending.ended && ending.paused");
+    ending.play().await.unwrap();
+    check(ending.ended == false, "not ending.ended");
+    check(audio_wait(ending, "ended").await, "audio_wait(ending, ended).await");
+    ending.close();
+
+    let stalled = Audio(base + "/stall.wav");
+    stalled.play().await.unwrap();
+    check(audio_wait(stalled, "waiting").await, "audio_wait(stalled, waiting).await");
+    check(audio_wait(stalled, "playing").await, "audio_wait(stalled, playing).await");
+    stalled.close();
+    System.println("audio playback: passed");
+}
+
+async fun main(): void {
+    let arguments = System.args;
+    Assert.is_true(arguments.length >= 2);
+    let base = arguments[0];
+    let local = Audio(arguments[1]);
+    local.load().await.unwrap();
+    Assert.is_true(Math.abs(local.duration.unwrap() - 4.0d / 48000.0d) < 0.000001d);
+    local.close();
+
+    let remote = Audio(base + "/tone.mp3");
+    remote.load().await.unwrap();
+    Assert.is_true(Math.abs(remote.duration.unwrap() - 4.0d / 48000.0d) < 0.000001d);
+    remote.src = base + "/malformed";
+    Assert.eq(remote.load().await.unwrap_err().code(), "EFORMAT");
+    remote.src = base + "/status";
+    Assert.eq(remote.load().await.unwrap_err().code(), "EHTTP");
+    remote.close();
+
+    let options = AudioOptions();
+    options.max_compressed_bytes = 8;
+    let limited = Audio(base + "/tone.mp3", options);
+    Assert.eq(limited.load().await.unwrap_err().code(), "ELIMIT");
+    limited.close();
+
+    let replaced = Audio(base + "/slow");
+    let obsolete = replaced.load();
+    Promise.start(obsolete);
+    Time.delay(50).await;
+    replaced.src = base + "/tone.mp3";
+    replaced.load().await.unwrap();
+    Assert.eq(obsolete.await.unwrap_err().code(), "ECANCELLED");
+    Assert.is_true(replaced.error.is_none());
+    Assert.is_true(replaced.duration.is_some());
+    replaced.close();
+
+    let paused = Audio(base + "/slow");
+    let pending = paused.play();
+    Promise.start(pending);
+    Time.delay(50).await;
+    paused.pause().unwrap();
+    Assert.eq(pending.await.unwrap_err().code(), "ECANCELLED");
+    Assert.is_true(paused.paused);
+    paused.close();
+
+    audio_streaming_sources(base).await;
+    System.println("audio sources: passed");
+    if arguments.length > 2 {
+        audio_streaming_playback(base).await;
+    }
+}

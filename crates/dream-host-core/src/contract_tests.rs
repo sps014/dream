@@ -140,6 +140,8 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/datetime_text.js"),
     include_str!("../../../runtime/src/hosts/window.js"),
     include_str!("../../../runtime/src/hosts/gpu.js"),
+    include_str!("../../../runtime/src/hosts/audio.js"),
+    include_str!("../../../runtime/src/hosts/audio_capture.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
 

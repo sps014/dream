@@ -1,0 +1,645 @@
+module system.audio;
+
+/// A web-style audio player. Constructors configure sources; load and play perform I/O.
+// Source closures capture immutable inputs only; callers cannot install a closure capturing the player.
+@allow_cycle
+public class Audio {
+    state: AudioState;
+
+    /// Creates an empty player. Assign src before calling play.
+    public constructor() {
+        this.state = AudioState(
+            async (token: CancellationToken) => AudioSource.empty(token).await,
+            Option.None,
+            "",
+            AudioOptions()
+        );
+    }
+
+    /// Creates a streaming player for a path or HTTP URL without starting I/O.
+    public constructor(src: string) {
+        this.state = AudioState(
+            async (token: CancellationToken) => AudioSource.empty(token).await,
+            Option.Some(AudioSource.path(src, 8388608)),
+            src,
+            AudioOptions()
+        );
+    }
+
+    /// Creates a streaming player for a path or URL with snapshotted buffering limits.
+    public constructor(src: string, options: AudioOptions) {
+        this.state = AudioState(
+            async (token: CancellationToken) => AudioSource.empty(token).await,
+            Option.Some(AudioSource.path(src, options.max_compressed_bytes)),
+            src,
+            options
+        );
+    }
+
+    /// Snapshots encoded bytes; detection and decoding begin when loading starts.
+    public constructor(bytes: byte[]) {
+        this.state = AudioState(
+            AudioSource.bytes(bytes, 268435456),
+            Option.None,
+            "",
+            AudioOptions()
+        );
+    }
+
+    /// Snapshots encoded bytes with a configurable decoded-data limit.
+    public constructor(bytes: byte[], options: AudioOptions) {
+        this.state = AudioState(
+            AudioSource.bytes(bytes, options.max_decoded_bytes),
+            Option.None,
+            "",
+            options
+        );
+    }
+
+    /// Creates a player from already decoded PCM without including encoded-format decoders.
+    public constructor(buffer: AudioBuffer) {
+        this.state = AudioState(
+            async (token: CancellationToken) => Result.Ok(buffer),
+            Option.None,
+            "",
+            AudioOptions()
+        );
+    }
+
+    del() {
+        this.state.release();
+    }
+
+    /// Cancels prior loading and prepares the current source; returns an I/O or decoding error.
+    public async fun load(): Result<bool, AudioError> {
+        return this.prepare(false).await;
+    }
+
+    async fun prepare(for_play: bool): Result<bool, AudioError> {
+        let state = this.state;
+        if state.writable("load") == false {
+            return Result.Err(state.failure.unwrap());
+        }
+        state.reset();
+        let generation = state.generation;
+        state.loading = true;
+        state.starting = for_play;
+        state.events.push(AudioEvent.LoadStart(AudioEvents.now()));
+        if state.opener.is_some() {
+            let open_source = state.opener.unwrap();
+            let opened = open_source(state.cancellation.token).await;
+            if generation != state.generation || state.closed {
+                if opened.is_ok() {
+                    let close = opened.unwrap().close;
+                    close();
+                }
+                return Result.Err(AudioError("ECANCELLED", "audio source changed during loading"));
+            }
+            state.loading = false;
+            if opened.is_err() {
+                state.starting = false;
+                let error = opened.unwrap_err();
+                return Result.Err(state.fail(error.code(), error.message(), "load", true));
+            }
+            let feed = opened.unwrap();
+            state.feed = Option.Some(feed);
+            state.events.push(AudioEvent.LoadedMetadata(AudioEvents.now()));
+            if feed.duration.is_some() {
+                state.events.push(AudioEvent.DurationChange(AudioEvents.now()));
+            }
+            state.events.push(AudioEvent.CanPlay(AudioEvents.now()));
+            return Result.Ok(true);
+        }
+        let load_source = state.loader;
+        let loaded = load_source(state.cancellation.token).await;
+        if generation != state.generation || state.closed {
+            return Result.Err(AudioError("ECANCELLED", "audio source changed during loading"));
+        }
+        state.loading = false;
+        if loaded.is_err() {
+            state.starting = false;
+            let error = loaded.unwrap_err();
+            return Result.Err(state.fail(error.code(), error.message(), "load", true));
+        }
+        state.buffer = Option.Some(loaded.unwrap());
+        state.events.push(AudioEvent.LoadedMetadata(AudioEvents.now()));
+        state.events.push(AudioEvent.DurationChange(AudioEvents.now()));
+        state.events.push(AudioEvent.CanPlay(AudioEvents.now()));
+        return Result.Ok(true);
+    }
+
+    /// Loads if necessary and starts or resumes playback. Browser activation may be required.
+    public async fun play(): Result<bool, AudioError> {
+        let state = this.state;
+        if state.writable("play") == false {
+            return Result.Err(state.failure.unwrap());
+        }
+        state.synchronize();
+        if state.starting || state.sink_pending {
+            return Result.Err(state.fail("EBUSY", "an output operation is pending", "play", false));
+        }
+        if state.loaded() == false {
+            let generation = state.generation + 1;
+            let play_generation = state.play_generation + 1;
+            let loaded = this.prepare(true).await;
+            if loaded.is_err() {
+                return loaded;
+            }
+            if generation != state.generation || play_generation != state.play_generation {
+                if generation == state.generation {
+                    state.starting = false;
+                }
+                return Result.Err(AudioError("ECANCELLED", "playback was cancelled while loading"));
+            }
+        }
+        let generation = state.generation;
+        state.starting = true;
+        let play_generation = state.play_generation;
+        if state.handle <= 0 {
+            if state.feed.is_some() {
+                state.handle = AudioStreaming.open_output(state);
+            } else {
+                let buffer = state.buffer.unwrap();
+                state.handle = AudioOutput.create(
+                    buffer.samples,
+                    buffer.sample_rate,
+                    buffer.channels
+                );
+            }
+            if state.handle < 0 {
+                state.handle = 0;
+                state.starting = false;
+                return Result.Err(
+                    state.fail(
+                        "ENOTSUP",
+                        "audio playback is unavailable on this host",
+                        "play",
+                        false
+                    )
+                );
+            }
+            if state.handle == 0 {
+                state.starting = false;
+                return Result.Err(
+                    state.fail("ENODEVICE", "audio output could not be opened", "play", false)
+                );
+            }
+            let gain = state.volume;
+            if state.muted {
+                gain = 0.0f;
+            }
+            AudioOutput.control(state.handle, 4, (double)gain);
+            let looping = 0.0d;
+            if state.looped {
+                looping = 1.0d;
+            }
+            AudioOutput.control(state.handle, 5, looping);
+            if state.buffer.is_some() {
+                AudioOutput.control(state.handle, 3, state.position * (double)state.rate());
+            }
+        }
+        if state.ended {
+            if state.feed.is_some() {
+                if state.feed_owned {
+                    state.starting = false;
+                    return Result.Err(
+                        state.fail("EBUSY", "another seek is pending", "play", false)
+                    );
+                }
+                state.feed_owned = true;
+                AudioStreaming.request_seek(state, 0.0d);
+                let restarted = AudioStreaming.apply_seek(state, generation).await;
+                if generation != state.generation || state.closed {
+                    return Result.Err(
+                        AudioError("ECANCELLED", "audio source changed while restarting")
+                    );
+                }
+                state.feed_owned = false;
+                if restarted == false {
+                    state.starting = false;
+                    return Result.Err(state.failure.unwrap());
+                }
+            } else {
+                AudioOutput.control(state.handle, 3, 0.0d);
+                state.position = 0.0d;
+            }
+        }
+        if state.paused == false {
+            state.starting = false;
+            return Result.Ok(true);
+        }
+        state.paused = false;
+        state.events.push(AudioEvent.Play(AudioEvents.now()));
+        if state.sink != "" {
+            let selected = AudioOutput.sink(state.handle, state.sink).await;
+            if generation
+                != state.generation || state.closed || play_generation != state.play_generation {
+                if generation == state.generation {
+                    state.starting = false;
+                }
+                return Result.Err(
+                    AudioError("ECANCELLED", "source changed during device selection")
+                );
+            }
+            if selected <= 0 {
+                state.starting = false;
+                state.paused = true;
+                return Result.Err(state.output_failure(selected, "play"));
+            }
+        }
+        if state.feed.is_some() {
+            AudioStreaming.start_pump(state);
+            let filled = AudioStreaming.prefill(state, generation, play_generation).await;
+            if generation
+                != state.generation || state.closed || play_generation != state.play_generation {
+                if generation == state.generation {
+                    state.starting = false;
+                }
+                return Result.Err(
+                    AudioError("ECANCELLED", "playback was cancelled while buffering")
+                );
+            }
+            if filled == false {
+                state.starting = false;
+                state.paused = true;
+                if state.failure.is_some() {
+                    return Result.Err(state.failure.unwrap());
+                }
+                return Result.Err(
+                    state.fail("EIO", "audio stream stopped before buffering", "play", false)
+                );
+            }
+        }
+        let started = AudioOutput.start(state.handle).await;
+        if generation == state.generation {
+            state.starting = false;
+        }
+        if generation
+            != state.generation || state.closed || play_generation != state.play_generation {
+            if state.handle > 0 && generation == state.generation {
+                AudioOutput.control(state.handle, 2, 0.0d);
+            }
+            return Result.Err(
+                AudioError("ECANCELLED", "audio source changed before playback started")
+            );
+        }
+        if started <= 0 {
+            state.paused = true;
+            return Result.Err(state.output_failure(started, "play"));
+        }
+        state.paused = false;
+        state.ended = false;
+        state.events.push(AudioEvent.Playing(AudioEvents.now()));
+        return Result.Ok(true);
+    }
+
+    /// Pauses without changing position; repeating pause emits no duplicate event.
+    public fun pause(): Result<bool, AudioError> {
+        let state = this.state;
+        if state.writable("pause") == false {
+            return Result.Err(state.failure.unwrap());
+        }
+        state.play_generation = state.play_generation + 1;
+        state.synchronize();
+        if state.paused == false {
+            AudioOutput.control(state.handle, 2, 0.0d);
+            state.paused = true;
+            state.events.push(AudioEvent.Pause(AudioEvents.now()));
+        }
+        return Result.Ok(true);
+    }
+
+    /// Cancels loading and releases output. Queued events remain available after closure.
+    public fun close(): void {
+        if this.state.closed {
+            return;
+        }
+        this.state.reset();
+        this.state.closed = true;
+        this.state.events.push(AudioEvent.Closed(AudioEvents.now()));
+    }
+
+    /// Drains ordered typed notifications, including after close.
+    public fun poll_events(): AudioEvent[] {
+        this.state.synchronize();
+        return this.state.events.drain();
+    }
+
+    /// Current string source; empty for PCM and encoded-byte constructors.
+    public get src(): string {
+        return this.state.source;
+    }
+
+    /// Replaces the source, cancelling prior playback and pending loads.
+    public set src(value: string) {
+        if this.state.writable("src") {
+            this.state.reset();
+            this.state.source = value;
+            this.state.opener = Option.Some(
+                AudioSource.path(this.state.source, this.state.compressed_limit)
+            );
+        }
+    }
+
+    /// Current position in seconds.
+    public get current_time(): double {
+        this.state.synchronize();
+        return this.state.position;
+    }
+
+    /// Requests an absolute seek in seconds; invalid requests preserve the current position.
+    public set current_time(value: double) {
+        let state = this.state;
+        if state.writable("current_time") == false {
+            return;
+        }
+        if state.seeking {
+            state.fail("EBUSY", "another seek is pending", "seek", false);
+            return;
+        }
+        if value != value || value < 0.0d || value > 1.0e9d || state.loaded() == false {
+            state.fail(
+                "EINVAL",
+                "seek requires loaded audio and a finite nonnegative position",
+                "seek",
+                false
+            );
+            return;
+        }
+        if state.feed.is_some() {
+            let declared = state.feed.unwrap().duration;
+            if declared.is_some() && value > declared.unwrap() {
+                state.fail("EINVAL", "seek is beyond the audio duration", "seek", false);
+                return;
+            }
+            AudioStreaming.request_seek(state, value);
+            return;
+        }
+        let buffer = state.buffer.unwrap();
+        if value > buffer.duration {
+            state.fail("EINVAL", "seek is beyond the audio duration", "seek", false);
+            return;
+        }
+        state.seeking = true;
+        state.events.push(AudioEvent.Seeking(AudioEvents.now(), value));
+        if state.handle > 0
+            && AudioOutput.control(state.handle, 3, value * (double)buffer.sample_rate) == 0 {
+            state.fail("ESEEK", "audio seek failed", "seek", false);
+        } else {
+            state.position = value;
+            state.ended = false;
+            state.events.push(AudioEvent.Seeked(AudioEvents.now(), value));
+        }
+        state.seeking = false;
+    }
+
+    /// Source duration in seconds, absent until metadata is loaded and for streams that
+    /// do not declare one, such as streamed MP3.
+    public get duration(): Option<double> {
+        if this.state.buffer.is_some() {
+            return Option.Some(this.state.buffer.unwrap().duration);
+        }
+        if this.state.feed.is_some() {
+            return this.state.feed.unwrap().duration;
+        }
+        return Option.None;
+    }
+
+    /// Linear gain from zero to one; mute does not change this value.
+    public get volume(): float {
+        return this.state.volume;
+    }
+
+    /// Sets finite gain from zero to one, preserving the previous value on error.
+    public set volume(value: float) {
+        let state = this.state;
+        if state.writable("volume") == false {
+            return;
+        }
+        if value != value || value < 0.0f || value > 1.0f {
+            state.fail("EINVAL", "volume must be finite and between zero and one", "volume", false);
+            return;
+        }
+        if state.volume != value {
+            state.volume = value;
+            this.apply_gain();
+        }
+    }
+
+    /// Whether this player is muted.
+    public get muted(): bool {
+        return this.state.muted;
+    }
+
+    /// Toggles mute without changing the stored volume.
+    public set muted(value: bool) {
+        if this.state.writable("muted") && this.state.muted != value {
+            this.state.muted = value;
+            this.apply_gain();
+        }
+    }
+
+    fun apply_gain(): void {
+        let gain = this.state.volume;
+        if this.state.muted {
+            gain = 0.0f;
+        }
+        if this.state.handle > 0 {
+            AudioOutput.control(this.state.handle, 4, (double)gain);
+        }
+        this.state.events.push(AudioEvent.VolumeChange(AudioEvents.now()));
+    }
+
+    /// Whether natural completion restarts playback.
+    public get loop(): bool {
+        return this.state.looped;
+    }
+
+    /// Enables repetition of a seekable source.
+    public set loop(value: bool) {
+        if this.state.writable("loop") {
+            this.state.looped = value;
+            if this.state.handle > 0 {
+                let enabled = 0.0d;
+                if value {
+                    enabled = 1.0d;
+                }
+                AudioOutput.control(this.state.handle, 5, enabled);
+            }
+        }
+    }
+
+    /// Whether playback is paused, including before the first play call.
+    public get paused(): bool {
+        this.state.synchronize();
+        return this.state.paused;
+    }
+
+    /// Whether the source reached natural completion without looping.
+    public get ended(): bool {
+        this.state.synchronize();
+        return this.state.ended;
+    }
+
+    /// Whether a seek is pending.
+    public get seeking(): bool {
+        return this.state.seeking;
+    }
+
+    /// How much source data has been prepared for playback.
+    public get ready_state(): AudioReadyState {
+        let state = this.state;
+        state.synchronize();
+        if state.buffer.is_some() {
+            return AudioReadyState.FutureData;
+        }
+        if state.feed.is_none() {
+            return AudioReadyState.Nothing;
+        }
+        if state.handle <= 0 || state.buffering || state.seeking {
+            return AudioReadyState.Metadata;
+        }
+        let queued = AudioOutput.query(state.handle, 4);
+        if state.stream_done || queued >= (double)(state.feed.unwrap().rate / 4) {
+            return AudioReadyState.FutureData;
+        }
+        if queued > 0.0d {
+            return AudioReadyState.CurrentData;
+        }
+        return AudioReadyState.Metadata;
+    }
+
+    /// Most recent operation failure, cleared when the source is reset.
+    public get error(): Option<AudioError> {
+        return this.state.failure;
+    }
+
+    /// Opaque selected output ID; empty selects the system default.
+    public get sink_id(): string {
+        return this.state.sink;
+    }
+
+    /// Enumerates output devices visible to the application.
+    public static async fun devices(): Result<AudioDevice[], AudioError> {
+        return AudioDevice.decode(AudioOutput.devices().await);
+    }
+
+    /// Prompts for browser output permission; native applications use devices instead.
+    public static async fun request_device(): Result<AudioDevice, AudioError> {
+        let result = AudioDevice.decode(AudioOutput.request().await);
+        if result.is_err() {
+            return Result.Err(result.unwrap_err());
+        }
+        if result.unwrap().length == 0 {
+            return Result.Err(
+                AudioError("ENOTSUP", "output selection is unavailable or was denied")
+            );
+        }
+        return Result.Ok(result.unwrap()[0]);
+    }
+
+    /// Selects this player's output asynchronously; failure preserves the previous output.
+    public async fun set_sink_id(id: string): Result<bool, AudioError> {
+        let state = this.state;
+        if state.writable("set_sink_id") == false {
+            return Result.Err(state.failure.unwrap());
+        }
+        if state.sink_pending || state.starting {
+            return Result.Err(
+                state.fail("EBUSY", "an output operation is pending", "set_sink_id", false)
+            );
+        }
+        let generation = state.generation;
+        state.sink_pending = true;
+        if state.handle <= 0 {
+            if id != "" {
+                let available = Audio.devices().await;
+                if generation != state.generation || state.closed {
+                    return Result.Err(
+                        AudioError("ECANCELLED", "source changed during device selection")
+                    );
+                }
+                if available.is_err() {
+                    state.sink_pending = false;
+                    return Result.Err(available.unwrap_err());
+                }
+                let found = false;
+                for (let device in available.unwrap()) {
+                    if device.id == id {
+                        found = true;
+                    }
+                }
+                if found == false {
+                    state.sink_pending = false;
+                    return Result.Err(
+                        state.fail(
+                            "ENOTFOUND",
+                            "output device is unavailable",
+                            "set_sink_id",
+                            false
+                        )
+                    );
+                }
+            }
+        } else {
+            let changed = AudioOutput.sink(state.handle, id).await;
+            if generation != state.generation || state.closed {
+                return Result.Err(
+                    AudioError("ECANCELLED", "source changed during device selection")
+                );
+            }
+            if changed <= 0 {
+                state.sink_pending = false;
+                return Result.Err(state.output_failure(changed, "set_sink_id"));
+            }
+        }
+        state.sink_pending = false;
+        if state.sink != id {
+            state.sink = id;
+            state.events.push(AudioEvent.SinkChange(AudioEvents.now(), state.sink));
+        }
+        return Result.Ok(true);
+    }
+
+    /// Enables an output tap and copies up to 32768 recent rendered frames.
+    /// Initial calls may return no samples while capture starts. Output is stereo at the device rate.
+    public fun capture(frame_count: int): Result<AudioSnapshot, AudioError> {
+        let state = this.state;
+        if state.writable("capture") == false {
+            return Result.Err(state.failure.unwrap());
+        }
+        if frame_count < 0 || frame_count > 32768 || state.loaded() == false {
+            return Result.Err(
+                state.fail(
+                    "EINVAL",
+                    "capture requires loaded audio and at most 32768 frames",
+                    "capture",
+                    false
+                )
+            );
+        }
+        if state.handle <= 0 {
+            return Result.Ok(AudioSnapshot([], 48000, 2, 0L, false));
+        }
+        let captured = AudioOutput.capture(state.handle, frame_count);
+        if captured.length < 5 {
+            return Result.Err(
+                state.fail("EOUTPUT", "audio capture could not be enabled", "capture", false)
+            );
+        }
+        let samples = Array.alloc<float>(captured.length - 5);
+        for (let i = 0; i < samples.length; i = i + 1) {
+            samples[i] = captured[i + 5];
+        }
+        let position = (long)captured[2] + (long)captured[3] * 16777216L;
+        return Result.Ok(
+            AudioSnapshot(
+                samples,
+                (int)captured[0],
+                (int)captured[1],
+                position,
+                captured[4] != 0.0f
+            )
+        );
+    }
+}

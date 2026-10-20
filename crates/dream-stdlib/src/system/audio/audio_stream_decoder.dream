@@ -1,0 +1,72 @@
+module system.audio;
+
+@intrinsic(Intrinsic.DreamAudioStreamOpen)
+static extern fun dream_audio_stream_open(capacity: int): usize;
+
+@intrinsic(Intrinsic.DreamAudioStreamSpace)
+static extern fun dream_audio_stream_space(handle: usize): int;
+
+@intrinsic(Intrinsic.DreamAudioStreamPush)
+static extern fun dream_audio_stream_push(handle: usize, borrow bytes: byte[]): int;
+
+@intrinsic(Intrinsic.DreamAudioStreamFinish)
+static extern fun dream_audio_stream_finish(handle: usize): void;
+
+@intrinsic(Intrinsic.DreamAudioStreamRead)
+static extern fun dream_audio_stream_read(handle: usize, max_frames: int): float[];
+
+@intrinsic(Intrinsic.DreamAudioStreamDuration)
+static extern fun dream_audio_stream_duration(handle: usize): double;
+
+@intrinsic(Intrinsic.DreamAudioStreamClose)
+static extern fun dream_audio_stream_close(handle: usize): void;
+
+// Detects the format from the first bytes and decodes as encoded input arrives.
+// Read results start with status, sample rate and channels; status 0 requests more
+// input, 1 carries PCM, 2 is the end, and negative values are terminal failures.
+internal class AudioStreamDecoder {
+    handle: usize;
+
+    internal constructor(capacity: int) {
+        this.handle = dream_audio_stream_open(capacity);
+    }
+
+    del() {
+        this.close();
+    }
+
+    internal fun is_open(): bool {
+        return this.handle != 0;
+    }
+
+    internal fun space(): int {
+        return dream_audio_stream_space(this.handle);
+    }
+
+    internal fun push(borrow bytes: byte[]): bool {
+        return dream_audio_stream_push(this.handle, bytes) != 0;
+    }
+
+    internal fun finish(): void {
+        dream_audio_stream_finish(this.handle);
+    }
+
+    internal fun read(max_frames: int): float[] {
+        return dream_audio_stream_read(this.handle, max_frames);
+    }
+
+    internal fun duration(): Option<double> {
+        let seconds = dream_audio_stream_duration(this.handle);
+        if seconds < 0.0d {
+            return Option.None;
+        }
+        return Option.Some(seconds);
+    }
+
+    internal fun close(): void {
+        if this.handle != 0 {
+            dream_audio_stream_close(this.handle);
+            this.handle = 0;
+        }
+    }
+}

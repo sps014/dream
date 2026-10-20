@@ -1,0 +1,229 @@
+import system;
+import system.audio;
+import system.gpu;
+import system.window;
+
+let visualizer_audio = Audio();
+let visualizer_start = false;
+
+@export
+fun audio_file(bytes: byte[]): void {
+    visualizer_audio.close();
+    visualizer_audio = Audio(bytes);
+    visualizer_start = true;
+}
+
+@export
+fun audio_url(url: string): void {
+    visualizer_audio.close();
+    visualizer_audio = Audio(url);
+    visualizer_start = true;
+}
+
+public struct AudioPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@vertex
+fun audio_vertex(): AudioPixel {
+    let x = -1.0f;
+    let y = -1.0f;
+    if vertex_id() == 1 {
+        x = 3.0f;
+    } else if vertex_id() == 2 {
+        y = 3.0f;
+    }
+    let pixel = AudioPixel();
+    pixel.position = GpuVec4(x, y, 0.0f, 1.0f);
+    pixel.uv = GpuVec2(x * 0.5f + 0.5f, y * 0.5f + 0.5f);
+    return pixel;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@fragment
+fun audio_fragment(pixel: AudioPixel, @readonly values: GpuBuffer<float>): GpuVec4 {
+    let uv = pixel.uv;
+    let color = GpuVec3(0.025f, 0.04f, 0.08f);
+    let bin = (int)GpuMath.clamp(uv.x * 512.0f, 0.0f, 511.0f);
+    let height = GpuMath.clamp((values[2048 + bin] + 90.0f) / 90.0f, 0.0f, 1.0f);
+    if uv.y < 0.46f && uv.y > 0.03f && uv.y < 0.03f + height * 0.4f {
+        color = GpuVec3(0.15f, 0.65f + height * 0.25f, 0.9f);
+    }
+    let sample = (int)GpuMath.clamp(uv.x * 2048.0f, 0.0f, 2047.0f);
+    let wave = 0.74f + values[sample] * 0.18f;
+    if uv.y > 0.51f && GpuMath.abs(uv.y - wave) < 0.003f {
+        color = GpuVec3(0.5f, 1.0f, 0.7f);
+    }
+    if GpuMath.abs(uv.y - 0.5f) < 0.0015f {
+        color = GpuVec3(0.12f, 0.2f, 0.3f);
+    }
+    return GpuVec4(color.x, color.y, color.z, 1.0f);
+}
+
+fun visualizer_error(result: Result<bool, AudioError>): void {
+    if result.is_err() {
+        System.println(result.unwrap_err().code() + ": " + result.unwrap_err().message());
+    }
+}
+
+async fun visualize(window: Window): Result<bool, GpuError> {
+    let device = GpuDevice.create(GpuBackend.Auto).await?;
+    let surface = device.create_surface(window)?;
+    let pipeline = device.render_pipeline(
+        GpuShaders.audio_vertex,
+        GpuShaders.audio_fragment,
+        GpuRenderPipelineDesc.defaults(surface.color_format)
+    )?;
+    let data = Array.alloc<float>(2560);
+    let values = device.buffer_from(data)?;
+    let analyzer = AudioAnalyzer();
+    let device_index = 0;
+    while window.is_open {
+        let input = window.poll();
+        for (let event in input.events) {
+            switch (event) {
+                WindowEvent.Resized(size) => {
+                    if size.width > 0 && size.height > 0 {
+                        surface.resize(size.width, size.height)?;
+                    }
+                }
+                WindowEvent.FileDropped(path) => {
+                    visualizer_audio.close();
+                    visualizer_audio = Audio(path);
+                    visualizer_start = true;
+                }
+                _ => {}
+            }
+        }
+        if input.keyboard.pressed(KeyCode.Escape) {
+            window.close();
+            break;
+        }
+        if visualizer_start {
+            visualizer_start = false;
+            visualizer_error(visualizer_audio.play().await);
+        }
+        if input.keyboard.pressed(KeyCode.Space) {
+            if visualizer_audio.paused {
+                visualizer_error(visualizer_audio.play().await);
+            } else {
+                visualizer_error(visualizer_audio.pause());
+            }
+        }
+        if input.keyboard.pressed(KeyCode.M) {
+            visualizer_audio.muted = !visualizer_audio.muted;
+        }
+        if input.keyboard.pressed(KeyCode.ArrowUp) {
+            visualizer_audio.volume = (float)Math.min((double)visualizer_audio.volume + 0.1d, 1.0d);
+        }
+        if input.keyboard.pressed(KeyCode.ArrowDown) {
+            visualizer_audio.volume = (float)Math.max((double)visualizer_audio.volume - 0.1d, 0.0d);
+        }
+        if input.keyboard.pressed(KeyCode.ArrowRight) {
+            let target = visualizer_audio.current_time + 5.0d;
+            let duration = visualizer_audio.duration.unwrap_or(0.0d);
+            visualizer_audio.current_time = Math.min(target, duration);
+        }
+        if input.keyboard.pressed(KeyCode.ArrowLeft) {
+            visualizer_audio.current_time = Math.max(visualizer_audio.current_time - 5.0d, 0.0d);
+        }
+        if input.keyboard.pressed(KeyCode.D) {
+            let devices = Audio.devices().await;
+            if devices.is_ok() && devices.unwrap().length > 0 {
+                let outputs = devices.unwrap();
+                device_index = (device_index + 1) % outputs.length;
+                visualizer_error(visualizer_audio.set_sink_id(outputs[device_index].id).await);
+                System.println("Output: " + outputs[device_index].name);
+            } else if devices.is_err() {
+                System.println(devices.unwrap_err().message());
+            }
+        }
+        if input.keyboard.pressed(KeyCode.P) {
+            let selected = Audio.request_device().await;
+            if selected.is_ok() {
+                visualizer_error(visualizer_audio.set_sink_id(selected.unwrap().id).await);
+            } else {
+                System.println(selected.unwrap_err().message());
+            }
+        }
+        for (let event in visualizer_audio.poll_events()) {
+            switch (event) {
+                AudioEvent.Error(_, error, operation, _) => {
+                    System.println(operation + ": " + error.message());
+                }
+                AudioEvent.Ended(_) => System.println("Ended"),
+                AudioEvent.DeviceLost(_, error) => System.println(error.message()),
+                _ => {}
+            }
+        }
+        if visualizer_audio.ready_state == AudioReadyState.FutureData {
+            let captured = visualizer_audio.capture(2048);
+            if captured.is_ok() {
+                let snapshot = captured.unwrap();
+                let analyzed = analyzer.analyze(
+                    snapshot.samples,
+                    snapshot.sample_rate,
+                    snapshot.channels
+                );
+                if analyzed.is_ok() {
+                    let analysis = analyzed.unwrap();
+                    for (let i = 0; i < 2048; i = i + 1) {
+                        data[i] = analysis.waveform[i];
+                    }
+                    for (let i = 0; i < 512; i = i + 1) {
+                        data[2048 + i] = analysis.magnitudes_db[i];
+                    }
+                    values.write(data)?;
+                    window.set_title(
+                        "Dream audio | peak " + analysis.peak + " | RMS " + analysis.rms
+                    );
+                }
+            }
+        }
+        let size = window.pixel_size;
+        if size.width <= 0 || size.height <= 0 {
+            Time.delay(50).await;
+            continue;
+        }
+        let frame = surface.begin_frame(GpuVec4(0.025f, 0.04f, 0.08f, 1.0f)).await?;
+        frame.pass.set_pipeline(pipeline);
+        frame.pass.bind_buffer(GpuShaders.audio_fragment.values, values);
+        frame.pass.draw(3);
+        frame.present().await?;
+    }
+    return Result.Ok(true);
+}
+
+async fun main(): void {
+    let arguments = System.args;
+    if arguments.length > 0 {
+        visualizer_audio = Audio(arguments[0]);
+        visualizer_start = true;
+    } else {
+        let samples = Array.alloc<float>(48000);
+        for (let i = 0; i < samples.length; i = i + 1) {
+            samples[i] = (float)(
+                Math.sin(6.283185307179586d * 440.0d * (double)i / 48000.0d) * 0.25d
+            );
+        }
+        visualizer_audio = Audio(AudioBuffer.from_pcm(samples, 48000, 1).unwrap());
+        visualizer_audio.loop = true;
+    }
+    let opened = Window.open(WindowDesc.of("Dream audio | Space: play", 1100, 680));
+    if opened.is_err() {
+        System.println(opened.unwrap_err().message());
+        return;
+    }
+    let window = opened.unwrap();
+    let result = visualize(window).await;
+    visualizer_audio.close();
+    window.close();
+    if result.is_err() {
+        System.println(result.unwrap_err().message());
+    }
+}

@@ -60,6 +60,9 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
@@ -166,6 +169,37 @@ jobs:
           env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" run arithmetic.dream
           env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" --release run arithmetic.dream
           env -u DREAM_LLVM "$STAGE/dream" --wasm arithmetic.dream
+
+      - name: Smoke test the staged Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tag = '${{ github.event.inputs.tag || github.ref_name }}'
+          $stage = (Resolve-Path "dist/dream-$($tag.TrimStart('v'))-${{ matrix.target }}").Path
+          $toolchains = [IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.dream/toolchains'))
+          $hidden = "$toolchains.off"
+          if (Test-Path -LiteralPath $hidden) { throw "Toolchain backup already exists: $hidden" }
+          Move-Item -LiteralPath $toolchains -Destination $hidden
+          try {
+            Remove-Item Env:DREAM_LLVM -ErrorAction SilentlyContinue
+            $env:DREAM_NO_AUTO_INSTALL = '1'
+            $work = Join-Path $env:RUNNER_TEMP 'dream-release-smoke'
+            New-Item -ItemType Directory -Path $work -Force | Out-Null
+            Copy-Item -LiteralPath 'tests/fixtures/compiler/arithmetic.dream' -Destination $work
+            Push-Location $work
+            try {
+              & "$stage/dream.exe" run arithmetic.dream
+              if ($LASTEXITCODE -ne 0) { throw 'Native debug smoke test failed' }
+              & "$stage/dream.exe" --release run arithmetic.dream
+              if ($LASTEXITCODE -ne 0) { throw 'Native release smoke test failed' }
+              & "$stage/dream.exe" --wasm arithmetic.dream
+              if ($LASTEXITCODE -ne 0) { throw 'WASM smoke test failed' }
+            } finally {
+              Pop-Location
+            }
+          } finally {
+            Move-Item -LiteralPath $hidden -Destination $toolchains
+          }
 
       - uses: actions/upload-artifact@v4
         with:

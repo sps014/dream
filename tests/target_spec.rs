@@ -32,6 +32,28 @@ impl LlvmToolchain for CaptureTarget {
 struct StaleRuntime;
 
 #[test]
+fn browser_and_wasi_components_share_machine_layout_but_have_distinct_environments() {
+    use dream_abi::target::ExecutionEnvironment;
+    let browser = TargetSpec::wasm32();
+    assert_eq!(browser.triple.to_string(), "wasm32-unknown-unknown");
+    assert_eq!(browser.execution_environment, ExecutionEnvironment::Browser);
+    for (name, environment) in [
+        ("wasm32-wasip2", ExecutionEnvironment::WasiP2),
+        ("wasm32-wasip3", ExecutionEnvironment::WasiP3),
+    ] {
+        let component = TargetSpec::parse(name).unwrap();
+        assert_eq!(component.triple, browser.triple);
+        assert_eq!(component.ptr_size, browser.ptr_size);
+        assert_eq!(component.execution_environment, environment);
+        assert!(!component.capabilities.js_interop);
+        assert!(!component.capabilities.native_entry);
+        assert!(component.capabilities.linear_memory);
+        assert!(dream::driver::target::resolve_triple(false, Some(name), None).is_ok());
+    }
+    assert!(TargetSpec::parse("wasm32-wasip1").is_err());
+}
+
+#[test]
 fn pointer_integer_literal_ranges_follow_the_selected_target() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("literal.dream");
@@ -115,7 +137,7 @@ fn selected_target_reaches_runtime_loading_unchanged() {
     for triple in [
         "i686-unknown-linux-gnu",
         "aarch64-apple-macosx13.2.0",
-        "wasm32-unknown-wasip1",
+        "wasm32-unknown-unknown",
     ] {
         let spec = TargetSpec::parse(triple).unwrap();
         let capture = Arc::new(CaptureTarget(Mutex::new(None)));

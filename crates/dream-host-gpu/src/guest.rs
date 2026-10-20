@@ -30,7 +30,11 @@ impl OutBytes {
     }
 
     pub fn data_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut((self.ptr as *mut u8).add(4), self.len) }
+        if waiter::has_completion_hook() {
+            unsafe { std::slice::from_raw_parts_mut((self.ptr as *mut u8).add(4), self.len) }
+        } else {
+            unsafe { dream_host_abi::bytes_mut(self.ptr as *mut u8) }
+        }
     }
 
     /// The future value: the array pointer.
@@ -41,7 +45,11 @@ impl OutBytes {
     /// The future value for a failed read: the same array, now empty. Its storage is freed with
     /// the array; only the visible length changes.
     pub fn fail(self) -> u64 {
-        unsafe { (self.ptr as *mut u8).cast::<i32>().write_unaligned(0) };
+        if waiter::has_completion_hook() {
+            unsafe { (self.ptr as *mut u8).cast::<i32>().write_unaligned(0) };
+        } else {
+            unsafe { dream_host_abi::truncate_array(self.ptr as *mut u8, 0) };
+        }
         self.ptr as u64
     }
 }

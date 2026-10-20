@@ -3,7 +3,7 @@
 mod exports;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dream_host_core_abi_v2() {}
+pub extern "C" fn dream_host_core_abi_v3() {}
 
 #[cfg(test)]
 mod contract_tests;

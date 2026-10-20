@@ -14,7 +14,7 @@ pub fn resolve_triple(
 ) -> Result<Target, String> {
     let spec = if let Some(triple) = triple {
         let spec = TargetSpec::parse(triple)?;
-        if spec.capabilities.linear_memory {
+        if spec.capabilities.linear_memory && spec.execution_environment.component().is_none() {
             return Err(
                 "--target selects native output; use --wasm for linear-memory output".into(),
             );

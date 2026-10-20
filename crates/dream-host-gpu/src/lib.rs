@@ -22,4 +22,4 @@ pub mod testing;
 mod waiter;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dream_host_gpu_abi_v2() {}
+pub extern "C" fn dream_host_gpu_abi_v3() {}

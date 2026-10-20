@@ -13,6 +13,7 @@ internal class Reflection {
     internal offset: int;
     internal size: int;
     internal found: bool;
+    internal webgpu_layout: WebGpuBindingLayout;
 
     internal constructor() {
         this.space = 0;
@@ -20,11 +21,16 @@ internal class Reflection {
         this.offset = 0;
         this.size = 0;
         this.found = false;
+        this.webgpu_layout = WebGpuBindingLayout.None;
     }
 
     // One `Reflection` per bindable parameter of `entry`, in parameter order. Parameters the
     // reflection does not mention keep `found == false`.
-    internal static fun parse(borrow text: string, borrow entry: ShaderEntry): List<Reflection> {
+    internal static fun parse(
+        borrow text: string,
+        borrow entry: ShaderEntry,
+        webgpu: bool
+    ): List<Reflection> {
         let out = List<Reflection>();
         let globals = JsonValue.array();
         switch (Json.parse(text)) {
@@ -57,6 +63,9 @@ internal class Reflection {
                     }
                 }
                 r.found = true;
+                if webgpu {
+                    r.webgpu_layout = WebGpuLayout.of(g.get_or("type", JsonValue.dict()), p);
+                }
                 if p.is_value() {
                     r.found = false;
                     let fields = g.get_or("type", JsonValue.dict())

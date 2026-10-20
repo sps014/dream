@@ -485,15 +485,8 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
         )
         .is_empty()
         {
-            let fns: Vec<V> = [
-                "dream_string_alloc",
-                "dream_array_new_shared",
-                "dream_complete_foreign",
-            ]
-            .iter()
-            .map(|n| V::s(fx.l.fn_ref(n)))
-            .collect();
-            fx.call("dream_host_bind_v2", &fns);
+            let bind = V::s(fx.l.fn_ref("dream_host_bind_v3"));
+            fx.call("dream_capability_bind", &[bind]);
         }
     }
     if let Some(init) = init {
@@ -582,7 +575,7 @@ mod string_layout_tests {
         for triple in [
             "i686-unknown-linux-gnu",
             "x86_64-unknown-linux-gnu",
-            "wasm32-wasip1",
+            "wasm32-unknown-unknown",
         ] {
             let target = dream_abi::target::TargetSpec::parse(triple).unwrap();
             let abi = crate::abi::TargetAbi::for_target(&target);

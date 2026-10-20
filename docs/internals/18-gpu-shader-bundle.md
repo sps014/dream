@@ -59,6 +59,7 @@ target × target_count:
             binding
             offset               // byte offset inside the uniform block for value parameters, else 0
             size                 // byte size for value parameters, else 0
+            webgpu_layout        // u32 binding-layout ID from dream-abi; 0 on other targets
         capability_count
         capability: string × capability_count   // features this entry needs, sorted (table below)
 data section
@@ -86,6 +87,21 @@ Capability names, one per feature an entry point uses (from the symbols its body
 - A `Bind` command in `gpuSubmit` carries the parameter's index into `param × param_count`; hosts never look parameters up by name at bind time.
 - Creating a pipeline checks each of its entries' capabilities against the device and fails with `UnsupportedCapability(feature)` for the first one it lacks; it never changes backend. An unknown capability name makes the bundle invalid.
 - Native hosts pick the target for the device's backend, call the replay library's `createPrecompiledProgram(layout, code blobs)` with the layout the pipeline's entries share, and verify each blob's SHA-256 before use. Entries with different layouts never share a pipeline. A bundle with no target for the device's backend makes `GpuDevice.create` fail with `BackendNotCompiled`.
-- The browser host reads the `wgsl` target, creates `GPUShaderModule`s from the code and bind group layouts from the parameter table. One WGSL blob can hold several entry points, so the host selects each by `name`: the generator must keep the Dream function name as the WGSL entry point's function name. What the table does not carry (buffer access mode, texture sample type, storage texture format) comes from the WGSL declaration at the parameter's `@group`/`@binding`.
+- The browser host reads the `wgsl` target, creates `GPUShaderModule`s from the code and bind group layouts from the parameter table. One WGSL blob can hold several entry points, so the host selects each by `name`: the generator must keep the Dream function name as the WGSL entry point's function name. `webgpu_layout` identifies a complete resource descriptor: `buffer`, `sampler`, `texture`, or `storageTexture`. The Dream generator derives the ID from Slang reflection, including buffer access, sample type, storage format, and view dimension. `crates/dream-abi/src/gpu_bindings.rs` generates the C constants, Dream enum, JS descriptor table, and fixture metadata. A parameter carries only one extra `u32`; descriptors are stored once in the JS host. Native and browser readers validate that each ID matches its parameter kind. The browser passes the descriptor to WebGPU without scanning WGSL. Bindings shared by stages must have identical descriptors. Unsupported reflected shapes produce a generator diagnostic instead of defaulting to a 2D texture.
+
+Binding-layout IDs are part of DGPB v0:
+
+| ID | Descriptor |
+|---|---|
+| 0 | No WebGPU descriptor: native recorded layouts, or an unsupported acceleration/MLP resource whose feature check fails before binding |
+| 1 | Uniform buffer |
+| 2 | Read-only storage buffer |
+| 3 | Storage buffer |
+| 4 | Filtering sampler |
+| 5 | 2D `float` sampled texture, not multisampled |
+| 6 | 2D read-write `r32float` storage texture |
+| 7 | 2D read-write `rg32float` storage texture |
+| 8 | 2D read-write `rgba32float` storage texture |
+| 9 | 2D read-write `r32uint` storage texture |
 
 The generator also emits the readable `<stem>.bundle.json` view next to the `<stem>.slang` artifact for review and goldens; hosts never read it.

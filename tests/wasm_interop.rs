@@ -56,6 +56,82 @@ fn write(root: &Path, file: &str, contents: &str) {
 }
 
 #[test]
+fn typed_host_adapters_snapshot_custom_arrays_and_async_inputs() {
+    let dir = tempfile::tempdir().unwrap();
+    let entry = dir.path().join("main.dream");
+    let out = dir.path().join("main.wat");
+    std::fs::write(
+        &entry,
+        r#"
+import system;
+@js("host", "bytes")
+extern fun typed_bytes(value: byte[]): byte[];
+@js("host", "text")
+extern fun typed_text(value: string): string;
+@js("host", "numbers")
+extern async fun typed_numbers(value: long[]): long[];
+async fun main(): void {
+    let bytes = typed_bytes([(byte)1, (byte)2]);
+    System.println((int)bytes[1]);
+    System.println(typed_text("日本語😀"));
+    let numbers = typed_numbers([1234567890123L, 7L]).await;
+    System.println(numbers[0]);
+}
+"#,
+    )
+    .unwrap();
+    compile(&entry, &out, None).unwrap();
+    let script = dir.path().join("verify.mjs");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+import assert from 'node:assert/strict';
+import {{pathToFileURL}} from 'node:url';
+const {{load}} = await import(pathToFileURL({runtime}));
+let instance;
+let output = '';
+instance = await load(pathToFileURL({wasm}), {{
+  stdout: text => output += text,
+  imports: {{
+    typed_bytes: value => {{
+      assert.ok(value instanceof Uint8Array);
+      instance.memory.grow(1);
+      assert.deepEqual([...value], [1, 2]);
+      return value;
+    }},
+    typed_text: value => value,
+    typed_numbers: async value => {{
+      assert.ok(value instanceof BigInt64Array);
+      instance.memory.grow(1);
+      await Promise.resolve();
+      assert.deepEqual([...value], [1234567890123n, 7n]);
+      return value;
+    }},
+  }},
+}});
+await instance.run();
+assert.equal(output, '2\n日本語😀\n1234567890123\n');
+"#,
+            runtime =
+                serde_json::to_string(&out.with_extension("node.runtime.js").to_string_lossy())
+                    .unwrap(),
+            wasm = serde_json::to_string(&out.with_extension("wasm").to_string_lossy()).unwrap(),
+        ),
+    )
+    .unwrap();
+    let result = std::process::Command::new("node")
+        .arg(script)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
 fn c_package_callbacks_strings_and_owned_pointer_drop() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("main.wat");

@@ -15,9 +15,9 @@
           "code": {"offset": 0, "size": 1897, "sha256": "8946be319d8877fb0ee017469d92a5747362d0effc75115f21c2e7c56d7110d4"},
           "thread_group_size": [256, 1, 1],
           "params": [
-            {"name": "flags", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "offsets", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0},
-            {"name": "counts", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0}
+            {"name": "flags", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 2},
+            {"name": "offsets", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 3},
+            {"name": "counts", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0, "webgpu_layout": 3}
           ],
           "capabilities": ["subgroup_basic"]
         }

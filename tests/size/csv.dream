@@ -1,0 +1,7 @@
+import system;
+import system.io;
+import system.csv;
+fun main(): void {
+    let reader = CsvReader(MemoryStream(Encoding.utf8_encode("a,b\n")));
+    System.println(reader.read_record().unwrap().unwrap()[0]);
+}

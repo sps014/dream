@@ -1,0 +1,8 @@
+{
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "source_sha256": "35b11fb5dae72b8886f6d167ccdb7d71ae81a5042ff7b8d338b3e412f5b10d75",
+  "families": {
+    "csv": "4646ddc4815643d6310aab3eb9a038fa03584a0d146fb29e2645d40fb060516e",
+    "compression": "977e273b6754da9c3c16a793206fe517694c1bc96eded5adf91ad71435bdd365"
+  }
+}

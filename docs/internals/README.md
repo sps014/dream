@@ -41,6 +41,7 @@ Additional engineering records:
 - [GPU shader bundle](18-gpu-shader-bundle.md): how shader modules are compiled ahead of time and the bundle format every GPU host reads.
 - [Native GPU host](19-gpu-host.md): the slang-rhi capability library, its pinned build, `dream-slang-layout`, futures, bindings and the backend test matrix.
 - [Slang GPU remaining work](20-slang-gpu-remaining-work.md): what landed, what is unverified, and the plan for the rest.
+- [Minimal WASM hosts](21-minimal-wasm-hosts.md): implementation checklist for the capability ABI, portable runtime, browser glue, and WASIp2/p3.
 
 ## Why a multi-pass architecture
 

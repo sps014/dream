@@ -120,6 +120,15 @@ impl Compiler {
         target: Target,
         toolchain_config: Arc<crate::driver::toolchain::ToolchainConfig>,
     ) -> Self {
+        let compile_targets = if target.spec().capabilities.linear_memory {
+            CompileTargets {
+                native: false,
+                node: false,
+                web: true,
+            }
+        } else {
+            CompileTargets::native_only()
+        };
         Self {
             output_kind: if target.spec().capabilities.linear_memory {
                 crate::driver::output::OutputKind::Wasm
@@ -136,7 +145,7 @@ impl Compiler {
             virtual_entry: None,
             render_diagnostics: true,
             runtimes: Vec::new(),
-            compile_targets: CompileTargets::native_only(),
+            compile_targets,
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
             emit_mir: None,

@@ -126,6 +126,7 @@ fn parse_native_header_fns() -> HashSet<String> {
     for raw in NATIVE_RT_HEADER
         .lines()
         .chain(include_str!("../../runtime/c/core/include/dream_ownership.h").lines())
+        .chain(include_str!("../../runtime/c/include/dream_gpu_bundle.h").lines())
     {
         let line = raw.trim();
         if line.is_empty()

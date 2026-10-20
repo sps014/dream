@@ -1,0 +1,11 @@
+[
+  {"id":1,"name":"Uniform","kind":6,"descriptor":{"buffer":{"type":"uniform"}}},
+  {"id":2,"name":"ReadOnlyStorage","kind":1,"descriptor":{"buffer":{"type":"read-only-storage"}}},
+  {"id":3,"name":"Storage","kind":1,"descriptor":{"buffer":{"type":"storage"}}},
+  {"id":4,"name":"FilteringSampler","kind":3,"descriptor":{"sampler":{"type":"filtering"}}},
+  {"id":5,"name":"Texture2DFloat","kind":2,"descriptor":{"texture":{"sampleType":"float","viewDimension":"2d","multisampled":false}}},
+  {"id":6,"name":"StorageR32Float","kind":4,"descriptor":{"storageTexture":{"format":"r32float","access":"read-write","viewDimension":"2d"}}},
+  {"id":7,"name":"StorageRg32Float","kind":4,"descriptor":{"storageTexture":{"format":"rg32float","access":"read-write","viewDimension":"2d"}}},
+  {"id":8,"name":"StorageRgba32Float","kind":4,"descriptor":{"storageTexture":{"format":"rgba32float","access":"read-write","viewDimension":"2d"}}},
+  {"id":9,"name":"StorageR32Uint","kind":4,"descriptor":{"storageTexture":{"format":"r32uint","access":"read-write","viewDimension":"2d"}}}
+]

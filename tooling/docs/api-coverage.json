@@ -183,8 +183,8 @@
       },
       {
         "signature": "public fun parse(arguments: string[]): Result<ParsedArguments, CliError>",
-        "description": "Parses explicit arguments on every target; pass System.args on native/Node. Errors include invalid definitions and conversions.",
-        "line": 113,
+        "description": "Parses explicit arguments on native targets; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.",
+        "line": 115,
         "page": "reference/api/cli-command.md"
       }
     ]

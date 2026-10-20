@@ -31,53 +31,14 @@ export class GpuFailure extends Error {
   }
 }
 
-const GPU_VIEW_DIMENSIONS = { "1d": "1d", "2d": "2d", "2d_array": "2d-array", "3d": "3d", "cube": "cube", "cube_array": "cube-array" };
-const GPU_SAMPLE_TYPES = { f32: "float", i32: "sint", u32: "uint" };
-const GPU_STORAGE_ACCESS = { read: "read-only", write: "write-only", read_write: "read-write" };
-
-function gpuLayoutResource(slot) {
-  const decl = slot.decl;
-  const param = slot.slots[0].param;
-  switch (slot.kind) {
-    case GPU_ARG.VALUE:
-      return { buffer: { type: "uniform" } };
-    case GPU_ARG.BUFFER: {
-      if (decl?.space === "<uniform>") return { buffer: { type: "uniform" } };
-      const writable = decl ? decl.space.includes("read_write") : (param.flags & 1) === 0;
-      return { buffer: { type: writable ? "storage" : "read-only-storage" } };
-    }
-    case GPU_ARG.SAMPLER:
-      return { sampler: { type: decl?.type === "sampler_comparison" ? "comparison" : "filtering" } };
-    case GPU_ARG.TEXTURE: {
-      const type = decl?.type || "";
-      let m = /^texture_depth_multisampled_2d/.exec(type);
-      if (m) return { texture: { sampleType: "depth", viewDimension: "2d", multisampled: true } };
-      m = /^texture_depth_(2d_array|2d|cube_array|cube)/.exec(type);
-      if (m) return { texture: { sampleType: "depth", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
-      m = /^texture_multisampled_2d\s*<\s*(\w+)\s*>/.exec(type);
-      if (m) return { texture: { sampleType: GPU_SAMPLE_TYPES[m[1]] || "float", viewDimension: "2d", multisampled: true } };
-      m = /^texture_(1d|2d_array|2d|3d|cube_array|cube)\s*<\s*(\w+)\s*>/.exec(type);
-      if (m) return { texture: { sampleType: GPU_SAMPLE_TYPES[m[2]] || "float", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
-      return { texture: { sampleType: "float", viewDimension: "2d" } };
-    }
-    case GPU_ARG.STORAGE_TEXTURE: {
-      const m = /^texture_storage_(1d|2d_array|2d|3d)\s*<\s*(\w+)\s*,\s*(\w+)\s*>/.exec(decl?.type || "");
-      if (!m) throw new GpuFailure("EVALIDATION", "storage texture " + param.name + " has no WGSL declaration");
-      return { storageTexture: { format: m[2], access: GPU_STORAGE_ACCESS[m[3]] || "write-only", viewDimension: GPU_VIEW_DIMENSIONS[m[1]] } };
-    }
-    default:
-      throw new GpuFailure("EINVALID", "parameter " + param.name + " has unknown kind " + slot.kind);
-  }
-}
-
 /**
  * Bind group layouts for the parameter tables of every stage in one pipeline. `stages` holds
- * `{ stage, visibility, entry, decls }`; parameters of different stages that share a
+ * `{ stage, visibility, entry }`; parameters of different stages that share a
  * @group/@binding become one layout entry visible to both.
  */
 export function gpuPipelineLayout(device, stages) {
   const groups = new Map();
-  for (const { stage, visibility, entry, decls } of stages) {
+  for (const { stage, visibility, entry } of stages) {
     entry.params.forEach((param, index) => {
       if (param.kind === GPU_ARG.ACCELERATION_STRUCTURE) throw new GpuFailure("EUNSUPPORTED", GPU_FEATURE.RAY_QUERY);
       if (param.kind === GPU_ARG.MLP_WEIGHTS) throw new GpuFailure("EUNSUPPORTED", GPU_FEATURE.COOPERATIVE_VECTORS);
@@ -85,11 +46,11 @@ export function gpuPipelineLayout(device, stages) {
       const group = groups.get(param.group);
       let slot = group.get(param.binding);
       if (!slot) {
-        slot = { kind: param.kind, visibility: 0, slots: [], decl: decls.get(param.group + ":" + param.binding) };
+        slot = { kind: param.kind, visibility: 0, slots: [], resource: param.webgpuLayout };
         group.set(param.binding, slot);
-      } else if (slot.kind !== param.kind) {
+      } else if (slot.kind !== param.kind || slot.resource !== param.webgpuLayout) {
         throw new GpuFailure("EVALIDATION", "parameters " + slot.slots[0].param.name + " and " + param.name
-          + " share @group(" + param.group + ") @binding(" + param.binding + ") with different kinds");
+          + " share @group(" + param.group + ") @binding(" + param.binding + ") with different layouts");
       }
       slot.visibility |= visibility;
       slot.slots.push({ stage, index, param });
@@ -105,7 +66,7 @@ export function gpuPipelineLayout(device, stages) {
         const end = Math.max(...slot.slots.map(s => s.param.offset + s.param.size));
         slot.blockSize = Math.max(16, Math.ceil(end / 16) * 16);
       }
-      return { binding, visibility: slot.visibility, ...gpuLayoutResource(slot) };
+      return { binding, visibility: slot.visibility, ...slot.resource };
     });
     const object = device.createBindGroupLayout({ entries });
     layouts.push(object);
@@ -276,7 +237,7 @@ export function gpuRecordCommands(dev, words, data, resource, pipelineOf, transi
       }
       case 9:
         inPass("render", "set_viewport");
-        state.pass.setViewport(...args.map(gpuFloat));
+        state.pass.setViewport(...Array.from(args, gpuFloat));
         break;
       case 10:
         inPass("render", "set_scissor");

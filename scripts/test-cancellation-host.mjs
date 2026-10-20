@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Worker } from "node:worker_threads";
 import { makeDatetimeTextHost } from "../runtime/src/hosts/datetime_text.js";
-import { wrapAsyncImport } from "../runtime/src/marshal.js";
+import { wrapAsyncImport } from "../runtime/src/async.js";
 import { makeCancellationHost } from "../runtime/src/hosts/cancellation.js";
 
 function fixture(shared = false) {

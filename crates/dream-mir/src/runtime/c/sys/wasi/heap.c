@@ -306,6 +306,9 @@ void dream_region_heap_mode(int active) {
 }
 
 static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
+#ifdef DREAM_COMPONENT
+    dream_heap_init();
+#endif
     int32_t idx;
     int32_t *head;
     int32_t block = 0;
@@ -341,7 +344,7 @@ static __attribute__((noinline)) dream_ptr malloc_slow(int32_t size, int32_t tag
 
 /* Small enough to inline at every allocation site after the runtime is linked with the
  * program; everything else (regions, shared, refills, large blocks) stays out of line. */
-__attribute__((export_name(DREAM_SYM_MALLOC), always_inline))
+DREAM_WASM_EXPORT(DREAM_SYM_MALLOC) __attribute__((always_inline))
 dream_ptr dream_malloc(int32_t size, int32_t tag) {
     int32_t *table = (int32_t *)(uintptr_t)(uint32_t)dream_priv_fast_get();
     if (DREAM_LIKELY(table != NULL && (uint32_t)size <= PRIV_SMALL_TOTAL - HEAP_HEADER_SIZE
@@ -385,7 +388,7 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
 
 /* Runtime allocations never enter guest diagnostics, including the interval between
  * allocating storage and constructing the aligned libc pointer on another worker. */
-__attribute__((export_name("dream_wasm_raw_malloc")))
+DREAM_WASM_EXPORT("dream_wasm_raw_malloc")
 dream_ptr dream_wasm_raw_malloc(int32_t size) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     dream_ptr p = malloc_locked(size, 0, 0);
@@ -393,7 +396,7 @@ dream_ptr dream_wasm_raw_malloc(int32_t size) {
     return p;
 }
 
-__attribute__((export_name("dream_wasm_raw_free")))
+DREAM_WASM_EXPORT("dream_wasm_raw_free")
 void dream_wasm_raw_free(dream_ptr ptr) {
     if (!ptr) { return; }
     dream_platform_current->lock(DREAM_LOCK_HEAP);
@@ -403,7 +406,7 @@ void dream_wasm_raw_free(dream_ptr ptr) {
 
 /* The private slab and freelists are reachable only through this instance's globals, so a
  * worker that discards its instance hands them back first; otherwise every Task leaked a slab. */
-__attribute__((export_name("dream_heap_thread_exit")))
+DREAM_WASM_EXPORT("dream_heap_thread_exit")
 void dream_heap_thread_exit(void) {
     int32_t table = dream_priv_table_get();
     int32_t off = dream_priv_off_get();

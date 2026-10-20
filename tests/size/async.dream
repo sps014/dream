@@ -1,0 +1,5 @@
+import system;
+async fun main(): void {
+    Time.sleep(1).await;
+    System.println("awake");
+}

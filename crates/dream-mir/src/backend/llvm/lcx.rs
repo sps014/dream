@@ -152,6 +152,16 @@ impl<'a> Lcx<'a> {
 
     /// Marks a public definition, with its JS export name on wasm32.
     pub fn export(&mut self, name: &str, export: &str) {
+        if self
+            .cx
+            .target
+            .spec()
+            .execution_environment
+            .component()
+            .is_some()
+        {
+            return;
+        }
         self.exports.insert(name.to_string(), export.to_string());
     }
 
@@ -237,6 +247,14 @@ impl<'a> Lcx<'a> {
         w.ret_attrs = sig.ret_attrs.clone();
         let export = self.exports.get(name);
         w.linkage = if name == "main"
+            || (name == "__main_void"
+                && self
+                    .cx
+                    .target
+                    .spec()
+                    .execution_environment
+                    .component()
+                    .is_some())
             || export.is_some()
             || self.shim_callees.contains(name)
             || self.sigs.has_function(name)

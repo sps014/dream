@@ -15,7 +15,7 @@
           "code": {"offset": 15905, "size": 1656, "sha256": "99d7c48ece6e3148095eed6f8c7832e370ee8e50bb659f3b5f16a590329d86ee"},
           "thread_group_size": [0, 0, 0],
           "params": [
-            {"name": "materials", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0}
+            {"name": "materials", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 0}
           ],
           "capabilities": ["descriptor_handle"]
         }

@@ -7,7 +7,7 @@ from mkdocs.structure.files import File, Files
 from mkdocs.structure.nav import Section
 from mkdocs.structure.pages import Page
 
-from site_hook import card_items, render_hub, validate_meta
+from site_hook import TARGETS, card_items, render_hub, validate_meta
 
 CONFIG = MkDocsConfig()
 CONFIG.load_dict({"site_name": "Test"})
@@ -92,7 +92,7 @@ class HubTests(unittest.TestCase):
 
     def test_rows_mark_only_restricted_targets(self):
         hub, _, _, _ = language_tree()
-        everywhere = page("language/a.md", "A", summary="s", targets=["native", "web", "node"])
+        everywhere = page("language/a.md", "A", summary="s", targets=list(TARGETS))
         browser = page("language/b.md", "B", summary="s", targets=["web"])
         html = render_hub(hub, [everywhere, browser], grouped=False)
         self.assertNotIn(">Native<", html)

@@ -1,5 +1,5 @@
-import { makeCliHost } from "./hosts/cli.js";
 import { makeCancellationHost } from "./hosts/cancellation.js";
+import { makeDataHost } from "./hosts/data.js";
 import { makeJsHost } from "./hosts/js.js";
 import { makeNetHost } from "./hosts/net.js";
 import { makeFsHost } from "./hosts/fs.js";
@@ -17,23 +17,23 @@ export function defaultDreamModule(getInstance) {
   return {
     ...makeJsHost(getInstance),
     ...makeCancellationHost(getInstance),
+    ...makeDataHost(),
     ...makeFsHost(),
     ...makeNetHost(),
-    ...makeCliHost(),
     ...makeCryptoHost(),
     ...makeDatetimeTextHost(),
     ...makeConsoleProcessHost(),
     ...makeWindowHost(),
-    ...makeGpuHost(),
+    ...makeGpuHost(getInstance),
   };
 }
 
 export {
   makeJsHost,
   makeCancellationHost,
+  makeDataHost,
   makeFsHost,
   makeNetHost,
-  makeCliHost,
   makeCryptoHost,
   makeConsoleProcessHost,
   makeDatetimeTextHost,

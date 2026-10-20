@@ -7,7 +7,7 @@ internal class CompressionCodec {
         this.id = id;
     }
 
-    @runtime("dataCodec")
+    @runtime("dataCompression")
     static extern fun host(request: string): string;
 
     internal static fun request(value: JsonValue): Result<JsonValue, IoError> {

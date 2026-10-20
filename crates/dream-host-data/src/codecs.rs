@@ -21,8 +21,21 @@ fn execute(value: &Value) -> Result<Value, String> {
         .as_str()
         .is_some_and(|v| v.starts_with("compress_"))
     {
+        #[cfg(feature = "compression")]
         return crate::compression::request(value);
+        #[cfg(not(feature = "compression"))]
+        return Err("compression capability is not linked".into());
     }
+    #[cfg(feature = "csv")]
+    {
+        csv_request(value)
+    }
+    #[cfg(not(feature = "csv"))]
+    Err("CSV capability is not linked".into())
+}
+
+#[cfg(feature = "csv")]
+fn csv_request(value: &Value) -> Result<Value, String> {
     let delimiter = value["delimiter"]
         .as_u64()
         .filter(|&d| d > 0 && d < 128 && ![10, 13, 34].contains(&d))
@@ -63,7 +76,7 @@ fn execute(value: &Value) -> Result<Value, String> {
         _ => Err("unsupported codec operation".into()),
     }
 }
-#[cfg(test)]
+#[cfg(all(test, feature = "csv"))]
 mod tests {
     use super::*;
     #[test]

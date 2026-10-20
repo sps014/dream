@@ -140,7 +140,7 @@ test("Node file operations keep buffers and descriptors alive through abandonmen
 });
 
 test("late async JS settlement skips cancelled frames and releases its pin", async () => {
-  const { wrapAsyncImport } = await import("../runtime/src/marshal.js");
+  const { wrapAsyncImport } = await import("../runtime/src/async.js");
   let refs = 1;
   let status = 0;
   let allocations = 0;

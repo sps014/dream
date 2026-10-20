@@ -31,6 +31,8 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
         .arg("-I")
         .arg(core.join("include"))
         .arg("-I")
+        .arg(core.parent().unwrap().join("include"))
+        .arg("-I")
         .arg(root.join("crates/dream-mir/src/runtime/c/sys/native/include"));
     if !cfg!(windows) {
         command.arg("-pthread");

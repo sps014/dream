@@ -40,7 +40,7 @@ fn packages_foreign_elf_and_its_target_libraries() {
     let library = targets.join(triple).join("lib/libdream_host_core.so");
     std::fs::create_dir_all(library.parent().unwrap()).unwrap();
     let source = root.path().join("host.c");
-    std::fs::write(&source, "void dream_host_core_abi_v2(void) {}\nvoid dream_host_bind_v2(void *a, void *b, void *c) {(void)a;(void)b;(void)c;}\n").unwrap();
+    std::fs::write(&source, "void dream_host_core_abi_v3(void) {}\nint dream_host_bind_v3(void *context) {(void)context;return 0;}\n").unwrap();
     checked(
         Command::new(&zig)
             .args([
@@ -56,7 +56,7 @@ fn packages_foreign_elf_and_its_target_libraries() {
             .arg(&library),
     );
     let unicode_source = root.path().join("unicode.c");
-    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v2(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v3(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
     checked(
         Command::new(&zig)
             .args([

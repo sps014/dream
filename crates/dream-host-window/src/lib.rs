@@ -12,4 +12,4 @@ pub mod wire;
 pub use surface::dream_window_surface_v1;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dream_host_window_abi_v2() {}
+pub extern "C" fn dream_host_window_abi_v3() {}

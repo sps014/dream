@@ -394,7 +394,27 @@ fun add_code(
 ): void {
     switch (file_bytes(r, Targets.code_path(m, kind, e))) {
         Some(code) => {
-            let reflection = Reflection.parse(file_text(r, Targets.reflection_path(m, kind, e)), e);
+            let reflection = Reflection.parse(
+                file_text(r, Targets.reflection_path(m, kind, e)),
+                e,
+                kind == "wgsl"
+            );
+            let params = e.bindable();
+            let i = 0;
+            while i < params.length {
+                if !reflection[i]
+                    .found
+                    || (kind == "wgsl" && reflection[i].webgpu_layout == WebGpuBindingLayout.None) {
+                    ctx.error_at(
+                        e.function.id,
+                        "slangc produced no supported binding layout for '"
+                            + params[i]
+                            .name + "' (" + kind + ")"
+                    );
+                    return;
+                }
+                i = i + 1;
+            }
             section.add(e, layout, code, reflection);
         }
         None => {

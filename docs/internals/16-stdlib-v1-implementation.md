@@ -99,18 +99,15 @@ structured help/version outcomes. Repeated options preserve occurrence order;
 typed single-value getters return the last occurrence. Explicit-value provenance
 is kept separately from defaults.
 
-The `cli` native capability and JavaScript adapter share one clap implementation.
-The adapter embeds a separately compiled Rust WebAssembly capability; it does not
-add Rust to the Dream guest runtime. It imports no host functions and is instantiated
-only when CLI parsing is used. `scripts/build-cli-parser.py` rebuilds it with the
-`wasm32-unknown-unknown` target; `--check` verifies its source/dependency fingerprint.
-The existing JS bundler includes this capability only for live CLI imports.
+CLI parsing is native-only and uses the `clap` implementation in `dream-host-cli`.
+The JS host and embedded CLI WASM parser have been removed. Calls to `Command.parse`
+on browser or Node targets are compile-time errors.
 
 Shared fixtures cover defaults, short clusters, negative numbers, overflow,
 repetition, `--`, empty/Unicode/multiline arguments, subcommands, generated help,
 version, and invalid definitions. The complete `sample/cli_download` application
 streams HTTP responses to files, reports exit statuses, and explicitly closes its
-resources. Native/Node integration checks downloads, help/version, bad arguments,
+resources. Native integration checks downloads, help/version, bad arguments,
 timeouts, and preserving destinations on HTTP error statuses.
 
 ## Phase 6 implementation
@@ -249,11 +246,10 @@ host/bundler tests, six documentation extractor tests, all 25 executable guide
 examples, and the strict documentation build pass. All 29 new public declarations
 have source comments and API reference entries. The download integration asserts
 zero live guest resources after success, help/version, validation errors, deadlines,
-and HTTP failures on both native and Node.
+and HTTP failures. CLI integration now runs only on native targets.
 
-The CLI browser fixture passes in debug and release modes with explicit arguments,
-Unicode values, short clusters, negative integers, `--`, help/version, and invalid
-definitions. Run `python scripts/serve-phase34-browser.py --case cli` to repeat it.
+Browser and Node compilation reject CLI parsing before code generation.
+
 The full native platform matrix for Phase 3–4 remains separately recorded above;
 Phase 8 still qualifies the completed v1 across platforms and packaging modes.
 

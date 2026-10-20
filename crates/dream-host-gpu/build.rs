@@ -14,7 +14,16 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    for path in ["build.rs", "build", "native", "patches", "pins.toml"] {
+    for path in [
+        "build.rs",
+        "build",
+        "native",
+        "patches",
+        "pins.toml",
+        "../dream-mir/src/runtime/c/core/gpu_bundle.c",
+        "../dream-mir/src/runtime/c/include/dream_gpu_bundle.h",
+        "../dream-mir/src/runtime/c/include/dream_gpu_bindings.h",
+    ] {
         println!("cargo:rerun-if-changed={path}");
     }
     println!("cargo:rerun-if-env-changed=DREAM_GPU_CACHE");

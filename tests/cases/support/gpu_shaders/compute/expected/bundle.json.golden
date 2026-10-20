@@ -15,11 +15,11 @@
           "code": {"offset": 0, "size": 794, "sha256": "ede72d921a67266bc7d06df8a8bf030e2e64faa04a11597a3ecfec8788aa9a51"},
           "thread_group_size": [64, 1, 1],
           "params": [
-            {"name": "x", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "y", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
-            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0},
-            {"name": "a", "kind": 6, "flags": 0, "space": 0, "binding": 3, "offset": 0, "size": 4},
-            {"name": "n", "kind": 6, "flags": 0, "space": 0, "binding": 3, "offset": 4, "size": 4}
+            {"name": "x", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 2},
+            {"name": "y", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 2},
+            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0, "webgpu_layout": 3},
+            {"name": "a", "kind": 6, "flags": 0, "space": 0, "binding": 3, "offset": 0, "size": 4, "webgpu_layout": 1},
+            {"name": "n", "kind": 6, "flags": 0, "space": 0, "binding": 3, "offset": 4, "size": 4, "webgpu_layout": 1}
           ],
           "capabilities": []
         }

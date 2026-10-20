@@ -4,7 +4,6 @@ import system.csv;
 import system.uuid;
 import system.crypto;
 import system.config;
-import system.cli;
 import system.testing;
 
 class FixtureCounter {
@@ -73,29 +72,13 @@ async fun application_utilities(): void {
     Assert.is_true(config.get_bool("enabled").unwrap());
     Assert.eq(config.source("port").unwrap(), temporary.path);
     System.set_env("DREAM_TEST_CONFIG_PORT", "9100").unwrap();
-    let command = Command("test").int_option("port", default_value: 1111);
-    let parsed = command.parse(["--port", "9200"]).unwrap();
     let overrides = ConfigBuilder()
         .default_value("port", "8080")
-        .cli(parsed)
         .environment("DREAM_TEST_CONFIG_")
         .json_file(temporary.path)
         .build()
         .unwrap();
-    Assert.eq(overrides.get_int("port").unwrap(), 9200);
-    let no_args: string[] = [];
-    let omitted = command.parse(no_args).unwrap();
-    Assert.eq(
-        ConfigBuilder()
-            .default_value("port", "8080")
-            .cli(omitted)
-            .environment("DREAM_TEST_CONFIG_")
-            .build()
-            .unwrap()
-            .get_int("port")
-            .unwrap(),
-        9100
-    );
+    Assert.eq(overrides.get_int("port").unwrap(), 9100);
     System.unset_env("DREAM_TEST_CONFIG_PORT").unwrap();
     Assert.is_true(
         ConfigBuilder().default_value("port", "bad").build().unwrap().get_int("port").is_err()

@@ -25,6 +25,11 @@ await run("./main.wasm");
 ```
 
 For a browser, import `main.web.runtime.js` instead and load it from a page served over HTTP.
+If your program uses CSV or compression codecs, also deploy the generated
+`main.data.wasm` beside the runtime file. The loader loads this companion automatically;
+programs without those codecs do not emit it. Keep the companion when copying a build
+to another directory or web server. A missing companion makes `load` or `run` reject,
+so handle that Promise failure alongside other loading errors.
 JavaScript APIs require the corresponding host: browser DOM APIs are unavailable in Node.
 
 ## Working with values
@@ -51,3 +56,5 @@ Explicit JS `extern` bindings are internal implementation facilities. Applicatio
 [Internal JavaScript bindings](../../internals/21-js-bindings.md).
 
 Native library integration uses [C interop](c.md) or [C++ interop](cpp.md).
+
+Use [Standalone WASI commands](wasi.md) to run command components in a WASI host.

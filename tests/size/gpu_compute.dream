@@ -1,0 +1,19 @@
+import system;
+import system.gpu;
+
+@compute(1)
+fun scale(values: GpuBuffer<float>, factor: float): void {
+    let i = global_id().x;
+    values[i] = values[i] * factor;
+}
+
+async fun main(): void {
+    let device = GpuDevice.create(GpuBackend.WebGpu).await.unwrap();
+    let values = device.buffer_from<float>([2.0f]).unwrap();
+    let dispatched = GpuShaders.scale.dispatch(device, GpuDispatch.threads_1d(1), values, 3.0f).await;
+    if dispatched.is_err() {
+        System.println(dispatched.unwrap_err().message());
+        return;
+    }
+    System.println(values.read().await.unwrap()[0]);
+}

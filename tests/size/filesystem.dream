@@ -1,0 +1,5 @@
+import system;
+import system.io;
+async fun main(): void {
+    System.println(File.read("input.txt").await.unwrap());
+}

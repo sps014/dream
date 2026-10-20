@@ -109,7 +109,9 @@ public class Command {
         return this;
     }
 
-    // Parses explicit arguments on every target; pass System.args on native/Node. Errors include invalid definitions and conversions.
+    /// Parses explicit arguments on native targets; pass System.args to parse the process arguments.
+    /// Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.
+    @native
     public fun parse(arguments: string[]): Result<ParsedArguments, CliError> {
         if this.error != "" {
             return Result.Err(CliError("EINVAL", this.error));
@@ -140,6 +142,7 @@ public class Command {
         return Result.Ok(ParsedArguments(wire));
     }
 
+    @native
     @runtime("cliParse")
     static extern fun parse_host(request: string): string;
 

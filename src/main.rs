@@ -386,7 +386,11 @@ fn main() -> ExitCode {
         ui.error("--runtime needs at least one host: pass --web and/or --node");
         return ExitCode::FAILURE;
     }
-    let native = !cli.wasm && runtimes.is_empty();
+    let component = matches!(
+        cli.target.as_deref(),
+        Some("wasm32-wasip2" | "wasm32-wasip3")
+    );
+    let native = !component && !cli.wasm && runtimes.is_empty();
     if cli.relocatable
         && (!native || run_tests || matches!(cli.crate_type, Some(CrateTypeArg::Lib)))
     {
@@ -514,9 +518,9 @@ fn main() -> ExitCode {
             web: true,
         },
         None => CompileTargets {
-            native: runtimes.is_empty(),
+            native,
             node: cli.node,
-            web: cli.web,
+            web: cli.web || cli.wasm || component,
         },
     };
 
@@ -533,7 +537,7 @@ fn main() -> ExitCode {
             }
         };
     if (run_after_compile || run_tests || debug_adapter)
-        && (cli.object || (native && !target.spec().can_link_on_host()))
+        && (component || cli.object || (native && !target.spec().can_link_on_host()))
     {
         ui.error("run, test and debug-adapter require a linked host executable");
         return ExitCode::FAILURE;

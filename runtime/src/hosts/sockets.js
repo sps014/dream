@@ -157,6 +157,7 @@ export function makeSocketHost() {
   }
   function start(text, input, run = execute, dispose = close) {
       if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
+      const bytes = Uint8Array.from(input || []);
       const id = ++nextOperation, abort = new AbortController();
       let done;
       const state = {abort,result:null,owned:0,dispose,released:false,done:new Promise(resolve=>{done=resolve;})};
@@ -167,7 +168,7 @@ export function makeSocketHost() {
           const request = JSON.parse(text);
           if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw fail("EINVAL","invalid socket timeout");
           if (request.timeout_ms) timer = setTimeout(()=>abort.abort(fail("ETIMEOUT","socket operation deadline exceeded")),request.timeout_ms);
-          const result = await run(request,Uint8Array.from(input||[]),abort.signal);
+          const result = await run(request,bytes,abort.signal);
           state.owned = result.owned || 0;
           if (abort.signal.aborted) throw abort.signal.reason || cancelled();
           state.result = [1,...result.bytes];

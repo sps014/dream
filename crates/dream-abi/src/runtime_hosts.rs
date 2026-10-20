@@ -20,6 +20,86 @@ pub fn is_worker_host_field(field: &str) -> bool {
     WORKER_IMPORT_FIELDS.contains(&field)
 }
 
+/// Standard component services implemented by the WASI adapter. Everything else is rejected
+/// while the driver can still render a diagnostic, before code generation or linking.
+pub fn component_host_supported(module: &str, field: &str) -> bool {
+    if module.starts_with("c/") {
+        return true;
+    }
+    if module == "env" {
+        return PURE_MATH_ENV_FIELDS.contains(&field);
+    }
+    if module != "Dream" {
+        return false;
+    }
+    matches!(
+        field,
+        "timeNowNanos"
+            | "dateNowMillis"
+            | "delayMs"
+            | "cryptoSecureRandomBytes"
+            | "fileRead"
+            | "fileWrite"
+            | "fileAppend"
+            | "fileExists"
+            | "fileDelete"
+            | "fileSize"
+            | "fileReadBytes"
+            | "fileWriteBytes"
+            | "fileIsDir"
+            | "fileStat"
+            | "fileOpen"
+            | "fileHandleRead"
+            | "fileHandleWrite"
+            | "fileHandleSeek"
+            | "fileHandleTell"
+            | "fileHandleSeekEnd"
+            | "fileHandleLength"
+            | "fileHandleClose"
+            | "fileOperationStart"
+            | "fileOperationDone"
+            | "fileOperationResult"
+            | "fileOperationBytes"
+            | "fileOperationRelease"
+            | "fileOperationWait"
+            | "dirRemove"
+            | "dirRemoveAll"
+            | "dirCreate"
+            | "dirCreateAll"
+            | "dirList"
+            | "fileCopy"
+            | "fileRename"
+            | "dirCurrent"
+            | "dirSetCurrent"
+            | "processEnvGet"
+            | "processEnvSet"
+            | "processEnvUnset"
+            | "processEnvKeys"
+            | "consoleReadLine"
+            | "consoleReadKey"
+            | "consoleExit"
+            | "netUrlParse"
+            | "netClientCreate"
+            | "netClientClose"
+            | "netHttpStart"
+            | "netBodyRead"
+            | "netBodyClose"
+            | "netOperationPoll"
+            | "netOperationRelease"
+            | "netOperationClaim"
+            | "netOperationWait"
+            | "netCapabilities"
+            | "netSocketStart"
+            | "netSocketWait"
+            | "netSocketResult"
+            | "netSocketCancel"
+            | "netSocketRelease"
+            | "netSocketClaim"
+            | "netSocketClose"
+            | "netSocketControl"
+    )
+}
+
 /// `env` math imports: pure functions of their numeric arguments on every host (libm natively,
 /// `Math.*` in JS), so they read and write no Dream heap state.
 pub const PURE_MATH_ENV_FIELDS: &[&str] = &[

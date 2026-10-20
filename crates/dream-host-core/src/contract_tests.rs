@@ -64,7 +64,7 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
         if let Some(end) = t.find('(') {
             let name = t[..end].trim();
             // Deferred-only hosts have no synchronous export; both forms share one import key.
-            if !name.is_empty() && name != "dream_host_bind_v2" {
+            if !name.is_empty() && name != "dream_host_bind_v3" {
                 out.push(name.strip_suffix("Async").unwrap_or(name).to_string());
             }
         }
@@ -132,7 +132,6 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/cancellation.js"),
     include_str!("../../../runtime/src/hosts/net.js"),
     include_str!("../../../runtime/src/hosts/sockets.js"),
-    include_str!("../../../runtime/src/hosts/cli.js"),
     include_str!("../../../runtime/src/hosts/data.js"),
     include_str!("../../../runtime/src/hosts/http.js"),
     include_str!("../../../runtime/src/hosts/crypto.js"),

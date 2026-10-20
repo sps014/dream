@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true")
-    parser.add_argument("--case", choices=["http", "io-url", "cancellation", "cancellation-worker", "cli", "structured", "channels-worker", "utilities"])
+    parser.add_argument("--case", choices=["http", "io-url", "cancellation", "cancellation-worker", "structured", "channels-worker", "utilities"])
     parser.add_argument("--port", type=int, default=60022)
     parser.add_argument("--dream", type=Path, default=ROOT / "target/debug/dream")
     args = parser.parse_args()
@@ -21,7 +21,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     base = f"http://127.0.0.1:{args.port}"
     for name, fixture in [("http", "http"), ("io-url", "io_url"),
-                          ("cancellation", "cancellation"), ("cancellation-worker", "cancellation_worker"), ("cli", "cli"), ("structured", "structured"), ("channels-worker", "channels_worker"), ("utilities", "utilities")]:
+                          ("cancellation", "cancellation"), ("cancellation-worker", "cancellation_worker"), ("structured", "structured"), ("channels-worker", "channels_worker"), ("utilities", "utilities")]:
         if args.case and args.case != name:
             continue
         source = ROOT / f"tests/fixtures/compiler/stdlib_web_{fixture}.dream"

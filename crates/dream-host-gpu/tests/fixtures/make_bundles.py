@@ -24,6 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SHADERS = HERE.parent / "shaders"
 VERSION = "2026.20"
+BINDING_LAYOUTS = json.loads((HERE.parents[2] / "dream-abi/gpu_binding_layouts.json").read_text())
 COMMON = ["-matrix-layout-row-major", "-line-directive-mode", "none"]
 # target name -> (code format, extra slangc options)
 TARGETS = {
@@ -177,6 +178,18 @@ def compile_target(root: Path, module: str, target: str, work: Path) -> dict | N
             "entries": out_entries}
 
 
+def webgpu_layout(kind: int, flags: int) -> dict:
+    if kind == BUFFER:
+        return {"buffer": {"type": "read-only-storage" if flags & READ_ONLY else "storage"}}
+    if kind == VALUE:
+        return {"buffer": {"type": "uniform"}}
+    if kind == TEXTURE:
+        return {"texture": {"sampleType": "float", "viewDimension": "2d", "multisampled": False}}
+    if kind == SAMPLER:
+        return {"sampler": {"type": "filtering"}}
+    raise ValueError(f"fixture resource kind {kind} has no WebGPU layout")
+
+
 def write_bundle(targets: list[dict]) -> bytes:
     data = bytearray()
     stored: dict[bytes, int] = {}
@@ -204,6 +217,9 @@ def write_bundle(targets: list[dict]) -> bytes:
             header += u32(len(params))
             for pname, kind, flags, space, binding, offset, psize in params:
                 header += string(pname) + b"".join(u32(v) for v in (kind, flags, space, binding, offset, psize))
+                header += u32(next(layout["id"] for layout in BINDING_LAYOUTS
+                                   if layout["kind"] == kind and layout["descriptor"] == webgpu_layout(kind, flags))
+                              if t["name"] == "wgsl" else 0)
             header += u32(len(capabilities)) + b"".join(string(c) for c in capabilities)
     return b"DGPB" + u32(0) + u32(12 + len(header)) + bytes(header) + bytes(data)
 
@@ -250,7 +266,10 @@ def read_bundle(bundle: bytes) -> list[dict]:
                 raise ValueError("fixture entries must use layout 0")
             code = blob()
             size = tuple(u32() for _ in range(3))
-            params = [(string(), *(u32() for _ in range(6))) for _ in range(u32())]
+            params = []
+            for _ in range(u32()):
+                params.append((string(), *(u32() for _ in range(6))))
+                u32()  # Native fixtures replay recorded layouts; the ID serves the JS host.
             capabilities = [string() for _ in range(u32())]
             entries.append((entry, stage, code, size, params, capabilities))
         targets.append(dict(name=name, code_format=code_format, layouts=layouts, entries=entries))

@@ -124,7 +124,7 @@ pub(crate) fn unit_command(
 ) -> Command {
     let is_asm = src.extension().and_then(|e| e.to_str()) == Some("s");
     let mut cmd = Command::new(clang);
-    cmd.args(["--target=wasm32-wasip1", "-nostdlib", "-c", "-g0"])
+    cmd.args(["--target=wasm32-unknown-unknown", "-nostdlib", "-c", "-g0"])
         .arg(format!("--sysroot={}", sysroot.display()));
     if is_asm {
         cmd.arg("-Wno-unused-command-line-argument");
@@ -138,7 +138,11 @@ pub(crate) fn unit_command(
             "-frandom-seed=0",
             "-Wno-unused-value",
             "-DDREAM_WASM32",
+            "-D__wasi__=1",
+            "-D__wasip1__=1",
         ]);
+        cmd.arg("-isystem")
+            .arg(sysroot.join("include/wasm32-wasip1"));
         cmd.args(GUEST_FEATURES);
         if dream_mir::runtime::wasm32_unit_defines_libc(src) {
             cmd.arg("-fno-builtin");
@@ -172,7 +176,7 @@ pub(crate) fn unit_command(
 
 /// Guest call-stack size for the linked module, from `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`,
 /// or a plain byte count). `None` leaves wasm-ld's default.
-fn stack_size_bytes() -> Option<u64> {
+pub(crate) fn stack_size_bytes() -> Option<u64> {
     let v = std::env::var("DREAM_STACK_SIZE").ok()?;
     parse_size(&v)
 }

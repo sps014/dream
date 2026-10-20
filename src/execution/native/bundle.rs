@@ -146,7 +146,7 @@ mod tests {
             true,
         );
         let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
-        assert!(args.iter().any(|a| a == "-Wl,-u,dream_host_core_abi_v2"));
+        assert!(args.iter().any(|a| a == "-Wl,-u,dream_host_core_abi_v3"));
         assert!(!args.iter().any(|a| a.contains("/include:")));
     }
 

@@ -15,8 +15,8 @@
           "code": {"offset": 21918, "size": 1628, "sha256": "d64e74a29b1265037769c7373d33a7c01f5da69c64d1fcad9dea24f944d91291"},
           "thread_group_size": [0, 0, 0],
           "params": [
-            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "output", "kind": 4, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0}
+            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "output", "kind": 4, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 0}
           ],
           "capabilities": ["raytracing"]
         },
@@ -45,8 +45,8 @@
           "code": {"offset": 24794, "size": 1240, "sha256": "6e93909f8729e2e98a5ed55effac1bc50a239a196636a23ab4957d585530cc00"},
           "thread_group_size": [1, 1, 1],
           "params": [
-            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "distances", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0}
+            {"name": "scene", "kind": 5, "flags": 0, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "distances", "kind": 1, "flags": 2, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 0}
           ],
           "capabilities": ["rayquery"]
         }

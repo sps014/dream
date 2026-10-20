@@ -1,7 +1,7 @@
 module system.csv;
 
 internal static class CsvCodec {
-    @runtime("dataCodec")
+    @runtime("dataCsv")
     internal static extern fun request_host(request: string): string;
 
     internal static fun request(value: JsonValue): Result<JsonValue, CsvError> {

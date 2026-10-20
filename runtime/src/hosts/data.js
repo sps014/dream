@@ -1,39 +1,34 @@
-import { dataCodecsBase64 } from "./data_codecs.js";
+import { loadBinaryModule } from "../binary.js";
+import { bindDataCodecs } from "../capabilities.js";
 
-let dataCodecsInstance;
-function dataCodecs() {
-  if (!dataCodecsInstance) {
-    const bytes = Uint8Array.from(atob(dataCodecsBase64), ch => ch.charCodeAt(0));
-    dataCodecsInstance = new WebAssembly.Instance(new WebAssembly.Module(bytes), {});
+const codecModules = new Map();
+const codecInstances = new Map();
+
+export async function loadDataCodecs(field, source) {
+  if (!codecModules.has(field)) codecModules.set(field, await loadBinaryModule(source));
+}
+
+function requestCodec(field, request) {
+  const input = new TextEncoder().encode(request);
+  if (input.length > 16 * 1024 * 1024) return JSON.stringify({ error: "codec request exceeds 16 MiB" });
+  try {
+    if (!codecInstances.has(field)) {
+      const module = codecModules.get(field);
+      if (!module) throw new Error("codec family was not loaded: " + field);
+      const instance = new WebAssembly.Instance(module, {});
+      codecInstances.set(field, bindDataCodecs(instance.exports));
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(codecInstances.get(field)(input));
+  } catch (_) {
+    // A trap can abandon Rust allocations; a fresh instance restores its allocator.
+    codecInstances.delete(field);
+    return JSON.stringify({ error: "data codec adapter failed" });
   }
-  return dataCodecsInstance.exports;
 }
 
 export function makeDataHost() {
   return {
-    dataCodec: request => {
-      const input = new TextEncoder().encode(request);
-      if (input.length > 16 * 1024 * 1024) return JSON.stringify({ error: "codec request exceeds 16 MiB" });
-      let parser;
-      let pointer;
-      let output;
-      let length;
-      try {
-        parser = dataCodecs();
-        pointer = parser.data_alloc(input.length);
-        new Uint8Array(parser.memory.buffer, pointer, input.length).set(input);
-        const result = BigInt.asUintN(64, parser.data_parse(pointer, input.length));
-        output = Number(result >> 32n);
-        length = Number(result & 0xffffffffn);
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(parser.memory.buffer, output, length));
-        parser.data_free(pointer, input.length);
-        parser.data_free(output, length);
-        return text;
-      } catch (_) {
-        // A trap can abandon Rust allocations; a fresh capability instance restores its allocator.
-        dataCodecsInstance = undefined;
-        return JSON.stringify({ error: "data codec adapter failed" });
-      }
-    },
+    dataCsv: request => requestCodec("dataCsv", request),
+    dataCompression: request => requestCodec("dataCompression", request),
   };
 }

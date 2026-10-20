@@ -92,7 +92,7 @@ int dream_heap_is_live(dream_ptr ptr) {
     return rc != 0 || dream_object_info(ptr) != NULL;
 }
 
-__attribute__((export_name(DREAM_SYM_FREE)))
+DREAM_WASM_EXPORT(DREAM_SYM_FREE)
 void dream_free(dream_ptr ptr) {
     if (!ptr) {
         return;

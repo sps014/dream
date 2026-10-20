@@ -1,0 +1,10 @@
+import system;
+import system.io;
+import system.compress;
+fun main(): void {
+    let encoded = MemoryStream();
+    let writer = Compression.writer(encoded, CompressionFormat.Gzip).unwrap();
+    writer.write_all(Encoding.utf8_encode("payload")).unwrap();
+    writer.finish().unwrap();
+    System.println(encoded.length);
+}

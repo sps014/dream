@@ -48,6 +48,24 @@ fn refresh_node(src_dir: &Path, dest_dir: &Path, stem: &str) -> Result<()> {
         .with_context(|| format!("creating alias dir {}", dest_dir.display()))?;
     copy_required(src_dir, dest_dir, &format!("{stem}.wasm"))?;
     copy_required(src_dir, dest_dir, &format!("{stem}.node.runtime.js"))?;
+    for suffix in [
+        "csv.wasm",
+        "csv.wasm.gz",
+        "csv.wasm.br",
+        "compression.wasm",
+        "compression.wasm.gz",
+        "compression.wasm.br",
+    ] {
+        let name = format!("{stem}.{suffix}");
+        if !copy_if_present(src_dir, dest_dir, &name)? {
+            let destination = dest_dir.join(name);
+            if destination.is_file() {
+                fs::remove_file(&destination).with_context(|| {
+                    format!("removing stale companion {}", destination.display())
+                })?;
+            }
+        }
+    }
     let _ = copy_if_present(src_dir, dest_dir, &format!("{stem}.abi.json"));
     Ok(())
 }
@@ -148,6 +166,50 @@ mod tests {
             fs::read(root.join("target/node/main.wasm")).unwrap(),
             b"wasm"
         );
+    }
+
+    #[test]
+    fn refresh_copies_codec_companions_and_removes_stale_aliases() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("web");
+        let destination = tmp.path().join("node");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("main.wasm"), b"module").unwrap();
+        fs::write(source.join("main.node.runtime.js"), b"loader").unwrap();
+        for suffix in [
+            "csv.wasm",
+            "csv.wasm.gz",
+            "csv.wasm.br",
+            "compression.wasm",
+            "compression.wasm.gz",
+            "compression.wasm.br",
+        ] {
+            fs::write(source.join(format!("main.{suffix}")), b"codec").unwrap();
+        }
+        refresh_node(&source, &destination, "main").unwrap();
+        for suffix in [
+            "csv.wasm",
+            "csv.wasm.gz",
+            "csv.wasm.br",
+            "compression.wasm",
+            "compression.wasm.gz",
+            "compression.wasm.br",
+        ] {
+            let name = format!("main.{suffix}");
+            assert_eq!(fs::read(destination.join(&name)).unwrap(), b"codec");
+            fs::remove_file(source.join(name)).unwrap();
+        }
+        refresh_node(&source, &destination, "main").unwrap();
+        for suffix in [
+            "csv.wasm",
+            "csv.wasm.gz",
+            "csv.wasm.br",
+            "compression.wasm",
+            "compression.wasm.gz",
+            "compression.wasm.br",
+        ] {
+            assert!(!destination.join(format!("main.{suffix}")).exists());
+        }
     }
 
     #[test]

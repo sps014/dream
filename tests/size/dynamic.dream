@@ -1,0 +1,6 @@
+import system;
+
+fun main(): void {
+    let text: string = js.global.JSON.stringify(js.object());
+    System.println(text);
+}

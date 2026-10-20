@@ -17,6 +17,7 @@ pub type LiveImport = (String, String);
 pub(crate) struct ModuleAbi<'a> {
     pub layouts: &'a dream_hir::LayoutTable,
     pub target_triple: &'a str,
+    pub execution_environment: dream_abi::target::ExecutionEnvironment,
     pub exports: &'a [String],
     pub export_functions: &'a [dream_abi::exports::ExportFunction],
 }
@@ -329,8 +330,18 @@ pub(crate) fn build_abi_json(
         .join(", ");
 
     format!(
-        "{{\n  \"target_triple\": \"{}\",\n  \"native_abi_version\": 2,\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}\n}}\n",
+        "{{\n  \"target_triple\": \"{}\",\n  \"execution_environment\": \"{}\",\n  \"native_abi_version\": 3,\n  \"main_async\": {},\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}\n}}\n",
         json_escape(module.target_triple),
+        match module.execution_environment {
+            dream_abi::target::ExecutionEnvironment::Native => "native",
+            dream_abi::target::ExecutionEnvironment::Browser => "browser",
+            dream_abi::target::ExecutionEnvironment::WasiP2 => "wasip2",
+            dream_abi::target::ExecutionEnvironment::WasiP3 => "wasip3",
+        },
+        program
+            .functions
+            .iter()
+            .any(|function| function.name.text == dream_mir::abi::ENTRY_FN && function.is_async),
         externs.join(",\n"),
         exports.join(", "),
         dream_abi::exports::to_json(module.export_functions),
@@ -611,6 +622,7 @@ mod tests {
                 exports: &[],
                 export_functions: &[],
                 target_triple: "",
+                execution_environment: dream_abi::target::ExecutionEnvironment::Native,
             },
         )
     }
@@ -684,6 +696,7 @@ mod tests {
                 exports: &[],
                 export_functions: &[],
                 target_triple: "",
+                execution_environment: dream_abi::target::ExecutionEnvironment::Native,
             },
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
@@ -849,6 +862,7 @@ mod tests {
                     exports: &[],
                     export_functions: &[],
                     target_triple: "",
+                    execution_environment: dream_abi::target::ExecutionEnvironment::Native,
                 },
             );
             assert!(

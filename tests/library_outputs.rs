@@ -46,7 +46,7 @@ fn build(root: &Path, kind: OutputKind, extra: &[&str]) -> std::path::PathBuf {
     .unwrap();
     if manifest.host_capabilities.is_empty() {
         let ir = fs::read_to_string(ll.with_extension("opt.ll")).unwrap();
-        assert!(!ir.contains("call void @dream_host_bind_v2("));
+        assert!(!ir.contains("call void @dream_capability_bind("));
         if kind == OutputKind::Staticlib {
             assert!(
                 !fs::read_to_string(ll.with_extension("link.json"))

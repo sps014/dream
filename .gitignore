@@ -9,6 +9,8 @@ site/
 # re-included below.
 *.wat
 *.wasm
+!/runtime/dream-csv.wasm
+!/runtime/dream-compression.wasm
 *.cwasm
 *.abi.json
 *.runtime.js
@@ -91,3 +93,7 @@ generated/
 
 # Machine-specific benchmark records stay in ignored output storage.
 tests/bench/results/
+
+!tests/fixtures/gpu_parser.wasm
+!crates/dream-mir/src/runtime/c/sys/wasi/component/p2/dream_http_p2_component_type.o
+!crates/dream-mir/src/runtime/c/sys/wasi/component/p3/dream_http_p3_component_type.o

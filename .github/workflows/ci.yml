@@ -65,7 +65,8 @@ jobs:
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})
-    timeout-minutes: 60
+    # Windows was still passing corpus cases when the shared 60-minute limit expired.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -184,12 +185,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: Check shared CLI parser and adapter
+      - name: Check capability artifacts and native CLI
         run: |
-          python scripts/test_cli_parser.py
-          python scripts/build-cli-parser.py --check
-          node --test scripts/test-cli-host.mjs
-          python scripts/test_corpus.py --both --release cli_arguments
+          cargo test -p dream-host-cli
+          python scripts/generate-capabilities.py --check
+          python scripts/build-data-codecs.py --check
+          python scripts/build-gpu-parser.py --check
+          node --test scripts/test-wasm-size.mjs
+          python scripts/test_corpus.py --release cli_arguments
       - name: Qualify async I/O and networking on native and Node
         run: python scripts/qualify-io-net.py
       - name: Preserve phase 3–4 qualification results
@@ -346,7 +349,7 @@ jobs:
       - name: JavaScript runtime storage and generated bundle
         run: |
           node scripts/bundle-runtime.mjs --check
-          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs
+          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-data-host.mjs scripts/test-cancellation-host.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}

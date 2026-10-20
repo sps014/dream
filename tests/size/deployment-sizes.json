@@ -1,0 +1,352 @@
+{
+  "schema": 1,
+  "date": "2026-10-20",
+  "platform": "Windows x64",
+  "baseline_revision": "617305d5d5aa792ef9f8e5ce99a1123ba86f1209",
+  "flags": [
+    "--release",
+    "--web"
+  ],
+  "compression": {
+    "gzip_level": 9,
+    "brotli_quality": 11
+  },
+  "fixtures": {
+    "hello": {
+      "source_sha256": "5b094f7100c9053911460b0e38e079b1c1370120381fb592c00baaad8ab11623",
+      "baseline": {
+        "raw": 25727,
+        "gzip": 10048,
+        "brotli": 9088
+      },
+      "current": {
+        "raw": 17082,
+        "gzip": 7283,
+        "brotli": 6583
+      },
+      "artifacts": [
+        {
+          "file": "hello.wasm",
+          "raw": 8905,
+          "gzip": 4077,
+          "brotli": 3654
+        },
+        {
+          "file": "hello.web.runtime.js",
+          "raw": 8177,
+          "gzip": 3206,
+          "brotli": 2929
+        }
+      ]
+    },
+    "async": {
+      "source_sha256": "0304844dc39215db7e43a2a6dbee43031e234b9fd77844a5fdadfed7d5ac2b3b",
+      "baseline": {
+        "raw": 44855,
+        "gzip": 15995,
+        "brotli": 14264
+      },
+      "current": {
+        "raw": 39691,
+        "gzip": 14464,
+        "brotli": 12914
+      },
+      "artifacts": [
+        {
+          "file": "async.wasm",
+          "raw": 27644,
+          "gzip": 9878,
+          "brotli": 8709
+        },
+        {
+          "file": "async.web.runtime.js",
+          "raw": 12047,
+          "gzip": 4586,
+          "brotli": 4205
+        }
+      ]
+    },
+    "typed_array": {
+      "source_sha256": "71e431df1978c6193a6fa6a7e81674eaed12ac9657d928c73156c08b5da09fa4",
+      "baseline": {
+        "raw": 25898,
+        "gzip": 10129,
+        "brotli": 9157
+      },
+      "current": {
+        "raw": 18630,
+        "gzip": 7846,
+        "brotli": 7053
+      },
+      "artifacts": [
+        {
+          "file": "typed_array.wasm",
+          "raw": 9795,
+          "gzip": 4378,
+          "brotli": 3896
+        },
+        {
+          "file": "typed_array.web.runtime.js",
+          "raw": 8835,
+          "gzip": 3468,
+          "brotli": 3157
+        }
+      ]
+    },
+    "callback": {
+      "source_sha256": "6cf9719f41d24021847743fa617c0940245efa4e761eed01fe8c86a2d84a08ed",
+      "baseline": {
+        "raw": 25976,
+        "gzip": 10148,
+        "brotli": 9175
+      },
+      "current": {
+        "raw": 19802,
+        "gzip": 8263,
+        "brotli": 7492
+      },
+      "artifacts": [
+        {
+          "file": "callback.wasm",
+          "raw": 9873,
+          "gzip": 4394,
+          "brotli": 3961
+        },
+        {
+          "file": "callback.web.runtime.js",
+          "raw": 9929,
+          "gzip": 3869,
+          "brotli": 3531
+        }
+      ]
+    },
+    "dynamic": {
+      "source_sha256": "9f9759b74b5fb67c65a018e049754696dca79076fc2a54d4c5d5519850aaf6b8",
+      "baseline": {
+        "raw": 33893,
+        "gzip": 11324,
+        "brotli": 10172
+      },
+      "current": {
+        "raw": 32434,
+        "gzip": 10874,
+        "brotli": 9738
+      },
+      "artifacts": [
+        {
+          "file": "dynamic.wasm",
+          "raw": 16676,
+          "gzip": 5200,
+          "brotli": 4557
+        },
+        {
+          "file": "dynamic.web.runtime.js",
+          "raw": 15758,
+          "gzip": 5674,
+          "brotli": 5181
+        }
+      ]
+    },
+    "worker": {
+      "source_sha256": "9e39e504eaf164bc75b0f1f78c64e693fad3443b85b9206d0ef09cee0b590315",
+      "baseline": {
+        "raw": 41567,
+        "gzip": 15539,
+        "brotli": 13969
+      },
+      "current": {
+        "raw": 37882,
+        "gzip": 14492,
+        "brotli": 12962
+      },
+      "artifacts": [
+        {
+          "file": "worker.wasm",
+          "raw": 19779,
+          "gzip": 8018,
+          "brotli": 7079
+        },
+        {
+          "file": "worker.web.runtime.js",
+          "raw": 18103,
+          "gzip": 6474,
+          "brotli": 5883
+        }
+      ]
+    },
+    "filesystem": {
+      "source_sha256": "48946a682cfe94509107adbc08535da84171221e37633f82b8f729f5e504b169",
+      "baseline": {
+        "raw": 42549,
+        "gzip": 15348,
+        "brotli": 13809
+      },
+      "current": {
+        "raw": 36000,
+        "gzip": 13303,
+        "brotli": 11940
+      },
+      "artifacts": [
+        {
+          "file": "filesystem.wasm",
+          "raw": 21194,
+          "gzip": 7892,
+          "brotli": 7004
+        },
+        {
+          "file": "filesystem.web.runtime.js",
+          "raw": 14806,
+          "gzip": 5411,
+          "brotli": 4936
+        }
+      ]
+    },
+    "http": {
+      "source_sha256": "24cd09a8b0fd6b556d214840b55e79656f5dc6b4d6dfc23cc754fdb85ef55c3a",
+      "baseline": {
+        "raw": 195125,
+        "gzip": 46339,
+        "brotli": 37925
+      },
+      "current": {
+        "raw": 191157,
+        "gzip": 45235,
+        "brotli": 36901
+      },
+      "artifacts": [
+        {
+          "file": "http.wasm",
+          "raw": 168644,
+          "gzip": 36971,
+          "brotli": 29473
+        },
+        {
+          "file": "http.web.runtime.js",
+          "raw": 22513,
+          "gzip": 8264,
+          "brotli": 7428
+        }
+      ]
+    },
+    "csv": {
+      "source_sha256": "2808d939395d9a0739b375c69a3582670ac0588701e5761fbf0e6b231f76dc58",
+      "baseline": {
+        "raw": 384491,
+        "gzip": 161334,
+        "brotli": 140216
+      },
+      "current": {
+        "raw": 210644,
+        "gzip": 81695,
+        "brotli": 70996
+      },
+      "artifacts": [
+        {
+          "file": "csv.csv.wasm",
+          "raw": 116410,
+          "gzip": 53196,
+          "brotli": 46649
+        },
+        {
+          "file": "csv.wasm",
+          "raw": 79896,
+          "gzip": 23222,
+          "brotli": 19537
+        },
+        {
+          "file": "csv.web.runtime.js",
+          "raw": 14338,
+          "gzip": 5277,
+          "brotli": 4810
+        }
+      ]
+    },
+    "compression": {
+      "source_sha256": "5a81a0254a91b30254e71db996c0046f927d3773a36403c1120cf6ad4e72c26b",
+      "baseline": {
+        "raw": 403828,
+        "gzip": 163643,
+        "brotli": 141730
+      },
+      "current": {
+        "raw": 287621,
+        "gzip": 112346,
+        "brotli": 96951
+      },
+      "artifacts": [
+        {
+          "file": "compression.compression.wasm",
+          "raw": 173567,
+          "gzip": 81419,
+          "brotli": 70835
+        },
+        {
+          "file": "compression.wasm",
+          "raw": 99121,
+          "gzip": 25467,
+          "brotli": 21143
+        },
+        {
+          "file": "compression.web.runtime.js",
+          "raw": 14933,
+          "gzip": 5460,
+          "brotli": 4973
+        }
+      ]
+    },
+    "gpu_compute": {
+      "source_sha256": "c6ad0e460edfb563d83098fc37d13df751c2bc9c7f3ddf19caff4c365cc65e53",
+      "baseline": {
+        "raw": 128790,
+        "gzip": 37070,
+        "brotli": 31607
+      },
+      "current": {
+        "raw": 127594,
+        "gzip": 36957,
+        "brotli": 31577
+      },
+      "artifacts": [
+        {
+          "file": "gpu_compute.wasm",
+          "raw": 96302,
+          "gzip": 25905,
+          "brotli": 21671
+        },
+        {
+          "file": "gpu_compute.web.runtime.js",
+          "raw": 31292,
+          "gzip": 11052,
+          "brotli": 9906
+        }
+      ]
+    },
+    "gpu_render": {
+      "source_sha256": "fa4e3dc1b05de8d3a624f7c4b1967b6f1ca555499cf51af14a0db5804caad2e8",
+      "baseline": {
+        "raw": 139399,
+        "gzip": 38105,
+        "brotli": 32366
+      },
+      "current": {
+        "raw": 137621,
+        "gzip": 37960,
+        "brotli": 32302
+      },
+      "artifacts": [
+        {
+          "file": "gpu_render.wasm",
+          "raw": 100235,
+          "gzip": 25704,
+          "brotli": 21361
+        },
+        {
+          "file": "gpu_render.web.runtime.js",
+          "raw": 37386,
+          "gzip": 12256,
+          "brotli": 10941
+        }
+      ]
+    }
+  }
+}

@@ -17,7 +17,7 @@ fn inventory(source: &str) -> Vec<HostCapability> {
             .unwrap();
     let ir = std::fs::read_to_string(&output).unwrap();
     assert_eq!(
-        ir.contains("call void @dream_host_bind_v2("),
+        ir.contains("call void @dream_capability_bind("),
         !manifest.host_capabilities.is_empty()
     );
     manifest.host_capabilities

@@ -1,0 +1,6 @@
+import system;
+@js("app", "sum")
+extern fun sum(values: int[]): int;
+fun main(): void {
+    System.println(sum([1, 2, 3]));
+}

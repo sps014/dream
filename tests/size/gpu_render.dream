@@ -1,0 +1,56 @@
+import system;
+import system.gpu;
+
+public struct TriangleVarying {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public color: GpuVec4;
+}
+
+@gpu_targets(GpuTarget.WebGpu)
+@vertex
+fun offscreen_vertex(scale: float): TriangleVarying {
+    let x = -0.5f;
+    let y = -0.5f;
+    if vertex_id() == 1 {
+        x = 0.5f;
+    } else if vertex_id() == 2 {
+        x = 0.0f;
+        y = 0.5f;
+    }
+    let result = TriangleVarying();
+    result.position = GpuVec4(x * scale, y * scale, 0.0f, 1.0f);
+    result.color = GpuVec4(1.0f, 0.5f, 0.0f, 1.0f);
+    return result;
+}
+
+@gpu_targets(GpuTarget.WebGpu)
+@fragment
+fun offscreen_fragment(input: TriangleVarying, tint: GpuVec4): GpuVec4 {
+    return input.color * tint;
+}
+
+async fun main(): void {
+    let device = GpuDevice.create(GpuBackend.WebGpu).await.unwrap();
+    let target = device.texture(GpuTextureDesc(64, 64, GpuTextureFormat.Rgba8Unorm).render_target(true)).unwrap();
+    let pipeline = device.render_pipeline(GpuShaders.offscreen_vertex, GpuShaders.offscreen_fragment,
+        GpuRenderPipelineDesc.defaults(GpuTextureFormat.Rgba8Unorm)).unwrap();
+    let encoder = device.command_encoder();
+    let pass = encoder.begin_render_pass(GpuRenderPassDesc.color(target,
+        GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 1.0f, 1.0f))));
+    pass.set_pipeline(pipeline);
+    pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
+    pass.bind_value(GpuShaders.offscreen_fragment.tint, GpuVec4(1.0f, 0.4f, 1.0f, 1.0f));
+    pass.draw(3);
+    pass.end();
+    device.submit(encoder.finish()).await.unwrap();
+    let pixels = target.read(0).await.unwrap();
+    let at = (36 * 64 + 32) * 4;
+    System.println((int)pixels[at]);
+    System.println((int)pixels[at + 1]);
+    System.println((int)pixels[at + 2]);
+    System.println((int)pixels[at + 3]);
+    System.println((int)pixels[(1 * 64 + 1) * 4 + 2]);
+}

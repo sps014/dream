@@ -12,6 +12,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <limits.h>
+#include "../../include/dream_guest_contract.h"
+#include "../../include/dream_gpu_bundle.h"
+#ifdef DREAM_COMPONENT
+#define DREAM_WASM_EXPORT(name)
+#else
+#define DREAM_WASM_EXPORT(name) __attribute__((export_name(name)))
+#endif
 #if __STDC_HOSTED__
 #include <string.h>
 #endif
@@ -1302,6 +1309,10 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
+uint32_t dream_guest_abi_version(void);
+uint32_t dream_guest_length(dream_ptr reference);
+void *dream_guest_data(dream_ptr reference, uint32_t kind);
+int32_t dream_async_host_status(dream_ptr future);
 dream_ptr dream_closure_env_array_new(int32_t len, int32_t esize);
 dream_ptr dream_array_realloc(dream_ptr arr, int32_t new_len, int32_t esize);
 dream_ptr dream_array_realloc_rc(dream_ptr arr, int32_t new_len, int32_t esize,
@@ -1622,7 +1633,11 @@ int32_t dream_console_write(int32_t stream, dream_ptr data);
 int32_t dream_console_flush(int32_t stream);
 
 #ifdef DREAM_WASM32
+#ifdef DREAM_COMPONENT
+#define DREAM_WASM_IMPORT(mod, name)
+#else
 #define DREAM_WASM_IMPORT(mod, name) __attribute__((import_module(mod), import_name(name)))
+#endif
 void cancellation_subscribe(dream_ptr future, uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationSubscribe");
 void cancellation_notify(uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationNotify");
 void async_host_cancel(dream_ptr future) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "asyncHostCancel");
@@ -1684,8 +1699,8 @@ dream_ptr processHomeDir(void);
 dream_ptr consoleReadLine(void);
 int32_t consoleReadKey(void);
 
-void dream_host_bind_v2(dream_ptr (*string_alloc)(int32_t), dream_ptr (*array_new)(int32_t, int32_t),
-                     void (*complete_foreign)(dream_ptr, dream_result));
+uint32_t dream_host_bind_v3(const dream_guest_context *context);
+void dream_capability_bind(uint32_t (*bind)(const dream_guest_context *));
 /* Complete an @async_host future from a foreign thread and wake the parked loop. */
 void dream_complete_foreign_owned(dream_ptr f, dream_ptr res);
 void dream_complete_foreign(dream_ptr f, dream_result res);

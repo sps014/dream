@@ -30,9 +30,9 @@ from mkdocs.utils import get_relative_url
 log = logging.getLogger("mkdocs.hooks.site")
 
 STATUSES = ("stable", "experimental", "planned")
-TARGETS = ("native", "web", "node")
+TARGETS = ("native", "web", "node", "wasip2", "wasip3")
 STATUS_LABELS = {"stable": "Stable", "experimental": "Experimental", "planned": "Planned"}
-TARGET_LABELS = {"native": "Native", "web": "Browser", "node": "Node"}
+TARGET_LABELS = {"native": "Native", "web": "Browser", "node": "Node", "wasip2": "WASI Preview 2", "wasip3": "WASI Preview 3"}
 VALIDATED_ROOTS = ("language/",)
 WORDS_PER_MINUTE = 220
 MARKER = re.compile(r"<!--\s*pages(\s+grouped)?\s*-->")

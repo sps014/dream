@@ -105,6 +105,8 @@ internal class Bundle {
                     Bundle.u32(section, r.binding);
                     Bundle.u32(section, r.offset);
                     Bundle.u32(section, r.size);
+                    let binding_layout: int = r.webgpu_layout;
+                    Bundle.u32(section, binding_layout);
                     if p > 0 {
                         b.json.append(",");
                     }
@@ -121,7 +123,10 @@ internal class Bundle {
                             + ", \"binding\": "
                             + r.binding.to_string()
                             + ", \"offset\": "
-                            + r.offset.to_string() + ", \"size\": " + r.size.to_string() + "}"
+                            + r.offset.to_string()
+                            + ", \"size\": "
+                            + r.size.to_string()
+                            + ", \"webgpu_layout\": " + binding_layout.to_string() + "}"
                     );
                     p = p + 1;
                 }

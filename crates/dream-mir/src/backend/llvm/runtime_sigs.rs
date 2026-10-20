@@ -588,7 +588,7 @@ attributes #2 = { nounwind }
     fn reference_abi_accepts_native_pointers_and_wasm_offsets() {
         for (triple, reference) in [
             ("x86_64-unknown-linux-gnu", "ptr"),
-            ("wasm32-unknown-wasip1", "i32"),
+            ("wasm32-unknown-unknown", "i32"),
         ] {
             let text = format!(
                 "target triple = \"{triple}\"\ntarget datalayout = \"e\"\ndeclare {reference} @dream_malloc(i64, i32)\ndeclare void @dream_retain({reference})\ndeclare void @dream_release({reference})\n"

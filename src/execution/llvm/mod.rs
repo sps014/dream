@@ -4,6 +4,8 @@
 pub mod build;
 pub mod bundle;
 mod c_shim;
+mod component;
+mod component_sources;
 pub mod cross;
 pub mod doctor;
 mod icon;

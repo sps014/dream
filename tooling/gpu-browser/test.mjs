@@ -45,6 +45,8 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const result = await page.evaluate(async () => {
     const { makeGpuHost } = await import('/runtime/src/hosts/gpu.js');
+    const { loadGpuParser } = await import('/runtime/src/hosts/gpu_bundle.js');
+    await loadGpuParser('/tests/fixtures/gpu_parser.wasm');
     const { makeWindowHost } = await import('/runtime/src/hosts/window.js');
     const check = (condition, message) => { if (!condition) throw new Error(message); };
     check(navigator.gpu, 'navigator.gpu is missing');

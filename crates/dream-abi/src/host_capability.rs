@@ -67,7 +67,7 @@ impl HostCapability {
     }
 
     pub fn abi_marker(self) -> String {
-        let version = if self == Self::Net { 3 } else { 2 };
+        let version = 3;
         format!("dream_host_{}_abi_v{version}", self.name())
     }
 
@@ -117,7 +117,10 @@ impl HostCapability {
 
     /// Shared libraries the capability library loads from its own directory at run time, so
     /// they ship next to it: the GPU host's Dawn (WebGPU) runtime.
-    pub fn companion_library_names(self, target: &crate::target::TargetSpec) -> &'static [&'static str] {
+    pub fn companion_library_names(
+        self,
+        target: &crate::target::TargetSpec,
+    ) -> &'static [&'static str] {
         match self {
             Self::Gpu if target.is_windows() => &["dawn.dll"],
             Self::Gpu if target.is_apple() => &["libdawn.dylib"],
@@ -145,13 +148,13 @@ pub struct HostManifest {
 impl HostManifest {
     pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
         let manifest: Self = serde_json::from_str(json)?;
-        if manifest.native_abi_version != 2 {
+        if manifest.native_abi_version != 3 {
             return Err(<serde_json::Error as serde::de::Error>::custom(
-                "stale native ABI manifest; rebuild with the pointer ABI compiler (version 2)",
+                "stale native ABI manifest; rebuild with the capability ABI compiler (version 3)",
             ));
         }
         Ok(Self {
-            native_abi_version: 2,
+            native_abi_version: 3,
             host_capabilities: HostCapability::canonicalize(&manifest.host_capabilities),
         })
     }
@@ -165,11 +168,11 @@ mod tests {
     fn manifest_requires_inventory_and_canonicalizes_order() {
         assert!(HostManifest::parse("{}").is_err());
         assert!(
-            HostManifest::parse(r#"{"native_abi_version":2,"host_capabilities":["unknown"]}"#)
+            HostManifest::parse(r#"{"native_abi_version":3,"host_capabilities":["unknown"]}"#)
                 .is_err()
         );
         let manifest = HostManifest::parse(
-            r#"{"native_abi_version":2,"host_capabilities":["timezone","unicode","crypto","unicode"]}"#,
+            r#"{"native_abi_version":3,"host_capabilities":["timezone","unicode","crypto","unicode"]}"#,
         )
         .unwrap();
         assert_eq!(
@@ -186,15 +189,15 @@ mod tests {
     #[test]
     fn manifest_rejects_missing_and_stale_native_abi_versions() {
         assert!(HostManifest::parse(r#"{"host_capabilities":["core"]}"#).is_err());
-        for version in [0, 1, 3] {
+        for version in [0, 1, 2] {
             let json =
                 format!("{{\"native_abi_version\":{version},\"host_capabilities\":[\"core\"]}}");
             let error = HostManifest::parse(&json).err().unwrap().to_string();
             assert!(error.contains("stale native ABI manifest"), "{}", error);
         }
         let manifest =
-            HostManifest::parse(r#"{"native_abi_version":2,"host_capabilities":[]}"#).unwrap();
-        assert_eq!(manifest.native_abi_version, 2);
+            HostManifest::parse(r#"{"native_abi_version":3,"host_capabilities":[]}"#).unwrap();
+        assert_eq!(manifest.native_abi_version, 3);
         assert!(manifest.host_capabilities.is_empty());
     }
 }

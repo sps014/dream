@@ -74,7 +74,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
     let c = root.path().join("host.c");
     let library = libs.join("libdream_host_core.so");
     let build_host = |marker: &str| {
-        std::fs::write(&c, format!("void {marker}(void) {{}}\nvoid dream_host_bind_v2(void *a, void *b, void *c) {{ (void)a; (void)b; (void)c; }}\n")).unwrap();
+        std::fs::write(&c, format!("void {marker}(void) {{}}\nint dream_host_bind_v3(void *context) {{ (void)context; return 0; }}\n")).unwrap();
         checked(
             Command::new(&tools)
                 .args([
@@ -91,7 +91,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
         );
     };
     let unicode_source = root.path().join("unicode.c");
-    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v2(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v3(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
     checked(
         Command::new(&tools)
             .args([
@@ -106,7 +106,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
             .arg("-o")
             .arg(libs.join("libdream_host_unicode.so")),
     );
-    build_host("dream_host_core_abi_v2");
+    build_host("dream_host_core_abi_v3");
     let source = root.path().join("main.dream");
     let ir = root.path().join("main.ll");
     std::fs::write(
@@ -146,7 +146,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
     let output = compile().output().unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("missing current ABI marker"));
-    build_host("dream_host_core_abi_v2");
+    build_host("dream_host_core_abi_v3");
     std::fs::write(&source, "@export fun twice(x: int): int { return x * 2; }").unwrap();
     for (kind, extension) in [("staticlib", "a"), ("cdylib", "so")] {
         std::fs::write(

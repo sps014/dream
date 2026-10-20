@@ -50,6 +50,7 @@ set(SLANG_RHI_ENABLE_AFTERMATH OFF CACHE BOOL "" FORCE)
 add_subdirectory(${DREAM_SLANG_RHI_DIR} slang-rhi EXCLUDE_FROM_ALL)
 
 add_library(dream-gpu-glue STATIC
+    ../../dream-mir/src/runtime/c/core/gpu_bundle.c
     glue/device.cpp
     glue/resources.cpp
     glue/programs.cpp
@@ -59,7 +60,8 @@ add_library(dream-gpu-glue STATIC
     glue/raytracing.cpp
     loader_check.cpp
 )
-target_include_directories(dream-gpu-glue PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(dream-gpu-glue PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../dream-mir/src/runtime/c/include)
 target_link_libraries(dream-gpu-glue PRIVATE slang-rhi dream-slang-replay)
 
 # build.rs links these archives in dependency order.

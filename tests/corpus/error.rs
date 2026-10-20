@@ -1,6 +1,11 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::error_targets(
+        "cli_wasm_unsupported",
+        None,
+        Some("not available on compile target 'node' (available on: native)"),
+    ),
     Case::error(
         "validation_non_model",
         "validation requires an @json model",

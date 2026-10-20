@@ -29,7 +29,25 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         register(l, STATUS_FN, Ty::I32, vec![h]);
     }
     register(l, crate::abi::GUEST_ENTRY_FN, Ty::I32, vec![]);
+    if l.cx
+        .target
+        .spec()
+        .execution_environment
+        .component()
+        .is_some()
+    {
+        register(l, "__main_void", Ty::I32, vec![]);
+    }
     l.export(crate::abi::GUEST_ENTRY_FN, crate::abi::ENTRY_FN);
+    if l.cx
+        .target
+        .spec()
+        .execution_environment
+        .component()
+        .is_some()
+    {
+        return;
+    }
     if !l.cx.target.spec().capabilities.native_entry {
         if entry_exit(main, &l.cx) != EntryExit::Void {
             let h = l.h();
@@ -76,7 +94,18 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         status_fn(l, ty);
     }
     guest_entry(l, main, exit);
-    if !l.cx.target.spec().capabilities.native_entry {
+    if l.cx
+        .target
+        .spec()
+        .execution_environment
+        .component()
+        .is_some()
+    {
+        let mut fx = glue(l, "__main_void");
+        let result = fx.call_v(crate::abi::GUEST_ENTRY_FN, &[]);
+        fx.w.ret(Some(&result.v));
+        fx.finish();
+    } else if !l.cx.target.spec().capabilities.native_entry {
         main_report(l, main, exit);
         if l.cx.leak_checks {
             leak_live(l);
@@ -124,7 +153,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
     let main_name = l.user_fn(main);
     let async_n = l.mir.polls.len();
     let uses_defer = l.mir.uses_defer;
-    let host_scheduled = !l.cx.target.spec().capabilities.native_entry;
+    let host_scheduled = l.cx.target.spec().capabilities.js_interop;
     let mut fx = glue(l, crate::abi::GUEST_ENTRY_FN);
     fx.call("dream_runtime_init", &[]);
     let args = if main.params.is_empty() {
@@ -175,7 +204,7 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
         fx.call("dream_release", std::slice::from_ref(mf));
     }
     fx.call("dream_drop_globals", &[]);
-    if fx.l.requirements.callbacks {
+    if fx.l.requirements.callbacks && !fx.l.cx.target.spec().capabilities.linear_memory {
         fx.call("dream_callback_owner_finish", &[]);
     }
     if exit == EntryExit::Void {

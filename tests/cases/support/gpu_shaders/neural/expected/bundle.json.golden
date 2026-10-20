@@ -15,10 +15,10 @@
           "code": {"offset": 21039, "size": 2184, "sha256": "a6cffb3c490fcca3e58248165119b5db62f04b7c5c72c891eaa9552dd64a0ac8"},
           "thread_group_size": [32, 1, 1],
           "params": [
-            {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "layer1", "kind": 7, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
-            {"name": "features", "kind": 1, "flags": 1, "space": 0, "binding": 2, "offset": 0, "size": 0},
-            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0}
+            {"name": "layer0", "kind": 7, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "layer1", "kind": 7, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "features", "kind": 1, "flags": 1, "space": 0, "binding": 2, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "out", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0, "webgpu_layout": 0}
           ],
           "capabilities": ["cooperative_vector", "half"]
         },
@@ -29,9 +29,9 @@
           "code": {"offset": 23223, "size": 1312, "sha256": "345a089aee10f05ce3f9c671b1b5929c44ae0f2bb86a12bf9e2ebde9cbed17bc"},
           "thread_group_size": [32, 1, 1],
           "params": [
-            {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "b", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
-            {"name": "c", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0}
+            {"name": "a", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "b", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 0},
+            {"name": "c", "kind": 1, "flags": 2, "space": 0, "binding": 2, "offset": 0, "size": 0, "webgpu_layout": 0}
           ],
           "capabilities": ["cooperative_matrix", "half"]
         }

@@ -8,7 +8,10 @@
 //! generates the data-driven `defaultDreamModule` composer. The chunk table lives in
 //! `runtime/src/chunks.manifest`, shared with `scripts/bundle-runtime.mjs`.
 
+mod companions;
 mod host_exports;
+mod requirements;
+mod typed;
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -17,6 +20,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use crate::driver::abi::LiveImport;
+use requirements::Requirements;
 
 /// Target host for a selective runtime (CLI `--web` / `--node`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -155,9 +159,34 @@ fn pin_is_node(text: &str, target: JsRuntimeTarget) -> String {
 }
 
 /// Assemble a selective runtime from live import `(module, field)` pairs for `target`.
-pub(crate) fn assemble_selective_runtime(
+#[cfg(test)]
+fn assemble_selective_runtime(
     live_imports: &[LiveImport],
     target: JsRuntimeTarget,
+) -> Result<String, Error> {
+    assemble_runtime(live_imports, target, true, "dream-data.wasm")
+}
+
+#[cfg(test)]
+fn assemble_runtime(
+    live_imports: &[LiveImport],
+    target: JsRuntimeTarget,
+    async_imports: bool,
+    codecs_file: &str,
+) -> Result<String, Error> {
+    assemble_for_requirements(
+        live_imports,
+        target,
+        Requirements::full(async_imports),
+        codecs_file,
+    )
+}
+
+fn assemble_for_requirements(
+    live_imports: &[LiveImport],
+    target: JsRuntimeTarget,
+    requirements: Requirements,
+    codecs_file: &str,
 ) -> Result<String, Error> {
     let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
     let mut chunks: BTreeSet<&str> = BTreeSet::new();
@@ -165,10 +194,18 @@ pub(crate) fn assemble_selective_runtime(
         .iter()
         .filter_map(|(module, field)| (module == "Dream").then_some(field.as_str()))
         .collect();
+    let env_fields: BTreeSet<_> = live_imports
+        .iter()
+        .filter_map(|(module, field)| (module == "env").then_some(field.as_str()))
+        .collect();
     for field in &fields {
         if let Some(c) = chunk_for_field(&manifest, field) {
             chunks.insert(c);
         }
+    }
+    let async_imports = requirements.async_imports || chunks.contains("cancellation");
+    if async_imports {
+        chunks.insert("async");
     }
     let src = runtime_src_dir();
     let mut out = format!(
@@ -181,11 +218,29 @@ pub(crate) fn assemble_selective_runtime(
     );
 
     for rel in &manifest.always {
+        if rel == "features.js" {
+            out.push_str(&requirements.constants());
+            out.push_str(&format!(
+                "const HAS_ASYNC_IMPORTS = {async_imports};\nconst HAS_DATA_CODECS = {};\nconst DATA_CODEC_FILES = {};\n",
+                chunks.contains("data"),
+                serde_json::to_string(&[ ("dataCsv", "csv"), ("dataCompression", "compression") ].into_iter()
+                    .filter(|(field, _)| fields.contains(field))
+                    .map(|(field, family)| (field, format!("{}.{family}.wasm", codecs_file.strip_suffix(".data.wasm").unwrap_or("dream"))))
+                    .collect::<std::collections::BTreeMap<_,_>>()).map_err(Error::other)?,
+            ));
+            continue;
+        }
         let path = src.join(rel);
         let text = fs::read_to_string(&path)?;
         let mut transformed = transform_module(&text, rel)?;
         if rel == "platform.js" {
             transformed = pin_is_node(&transformed, target);
+        }
+        if rel == "hosts/env.js" {
+            transformed = host_exports::select(&transformed, "defaultEnv", &env_fields)?;
+        }
+        if rel == "instance.js" {
+            transformed = requirements.select_instance(&transformed)?;
         }
         out.push_str(&transformed);
         out.push('\n');
@@ -275,9 +330,30 @@ pub(crate) fn emit_selective_runtimes(
         }
     }
     let mut written = Vec::new();
+    let abi_path = Path::new(wat_path).with_extension("abi.json");
+    let abi: serde_json::Value =
+        serde_json::from_slice(&fs::read(&abi_path)?).map_err(Error::other)?;
+    let requirements = Requirements::from_abi(&abi, &live_imports)?;
+    let codecs_path = Path::new(wat_path).with_extension("data.wasm");
+    let codecs_file = codecs_path
+        .file_name()
+        .ok_or_else(|| Error::other("missing WASM artifact filename"))?
+        .to_string_lossy();
+    if !targets.is_empty() {
+        written.extend(companions::emit(
+            Path::new(wat_path),
+            &live_imports,
+            minify,
+        )?);
+    }
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
-        let mut text = assemble_selective_runtime(&live_imports, target)?;
+        let mut text =
+            assemble_for_requirements(&live_imports, target, requirements, &codecs_file)?;
+        text = text.replace(
+            "function bindTypedImport() { return null; }",
+            &typed::generate(&abi, &live_imports)?,
+        );
         let entries: Vec<_> = assets.iter().collect();
         let entries = serde_json::to_string(&entries).map_err(Error::other)?;
         text.push_str(&format!("\nexport const embeddedAssets = Object.freeze(Object.fromEntries({entries}.map(([name, bytes]) => [name, Uint8Array.from(bytes)])));\n"));
@@ -327,148 +403,4 @@ fn minify_js_source(source: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn release_runtime_minification_renames_locals_and_removes_formatting() {
-        let source = r#"
-            export function load(unnecessarilyLongRuntimeParameter) {
-                return globalThis.callback(unnecessarilyLongRuntimeParameter + 1,
-                    unnecessarilyLongRuntimeParameter * 2);
-            }
-        "#;
-        let text = minify_js_source(source).unwrap();
-        assert!(!text.contains("unnecessarilyLongRuntimeParameter"));
-        assert!(!text.contains('\n'));
-        assert!(text.contains("load"));
-        assert_eq!(text, minify_js_source(source).unwrap());
-        let allocator = oxc_allocator::Allocator::default();
-        let parsed =
-            oxc_parser::Parser::new(&allocator, &text, oxc_span::SourceType::mjs()).parse();
-        assert!(parsed.diagnostics.is_empty());
-    }
-
-    #[test]
-    fn minimal_print_runtime_omits_optional_hosts() {
-        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
-        assert!(!text.contains("makeFsHost(getInstance)"));
-        assert!(!text.contains("makeCryptoHost(getInstance)"));
-        assert!(text.contains("function load("));
-        assert!(text.contains("readEmbeddedAbi"));
-        assert!(text.contains("const isNode = false;"));
-    }
-
-    #[test]
-    fn node_target_pins_is_node() {
-        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Node).expect("assemble");
-        assert!(text.contains("const isNode = true;"));
-    }
-
-    #[test]
-    fn compiler_emitted_js_rc_is_bound_from_wasm_imports() {
-        let text = assemble_selective_runtime(&[], JsRuntimeTarget::Web).expect("assemble");
-        assert!(text.contains(r#"imp.name === "jsRetain" || imp.name === "jsRelease""#));
-    }
-
-    #[test]
-    fn window_host_joins_only_programs_that_import_it() {
-        let without = assemble_selective_runtime(&[], JsRuntimeTarget::Web).unwrap();
-        assert!(!without.contains("makeWindowHost(getInstance)"));
-        let live = vec![("Dream".into(), "windowPoll".into())];
-        let with = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
-        assert!(with.contains("Object.assign(parts, makeWindowHost(getInstance));"));
-    }
-
-    #[test]
-    fn gpu_host_joins_only_programs_that_import_it() {
-        let without = assemble_selective_runtime(&[], JsRuntimeTarget::Web).unwrap();
-        assert!(!without.contains("makeGpuHost(getInstance)"));
-        assert!(!without.contains("function gpuParseBundle("));
-        let live = vec![
-            ("Dream".into(), "gpuDeviceCreate".into()),
-            ("Dream".into(), "gpuSubmit".into()),
-        ];
-        let with = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
-        assert!(with.contains("Object.assign(parts, makeGpuHost(getInstance));"));
-        assert!(with.contains("function gpuParseBundle("));
-        assert!(with.contains("function gpuRecordCommands("));
-        assert!(!with.contains("makeWindowHost(getInstance)"));
-        let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
-        assert_eq!(chunk_for_field(&manifest, "gpuSurfaceAcquire"), Some("gpu"));
-    }
-
-    #[test]
-    fn unreferenced_apis_inside_live_chunks_are_removed() {
-        for (field, unused) in [
-            ("gpuDeviceCreate", "createComputePipeline"),
-            ("jsGlobal", "jsAwait"),
-            ("netUrlParse", "netClientCreate"),
-        ] {
-            let live = vec![("Dream".into(), field.into())];
-            let assembled = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
-            let text = minify_js_source(&assembled).unwrap();
-            assert!(text.contains(field), "missing {field}");
-            assert!(!text.contains(unused), "retained {unused} for {field}");
-            if std::process::Command::new("node")
-                .arg("--version")
-                .output()
-                .is_ok()
-            {
-                let check = match field {
-                    "jsGlobal" => {
-                        "if (host.jsGlobal('Math') !== Math) throw Error('global lookup');"
-                    }
-                    "netUrlParse" => {
-                        "if (host.netUrlParse('/a?x=1', 'https://example.test')[0] !== 'https://example.test/a') throw Error('URL parsing');"
-                    }
-                    _ => {
-                        "if (typeof host.gpuDeviceCreate !== 'function') throw Error('GPU import');"
-                    }
-                };
-                let dir = tempfile::tempdir().unwrap();
-                let script = dir.path().join("selected.mjs");
-                let checked = format!(
-                    "{assembled}\nconst host=defaultDreamModule(() => ({{}}));\nif(Object.keys(host).join()!=={field:?}) throw Error('unneeded imports: '+Object.keys(host));\n{check}\n"
-                );
-                fs::write(&script, minify_js_source(&checked).unwrap()).unwrap();
-                let output = std::process::Command::new("node")
-                    .arg(script)
-                    .output()
-                    .unwrap();
-                assert!(
-                    output.status.success(),
-                    "{field}: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-        }
-        let foreign = vec![("application".into(), "gpuDeviceCreate".into())];
-        let text = assemble_selective_runtime(&foreign, JsRuntimeTarget::Web).unwrap();
-        assert!(!text.contains("makeGpuHost"));
-    }
-
-    #[test]
-    fn selective_runtime_is_deterministic() {
-        let live = vec![
-            ("Dream".into(), "jsGlobal".into()),
-            ("Dream".into(), "fileRead".into()),
-        ];
-        let a = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
-        let b = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
-        assert_eq!(a, b);
-    }
-
-    #[test]
-    fn manifest_fields_match_previous_prefix_table() {
-        let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
-        assert_eq!(chunk_for_field(&manifest, "jsGlobal"), Some("js"));
-        assert_eq!(chunk_for_field(&manifest, "fileRead"), Some("fs"));
-        assert_eq!(chunk_for_field(&manifest, "dirList"), Some("fs"));
-        assert_eq!(chunk_for_field(&manifest, "delayMs"), Some("datetime_text"));
-        assert_eq!(chunk_for_field(&manifest, "windowPoll"), Some("window"));
-        assert_eq!(chunk_for_field(&manifest, "windowCanvas"), Some("window"));
-        assert_eq!(chunk_for_field(&manifest, "delay"), None);
-        assert_eq!(chunk_for_field(&manifest, "print_int"), None);
-    }
-}
+mod tests;

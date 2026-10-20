@@ -20,6 +20,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/gpu/shaders/web_gpu_binding_layout.dream",
+            include_str!("../system/gpu/shaders/web_gpu_binding_layout.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/web_gpu_layout.dream",
+            include_str!("../system/gpu/shaders/web_gpu_layout.dream"),
+        ),
+        (
             "<std>/system/gpu/shaders/slang_constructors.dream",
             include_str!("../system/gpu/shaders/slang_constructors.dream"),
         ),

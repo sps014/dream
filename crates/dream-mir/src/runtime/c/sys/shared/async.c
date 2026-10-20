@@ -124,7 +124,7 @@ static int64_t vclock;
 #endif
 
 #ifdef DREAM_WASM32
-__attribute__((export_name(DREAM_SYM_NEW_FUTURE)))
+DREAM_WASM_EXPORT(DREAM_SYM_NEW_FUTURE)
 #endif
 dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind) {
     dream_size bytes = size < F_SLOTS ? F_SLOTS : size;
@@ -213,7 +213,7 @@ void dream_enqueue(dream_ptr f) {
 }
 
 #ifdef DREAM_WASM32
-__attribute__((export_name(DREAM_SYM_RESOLVE)))
+DREAM_WASM_EXPORT(DREAM_SYM_RESOLVE)
 #endif
 void dream_resolve(dream_ptr f, dream_ptr res) {
     dream_async_complete(f, (dream_result)(uintptr_t)res);
@@ -222,13 +222,15 @@ void dream_resolve(dream_ptr f, dream_ptr res) {
 #ifdef DREAM_WASM32
 /* A JS Promise outlives a cancelled scheduler token. Its own pin also keeps cancelled frames
  * readable so the adapter can skip allocating a result that the guest will never consume. */
-__attribute__((export_name(DREAM_SYM_HOST_PIN)))
+DREAM_WASM_EXPORT(DREAM_SYM_HOST_PIN)
 void dream_async_host_pin(dream_ptr f) { dream_retain(f); }
 
-__attribute__((export_name(DREAM_SYM_HOST_STATUS)))
+DREAM_WASM_EXPORT(DREAM_SYM_HOST_STATUS)
+#endif
 int32_t dream_async_host_status(dream_ptr f) { return status_of(f); }
+#ifdef DREAM_WASM32
 
-__attribute__((export_name(DREAM_SYM_HOST_UNPIN)))
+DREAM_WASM_EXPORT(DREAM_SYM_HOST_UNPIN)
 void dream_async_host_unpin(dream_ptr f) { dream_release(f); }
 #endif
 
@@ -384,7 +386,7 @@ int dream_async_pending(void) {
 }
 
 #ifdef DREAM_WASM32
-__attribute__((export_name(DREAM_SYM_RUN_LOOP)))
+DREAM_WASM_EXPORT(DREAM_SYM_RUN_LOOP)
 #endif
 void dream_run_loop(void) {
 #ifndef DREAM_WASM32
@@ -442,8 +444,14 @@ void dream_run_loop(void) {
 #endif
         {
 #ifdef DREAM_WASM32
+#ifdef DREAM_COMPONENT
+            void dream_component_wait_until(int64_t deadline);
+            dream_component_wait_until(timer_head->due);
+            int64_t now = timeNowNanos();
+#else
             int64_t now = timer_head->due;
             vclock = now;
+#endif
 #else
             int64_t now = timeNowNanos();
             int64_t due = timer_head ? timer_head->due : 0;
@@ -480,7 +488,7 @@ static void timer_arm(dream_ptr f, int32_t ms) {
     Node *n = timer_node_take();
     Node **pp;
     n->f = f;
-#ifdef DREAM_WASM32
+#if defined(DREAM_WASM32) && !defined(DREAM_COMPONENT)
     n->due = vclock + (int64_t)ms * 1000000LL;
 #else
     n->due = timeNowNanos() + (int64_t)ms * 1000000LL;
@@ -498,6 +506,12 @@ dream_ptr dream_sleep(int32_t ms) {
     timer_arm(f, ms);
     return f;
 }
+
+#ifdef DREAM_COMPONENT
+void delayMs(dream_ptr future, int32_t milliseconds) {
+    timer_arm(future, milliseconds > 0 ? milliseconds : 0);
+}
+#endif
 
 #ifndef DREAM_WASM32
 /* Native `@async_host` side of `@runtime("delayMs")` (wasm32 imports JS `setTimeout`). The

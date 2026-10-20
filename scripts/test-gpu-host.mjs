@@ -4,8 +4,23 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeGpuHost } from '../runtime/src/hosts/gpu.js';
-import { gpuParseBundle, gpuScanWgslBindings } from '../runtime/src/hosts/gpu_bundle.js';
+import { GPU_BINDING_LAYOUTS } from '../runtime/src/hosts/gpu_layouts.js';
+import { gpuParseBundle, loadGpuParser } from '../runtime/src/hosts/gpu_bundle.js';
 import { makeWindowHost } from '../runtime/src/hosts/window.js';
+
+await loadGpuParser(readFileSync(new URL("../tests/fixtures/gpu_parser.wasm", import.meta.url)));
+
+function gpuScanWgslBindings(source) {
+  const out = new Map();
+  const declaration = /((?:@\w+\s*\(\s*\d+\s*\)\s*)+)var\s*(<[^>]*>)?\s*[A-Za-z_]\w*\s*:\s*([^;]+);/g;
+  for (const m of source.matchAll(declaration)) {
+    const group = /@group\s*\(\s*(\d+)\s*\)/.exec(m[1]);
+    const binding = /@binding\s*\(\s*(\d+)\s*\)/.exec(m[1]);
+    if (!group || !binding) continue;
+    out.set(group[1] + ":" + binding[1], { space: (m[2] || "").replace(/\s+/g, ""), type: m[3].trim() });
+  }
+  return out;
+}
 
 // ----- bundle builder (docs/internals/18-gpu-shader-bundle.md, DGPB v0) -----
 
@@ -22,6 +37,16 @@ function u32(value) {
 function str(text) {
   const raw = Buffer.from(text, 'utf8');
   return Buffer.concat([u32(raw.length), raw]);
+}
+
+function fixtureLayout(p) {
+  switch (p.kind) {
+    case KIND.Buffer: return { buffer: { type: (p.flags & 1) ? 'read-only-storage' : 'storage' } };
+    case KIND.Value: return { buffer: { type: 'uniform' } };
+    case KIND.Texture: return { texture: { sampleType: 'float', viewDimension: '2d', multisampled: false } };
+    case KIND.Sampler: return { sampler: { type: 'filtering' } };
+    default: return {};
+  }
 }
 
 /** Builds a bundle; `corrupt(code)` may return different bytes to store than were hashed. */
@@ -51,7 +76,9 @@ function buildBundle(targets, { corrupt = null } = {}) {
       for (const n of entry.threadGroupSize || [0, 0, 0]) parts.push(u32(n));
       parts.push(u32(entry.params.length));
       for (const p of entry.params) {
-        parts.push(str(p.name), u32(p.kind), u32(p.flags || 0), u32(p.group || 0), u32(p.binding), u32(p.offset || 0), u32(p.size || 0));
+        parts.push(str(p.name), u32(p.kind), u32(p.flags || 0), u32(p.group || 0), u32(p.binding), u32(p.offset || 0), u32(p.size || 0), u32(p.layoutCode ?? (target.name === 'wgsl'
+          ? (p.kind === 5 || p.kind === 7) ? 0 : GPU_BINDING_LAYOUTS.findIndex(row => row?.[0] === p.kind
+            && JSON.stringify(row[1]) === JSON.stringify(p.webgpuLayout ?? fixtureLayout(p))) : 0)));
       }
       const caps = entry.capabilities || [];
       parts.push(u32(caps.length), ...caps.map(str));
@@ -250,7 +277,7 @@ test('bundles parse per the documented layout and malformed bytes never throw pa
   assert.equal(target.entries[0].layout, 0);
   assert.deepEqual(target.entries[0].capabilities, ['half', 'subgroup_basic']);
   assert.deepEqual(target.entries[0].threadGroupSize, [64, 1, 1]);
-  assert.deepEqual(target.entries[0].params[4], { name: 'alpha', kind: 6, flags: 0, group: 0, binding: 3, offset: 8, size: 4 });
+  assert.deepEqual(target.entries[0].params[4], { name: 'alpha', kind: 6, flags: 0, group: 0, binding: 3, offset: 8, size: 4, webgpuLayout: { buffer: { type: 'uniform' } } });
 
   const host = makeGpuHost();
   const { device } = await openDevice(host);
@@ -263,7 +290,7 @@ test('bundles parse per the documented layout and malformed bytes never throw pa
     assert.equal(host.gpuLibraryLoad(device, mutate(0, 0x58)), 0);
     assert.match(host.gpuLastError(), /DGPB/);
     assert.equal(host.gpuLibraryLoad(device, mutate(4, 1)), 0);
-    assert.match(host.gpuLastError(), /version 1/);
+    assert.match(host.gpuLastError(), /unsupported version/);
     assert.equal(host.gpuLibraryLoad(device, mutate(12, 0xff)), 0, 'huge target count');
     let seed = 7;
     for (let round = 0; round < 500; round++) {
@@ -278,6 +305,41 @@ test('bundles parse per the documented layout and malformed bytes never throw pa
     assert.equal(host.gpuLibraryLoad(device, buildBundle([{ name: 'spirv', entries: [SAXPY] }])), 0);
     assert.equal(host.gpuLastError(), 'ENOTCOMPILED\n6');
   } finally { uninstall(); }
+});
+
+test('binding metadata is validated before WebGPU and no WGSL scan supplies defaults', async () => {
+  const host = makeGpuHost();
+  const { device, fake } = await openDevice(host);
+  try {
+    for (const layoutCode of [0, 1, 4, 5, 6, 10, 0xffffffff]) {
+      const entry = { ...SAXPY, params: [{ ...SAXPY.params[0], layoutCode }] };
+      assert.equal(host.gpuLibraryLoad(device, wgsl([entry])), 0, String(layoutCode));
+      assert.match(host.gpuLastError(), /invalid WebGPU binding layout/);
+    }
+    assert.equal(fake.named('createShaderModule').length, 0);
+    const layout = { storageTexture: { format: 'rgba32float', access: 'read-write', viewDimension: '2d' } };
+    const entry = { name: 'store', stage: 'compute', code: '@compute @workgroup_size(1) fn store() {}',
+      params: [{ name: 'image', kind: KIND.StorageTexture, binding: 0, webgpuLayout: layout }] };
+    const library = host.gpuLibraryLoad(device, wgsl([entry]));
+    assert.ok(library > 0, host.gpuLastError());
+    assert.ok(host.gpuComputePipelineCreate(library, 'store') > 0, host.gpuLastError());
+    assert.deepEqual(fake.named('createBindGroupLayout').at(-1).layout.entries,
+      [{ binding: 0, visibility: 4, ...layout }]);
+  } finally { host.gpuRelease(device); }
+});
+
+test('render stages sharing a binding must agree on the full layout', async () => {
+  const host = makeGpuHost();
+  const { device } = await openDevice(host);
+  try {
+    const vertex = { ...QUAD_VERTEX, params: [{ name: 'data', kind: KIND.Buffer, binding: 0, flags: 1 }] };
+    const fragment = { ...QUAD_FRAGMENT, params: [{ name: 'data', kind: KIND.Buffer, binding: 0, flags: 2 }] };
+    const library = host.gpuLibraryLoad(device, wgsl([vertex, fragment]));
+    assert.ok(library > 0, host.gpuLastError());
+    assert.equal(host.gpuRenderPipelineCreate(library, vertex.name, library, fragment.name,
+      [0, 0, 0, 0, 0, 0, 0, 1, 0]), 0);
+    assert.match(host.gpuLastError(), /different layouts/);
+  } finally { host.gpuRelease(device); }
 });
 
 test('backend selection reports the GpuError codes the Dream side decodes', async () => {
@@ -431,6 +493,25 @@ test('a bundle whose code fails SHA-256 never reaches the GPU queue', async () =
   } finally { uninstall(); }
 });
 
+test('every shared code reference must carry the verified digest', async () => {
+  const host = makeGpuHost();
+  const { device, fake } = await openDevice(host);
+  try {
+    const bytes = Buffer.from(wgsl([SAXPY, { ...SAXPY, name: 'alias' }]));
+    const digest = createHash('sha256').update(SAXPY_WGSL).digest();
+    const first = bytes.indexOf(digest);
+    const second = bytes.indexOf(digest, first + digest.length);
+    assert.ok(first >= 0 && second > first);
+    bytes[second] ^= 1;
+    const library = host.gpuLibraryLoad(device, [...bytes]);
+    assert.ok(library > 0, host.gpuLastError());
+    const pipeline = host.gpuComputePipelineCreate(library, 'alias');
+    assert.equal(await host.gpuSubmit(device, [OP.BeginComputePass, OP.SetPipeline, pipeline, OP.EndPass], []), 1);
+    assert.match(host.gpuLastError(), /the code of alias fails its SHA-256 check/);
+    assert.equal(fake.named('submit').length, 0);
+  } finally { uninstall(); }
+});
+
 test('render pipelines, canvas surfaces and draws translate to WebGPU', async () => {
   const canvas = installCanvas();
   const windows = makeWindowHost();
@@ -457,7 +538,7 @@ test('render pipelines, canvas surfaces and draws translate to WebGPU', async ()
     assert.deepEqual(render.depthStencil, { format: 'depth32float', depthCompare: 'less', depthWriteEnabled: true });
     const layouts = fake.named('createBindGroupLayout');
     assert.deepEqual(layouts.map(l => l.layout.entries), [
-      [{ binding: 0, visibility: 2, texture: { sampleType: 'float', viewDimension: '2d' } },
+      [{ binding: 0, visibility: 2, texture: { sampleType: 'float', viewDimension: '2d', multisampled: false } },
         { binding: 1, visibility: 2, sampler: { type: 'filtering' } }],
       [{ binding: 0, visibility: 1, buffer: { type: 'uniform' } }],
     ]);
@@ -533,7 +614,7 @@ test('render pipelines, canvas surfaces and draws translate to WebGPU', async ()
   } finally { uninstall(); }
 });
 
-test('release frees resources and a released device takes its resources with it', async () => {
+test('resources retain their device until the final resource is released', async () => {
   const host = makeGpuHost();
   const { device, fake } = await openDevice(host);
   try {
@@ -545,10 +626,12 @@ test('release frees resources and a released device takes its resources with it'
     assert.match(host.gpuLastError(), /^EINVALID\nthe buffer was released/);
     host.gpuRelease(buffer);
     host.gpuRelease(device);
-    assert.equal(fake.destroyed, true);
-    assert.equal(host.gpuTextureWrite(texture, 0, 0, new Array(64).fill(0)), 1);
+    assert.equal(fake.destroyed, false);
+    assert.equal(host.gpuTextureWrite(texture, 0, 0, new Array(64).fill(0)), 0);
     assert.equal(host.gpuDeviceCheck(device), 1);
     assert.match(host.gpuLastError(), /^EINVALID\n/);
+    host.gpuRelease(texture);
+    assert.equal(fake.destroyed, true);
   } finally { uninstall(); }
 });
 
@@ -697,6 +780,7 @@ function checkLayouts(fake, entries, before) {
     for (const param of entry.params) {
       const decl = decls.get(param.group + ':' + param.binding);
       const key = expectedLayoutEntry(param, decl);
+      assert.deepEqual(param.webgpuLayout, fixtureLayout(param), 'generated descriptor: ' + param.name);
       const found = layouts.find(l => l.binding === param.binding && l[key]);
       assert.ok(found, entry.name + '.' + param.name + ' has no ' + key + ' layout entry at binding ' + param.binding);
     }

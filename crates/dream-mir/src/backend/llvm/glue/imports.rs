@@ -67,6 +67,20 @@ fn wasm_import_names(imp: &HImport) -> (String, String) {
     (module.to_string(), field.to_string())
 }
 
+fn register_wasm_host(l: &mut Lcx<'_>, name: &str, sig: FnSig, module: &str, field: &str) {
+    if l.cx
+        .target
+        .spec()
+        .execution_environment
+        .component()
+        .is_some()
+    {
+        l.host(name, sig);
+    } else {
+        l.wasm_import(name, sig, module, field);
+    }
+}
+
 fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
     let h = l.h();
     for (name, field) in [
@@ -74,7 +88,7 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
         ("js_release", js_abi::HOST_JS_RELEASE),
     ] {
         let sig = FnSig::plain(FnTy::new(Ty::Void, vec![Ty::I32]));
-        l.wasm_import(name, sig, js_abi::HOST_MODULE, field);
+        register_wasm_host(l, name, sig, js_abi::HOST_MODULE, field);
     }
     for imp in imports {
         if is_c_import(imp)
@@ -88,12 +102,13 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
         let params = host_params(l, imp);
         if !imp.is_async {
             let sig = FnSig::plain(FnTy::new(dream_ret(l, imp), params));
-            l.wasm_import(&host, sig, &module, &field);
+            register_wasm_host(l, &host, sig, &module, &field);
             continue;
         }
         let mut hp = vec![h.clone()];
         hp.extend(params.iter().cloned());
-        l.wasm_import(
+        register_wasm_host(
+            l,
             &host,
             FnSig::plain(FnTy::new(Ty::Void, hp)),
             &module,
@@ -108,7 +123,7 @@ fn register_wasm(l: &mut Lcx<'_>, imports: &[HImport]) {
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     let imports = l.mir.imports.clone();
     c_reverse::register_reverse(l);
-    if l.cx.target.spec().capabilities.js_interop {
+    if l.cx.target.spec().capabilities.linear_memory {
         register_wasm(l, &imports);
         for imp in imports.iter().filter(|imp| is_c_import(imp)) {
             c_marshal::register_import(l, imp);
@@ -246,7 +261,7 @@ fn async_bridge(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
                 fx.load_ty(t.clone(), &at, 8, *t == fx.h())
             })
             .collect();
-        if fx.l.cx.target.spec().capabilities.js_interop {
+        if fx.l.cx.target.spec().capabilities.linear_memory {
             let mut a = vec![s.clone()];
             a.extend(saved);
             fx.call(&host, &a);

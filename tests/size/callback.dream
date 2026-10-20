@@ -1,0 +1,12 @@
+import system;
+
+@js("app", "invoke")
+extern fun invoke(callback: fun(int): int): int;
+
+fun double_value(value: int): int {
+    return value * 2;
+}
+
+fun main(): void {
+    System.println(invoke(double_value));
+}

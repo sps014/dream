@@ -1,0 +1,5 @@
+{
+  "version": "0.2.12",
+  "url": "https://github.com/WebAssembly/WASI/releases/download/v0.2.12/wasi-wit-0.2.12.tar.gz",
+  "sha256": "2b0e47bc02953267ad163c6c1188b65baed1292351998cb032f3dcd28d005992"
+}

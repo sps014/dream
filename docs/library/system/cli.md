@@ -7,10 +7,11 @@ api: reference/api/system-cli.md
 
 # Command-line arguments
 
-Import `system.cli` to declare commands, named flags, typed options, positional
+On native targets, import `system.cli` to declare commands, named flags, typed options, positional
 arguments, and subcommands. Parsing returns `Result<ParsedArguments, CliError>`.
 It never prints or exits the process. Help and version requests are successful
 outcomes, so your application decides how to display them.
+CLI parsing is unavailable in browser, Node, and standalone WASM builds.
 
 ```dream
 import system;

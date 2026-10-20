@@ -146,8 +146,8 @@ members = [
 # crate's default `native` feature.
 resolver = "3"
 
-# Portable JavaScript hosts embed Rust CLI/data adapters separately from the C guest runtime.
-[profile.cli-wasm]
+# Portable codec capability modules are separate from the C guest runtime.
+[profile.capability-wasm]
 inherits = "release"
 opt-level = "z"
 lto = true

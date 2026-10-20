@@ -1,7 +1,7 @@
 // WebGPU host for `system.gpu` (imports declared in crates/dream-stdlib/src/system/gpu/gpu_host.dream).
 // Shaders come only from the `wgsl` target of generated bundles; this host never compiles
 // anything but that WGSL. Canvas surfaces attach to `system.window` canvases.
-import { gpuParseBundle, gpuScanWgslBindings, gpuVerifyTarget } from "./gpu_bundle.js";
+import { gpuParseBundle, gpuVerifyTarget } from "./gpu_bundle.js";
 import {
   GPU_ARG, GPU_BUFFER, GPU_FEATURE, GPU_MAP_READ, GPU_STAGE, GPU_TEXTURE, GPU_TEXTURE_FORMATS,
   GPU_VISIBILITY, GpuFailure, gpuPipelineLayout, gpuRecordCommands,
@@ -49,7 +49,7 @@ function gpuBytes(data) {
 }
 
 
-export function makeGpuHost() {
+export function makeGpuHost(getInstance) {
   // Every live handle: devices, buffers, textures, samplers, libraries, pipelines and surfaces.
   const table = new Map();
   let nextHandle = 1;
@@ -65,6 +65,8 @@ export function makeGpuHost() {
   };
   const register = record => {
     const handle = nextHandle++;
+    const dev = record.type === "device" ? record : record.dev;
+    dev.references = (dev.references || 0) + 1;
     table.set(handle, record);
     return handle;
   };
@@ -138,7 +140,7 @@ export function makeGpuHost() {
     const dev = deviceOf(deviceHandle);
     let parsed;
     try {
-      parsed = gpuParseBundle(gpuBytes(bundle));
+      parsed = gpuParseBundle(gpuBytes(bundle), getInstance?.());
     } catch (error) {
       throw new GpuFailure("EINVALID", "malformed shader bundle: " + error.message);
     }
@@ -167,7 +169,8 @@ export function makeGpuHost() {
       if (feature === undefined) throw new GpuFailure("EINVALID", name + " needs the unknown capability " + capability);
       if ((library.dev.features & (1 << feature)) === 0) throw new GpuFailure("EUNSUPPORTED", feature);
     }
-    let shader = library.modules.get(entry.code.offset);
+    const codeKey = entry.code.offset + ":" + entry.code.size;
+    let shader = library.modules.get(codeKey);
     if (!shader) {
       let code;
       try {
@@ -175,8 +178,8 @@ export function makeGpuHost() {
       } catch (_) {
         throw new GpuFailure("EINVALID", "the WGSL of " + name + " is not UTF-8");
       }
-      shader = { module: library.dev.device.createShaderModule({ code }), decls: gpuScanWgslBindings(code) };
-      library.modules.set(entry.code.offset, shader);
+      shader = { module: library.dev.device.createShaderModule({ code }) };
+      library.modules.set(codeKey, shader);
     }
     return { entry, ...shader };
   };
@@ -287,9 +290,6 @@ export function makeGpuHost() {
     table.delete(handle);
     switch (record.type) {
       case "device":
-        for (const [other, owned] of table) if (owned.dev === record) table.delete(other);
-        record.lost ??= "the device was released";
-        record.device.destroy?.();
         break;
       case "buffer":
         record.obj.destroy?.();
@@ -301,14 +301,19 @@ export function makeGpuHost() {
         record.dev.libraries.delete(record);
         break;
       case "surface":
-        if (record.frame) table.delete(record.frame);
+        if (record.frame) release(record.frame);
         record.context.unconfigure?.();
         break;
+    }
+    const dev = record.type === "device" ? record : record.dev;
+    if (--dev.references === 0) {
+      dev.lost ??= "the device was released";
+      dev.device.destroy?.();
     }
   };
 
   const dropFrame = surface => {
-    if (surface.frame) table.delete(surface.frame);
+    if (surface.frame) release(surface.frame);
     surface.frame = 0;
   };
 

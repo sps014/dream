@@ -1,119 +1,96 @@
-// Reader for the generated shader bundle (DGPB v0, docs/internals/18-gpu-shader-bundle.md).
-// The browser only drives the `wgsl` target; it binds from the parameter table, so the layout
-// blobs are never read (wasm bundles carry none).
+import { GPU_BINDING_LAYOUTS, GPU_BUNDLE_ABI_VERSION } from "./gpu_layouts.js";
+import { loadBinaryModule } from "../binary.js";
 
-const GPU_BUNDLE_STAGES = new Set(["compute", "vertex", "fragment", "raygeneration", "closesthit",
-  "anyhit", "miss", "intersection", "callable"]);
-const GPU_BUNDLE_MAX_COUNT = 1 << 16;
-
+let gpuParser;
 class GpuBundleError extends Error {}
 
-class GpuBundleReader {
-  constructor(bytes, end) {
-    this.bytes = bytes;
-    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    this.pos = 0;
-    this.end = end;
+export async function loadGpuParser(source) {
+  if (gpuParser) return;
+  const module = await loadBinaryModule(source);
+  const instance = new WebAssembly.Instance(module, {});
+  const exports = instance.exports;
+  if (exports.dream_gpu_bundle_abi_version?.() !== GPU_BUNDLE_ABI_VERSION) {
+    throw new GpuBundleError("GPU bundle capability ABI version mismatch");
   }
-
-  need(count) {
-    if (count < 0 || this.pos + count > this.end) throw new GpuBundleError("the bundle header is truncated");
+  for (const name of ["gpu_bundle_alloc", "gpu_bundle_reset", "dream_gpu_bundle_index", "dream_gpu_bundle_error"]) {
+    if (typeof exports[name] !== "function") throw new GpuBundleError("missing GPU parser export: " + name);
   }
-
-  u32() {
-    this.need(4);
-    const value = this.view.getUint32(this.pos, true);
-    this.pos += 4;
-    return value;
-  }
-
-  count(what) {
-    const value = this.u32();
-    if (value > GPU_BUNDLE_MAX_COUNT) throw new GpuBundleError(what + " count " + value + " is too large");
-    return value;
-  }
-
-  raw(length) {
-    this.need(length);
-    const out = this.bytes.subarray(this.pos, this.pos + length);
-    this.pos += length;
-    return out;
-  }
-
-  str() {
-    const length = this.u32();
-    try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(this.raw(length));
-    } catch (error) {
-      if (error instanceof GpuBundleError) throw error;
-      throw new GpuBundleError("a bundle string is not UTF-8");
-    }
-  }
-
-  blob(dataStart) {
-    const offset = this.u32();
-    const size = this.u32();
-    const sha256 = this.raw(32);
-    const start = dataStart + offset;
-    if (start + size > this.bytes.length) throw new GpuBundleError("a blob lies outside the data section");
-    return { offset, size, sha256, bytes: this.bytes.subarray(start, start + size) };
-  }
+  if (!(exports.memory instanceof WebAssembly.Memory)) throw new GpuBundleError("GPU parser has no linear memory");
+  gpuParser = exports;
 }
 
-function gpuParseParam(r) {
+function guestParser(inst) {
+  const exports = inst.exports;
+  if (exports.__dream_gpu_version?.() !== GPU_BUNDLE_ABI_VERSION) throw new GpuBundleError("GPU bundle capability ABI version mismatch");
+  const references = [];
   return {
-    name: r.str(),
-    kind: r.u32(),
-    flags: r.u32(),
-    group: r.u32(),
-    binding: r.u32(),
-    offset: r.u32(),
-    size: r.u32(),
+    memory: inst.memory,
+    dream_gpu_bundle_index: exports.__dream_gpu_index,
+    gpu_bundle_alloc(length) {
+      const reference = exports.__dream_guest_array(length, 1);
+      references.push(reference);
+      return exports.__dream_guest_data(reference, 0);
+    },
+    gpu_bundle_reset() {
+      for (const reference of references) inst.__guestFree(reference);
+      references.length = 0;
+    },
   };
 }
 
-function gpuParseEntry(r, dataStart) {
-  const name = r.str();
-  const stage = r.str();
-  if (!GPU_BUNDLE_STAGES.has(stage)) throw new GpuBundleError("entry " + name + " has unknown stage '" + stage + "'");
-  const layout = r.u32();
-  const code = r.blob(dataStart);
-  const threadGroupSize = [r.u32(), r.u32(), r.u32()];
-  const params = [];
-  for (let i = 0, n = r.count("parameter"); i < n; i++) params.push(gpuParseParam(r));
-  const capabilities = [];
-  for (let i = 0, n = r.count("capability"); i < n; i++) capabilities.push(r.str());
-  return { name, stage, layout, code, threadGroupSize, params, capabilities };
-}
-
-/**
- * Parses a whole bundle. Throws `GpuBundleError` with a readable reason for any malformed input;
- * never reads outside `bytes`.
- */
-export function gpuParseBundle(bytes) {
-  if (!(bytes instanceof Uint8Array)) bytes = Uint8Array.from(bytes || []);
-  if (bytes.length < 16) throw new GpuBundleError("the bundle is shorter than its header");
-  const head = new GpuBundleReader(bytes, 16);
-  const magic = new TextDecoder().decode(head.raw(4));
-  if (magic !== "DGPB") throw new GpuBundleError("the bundle does not start with DGPB");
-  const version = head.u32();
-  if (version !== 0) throw new GpuBundleError("bundle version " + version + " is not supported");
-  const headerSize = head.u32();
-  if (headerSize < 16 || headerSize > bytes.length) throw new GpuBundleError("the bundle header size is out of range");
-  const targetCount = head.count("target");
-  const r = new GpuBundleReader(bytes, headerSize);
-  r.pos = 16;
-  const targets = [];
-  for (let t = 0; t < targetCount; t++) {
-    const name = r.str();
-    const codeFormat = r.str();
-    const layouts = [];
-    for (let i = 0, n = r.count("layout"); i < n; i++) layouts.push(r.blob(headerSize));
-    const entries = [];
-    for (let i = 0, n = r.count("entry"); i < n; i++) entries.push(gpuParseEntry(r, headerSize));
-    targets.push({ name, codeFormat, layouts, entries });
-  }
-  return { version, targets };
+export function gpuParseBundle(input, inst) {
+  const parser = inst ? guestParser(inst) : gpuParser;
+  if (!parser) throw new GpuBundleError("GPU parser was not loaded");
+  const bytes = input instanceof Uint8Array ? input.slice() : Uint8Array.from(input || []);
+  const decoder = new TextDecoder();
+  const check = status => {
+    if (status >= 0) return status;
+    if (inst) throw new GpuBundleError("invalid shader bundle (status " + status + ")");
+    const offset = parser.dream_gpu_bundle_error(status);
+    const memory = new Uint8Array(parser.memory.buffer);
+    const end = memory.indexOf(0, offset);
+    throw new GpuBundleError(decoder.decode(memory.subarray(offset, end < 0 ? memory.length : end)));
+  };
+  const text = (offset, length) => decoder.decode(bytes.subarray(offset, offset + length));
+  const blob = (row, at) => ({ offset: row[at], size: row[at + 1],
+    sha256: bytes.subarray(row[at + 2], row[at + 2] + 32), bytes: bytes.subarray(row[at], row[at] + row[at + 1]) });
+  parser.gpu_bundle_reset();
+  try {
+    const borrowed = inst && input instanceof Uint8Array && input.buffer === inst.memory.buffer;
+    const pointer = borrowed ? input.byteOffset : parser.gpu_bundle_alloc(bytes.length);
+    if (!pointer) throw new GpuBundleError("GPU parser input allocation failed");
+    if (!borrowed) new Uint8Array(parser.memory.buffer, pointer, bytes.length).set(bytes);
+    const count = check(parser.dream_gpu_bundle_index(pointer, bytes.length, 0, 0));
+    const records = parser.gpu_bundle_alloc(count * 64);
+    if (!records) throw new GpuBundleError("GPU parser record allocation failed");
+    check(parser.dream_gpu_bundle_index(pointer, bytes.length, records, count));
+    const words = new Uint32Array(parser.memory.buffer, records, count * 16);
+    const objects = [], targets = [];
+    for (let i = 0; i < count; i++) {
+      const row = words.subarray(i * 16, i * 16 + 16);
+      const parent = objects[row[1]];
+      let object;
+      switch (row[0]) {
+        case 1:
+          object = { name: text(row[2], row[3]), codeFormat: text(row[4], row[5]), layouts: [], entries: [] };
+          targets.push(object);
+          break;
+        case 2: parent.layouts.push(blob(row, 2)); break;
+        case 3:
+          object = { name: text(row[2], row[3]), stage: text(row[14], row[15]), layout: row[5],
+            code: blob(row, 6), threadGroupSize: [row[9], row[10], row[11]], params: [], capabilities: [] };
+          parent.entries.push(object);
+          break;
+        case 4:
+          parent.params.push({ name: text(row[2], row[3]), kind: row[4], flags: row[5], group: row[6], binding: row[7],
+            offset: row[8], size: row[9], webgpuLayout: GPU_BINDING_LAYOUTS[row[10]]?.[1] ?? null });
+          break;
+        case 5: parent.capabilities.push(text(row[2], row[3])); break;
+      }
+      objects.push(object);
+    }
+    return { version: 0, targets };
+  } finally { parser.gpu_bundle_reset(); }
 }
 
 function gpuHex(bytes) {
@@ -132,25 +109,11 @@ export async function gpuVerifyTarget(target) {
   const seen = new Set();
   for (const entry of target.entries) {
     const blob = entry.code;
-    if (seen.has(blob.offset)) continue;
-    seen.add(blob.offset);
+    const key = blob.offset + ":" + blob.size + ":" + gpuHex(blob.sha256);
+    if (seen.has(key)) continue;
+    seen.add(key);
     const digest = new Uint8Array(await subtle.digest("SHA-256", blob.bytes));
     if (gpuHex(digest) !== gpuHex(blob.sha256)) return "the code of " + entry.name + " fails its SHA-256 check";
   }
   return null;
-}
-
-// WGSL resource declarations by "group:binding". The parameter table says what a binding holds;
-// the declaration supplies what the bind group layout additionally needs (access mode, sample
-// type, storage format).
-export function gpuScanWgslBindings(source) {
-  const out = new Map();
-  const declaration = /((?:@\w+\s*\(\s*\d+\s*\)\s*)+)var\s*(<[^>]*>)?\s*[A-Za-z_]\w*\s*:\s*([^;]+);/g;
-  for (const m of source.matchAll(declaration)) {
-    const group = /@group\s*\(\s*(\d+)\s*\)/.exec(m[1]);
-    const binding = /@binding\s*\(\s*(\d+)\s*\)/.exec(m[1]);
-    if (!group || !binding) continue;
-    out.set(group[1] + ":" + binding[1], { space: (m[2] || "").replace(/\s+/g, ""), type: m[3].trim() });
-  }
-  return out;
 }

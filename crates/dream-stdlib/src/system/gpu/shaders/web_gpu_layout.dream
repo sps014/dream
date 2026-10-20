@@ -1,0 +1,53 @@
+module system.gpu.shaders;
+
+import system;
+import system.json;
+
+// Access comes from Slang's declared resource type, even if this entry never writes it.
+internal static class WebGpuLayout {
+    internal static fun of(borrow ty: JsonValue, borrow p: ShaderParam): WebGpuBindingLayout {
+        if p.is_value() {
+            return WebGpuBindingLayout.Uniform;
+        }
+        if p.kind == ParamKinds.buffer() {
+            if ty.get_str_or("access", "read") == "readWrite" {
+                return WebGpuBindingLayout.Storage;
+            }
+            return WebGpuBindingLayout.ReadOnlyStorage;
+        }
+        if p.kind == ParamKinds.sampler() {
+            return WebGpuBindingLayout.FilteringSampler;
+        }
+        // The current shader API exposes 2D textures only. A new shape needs an explicit ABI
+        // descriptor instead of silently acquiring a default 2D layout.
+        if ty.get_str_or("baseShape", "") != "texture2D" {
+            return WebGpuBindingLayout.None;
+        }
+        let result = ty.get_or("resultType", JsonValue.dict());
+        let scalar = result;
+        if result.get_str_or("kind", "") == "vector" {
+            scalar = result.get_or("elementType", JsonValue.dict());
+        }
+        let scalar_type = scalar.get_str_or("scalarType", "");
+        let channels = result.get_int_or("elementCount", 1);
+        if p.kind == ParamKinds.texture() && scalar_type == "float32" {
+            return WebGpuBindingLayout.Texture2DFloat;
+        }
+        if p.kind != ParamKinds.storage_texture() || ty.get_str_or("access", "") != "readWrite" {
+            return WebGpuBindingLayout.None;
+        }
+        if scalar_type == "float32" {
+            if channels == 1 {
+                return WebGpuBindingLayout.StorageR32Float;
+            } else if channels == 2 {
+                return WebGpuBindingLayout.StorageRg32Float;
+            } else if channels == 4 {
+                return WebGpuBindingLayout.StorageRgba32Float;
+            }
+        }
+        if scalar_type == "uint32" && channels == 1 {
+            return WebGpuBindingLayout.StorageR32Uint;
+        }
+        return WebGpuBindingLayout.None;
+    }
+}

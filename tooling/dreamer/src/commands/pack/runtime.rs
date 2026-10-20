@@ -69,7 +69,7 @@ mod tests {
         let destination = root.path().join("package");
         std::fs::write(
             binary.with_extension("abi.json"),
-            r#"{"native_abi_version":2,"host_capabilities":["core"]}"#,
+            r#"{"native_abi_version":3,"host_capabilities":["core"]}"#,
         )
         .unwrap();
         for capability in HostCapability::ALL {
@@ -105,7 +105,7 @@ mod tests {
         std::fs::write(
             binary.with_extension("abi.json"),
             serde_json::json!({
-                "native_abi_version": 2,
+                "native_abi_version": 3,
                 "host_capabilities": HostCapability::ALL.iter().map(|capability| capability.name()).collect::<Vec<_>>()
             }).to_string(),
         )
@@ -137,7 +137,10 @@ mod tests {
         }
         copy(&binary, &destination, &spec).unwrap();
         for companion in HostCapability::Gpu.companion_library_names(&spec) {
-            assert_eq!(std::fs::read(destination.join(companion)).unwrap(), b"companion");
+            assert_eq!(
+                std::fs::read(destination.join(companion)).unwrap(),
+                b"companion"
+            );
         }
         for capability in HostCapability::ALL {
             assert_eq!(

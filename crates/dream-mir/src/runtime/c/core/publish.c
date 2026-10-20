@@ -113,7 +113,7 @@ static void publish_edge(dream_ptr child, void *context) {
 }
 
 #ifdef DREAM_WASM32_THREADS
-__attribute__((export_name("dream_publish")))
+DREAM_WASM_EXPORT("dream_publish")
 #endif
 void dream_publish(dream_ptr ptr) {
     /* TAG_SHARED is ownership, not visitation: shared roots can contain new private children. */

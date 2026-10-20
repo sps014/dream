@@ -6,7 +6,7 @@ mod process_host;
 mod service;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dream_host_process_abi_v2() {}
+pub extern "C" fn dream_host_process_abi_v3() {}
 
 #[cfg(test)]
 mod service_tests;

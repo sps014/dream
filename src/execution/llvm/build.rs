@@ -682,6 +682,15 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<(), String> {
         let config = &self.config;
+        if req
+            .target
+            .spec()
+            .execution_environment
+            .component()
+            .is_some()
+        {
+            return super::component::link(config, ll, wasm, req);
+        }
         let tools = resolve_llvm(config)?;
         super::wasm::link_wasm(&tools, ll, wasm, opt_ll, req)
     }

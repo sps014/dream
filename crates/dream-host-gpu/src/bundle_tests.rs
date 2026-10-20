@@ -5,6 +5,7 @@ use proptest::prelude::*;
 fn param(name: &str, kind: ArgKind, binding: u32) -> Param {
     Param {
         name: name.into(),
+        webgpu_layout: 0,
         kind,
         flags: if kind == ArgKind::Value {
             0
@@ -75,7 +76,10 @@ fn round_trips_targets_entries_and_parameters() {
     assert_eq!(metal.layouts.len(), 2);
     let saxpy = metal.entry("saxpy").unwrap();
     assert_eq!(&*metal.layouts[saxpy.layout], b"saxpy layout");
-    assert_eq!(&*metal.layouts[metal.entry("copy").unwrap().layout], b"copy layout");
+    assert_eq!(
+        &*metal.layouts[metal.entry("copy").unwrap().layout],
+        b"copy layout"
+    );
     assert_eq!(saxpy.capabilities, vec!["subgroup_basic".to_string()]);
     assert!(metal.entry("copy").unwrap().capabilities.is_empty());
     assert_eq!(saxpy.stage, Stage::Compute);
@@ -98,6 +102,46 @@ fn identical_blobs_are_stored_once() {
         .filter(|w| *w == b"shared code")
         .count();
     assert_eq!(once, 1);
+}
+
+#[test]
+fn binding_layout_ids_match_the_parameter_kind() {
+    let make = |p: Param| {
+        write::bundle(&[TargetSpec {
+            name: "wgsl",
+            code_format: "wgsl",
+            layouts: vec![],
+            entries: vec![EntrySpec {
+                name: "main",
+                stage: "compute",
+                layout: 0,
+                code: b"shader",
+                thread_group_size: [1, 1, 1],
+                params: vec![p],
+                capabilities: vec![],
+            }],
+        }])
+    };
+    for (index, layout) in dream_abi::gpu_bindings::BINDING_LAYOUTS.iter().enumerate() {
+        let kind = ArgKind::from_i32(layout.kind as i32).unwrap();
+        let mut p = param("resource", kind, 0);
+        p.webgpu_layout = index as u32 + 1;
+        let parsed = parse(&make(p.clone())).unwrap();
+        assert_eq!(parsed.targets[0].entries[0].params[0], p);
+        p.kind = if kind == ArgKind::Buffer {
+            ArgKind::Sampler
+        } else {
+            ArgKind::Buffer
+        };
+        assert!(
+            parse(&make(p.clone()))
+                .unwrap_err()
+                .to_string()
+                .contains("binding layout")
+        );
+        p.webgpu_layout = u32::MAX;
+        assert!(parse(&make(p)).is_err());
+    }
 }
 
 #[test]
@@ -169,7 +213,12 @@ fn rejects_tampering_and_contract_violations() {
             capabilities: vec![],
         }],
     }]);
-    assert!(parse(&missing_layout).unwrap_err().to_string().contains("names layout 1 of 1"));
+    assert!(
+        parse(&missing_layout)
+            .unwrap_err()
+            .to_string()
+            .contains("names layout")
+    );
 }
 
 #[test]

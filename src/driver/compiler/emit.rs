@@ -144,6 +144,7 @@ impl Compiler {
                 exports: &emitted.exports,
                 export_functions: &emitted.export_functions,
                 target_triple: &self.target.spec().llvm_triple(),
+                execution_environment: self.target.spec().execution_environment,
             },
         )?;
         if !self.target.spec().capabilities.linear_memory {
@@ -191,7 +192,14 @@ impl Compiler {
         // Post-process order matters: wasm-opt first (it drops unknown custom sections), then
         // embed the ABI custom section, then read the final binary once to print `.wat` — so
         // the text always mirrors the shipped bytes.
-        if let Some(level) = self.effective_optimize() {
+        if let Some(level) = self.effective_optimize()
+            && self
+                .target
+                .spec()
+                .execution_environment
+                .component()
+                .is_none()
+        {
             llvm.ok_or_else(|| CompileError::Internal("no LLVM toolchain configured".into()))?
                 .optimize_wasm(&wasm_path, level)
                 .map_err(CompileError::Toolchain)?;
@@ -249,6 +257,8 @@ impl Compiler {
             "opt.ll",
             "s",
             "wasm",
+            "csv.wasm",
+            "compression.wasm",
             "wat",
             "bin",
             "abi.json",

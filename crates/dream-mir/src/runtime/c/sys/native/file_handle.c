@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#ifdef DREAM_COMPONENT
+#include <fcntl.h>
+#endif
 #include <stdio.h>
 #include <sys/stat.h>
 
@@ -37,6 +40,14 @@ int32_t dream_file_open(const char *text, const char *open_mode) {
         strcmp(open_mode, "r+") && strcmp(open_mode, "w+") && strcmp(open_mode, "a+")) {
         return -3;
     }
+#ifdef DREAM_COMPONENT
+    int flags = open_mode[0] == 'r' ? O_RDONLY : O_WRONLY | O_CREAT;
+    if (open_mode[0] == 'w') { flags |= O_TRUNC; }
+    if (open_mode[0] == 'a') { flags |= O_APPEND; }
+    if (open_mode[1] == '+') { flags = (flags & ~O_ACCMODE) | O_RDWR; }
+    int fd = open(text, flags, 0666);
+    return fd >= 0 ? fd : errno == ENOENT ? -1 : errno == EACCES ? -2 : -4;
+#else
     char binary_mode[4] = {open_mode[0], 'b', 0, 0};
     if (open_mode[1] == '+') { binary_mode[2] = '+'; }
 #ifdef _WIN32
@@ -61,6 +72,7 @@ int32_t dream_file_open(const char *text, const char *open_mode) {
     int32_t fd = dream_dup(dream_fileno(file));
     fclose(file);
     return fd < 0 ? -4 : fd;
+#endif
 }
 
 int32_t fileOpen(dream_ptr path, dream_ptr mode) {

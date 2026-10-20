@@ -16,6 +16,7 @@ path = "tests/backends.rs"
 harness = false
 
 [dependencies]
+dream-abi = { path = "../dream-abi" }
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }
 sha2 = "0.10"

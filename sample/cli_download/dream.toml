@@ -3,5 +3,5 @@ name = "download"
 version = "1.0.0"
 type = "bin"
 entry = "main.dream"
-targets = ["native", "node"]
+targets = ["native"]
 description = "Streaming HTTP download CLI using system.cli, system.net, and system.io"

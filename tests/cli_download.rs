@@ -11,109 +11,112 @@ fn successful(output: Output) -> String {
         .unwrap()
         .replace("\r\n", "\n")
 }
+
 #[test]
-fn download_cli_runs_on_native_and_node() {
+fn cli_parsing_is_rejected_on_web_and_node() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("main.dream");
+    std::fs::write(&source, include_str!("cases/cli_wasm_unsupported.dream")).unwrap();
+    for target in ["web", "node"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+            .arg(format!("--{target}"))
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert!(
+            !output.status.success(),
+            "CLI unexpectedly supported on {target}"
+        );
+        let diagnostic = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            diagnostic.contains(&format!("not available on compile target '{target}'"))
+                && diagnostic.contains("available on: native"),
+            "{diagnostic}",
+        );
+        assert!(!source.with_extension("wasm").exists());
+    }
+}
+#[test]
+fn download_cli_runs_on_native() {
     let server = fixture::HttpFixture::start();
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     let source = root.join("download.dream");
     std::fs::write(&source, include_str!("../sample/cli_download/main.dream")).unwrap();
     let compiler = env!("CARGO_BIN_EXE_dream");
-    for (node, output) in [
-        (false, root.join("native.bin")),
-        (true, root.join("download.wasm")),
-    ] {
-        let mut build = Command::new(compiler);
-        if node {
-            build.args(["--runtime", "--node"]);
-        }
-        successful(
-            build
-                .arg("-o")
-                .arg(output.with_extension("ll"))
-                .arg(&source)
-                .output()
-                .unwrap(),
-        );
-        let runner = root.join("run.mjs");
-        if node {
-            let runtime =
-                serde_json::to_string(&root.join("download.node.runtime.js").to_string_lossy())
-                    .unwrap();
-            let wasm = serde_json::to_string(&output.to_string_lossy()).unwrap();
-            std::fs::write(&runner, format!("import {{pathToFileURL}} from 'node:url';\nconst {{run}} = await import(pathToFileURL({runtime}));\nconst timer = setTimeout(()=>process.exit(99),20000);\nawait run({wasm}, {{leakReport:true}});\nclearTimeout(timer);\n")).unwrap();
-        }
-        let invoke = |args: &[&str]| {
-            let mut command = if node {
-                let mut command = Command::new("node");
-                command.arg(&runner);
-                command
-            } else {
-                dream::execution::native::native_command(
-                    &Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-                    &output,
-                    &output.with_extension("ll").to_string_lossy(),
-                    None,
-                )
-                .unwrap()
-            };
-            let output = command
-                .args(args)
-                .env("DREAM_LEAK_CHECK", "1")
-                .current_dir(root)
-                .output()
-                .unwrap();
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let live = stderr
-                .lines()
-                .find_map(|line| line.strip_prefix("[dream] leak check: live="))
-                .and_then(|tail| tail.split_whitespace().next());
-            assert_eq!(live, Some("0"), "CLI left live resources: {output:?}");
-            output
-        };
-        let destination = root.join(if node {
-            "node output 日本語.bin"
-        } else {
-            "native output 日本語.bin"
-        });
-        let url = format!("{}/redirect", server.url);
-        assert_eq!(
-            successful(invoke(&[&url, "-o", destination.to_str().unwrap()])),
-            ""
-        );
-        assert_eq!(std::fs::read(&destination).unwrap(), b"firstsecond");
-        let preserved = root.join("preserved.bin");
-        std::fs::write(&preserved, b"preserve existing contents").unwrap();
-        let rejected = invoke(&[
-            &format!("{}/echo", server.url),
-            "-o",
-            preserved.to_str().unwrap(),
-        ]);
-        assert_eq!(rejected.status.code(), Some(1));
-        assert_eq!(
-            std::fs::read(&preserved).unwrap(),
-            b"preserve existing contents"
-        );
-        let timeout = invoke(&[
-            &format!("{}/slow", server.url),
-            "--timeout=20",
-            "-o",
-            "timed-out.bin",
-        ]);
-        assert_eq!(timeout.status.code(), Some(1));
-        assert!(!root.join("timed-out.bin").exists());
-        let negative = invoke(&[&url, "--timeout=-1"]);
-        assert_eq!(negative.status.code(), Some(2));
-        let help = successful(invoke(&["--help"]));
-        assert!(help.contains("Usage: download"));
-        assert_eq!(successful(invoke(&["--version"])), "download 1.0.0\n");
-        let invalid = invoke(&[&url, "--timeout", "oops"]);
-        assert_eq!(invalid.status.code(), Some(2));
-        assert!(String::from_utf8_lossy(&invalid.stderr).contains("integer"));
-        let failure = invoke(&[&format!("{}/echo", server.url), "-o", "not-created.bin"]);
-        assert_eq!(failure.status.code(), Some(1));
-        assert!(!root.join("not-created.bin").exists());
-        assert!(String::from_utf8_lossy(&failure.stderr).contains("HTTP status 404"));
-    }
+    let output = root.join("native.bin");
+    successful(
+        Command::new(compiler)
+            .arg("-o")
+            .arg(output.with_extension("ll"))
+            .arg(&source)
+            .output()
+            .unwrap(),
+    );
+    let invoke = |args: &[&str]| {
+        let mut command = dream::execution::native::native_command(
+            &Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+            &output,
+            &output.with_extension("ll").to_string_lossy(),
+            None,
+        )
+        .unwrap();
+        let output = command
+            .args(args)
+            .env("DREAM_LEAK_CHECK", "1")
+            .current_dir(root)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let live = stderr
+            .lines()
+            .find_map(|line| line.strip_prefix("[dream] leak check: live="))
+            .and_then(|tail| tail.split_whitespace().next());
+        assert_eq!(live, Some("0"), "CLI left live resources: {output:?}");
+        output
+    };
+    let destination = root.join("native output 日本語.bin");
+    let url = format!("{}/redirect", server.url);
+    assert_eq!(
+        successful(invoke(&[&url, "-o", destination.to_str().unwrap()])),
+        ""
+    );
+    assert_eq!(std::fs::read(&destination).unwrap(), b"firstsecond");
+    let preserved = root.join("preserved.bin");
+    std::fs::write(&preserved, b"preserve existing contents").unwrap();
+    let rejected = invoke(&[
+        &format!("{}/echo", server.url),
+        "-o",
+        preserved.to_str().unwrap(),
+    ]);
+    assert_eq!(rejected.status.code(), Some(1));
+    assert_eq!(
+        std::fs::read(&preserved).unwrap(),
+        b"preserve existing contents"
+    );
+    let timeout = invoke(&[
+        &format!("{}/slow", server.url),
+        "--timeout=20",
+        "-o",
+        "timed-out.bin",
+    ]);
+    assert_eq!(timeout.status.code(), Some(1));
+    assert!(!root.join("timed-out.bin").exists());
+    let negative = invoke(&[&url, "--timeout=-1"]);
+    assert_eq!(negative.status.code(), Some(2));
+    let help = successful(invoke(&["--help"]));
+    assert!(help.contains("Usage: download"));
+    assert_eq!(successful(invoke(&["--version"])), "download 1.0.0\n");
+    let invalid = invoke(&[&url, "--timeout", "oops"]);
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("integer"));
+    let failure = invoke(&[&format!("{}/echo", server.url), "-o", "not-created.bin"]);
+    assert_eq!(failure.status.code(), Some(1));
+    assert!(!root.join("not-created.bin").exists());
+    assert!(String::from_utf8_lossy(&failure.stderr).contains("HTTP status 404"));
     assert!(server.accepted.load(Ordering::Relaxed) > 0);
 }

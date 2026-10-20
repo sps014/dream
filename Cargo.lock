@@ -1117,7 +1117,7 @@ dependencies = [
 name = "dream-host-abi"
 version = "0.1.0"
 dependencies = [
- "dream-mir",
+ "dream-abi",
 ]
 
 [[package]]
@@ -1163,6 +1163,7 @@ name = "dream-host-data"
 version = "0.1.0"
 dependencies = [
  "csv",
+ "dream-abi",
  "dream-host-abi",
  "dream-host-core",
  "flate2",
@@ -1175,6 +1176,7 @@ name = "dream-host-gpu"
 version = "0.1.0"
 dependencies = [
  "cmake",
+ "dream-abi",
  "dream-host-abi",
  "dream-host-core",
  "dream-host-window",

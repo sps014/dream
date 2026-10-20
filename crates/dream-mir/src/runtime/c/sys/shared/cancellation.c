@@ -47,7 +47,7 @@ static void wake(Registration *r, int32_t done) {
     r->done = done;
 #endif
     if (!r->future) { return; }
-#ifdef DREAM_WASM32
+#if defined(DREAM_WASM32) && !defined(DREAM_COMPONENT)
     cancellation_notify((uintptr_t)r);
 #else
     dream_event_complete(r->future);
@@ -149,7 +149,7 @@ dream_ptr dream_cancellation_signal(uintptr_t handle) {
 #endif
     } else {
         r->future = future;
-#ifdef DREAM_WASM32
+#if defined(DREAM_WASM32) && !defined(DREAM_COMPONENT)
         /* Subscribe before releasing the lock: cancellation cannot race JS registration. */
         cancellation_subscribe(future, handle);
 #endif

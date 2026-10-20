@@ -1,4 +1,5 @@
 import { TAGS, HEAP_HEADER_SIZE } from "./abi.js";
+import { HAS_JS_HANDLES } from "./features.js";
 export { TAGS, HEAP_HEADER_SIZE };
 
 export function elementSize(typeName) {
@@ -30,7 +31,7 @@ export function jsToWasm(inst, t, value) {
   const base = stripSuffix(t);
   if (base === "string") return inst.writeString(value == null ? "" : String(value));
   if (base === "bool") return value ? 1 : 0;
-  if (base === "js") return inst.registerHandle(value);
+  if (HAS_JS_HANDLES && base === "js") return inst.registerHandle(value);
   if (base === "void") return 0;
   if (base === "long" || base === "ulong") return BigInt(value == null ? 0 : value);
   return value == null ? 0 : value;
@@ -40,7 +41,7 @@ export function wasmToJs(inst, t, raw) {
   const base = stripSuffix(t);
   if (base === "string") return inst.readString(raw);
   if (base === "bool") return raw !== 0;
-  if (base === "js") return inst.derefHandle(raw);
+  if (HAS_JS_HANDLES && base === "js") return inst.derefHandle(raw);
   if (base === "void") return undefined;
   return raw;
 }

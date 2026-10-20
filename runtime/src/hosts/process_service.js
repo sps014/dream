@@ -136,13 +136,14 @@ export function makeProcessHost() {
   return {
     processStart: (request, bytes) => {
       if (processOperations.size >= 4096 || nextProcessServiceId >= 2147483647) return 0;
+      const input = Uint8Array.from(bytes || []);
       const id = nextProcessServiceId++;
       const op = { controller: new AbortController(), result: null, released: false, waiters: [], claimed: false };
       processOperations.set(id, op);
       Promise.resolve().then(() => {
         if (!isNode) throw processFailure("EUNSUPPORTED", "processes are unavailable in the browser");
         let parsed; try { parsed = JSON.parse(request); } catch (_) { throw processFailure("EINVAL", "invalid process request"); }
-        return processExecute(parsed, bytes, op);
+        return processExecute(parsed, input, op);
       }).then(result => {
         if (op.released) { if (result.child) processStop(result.child).catch(() => {}); return; }
         op.result = result;

@@ -40,6 +40,26 @@ extern "C" fn complete(future: *mut u8, result: u64) {
         .unwrap();
 }
 
+unsafe extern "C" fn guest_data(reference: *mut u8, kind: u32) -> *mut u8 {
+    if reference.is_null() {
+        return reference;
+    }
+    unsafe { reference.add(if kind == 1 { 8 } else { 4 }) }
+}
+unsafe extern "C" fn guest_length(reference: *mut u8) -> u32 {
+    if reference.is_null() {
+        return 0;
+    }
+    unsafe { reference.cast::<u32>().read_unaligned() }
+}
+unsafe extern "C" fn guest_status(_: *mut u8) -> i32 {
+    0
+}
+unsafe extern "C" fn guest_truncate(_: *mut u8, _: u32) -> u32 {
+    0
+}
+unsafe extern "C" fn guest_pin(_: *mut u8) {}
+
 #[test]
 fn capabilities_share_core_binding_and_allocation() {
     let directory = std::env::current_exe()
@@ -67,13 +87,23 @@ fn capabilities_share_core_binding_and_allocation() {
             let marker: Symbol<unsafe extern "C" fn()> = library.get(marker.as_bytes()).unwrap();
             marker();
         }
-        type Bind = unsafe extern "C" fn(
-            unsafe extern "C" fn(i32) -> *mut u8,
-            unsafe extern "C" fn(i32, i32) -> *mut u8,
-            extern "C" fn(*mut u8, u64),
-        );
-        let bind: Symbol<Bind> = libraries[0].get(b"dream_host_bind_v2").unwrap();
-        bind(string_alloc, array_new, complete);
+        use dream_abi::guest_contract::{GUEST_ABI_VERSION, GuestContext};
+        type Bind = unsafe extern "C" fn(*const GuestContext) -> u32;
+        let bind: Symbol<Bind> = libraries[0].get(b"dream_host_bind_v3").unwrap();
+        let context = GuestContext {
+            version: GUEST_ABI_VERSION,
+            size: std::mem::size_of::<GuestContext>() as u32,
+            string_alloc: Some(string_alloc),
+            array_new: Some(array_new),
+            data: Some(guest_data),
+            length: Some(guest_length),
+            complete: Some(complete),
+            truncate: Some(guest_truncate),
+            status: Some(guest_status),
+            retain: Some(guest_pin),
+            release: Some(guest_pin),
+        };
+        assert_eq!(bind(&context), 0);
 
         let unicode: Symbol<unsafe extern "C" fn(*mut u8) -> *mut u8> =
             libraries[1].get(b"unicodeToLower").unwrap();

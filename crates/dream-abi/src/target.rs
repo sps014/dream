@@ -3,6 +3,24 @@
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExecutionEnvironment {
+    Native,
+    Browser,
+    WasiP2,
+    WasiP3,
+}
+
+impl ExecutionEnvironment {
+    pub fn component(self) -> Option<&'static str> {
+        match self {
+            Self::WasiP2 => Some("wasip2"),
+            Self::WasiP3 => Some("wasip3"),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TargetCapabilities {
     pub linear_memory: bool,
     pub native_entry: bool,
@@ -50,6 +68,7 @@ impl std::str::FromStr for OsVersion {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetSpec {
+    pub execution_environment: ExecutionEnvironment,
     pub triple: Triple,
     pub ptr_size: u32,
     pub ptr_align: u32,
@@ -61,6 +80,21 @@ pub struct TargetSpec {
 
 impl TargetSpec {
     pub fn parse(triple: &str) -> Result<Self, String> {
+        // Components share a core-module machine ABI; their WASI version belongs to the
+        // execution environment, independently of LLVM's core-module target triple.
+        if let Some(environment) = match triple {
+            "wasm32-wasip2" => Some(ExecutionEnvironment::WasiP2),
+            "wasm32-wasip3" => Some(ExecutionEnvironment::WasiP3),
+            _ => None,
+        } {
+            let mut spec = Self::parse("wasm32-unknown-unknown")?;
+            spec.execution_environment = environment;
+            spec.capabilities.js_interop = false;
+            return Ok(spec);
+        }
+        if triple.contains("wasi") {
+            return Err("select wasm32-wasip2 or wasm32-wasip3 for standalone WASI; browser output uses --wasm".into());
+        }
         let normalized = triple.replace("-simulator", "-sim");
         let (normalized, ios_version) =
             if let Some((prefix, suffix)) = normalized.split_once("-ios") {
@@ -132,6 +166,11 @@ impl TargetSpec {
             _ => None,
         };
         let spec = Self {
+            execution_environment: if linear_memory {
+                ExecutionEnvironment::Browser
+            } else {
+                ExecutionEnvironment::Native
+            },
             ptr_size,
             ptr_align: ptr_size,
             os: triple.operating_system,
@@ -159,7 +198,7 @@ impl TargetSpec {
     }
 
     pub fn wasm32() -> Self {
-        Self::parse("wasm32-unknown-wasip1").expect("built-in wasm32 target must be valid")
+        Self::parse("wasm32-unknown-unknown").expect("built-in wasm32 target must be valid")
     }
 
     pub fn is_ios(&self) -> bool {
@@ -319,7 +358,7 @@ mod tests {
             "x86_64-apple-darwin",
             "aarch64-unknown-linux-gnu",
             "aarch64-pc-windows-msvc",
-            "wasm32-unknown-wasip1",
+            "wasm32-unknown-unknown",
         ] {
             assert!(
                 !TargetSpec::parse(other)

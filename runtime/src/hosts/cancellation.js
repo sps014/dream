@@ -1,4 +1,4 @@
-import { wrapAsyncImport } from "../marshal.js";
+import { wrapAsyncImport } from "../async.js";
 
 export function makeCancellationHost(getInstance) {
   const waiters = new Map();

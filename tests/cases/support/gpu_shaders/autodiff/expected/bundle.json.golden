@@ -15,11 +15,11 @@
           "code": {"offset": 0, "size": 3190, "sha256": "1474ab964579404d139905fd34a400b58507b791edb7550a50eb7fe5f2be1908"},
           "thread_group_size": [64, 1, 1],
           "params": [
-            {"name": "inputs", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0},
-            {"name": "targets", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0},
-            {"name": "weights", "kind": 1, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 0},
-            {"name": "gradients", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0},
-            {"name": "n", "kind": 6, "flags": 0, "space": 0, "binding": 4, "offset": 0, "size": 4}
+            {"name": "inputs", "kind": 1, "flags": 1, "space": 0, "binding": 0, "offset": 0, "size": 0, "webgpu_layout": 2},
+            {"name": "targets", "kind": 1, "flags": 1, "space": 0, "binding": 1, "offset": 0, "size": 0, "webgpu_layout": 2},
+            {"name": "weights", "kind": 1, "flags": 0, "space": 0, "binding": 2, "offset": 0, "size": 0, "webgpu_layout": 3},
+            {"name": "gradients", "kind": 1, "flags": 2, "space": 0, "binding": 3, "offset": 0, "size": 0, "webgpu_layout": 3},
+            {"name": "n", "kind": 6, "flags": 0, "space": 0, "binding": 4, "offset": 0, "size": 4, "webgpu_layout": 1}
           ],
           "capabilities": []
         }

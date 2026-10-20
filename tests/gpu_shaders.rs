@@ -165,6 +165,77 @@ fn cooperative_vectors_and_matrices_golden() {
     golden("neural", true);
 }
 
+#[test]
+#[ignore = "needs the pinned slang toolchain"]
+fn webgpu_storage_layouts_match_slang() {
+    let dir = project(
+        r#"module shaders;
+import system.gpu;
+
+@compute(1)
+public fun fill(
+    rgba: GpuStorageTexture<GpuVec4>,
+    rg: GpuStorageTexture<GpuVec2>,
+    r: GpuStorageTexture<float>,
+    u: GpuStorageTexture<uint>,
+    source: GpuBuffer<float>
+): void {
+    let at = GpuIVec2(0, 0);
+    let value = source[0];
+    rgba[at] = GpuVec4(value);
+    rg[at] = GpuVec2(value);
+    r[at] = value;
+    u[at] = 1u;
+}
+"#,
+        MAIN,
+    );
+    let output = build(dir.path(), false);
+    assert!(output.status.success(), "{}", log(&output));
+    let out = generated(dir.path());
+    let view: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(out.join("shaders.bundle.json")).unwrap()).unwrap();
+    let entry = &view["targets"][0]["entries"][0];
+    let binary = std::fs::read(out.join("shaders.bundle")).unwrap();
+    let data_start = u32::from_le_bytes(binary[8..12].try_into().unwrap()) as usize;
+    let code_start = data_start + entry["code"]["offset"].as_u64().unwrap() as usize;
+    let code_end = code_start + entry["code"]["size"].as_u64().unwrap() as usize;
+    let code = std::str::from_utf8(&binary[code_start..code_end]).unwrap();
+    for (i, format) in ["rgba32float", "rg32float", "r32float", "r32uint"]
+        .iter()
+        .enumerate()
+    {
+        let layout: serde_json::Value = serde_json::from_str(
+            dream_abi::gpu_bindings::binding_layout(
+                entry["params"][i]["webgpu_layout"].as_u64().unwrap() as u32,
+            )
+            .unwrap()
+            .descriptor,
+        )
+        .unwrap();
+        assert_eq!(
+            layout,
+            serde_json::json!({"storageTexture": {
+                "format": format, "access": "read-write", "viewDimension": "2d"
+            }})
+        );
+        assert!(
+            code.contains(&format!("texture_storage_2d<{format}, read_write>")),
+            "{code}"
+        );
+    }
+    let buffer: serde_json::Value = serde_json::from_str(
+        dream_abi::gpu_bindings::binding_layout(
+            entry["params"][4]["webgpu_layout"].as_u64().unwrap() as u32,
+        )
+        .unwrap()
+        .descriptor,
+    )
+    .unwrap();
+    assert_eq!(buffer, serde_json::json!({"buffer": {"type": "storage"}}));
+    assert!(code.contains("var<storage, read_write>"));
+}
+
 /// A web build with two shader modules: both bundles go through the browser host
 /// (`scripts/test-gpu-host.mjs` with a fake `navigator.gpu`), which checks entry names, bind
 /// group layouts and uniform offsets against the WGSL, and the selective runtime carries the

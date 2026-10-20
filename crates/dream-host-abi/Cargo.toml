@@ -4,4 +4,4 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-dream-mir = { path = "../dream-mir" }
+dream-abi = { path = "../dream-abi" }

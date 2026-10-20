@@ -129,6 +129,8 @@ pub const CORE_C: &[&str] = &[
     "inlines.c",
     "memory.c",
     "utf8.c",
+    "gpu_bundle.c",
+    "capability.c",
 ];
 const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c"];
 const SHARED_SYS_C: &[&str] = &[
@@ -138,6 +140,7 @@ const SHARED_SYS_C: &[&str] = &[
     "channel.c",
 ];
 const NATIVE_SYS_C: &[&str] = &[
+    "capability.c",
     "platform.c",
     "heap_debug.c",
     "leak_report.c",
@@ -171,6 +174,43 @@ const WASI_SYS_C: &[&str] = &[
     "interns.c",
     "platform.c",
 ];
+
+/// Component hosts use standard WASI libc services and never the browser's libc adapters.
+pub fn component_runtime_c_files(root: &Path) -> Vec<PathBuf> {
+    CORE_C
+        .iter()
+        .map(|name| root.join("core").join(name))
+        .chain(
+            WASI_SYS_C
+                .iter()
+                .filter(|name| **name != "interop_libc.c")
+                .map(|name| root.join("sys/wasi").join(name)),
+        )
+        .chain(
+            SHARED_SYS_C
+                .iter()
+                .map(|name| root.join("sys/shared").join(name)),
+        )
+        .chain(
+            [
+                "host_support.c",
+                "stdio.c",
+                "fs.c",
+                "dirs.c",
+                "env.c",
+                "file_handle.c",
+                "math.c",
+            ]
+            .into_iter()
+            .map(|name| root.join("sys/native").join(name)),
+        )
+        .chain(
+            ["services.c", "file_operation.c"]
+                .into_iter()
+                .map(|name| root.join("sys/wasi/component").join(name)),
+        )
+        .collect()
+}
 
 /// Guest units that define libc symbols (`memcpy`, `malloc`, …). Only these build with
 /// `-fno-builtin`, which keeps clang from folding their bodies back into calls to themselves;

@@ -1,0 +1,11 @@
+import system;
+import system.net;
+
+async fun main(): void {
+    let client = HttpClient();
+    let request = HttpRequest(HttpMethod.Get, Url.parse("https://example.invalid/data").unwrap());
+    let response = client.send(request).await.unwrap();
+    System.println(response.read_text().await.unwrap());
+    response.close();
+    client.close();
+}

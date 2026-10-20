@@ -1,4 +1,5 @@
 import { TAGS, elementSize, stripSuffix, parseFunType, jsToWasm, wasmToJs } from "./core.js";
+import { HAS_ASYNC_MAIN, HAS_ASYNC_IMPORTS, HAS_JS_HANDLES, HAS_CALLBACKS, HAS_WORKERS } from "./features.js";
 
 const WORKER_STACK_BYTES = 65536;
 
@@ -11,19 +12,23 @@ export class DreamInstance {
     // as a small i32 id; the host keeps the real JS value here with a Dream-owned refcount.
     // Id 0 is reserved for null. `registerHandle` / `retainValue` / `releaseValue` keep the count
     // in sync with MIR `Retain`/`Release` so the entry is dropped when the last owner releases.
-    this._jsHandles = new Map(); // id -> { value, count }
-    this._jsIds = new Map(); // JS value -> id (identity for objects, value for primitives)
-    this._jsNextId = 1;
-    this._jsFreeIds = [];
+    if (HAS_JS_HANDLES) {
+      this._jsHandles = new Map(); // id -> { value, count }
+      this._jsIds = new Map(); // JS value -> id (identity for objects, value for primitives)
+      this._jsNextId = 1;
+      this._jsFreeIds = [];
+    }
     // Cache of JS callables wrapping Dream funcrefs, keyed by `${index}|${typeStr}`. Funcrefs are
     // captureless table indices, so index identity == function identity: returning the *same* JS
     // callable for the same funcref lets `addEventListener`/`removeEventListener` pair correctly.
-    this._callbackWrappers = new Map();
+    if (HAS_CALLBACKS) this._callbackWrappers = new Map();
     // Unsettled `extern async` host calls; a worker that still has one cannot be reused.
-    this._hostPending = 0;
-    this._hostSettlements = new Set();
-    this._hostCancellations = new Map();
-    this._hostCompletions = new Map();
+    if (HAS_ASYNC_IMPORTS || HAS_WORKERS) {
+      this._hostPending = 0;
+      this._hostSettlements = new Set();
+      this._hostCancellations = new Map();
+      this._hostCompletions = new Map();
+    }
     this._drainWorkers = async () => {};
     this.workerStack = 0;
   }
@@ -443,17 +448,21 @@ export class DreamInstance {
    */
   __awaitFuture(r) {
     const F_STATUS = 4; // mirrors src/mir/async_emit.rs
+    if (this._hostError) return Promise.reject(this._hostError);
     if (!r || this.i32(r + F_STATUS) !== 0) return Promise.resolve();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       // `setTimeout`, not `queueMicrotask`: a real pending host op (e.g. `fetch`) settles via a
       // macrotask-queued I/O callback, which a tight microtask-only poll loop would starve (the
       // microtask queue must fully drain before the next macrotask runs), hanging forever.
       const poll = () => {
-        if (typeof this.exports.__dream_run_loop === "function") {
-          this.exports.__dream_run_loop();
-        }
-        if (this.i32(r + F_STATUS) !== 0) resolve();
-        else setTimeout(poll, 0);
+        if (this._hostError) { reject(this._hostError); return; }
+        try {
+          if (typeof this.exports.__dream_run_loop === "function") {
+            this.exports.__dream_run_loop();
+          }
+          if (this.i32(r + F_STATUS) !== 0) resolve();
+          else setTimeout(poll, 0);
+        } catch (error) { reject(error); }
       };
       poll();
     });
@@ -485,7 +494,7 @@ export class DreamInstance {
     const r = this.exports.main();
     const after = async (fut) => {
       const code = this.__mainStatus(fut);
-      if (this.__isFutureFrame(r) && typeof this.exports.free === "function") {
+      if (HAS_ASYNC_MAIN && this.__isFutureFrame(r) && typeof this.exports.free === "function") {
         this.exports.free(r);
       }
       await this._drainWorkers();
@@ -493,7 +502,7 @@ export class DreamInstance {
       this.exitCode = code;
       return code;
     };
-    if (!r || !this.__isFutureFrame(r)) {
+    if (!HAS_ASYNC_MAIN || !r || !this.__isFutureFrame(r)) {
       return Promise.resolve(after(0));
     }
     return this.__awaitFuture(r).then(() => after(r));

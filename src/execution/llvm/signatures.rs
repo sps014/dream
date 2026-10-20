@@ -99,6 +99,9 @@ pub(super) fn load(
                 },
             );
             command.arg("-DDREAM_ALWAYS_INLINE=__attribute__((always_inline))");
+            if spec.execution_environment.component().is_some() {
+                command.arg("-DDREAM_COMPONENT");
+            }
             command
         };
         let check = |source: &Path| {

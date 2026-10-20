@@ -5,8 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef DREAM_COMPONENT
+#define EXPORT(name)
+#define IMPORT(name)
+#else
 #define EXPORT(name) __attribute__((export_name(name)))
 #define IMPORT(name) __attribute__((import_module("env"), import_name(name)))
+#endif
 
 extern int32_t free_list_head;
 extern int64_t live_objects;

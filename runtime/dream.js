@@ -3091,7 +3091,7 @@ function requestLock(state) {
     const request = state.canvas.requestPointerLock?.();
     request?.catch?.(() => {});
   } catch (_) {
-    // Browsers refuse the lock outside a user gesture; the next pointerdown retries.
+    // Browsers refuse the lock outside a user gesture; the next mouse press retries.
   }
 }
 
@@ -3185,7 +3185,8 @@ function attach(canvas, owns) {
     if (e.data) push(state, TEXT, [], e.data);
   });
   listen(canvas, "pointermove", e => pointerPosition(state, e));
-  listen(canvas, "pointerdown", e => {
+  // Mouse events report each chorded button; pointerdown/up only bracket the whole chord.
+  listen(canvas, "mousedown", e => {
     canvas.focus?.();
     if (state.cursorMode === CURSOR_CAPTURED && !locked(state)) requestLock(state);
     const button = MOUSE_BUTTONS[e.button];
@@ -3193,7 +3194,7 @@ function attach(canvas, owns) {
     state.buttons.add(button);
     push(state, MOUSE_DOWN, [button]);
   });
-  listen(canvas, "pointerup", e => {
+  listen(canvas, "mouseup", e => {
     const button = MOUSE_BUTTONS[e.button];
     if (button === undefined) return;
     state.buttons.delete(button);

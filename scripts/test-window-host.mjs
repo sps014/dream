@@ -118,9 +118,9 @@ test('pointer, wheel and Pointer Lock use logical coordinates', () => {
     const host = makeWindowHost();
     const id = host.windowCanvas('game', 5);
     fire(page, 'pointermove', { clientX: 110, clientY: 70 });
-    fire(page, 'pointerdown', { button: 2 });
-    fire(page, 'pointerup', { button: 2 });
-    fire(page, 'pointerdown', { button: 9 });
+    fire(page, 'mousedown', { button: 2 });
+    fire(page, 'mouseup', { button: 2 });
+    fire(page, 'mousedown', { button: 9 });
     const wheel = fire(page, 'wheel', { deltaX: 0, deltaY: 200, deltaMode: 0 });
     assert.equal(wheel.defaultPrevented, true);
     fire(page, 'wheel', { deltaX: 3, deltaY: 0, deltaMode: 1 });
@@ -138,6 +138,29 @@ test('pointer, wheel and Pointer Lock use logical coordinates', () => {
   } finally { uninstallDom(); }
 });
 
+test('aim and fire buttons are independent throughout either release order', () => {
+  const page = installDom();
+  try {
+    const host = makeWindowHost();
+    const id = host.windowCanvas('game', 5);
+    page.focus();
+    host.windowPoll(id);
+    for (const release of [[0, 2], [2, 0]]) {
+      fire(page, 'pointerdown', { button: 2, buttons: 2 });
+      fire(page, 'mousedown', { button: 2, buttons: 2 });
+      fire(page, 'mousedown', { button: 0, buttons: 3 });
+      fire(page, 'mouseup', { button: release[0], buttons: release[1] === 2 ? 2 : 1 });
+      fire(page, 'pointerup', { button: release[1], buttons: 0 });
+      fire(page, 'mouseup', { button: release[1], buttons: 0 });
+      assert.deepEqual(records(host.windowPoll(id)), [
+        [10, 1], [10, 0], [11, release[0] === 2 ? 1 : 0], [11, release[1] === 2 ? 1 : 0],
+      ]);
+    }
+    fire(page, 'blur');
+    assert.deepEqual(records(host.windowPoll(id)), [[4]], 'neither button remains held');
+  } finally { uninstallDom(); }
+});
+
 test('blur releases held input before reporting Unfocused', () => {
   const page = installDom();
   try {
@@ -145,7 +168,7 @@ test('blur releases held input before reporting Unfocused', () => {
     const id = host.windowCanvas('game', 5);
     page.focus();
     fire(page, 'keydown', { code: 'KeyW', key: 'w' });
-    fire(page, 'pointerdown', { button: 0 });
+    fire(page, 'mousedown', { button: 0 });
     host.windowPoll(id);
     fire(page, 'blur');
     assert.deepEqual(records(host.windowPoll(id)), [[7, 23, 0, 0], [11, 0], [4]]);

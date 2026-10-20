@@ -1,6 +1,7 @@
 //! Resolve the system C compiler driver that links native binaries: env, `dreamer toolchain` Zig,
 //! then PATH, and when none exists, install the Zig toolchain once (`DREAM_NO_AUTO_INSTALL=1`
-//! opts out).
+//! opts out). A MinGW or MSYS `cc` is skipped when `clang` is on PATH: Windows host objects are
+//! MSVC COFF, and that `cc` links with `ld` instead of `link.exe`.
 
 use crate::driver::toolchain::ToolchainConfig;
 use dream_abi::target::TargetSpec;
@@ -64,9 +65,7 @@ pub fn resolve_existing_target_cc(
         return Ok(Cc::Zig(p));
     }
     if spec.can_link_on_host()
-        && let Some(p) = config
-            .find_on_path("cc")
-            .or_else(|| config.find_on_path("clang"))
+        && let Some(p) = path_cc(config)
     {
         return Ok(Cc::Program(p));
     }
@@ -90,10 +89,7 @@ fn resolve_uncached(config: &ToolchainConfig) -> Result<Cc, String> {
     if let Some(zig) = pinned_zig(config) {
         return Ok(Cc::Zig(zig));
     }
-    if let Some(p) = config.find_on_path("cc") {
-        return Ok(Cc::Program(p));
-    }
-    if let Some(p) = config.find_on_path("clang") {
+    if let Some(p) = path_cc(config) {
         return Ok(Cc::Program(p));
     }
     auto_install_zig(config).map(Cc::Zig)
@@ -136,13 +132,35 @@ fn auto_install_zig(config: &ToolchainConfig) -> Result<PathBuf, String> {
 }
 
 /// A C compiler driver that links with the platform's own linker, for binaries the Zig toolchain
-/// cannot link: `DREAM_CC`/`CC` unless they name zig, then `cc`/`clang` on PATH.
+/// cannot link: `DREAM_CC`/`CC` unless they name zig, then `cc`/`clang` on PATH. MinGW `cc` is
+/// skipped when `clang` is present.
 pub fn resolve_system_cc(config: &ToolchainConfig) -> Option<PathBuf> {
     config
         .program(config.cc.as_ref())
         .filter(|p| matches!(classify_program(p.clone()), Cc::Program(_)))
-        .or_else(|| config.find_on_path("cc"))
-        .or_else(|| config.find_on_path("clang"))
+        .or_else(|| path_cc(config))
+}
+
+/// `cc` on PATH, else `clang`. MinGW and MSYS `cc` lose to `clang` because they cannot link
+/// MSVC host objects (`ld` does not search the Windows SDK for `oldnames.lib`).
+fn path_cc(config: &ToolchainConfig) -> Option<PathBuf> {
+    prefer_clang_over_gnu_cc(config.find_on_path("cc"), config.find_on_path("clang"))
+}
+
+fn prefer_clang_over_gnu_cc(cc: Option<PathBuf>, clang: Option<PathBuf>) -> Option<PathBuf> {
+    match cc {
+        Some(path) if gnu_windows_driver(&path) => clang.or(Some(path)),
+        Some(path) => Some(path),
+        None => clang,
+    }
+}
+
+fn gnu_windows_driver(path: &Path) -> bool {
+    let text = path
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .replace('/', "\\");
+    text.contains("mingw") || text.contains("msys") || text.contains("\\git\\usr\\bin\\")
 }
 
 fn classify_program(p: PathBuf) -> Cc {
@@ -185,5 +203,28 @@ mod tests {
             Cc::Program(p) => assert_eq!(p, PathBuf::from("/usr/bin/cc")),
             Cc::Zig(_) => panic!("expected cc"),
         }
+    }
+
+    #[test]
+    fn mingw_cc_loses_to_clang() {
+        let mingw = PathBuf::from("C:/mingw64/bin/cc.exe");
+        let clang = PathBuf::from("C:/Program Files/LLVM/bin/clang.exe");
+        assert_eq!(
+            prefer_clang_over_gnu_cc(Some(mingw.clone()), Some(clang.clone())),
+            Some(clang.clone())
+        );
+        assert_eq!(
+            prefer_clang_over_gnu_cc(Some(mingw.clone()), None),
+            Some(mingw)
+        );
+        let system = PathBuf::from("/usr/bin/cc");
+        assert_eq!(
+            prefer_clang_over_gnu_cc(Some(system.clone()), Some(clang.clone())),
+            Some(system)
+        );
+        assert!(gnu_windows_driver(&PathBuf::from(
+            "C:/Program Files/Git/usr/bin/cc.exe"
+        )));
+        assert!(!gnu_windows_driver(&PathBuf::from("/usr/bin/cc")));
     }
 }

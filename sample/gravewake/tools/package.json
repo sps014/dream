@@ -1,6 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "scripts": { "pack": "node pack.mjs" },
-  "dependencies": { "three": "0.180.0", "three-mesh-bvh": "0.9.2" }
-}

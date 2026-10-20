@@ -1,8 +1,0 @@
-[package]
-name = "gravewake"
-version = "0.1.0"
-type = "bin"
-entry = "main.dream"
-assets = ["assets/packed", "assets/CREDITS.md"]
-targets = ["native", "web"]
-description = "An original procedural low-poly zombie wave shooter with optional RT"

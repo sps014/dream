@@ -1,5 +1,0 @@
-assets/source/
-assets/intermediate/
-target/
-__pycache__/
-!assets/packed/*.bin

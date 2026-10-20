@@ -1,5 +1,0 @@
-import src.app;
-
-async fun main(): void {
-    run_game().await;
-}

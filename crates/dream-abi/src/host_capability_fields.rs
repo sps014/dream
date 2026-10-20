@@ -6,6 +6,8 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
     match capability {
         HostCapability::Core => &[],
         HostCapability::Audio => &[
+            "audioMediaCreate",
+            "audioMediaSeek",
             "audioOutputStart",
             "audioOutputRequest",
             "audioOutputCreate",

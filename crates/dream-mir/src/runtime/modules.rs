@@ -110,6 +110,8 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "dream_audio_stream_finish",
             "dream_audio_stream_read",
             "dream_audio_stream_duration",
+            "dream_audio_stream_seek_offset",
+            "dream_audio_stream_reposition",
             "dream_audio_stream_close",
         ],
         intrinsic_keys: &[
@@ -120,6 +122,8 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "dream_audio_stream_finish",
             "dream_audio_stream_read",
             "dream_audio_stream_duration",
+            "dream_audio_stream_seek_offset",
+            "dream_audio_stream_reposition",
             "dream_audio_stream_close",
         ],
     },

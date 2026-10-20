@@ -38,6 +38,16 @@ static PLAYERS: Mutex<Players> = Mutex::new(Players {
 #[unsafe(no_mangle)]
 pub extern "C" fn dream_host_audio_abi_v3() {}
 
+#[unsafe(no_mangle)]
+pub extern "C" fn audioMediaCreate(_src: DreamPtr) -> i32 {
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn audioMediaSeek(_handle: i32, _time: f64) -> i32 {
+    -1
+}
+
 /// # Safety
 /// `samples` is a retained guest float array for the duration of this call.
 #[unsafe(no_mangle)]

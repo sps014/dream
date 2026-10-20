@@ -405,6 +405,36 @@ double dream_audio_stream_duration(uintptr_t handle) {
     return s ? s->duration : -1.0;
 }
 
+/* dr_wav supplies the validated data chunk and frame alignment. Compressed WAV
+ * needs codec checkpoints; accepting only independently decodable frames avoids
+ * a seek that appears successful but reconstructs the wrong predictor state. */
+int64_t dream_audio_stream_seek_offset(uintptr_t handle, int64_t frame) {
+    audio_stream *s = (audio_stream *)handle;
+    if (!s || !s->wav || frame < 0 || (uint64_t)frame > s->wav->totalPCMFrameCount ||
+        (s->wav->translatedFormatTag != DR_WAVE_FORMAT_PCM &&
+         s->wav->translatedFormatTag != DR_WAVE_FORMAT_IEEE_FLOAT) ||
+        !s->wav->fmt.blockAlign || s->wav->dataChunkDataPos > INT64_MAX ||
+        (uint64_t)frame > (INT64_MAX - s->wav->dataChunkDataPos) / s->wav->fmt.blockAlign) return -1;
+    uint64_t offset = s->wav->dataChunkDataPos + (uint64_t)frame * s->wav->fmt.blockAlign;
+    if (offset > INT64_MAX) return -1;
+    return (int64_t)offset;
+}
+
+int32_t dream_audio_stream_reposition(uintptr_t handle, int64_t frame) {
+    audio_stream *s = (audio_stream *)handle;
+    int64_t offset = dream_audio_stream_seek_offset(handle, frame);
+    if (offset < 0) return 0;
+    s->base = s->cursor = (uint64_t)offset;
+    s->length = 0;
+    s->eof = s->starved = 0;
+    s->status = STATUS_DATA;
+    s->pending_count = s->pending_offset = 0;
+    s->wav->readCursorInPCMFrames = (uint64_t)frame;
+    s->wav->bytesRemaining = s->wav->dataChunkDataSize -
+        (uint64_t)frame * s->wav->fmt.blockAlign;
+    return 1;
+}
+
 void dream_audio_stream_close(uintptr_t handle) {
     audio_stream *s = (audio_stream *)handle;
     if (!s) return;

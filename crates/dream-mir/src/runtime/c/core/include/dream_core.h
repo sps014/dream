@@ -1317,6 +1317,8 @@ int32_t dream_audio_stream_push(uintptr_t handle, dream_ptr source);
 void dream_audio_stream_finish(uintptr_t handle);
 dream_ptr dream_audio_stream_read(uintptr_t handle, int32_t max_frames);
 double dream_audio_stream_duration(uintptr_t handle);
+int64_t dream_audio_stream_seek_offset(uintptr_t handle, int64_t frame);
+int32_t dream_audio_stream_reposition(uintptr_t handle, int64_t frame);
 void dream_audio_stream_close(uintptr_t handle);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
 uint32_t dream_guest_abi_version(void);

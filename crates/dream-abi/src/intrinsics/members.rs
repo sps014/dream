@@ -7,6 +7,14 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("DreamAudioStreamFinish", "dream_audio_stream_finish"),
     ("DreamAudioStreamRead", "dream_audio_stream_read"),
     ("DreamAudioStreamDuration", "dream_audio_stream_duration"),
+    (
+        "DreamAudioStreamSeekOffset",
+        "dream_audio_stream_seek_offset",
+    ),
+    (
+        "DreamAudioStreamReposition",
+        "dream_audio_stream_reposition",
+    ),
     ("DreamAudioStreamClose", "dream_audio_stream_close"),
     ("DreamAudioFft", "dream_audio_fft"),
     ("ConsoleRead", "dream_console_read"),

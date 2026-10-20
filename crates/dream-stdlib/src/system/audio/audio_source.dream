@@ -28,6 +28,15 @@ internal static class AudioSource {
         compressed_limit: int
     ): fun(CancellationToken): Future<Result<AudioFeed, AudioError>> {
         return async (token: CancellationToken) => {
+            if path.starts_with("http://") || path.starts_with("https://") {
+                let browser = AudioMedia.open(path, token).await;
+                if browser.is_err() {
+                    return Result.Err(browser.unwrap_err());
+                }
+                if browser.unwrap().is_some() {
+                    return Result.Ok(browser.unwrap().unwrap());
+                }
+            }
             let opened = AudioStreamCursor.open(path, compressed_limit, token).await;
             if opened.is_err() {
                 return Result.Err(opened.unwrap_err());

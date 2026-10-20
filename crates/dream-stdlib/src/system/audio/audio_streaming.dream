@@ -8,6 +8,9 @@ internal static class AudioStreaming {
     /// Creates the output ring for the loaded feed; returns the host result code.
     internal static fun open_output(state: AudioState): int {
         let feed = state.feed.unwrap();
+        if feed.output_handle > 0 {
+            return feed.output_handle;
+        }
         let seconds = state.buffer_seconds;
         if seconds != seconds || seconds > 30.0d {
             seconds = 30.0d;
@@ -33,6 +36,9 @@ internal static class AudioStreaming {
 
     /// Starts the pump unless another task owns the feed or the source has ended.
     internal static fun start_pump(state: AudioState): void {
+        if state.feed.unwrap().output_handle > 0 {
+            return;
+        }
         if state.feed_owned || state.handle <= 0 || state.stream_done || state.closed {
             return;
         }
@@ -57,6 +63,9 @@ internal static class AudioStreaming {
         generation: int,
         play_generation: int
     ): bool {
+        if state.feed.unwrap().output_handle > 0 {
+            return true;
+        }
         let wanted = state.feed.unwrap().rate / 4;
         if wanted > state.ring_frames {
             wanted = state.ring_frames;
@@ -122,8 +131,9 @@ internal static class AudioStreaming {
         let pending: float[] = [];
         while generation == state.generation && state.closed == false && state.stream_done == false {
             if state.seek_target >= 0.0d {
-                pending = [];
-                if AudioStreaming.apply_seek(state, generation).await == false {
+                if AudioStreaming.apply_seek(state, generation).await {
+                    pending = [];
+                } else {
                     if generation != state.generation {
                         return;
                     }
@@ -139,9 +149,6 @@ internal static class AudioStreaming {
                 if generation != state.generation || state.closed {
                     return;
                 }
-                if state.seek_target >= 0.0d {
-                    continue;
-                }
                 if chunk.is_err() {
                     let error = chunk.unwrap_err();
                     AudioOutput.control(state.handle, 2, 0.0d);
@@ -150,6 +157,9 @@ internal static class AudioStreaming {
                     break;
                 }
                 pending = chunk.unwrap();
+                if state.seek_target >= 0.0d {
+                    continue;
+                }
                 if pending.length == 0 {
                     if state.looped {
                         let restarted = seek(0L, state.cancellation.token).await;

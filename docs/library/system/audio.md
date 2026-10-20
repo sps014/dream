@@ -57,26 +57,39 @@ its playback resources alive; dropping it cancels loading and releases output.
 
 ## URLs and limits
 
-String sources also accept HTTP and HTTPS URLs. Requests use Dream's HTTP client;
-browser requests follow CORS and permission rules. Non-success HTTP responses
-produce `EHTTP`. Replacing `src`, calling `load` again, or closing cancels the prior
+String sources also accept HTTP and HTTPS URLs. Native and Node requests use
+Dream's HTTP client; non-success HTTP responses produce `EHTTP`. Browser URLs use
+the browser's media element for loading, decoding, buffering, and seeking. Browser
+requests follow media permissions and CORS rules; cross-origin servers must allow
+the application origin so rendered samples can be visualized. Browser media load
+failures report `EIO`. Replacing `src`, calling `load` again, or closing cancels the prior
 load; its completion cannot overwrite the replacement source.
 
-File and HTTP sources stream: playback starts once the first 256 KiB (or the
+Native file and HTTP sources stream: playback starts once the first 256 KiB (or the
 whole source, if smaller) has arrived and a quarter second of audio has been
 decoded, and memory use does not grow with track length. `load()`
 reads only enough to learn the format, channel count, and (when the container
 declares it) the duration. Streamed MP3 files, and WebM files without a declared
-duration, keep `duration` absent; playback, looping, and `Ended` still work.
+duration, keep `duration` absent; playback and `Ended` still work. Looping requires
+a seekable source.
 
 If data arrives more slowly than it plays, output pauses with silence, `Waiting`
-is reported, and `Playing` follows once data resumes. Seeking forward reads and
-discards audio up to the target. Seeking backward reopens the file or repeats the
-HTTP request and decodes from the start, so a backward seek in a long remote track
-takes as long as downloading the skipped part. HTTP range requests are not used.
+is reported, and `Playing` follows once data resumes. Local file seeking reopens
+and decodes up to the target. Native and Node HTTP seeking currently supports
+PCM and IEEE-float WAV through validated frame-to-byte positions from dr_wav.
+The server must advertise byte ranges, supply a strong ETag or Last-Modified
+validator and Content-Length, and return the requested range of the same resource.
+Unsupported formats or servers report `ENOTSUP`; ignored or inconsistent range
+responses report `ESEEK`. Failure preserves playback at its previous position.
+No full download is performed to make a remote source seekable. Browser URLs use
+the media element's seekable ranges and the browser's container indexes and HTTP
+range implementation; supported formats depend on the browser's installed codecs.
 A seek on a stream is asynchronous: `seeking` stays true until `Seeked` arrives,
 and assigning `current_time` again before then reports `EBUSY`. A target beyond a
 known duration reports `EINVAL`.
+
+The browser controls URL buffering independently of `AudioOptions`. Encoded bytes,
+local file sources, and offline `AudioBuffer.decode` still use the portable decoders.
 
 On the web, decoding runs on the program's own thread rather than a background
 worker, so a busy program can cause underruns.

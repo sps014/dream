@@ -152,6 +152,13 @@ internal class AudioState {
         }
         let coordinate = AudioOutput.query(this.handle, 1);
         if this.feed.is_some() {
+            if this.feed.unwrap()
+                .output_handle > 0
+                && AudioOutput.query(this.handle, 7) < 0.0d && this.paused == false {
+                AudioOutput.control(this.handle, 2, 0.0d);
+                this.paused = true;
+                this.fail("EIO", "browser audio loading or decoding failed", "stream", true);
+            }
             let frame = (long)coordinate;
             while this.wraps.length > 0 && frame >= this.wraps[0] {
                 this.origin = this.wraps[0];

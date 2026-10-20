@@ -8,6 +8,7 @@ internal class AudioFeed {
     internal rate: int;
     internal channels: int;
     internal duration: Option<double>;
+    internal output_handle: int;
 
     /// Next decoded chunk of at most the given frame count; empty at the end of the source.
     internal next: fun(int, CancellationToken): Future<Result<float[], AudioError>>;
@@ -28,6 +29,7 @@ internal class AudioFeed {
         this.rate = rate;
         this.channels = channels;
         this.duration = duration;
+        this.output_handle = 0;
         this.next = next;
         this.seek = seek;
         this.close = close;

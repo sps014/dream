@@ -26,7 +26,13 @@ memory. Closing and source replacement invalidate pending asynchronous starts.
 
 ## Streaming
 
-String sources open an `AudioStreamCursor` (AsyncReader over a file or HTTP body)
+Browser HTTP URLs use `HTMLAudioElement` through the separately selected
+`audio_media` host chunk. The browser owns decoding, network buffering, container
+indexes, and HTTP range requests. Each URL player has a private AudioContext so
+changing its sink cannot reroute peers; gain and capture remain in its audio graph.
+Native and Node return zero from media creation and use the portable stream path.
+
+Other string sources open an `AudioStreamCursor` (AsyncReader over a file or HTTP body)
 feeding `core/audio_stream.c`, an incremental decoder over a bounded compressed
 queue. The vendored dr_wav, dr_mp3, and Nestegg parsers expect random access, so
 the queue enforces a lookahead invariant instead of a custom parser: a decoder is
@@ -39,8 +45,12 @@ how undecodable-within-limit sources fail. ID3v2 tags are skipped as they arrive
 `AudioStreaming.pump` moves 4,096-frame chunks into a host ring sized by
 `buffer_seconds`. Exactly one task owns the feed (`feed_owned`): the pump while it
 runs, otherwise a seek task, so a chunk decoded before a flush can never be written
-after it. Seeks during playback are applied by the pump between chunks. Backward
-seeks reopen the source and decode-skip; loops `seek(0)` and record the wrap frame
+after it. Seeks during playback are applied by the pump between chunks. Local
+seeks reopen the source and decode-skip. Remote PCM/float WAV seeks get a validated
+byte offset from dr_wav's data chunk and block alignment and send Range with
+If-Range. Response status, resource validator, start position, and total length
+are checked before replacing the reader or rebasing the decoder. Unsupported
+remote formats return ENOTSUP without decode-skipping. Loops record the wrap frame
 so `current_time` stays continuous with the ring's absolute frame counter.
 
 The native host's stream source is a miniaudio data source over a single-producer
@@ -60,11 +70,11 @@ libraries only after the last sibling manifest releases them.
 
 ## Outstanding work from the approved plan
 
-- Decoder workers in the browser. Portable stream decoding executes on the guest
-  scheduler thread; only the decoded ring lives in the audio worklet.
-- HTTP range requests and container index seeking. Backward seeks currently
-  reopen and decode-skip, and a second seek while one is pending reports `EBUSY`
-  rather than replacing the target.
+- Browser URL decoding runs in the browser media stack. Portable decoding for
+  byte sources and filesystem streams still executes on the guest scheduler.
+- Native remote MP3 and WebM index seeking remains unsupported; HTTP seeking is
+  limited to independently decodable PCM and float WAV. A second pending seek
+  reports EBUSY.
 - Streamed MP3 duration. dr_mp3 needs the whole file to count frames, so streamed
   MP3 sources report no duration.
 - The approved plan named libwebm. The current WebM parser is pinned Nestegg,

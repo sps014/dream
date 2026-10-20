@@ -53,14 +53,29 @@ def main():
     directory.mkdir(parents=True, exist_ok=True)
     disguised = directory / "actually-wav.webp"
     disguised.write_bytes(WAV)
+    ranges = []
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            bodies = {"/long.wav": LONG, "/short.wav": SHORT, "/stall.wav": STALL, "/tagged.mp3": MP3}
+            bodies = {"/long.wav": LONG, "/short.wav": SHORT, "/stall.wav": STALL, "/tagged.mp3": MP3,
+                      "/ignore.wav": LONG, "/changed.wav": LONG, "/wrong.wav": LONG, "/no-ranges.wav": LONG}
             data = bodies.get(self.path, b"bad" if self.path in ("/malformed", "/status") else WAV)
             if self.path == "/slow":
                 time.sleep(0.3)
-            self.send_response(503 if self.path == "/status" else 200)
+            range_header = self.headers.get("Range")
+            total = len(data)
+            offset = 0
+            if range_header and self.path in bodies and self.path != "/ignore.wav":
+                offset = int(range_header.removeprefix("bytes=").split("-")[0])
+                ranges.append((self.path, offset, self.headers.get("If-Range")))
+                data = data[offset:]
+            self.send_response(206 if offset else 503 if self.path == "/status" else 200)
+            if self.path in bodies and self.path != "/no-ranges.wav":
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("ETag", '"changed"' if offset and self.path == "/changed.wav" else '"original"')
+            if offset:
+                declared = offset + 1 if self.path == "/wrong.wav" else offset
+                self.send_header("Content-Range", f"bytes {declared}-{total - 1}/{total}")
             self.send_header("Content-Type", "audio/mpeg")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -94,6 +109,8 @@ def main():
             assert "audio sources: passed" in output, output
             assert "audio playback: passed" in output, output
             print("native sources and playback: passed", flush=True)
+            assert any(path == "/long.wav" and offset == 44 + 6 * 48000 * 4 and validator == '"original"'
+                       for path, offset, validator in ranges), ranges
             checked([compiler, "--node", fixture, "-o", str(directory / "main.wasm")], cwd=ROOT)
             runner = directory / "runner.mjs"
             runner.write_text("import {run} from './main.node.runtime.js';\n"

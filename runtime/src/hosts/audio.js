@@ -2,8 +2,13 @@
 export const audioPlayers = new Map();
 const audioOutputs = new Map();
 const audioOutputPending = new Map();
+export function allocateAudioPlayer(player) {
+  const id = nextAudioPlayer++;
+  audioPlayers.set(id, player);
+  return id;
+}
 let nextAudioPlayer = 1;
-function audioFailure(error) {
+export function audioFailure(error) {
   if (error?.name === "NotAllowedError") return -2;
   if (error?.name === "SecurityError") return -3;
   if (error?.name === "NotFoundError") return -5;
@@ -318,6 +323,7 @@ export function makeAudioHost() {
     audioOutputStart: async id => {
       const player = audioPlayers.get(id);
       if (!player || player.closed) return 0;
+      if (player.media) return player.media.start();
       const generation = ++player.startGeneration;
       try {
         if (!player.output) {
@@ -339,6 +345,7 @@ export function makeAudioHost() {
     audioOutputControl: (id, command, value) => {
       const player = audioPlayers.get(id);
       if (!player || player.closed || !Number.isFinite(value)) return 0;
+      if (player.media) return player.media.control(command, value);
       const stream = player.stream;
       if (stream && (command === 3 || command === 5 || command === 6)) {
         if (command === 3) {
@@ -376,6 +383,7 @@ export function makeAudioHost() {
     audioOutputQuery: (id, field) => {
       const player = audioPlayers.get(id);
       if (!player) return 0;
+      if (player.media) return player.media.query(field);
       if (field === 1) return audioPosition(player) * player.rate;
       if (field === 2) return +player.ended;
       if (field === 3) return +(player.output?.lost || player.output?.context.state === "closed");
@@ -386,6 +394,11 @@ export function makeAudioHost() {
     audioOutputClose: id => {
       const player = audioPlayers.get(id);
       if (!player) return;
+      if (player.media) {
+        player.media.close();
+        audioPlayers.delete(id);
+        return;
+      }
       player.closed = true;
       pauseAudioPlayer(player);
       disconnectAudioStream(player.stream);
@@ -429,6 +442,7 @@ export function makeAudioHost() {
     audioOutputSink: async (id, sink) => {
       const player = audioPlayers.get(id);
       if (!player || player.closed) return 0;
+      if (player.media) return player.media.sink(sink);
       if (player.sink === sink) return 1;
       if (player.sinkPending) return -7;
       player.sinkPending = true;

@@ -14,6 +14,7 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-io/src/exports.rs"),
     include_str!("../../dream-host-window/src/exports.rs"),
     include_str!("../../dream-host-gpu/src/exports.rs"),
+    include_str!("../../dream-host-audio/src/lib.rs"),
 ];
 
 fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
@@ -64,7 +65,8 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
         if let Some(end) = t.find('(') {
             let name = t[..end].trim();
             // Deferred-only hosts have no synchronous export; both forms share one import key.
-            if !name.is_empty() && name != "dream_host_bind_v3" {
+            if !name.is_empty() && name != "dream_host_bind_v3" && name != "dream_host_audio_abi_v3"
+            {
                 out.push(name.strip_suffix("Async").unwrap_or(name).to_string());
             }
         }
@@ -107,6 +109,7 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Io, vec![HOST_SOURCES[7]]),
         (HostCapability::Window, vec![HOST_SOURCES[8]]),
         (HostCapability::Gpu, vec![HOST_SOURCES[9]]),
+        (HostCapability::Audio, vec![HOST_SOURCES[10]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -141,6 +144,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/window.js"),
     include_str!("../../../runtime/src/hosts/gpu.js"),
     include_str!("../../../runtime/src/hosts/audio.js"),
+    include_str!("../../../runtime/src/hosts/audio_media.js"),
     include_str!("../../../runtime/src/hosts/audio_capture.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];

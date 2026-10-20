@@ -18,6 +18,12 @@ static extern fun dream_audio_stream_read(handle: usize, max_frames: int): float
 @intrinsic(Intrinsic.DreamAudioStreamDuration)
 static extern fun dream_audio_stream_duration(handle: usize): double;
 
+@intrinsic(Intrinsic.DreamAudioStreamSeekOffset)
+static extern fun dream_audio_stream_seek_offset(handle: usize, frame: long): long;
+
+@intrinsic(Intrinsic.DreamAudioStreamReposition)
+static extern fun dream_audio_stream_reposition(handle: usize, frame: long): int;
+
 @intrinsic(Intrinsic.DreamAudioStreamClose)
 static extern fun dream_audio_stream_close(handle: usize): void;
 
@@ -61,6 +67,14 @@ internal class AudioStreamDecoder {
             return Option.None;
         }
         return Option.Some(seconds);
+    }
+
+    internal fun seek_offset(frame: long): long {
+        return dream_audio_stream_seek_offset(this.handle, frame);
+    }
+
+    internal fun reposition(frame: long): bool {
+        return dream_audio_stream_reposition(this.handle, frame) != 0;
     }
 
     internal fun close(): void {

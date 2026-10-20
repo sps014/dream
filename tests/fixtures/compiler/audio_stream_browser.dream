@@ -11,7 +11,11 @@ async fun main(): void {
     }
     audio.capture(2048).unwrap();
     Time.delay(400).await;
-    System.println("stream progress: " + (audio.current_time > 0.1d).to_string());
+    System.println(
+        "stream progress: "
+            + (audio.current_time > 0.1d && audio.ready_state == AudioReadyState.FutureData)
+            .to_string()
+    );
 
     let captured = audio.capture(2048).unwrap();
     let peak = 0.0f;
@@ -22,7 +26,7 @@ async fun main(): void {
     }
     System.println("stream capture: " + (peak > 0.08f && peak < 0.15f).to_string());
 
-    audio.current_time = 1.5d;
+    audio.current_time = 90.0d;
     let seeked = false;
     for (let attempt = 0; attempt < 200 && seeked == false; attempt = attempt + 1) {
         for (let event in audio.poll_events()) {
@@ -30,12 +34,15 @@ async fun main(): void {
                 AudioEvent.Seeked(_, _) => {
                     seeked = true;
                 }
+                AudioEvent.Error(_, error, operation, _) => {
+                    System.println(operation + ": " + error.code() + " " + error.message());
+                }
                 _ => {}
             }
         }
         Time.delay(10).await;
     }
     let position = audio.current_time;
-    System.println("stream seek: " + (seeked && position >= 1.5d && position < 2.5d).to_string());
+    System.println("stream seek: " + (seeked && position >= 90.0d && position < 91.0d).to_string());
     audio.close();
 }

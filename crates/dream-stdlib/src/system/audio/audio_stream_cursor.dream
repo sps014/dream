@@ -19,6 +19,10 @@ internal class AudioStreamCursor {
     ended: bool;
     input_done: bool;
     released: bool;
+    remote: bool;
+    ranges: bool;
+    validator: string;
+    length: string;
 
     constructor(
         path: string,
@@ -40,6 +44,10 @@ internal class AudioStreamCursor {
         this.ended = false;
         this.input_done = false;
         this.released = false;
+        this.remote = false;
+        this.ranges = false;
+        this.validator = "";
+        this.length = "";
     }
 
     del() {
@@ -97,6 +105,23 @@ internal class AudioStreamCursor {
                     }
                 )
             );
+            let remote = cursor.unwrap();
+            remote.remote = true;
+            remote.ranges = response.headers.get("accept-ranges")
+                .unwrap_or("")
+                .to_lower() == "bytes";
+            let encoding = response.headers.get("content-encoding").unwrap_or("").to_lower();
+            if encoding != "" && encoding != "identity" {
+                remote.ranges = false;
+            }
+            let etag = response.headers.get("etag").unwrap_or("");
+            if etag.starts_with("W/") == false {
+                remote.validator = etag;
+            }
+            if remote.validator == "" {
+                remote.validator = response.headers.get("last-modified").unwrap_or("");
+            }
+            remote.length = response.headers.get("content-length").unwrap_or("");
         } else {
             let opened = FileHandle.open_async(path, FileMode.Read, Option.Some(token)).await;
             if opened.is_err() {
@@ -138,8 +163,8 @@ internal class AudioStreamCursor {
 
     /// Positions the next read at an absolute source frame.
     internal async fun seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
-        if frame >= this.delivered {
-            return this.skip(frame, token).await;
+        if this.remote {
+            return this.range_seek(frame, token).await;
         }
         let opened = AudioStreamCursor.open(this.path, this.capacity, token).await;
         if opened.is_err() {
@@ -161,6 +186,72 @@ internal class AudioStreamCursor {
         this.input_done = other.input_done;
         this.released = false;
         other.released = true;
+        return Result.Ok(true);
+    }
+
+    async fun range_seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
+        let offset = this.decoder.seek_offset(frame);
+        if this.ranges == false || offset < 0 || this.validator == "" || this.length == "" {
+            return Result.Err(
+                AudioError(
+                    "ENOTSUP",
+                    "HTTP seeking requires byte ranges, a stable resource validator, and usable format positioning"
+                )
+            );
+        }
+        let client = HttpClient();
+        let request = HttpRequest(HttpMethod.Get, Url.parse(this.path).unwrap());
+        request.headers.set("Range", "bytes=" + offset + "-");
+        request.headers.set("If-Range", this.validator);
+        let received = client.send(request, Option.Some(token)).await;
+        if received.is_err() {
+            client.close();
+            let error = received.unwrap_err();
+            return Result.Err(AudioError(error.code(), error.message()));
+        }
+        let response = received.unwrap();
+        let content_range = response.headers.get("content-range").unwrap_or("");
+        let same = response.headers.get("etag")
+            .unwrap_or("")
+            == this.validator
+            || response.headers.get("last-modified")
+            .unwrap_or("") == this.validator;
+        if response.status
+            != 206
+            || same
+            == false
+            || content_range.starts_with("bytes " + offset + "-")
+            == false || content_range.ends_with("/" + this.length) == false {
+            response.close();
+            client.close();
+            return Result.Err(
+                AudioError(
+                    "ESEEK",
+                    "server did not return the requested range of the unchanged audio resource"
+                )
+            );
+        }
+        if this.released || token.is_cancelled {
+            response.close();
+            client.close();
+            return Result.Err(AudioError("ECANCELLED", "audio seek was cancelled"));
+        }
+        if this.decoder.reposition(frame) == false {
+            response.close();
+            client.close();
+            return Result.Err(AudioError("ESEEK", "decoder could not reposition"));
+        }
+        let release = this.release;
+        release();
+        this.reader = response.body;
+        this.release = () => {
+            response.close();
+            client.close();
+        };
+        this.stash = [];
+        this.delivered = frame;
+        this.ended = false;
+        this.input_done = false;
         return Result.Ok(true);
     }
 

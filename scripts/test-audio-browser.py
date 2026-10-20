@@ -21,8 +21,9 @@ def compile_stream(args, base):
         tone.setnchannels(1)
         tone.setsampwidth(2)
         tone.setframerate(48000)
-        tone.writeframes(b"".join(struct.pack("<h", round(16383 * math.sin(2 * math.pi * 440 * i / 48000)))
-                                  for i in range(48000 * 4)))
+        period = b"".join(struct.pack("<h", round(16383 * math.sin(2 * math.pi * 440 * i / 48000)))
+                           for i in range(48000))
+        tone.writeframes(period * 120)
     source = args.directory / "audio-stream.dream"
     text = (ROOT / "tests/fixtures/compiler/audio_stream_browser.dream").read_text(encoding="utf-8")
     source.write_text(text.replace("__BASE__", base), encoding="utf-8")
@@ -50,6 +51,7 @@ def main():
         raise SystemExit("set DREAM_BROWSER to a Chromium browser executable")
     complete = threading.Event()
     result = {}
+    media_ranges = []
     page = r"""<!doctype html><meta charset=utf-8><pre id=result>running</pre>
 <script type=module>
 let result;
@@ -78,7 +80,27 @@ await fetch('/complete', {method: 'POST', body: JSON.stringify(result)});
             super().__init__(*values, directory=str(args.directory), **kwargs)
 
         def do_GET(self):
-            if self.path == "/":
+            if self.path == "/tone.wav":
+                data = (args.directory / "tone.wav").read_bytes()
+                length = len(data)
+                start, end = 0, length - 1
+                request = self.headers.get("Range")
+                if request:
+                    left, right = request.removeprefix("bytes=").split("-", 1)
+                    start = int(left or "0")
+                    end = min(int(right) if right else end, end)
+                media_ranges.append(start)
+                # Cap each response so the far seek cannot be satisfied from a full download.
+                end = min(end, start + 524287)
+                self.send_response(206 if request else 200)
+                self.send_header("Content-Type", "audio/wav")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Length", str(end - start + 1))
+                if request:
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{length}")
+                self.end_headers()
+                self.wfile.write(data[start:end + 1])
+            elif self.path == "/":
                 data = page.encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -124,6 +146,8 @@ await fetch('/complete', {method: 'POST', body: JSON.stringify(result)});
     if args.output:
         args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(result, indent=2))
+    if result.get("ok") and not any(start > 48000 * 2 * 50 for start in media_ranges):
+        raise RuntimeError(f"browser did not request a distant media range: {media_ranges}")
     return 0 if result.get("ok") else 1
 
 

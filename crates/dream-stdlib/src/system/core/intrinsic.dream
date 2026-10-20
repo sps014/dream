@@ -16,6 +16,10 @@ internal enum Intrinsic {
     DreamAudioStreamRead,
     /// Reports a declared stream duration in seconds.
     DreamAudioStreamDuration,
+    /// Gets a validated independently decodable source byte offset for a frame.
+    DreamAudioStreamSeekOffset,
+    /// Repositions a decoder after a validated random-access transport switch.
+    DreamAudioStreamReposition,
     /// Releases an incremental audio decoder.
     DreamAudioStreamClose,
     /// Computes the portable audio FFT.

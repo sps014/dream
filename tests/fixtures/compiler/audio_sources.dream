@@ -50,6 +50,19 @@ async fun audio_streaming_sources(base: string): void {
     tagged.load().await.unwrap();
     Assert.is_true(tagged.duration.is_none());
     tagged.close();
+
+    for (let path in ["/ignore.wav", "/changed.wav", "/wrong.wav", "/no-ranges.wav"]) {
+        let refused = Audio(base + path, options);
+        refused.load().await.unwrap();
+        refused.current_time = 6.0d;
+        for (let attempt = 0; attempt < 200 && refused.seeking; attempt = attempt + 1) {
+            Time.delay(10).await;
+        }
+        Assert.is_true(refused.seeking == false);
+        Assert.is_true(refused.error.is_some());
+        Assert.eq(refused.current_time, 0.0d);
+        refused.close();
+    }
 }
 
 // Names the failing playback check because timing failures are otherwise hard to locate.

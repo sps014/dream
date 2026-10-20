@@ -1,0 +1,33 @@
+module system.audio;
+
+/// A copied view of a player's recent output PCM.
+public class AudioSnapshot {
+    /// Interleaved PCM after the player's volume and mute settings.
+    public samples: float[];
+
+    /// Samples per second per channel.
+    public sample_rate: int;
+
+    /// One for mono or two for stereo.
+    public channels: int;
+
+    /// Rendered frame index since capture was enabled, at the beginning of this snapshot.
+    public frame_position: long;
+
+    /// Whether output frames were lost to queue overflow or a concurrent capture update.
+    public overrun: bool;
+
+    internal constructor(
+        samples: float[],
+        sample_rate: int,
+        channels: int,
+        position: long,
+        overrun: bool
+    ) {
+        this.samples = samples;
+        this.sample_rate = sample_rate;
+        this.channels = channels;
+        this.frame_position = position;
+        this.overrun = overrun;
+    }
+}

@@ -35,6 +35,9 @@ impl<'a> Analyzer<'a> {
         let before_if = self.snapshot_moved();
 
         let mut taken_index: Option<usize> = None;
+        let mut taken_literal = false;
+        let check_type_test_dead = self.current_generic_bindings.is_empty()
+            && ctx.parent_function.generic_parameters.is_none();
         for (index, (cond_expr, cond_pos, body)) in branches.enumerate() {
             self.restore_moved(before_if.clone());
             // An `is`-with-binding condition declares a narrowed local `name: T` scoped to the taken
@@ -52,6 +55,18 @@ impl<'a> Analyzer<'a> {
             let mut folded = cond_expr;
             while let ExpressionNode::Parenthesized(_, inner) = folded {
                 folded = inner;
+            }
+            // Literal branches must not keep async HIR call edges alive, even at -O0.
+            // Unlike generic type tests, their dead bodies still receive ordinary validation.
+            let literal = match folded {
+                ExpressionNode::Literal(Type::Boolean(token)) => Some(token.text == "true"),
+                _ => None,
+            };
+            if literal == Some(false) {
+                self.check_dead_branch(
+                    Some(cond_expr), &bindings, body, ctx, has_parent_while, diagnostics,
+                )?;
+                continue;
             }
             if let ExpressionNode::IsExpression(left, right_type, _) = folded {
                 let left_t = self
@@ -78,14 +93,11 @@ impl<'a> Analyzer<'a> {
                         taken_index = Some(index);
                         break;
                     } else {
-                        self.check_dead_branch(
-                            None,
-                            &bindings,
-                            body,
-                            ctx,
-                            has_parent_while,
-                            diagnostics,
-                        )?;
+                        if check_type_test_dead {
+                            self.check_dead_branch(
+                                None, &bindings, body, ctx, has_parent_while, diagnostics,
+                            )?;
+                        }
                         continue;
                     }
                 }
@@ -113,6 +125,12 @@ impl<'a> Analyzer<'a> {
             )?;
             let body_hir = self.hir_close_block();
             branch_moved.push(self.snapshot_moved());
+            if literal == Some(true) {
+                terminal = body_hir;
+                taken_index = Some(index);
+                taken_literal = true;
+                break;
+            }
             match cond_hir {
                 Some(cond_hir) => arms.push((cond_hir, body_hir)),
                 None => self.hir_fail(),
@@ -124,6 +142,9 @@ impl<'a> Analyzer<'a> {
                 .chain(else_if.iter().map(|i| (&i.0, &i.1)))
                 .skip(taken + 1);
             for (cond_expr, body) in rest {
+                if !taken_literal && !check_type_test_dead {
+                    continue;
+                }
                 let mut bindings = Vec::new();
                 Self::collect_is_bindings(cond_expr, &mut bindings);
                 self.check_dead_branch(
@@ -135,7 +156,8 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                 )?;
             }
-            if let Some(body) = else_body {
+            if let Some(body) = else_body
+                && (taken_literal || check_type_test_dead) {
                 self.check_dead_branch(None, &[], body, ctx, has_parent_while, diagnostics)?;
             }
         } else {
@@ -177,11 +199,9 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    /// Type-checks a branch the `is` fold proved dead, without emitting HIR for it. Inside a generic
-    /// instantiation the branch is skipped instead: it is typically only valid for *other* type
-    /// arguments (`if (x is int) { x + 1 }` under `T = string`), so checking it would report errors
-    /// the author cannot fix. Narrowed `is` bindings are declared without the cast validation the
-    /// live path performs, because the cast is exactly what the fold proved impossible.
+    /// Validates a dead body without emitting call edges or transferring move state.
+    /// Callers skip impossible generic type-test arms, whose operations may be invalid for
+    /// the current instantiation; literal-dead arms still receive ordinary type checking.
     fn check_dead_branch(
         &mut self,
         cond: Option<&ExpressionNode<'a>>,
@@ -191,11 +211,6 @@ impl<'a> Analyzer<'a> {
         has_parent_while: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
-        if !self.current_generic_bindings.is_empty()
-            || ctx.parent_function.generic_parameters.is_some()
-        {
-            return Ok(());
-        }
         let moved = self.snapshot_moved();
         let (collecting, ok) = self.hir_pause_collection();
         let result = (|| {

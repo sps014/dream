@@ -1,3 +1,4 @@
+mod audio;
 mod cli;
 mod codegen;
 mod collections;
@@ -49,6 +50,7 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
 /// All stdlib packages, in global prelude merge order.
 pub const STD_PACKAGES: &[StdPackage] = &[
     core::PACKAGE,
+    audio::PACKAGE,
     primitives::PACKAGE,
     collections::PACKAGE,
     simd::PACKAGE,

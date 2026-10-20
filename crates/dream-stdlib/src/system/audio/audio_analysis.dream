@@ -1,0 +1,58 @@
+module system.audio;
+
+/// A mono waveform and its single-sided frequency spectrum.
+public class AudioAnalysis {
+    /// Mono samples before window weighting; short input is padded with silence.
+    public waveform: float[];
+
+    /// Unnormalized real FFT components, including DC and Nyquist.
+    public real: float[];
+
+    /// Unnormalized imaginary FFT components, including DC and Nyquist.
+    public imaginary: float[];
+
+    /// Window-compensated single-sided amplitudes; a unit sine has amplitude one.
+    public magnitudes: float[];
+
+    /// Amplitudes in dBFS, floored at -120 dBFS.
+    public magnitudes_db: float[];
+
+    /// Largest absolute sample in the unweighted waveform.
+    public peak: float;
+
+    /// Root mean square of the unweighted waveform, including zero padding.
+    public rms: float;
+
+    rate: int;
+    size: int;
+
+    internal constructor(
+        waveform: float[],
+        real: float[],
+        imaginary: float[],
+        magnitudes: float[],
+        magnitudes_db: float[],
+        peak: float,
+        rms: float,
+        rate: int,
+        size: int
+    ) {
+        this.waveform = waveform;
+        this.real = real;
+        this.imaginary = imaginary;
+        this.magnitudes = magnitudes;
+        this.magnitudes_db = magnitudes_db;
+        this.peak = peak;
+        this.rms = rms;
+        this.rate = rate;
+        this.size = size;
+    }
+
+    /// Returns the frequency in Hz for a valid bin; invalid indices return EINVAL.
+    public fun frequency_hz(bin: int): Result<double, AudioError> {
+        if bin < 0 || bin >= this.magnitudes.length {
+            return Result.Err(AudioError("EINVAL", "frequency bin is out of range"));
+        }
+        return Result.Ok((double)bin * (double)this.rate / (double)this.size);
+    }
+}

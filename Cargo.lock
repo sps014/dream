@@ -1100,6 +1100,7 @@ dependencies = [
 name = "dream-host"
 version = "0.1.0"
 dependencies = [
+ "dream-host-audio",
  "dream-host-cli",
  "dream-host-core",
  "dream-host-crypto",
@@ -1118,6 +1119,16 @@ name = "dream-host-abi"
 version = "0.1.0"
 dependencies = [
  "dream-abi",
+]
+
+[[package]]
+name = "dream-host-audio"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "dream-host-abi",
+ "dream-host-core",
+ "serde_json",
 ]
 
 [[package]]

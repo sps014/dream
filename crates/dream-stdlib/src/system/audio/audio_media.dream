@@ -1,0 +1,64 @@
+module system.audio;
+
+// Browser URL playback uses the platform's media stack; native and Node return
+// zero and continue through the portable streaming decoder.
+internal static class AudioMedia {
+    @runtime("audioMediaCreate")
+    internal static extern fun create(borrow src: string): int;
+
+    @runtime("audioMediaSeek")
+    internal static extern async fun seek(handle: int, time: double): int;
+
+    internal static async fun open(
+        path: string,
+        token: CancellationToken
+    ): Result<Option<AudioFeed>, AudioError> {
+        let handle = AudioMedia.create(path);
+        if handle == 0 {
+            let unavailable: Option<AudioFeed> = Option.None;
+            return Result.Ok(unavailable);
+        }
+        let attempts = 0;
+        while AudioOutput.query(handle, 7) == 0.0d && attempts < 3000 && token.is_cancelled == false {
+            attempts = attempts + 1;
+            Time.delay(10).await;
+        }
+        if token.is_cancelled || AudioOutput.query(handle, 7) <= 0.0d {
+            AudioOutput.close(handle);
+            if token.is_cancelled {
+                return Result.Err(AudioError("ECANCELLED", "audio loading was cancelled"));
+            }
+            return Result.Err(AudioError("EIO", "browser could not load the audio URL"));
+        }
+        let seconds = AudioOutput.query(handle, 6);
+        let duration: Option<double> = Option.None;
+        if seconds >= 0.0d {
+            duration = Option.Some(seconds);
+        }
+        let feed = AudioFeed(
+            48000,
+            2,
+            duration,
+            async (count: int, next_token: CancellationToken) => {
+                let empty: float[] = [];
+                return Result.Ok(empty);
+            },
+            async (frame: long, seek_token: CancellationToken) => {
+                let result = AudioMedia.seek(handle, (double)frame / 48000.0d).await;
+                if result <= 0 {
+                    let code = "ESEEK";
+                    if result == -1 {
+                        code = "ENOTSUP";
+                    }
+                    return Result.Err(AudioError(code, "browser could not seek this audio source"));
+                }
+                return Result.Ok(true);
+            },
+            () => {
+                AudioOutput.close(handle);
+            }
+        );
+        feed.output_handle = handle;
+        return Result.Ok(Option.Some(feed));
+    }
+}

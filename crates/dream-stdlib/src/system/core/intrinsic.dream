@@ -2,6 +2,28 @@ module system.core;
 
 /// Built-in operations available to declarations annotated with `@intrinsic`.
 internal enum Intrinsic {
+    /// Decodes an encoded audio buffer.
+    DreamAudioDecode,
+    /// Opens an incremental audio decoder with a bounded encoded-input queue.
+    DreamAudioStreamOpen,
+    /// Reports how many encoded bytes the incremental decoder accepts next.
+    DreamAudioStreamSpace,
+    /// Appends encoded bytes to an incremental decoder.
+    DreamAudioStreamPush,
+    /// Marks the end of encoded input for an incremental decoder.
+    DreamAudioStreamFinish,
+    /// Decodes buffered encoded input into interleaved PCM.
+    DreamAudioStreamRead,
+    /// Reports a declared stream duration in seconds.
+    DreamAudioStreamDuration,
+    /// Gets a validated independently decodable source byte offset for a frame.
+    DreamAudioStreamSeekOffset,
+    /// Repositions a decoder after a validated random-access transport switch.
+    DreamAudioStreamReposition,
+    /// Releases an incremental audio decoder.
+    DreamAudioStreamClose,
+    /// Computes the portable audio FFT.
+    DreamAudioFft,
     /// Reads standard input bytes.
     ConsoleRead,
     /// Writes standard output or error bytes.

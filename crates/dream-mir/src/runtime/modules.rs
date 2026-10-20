@@ -13,6 +13,8 @@ pub struct RuntimeNeed(u32);
 impl RuntimeNeed {
     pub const CORE: Self = Self(1 << 0);
     pub const REGEX: Self = Self(1 << 1);
+    pub const AUDIO_FFT: Self = Self(1 << 2);
+    pub const AUDIO_DECODE: Self = Self(1 << 3);
 
     pub fn bits(self) -> u32 {
         self.0
@@ -66,47 +68,107 @@ pub struct RuntimeModule {
     pub intrinsic_keys: &'static [&'static str],
 }
 
-pub const RUNTIME_MODULES: &[RuntimeModule] = &[RuntimeModule {
-    id: "regex",
-    need: RuntimeNeed::REGEX,
-    shared_c: &["regex.c"],
-    native_extra_c: &["pcre2/pcre2_jit_compile.c"],
-    vendor_sources: Some("pcre2/SOURCES"),
-    wasm_defines: &[
-        "HAVE_CONFIG_H",
-        "PCRE2_CODE_UNIT_WIDTH=16",
-        "PCRE2_STATIC",
-        "PCRE2_WASM",
-    ],
-    native_defines: &[
-        "DREAM_NATIVE",
-        "HAVE_CONFIG_H",
-        "PCRE2_CODE_UNIT_WIDTH=16",
-        "PCRE2_STATIC",
-    ],
-    include_dirs: &["include", "pcre2"],
-    exports: &[
-        "regex_compile",
-        "regex_free",
-        "regex_group_count",
-        "regex_name_count",
-        "regex_name_at",
-        "regex_name_number",
-        "regex_find",
-        "regex_find_all",
-        "regex_test",
-    ],
-    intrinsic_keys: &[
-        ATTR_REGEX_COMPILE,
-        ATTR_REGEX_FREE,
-        ATTR_REGEX_FIND,
-        ATTR_REGEX_FIND_ALL,
-        ATTR_REGEX_GROUP_COUNT,
-        ATTR_REGEX_NAME_COUNT,
-        ATTR_REGEX_NAME_AT,
-        ATTR_REGEX_NAME_NUMBER,
-    ],
-}];
+pub const RUNTIME_MODULES: &[RuntimeModule] = &[
+    RuntimeModule {
+        id: "audio_fft",
+        need: RuntimeNeed::AUDIO_FFT,
+        shared_c: &["core/audio_fft.c"],
+        native_extra_c: &[],
+        vendor_sources: None,
+        wasm_defines: &["DREAM_WASM32"],
+        native_defines: &["DREAM_NATIVE"],
+        include_dirs: &["core/include"],
+        exports: &["dream_audio_fft"],
+        intrinsic_keys: &["dream_audio_fft"],
+    },
+    RuntimeModule {
+        id: "audio_decode",
+        need: RuntimeNeed::AUDIO_DECODE,
+        shared_c: &[
+            "core/audio_decode.c",
+            "core/audio_webm.c",
+            "core/audio_stream.c",
+        ],
+        native_extra_c: &[],
+        vendor_sources: Some("core/vendor/opus/SOURCES"),
+        wasm_defines: &["DREAM_WASM32", "HAVE_CONFIG_H", "NDEBUG"],
+        native_defines: &["DREAM_NATIVE", "HAVE_CONFIG_H", "NDEBUG"],
+        include_dirs: &[
+            "core/include",
+            "core/vendor/opus",
+            "core/vendor/opus/include",
+            "core/vendor/opus/celt",
+            "core/vendor/opus/silk",
+            "core/vendor/opus/silk/float",
+            "core/vendor/nestegg/include",
+        ],
+        exports: &[
+            "dream_audio_decode",
+            "dream_audio_stream_open",
+            "dream_audio_stream_space",
+            "dream_audio_stream_push",
+            "dream_audio_stream_finish",
+            "dream_audio_stream_read",
+            "dream_audio_stream_duration",
+            "dream_audio_stream_seek_offset",
+            "dream_audio_stream_reposition",
+            "dream_audio_stream_close",
+        ],
+        intrinsic_keys: &[
+            "dream_audio_decode",
+            "dream_audio_stream_open",
+            "dream_audio_stream_space",
+            "dream_audio_stream_push",
+            "dream_audio_stream_finish",
+            "dream_audio_stream_read",
+            "dream_audio_stream_duration",
+            "dream_audio_stream_seek_offset",
+            "dream_audio_stream_reposition",
+            "dream_audio_stream_close",
+        ],
+    },
+    RuntimeModule {
+        id: "regex",
+        need: RuntimeNeed::REGEX,
+        shared_c: &["regex.c"],
+        native_extra_c: &["pcre2/pcre2_jit_compile.c"],
+        vendor_sources: Some("pcre2/SOURCES"),
+        wasm_defines: &[
+            "HAVE_CONFIG_H",
+            "PCRE2_CODE_UNIT_WIDTH=16",
+            "PCRE2_STATIC",
+            "PCRE2_WASM",
+        ],
+        native_defines: &[
+            "DREAM_NATIVE",
+            "HAVE_CONFIG_H",
+            "PCRE2_CODE_UNIT_WIDTH=16",
+            "PCRE2_STATIC",
+        ],
+        include_dirs: &["include", "pcre2"],
+        exports: &[
+            "regex_compile",
+            "regex_free",
+            "regex_group_count",
+            "regex_name_count",
+            "regex_name_at",
+            "regex_name_number",
+            "regex_find",
+            "regex_find_all",
+            "regex_test",
+        ],
+        intrinsic_keys: &[
+            ATTR_REGEX_COMPILE,
+            ATTR_REGEX_FREE,
+            ATTR_REGEX_FIND,
+            ATTR_REGEX_FIND_ALL,
+            ATTR_REGEX_GROUP_COUNT,
+            ATTR_REGEX_NAME_COUNT,
+            ATTR_REGEX_NAME_AT,
+            ATTR_REGEX_NAME_NUMBER,
+        ],
+    },
+];
 
 /// Portable runtime logic; no OS headers or direct hosted allocator calls.
 pub const CORE_C: &[&str] = &[
@@ -264,9 +326,6 @@ pub struct Wasm32LinkedUnit {
 /// Linked-library units for `need` on wasm32 (today: PCRE2 regex).
 pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUnit> {
     let mut units = Vec::new();
-    if !need.contains(RuntimeNeed::REGEX) {
-        return units;
-    }
     let c = root.to_path_buf();
     for m in RUNTIME_MODULES {
         if !need.contains(m.need) {
@@ -303,6 +362,11 @@ pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUn
 
 fn vendor_c_names_static(list_path: &str) -> Vec<&'static str> {
     match list_path {
+        "core/vendor/opus/SOURCES" => include_str!("c/core/vendor/opus/SOURCES")
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect(),
         "pcre2/SOURCES" => include_str!("c/pcre2/SOURCES")
             .lines()
             .map(str::trim)

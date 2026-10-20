@@ -1,0 +1,253 @@
+import system.encoding;
+import system.audio;
+import system.testing;
+
+fun audio_fft_sine_and_levels(): void {
+    let analyzer = AudioAnalyzer();
+    Assert.is_true(analyzer.set_fft_size(32).is_ok());
+    analyzer.set_window(AudioWindow.Rectangular);
+    let samples = Array.alloc<float>(32);
+    for (let i = 0; i < samples.length; i = i + 1) {
+        samples[i] = (float)Math.sin(6.283185307179586d * 4.0d * (double)i / 32.0d);
+    }
+    let result = analyzer.analyze(samples, 48000, 1).unwrap();
+    Assert.eq(result.magnitudes.length, 17);
+    Assert.is_true(Math.abs((double)result.magnitudes[4] - 1.0d) < 0.00001d);
+    Assert.is_true(Math.abs((double)result.rms - Math.sqrt(0.5d)) < 0.00001d);
+    Assert.is_true(Math.abs(result.frequency_hz(4).unwrap() - 6000.0d) < 0.00001d);
+    Assert.is_true(result.frequency_hz(17).is_err());
+    Assert.is_true(analyzer.set_fft_size(31).is_err());
+    Assert.eq(analyzer.analyze(samples, 48000, 1).unwrap().magnitudes.length, 17);
+}
+
+fun audio_fft_silence_dc_and_stereo(): void {
+    let analyzer = AudioAnalyzer();
+    analyzer.set_fft_size(32).unwrap();
+    analyzer.set_window(AudioWindow.Rectangular);
+    let silent = analyzer.analyze([], 48000, 1).unwrap();
+    Assert.eq(silent.peak, 0.0f);
+    Assert.eq(silent.rms, 0.0f);
+    Assert.eq(silent.magnitudes_db[0], -120.0f);
+    let stereo = Array.alloc<float>(64);
+    for (let i = 0; i < 32; i = i + 1) {
+        stereo[i * 2] = 1.0f;
+        stereo[i * 2 + 1] = -1.0f;
+    }
+    Assert.eq(analyzer.analyze(stereo, 48000, 2).unwrap().peak, 0.0f);
+    let dc = analyzer.analyze(Array.repeat<float>(32, 0.5f), 48000, 1).unwrap();
+    Assert.is_true(Math.abs((double)dc.magnitudes[0] - 0.5d) < 0.00001d);
+    Assert.is_true(analyzer.analyze([1.0f], 48000, 2).is_err());
+    Assert.is_true(analyzer.analyze([], 0, 1).is_err());
+}
+
+fun audio_pcm_snapshot_and_ranges(): void {
+    let samples = [0.25f, -0.5f, 0.75f, -1.0f];
+    let buffer = AudioBuffer.from_pcm(samples, 48000, 2).unwrap();
+    samples[0] = 1.0f;
+    Assert.eq(buffer.frame_count, 2);
+    Assert.eq(buffer.read_pcm(0, 1).unwrap()[0], 0.25f);
+    Assert.eq(buffer.read_pcm(1, 1).unwrap()[0], 0.75f);
+    Assert.is_true(buffer.read_pcm(-1, 1).is_err());
+    Assert.is_true(buffer.read_pcm(1, 2).is_err());
+    Assert.is_true(AudioBuffer.from_pcm([1.0f], 48000, 2).is_err());
+    Assert.is_true(AudioBuffer.decode([(byte)1, (byte)2, (byte)3]).is_err());
+}
+
+async fun audio_controls_and_events_without_device(): void {
+    let buffer = AudioBuffer.from_pcm([0.25f, -0.5f], 48000, 1).unwrap();
+    let audio = Audio(buffer);
+    Assert.is_true(audio.paused);
+    Assert.is_true(audio.duration.is_none());
+    Assert.is_true(audio.load().await.is_ok());
+    Assert.is_true(audio.duration.is_some());
+    audio.volume = 0.5f;
+    audio.volume = -0.1f;
+    Assert.eq(audio.volume, 0.5f);
+    Assert.eq(audio.error.unwrap().code(), "EINVAL");
+    audio.current_time = 1.0d / 48000.0d;
+    Assert.is_true(Math.abs(audio.current_time - 1.0d / 48000.0d) < 0.0000001d);
+    Assert.eq(audio.capture(1).unwrap().samples.length, 0);
+    audio.muted = true;
+    Assert.eq(audio.capture(1).unwrap().samples.length, 0);
+    Assert.is_true(audio.poll_events().length > 0);
+    Assert.eq(audio.poll_events().length, 0);
+    audio.close();
+    audio.close();
+    Assert.is_true(audio.play().await.is_err());
+    Assert.is_true(audio.load().await.is_err());
+    Assert.is_true(audio.pause().is_err());
+    Assert.is_true(audio.poll_events().length > 0);
+}
+
+fun audio_event_queue_is_bounded(): void {
+    let audio = Audio();
+    for (let i = 0; i < 1100; i = i + 1) {
+        audio.volume = (float)(i % 2);
+    }
+    let events = audio.poll_events();
+    Assert.eq(events.length, 1025);
+    let timestamp = 0L;
+    switch (events[0]) {
+        AudioEvent.EventsLost(time, count) => {
+            Assert.eq(count, 76);
+            timestamp = time;
+        }
+        _ => Assert.is_true(false),
+    }
+    for (let i = 1; i < events.length; i = i + 1) {
+        switch (events[i]) {
+            AudioEvent.VolumeChange(time) => {
+                Assert.is_true(time >= timestamp);
+                timestamp = time;
+            }
+            _ => Assert.is_true(false),
+        }
+    }
+    Assert.eq(audio.poll_events().length, 0);
+    audio.close();
+}
+
+fun audio_fixture_wav(): byte[] {
+    return Encoding.base64_decode(
+        "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAMD/fw=="
+    ).unwrap();
+}
+
+fun audio_fixture_mp3(): byte[] {
+    return Encoding.base64_decode(
+        "//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQ"
+            + "ZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ).unwrap();
+}
+
+fun audio_fixture_webm(): byte[] {
+    return Encoding.base64_decode(
+        "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAABAQEU2bdLlNu4tTq4QVSalmU6yBbk27i1Or"
+            + "hBZUrmtTrIGTTbuLU6uEH0O2dVOsgddNu4xTq4QcU7trU6yCD/7srgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAVSalmoCrXsYMPQkBEiYRDOm/fTYCGQ2hyb21lV0GGQ2hyb21lFlSua7+uvdeBAXPFhwgvjYiqD2yD"
+            + "gQKGhkFfT1BVU2Oik09wdXNIZWFkAQIAAIC7AAAAAADhjbWERzuAAJ+BAmJkgSAfQ7Z1AQAAAAAADxvngQCjQ8OBAACA/wO0"
+            + "62+b7bK6nOW+gkGNe96DcW4+r42+7Km+Kx/t0l5SJZWaNuMv0uOdCm2R0ZyCbiMK3HAHziAq7P9fxTs+Wrp7QBOx3ugdTSWz"
+            + "z//1GjxVwFfVxe9gLTWKC3nAMjLCtaO+mYrK9HiV4Le0xQnqxsMxuf2+nwxJFr1hdXnbCjI7mAl6Gksu0g3gXZJ+93H60d7m"
+            + "/UAemOFB5Aq0Rt2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmGYHgH8czPQVH+arC561Fl1FA4j1O5HShxUY0YQOQfDl7tqIg3"
+            + "6BEeSRznlSkTULk6Q0DC9ON5lHFxVVK2/4DX7E9O/vBFILzmDTcDIyAceANK8SitdUqIz+vRSJ8HAcf4+flmnv6gUvWNqBG/"
+            + "VLZZK2QDcfkWaCQmFI3pWtyAAJASfTewSBEf+u1tsaPHpHlLT8R3fx7G4I0aThQzNSZlmXDJLJKl7msl5fV5ojavz4Vhk7E6"
+            + "Kzg274wZCxeekWxXzrOhLr0qH64uk3FBh0IKSIrPBLY17KvF5Ulyyibcc9SXHUcHIxcOTIuztLsxXJUECV1Q41s8h6qYRPU7"
+            + "RnXe445vRgYRjoZrIpmAmF1L+ryCeX8PBM1Zx7Fl9H+gNPLjLffC6e33m8Kk51+iwfdcduQQLJHpnPuhNdh/kEsw3WSNbkMy"
+            + "UQ9B1S4w1bUvXhAvqB9tw9JbI3Q0xlgIRwDFuPWRhClKUv2zam23OjBCF38kjgmNeJIHYEg0XkWJjH6L4N74+d38XDJkIjBl"
+            + "A+DYzFHH2T3qg9aOWBdTCn4z7Yq6SKjvstYadKmTntNPELomYEBAAR4VTNs2T/tIq2gJf4Q2spT3kIqr7rAf1VPtWxVGcEDk"
+            + "/XrqSKZX60E5KtnuI+I0E8Ysg0xz+gE2YMIALG4rKEJZjgYW3bUx5ingOW9yraXrgk/GCxG/WvmjLcYTJNbwRi2LAyB69zAW"
+            + "qPXNOk2Z8CoLJdlZG4aO4E3JeJLItjef53EoPjdQv1VdrdF0d75JfzuKtdSeA6rTO6muNKDd3vUNEfRJHrCaM+doiwvYbyHE"
+            + "Rob3UbaEfuj/r2j4xjJrvnbUCY3W09yaROYb95O4q0qyffjUIi5bmgw3H4b0bSI3jv49W+P9LJYHKfd2Rpyt5GRS/OXeuXfM"
+            + "RT6qRTZ9LOgdHmioiJ+Wu4jiGY07mTE+5+2k8S4dIXxYURG8Ss3gIFN6F8J3A22xIJrGdWtvAH+z/swQqihiKzWYJLmdv/4H"
+            + "czM//2yAf+v+wABOaEJSxne8ce6jQ8OBADqA/wOsnKXJORfUJaQMn3Lgyyvm88q/Efb7b59Nl0qJ5SSntb/YYcz3w356+1Wu"
+            + "QIhkugv6202Z+GVHHbIjjsWkvmjvaIX41hpNyOOM4urEzgAaxPn+V81Cn87g8koaKhDy7UiUWlnlt0rLaL3fATuO0NaN4Jrf"
+            + "NS2aJ4GrAj2UmUWGO3X15wI58sfefT9RBcReZuYdMK4YO5Q+vbUEpzgdrUU0t0X/DcyS95ir/2aeLB+mTgSd+Mnww6SQfPY1"
+            + "FXg6yIJ350Zo4X15RLZeCm7mm1YwSC1lhw9n/m3W4XBiyJI6fLvxxp+YuqVyjrJKdojed7/K/g2ALrH1g5IQntz163QWUjj9"
+            + "ucnsTkLjAyhIS1UZO80PM5GS79zRbageelxT9rif7F/x2gnmZj/+BHu7oH+1qSQe3/siCEQlKWt3px3urFp4g0KZW8e95ow8"
+            + "82A4wUPUe0G5B5Bpq9d7UjkmaZIWCfwLGs5c0CbVmwVpfh6t6wcP/wzSeoPIJjuV8uBvIXnJpBM+RSFXL1hSS8Ors3kZQ+tu"
+            + "RWqGAjokvFXonEwwL3gwD+6QBGAXVMf0ueHfcyYzodrR5/ofTLNoPVNznRIp27edFMit9s4JCr82XDtWWfgnpCFIEBtBmgOy"
+            + "kFZDAvUFCylvaMT07YLvtqPqH+lWUJfDPL0ubxXefhM0wP54vIubMgMZhBiLSQpHYmorNb4SMEEDvsh+yK9r6r/Y/3Qb9de7"
+            + "ML+0KuhqGT7E3oiBs7OMS9BeGsY8cetWXSgCn6kYG9b6gsmv8TrVFNdr6Dl+U5S48lXkPjSR/gh86ldvwAKdy30G/HJAA//q"
+            + "pEBtbIkkH2t7TJz73a1KTm677rAyQ/vhe8NOU59SrkTm6UPWhzoZUJEJDTMjvc1mDLERGlu6iy95bZgQrt0H1BmEzLFTIV82"
+            + "3yfUaCYcPt8eMW8Pzr8/iHaeJ1nWMedQEF2LDDODA2yD2eVPL1tZd0V4gQDRSG7OTOMPtmu0IkAdh/uUhVnUfEII+dyipXep"
+            + "krremBcKRFqhS1mIJZe7W8VLvTAT/3Xz96N41nWrobZwtZveww28M1qvXoZBxkSNYOteSIoXI/szoWOQwI6iM/tGwQAEVmKu"
+            + "2UWeIanb/T39qZAJ4QiZOWhVPUpiaHojvaspwbY/2XER5uQra+bFnMRDx+o1Ea3PHQfjlIY0052YCQe35ujQHl3lu/X1vFXD"
+            + "Zv1UWyi6ZsZYc+3p4yOnL5RwoP8HvPuk4x6bv/wEeZ3NpAbSNh+xNqIhEYznjAhZZe6jQ8OBAHiA/wOsnMpaJYVsq5yIM8/T"
+            + "XpTwvc72p6v6vyEhVHDxMium1nQHaFnHJCRZi+9aJckVJwAHfYp09fCHvuVaEaegPow4XNUQN6L9y2HNZYurCjYBUq4wTUVC"
+            + "hzCF0192y6bcuWorIFdlzhk2Fh7Jlayr7Tj/h0CyKPwLiwdjRSllRWFkdQyd83Z2PFvDBXRty+923PvqQHR92NOnUHGsKcbh"
+            + "nrXSP4PZbbMceaV2nqKM3z4FM1T989ALbZ8eKn0e3WfwfPJSZ8t0xjU8MFwR9WiiKgkPLbSmZPf/V4OY4X2sW40fu3Qzky2H"
+            + "frq02ryBNZyOK8v4AV+p8oeuyQbRwKJutezTyC7oGIrzq3ka/MsV1cBh8AttqBnfB7kOMYMfEaS1U+3A94t5Xq7YcUAB//VM"
+            + "wH+1rbah+3Jd+9OeMYwxk03urFp4yHwddKwxmSfiU7owGIwWaByf8Pdvdn4PqHoDXoNVG2jyF503Bc6Ff/Qut+xeq/rS4LKa"
+            + "TPcREm7xnpJUYlREdeHi7r39naL2Fp3yWVdmZacPlqgsFksDcDkvtNHd3KTIgiH782M2hbEuexeo2c/xSfxkInMyGkuHyt6u"
+            + "fgWMtHajk13F+Jk/Q6Oa+jFFk9uWr05Y7J/qCS1W3VAfhbd+9Evtadw7VrHqM1F/vcyW2vY47rVBA4eMRp59GUk2D8vIFArV"
+            + "97uGttM8fewfg7IKt+t9U5Uu3cwTEdda2GcfCO7uGSfCzoH3jz6PNFRKT/t/KOHeUeU5+O7nVNu2kg6RSgFERvErN4D0Rce3"
+            + "Z2LM22JBNYzq1t4NX2f90KFUUMRWHKd8uZ2//gd1UR//bIB/9NgE7q1vfa1alKGH7qycpck5F9QlpAyfcvQLEsCpgQYBr+b+"
+            + "baWsyJMKwmHZGL4DlTvcQT96oImbmkILpd4kxY7ZP3V9mM/0mlWeZS23x2Dg5Q0uNMvRWj+3icIlvdcq9J5TW+x1Tf45JiTZ"
+            + "Zc4NBOiyx7YoDlqwfFAycl1Jm4HmcpnB8yAdneLdFgO/qaI6qh4cNfvnl83QQDa3jXCwxZ8Kh2Ks2eST9LIFV/ELpqgHGiLV"
+            + "VAEDTyGWae6v+a6UB4B241zWNPYrG1nthP3hio/0OT89SkUnfR/Gk01+uVJeqZk43D+egobZMhH2Jxt6sM7o8o6zNbzOatLR"
+            + "dMV/ONahZ/W8JDoucc6MdklSOPU9ZnEuQuMDKEhLVRk7zQ8zkZLv3NFebD56XFP2uJ/sXNZaCeZmP/4Gd3EAf7WpJB7f+yII"
+            + "RCTna3OGGe6jQ8OBALqA/wOsWniDQplbx73mjGx77cB34hXYHF/2+A+AhT9UjsqCnFKC1exV/JJMLuR4Zzp2qEe2AKiLGhVF"
+            + "RQIHTwVnQS9oEyf7BQ9JWyGX0pQrPGAak4csNQL1XjTRE5TtaGGq2BOQyGI0raVA44awmDhEgwDKsfsl5Q3MH9AVn2RJuGda"
+            + "uQ8wF4yhQnQHSo+dBJP9bcQ+TBR+hbQMS2pwWrl/IXNV5QsMS9nW58akdM7XR0ybFocJF0YKx/UGH0usnbeodVgO9IFZgrDu"
+            + "TYr+XDrOYMrjbmugffl77HjMz3D7r0mptuRS2RN0y/VidaR9nhTYv116Mpanc3UG9TMc2z78ct36Rsm203nBZNf4nWqKa7Xz"
+            + "qzspylx5KvaTasjoZD47K7fgAS2t/Qb6ckAD//MiP/9tqSQfa3tMnPvdrUpObz3usDJD++F7w05T6t6w4Gyyqe1TTUjJ/5/1"
+            + "27poTkm/UlmIXOeefncZFfNOUKfD25IpJD5mOk1tydrfta8VcXzXet0+wEGgFakN07sLNTLzWErswf/izTSkTu9k5yaCKT9s"
+            + "08Jpksf8zdOlUT1ZuIh85esyXG6vuA5xHoXr34o6+uv3c/VbDGYqBAvGvFpSiKnFxqROwVN4oIVBmN8yGrhrtqtogTHOFHYR"
+            + "krhhK6sCDuyws0KE92NW+CkgGbYlguXrlNcErGXgNBlpKiC4LzzTsbmhNUhg5iS2w2AXVpV4eTwx8nRUEDchWYJibOYiH17h"
+            + "wtNfVcBXm+0IrGmnOzASD2/N0aA8u+N1t7W8VUksUPjbKLpmxlhzvenjI6cpNfKA/we8+6TjHx2//AR3fc2T//I2H7E2oiER"
+            + "jOeMCFll7qycylolhWyrnIgzz9NelPC9zvanq/q/ISFUcN/SiZQXBjYW5VuWav5HbhklLWdxRtuYG9jDV4oih3fxd4yhVrsk"
+            + "O7o1uwIPkVJR8ndEUBAy3YtMVoxfzhPkbLB+spadARwXdrlLt0fYl89e9YMHx3xJlwFTIyp4tqK3gnKyRFv0xqGyLHoGidU7"
+            + "ngoxe/wvNvulvLEpmawMVrCzcovWIAGogvjSv/P1lqF1+RQV393MB4BcXSmPGoGmPAaU53KrO/Vqiun/udPLA+1LSOQG8ZIF"
+            + "pJnpBEGRuCdptoC6hS3Py75gH+RrLPDKxzFPnroU8FiYB0R5Q9bHBEciMJDT0Da813QMZZABKScxQvoq4DAq07bUDO+D3Idd"
+            + "WbI+tLVT7cDjld3erdhxQAH/+YiAf7WyN0H7cl37054xjDGTTe4cU7trjbuLs4EAt4b3gQHxgdc="
+    ).unwrap();
+}
+
+fun audio_content_detection_and_webm_opus(): void {
+    let wav = AudioBuffer.decode(audio_fixture_wav()).unwrap();
+    Assert.eq(wav.sample_rate, 48000);
+    Assert.eq(wav.channels, 1);
+    Assert.eq(wav.frame_count, 4);
+    Assert.is_true(Math.abs((double)wav.read_pcm(1, 1).unwrap()[0] - 0.25d) < 0.00001d);
+    let mp3 = AudioBuffer.decode(audio_fixture_mp3()).unwrap();
+    Assert.eq(mp3.sample_rate, 44100);
+    Assert.is_true(mp3.frame_count > 1000);
+    let webm = AudioBuffer.decode(audio_fixture_webm()).unwrap();
+    Assert.eq(webm.sample_rate, 48000);
+    Assert.is_true(webm.duration > 0.2d && webm.duration < 0.5d);
+    let spectrum = AudioAnalyzer()
+        .analyze(webm.read_pcm(0, webm.frame_count).unwrap(), webm.sample_rate, webm.channels)
+        .unwrap();
+    let peak_bin = 0;
+    for (let i = 1; i < spectrum.magnitudes.length; i = i + 1) {
+        if spectrum.magnitudes[i] > spectrum.magnitudes[peak_bin] {
+            peak_bin = i;
+        }
+    }
+    Assert.eq(peak_bin, 19);
+    Assert.is_true(AudioBuffer.decode(audio_fixture_webm(), 4).is_err());
+    Assert.is_true(AudioBuffer.decode(audio_fixture_wav(), 4).is_err());
+}
+
+@test
+async fun audio_analysis(): void {
+    audio_fft_sine_and_levels();
+    audio_fft_silence_dc_and_stereo();
+    audio_pcm_snapshot_and_ranges();
+    audio_controls_and_events_without_device().await;
+    audio_event_queue_is_bounded();
+    audio_content_detection_and_webm_opus();
+}

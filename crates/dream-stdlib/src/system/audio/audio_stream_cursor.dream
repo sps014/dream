@@ -1,0 +1,373 @@
+module system.audio;
+
+// Owns one open file or HTTP body and its incremental decoder. A backward seek reopens
+// the source into a second cursor and adopts it only after that cursor reaches the
+// target, so a failed seek leaves this cursor and its position untouched.
+// The release closure captures only the file or HTTP objects, never the cursor.
+@allow_cycle
+internal class AudioStreamCursor {
+    internal rate: int;
+    internal channels: int;
+    internal duration: Option<double>;
+    path: string;
+    capacity: int;
+    decoder: AudioStreamDecoder;
+    reader: AsyncReader;
+    release: fun(): void;
+    stash: float[];
+    delivered: long;
+    ended: bool;
+    input_done: bool;
+    released: bool;
+    remote: bool;
+    ranges: bool;
+    validator: string;
+    length: string;
+
+    constructor(
+        path: string,
+        capacity: int,
+        decoder: AudioStreamDecoder,
+        reader: AsyncReader,
+        release: fun(): void
+    ) {
+        this.rate = 0;
+        this.channels = 0;
+        this.duration = Option.None;
+        this.path = path;
+        this.capacity = capacity;
+        this.decoder = decoder;
+        this.reader = reader;
+        this.release = release;
+        this.stash = [];
+        this.delivered = 0L;
+        this.ended = false;
+        this.input_done = false;
+        this.released = false;
+        this.remote = false;
+        this.ranges = false;
+        this.validator = "";
+        this.length = "";
+    }
+
+    del() {
+        this.close();
+    }
+
+    /// Opens a local path or HTTP URL and decodes until the format and first samples are known.
+    internal static async fun open(
+        path: string,
+        capacity: int,
+        token: CancellationToken
+    ): Result<AudioStreamCursor, AudioError> {
+        if capacity <= 0 || capacity > 1073741824 {
+            return Result.Err(
+                AudioError("EINVAL", "encoded-data limit must be positive and at most 1 GiB")
+            );
+        }
+        let decoder = AudioStreamDecoder(capacity);
+        if decoder.is_open() == false {
+            return Result.Err(AudioError("ENOMEM", "audio decoder could not be allocated"));
+        }
+        let cursor: Option<AudioStreamCursor> = Option.None;
+        if path.starts_with("http://") || path.starts_with("https://") {
+            let parsed = Url.parse(path);
+            if parsed.is_err() {
+                return Result.Err(AudioError("EINVAL", parsed.unwrap_err().message()));
+            }
+            let client = HttpClient();
+            let received = client.send(
+                HttpRequest(HttpMethod.Get, parsed.unwrap()),
+                Option.Some(token)
+            ).await;
+            if received.is_err() {
+                client.close();
+                let error = received.unwrap_err();
+                return Result.Err(AudioError(error.code(), error.message()));
+            }
+            let response = received.unwrap();
+            if response.status < 200 || response.status >= 300 {
+                response.close();
+                client.close();
+                return Result.Err(
+                    AudioError("EHTTP", "audio request returned HTTP " + response.status)
+                );
+            }
+            cursor = Option.Some(
+                AudioStreamCursor(
+                    path,
+                    capacity,
+                    decoder,
+                    response.body,
+                    () => {
+                        response.close();
+                        client.close();
+                    }
+                )
+            );
+            let remote = cursor.unwrap();
+            remote.remote = true;
+            remote.ranges = response.headers.get("accept-ranges")
+                .unwrap_or("")
+                .to_lower() == "bytes";
+            let encoding = response.headers.get("content-encoding").unwrap_or("").to_lower();
+            if encoding != "" && encoding != "identity" {
+                remote.ranges = false;
+            }
+            let etag = response.headers.get("etag").unwrap_or("");
+            if etag.starts_with("W/") == false {
+                remote.validator = etag;
+            }
+            if remote.validator == "" {
+                remote.validator = response.headers.get("last-modified").unwrap_or("");
+            }
+            remote.length = response.headers.get("content-length").unwrap_or("");
+        } else {
+            let opened = FileHandle.open_async(path, FileMode.Read, Option.Some(token)).await;
+            if opened.is_err() {
+                let error = opened.unwrap_err();
+                return Result.Err(AudioError(error.code(), error.message()));
+            }
+            let file = opened.unwrap();
+            cursor = Option.Some(
+                AudioStreamCursor(
+                    path,
+                    capacity,
+                    decoder,
+                    file,
+                    () => {
+                        file.close();
+                    }
+                )
+            );
+        }
+        let result = cursor.unwrap();
+        let first = result.pull(4096, token).await;
+        if first.is_err() {
+            result.close();
+            return Result.Err(first.unwrap_err());
+        }
+        result.stash = first.unwrap();
+        result.duration = result.decoder.duration();
+        return Result.Ok(result);
+    }
+
+    /// Returns up to frame_count decoded frames; an empty array marks the end of the source.
+    /// Callers serialize next and seek; the player's pump task is the only reader.
+    internal async fun next(
+        frame_count: int,
+        token: CancellationToken
+    ): Result<float[], AudioError> {
+        return this.take(frame_count, token).await;
+    }
+
+    /// Positions the next read at an absolute source frame.
+    internal async fun seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
+        if this.remote {
+            return this.range_seek(frame, token).await;
+        }
+        let opened = AudioStreamCursor.open(this.path, this.capacity, token).await;
+        if opened.is_err() {
+            return Result.Err(opened.unwrap_err());
+        }
+        let other = opened.unwrap();
+        let skipped = other.skip(frame, token).await;
+        if skipped.is_err() {
+            other.close();
+            return skipped;
+        }
+        this.close();
+        this.decoder = other.decoder;
+        this.reader = other.reader;
+        this.release = other.release;
+        this.stash = other.stash;
+        this.delivered = other.delivered;
+        this.ended = other.ended;
+        this.input_done = other.input_done;
+        this.released = false;
+        other.released = true;
+        return Result.Ok(true);
+    }
+
+    async fun range_seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
+        let offset = this.decoder.seek_offset(frame);
+        if this.ranges == false || offset < 0 || this.validator == "" || this.length == "" {
+            return Result.Err(
+                AudioError(
+                    "ENOTSUP",
+                    "HTTP seeking requires byte ranges, a stable resource validator, and usable format positioning"
+                )
+            );
+        }
+        let client = HttpClient();
+        let request = HttpRequest(HttpMethod.Get, Url.parse(this.path).unwrap());
+        request.headers.set("Range", "bytes=" + offset + "-");
+        request.headers.set("If-Range", this.validator);
+        let received = client.send(request, Option.Some(token)).await;
+        if received.is_err() {
+            client.close();
+            let error = received.unwrap_err();
+            return Result.Err(AudioError(error.code(), error.message()));
+        }
+        let response = received.unwrap();
+        let content_range = response.headers.get("content-range").unwrap_or("");
+        let same = response.headers.get("etag")
+            .unwrap_or("")
+            == this.validator
+            || response.headers.get("last-modified")
+            .unwrap_or("") == this.validator;
+        if response.status
+            != 206
+            || same
+            == false
+            || content_range.starts_with("bytes " + offset + "-")
+            == false || content_range.ends_with("/" + this.length) == false {
+            response.close();
+            client.close();
+            return Result.Err(
+                AudioError(
+                    "ESEEK",
+                    "server did not return the requested range of the unchanged audio resource"
+                )
+            );
+        }
+        if this.released || token.is_cancelled {
+            response.close();
+            client.close();
+            return Result.Err(AudioError("ECANCELLED", "audio seek was cancelled"));
+        }
+        if this.decoder.reposition(frame) == false {
+            response.close();
+            client.close();
+            return Result.Err(AudioError("ESEEK", "decoder could not reposition"));
+        }
+        let release = this.release;
+        release();
+        this.reader = response.body;
+        this.release = () => {
+            response.close();
+            client.close();
+        };
+        this.stash = [];
+        this.delivered = frame;
+        this.ended = false;
+        this.input_done = false;
+        return Result.Ok(true);
+    }
+
+    /// Releases the source and decoder; repeated calls do nothing.
+    internal fun close(): void {
+        if this.released {
+            return;
+        }
+        this.released = true;
+        let release = this.release;
+        release();
+        this.decoder.close();
+    }
+
+    async fun take(frame_count: int, token: CancellationToken): Result<float[], AudioError> {
+        if this.released {
+            return Result.Err(AudioError("ECLOSED", "audio stream is closed"));
+        }
+        let samples = this.stash;
+        if samples.length > 0 {
+            this.stash = [];
+        } else if this.ended {
+            let none: float[] = [];
+            return Result.Ok(none);
+        } else {
+            let pulled = this.pull(frame_count, token).await;
+            if pulled.is_err() {
+                return pulled;
+            }
+            samples = pulled.unwrap();
+        }
+        this.delivered = this.delivered + (long)(samples.length / this.channels);
+        return Result.Ok(samples);
+    }
+
+    async fun skip(frame: long, token: CancellationToken): Result<bool, AudioError> {
+        while this.delivered < frame {
+            let next = this.take(4096, token).await;
+            if next.is_err() {
+                return Result.Err(next.unwrap_err());
+            }
+            let samples = next.unwrap();
+            if samples.length == 0 {
+                return Result.Err(
+                    AudioError("ESEEK", "seek position is beyond the end of the stream")
+                );
+            }
+            if this.delivered > frame {
+                let extra = (int)(this.delivered - frame) * this.channels;
+                let kept = Array.alloc<float>(extra);
+                let start = samples.length - extra;
+                for (let i = 0; i < extra; i = i + 1) {
+                    kept[i] = samples[start + i];
+                }
+                this.stash = kept;
+                this.delivered = frame;
+            }
+        }
+        return Result.Ok(true);
+    }
+
+    async fun pull(frame_count: int, token: CancellationToken): Result<float[], AudioError> {
+        while this.released == false {
+            let result = this.decoder.read(frame_count);
+            let status = (int)result[0];
+            if status > 0 {
+                this.rate = (int)result[1];
+                this.channels = (int)result[2];
+                if status == 2 {
+                    this.ended = true;
+                }
+                let samples = Array.alloc<float>(result.length - 3);
+                for (let i = 0; i < samples.length; i = i + 1) {
+                    samples[i] = result[i + 3];
+                }
+                return Result.Ok(samples);
+            }
+            if status < 0 {
+                return Result.Err(AudioStreamCursor.failure(status));
+            }
+            let space = this.decoder.space();
+            if this.input_done || space <= 0 {
+                return Result.Err(AudioStreamCursor.failure(-4));
+            }
+            if space > 65536 {
+                space = 65536;
+            }
+            let next = this.reader.read_async(space, Option.Some(token)).await;
+            if next.is_err() {
+                let error = next.unwrap_err();
+                return Result.Err(AudioError(error.code(), error.message()));
+            }
+            let bytes = next.unwrap();
+            if bytes.length == 0 {
+                this.input_done = true;
+                this.decoder.finish();
+            } else if this.decoder.push(bytes) == false {
+                return Result.Err(AudioStreamCursor.failure(-4));
+            }
+        }
+        return Result.Err(AudioError("ECLOSED", "audio stream is closed"));
+    }
+
+    static fun failure(status: int): AudioError {
+        if status == -2 {
+            return AudioError("ENOMEM", "audio decoder ran out of memory");
+        }
+        if status == -3 {
+            return AudioError("EFORMAT", "only mono and stereo audio is supported");
+        }
+        if status == -4 {
+            return AudioError(
+                "ELIMIT",
+                "an encoded audio element exceeds the compressed queue limit"
+            );
+        }
+        return AudioError("EFORMAT", "invalid or unsupported encoded audio");
+    }
+}

@@ -1,0 +1,37 @@
+module system.audio;
+
+// Streaming operations are closures installed by string-source constructors, so
+// players built from bytes or PCM never reference the incremental decoders.
+// The closures capture only a cursor, which never refers back to its feed.
+@allow_cycle
+internal class AudioFeed {
+    internal rate: int;
+    internal channels: int;
+    internal duration: Option<double>;
+    internal output_handle: int;
+
+    /// Next decoded chunk of at most the given frame count; empty at the end of the source.
+    internal next: fun(int, CancellationToken): Future<Result<float[], AudioError>>;
+
+    /// Repositions decoding at an absolute source frame; failure keeps the old position.
+    internal seek: fun(long, CancellationToken): Future<Result<bool, AudioError>>;
+
+    internal close: fun(): void;
+
+    internal constructor(
+        rate: int,
+        channels: int,
+        duration: Option<double>,
+        next: fun(int, CancellationToken): Future<Result<float[], AudioError>>,
+        seek: fun(long, CancellationToken): Future<Result<bool, AudioError>>,
+        close: fun(): void
+    ) {
+        this.rate = rate;
+        this.channels = channels;
+        this.duration = duration;
+        this.output_handle = 0;
+        this.next = next;
+        this.seek = seek;
+        this.close = close;
+    }
+}

@@ -1,0 +1,9 @@
+module system.audio;
+
+/// The weighting applied before computing an audio spectrum.
+public enum AudioWindow {
+    /// Tapers both ends to reduce leakage between frequency bins.
+    Hann,
+    /// Leaves the input unchanged; useful for integer-period test signals.
+    Rectangular,
+}

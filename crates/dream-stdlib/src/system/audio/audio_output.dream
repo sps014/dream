@@ -1,0 +1,37 @@
+module system.audio;
+
+// Each entry point is separate so decoding and analysis need no output capability.
+internal static class AudioOutput {
+    @runtime("audioOutputCreate")
+    internal static extern fun create(borrow samples: float[], rate: int, channels: int): int;
+
+    @runtime("audioOutputStream")
+    internal static extern fun stream(rate: int, channels: int, frames: int): int;
+
+    @runtime("audioOutputWrite")
+    internal static extern fun write(handle: int, borrow samples: float[]): int;
+
+    @runtime("audioOutputStart")
+    internal static extern async fun start(handle: int): int;
+
+    @runtime("audioOutputControl")
+    internal static extern fun control(handle: int, command: int, value: double): int;
+
+    @runtime("audioOutputQuery")
+    internal static extern fun query(handle: int, field: int): double;
+
+    @runtime("audioOutputClose")
+    internal static extern fun close(handle: int): void;
+
+    @runtime("audioOutputDevices")
+    internal static extern async fun devices(): string;
+
+    @runtime("audioOutputRequest")
+    internal static extern async fun request(): string;
+
+    @runtime("audioOutputSink")
+    internal static extern async fun sink(handle: int, borrow id: string): int;
+
+    @runtime("audioOutputCapture")
+    internal static extern fun capture(handle: int, frames: int): float[];
+}

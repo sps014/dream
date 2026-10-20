@@ -27,6 +27,7 @@ These declaration snippets show the interface; they are not complete programs. T
 ## Packages
 
 - [system](package-system.md)
+- [system.audio](system-audio.md)
 - [system.cli](system-cli.md)
 - [system.codegen](system-codegen.md)
 - [system.collections](system-collections.md)

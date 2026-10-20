@@ -247,7 +247,8 @@ pub(super) fn build_wasm_runtime(
         }
     }
     let mut link = tools.command("llvm-link");
-    link.args(&parts).arg("-o").arg(&bc);
+    let inputs = super::tools::input_response(&parts).map_err(|error| error.to_string())?;
+    link.arg(format!("@{}", inputs.path().display())).arg("-o").arg(&bc);
     run_captured(&mut link, "llvm-link (wasm32 runtime)")?;
 
     let check = |src: &Path| {
@@ -501,6 +502,7 @@ pub fn link_wasm(
     // `--allow-undefined` would otherwise turn a missing one into a host import that fails at
     // instantiation. As an archive after the objects, only referenced members are linked.
     let builtins = clang_rt(tools, ClangRt::WasmBuiltins { threads })?;
+    let runtime_inputs = super::tools::input_response(&runtime_objects).map_err(|error| error.to_string())?;
     let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
     if !packages.libraries.is_empty() {
         cmd.arg("--fatal-warnings");
@@ -510,9 +512,19 @@ pub fn link_wasm(
         .arg(&obj)
         .args(&separate)
         .args(rt.as_ref().map(|rt| rt.objs.as_slice()).unwrap_or_default())
-        .args(&runtime_objects)
+        .arg(format!("@{}", runtime_inputs.path().display()))
         .args(&packages.libraries)
         .arg(builtins);
+    // Codec parsers use standard C routines beyond Dream's small freestanding libc.
+    // Archive extraction retains only their unresolved routines, without WASI services.
+    if need.contains(RuntimeNeed::AUDIO_DECODE) {
+        let flavor = if threads { "wasm32-wasip1-threads" } else { "wasm32-wasip1" };
+        let libc = wasi_sysroot(&tools.clang()?)?.join("lib").join(flavor).join("libc.a");
+        if !libc.is_file() {
+            return Err(format!("missing codec libc archive: {}", libc.display()));
+        }
+        cmd.arg(libc);
+    }
     let r = run_captured(&mut cmd, "wasm-ld");
     let _ = std::fs::remove_file(&obj);
     for object in &separate {

@@ -1,0 +1,251 @@
+module system.audio;
+
+// Async operations retain this state and compare generation before publishing results.
+// Source closures capture immutable inputs only; callers cannot install a closure capturing the player.
+@allow_cycle
+internal class AudioState {
+    internal loader: fun(CancellationToken): Future<Result<AudioBuffer, AudioError>>;
+    internal opener: Option<fun(CancellationToken): Future<Result<AudioFeed, AudioError>>>;
+    internal source: string;
+    internal buffer: Option<AudioBuffer>;
+    internal feed: Option<AudioFeed>;
+    internal buffer_seconds: double;
+    internal ring_frames: int;
+    internal buffering: bool;
+    internal stream_done: bool;
+    internal feed_owned: bool;
+    internal seek_target: double;
+
+    // Output-ring frame coordinates: flush_base is the source frame at the last flush,
+    // written counts frames queued since then, and origin is where the current loop
+    // iteration's time zero lies. Pending loop restarts wait in wraps until played.
+    internal flush_base: long;
+
+    internal written: long;
+    internal origin: long;
+    internal wraps: List<long>;
+    internal handle: int;
+    internal closed: bool;
+    internal loading: bool;
+    internal generation: int;
+    internal events: AudioEvents;
+    internal failure: Option<AudioError>;
+    internal paused: bool;
+    internal ended: bool;
+    internal seeking: bool;
+    internal starting: bool;
+    internal sink_pending: bool;
+    internal play_generation: int;
+    internal position: double;
+    internal volume: float;
+    internal muted: bool;
+    internal looped: bool;
+    internal sink: string;
+    internal limit: int;
+    internal last_update: long;
+    internal compressed_limit: int;
+    internal cancellation: CancellationSource;
+
+    internal constructor(
+        loader: fun(CancellationToken): Future<Result<AudioBuffer, AudioError>>,
+        opener: Option<fun(CancellationToken): Future<Result<AudioFeed, AudioError>>>,
+        source: string,
+        options: AudioOptions
+    ) {
+        this.loader = loader;
+        this.opener = opener;
+        this.source = source;
+        this.buffer = Option.None;
+        this.feed = Option.None;
+        this.buffer_seconds = options.buffer_seconds;
+        this.ring_frames = 0;
+        this.buffering = false;
+        this.stream_done = false;
+        this.feed_owned = false;
+        this.seek_target = -1.0d;
+        this.flush_base = 0L;
+        this.written = 0L;
+        this.origin = 0L;
+        this.wraps = List<long>();
+        this.handle = 0;
+        this.closed = false;
+        this.loading = false;
+        this.generation = 0;
+        this.events = AudioEvents();
+        this.failure = Option.None;
+        this.paused = true;
+        this.ended = false;
+        this.seeking = false;
+        this.starting = false;
+        this.sink_pending = false;
+        this.play_generation = 0;
+        this.position = 0.0d;
+        this.volume = 1.0f;
+        this.muted = false;
+        this.looped = false;
+        this.sink = "";
+        this.limit = options.max_decoded_bytes;
+        this.last_update = 0L;
+        this.compressed_limit = options.max_compressed_bytes;
+        this.cancellation = CancellationSource();
+    }
+
+    internal fun fail(
+        code: string,
+        message: string,
+        operation: string,
+        terminal: bool
+    ): AudioError {
+        let error = AudioError(code, message);
+        this.failure = Option.Some(error);
+        this.events.push(AudioEvent.Error(AudioEvents.now(), error, operation, terminal));
+        return error;
+    }
+
+    internal fun writable(operation: string): bool {
+        if this.closed {
+            this.fail("ECLOSED", "audio player is closed", operation, false);
+            return false;
+        }
+        return true;
+    }
+
+    internal fun output_failure(result: int, operation: string): AudioError {
+        let code = "EOUTPUT";
+        let message = "audio output operation failed";
+        if result == -1 {
+            code = "ENOTSUP";
+            message = "audio output operation is unsupported";
+        } else if result == -2 {
+            code = "EACCES";
+            message = "audio output permission or playback activation was denied";
+        } else if result == -3 {
+            code = "ESECURITY";
+            message = "audio output requires a secure browser context";
+        } else if result == -5 {
+            code = "ENOTFOUND";
+            message = "audio output device was not found";
+        } else if result == -6 {
+            code = "ECANCELLED";
+            message = "audio output operation was cancelled";
+        } else if result == -7 {
+            code = "EBUSY";
+            message = "another audio output operation is pending";
+        }
+        return this.fail(code, message, operation, false);
+    }
+
+    internal fun loaded(): bool {
+        return this.buffer.is_some() || this.feed.is_some();
+    }
+
+    internal fun rate(): int {
+        if this.buffer.is_some() {
+            return this.buffer.unwrap().sample_rate;
+        }
+        return this.feed.unwrap().rate;
+    }
+
+    internal fun synchronize(): void {
+        if this.handle <= 0 || this.closed || this.loaded() == false {
+            return;
+        }
+        let coordinate = AudioOutput.query(this.handle, 1);
+        if this.feed.is_some() {
+            if this.feed.unwrap()
+                .output_handle > 0
+                && AudioOutput.query(this.handle, 7) < 0.0d && this.paused == false {
+                AudioOutput.control(this.handle, 2, 0.0d);
+                this.paused = true;
+                this.fail("EIO", "browser audio loading or decoding failed", "stream", true);
+            }
+            let frame = (long)coordinate;
+            while this.wraps.length > 0 && frame >= this.wraps[0] {
+                this.origin = this.wraps[0];
+                this.wraps.remove_at(0);
+            }
+            this.position = (double)(frame - this.origin) / (double)this.rate();
+            if this.paused == false {
+                let starved = AudioOutput.query(this.handle, 5) != 0.0d;
+                if starved && this.buffering == false {
+                    this.buffering = true;
+                    this.events.push(AudioEvent.Waiting(AudioEvents.now()));
+                } else if starved == false && this.buffering {
+                    this.buffering = false;
+                    this.events.push(AudioEvent.Playing(AudioEvents.now()));
+                }
+            }
+        } else {
+            this.position = coordinate / (double)this.rate();
+        }
+        if this.paused == false && AudioOutput.query(this.handle, 3) != 0.0d {
+            AudioOutput.control(this.handle, 2, 0.0d);
+            this.paused = true;
+            let error = AudioError("ENODEVICE", "audio output is no longer available");
+            this.failure = Option.Some(error);
+            this.events.push(AudioEvent.DeviceLost(AudioEvents.now(), error));
+        }
+        if this.paused == false && AudioOutput.query(this.handle, 2) != 0.0d {
+            this.ended = true;
+            this.paused = true;
+            this.events.push(AudioEvent.Ended(AudioEvents.now()));
+        }
+        let now = AudioEvents.now();
+        if this.paused == false && now - this.last_update >= 250000000L {
+            this.last_update = now;
+            this.events.push(AudioEvent.TimeUpdate(now, this.position));
+        }
+    }
+
+    /// Releases the feed and output without recording events; used by close and destruction.
+    internal fun release(): void {
+        this.cancellation.cancel();
+        this.generation = this.generation + 1;
+        if this.feed.is_some() {
+            let close = this.feed.unwrap().close;
+            close();
+            this.feed = Option.None;
+        }
+        if this.handle > 0 {
+            AudioOutput.close(this.handle);
+            this.handle = 0;
+        }
+    }
+
+    internal fun reset(): void {
+        let had_data = this.loaded() || this.handle > 0;
+        this.play_generation = this.play_generation + 1;
+        this.starting = false;
+        this.sink_pending = false;
+        this.cancellation.cancel();
+        this.cancellation = CancellationSource();
+        this.generation = this.generation + 1;
+        if this.loading {
+            this.events.push(AudioEvent.Abort(AudioEvents.now()));
+        }
+        if this.feed.is_some() {
+            let close = this.feed.unwrap().close;
+            close();
+            this.feed = Option.None;
+        }
+        if this.handle > 0 {
+            AudioOutput.close(this.handle);
+            this.handle = 0;
+        }
+        this.buffer = Option.None;
+        this.buffering = false;
+        this.stream_done = false;
+        this.feed_owned = false;
+        this.seek_target = -1.0d;
+        this.wraps.clear();
+        this.loading = false;
+        this.position = 0.0d;
+        this.paused = true;
+        this.ended = false;
+        this.seeking = false;
+        this.failure = Option.None;
+        if had_data {
+            this.events.push(AudioEvent.Emptied(AudioEvents.now()));
+        }
+    }
+}

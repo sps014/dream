@@ -1,0 +1,23 @@
+module system.audio;
+
+/// A stable audio failure code and a readable explanation.
+public class AudioError: Error {
+    value_code: string;
+    value_message: string;
+
+    /// Creates a failure with a machine-readable code and message.
+    public constructor(code: string, message: string) {
+        this.value_code = code;
+        this.value_message = message;
+    }
+
+    /// Returns the failure code, such as EINVAL, EFORMAT, ECLOSED, or ENOTSUP.
+    public fun code(): string {
+        return this.value_code;
+    }
+
+    /// Returns a readable explanation of the failure.
+    public fun message(): string {
+        return this.value_message;
+    }
+}

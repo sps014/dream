@@ -1,0 +1,65 @@
+module system.audio;
+
+// Source loaders capture immutable inputs, keeping codec imports out of PCM-only players.
+internal static class AudioSource {
+    internal static async fun empty(token: CancellationToken): Result<AudioBuffer, AudioError> {
+        return Result.Err(AudioError("ENOSOURCE", "no audio source was assigned"));
+    }
+
+    internal static fun bytes(
+        bytes: byte[],
+        limit: int
+    ): fun(CancellationToken): Future<Result<AudioBuffer, AudioError>> {
+        let copied = Array.alloc<byte>(bytes.length);
+        for (let i = 0; i < bytes.length; i = i + 1) {
+            copied[i] = bytes[i];
+        }
+        return async (token: CancellationToken) => {
+            if token.is_cancelled {
+                return Result.Err(AudioError("ECANCELLED", "audio loading was cancelled"));
+            }
+            return AudioBuffer.decode(copied, limit);
+        };
+    }
+
+    /// Opens a file or HTTP URL for incremental decoding with a bounded encoded queue.
+    internal static fun path(
+        path: string,
+        compressed_limit: int
+    ): fun(CancellationToken): Future<Result<AudioFeed, AudioError>> {
+        return async (token: CancellationToken) => {
+            if path.starts_with("http://") || path.starts_with("https://") {
+                let browser = AudioMedia.open(path, token).await;
+                if browser.is_err() {
+                    return Result.Err(browser.unwrap_err());
+                }
+                if browser.unwrap().is_some() {
+                    return Result.Ok(browser.unwrap().unwrap());
+                }
+            }
+            let opened = AudioStreamCursor.open(path, compressed_limit, token).await;
+            if opened.is_err() {
+                return Result.Err(opened.unwrap_err());
+            }
+            let cursor = opened.unwrap();
+            return Result.Ok(
+                AudioFeed(
+                    cursor.rate,
+                    cursor.channels,
+                    cursor.duration,
+                    async (frame_count: int, next_token: CancellationToken) => cursor.next(
+                        frame_count,
+                        next_token
+                    ).await,
+                    async (frame: long, seek_token: CancellationToken) => cursor.seek(
+                        frame,
+                        seek_token
+                    ).await,
+                    () => {
+                        cursor.close();
+                    }
+                )
+            );
+        };
+    }
+}

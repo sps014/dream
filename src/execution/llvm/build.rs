@@ -354,6 +354,7 @@ pub fn compile_llvm(
         )?
     };
     let stamp_path = bin.with_extension("flags");
+    let driver = cc::resolve_target_cc(config, &spec)?;
     let stamp = format!(
         "native-c-shim-v5\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt),
@@ -373,7 +374,6 @@ pub fn compile_llvm(
         section_args(&spec),
         dead_strip_args(&spec)
     );
-    let driver = cc::resolve_target_cc(config, &spec)?;
     let mut resolved_inputs = vec![driver.path().to_path_buf()];
     if icon_png.is_some() && spec.is_windows() {
         resolved_inputs.push(PathBuf::from(icon::resource_command(&tools)?.get_program()));
@@ -417,6 +417,9 @@ pub fn compile_llvm(
         && (output_kind != OutputKind::Staticlib || ll_path.with_extension("link.json").is_file())
         && std::fs::read_to_string(&stamp_path).is_ok_and(|s| s == stamp)
     {
+        if relocatable {
+            crate::execution::native::runtime_manifest::update(&bin, &capabilities, &spec)?;
+        }
         return Ok(bin);
     }
     if *pgo == Pgo::Generate {
@@ -537,7 +540,8 @@ pub fn compile_llvm(
         c.arg(&obj);
         c
     };
-    lcmd.args(&native.objects).args(&debug_objects);
+    let object_inputs = super::tools::input_response(native.objects.iter().chain(&debug_objects))?;
+    lcmd.arg(format!("@{}", object_inputs.path().display()));
     if let Some(version) = spec.min_os {
         lcmd.arg(format!(
             "-m{}-version-min={}.{}.{}",
@@ -603,6 +607,9 @@ pub fn compile_llvm(
     }
     if let Some(path) = export_file {
         let _ = std::fs::remove_file(path);
+    }
+    if relocatable {
+        crate::execution::native::runtime_manifest::update(&bin, &capabilities, &spec)?;
     }
     std::fs::write(&stamp_path, stamp)?;
     if optimized != ll_path {

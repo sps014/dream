@@ -17,10 +17,11 @@ pub enum HostCapability {
     Io,
     Window,
     Gpu,
+    Audio,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Core,
         Self::Unicode,
         Self::Crypto,
@@ -32,6 +33,7 @@ impl HostCapability {
         Self::Io,
         Self::Window,
         Self::Gpu,
+        Self::Audio,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -47,6 +49,7 @@ impl HostCapability {
             Self::Io => "io",
             Self::Window => "window",
             Self::Gpu => "gpu",
+            Self::Audio => "audio",
         }
     }
 
@@ -63,6 +66,7 @@ impl HostCapability {
             Self::Io => "dream_host_io",
             Self::Window => "dream_host_window",
             Self::Gpu => "dream_host_gpu",
+            Self::Audio => "dream_host_audio",
         }
     }
 

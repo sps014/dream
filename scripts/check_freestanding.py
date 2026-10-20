@@ -24,7 +24,9 @@ def main():
     runtime = CORE.parent
     for source in sorted(runtime.rglob("*.c")):
         relative = source.relative_to(runtime)
-        if relative.parts[0] in ("deps", "pcre2"):
+        if (relative.parts[0] in ("deps", "pcre2", "vendor")
+                or relative.parts[:4] in (("sys", "wasi", "component", "p2"),
+                                          ("sys", "wasi", "component", "p3"))):
             continue
         lines = len(source.read_text(encoding="utf-8").splitlines())
         if lines > 600:
@@ -38,7 +40,7 @@ def main():
             run(args.clang, "--target=x86_64-unknown-linux-gnu", "-std=gnu11", "-O1",
                 "-ffreestanding", "-nostdlib", "-nostdinc", "-fno-stack-protector",
                 "-isystem", resource, "-I", CORE / "include/freestanding",
-                "-I", CORE / "include", "-c", source, "-o", obj)
+                "-I", CORE / "include", "-I", runtime / "include", "-c", source, "-o", obj)
             objects.append(obj)
         harness = temporary / "embedding.c"
         harness.write_text("""#include "dream_core.h"

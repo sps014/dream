@@ -216,8 +216,9 @@ impl Compiler {
         let text = dream_mir::backend::print_wasm(&wasm_bytes).map_err(|message| {
             CompileError::Toolchain(format!("could not render emitted WebAssembly: {message}"))
         })?;
-        fs::write(out_path, &text)?;
-        self.reporter.artifact(Path::new(out_path));
+        let wat_path = Path::new(out_path).with_extension("wat");
+        fs::write(&wat_path, &text)?;
+        self.reporter.artifact(&wat_path);
 
         // Release builds ship pre-compressed siblings (.gz / .br) for servers with
         // `gzip_static` / `brotli_static` (or CDNs); browsers never compress on their own.

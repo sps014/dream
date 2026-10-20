@@ -24,6 +24,27 @@ fn compile(entry: &Path, output: &Path, optimize: Option<OptLevel>) -> Result<()
         })
 }
 
+#[test]
+fn explicit_wasm_output_keeps_binary_and_text_separate() {
+    let dir = tempfile::tempdir().unwrap();
+    let entry = dir.path().join("main.dream");
+    let output = dir.path().join("main.wasm");
+    std::fs::write(
+        &entry,
+        "import system; fun main(): void { System.println(42); }",
+    )
+    .unwrap();
+    compile(&entry, &output, None).unwrap();
+    let binary = std::fs::read(&output).unwrap();
+    assert!(binary.starts_with(b"\0asm"));
+    let text = std::fs::read_to_string(output.with_extension("wat")).unwrap();
+    wat::parse_str(text).unwrap();
+    assert_eq!(
+        run_with_runtime(&output, &output.with_extension("node.runtime.js")),
+        "42\n"
+    );
+}
+
 fn run(wat: &Path) -> String {
     run_with_runtime(wat, &repo("runtime/dream.js"))
 }

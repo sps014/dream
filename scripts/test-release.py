@@ -31,6 +31,17 @@ with tempfile.TemporaryDirectory(prefix='dream-release-check-') as temporary:
         output = command([compiler, *flags, 'run', source], work)
         assert output == 'release 日本語\n', repr(output)
         print('PASS native ' + ('release' if flags else 'debug'), flush=True)
+    cli = work / 'cli.dream'
+    cli.write_text('''import system;
+import system.cli;
+fun main(): void {
+    let command = Command("release").string_option("message");
+    let parsed = command.parse(["--message", "native ABI"]).unwrap();
+    System.println(parsed.get_string("message").unwrap());
+}
+''', encoding='utf-8')
+    assert command([compiler, '--release', 'run', cli], work) == 'native ABI\n'
+    print('PASS native CLI capability ABI', flush=True)
     runner = work / 'verify.mjs'
     for name, expected in [('hello', 'Hello, world!\n'), ('async', 'awake\n'), ('typed_array', '6\n'), ('callback', '14\n'), ('csv', 'a\n'), ('compression', '27\n')]:
         source = work / (name + '.dream')

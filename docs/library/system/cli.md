@@ -34,10 +34,9 @@ fun main(): void {
 }
 ```
 
-Use `command.parse(System.args)` in a native or Node application. `System.args`
+Use `command.parse(System.args)` in a native application. `System.args`
 is a property containing arguments after the executable/runner, so no executable
-name belongs in the array. Browsers support explicit argument arrays through the
-same API.
+name belongs in the array.
 
 ## Command methods
 

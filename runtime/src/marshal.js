@@ -1,12 +1,15 @@
 import { isFunType, stripSuffix } from "./core.js";
 import { HAS_JS_HANDLES, HAS_CALLBACKS, HAS_ARRAYS } from "./features.js";
+import { GUEST_FUNCTION_EXPORT } from "./guest_contract.js";
 
 /** Marshals raw WASM argument values into JS values per the parameter type names. */
 export function marshalArgs(inst, params, rawArgs) {
   if (!params) return rawArgs;
   return rawArgs.map((arg, i) => {
     const rawType = params[i] || "int";
-    if (HAS_CALLBACKS && isFunType(rawType)) return inst.callback(arg, rawType); // Dream fn index -> JS callable
+    if (HAS_CALLBACKS && isFunType(rawType)) {
+      return inst.callback(inst.exports[GUEST_FUNCTION_EXPORT](arg), rawType);
+    }
     const t = stripSuffix(rawType);
     if (t === "string") return inst.readString(arg);
     if (HAS_JS_HANDLES && t === "js") return inst.derefHandle(arg); // i32 handle id -> live JS value

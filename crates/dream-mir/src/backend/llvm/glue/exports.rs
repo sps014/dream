@@ -60,6 +60,14 @@ fn needs_guest_context(l: &Lcx<'_>) -> bool {
 
 fn context_exports(l: &Lcx<'_>) -> Vec<(&'static str, &'static str)> {
     let mut exports = dream_abi::guest_contract::EXPORTS.to_vec();
+    if l.mir.imports.iter().any(|import| {
+        import
+            .params
+            .iter()
+            .any(|ty| matches!(l.interner.kind(*ty), dream_types::TyKind::Func(..)))
+    }) {
+        exports.push(dream_abi::guest_contract::FUNCTION_EXPORT);
+    }
     if l.mir
         .imports
         .iter()

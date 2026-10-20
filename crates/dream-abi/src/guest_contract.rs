@@ -3,6 +3,7 @@
 use std::fmt::Write;
 
 const VERSION: u32 = 1;
+pub const FUNCTION_EXPORT: (&str, &str) = ("__dream_guest_function", "dream_funcbox_funcidx");
 const STATUSES: &[(&str, &str, u32)] = &[
     ("OK", "Ok", 0),
     ("INVALID", "Invalid", 1),
@@ -115,6 +116,12 @@ pub fn javascript() -> String {
         writeln!(out, "  {name}: {value},").unwrap();
     }
     out.push_str("};\n");
+    writeln!(
+        out,
+        "export const GUEST_FUNCTION_EXPORT = {:?};",
+        FUNCTION_EXPORT.0
+    )
+    .unwrap();
     out
 }
 

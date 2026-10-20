@@ -91,6 +91,10 @@ jobs:
         shell: bash
         run: scripts/fetch-dev-llvm.sh
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
       - name: Package archive
         shell: bash
         run: |
@@ -173,10 +177,7 @@ jobs:
           mv "${HOME}/.dream/toolchains" "${HOME}/.dream/toolchains.off"
           trap 'mv "${HOME}/.dream/toolchains.off" "${HOME}/.dream/toolchains"' EXIT
           cd "$(mktemp -d)"
-          cp "${GITHUB_WORKSPACE}/tests/fixtures/compiler/arithmetic.dream" .
-          env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" run arithmetic.dream
-          env -u DREAM_LLVM DREAM_NO_AUTO_INSTALL=1 "$STAGE/dream" --release run arithmetic.dream
-          env -u DREAM_LLVM "$STAGE/dream" --wasm arithmetic.dream
+          env -u DREAM_LLVM python3 "${GITHUB_WORKSPACE}/scripts/test-release.py" --dream "$STAGE/dream"
 
       - name: Smoke test the staged Windows archive
         if: runner.os == 'Windows'
@@ -191,20 +192,8 @@ jobs:
           try {
             Remove-Item Env:DREAM_LLVM -ErrorAction SilentlyContinue
             $env:DREAM_NO_AUTO_INSTALL = '1'
-            $work = Join-Path $env:RUNNER_TEMP 'dream-release-smoke'
-            New-Item -ItemType Directory -Path $work -Force | Out-Null
-            Copy-Item -LiteralPath 'tests/fixtures/compiler/arithmetic.dream' -Destination $work
-            Push-Location $work
-            try {
-              & "$stage/dream.exe" run arithmetic.dream
-              if ($LASTEXITCODE -ne 0) { throw 'Native debug smoke test failed' }
-              & "$stage/dream.exe" --release run arithmetic.dream
-              if ($LASTEXITCODE -ne 0) { throw 'Native release smoke test failed' }
-              & "$stage/dream.exe" --wasm arithmetic.dream
-              if ($LASTEXITCODE -ne 0) { throw 'WASM smoke test failed' }
-            } finally {
-              Pop-Location
-            }
+            python -X utf8 scripts/test-release.py --dream "$stage/dream.exe"
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged compiler smoke tests failed' }
           } finally {
             Move-Item -LiteralPath $hidden -Destination $toolchains
           }

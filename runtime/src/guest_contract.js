@@ -10,3 +10,4 @@ export const HOST_STATUS = {
   CLOSED: 6,
   FAILED: 7,
 };
+export const GUEST_FUNCTION_EXPORT = "__dream_guest_function";

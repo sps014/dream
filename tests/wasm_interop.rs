@@ -49,6 +49,62 @@ fn run(wat: &Path) -> String {
     run_with_runtime(wat, &repo("runtime/dream.js"))
 }
 
+#[test]
+fn typed_js_callbacks_unbox_functions_and_keep_stable_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let entry = dir.path().join("callback.dream");
+    let output = dir.path().join("callback.wat");
+    std::fs::write(
+        &entry,
+        r#"
+import system;
+@js("host", "inspect")
+extern fun inspect(callback: fun(int): int): int;
+fun twice(value: int): int { return value * 2; }
+fun main(): void {
+    System.println(inspect(twice));
+    System.println(inspect(twice));
+}
+"#,
+    )
+    .unwrap();
+    compile(&entry, &output, None).unwrap();
+    let runner = dir.path().join("verify.mjs");
+    std::fs::write(
+        &runner,
+        format!(
+            r#"
+import assert from 'node:assert/strict';
+import {{pathToFileURL}} from 'node:url';
+const {{run}} = await import(pathToFileURL({runtime}));
+let previous;
+let output = '';
+await run(pathToFileURL({wasm}), {{
+  stdout: text => output += text,
+  imports: {{inspect: callback => {{
+    if (previous) assert.equal(callback, previous);
+    previous = callback;
+    return callback(7);
+  }}}},
+}});
+assert.equal(output, '14\n14\n');
+assert.equal(previous(9), 18);
+"#,
+            runtime =
+                serde_json::to_string(&output.with_extension("node.runtime.js").to_string_lossy())
+                    .unwrap(),
+            wasm = serde_json::to_string(&output.with_extension("wasm").to_string_lossy()).unwrap(),
+        ),
+    )
+    .unwrap();
+    let result = std::process::Command::new("node").arg(runner).output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
 fn run_with_runtime(wat: &Path, runtime: &Path) -> String {
     let script = wat.with_extension("mjs");
     std::fs::write(&script, format!(

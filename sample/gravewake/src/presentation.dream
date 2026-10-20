@@ -1,0 +1,187 @@
+import system;
+import system.gpu;
+import game.simulation;
+import game.animation;
+import render.catalog;
+
+public fun actor_data(game: Game, alpha: float = 1.0f): GpuVec4[] {
+    let data = Array.alloc<GpuVec4>(43);
+    for (let i in 0..game.enemies.length) {
+        let enemy = game.enemies[i];
+        let clip = animation_clip(enemy.animation);
+        let phase = (float)Math.max(0.0f, enemy.animation_time + (alpha - 1.0f) / 60.0f) / clip.z;
+        if enemy.animation == 1 && enemy.kind == 1 {
+            phase = phase * 1.25f;
+        }
+        if enemy.animation == 1 && enemy.kind == 2 {
+            phase = phase * 2.25f;
+        }
+        if clip.w > 0.0f {
+            phase = phase - (float)Math.floor(phase);
+        } else {
+            phase = (float)Math.min(phase, 1.0f);
+        }
+        let frame = phase * (clip.y - 1.0f);
+        let first = (float)Math.floor(frame);
+        let second = (float)Math.min(first + 1.0f, clip.y - 1.0f);
+        let from = clip.x + first;
+        let to = clip.x + second;
+        let weight = frame - first;
+        if enemy.blend_age < 0.09f {
+            from = enemy.previous_pose;
+            to = clip.x + (float)Math.floor(frame + 0.5f);
+            weight = (float)Math.min(1.0f, enemy.blend_age / 0.09f);
+            weight = weight * weight * (3.0f - 2.0f * weight);
+        }
+        if enemy.body.active {
+            from = 0.0f;
+            to = 0.0f;
+            weight = 0.0f;
+        }
+        let variant = (float)(enemy.appearance * animation_variant_stride());
+        if enemy.kind == 2 {
+            variant = 0.0f;
+        }
+        let position = enemy.previous_position + (enemy.position - enemy.previous_position) * alpha;
+        let sink = (float)Math.max(0.0f, enemy.animation_time - 7.25f) * 0.9f;
+        if enemy.health > 0 {
+            sink = 0.0f;
+        }
+        let snow = 0.0f;
+        if game.seasons.current == 3 {
+            snow = game.seasons.depth_at(position.x, position.z);
+        }
+        data[i * 3] = GpuVec4(position.x, snow - sink, position.z, (float)Math.cos(enemy.yaw));
+        let poses = (float)animation_pose_count();
+        if enemy.body.active {
+            poses = -1.0f;
+        }
+        data[i * 3 + 1] = GpuVec4(from + variant, to + variant, weight, poses);
+        let radius = 1.5f;
+        if enemy.health <= 0 {
+            radius = 2.8f;
+        }
+        if enemy.health <= 0 && enemy.animation_time > corpse_lifetime() {
+            radius = 0.0f;
+        }
+        data[i * 3 + 2] = GpuVec4(
+            (float)enemy.kind,
+            enemy.flash,
+            radius,
+            (float)Math.sin(enemy.yaw)
+        );
+    }
+    for (let i in 0..game.barrels.positions.length) {
+        let p = game.barrels.positions[i];
+        let active = 0.0f;
+        if game.barrels.active[i] {
+            active = 1.0f;
+        }
+        data[36 + i] = GpuVec4(p.x, p.y, p.z, active);
+    }
+    data[42] = GpuVec4(game.muzzle, 0.0f, 0.0f, 0.0f);
+    return data;
+}
+
+public fun particle_data(game: Game): GpuVec4[] {
+    let data = Array.alloc<GpuVec4>(331);
+    let count = 0;
+    for (let particle in game.effects.particles) {
+        if particle.life <= 0.0f {
+            continue;
+        }
+        let position = particle.position;
+        data[count * 3] = GpuVec4(position.x, position.y, position.z, particle.life);
+        let tint = GpuVec4(0.9f, 0.008f, 0.018f, 0.09f);
+        if particle.kind == 1 {
+            tint = GpuVec4(8.0f, 2.6f, 0.25f, 0.065f);
+        } else if particle.kind == 2 {
+            tint = GpuVec4(0.16f, 0.002f, 0.005f, 0.18f);
+        } else if particle.kind == 3 {
+            tint = GpuVec4(8.0f, 6.0f, 3.0f, 0.012f);
+        } else if particle.kind == 4 {
+            tint = GpuVec4(0.008f, 0.006f, 0.004f, 0.10f);
+        } else if particle.kind == 5 {
+            tint = GpuVec4(10.0f, 3.5f, 0.3f, 0.24f);
+        }
+        if particle.kind == 6 {
+            tint = GpuVec4(0.7f, 0.003f, 0.012f, 0.28f);
+        } else if particle.kind == 7 {
+            tint = GpuVec4(1.2f, 0.65f, 0.12f, 0.028f);
+        }
+        if particle.kind == 8 {
+            tint = GpuVec4(0.12f, 3.0f, 4.5f, 7.6f);
+        }
+        if particle.kind == 10 {
+            tint = GpuVec4(6.0f, 1.2f, 0.08f, 7.6f);
+        }
+        if particle.kind == 9 {
+            tint = GpuVec4(10.0f, 2.3f, 0.12f, 1.8f);
+        }
+        if particle.kind == 12 {
+            tint = GpuVec4(0.3f, 0.8f, 0.9f, 3.0f);
+        }
+        if particle.kind == 13 {
+            tint = GpuVec4(0.5f, 0.9f, 1.0f, 0.035f);
+        }
+        data[count * 3 + 1] = tint;
+        data[count * 3 + 2] = GpuVec4(
+            particle.velocity.x,
+            particle.velocity.y,
+            particle.velocity.z,
+            (float)particle.kind
+        );
+        count = count + 1;
+    }
+    for (let pickup in game.pickups) {
+        if !pickup.taken {
+            let position = pickup.position;
+            data[count * 3] = GpuVec4(
+                position.x,
+                position.y + (float)Math.sin(game.time * 2.0f) * 0.08f,
+                position.z,
+                1.0f
+            );
+            let tint = GpuVec4(0.05f, 1.5f, 0.3f, 0.25f);
+            if pickup.kind == 1 {
+                tint = GpuVec4(0.05f, 0.6f, 3.0f, 0.25f);
+            }
+            if pickup.kind == 2 {
+                tint = GpuVec4(3.0f, 1.7f, 0.02f, 0.28f);
+            }
+            data[count * 3 + 1] = tint;
+            data[count * 3 + 2] = GpuVec4(0.0f);
+            count = count + 1;
+        }
+    }
+    for (let grenade in game.grenades.items) {
+        if grenade.fuse <= 0.0f {
+            continue;
+        }
+        let p = grenade.position;
+        data[count * 3] = GpuVec4(p.x, p.y, p.z, grenade.fuse);
+        data[count * 3 + 1] = GpuVec4(0.10f, 0.18f, 0.035f, 0.11f);
+        data[count * 3 + 2] = GpuVec4(0.0f, 0.0f, 0.0f, 11.0f);
+        count = count + 1;
+    }
+    data[330] = GpuVec4((float)count, 0.0f, 0.0f, 0.0f);
+    return data;
+}
+
+public fun corpse_data(game: Game, alpha: float): GpuVec4[] {
+    let data = Array.alloc<GpuVec4>(576);
+    for (let i in 0..game.enemies.length) {
+        let body = game.enemies[i].body;
+        if !body.active {
+            continue;
+        }
+        for (let node in 0..body.rest.length) {
+            data[i * 48 + node * 2] = body.rest[node];
+            let p = body.render_previous[node]
+                + (body.points[node] - body.render_previous[node]) * alpha;
+            p.y = p.y - (float)Math.max(0.0f, game.enemies[i].animation_time - 7.25f) * 0.9f;
+            data[i * 48 + node * 2 + 1] = GpuVec4(p.x, p.y, p.z, 0.0f);
+        }
+    }
+    return data;
+}

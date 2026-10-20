@@ -1,0 +1,25 @@
+import system;
+import system.gpu;
+
+public fun scene_size(width: int, height: int, quality: int): GpuVec2 {
+    if width <= 0 || height <= 0 {
+        return GpuVec2(1.0f);
+    }
+    let maximum = GpuVec2(3840.0f, 2160.0f);
+    let limit = 1.0f;
+    if quality == 0 {
+        maximum = GpuVec2(640.0f, 360.0f);
+    } else if quality == 1 {
+        maximum = GpuVec2(960.0f, 540.0f);
+    } else if quality == 3 {
+        limit = 2.0f;
+    }
+    let scale = (float)Math.min(
+        limit,
+        Math.min(maximum.x / (float)width, maximum.y / (float)height)
+    );
+    return GpuVec2(
+        (float)Math.max(1, (int)((float)width * scale)),
+        (float)Math.max(1, (int)((float)height * scale))
+    );
+}

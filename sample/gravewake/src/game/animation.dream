@@ -1,0 +1,20 @@
+import system.gpu;
+
+public fun animation_clip(index: int): GpuVec4 {
+    let clips = [
+        GpuVec4(0.0f, 8.0f, 2.4f, 1.0f),
+        GpuVec4(8.0f, 16.0f, 1.05f, 1.0f),
+        GpuVec4(24.0f, 12.0f, 0.8f, 0.0f),
+        GpuVec4(36.0f, 20.0f, 1.25f, 0.0f),
+        GpuVec4(56.0f, 8.0f, 0.35f, 0.0f)
+    ];
+    return clips[index];
+}
+
+public fun animation_variant_stride(): int {
+    return 64;
+}
+
+public fun corpse_lifetime(): float {
+    return 8.0f;
+}

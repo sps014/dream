@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Gravewake</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #32251d; color: #f2dfba; font: 16px system-ui, sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100% !important; height: 100% !important; outline: none; }
+  #status { position: fixed; z-index: 2; left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 36em; padding: 20px; background: #231b15e8; border-radius: 8px; white-space: pre-wrap; }
+  #status:empty { display: none; }
+</style>
+<div id="status" role="status">Loading…</div>
+<script type="module">
+  import { attachPointerLock } from './src/input/pointer-lock.js';
+  import { createGameAudio } from './src/input/audio.js';
+  const audio = createGameAudio(document);
+  const status = document.querySelector('#status');
+  const report = message => { status.textContent = message; };
+  const download = async url => {
+    const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`Download failed: ${response.status} ${url}`);
+    return new Uint8Array(await response.arrayBuffer());
+  };
+  try {
+    if (!navigator.gpu) throw new Error('WebGPU is unavailable. Open this page in Chrome or Edge on localhost or HTTPS.');
+    const [{ load }, wasm, vertices, acceleration] = await Promise.all([
+      import('./target/web/main.web.runtime.js'),
+      download('./target/web/main.wasm'),
+      download('./assets/packed/vertices.bin'),
+      download('./assets/packed/acceleration.bin'),
+    ]);
+    const files = new Map([['vertices.bin', vertices], ['acceleration.bin', acceleration]]);
+    const observer = new MutationObserver(() => {
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        canvas.setAttribute('aria-label', 'Gravewake');
+        attachPointerLock(canvas, document, report);
+        canvas.focus();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true });
+    let failure = '';
+    report('Opening WebGPU…');
+    const game = await load(wasm, {
+      imports: {
+        file_exists(path) { return files.has(String(path).replaceAll('\\', '/').split('/').at(-1)); },
+        file_read_bytes(path) {
+          const name = String(path).replaceAll('\\', '/').split('/').at(-1);
+          if (!files.has(name)) throw new Error(`Missing game asset: ${path}`);
+          return files.get(name);
+        },
+      },
+      stdout(text) {
+        if (!text.trim()) return;
+        if (text.startsWith('MUSIC|')) {
+          const [, wave, alive, intermission, state] = text.trim().split('|').map(Number);
+          audio.setCombat({wave, alive, intermission: intermission > 0, state});
+          return;
+        }
+        if (text.startsWith('SFX|')) {
+          const [,kind,gain,pan]=text.trim().split('|').map(Number);
+          audio.play(kind,gain,pan);
+          return;
+        }
+        console.log(text);
+        if (text.includes('Gravewake ready')) report('');
+        if (/GPU error:|Window error:/.test(text)) { failure = text; report(text); }
+      },
+      stderr(text) { console.error(text); report(text); },
+    });
+    await game.run();
+    if (failure) throw new Error(failure.trim());
+    report('Game closed. Reload to play.');
+  } catch (error) {
+    report(error.message);
+    console.error(error);
+  }
+</script>
+</html>

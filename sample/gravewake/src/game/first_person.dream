@@ -1,0 +1,154 @@
+import system;
+import system.gpu;
+
+public class FirstPerson {
+    public velocity: GpuVec3;
+    public aim: float;
+    public aiming: bool;
+    public crouching: bool;
+    public sprint: float;
+    public sway: GpuVec2;
+    public reload_remaining: float;
+    public reload_duration: float;
+    public reload_weapon: int;
+    public sniper_loaded: int;
+    public rifle_loaded: int;
+    public shotgun_loaded: int;
+    public step_phase: float;
+    public eye_height: float;
+    public jump_height: float;
+    public jump_velocity: float;
+
+    public constructor() {
+        this.velocity = GpuVec3(0.0f);
+        this.aim = 0.0f;
+        this.aiming = false;
+        this.crouching = false;
+        this.sprint = 0.0f;
+        this.sway = GpuVec2(0.0f);
+        this.reload_remaining = 0.0f;
+        this.reload_duration = 1.7f;
+        this.reload_weapon = 0;
+        this.sniper_loaded = 5;
+        this.rifle_loaded = 24;
+        this.shotgun_loaded = 6;
+        this.step_phase = 0.0f;
+        this.eye_height = 1.65f;
+        this.jump_height = 0.0f;
+        this.jump_velocity = 0.0f;
+    }
+
+    public fun start_reload(weapon: int, ammunition: int): void {
+        let loaded = this.rifle_loaded;
+        let capacity = 24;
+        if weapon == 1 {
+            loaded = this.shotgun_loaded;
+            capacity = 6;
+        }
+        if weapon == 2 {
+            loaded = this.sniper_loaded;
+            capacity = 5;
+        }
+        if this.reload_remaining > 0.0f || loaded >= capacity || ammunition <= loaded {
+            return;
+        }
+        this.reload_weapon = weapon;
+        this.reload_duration = 1.7f;
+        if weapon == 1 {
+            this.reload_duration = 2.2f;
+        }
+        if weapon == 2 {
+            this.reload_duration = 2.7f;
+        }
+        this.reload_remaining = this.reload_duration;
+    }
+
+    public fun jump(): void {
+        if this.jump_height <= 0.0f && !this.crouching {
+            this.jump_velocity = 5.0f;
+        }
+    }
+
+    public fun visual(dt: float, mouse_x: float, mouse_y: float): void {
+        let blend = 1.0f - (float)Math.exp(-dt * 16.0f);
+        let target_aim = 0.0f;
+        if this.aiming && this.reload_remaining <= 0.0f {
+            target_aim = 1.0f;
+        }
+        this.aim = this.aim + (target_aim - this.aim) * blend;
+        let target = GpuVec2(
+            (float)Math.max(-0.025f, Math.min(0.025f, -mouse_x * 0.00035f)),
+            (float)Math.max(-0.018f, Math.min(0.018f, mouse_y * 0.00035f))
+        );
+        this.sway = this.sway + (target - this.sway) * blend;
+    }
+
+    public fun advance(
+        dt: float,
+        forward: float,
+        strafe: float,
+        sprinting: bool,
+        yaw: float,
+        bullets: int,
+        shells: int,
+        rounds: int
+    ): GpuVec3 {
+        if this.reload_remaining > 0.0f {
+            this.reload_remaining = (float)Math.max(0.0f, this.reload_remaining - dt);
+            if this.reload_remaining == 0.0f {
+                if this.reload_weapon == 0 {
+                    this.rifle_loaded = (int)Math.min(24, bullets);
+                } else if this.reload_weapon == 2 {
+                    this.sniper_loaded = (int)Math.min(5, rounds);
+                } else {
+                    this.shotgun_loaded = (int)Math.min(6, shells);
+                }
+            }
+        }
+        let speed = 3.8f;
+        let running = sprinting && forward > 0.0f && !this.aiming && !this.crouching;
+        if running {
+            speed = 6.0f;
+        } else if this.crouching {
+            speed = 1.8f;
+        } else if this.aiming {
+            speed = 2.2f;
+        }
+        let sprint_target = 0.0f;
+        if running {
+            sprint_target = 1.0f;
+        }
+        this.sprint = this.sprint
+            + (sprint_target - this.sprint) * (1.0f - (float)Math.exp(-dt * 10.0f));
+        let length = (float)Math.max(1.0f, Math.sqrt(forward * forward + strafe * strafe));
+        let s = (float)Math.sin(yaw);
+        let c = (float)Math.cos(yaw);
+        let desired = GpuVec3(
+            (s * forward + c * strafe) * speed / length,
+            0.0f,
+            (c * forward - s * strafe) * speed / length
+        );
+        this.velocity = this.velocity
+            + (desired - this.velocity) * (1.0f - (float)Math.exp(-dt * 16.0f));
+        this.step_phase = this.step_phase + this.velocity.length() * dt * 2.6f;
+        let target_height = 1.65f;
+        if this.crouching {
+            target_height = 1.1f;
+        }
+        this.eye_height = this.eye_height
+            + (target_height - this.eye_height) * (1.0f - (float)Math.exp(-dt * 14.0f));
+        this.jump_velocity = this.jump_velocity - dt * 18.0f;
+        this.jump_height = (float)Math.max(0.0f, this.jump_height + this.jump_velocity * dt);
+        if this.jump_height == 0.0f {
+            this.jump_velocity = 0.0f;
+        }
+        return this.velocity * dt;
+    }
+
+    public fun reload_phase(): float {
+        if this.reload_remaining <= 0.0f {
+            return 0.0f;
+        }
+        return 1.0f - this.reload_remaining / this.reload_duration;
+    }
+}

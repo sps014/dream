@@ -1,0 +1,148 @@
+import system.gpu;
+import game.seasons;
+import snow_terrain;
+
+public struct WeatherPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+
+    @location(1)
+    public fade: float;
+
+    @location(2)
+    public kind: float;
+}
+
+fun weather_corner(index: int): GpuVec2 {
+    let x = -1.0f;
+    let y = -1.0f;
+    if index == 1 || index == 2 || index == 4 {
+        x = 1.0f;
+    }
+    if index == 2 || index == 4 || index == 5 {
+        y = 1.0f;
+    }
+    return GpuVec2(x, y);
+}
+
+fun weather_projection(point: GpuVec3, camera: GpuVec4, look: GpuVec4, aspect: float): GpuVec4 {
+    let forward = GpuVec3(
+        GpuMath.sin(look.x) * GpuMath.cos(look.y),
+        GpuMath.sin(look.y),
+        GpuMath.cos(look.x) * GpuMath.cos(look.y)
+    );
+    let right = GpuVec3(GpuMath.cos(look.x), 0.0f, -GpuMath.sin(look.x));
+    let up = -right.cross(forward);
+    let delta = point - GpuVec3(camera.x, camera.y, camera.z);
+    let depth = delta.dot(forward);
+    return GpuVec4(
+        delta.dot(right) * look.z / aspect,
+        delta.dot(up) * look.z,
+        depth * 1.000417f - 0.050021f,
+        depth
+    );
+}
+
+fun weather_hash(value: float): float {
+    let result = GpuMath.sin(value * 127.1f) * 43758.5453f;
+    return result - GpuMath.floor(result);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@vertex
+fun snow_vertex(camera: GpuVec4, look: GpuVec4, aspect: float): WeatherPixel {
+    let id = (float)instance_id();
+    let uv = weather_corner(vertex_id());
+    let x = weather_hash(id + 1.0f) * 32.0f - 16.0f;
+    let z = weather_hash(id + 17.0f) * 32.0f - 16.0f;
+    let fall = weather_hash(id + 71.0f) * 12.0f - camera.w * (0.6f + weather_hash(id) * 0.7f);
+    fall = fall - GpuMath.floor(fall / 12.0f) * 12.0f - 1.0f;
+    let point = GpuVec3(camera.x + x + GpuMath.sin(camera.w + id) * 0.45f, fall, camera.z + z);
+    let pixel = WeatherPixel();
+    pixel.position = weather_projection(point, camera, look, aspect);
+    let radius = 0.018f + weather_hash(id + 39.0f) * 0.025f;
+    pixel.position.x = pixel.position.x + uv.x * radius / aspect;
+    pixel.position.y = pixel.position.y + uv.y * radius;
+    pixel.uv = uv;
+    pixel.fade = 0.70f;
+    return pixel;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+fun snow_fragment(pixel: WeatherPixel): GpuVec4 {
+    let alpha = (1.0f - GpuMath.smoothstep(0.2f, 1.0f, pixel.uv.length())) * pixel.fade;
+    return GpuVec4(0.84f, 0.93f, 1.0f, alpha);
+}
+
+public class SeasonalRenderer {
+    public terrain: SnowTerrain;
+    device: GpuDevice;
+    public layer: GpuTexture;
+    snowfall: GpuRenderPipeline;
+
+    constructor(
+        device: GpuDevice,
+        terrain: SnowTerrain,
+        layer: GpuTexture,
+        snowfall: GpuRenderPipeline
+    ) {
+        this.device = device;
+        this.terrain = terrain;
+        this.layer = layer;
+        this.snowfall = snowfall;
+    }
+
+    public static fun create(device: GpuDevice): Result<SeasonalRenderer, GpuError> {
+        let desc = GpuRenderPipelineDesc.defaults(GpuTextureFormat.Rgba16Float)
+            .with_cull_mode(GpuCullMode.None)
+            .with_depth(GpuTextureFormat.Depth32Float, GpuCompare.LessEqual, false)
+            .with_blend_mode(GpuBlendMode.Alpha);
+        return Result.Ok(
+            SeasonalRenderer(
+                device,
+                SnowTerrain.create(device)?,
+                device.texture(
+                    GpuTextureDesc(960, 540, GpuTextureFormat.Rgba16Float).render_target(true)
+                )?,
+                device.render_pipeline(GpuShaders.snow_vertex, GpuShaders.snow_fragment, desc)?
+            )
+        );
+    }
+
+    public fun draw(
+        encoder: GpuCommandEncoder,
+        image: GpuTexture,
+        depth: GpuTexture,
+        camera: GpuVec4,
+        look: GpuVec4,
+        aspect: float,
+        seasons: Seasons
+    ): Result<bool, GpuError> {
+        if this.layer.width != image.width || this.layer.height != image.height {
+            this.layer.destroy();
+            this.layer = this.device.texture(
+                GpuTextureDesc(image.width, image.height, GpuTextureFormat.Rgba16Float)
+                    .render_target(true)
+            )?;
+        }
+        let pass = encoder.begin_render_pass(
+            GpuRenderPassDesc.color(this.layer, GpuLoad.Clear(GpuVec4(0.0f)))
+                .with_depth(depth, GpuLoad.Keep)
+        );
+        if seasons.current != 3 {
+            pass.end();
+            return Result.Ok(false);
+        }
+        pass.set_pipeline(this.snowfall);
+        pass.bind_value(GpuShaders.snow_vertex.camera, camera);
+        pass.bind_value(GpuShaders.snow_vertex.look, look);
+        pass.bind_value(GpuShaders.snow_vertex.aspect, aspect);
+        pass.draw(6, 320);
+        pass.end();
+        return Result.Ok(true);
+    }
+}

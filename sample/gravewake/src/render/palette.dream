@@ -1,0 +1,105 @@
+import system.gpu;
+
+fun palette_encoded(index: int): GpuVec3 {
+    if index == 0 {
+        return GpuVec3(0.6700f, 0.4900f, 0.3000f);
+    }
+    if index == 1 {
+        return GpuVec3(0.7300f, 0.5700f, 0.3500f);
+    }
+    if index == 2 {
+        return GpuVec3(0.5200f, 0.3600f, 0.2300f);
+    }
+    if index == 3 {
+        return GpuVec3(0.4900f, 0.2800f, 0.2000f);
+    }
+    if index == 4 {
+        return GpuVec3(0.6800f, 0.4300f, 0.2900f);
+    }
+    if index == 5 {
+        return GpuVec3(0.2900f, 0.1600f, 0.1200f);
+    }
+    if index == 6 {
+        return GpuVec3(0.6500f, 0.2500f, 0.1300f);
+    }
+    if index == 7 {
+        return GpuVec3(0.8900f, 0.5100f, 0.2000f);
+    }
+    if index == 8 {
+        return GpuVec3(0.1800f, 0.5700f, 0.6200f);
+    }
+    if index == 9 {
+        return GpuVec3(0.1300f, 0.2400f, 0.2800f);
+    }
+    if index == 10 {
+        return GpuVec3(0.2500f, 0.3900f, 0.2200f);
+    }
+    if index == 11 {
+        return GpuVec3(0.4300f, 0.5100f, 0.2900f);
+    }
+    if index == 12 {
+        return GpuVec3(0.9800f, 0.9100f, 0.6400f);
+    }
+    if index == 13 {
+        return GpuVec3(0.1000f, 0.1100f, 0.1600f);
+    }
+    if index == 14 {
+        return GpuVec3(0.3800f, 0.2000f, 0.3100f);
+    }
+    if index == 15 {
+        return GpuVec3(0.6300f, 0.2800f, 0.3800f);
+    }
+    if index == 16 {
+        return GpuVec3(0.3200f, 0.4500f, 0.5800f);
+    }
+    if index == 17 {
+        return GpuVec3(0.6900f, 0.4800f, 0.3000f);
+    }
+    if index == 18 {
+        return GpuVec3(0.8200f, 0.6600f, 0.4200f);
+    }
+    if index == 19 {
+        return GpuVec3(0.1000f, 0.5600f, 0.7000f);
+    }
+    if index == 20 {
+        return GpuVec3(0.8700f, 0.9100f, 0.8200f);
+    }
+    if index == 21 {
+        return GpuVec3(0.6000f, 0.4400f, 0.2600f);
+    }
+    if index == 22 {
+        return GpuVec3(0.6700f, 0.3100f, 0.1700f);
+    }
+    if index == 23 {
+        return GpuVec3(0.1700f, 0.2700f, 0.2100f);
+    }
+    if index == 24 {
+        return GpuVec3(0.4800f, 0.5900f, 0.3900f);
+    }
+    if index == 25 {
+        return GpuVec3(0.3000f, 0.4000f, 0.2500f);
+    }
+    if index == 26 {
+        return GpuVec3(0.6200f, 0.6800f, 0.4900f);
+    }
+    if index == 27 {
+        return GpuVec3(0.2500f, 0.3900f, 0.3900f);
+    }
+    if index == 28 {
+        return GpuVec3(0.1400f, 0.2200f, 0.2600f);
+    }
+    if index == 29 {
+        return GpuVec3(0.4200f, 0.2000f, 0.1900f);
+    }
+    if index == 30 {
+        return GpuVec3(0.8100f, 0.7700f, 0.5800f);
+    }
+    if index == 31 {
+        return GpuVec3(0.1200f, 0.1600f, 0.1300f);
+    }
+    return GpuVec3(0.3f, 0.4f, 0.3f);
+}
+
+public fun palette(index: int): GpuVec3 {
+    return GpuMath.pow(palette_encoded(index), GpuVec3(2.2f));
+}

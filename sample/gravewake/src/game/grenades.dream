@@ -1,0 +1,131 @@
+import system;
+import system.gpu;
+import enemy;
+import level;
+import level_geometry;
+import particles;
+
+public class Grenade {
+    public position: GpuVec3;
+    public velocity: GpuVec3;
+    public fuse: float;
+
+    public constructor() {
+        this.position = GpuVec3(0.0f);
+        this.velocity = GpuVec3(0.0f);
+        this.fuse = 0.0f;
+    }
+}
+
+public class Grenades {
+    public items: Grenade[];
+    public remaining: int;
+    public detonated: bool;
+
+    public constructor() {
+        this.items = Array.alloc<Grenade>(6);
+        for (let i in 0..6) {
+            this.items[i] = Grenade();
+        }
+        this.remaining = 3;
+        this.detonated = false;
+    }
+
+    public fun throw_from(origin: GpuVec3, direction: GpuVec3): bool {
+        if this.remaining <= 0 {
+            return false;
+        }
+        for (let grenade in this.items) {
+            if grenade.fuse > 0.0f {
+                continue;
+            }
+            grenade.position = origin + direction * 0.35f;
+            grenade.velocity = direction * 12.0f + GpuVec3(0.0f, 3.5f, 0.0f);
+            grenade.fuse = 2.3f;
+            this.remaining = this.remaining - 1;
+            return true;
+        }
+        return false;
+    }
+
+    public fun tick(
+        dt: float,
+        boxes: WorldBox[],
+        enemies: Enemy[],
+        effects: Effects,
+        player: GpuVec3,
+        snow: float
+    ): GpuVec2 {
+        this.detonated = false;
+        let kills = 0;
+        let hurt = 0.0f;
+        for (let grenade in this.items) {
+            if grenade.fuse <= 0.0f {
+                continue;
+            }
+            grenade.velocity.y = grenade.velocity.y - dt * 12.0f;
+            let distance = grenade.velocity.length() * dt;
+            let ray = grenade.velocity / (float)Math.max(0.001f, grenade.velocity.length());
+            let wall = wall_distance(boxes, grenade.position, ray);
+            if wall < distance + 0.1f {
+                let point = grenade.position + ray * (float)Math.max(0.0f, wall - 0.11f);
+                let normal = wall_normal(boxes, point + ray * 0.11f, -ray);
+                grenade.position = point;
+                grenade.velocity = (
+                    grenade.velocity - normal * grenade.velocity.dot(normal) * 1.65f
+                ) * 0.75f;
+            } else {
+                grenade.position = grenade.position + grenade.velocity * dt;
+            }
+            let ground = snow + 0.10f;
+            if Math.abs(grenade.position.x) < 3.0f && Math.abs(grenade.position.z - 24.0f) < 3.0f {
+                ground = ground + 0.22f;
+            }
+            if grenade.position.y < ground {
+                grenade.position.y = ground;
+                grenade.velocity.y = (float)Math.abs(grenade.velocity.y) * 0.42f;
+                grenade.velocity.x = grenade.velocity.x * 0.72f;
+                grenade.velocity.z = grenade.velocity.z * 0.72f;
+            }
+            grenade.fuse = grenade.fuse - dt;
+            if grenade.fuse > 0.0f {
+                continue;
+            }
+            this.detonated = true;
+            effects.explode(grenade.position);
+            for (let enemy in enemies) {
+                if enemy.health <= 0 {
+                    continue;
+                }
+                let delta = enemy.position - grenade.position;
+                let range = delta.length();
+                if range > 7.0f
+                    || wall_distance(
+                        boxes,
+                        grenade.position,
+                        delta / (float)Math.max(0.001f, range)
+                    ) < range {
+                    continue;
+                }
+                enemy.health = enemy.health - (int)((1.0f - range / 7.0f) * 220.0f);
+                enemy.impulse = delta
+                    / (float)Math.max(0.1f, range) * 9.0f + GpuVec3(0.0f, 5.0f, 0.0f);
+                enemy.flash = 0.07f;
+                if enemy.health <= 0 {
+                    enemy.play(3);
+                    kills = kills + 1;
+                } else {
+                    enemy.play(4);
+                    enemy.stagger = 0.5f;
+                }
+            }
+            let delta = player - grenade.position;
+            let range = delta.length();
+            if range < 5.0f
+                && wall_distance(boxes, grenade.position, delta / (float)Math.max(0.001f, range)) >= range {
+                hurt = hurt + (1.0f - range / 5.0f) * 70.0f;
+            }
+        }
+        return GpuVec2((float)kills, hurt);
+    }
+}

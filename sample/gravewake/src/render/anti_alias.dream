@@ -1,0 +1,57 @@
+import system.gpu;
+import brdf;
+
+public fun display_color(color: GpuVec3): GpuVec3 {
+    let luminance = color.dot(GpuVec3(0.2126f, 0.7152f, 0.0722f));
+    return filmic_map(GpuMath.mix(GpuVec3(luminance), color, GpuVec3(1.08f)) * 1.08f);
+}
+
+fun display_sample(scene: GpuTexture, filtering: GpuSampler, uv: GpuVec2): GpuVec3 {
+    let pixel = scene.sample_level(filtering, uv, 0.0f);
+    return display_color(GpuVec3(pixel.x, pixel.y, pixel.z));
+}
+
+fun edge_luma(color: GpuVec3): float {
+    // Edge thresholds operate on perceptual brightness, before the final sRGB encode.
+    return GpuMath.sqrt(GpuMath.max(0.0f, color.dot(GpuVec3(0.299f, 0.587f, 0.114f))));
+}
+
+public fun antialiased_scene(scene: GpuTexture, filtering: GpuSampler, uv: GpuVec2): GpuVec3 {
+    let size = scene.size(0);
+    let texel = GpuVec2(1.0f / (float)size.x, 1.0f / (float)size.y);
+    let center = display_sample(scene, filtering, uv);
+    let nw = display_sample(scene, filtering, uv + GpuVec2(-texel.x, -texel.y));
+    let ne = display_sample(scene, filtering, uv + GpuVec2(texel.x, -texel.y));
+    let sw = display_sample(scene, filtering, uv + GpuVec2(-texel.x, texel.y));
+    let se = display_sample(scene, filtering, uv + GpuVec2(texel.x, texel.y));
+    let mid = edge_luma(center);
+    let a = edge_luma(nw);
+    let b = edge_luma(ne);
+    let c = edge_luma(sw);
+    let d = edge_luma(se);
+    let low = GpuMath.min(mid, GpuMath.min(GpuMath.min(a, b), GpuMath.min(c, d)));
+    let high = GpuMath.max(mid, GpuMath.max(GpuMath.max(a, b), GpuMath.max(c, d)));
+    if high - low < GpuMath.max(0.025f, high * 0.10f) {
+        return center;
+    }
+    let direction = GpuVec2(c + d - a - b, a + c - b - d);
+    let reduce = GpuMath.max((a + b + c + d) * 0.03125f, 0.0078125f);
+    let reciprocal = 1.0f
+        / (GpuMath.min(GpuMath.abs(direction.x), GpuMath.abs(direction.y)) + reduce);
+    direction = GpuMath.clamp(direction * reciprocal, GpuVec2(-4.0f), GpuVec2(4.0f)) * texel;
+    let inner = (
+        display_sample(scene, filtering, uv - direction / 6.0f)
+            + display_sample(scene, filtering, uv + direction / 6.0f)
+    ) * 0.5f;
+    let outer = inner
+        * 0.5f
+        + (
+            display_sample(scene, filtering, uv - direction * 0.5f)
+                + display_sample(scene, filtering, uv + direction * 0.5f)
+        ) * 0.25f;
+    let brightness = edge_luma(outer);
+    if brightness < low || brightness > high {
+        return inner;
+    }
+    return outer;
+}

@@ -1,0 +1,86 @@
+module snow_imprint;
+
+import system.gpu;
+import render.screen;
+
+fun snow_uv(point: GpuVec3): GpuVec2 {
+    return GpuVec2((point.x + 52.0f) / 104.0f, (88.0f - point.z) / 112.0f);
+}
+
+fun snow_corner(id: int): GpuVec2 {
+    let p = GpuVec2(-1.0f);
+    if id == 1 || id == 2 || id == 4 {
+        p.x = 1.0f;
+    }
+    if id == 2 || id == 4 || id == 5 {
+        p.y = 1.0f;
+    }
+    return p;
+}
+
+public struct SnowPrintPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+
+    @location(1)
+    public kind: float;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@vertex
+public fun imprint_vertex(@readonly tracks: GpuBuffer<GpuVec4>, first: int): SnowPrintPixel {
+    let track = tracks[((instance_id() + first) % 384) * 2];
+    let uv = snow_corner(vertex_id());
+    let scale = GpuVec2(0.23f, 0.40f);
+    if track.w > 0.5f {
+        scale = GpuVec2(0.18f, 0.24f);
+    }
+    if track.w > 1.5f {
+        scale = GpuVec2(0.48f, 0.70f);
+    }
+    let p = uv * scale;
+    let point = GpuVec3(
+        track.x + p.x * GpuMath.cos(track.z) + p.y * GpuMath.sin(track.z),
+        0.0f,
+        track.y - p.x * GpuMath.sin(track.z) + p.y * GpuMath.cos(track.z)
+    );
+    let map = snow_uv(point);
+    let pixel = SnowPrintPixel();
+    pixel.position = GpuVec4(map.x * 2.0f - 1.0f, 1.0f - map.y * 2.0f, 0.0f, 1.0f);
+    pixel.uv = uv;
+    pixel.kind = track.w;
+    return pixel;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+public fun imprint_fragment(pixel: SnowPrintPixel): GpuVec4 {
+    let edge = (pixel.uv * GpuVec2(1.0f, 0.85f)).length();
+    let pressure = (1.0f - GpuMath.smoothstep(0.35f, 1.0f, edge)) * 0.88f;
+    return GpuVec4(0.0f, 0.0f, 0.0f, pressure);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+public fun fill_fragment(pixel: ScreenPixel, amount: float): GpuVec4 {
+    return GpuVec4(1.0f, 1.0f, 1.0f, amount);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@vertex
+public fun stamp_screen_vertex(): ScreenPixel {
+    let x = -1.0f;
+    let y = -1.0f;
+    if vertex_id() == 1 {
+        x = 3.0f;
+    } else if vertex_id() == 2 {
+        y = 3.0f;
+    }
+    let pixel = ScreenPixel();
+    pixel.position = GpuVec4(x, y, 0.0f, 1.0f);
+    pixel.uv = GpuVec2(x, y);
+    return pixel;
+}

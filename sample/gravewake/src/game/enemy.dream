@@ -1,0 +1,81 @@
+import system;
+import system.gpu;
+import animation;
+import ragdoll;
+
+public class Enemy {
+    public body: Ragdoll;
+    public impulse: GpuVec3;
+    public previous_pose: float;
+    public blend_age: float;
+    public stagger: float;
+    public appearance: int;
+    public position: GpuVec3;
+    public previous_position: GpuVec3;
+    public kind: int;
+    public health: int;
+    public cooldown: float;
+    public flash: float;
+    public yaw: float;
+    public animation: int;
+    public animation_time: float;
+    public attack_pending: bool;
+
+    public constructor(x: float, z: float, kind: int) {
+        this.previous_pose = 0.0f;
+        this.blend_age = 1.0f;
+        this.stagger = 0.0f;
+        this.appearance = ((int)Math.abs(x * 13.0f + z * 7.0f)) % 3;
+        this.body = Ragdoll(kind, this.appearance);
+        this.impulse = GpuVec3(0.0f, 1.0f, -2.0f);
+        this.position = GpuVec3(x, 1.0f, z);
+        this.previous_position = this.position;
+        this.kind = kind;
+        this.health = 90;
+        if kind == 1 {
+            this.health = 125;
+        }
+        if kind == 2 {
+            this.health = 60;
+            this.position.y = 0.55f;
+            this.previous_position = this.position;
+        }
+        this.cooldown = 1.0f;
+        this.flash = 0.0f;
+        this.yaw = 3.14159f;
+        this.animation = 0;
+        this.animation_time = 0.0f;
+        this.attack_pending = false;
+    }
+
+    public fun play(animation: int): void {
+        if animation == 3 && !this.body.active {
+            let base = this.position;
+            base.y = base.y - 1.0f;
+            if this.kind == 2 {
+                base.y = base.y + 0.45f;
+            }
+            this.body.start(base, this.yaw, this.impulse);
+        }
+        let clip = animation_clip(this.animation);
+        let phase = (float)Math.max(0.0f, this.animation_time) / clip.z;
+        if this.animation == 1 && this.kind == 1 {
+            phase = phase * 1.25f;
+        }
+        if this.animation == 1 && this.kind == 2 {
+            phase = phase * 2.25f;
+        }
+        if clip.w > 0.0f {
+            phase = phase - (float)Math.floor(phase);
+        } else {
+            phase = (float)Math.min(1.0f, phase);
+        }
+        this.previous_pose = clip.x + (float)Math.floor(phase * (clip.y - 1.0f));
+        this.blend_age = 0.0f;
+        this.animation = animation;
+        this.animation_time = 0.0f;
+        if animation == 3 || animation == 4 {
+            this.attack_pending = false;
+        }
+    }
+}

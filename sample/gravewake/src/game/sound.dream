@@ -1,0 +1,64 @@
+import system;
+import system.gpu;
+
+public class SoundEvents {
+    events: GpuVec4[];
+    count: int;
+    wave: int;
+    alive: int;
+    intermission: bool;
+    state: int;
+
+    public constructor() {
+        this.events = Array.alloc<GpuVec4>(32);
+        this.count = 0;
+        this.wave = -1;
+        this.alive = -1;
+        this.intermission = false;
+        this.state = -1;
+    }
+
+    public fun play(kind: int, gain: float = 1.0f, pan: float = 0.0f): void {
+        if this.count >= 32 {
+            return;
+        }
+        this.events[this.count] = GpuVec4((float)kind, gain, pan, 0.0f);
+        this.count = this.count + 1;
+    }
+
+    public fun flush(): void {
+        if System.is_browser {
+            for (let i in 0..this.count) {
+                let e = this.events[i];
+                System.println(
+                    "SFX|" + ((int)e.x).to_string() + "|" + e.y.to_string() + "|" + e.z.to_string()
+                );
+            }
+        }
+        this.count = 0;
+    }
+
+    public fun music(wave: int, alive: int, intermission: bool, state: int): void {
+        if !System.is_browser {
+            return;
+        }
+        if this.wave
+            == wave
+            && this.alive == alive && this.intermission == intermission && this.state == state {
+            return;
+        }
+        this.wave = wave;
+        this.alive = alive;
+        this.intermission = intermission;
+        this.state = state;
+        let rest = 0;
+        if intermission {
+            rest = 1;
+        }
+        System.println(
+            "MUSIC|"
+                + wave.to_string()
+                + "|" + alive.to_string() + "|" + rest.to_string() + "|" + state.to_string()
+        );
+    }
+}

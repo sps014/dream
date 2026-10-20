@@ -1,0 +1,13 @@
+import system.gpu;
+
+public class Pickup {
+    public position: GpuVec3;
+    public kind: int;
+    public taken: bool;
+
+    public constructor(x: float, z: float, kind: int) {
+        this.position = GpuVec3(x, 0.6f, z);
+        this.kind = kind;
+        this.taken = false;
+    }
+}

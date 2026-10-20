@@ -1,0 +1,49 @@
+import system.gpu;
+import screen;
+
+public fun town_sky(ray: GpuVec3, time: float): GpuVec3 {
+    let t = GpuMath.clamp(ray.y * 1.15f + 0.08f, 0.0f, 1.0f);
+    let color = GpuMath.mix(GpuVec3(0.84f, 0.73f, 0.48f), GpuVec3(0.11f, 0.38f, 0.60f), GpuVec3(t));
+    let sun = GpuMath.max(0.0f, ray.dot(GpuVec3(-0.45f, 0.85f, -0.3f).normalize()));
+    color = color + GpuVec3(0.70f, 0.36f, 0.08f) * GpuMath.pow(sun, 12.0f);
+    color = color + GpuVec3(6.0f, 4.5f, 2.0f) * GpuMath.smoothstep(0.9992f, 0.9997f, sun);
+    return color;
+}
+
+public fun wind_position(point: GpuVec3, material: int, time: float): GpuVec3 {
+    if material != 40 && material != 41 && material != 61 {
+        return point;
+    }
+    let bend = GpuMath.smoothstep(0.3f, 9.0f, point.y);
+    let gust = GpuMath.sin(time * 0.85f + point.x * 0.16f + point.z * 0.09f);
+    let flutter = 0.0f;
+    if material == 41 || material == 61 {
+        flutter = GpuMath.sin(time * 3.4f + point.x * 4.0f + point.y * 2.0f) * 0.035f;
+    }
+    return point
+        + GpuVec3((gust * 0.18f + flutter) * bend, flutter * bend * 0.2f, gust * bend * 0.07f);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+fun sky_fragment(pixel: ScreenPixel, camera: GpuVec4, look: GpuVec4, aspect: float): GpuVec4 {
+    let forward = GpuVec3(
+        GpuMath.sin(look.x) * GpuMath.cos(look.y),
+        GpuMath.sin(look.y),
+        GpuMath.cos(look.x) * GpuMath.cos(look.y)
+    );
+    let right = GpuVec3(GpuMath.cos(look.x), 0.0f, -GpuMath.sin(look.x));
+    let up = -right.cross(forward);
+    let ray = (forward * look.z + right * pixel.uv.x * aspect + up * pixel.uv.y).normalize();
+    let color = town_sky(ray, camera.w);
+    if look.w > 2.5f {
+        color = GpuMath.mix(
+            GpuVec3(0.63f, 0.75f, 0.84f),
+            GpuVec3(0.30f, 0.44f, 0.58f),
+            GpuVec3(GpuMath.max(0.0f, ray.y))
+        );
+    } else if look.w > 1.5f {
+        color = GpuMath.mix(color, GpuVec3(0.64f, 0.48f, 0.36f), GpuVec3(0.25f));
+    }
+    return GpuVec4(color.x, color.y, color.z, 1.0f);
+}

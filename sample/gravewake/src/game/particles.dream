@@ -1,0 +1,146 @@
+import system;
+import system.gpu;
+
+public class Particle {
+    public position: GpuVec3;
+    public velocity: GpuVec3;
+    public life: float;
+    public kind: int;
+
+    public constructor() {
+        this.position = GpuVec3(0.0f);
+        this.velocity = GpuVec3(0.0f);
+        this.life = 0.0f;
+        this.kind = 0;
+    }
+}
+
+public class Effects {
+    public particles: Particle[];
+    cursor: int;
+    sequence: int;
+
+    public constructor() {
+        this.particles = Array.alloc<Particle>(96);
+        for (let i in 0..96) {
+            this.particles[i] = Particle();
+        }
+        this.cursor = 0;
+        this.sequence = 0;
+    }
+
+    public fun burst(position: GpuVec3, direction: GpuVec3, kind: int): void {
+        for (let i in 0..12) {
+            let particle = this.particles[this.cursor];
+            this.cursor = (this.cursor + 1) % 96;
+            this.sequence = (this.sequence + 1) % 10000;
+            let phase = (float)this.sequence * 2.399963f;
+            let speed = 1.0f + (float)(i % 4) * 0.8f;
+            particle.position = position;
+            particle.velocity = GpuVec3(
+                (float)Math.cos(phase) * speed,
+                1.0f + (float)(i % 3) * 0.8f,
+                (float)Math.sin(phase) * speed
+            ) + direction * 1.4f;
+            particle.life = 0.7f + (float)(i % 4) * 0.15f;
+            particle.kind = kind;
+        }
+    }
+
+    public fun shock(position: GpuVec3): void {
+        let particle = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        particle.position = GpuVec3(position.x, 0.08f, position.z);
+        particle.velocity = GpuVec3(0.0f);
+        particle.life = 0.6f;
+        particle.kind = 8;
+    }
+
+    public fun explode(position: GpuVec3): void {
+        this.burst(position, GpuVec3(0.0f, 2.0f, 0.0f), 1);
+        this.shock(position);
+        this.particles[(this.cursor + 95) % 96].kind = 10;
+        let flash = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        flash.position = position;
+        flash.velocity = GpuVec3(0.0f);
+        flash.life = 0.45f;
+        flash.kind = 9;
+    }
+
+    public fun splash(position: GpuVec3): void {
+        this.burst(position, GpuVec3(0.0f, 1.0f, 0.0f), 13);
+        let ring = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        ring.position = GpuVec3(position.x, 0.06f, position.z);
+        ring.velocity = GpuVec3(0.0f);
+        ring.life = 1.3f;
+        ring.kind = 12;
+    }
+
+    public fun trail(start: GpuVec3, end: GpuVec3): void {
+        let particle = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        particle.position = start;
+        particle.velocity = end;
+        particle.life = 0.045f;
+        particle.kind = 3;
+    }
+
+    public fun impact(position: GpuVec3, outward: GpuVec3, blood: bool): void {
+        let kind = 1;
+        if blood {
+            kind = 0;
+        }
+        this.burst(position, outward * 2.0f, kind);
+        let flash = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        flash.position = position;
+        flash.velocity = GpuVec3(0.0f);
+        flash.life = 0.12f;
+        flash.kind = 5;
+        if blood {
+            flash.kind = 6;
+            flash.life = 0.3f;
+        }
+        if !blood {
+            let decal = this.particles[this.cursor];
+            this.cursor = (this.cursor + 1) % 96;
+            decal.position = position;
+            decal.velocity = outward;
+            decal.life = 8.0f;
+            decal.kind = 4;
+        }
+    }
+
+    public fun eject(position: GpuVec3, right: GpuVec3): void {
+        let particle = this.particles[this.cursor];
+        this.cursor = (this.cursor + 1) % 96;
+        particle.position = position;
+        particle.velocity = right * 2.5f + GpuVec3(0.0f, 1.2f, 0.0f);
+        particle.life = 1.2f;
+        particle.kind = 7;
+    }
+
+    public fun tick(dt: float): void {
+        for (let particle in this.particles) {
+            if particle.life > 0.0f {
+                particle.life = (float)Math.max(0.0f, particle.life - dt);
+                if (particle.kind >= 3 && particle.kind <= 6)
+                    || (particle.kind >= 8 && particle.kind <= 12) {
+                    continue;
+                }
+                particle.velocity.y = particle.velocity.y - dt * 7.5f;
+                particle.position = particle.position + particle.velocity * dt;
+                if particle.position.y < 0.06f {
+                    particle.position.y = 0.06f;
+                    particle.velocity = GpuVec3(0.0f);
+                    if particle.kind == 0 {
+                        particle.life = (float)Math.max(particle.life, 1.5f);
+                        particle.kind = 2;
+                    }
+                }
+            }
+        }
+    }
+}

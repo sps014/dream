@@ -1,0 +1,294 @@
+import system.gpu;
+import mesh;
+import atmosphere;
+import shadow_space;
+import seasonal_materials;
+
+public struct WorldPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public world: GpuVec3;
+
+    @location(1)
+    public normal: GpuVec3;
+
+    @location(2)
+    public uv: GpuVec2;
+
+    @location(3)
+    public tangent: GpuVec3;
+
+    @location(4)
+    public material: float;
+
+    @location(5)
+    public flash: float;
+
+    @location(6)
+    public handedness: float;
+
+    @location(7)
+    public view_model: float;
+}
+
+public fun ragdoll_rotate(point: GpuVec3, from: GpuVec3, to: GpuVec3): GpuVec3 {
+    let cosine = GpuMath.clamp(from.dot(to), -1.0f, 1.0f);
+    if cosine < -0.99f {
+        let axis = from.cross(GpuVec3(0.0f, 0.0f, 1.0f));
+        if axis.length() < 0.1f {
+            axis = from.cross(GpuVec3(1.0f, 0.0f, 0.0f));
+        }
+        axis = axis.normalize();
+        return axis * axis.dot(point) * 2.0f - point;
+    }
+    let axis = from.cross(to);
+    return point
+        + axis.cross(point) + axis.cross(axis.cross(point)) / GpuMath.max(0.01f, 1.0f + cosine);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@vertex
+fun world_vertex(
+    @readonly vertices: GpuBuffer<GpuVec4>,
+    @readonly acceleration: GpuBuffer<GpuVec4>,
+    @readonly actors: GpuBuffer<GpuVec4>,
+    @readonly corpses: GpuBuffer<GpuVec4>,
+    @readonly chunks: GpuBuffer<GpuVec4>,
+    layout: GpuVec4,
+    camera: GpuVec4,
+    look: GpuVec4,
+    aspect: float,
+    draw: GpuVec4,
+    weapon_motion: GpuVec4,
+    handling: GpuVec4,
+    action: GpuVec4
+): WorldPixel {
+    let pixel = WorldPixel();
+    let model = scene_model(acceleration, layout, (int)draw.x);
+    let metadata = acceleration[(int)layout.y + (int)draw.x * 3 + 1];
+    let first = 0;
+    if draw.y == -2.0f {
+        let chunk = chunks[instance_id()];
+        if vertex_id() >= (int)chunk.y * 3 {
+            pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+            return pixel;
+        }
+        first = (int)chunk.x;
+    }
+    let triangle = scene_triangle(acceleration, (int)metadata.x + first + vertex_id() / 3);
+    let corner = vertex_id() % 3;
+    let index = triangle.x;
+    // The camera looks along +Z; reverse winding for the raster front-face convention.
+    if corner == 1 {
+        index = triangle.z;
+    } else if corner == 2 {
+        index = triangle.y;
+    }
+    let pose = GpuVec3(0.0f);
+    if draw.y >= 0.0f {
+        let blend = actors[(int)draw.y * 3 + 1];
+        pose = GpuVec3(blend.x, blend.y, blend.z);
+    }
+    let point = pose_vertex(vertices, (int)model.x, (int)model.y, index, pose, 0);
+    let normal = pose_vertex(vertices, (int)model.x, (int)model.y, index, pose, 1);
+    pixel.world = GpuVec3(point.x, point.y, point.z);
+    pixel.normal = GpuVec3(normal.x, normal.y, normal.z);
+    pixel.uv = GpuVec2(point.w, normal.w);
+    pixel.material = (float)triangle.w;
+    if pixel.material == 59.0f {
+        pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+        return pixel;
+    }
+
+    pixel.tangent = GpuVec3(1.0f, 0.0f, 0.0f);
+    pixel.handedness = 1.0f;
+    if draw.y >= 0.0f {
+        let actor = actors[(int)draw.y * 3];
+        let state = actors[(int)draw.y * 3 + 2];
+        let av = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.x, pose, 0);
+        let bv = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.y, pose, 0);
+        let cv = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.z, pose, 0);
+        let an = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.x, pose, 1);
+        let bn = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.y, pose, 1);
+        let cn = pose_vertex(vertices, (int)model.x, (int)model.y, triangle.z, pose, 1);
+        let e1 = GpuVec3(bv.x - av.x, bv.y - av.y, bv.z - av.z);
+        let e2 = GpuVec3(cv.x - av.x, cv.y - av.y, cv.z - av.z);
+        let uv1 = GpuVec2(bv.w - av.w, bn.w - an.w);
+        let uv2 = GpuVec2(cv.w - av.w, cn.w - an.w);
+        let determinant = uv1.x * uv2.y - uv1.y * uv2.x;
+        if GpuMath.abs(determinant) > 0.0000001f {
+            pixel.tangent = (e1 * uv2.y - e2 * uv1.y) / determinant;
+            pixel.handedness = GpuMath.sign(
+                pixel.normal.cross(pixel.tangent).dot((e2 * uv1.x - e1 * uv2.x) / determinant)
+            );
+        }
+        if actors[(int)draw.y * 3 + 1].w < 0.0f {
+            let bone = (int)(normal.w + 0.1f);
+            let base = (int)draw.y * 48;
+            let rest = corpses[base + bone * 2];
+            let tip = corpses[base + (int)rest.w * 2];
+            let point = corpses[base + bone * 2 + 1];
+            let end = corpses[base + (int)rest.w * 2 + 1];
+            let from = GpuVec3(tip.x - rest.x, tip.y - rest.y, tip.z - rest.z).normalize();
+            let to = GpuVec3(end.x - point.x, end.y - point.y, end.z - point.z).normalize();
+            pixel.world = ragdoll_rotate(pixel.world - GpuVec3(rest.x, rest.y, rest.z), from, to)
+                + GpuVec3(point.x, point.y, point.z);
+            pixel.normal = ragdoll_rotate(pixel.normal, from, to);
+        } else {
+            pixel.world = rotate_cs(pixel.world, actor.w, state.w)
+                + GpuVec3(actor.x, actor.y, actor.z);
+            pixel.normal = rotate_cs(pixel.normal, actor.w, state.w);
+            pixel.tangent = rotate_cs(pixel.tangent, actor.w, state.w);
+        }
+        pixel.material = 7.0f + state.x;
+        pixel.flash = state.y;
+    }
+    if pixel.material >= 70.0f && pixel.material < 76.0f {
+        if actors[36 + (int)pixel.material - 70].w <= 0.0f {
+            pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+            return pixel;
+        }
+    }
+    if pixel.material == 76.0f && look.w < 2.5f {
+        pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+        return pixel;
+    }
+    if draw.y < 0.0f && draw.z == 0.0f {
+        pixel.world = seasonal_position(pixel.world, pixel.material, look.w);
+    }
+    if action.w > 0.0f {
+        if pixel.material == 59.0f {
+            pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+            return pixel;
+        }
+        let plane = 0.09f;
+        if look.w > 2.5f {
+            plane = 0.44f;
+        }
+        pixel.world.y = plane - pixel.world.y;
+        pixel.normal.y = -pixel.normal.y;
+        pixel.view_model = -1.0f;
+    }
+    if draw.z == 0.0f {
+        pixel.world = wind_position(pixel.world, (int)(pixel.material + 0.5f), camera.w);
+    }
+    let forward = GpuVec3(
+        GpuMath.sin(look.x) * GpuMath.cos(look.y),
+        GpuMath.sin(look.y),
+        GpuMath.cos(look.x) * GpuMath.cos(look.y)
+    );
+    let right = GpuVec3(GpuMath.cos(look.x), 0.0f, -GpuMath.sin(look.x));
+    let up = -right.cross(forward);
+    let delta = pixel.world - GpuVec3(camera.x, camera.y, camera.z);
+    if draw.z > 0.0f {
+        let p = pixel.world;
+        p.x = p.x * 0.75f + 0.07f;
+        p.y = p.y * 0.75f - 0.12f;
+        p.z = p.z * 0.75f + 0.55f;
+        let group = 0.0f;
+        if pixel.material >= 20.0f {
+            group = 1.0f;
+        }
+        if pixel.material >= 80.0f {
+            group = 2.0f;
+        }
+        if handling.w != group {
+            pixel.position = GpuVec4(0.0f, 0.0f, 2.0f, 1.0f);
+            return pixel;
+        }
+        if pixel.material == 19.0f || pixel.material == 24.0f || pixel.material == 85.0f {
+            if weapon_motion.w <= 0.0f {
+                p.x = 1000.0f;
+            }
+        }
+        if pixel.material == 23.0f && action.x > 0.0f {
+            p.z = p.z - GpuMath.sin((0.8f - action.x) / 0.8f * 3.141593f) * 0.15f;
+        }
+        let phase = handling.y;
+        let lower = GpuMath.smoothstep(0.0f, 0.16f, phase)
+            * (1.0f - GpuMath.smoothstep(0.80f, 1.0f, phase));
+        let remove = GpuMath.smoothstep(0.16f, 0.38f, phase);
+        let insert = GpuMath.smoothstep(0.52f, 0.74f, phase);
+        let reload = lower;
+        let support = pixel.material == 15.0f || pixel.material == 38.0f || pixel.material == 88.0f;
+        let support_arm = pixel.material
+            == 16.0f || pixel.material == 39.0f || pixel.material == 89.0f;
+        if pixel.material == 83.0f && action.x > 0.0f {
+            p.z = p.z
+                - GpuMath.sin(GpuMath.clamp((1.15f - action.x) / 1.15f, 0.0f, 1.0f) * 3.141593f)
+                * 0.16f;
+        }
+        if pixel.material == 18.0f || pixel.material == 84.0f {
+            p.y = p.y - (remove - insert) * 0.42f;
+            p.z = p.z - (remove - insert) * 0.14f;
+        }
+        if support || support_arm {
+            let reach = GpuMath.smoothstep(0.05f, 0.22f, phase)
+                * (1.0f - GpuMath.smoothstep(0.76f, 0.92f, phase));
+            let magazine = GpuMath.sin(
+                GpuMath.clamp((phase - 0.25f) / 0.42f, 0.0f, 1.0f) * 3.141593f
+            );
+            p.x = p.x + reach * 0.13f;
+            p.y = p.y - magazine * 0.18f - reach * 0.04f;
+            p.z = p.z - reach * 0.21f;
+            if handling.w == 1.0f {
+                let shells = GpuMath.abs(
+                    GpuMath.sin(GpuMath.clamp((phase - 0.16f) / 0.58f, 0.0f, 1.0f) * 9.424778f)
+                ) * reach;
+                p.y = p.y - shells * 0.16f;
+                p.z = p.z - shells * 0.09f;
+            }
+        }
+        let roll = lower * 0.28f;
+        let px = p.x - 0.28f;
+        let py = p.y + 0.36f;
+        p.x = px * GpuMath.cos(roll) - py * GpuMath.sin(roll) + 0.28f;
+        p.y = px * GpuMath.sin(roll) + py * GpuMath.cos(roll) - 0.36f;
+        let settle = GpuMath.sin(GpuMath.clamp((phase - 0.78f) / 0.22f, 0.0f, 1.0f) * 6.283185f)
+            * (1.0f - GpuMath.smoothstep(0.78f, 1.0f, phase));
+        p.z = p.z - settle * 0.035f;
+        p.x = p.x - handling.x * 0.28f + weapon_motion.y;
+        if pixel.material
+            == 15.0f
+            || pixel.material == 16.0f || pixel.material == 38.0f || pixel.material == 39.0f {
+            p.y = p.y - handling.x * 0.08f * GpuMath.clamp((0.75f - p.z) / 0.4f, 0.0f, 1.0f);
+        }
+        p.y = p.y
+            + weapon_motion.x
+            * 0.3f
+            + 0.16f
+            + handling.x
+            * (0.24f - handling.w * 0.11f) + weapon_motion.z - reload * 0.08f - handling.z * 0.22f;
+        p.z = p.z - weapon_motion.x * 0.2f;
+        delta = right * p.x + up * p.y + forward * p.z;
+        pixel.world = GpuVec3(camera.x, camera.y, camera.z) + delta;
+        pixel.normal = right * pixel.normal.x + up * pixel.normal.y + forward * pixel.normal.z;
+        pixel.view_model = 1.0f;
+    }
+    let view = GpuVec3(delta.dot(right), delta.dot(up), delta.dot(forward));
+    let focal = look.z;
+    if draw.z > 0.0f {
+        focal = 1.45f;
+    }
+    pixel.position = GpuVec4(
+        view.x * focal / aspect,
+        view.y * focal,
+        view.z * 1.000417f - 0.050021f,
+        view.z
+    );
+    if action.z > 0.0f {
+        let point = shadow_position(pixel.world);
+        pixel.position = GpuVec4(point.x, point.y, point.z, 1.0f);
+    }
+    // Allow for depth rounding between the depth-only and shaded shader programs.
+    pixel.position.z = pixel.position.z - action.y * 0.000001f * view.z;
+    return pixel;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+fun depth_fragment(pixel: WorldPixel): GpuVec4 {
+    return GpuVec4(0.0f, 0.0f, 0.0f, 1.0f);
+}

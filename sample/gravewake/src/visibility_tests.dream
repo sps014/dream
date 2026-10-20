@@ -1,0 +1,46 @@
+import system.gpu;
+import system.testing;
+import visibility;
+import game.simulation;
+import game.enemy;
+
+@test
+fun gravewake_culling_keeps_intersecting_spheres(): void {
+    let camera = GpuVec3(0.0f);
+    Assert.is_true(
+        sphere_in_frustum(GpuVec3(0.0f, 0.0f, 5.0f), 1.0f, camera, 0.0f, 0.0f, 1.45f, 1.7778f)
+    );
+    Assert.is_true(
+        !sphere_in_frustum(GpuVec3(0.0f, 0.0f, -5.0f), 1.0f, camera, 0.0f, 0.0f, 1.45f, 1.7778f)
+    );
+    Assert.is_true(
+        sphere_in_frustum(GpuVec3(6.5f, 0.0f, 5.0f), 1.0f, camera, 0.0f, 0.0f, 1.45f, 1.7778f)
+    );
+    Assert.is_true(
+        !sphere_in_frustum(GpuVec3(10.0f, 0.0f, 5.0f), 1.0f, camera, 0.0f, 0.0f, 1.45f, 1.7778f)
+    );
+    Assert.is_true(
+        sphere_in_frustum(GpuVec3(0.0f, 0.0f, 0.0f), 1.0f, camera, 0.0f, 0.0f, 1.45f, 1.7778f)
+    );
+}
+
+@test
+fun gravewake_visible_enemies_are_sorted_in_open_town(): void {
+    let game = Game();
+    game.yaw = 0.0f;
+    game.pitch = 0.0f;
+    game.enemies = [
+        Enemy(0.0f, 20.0f, 0),
+        Enemy(0.0f, 5.0f, 0),
+        Enemy(0.0f, -10.0f, 0),
+        Enemy(0.0f, 40.0f, 1)
+    ];
+    let camera = GpuVec3(0.0f, 1.65f, 0.0f);
+    let closed = visible_actors(game, camera, 1.45f, 1.7778f);
+    Assert.eq(closed.length, 3);
+    Assert.eq(closed[0], 1);
+    Assert.eq(closed[1], 0);
+    let opened = visible_actors(game, camera, 1.45f, 1.7778f);
+    Assert.eq(opened.length, 3);
+    Assert.eq(opened[2], 3);
+}

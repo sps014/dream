@@ -1,0 +1,13 @@
+import system.gpu;
+
+public fun shadow_position(world: GpuVec3): GpuVec3 {
+    let sun = GpuVec3(-0.45f, 0.85f, -0.3f).normalize();
+    let right = GpuVec3(0.3f, 0.0f, -0.45f).normalize();
+    let up = right.cross(sun);
+    let delta = world - GpuVec3(0.0f, 0.0f, 32.0f);
+    return GpuVec3(
+        delta.dot(right) / 82.0f,
+        delta.dot(up) / 82.0f,
+        (100.0f - delta.dot(sun)) / 200.0f
+    );
+}

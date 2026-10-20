@@ -1,0 +1,159 @@
+import system;
+import system.gpu;
+
+public class Seasons {
+    public current: int;
+    public tracks: GpuVec4[];
+    public count: int;
+    public head: int;
+    public stamps: int;
+    pressure: float[];
+    written: float[];
+    public time: float;
+    last: GpuVec3[];
+    steps: int[];
+
+    public constructor() {
+        this.current = 3;
+        this.tracks = Array.alloc<GpuVec4>(768);
+        this.last = Array.alloc<GpuVec3>(13);
+        this.steps = Array.alloc<int>(13);
+        this.count = 0;
+        this.head = 0;
+        this.stamps = 0;
+        this.pressure = Array.alloc<float>(512 * 512);
+        this.written = Array.alloc<float>(512 * 512);
+        this.time = 0.0f;
+    }
+
+    public fun cycle(): void {
+        this.current = (this.current + 1) % 4;
+        this.count = 0;
+        this.head = 0;
+        this.stamps = 0;
+        this.pressure = Array.alloc<float>(512 * 512);
+        this.written = Array.alloc<float>(512 * 512);
+        this.time = 0.0f;
+        this.last = Array.alloc<GpuVec3>(13);
+    }
+
+    fun value(x: int, z: int): float {
+        let ix = (int)Math.max(0, Math.min(511, x));
+        let iz = (int)Math.max(0, Math.min(511, z));
+        let at = iz * 512 + ix;
+        return this.pressure[at] * (float)Math.exp(-(this.time - this.written[at]) * 0.012f);
+    }
+
+    public fun depth_at(x: float, z: float): float {
+        if this.current != 3 {
+            return 0.0f;
+        }
+        let gx = (x + 52.0f) / 104.0f * 512.0f - 0.5f;
+        let gz = (z + 24.0f) / 112.0f * 512.0f - 0.5f;
+        let ix = (int)Math.floor(gx);
+        let iz = (int)Math.floor(gz);
+        let fx = gx - (float)ix;
+        let fz = gz - (float)iz;
+        let a = this.value(ix, iz) * (1.0f - fx) + this.value(ix + 1, iz) * fx;
+        let b = this.value(ix, iz + 1) * (1.0f - fx) + this.value(ix + 1, iz + 1) * fx;
+        return 0.24f - (a * (1.0f - fz) + b * fz) * 0.22f;
+    }
+
+    fun compress(x: float, z: float, yaw: float, kind: float): void {
+        let ix = (int)((x + 52.0f) / 104.0f * 512.0f);
+        let iz = (int)((z + 24.0f) / 112.0f * 512.0f);
+        let sx = 0.23f;
+        let sz = 0.40f;
+        if kind > 0.5f {
+            sx = 0.18f;
+            sz = 0.24f;
+        }
+        if kind > 1.5f {
+            sx = 0.48f;
+            sz = 0.70f;
+        }
+        for (let row in -6..7) {
+            for (let col in -6..7) {
+                let xx = ix + col;
+                let zz = iz + row;
+                if xx < 0 || xx >= 512 || zz < 0 || zz >= 512 {
+                    continue;
+                }
+                let dx = ((float)xx + 0.5f) / 512.0f * 104.0f - 52.0f - x;
+                let dz = ((float)zz + 0.5f) / 512.0f * 112.0f - 24.0f - z;
+                let lx = (dx * (float)Math.cos(yaw) - dz * (float)Math.sin(yaw)) / sx;
+                let lz = (dx * (float)Math.sin(yaw) + dz * (float)Math.cos(yaw)) / sz;
+                let d = (float)Math.sqrt(lx * lx + lz * lz * 0.85f * 0.85f);
+                let t = (float)Math.max(0.0f, Math.min(1.0f, (d - 0.35f) / 0.65f));
+                let stamp = (1.0f - t * t * (3.0f - 2.0f * t)) * 0.88f;
+                if stamp <= 0.0f {
+                    continue;
+                }
+                let at = zz * 512 + xx;
+                this.pressure[at] = 1.0f - (1.0f - this.value(xx, zz)) * (1.0f - stamp);
+                this.written[at] = this.time;
+            }
+        }
+    }
+
+    public fun record(
+        actor: int,
+        position: GpuVec3,
+        yaw: float,
+        dog: bool,
+        time: float,
+        drag: bool = false
+    ): void {
+        if this.current != 3 {
+            return;
+        }
+        let delta = position - this.last[actor];
+        delta.y = 0.0f;
+        if delta.length() > 4.0f || this.last[actor].y == 0.0f {
+            this.last[actor] = position;
+            return;
+        }
+        let spacing = 0.28f;
+        if drag {
+            spacing = 0.15f;
+        }
+        if delta.length() < spacing {
+            return;
+        }
+        this.last[actor] = position;
+        if Math.abs(position.z - 24.0f) < 2.6f && Math.abs(position.x) > 3.0f {
+            return;
+        }
+        let pairs = 1;
+        if dog {
+            pairs = 2;
+        }
+        for (let pair in 0..pairs) {
+            let side = -1.0f;
+            if (this.steps[actor] / pairs + pair) % 2 == 0 {
+                side = 1.0f;
+            }
+            let offset = side * 0.12f;
+            let forward = 0.0f;
+            if dog {
+                forward = ((float)pair - 0.5f) * 0.65f;
+            }
+            let x = position.x + (float)Math.cos(yaw) * offset + (float)Math.sin(yaw) * forward;
+            let z = position.z - (float)Math.sin(yaw) * offset + (float)Math.cos(yaw) * forward;
+            let kind = 0.0f;
+            if dog {
+                kind = 1.0f;
+            }
+            if drag {
+                kind = 2.0f;
+            }
+            this.compress(x, z, yaw, kind);
+            this.tracks[this.head * 2] = GpuVec4(x, z, yaw, kind);
+            this.tracks[this.head * 2 + 1] = GpuVec4(time, side, 0.0f, 0.0f);
+            this.stamps = this.stamps + 1;
+            this.head = (this.head + 1) % 384;
+            this.count = (int)Math.min(384, this.count + 1);
+            this.steps[actor] = this.steps[actor] + 1;
+        }
+    }
+}

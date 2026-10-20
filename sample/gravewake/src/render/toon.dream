@@ -1,0 +1,206 @@
+import system.gpu;
+import raster;
+import palette;
+import atmosphere;
+import shadows;
+import water;
+import seasonal_materials;
+
+public fun toon_color(material: int, uv: GpuVec2): GpuVec3 {
+    if material >= 80 && material <= 89 {
+        return palette((int)(uv.x * 32.0f));
+    }
+    if material >= 40 && material < 64 {
+        return palette(material - 40);
+    }
+    if material
+        == 7
+        || material
+        == 9
+        || material
+        == 5
+        || material
+        == 14
+        || material
+        == 35
+        || material
+        == 36
+        || material
+        == 8
+        || material
+        == 17
+        || material == 20 || material == 15 || material == 16 || material == 38 || material == 39 {
+        let color = palette((int)(uv.x * 32.0f));
+        if material == 8 {
+            color = color * GpuVec3(0.94f, 1.02f, 0.94f);
+        }
+        return color;
+    }
+    if material == 19 || material == 24 {
+        return GpuVec3(4.0f, 1.8f, 0.15f);
+    }
+    return GpuVec3(0.35f, 0.4f, 0.45f);
+}
+
+public fun toon_lighting(
+    pixel: WorldPixel,
+    camera: GpuVec4,
+    visibility: float,
+    season: float
+): GpuVec3 {
+    let normal = pixel.normal.normalize();
+    let sun = GpuVec3(-0.45f, 0.85f, -0.3f).normalize();
+    let eye = (GpuVec3(camera.x, camera.y, camera.z) - pixel.world).normalize();
+    let diffuse = GpuMath.max(0.0f, normal.dot(sun));
+    let material = (int)(pixel.material + 0.5f);
+    let base = seasonal_color(
+        toon_color(material, pixel.uv),
+        pixel.world,
+        normal,
+        material,
+        season
+    );
+    let sky = GpuMath.mix(
+        GpuVec3(0.13f, 0.17f, 0.12f),
+        GpuVec3(0.40f, 0.57f, 0.70f),
+        GpuVec3(normal.y * 0.5f + 0.5f)
+    );
+    let color = base * (sky + GpuVec3(1.25f, 1.10f, 0.82f) * diffuse * visibility);
+    let rim = GpuMath.pow(1.0f - GpuMath.max(0.0f, eye.dot(normal)), 3.0f);
+    color = color + base * GpuVec3(0.20f, 0.38f, 0.42f) * rim * 0.35f;
+    let half_vector = (sun + eye).normalize();
+    let specular = GpuMath.pow(GpuMath.max(0.0f, normal.dot(half_vector)), 48.0f);
+    if material == 13 || material == 17 || material == 20 || material >= 70 {
+        color = color + GpuVec3(0.65f, 0.77f, 0.83f) * specular * visibility * 0.35f;
+    }
+    if material == 68 || material == 19 || material == 24 {
+        let flicker = 0.85f + 0.15f * GpuMath.sin(camera.w * 9.0f + pixel.world.x * 4.0f);
+        color = GpuVec3(3.8f, 1.1f, 0.14f) * flicker;
+    }
+    if material >= 70 && material < 76 {
+        base = palette(6);
+        if GpuMath.abs(pixel.world.y - 0.6f) < 0.12f {
+            base = palette(7);
+        }
+        color = base * (sky + GpuVec3(1.25f, 1.10f, 0.82f) * diffuse * visibility);
+    }
+    if material == 69 {
+        color = palette(23) * 0.72f;
+    }
+    if material == 59 {
+        let wave = GpuVec3(
+            GpuMath.sin(pixel.world.z * 3.2f + camera.w * 1.5f) * 0.055f,
+            1.0f,
+            GpuMath.cos(pixel.world.x * 1.8f + camera.w * 1.1f) * 0.055f
+        ).normalize();
+        let reflection = GpuMath.reflect(-eye, wave);
+        let fresnel = 0.12f + GpuMath.pow(1.0f - GpuMath.max(0.0f, eye.dot(wave)), 4.0f) * 0.75f;
+        color = GpuMath.mix(
+            GpuVec3(0.018f, 0.24f, 0.28f),
+            town_sky(reflection, camera.w),
+            GpuVec3(fresnel)
+        );
+        color = color
+            + GpuVec3(3.0f, 1.65f, 0.55f)
+            * GpuMath.pow(GpuMath.max(0.0f, wave.dot(half_vector)), 160.0f) * visibility;
+        let foam = GpuMath.smoothstep(1.94f, 2.38f, GpuMath.abs(pixel.world.z - 24.0f));
+        color = GpuMath.mix(color, GpuVec3(0.60f, 0.86f, 0.76f), GpuVec3(foam * 0.65f));
+    }
+    // Warm pools make supplies and shelters navigable with either rendering mode.
+    let fire = GpuVec3(0.0f, 0.5f, 4.0f) - pixel.world;
+    let fire_light = GpuMath.max(0.0f, 1.0f - fire.length() / 6.0f);
+    color = color + base * GpuVec3(1.5f, 0.5f, 0.07f) * fire_light * fire_light;
+    color = GpuMath.mix(
+        color,
+        GpuVec3(2.4f, 1.3f, 0.3f),
+        GpuVec3(GpuMath.min(0.8f, pixel.flash * 5.0f))
+    );
+    if pixel.view_model > 0.0f {
+        return color * 1.15f;
+    }
+    let distance = (pixel.world - GpuVec3(camera.x, camera.y, camera.z)).length();
+    let fog = 1.0f - GpuMath.exp(-GpuMath.max(0.0f, distance - 18.0f) * 0.009f);
+    let haze = GpuVec3(0.47f, 0.63f, 0.63f)
+        + GpuVec3(0.20f, 0.10f, 0.01f) * GpuMath.pow(GpuMath.max(0.0f, (-eye).dot(sun)), 8.0f);
+    return GpuMath.mix(color, haze, GpuVec3(fog));
+}
+
+public fun actor_contact(
+    pixel: WorldPixel,
+    @readonly actors: GpuBuffer<GpuVec4>,
+    count: int
+): float {
+    let shade = 1.0f;
+    if pixel.view_model > 0.0f || pixel.world.y > 0.2f || pixel.normal.y < 0.6f {
+        return shade;
+    }
+    for (let i in 0..12) {
+        if i >= count {
+            break;
+        }
+        if actors[i * 3 + 2].z <= 0.0f {
+            continue;
+        }
+        let actor = actors[i * 3];
+        let delta = GpuVec2(pixel.world.x - actor.x, pixel.world.z - actor.z);
+        shade = shade * (0.65f + 0.35f * GpuMath.smoothstep(0.1f, 0.72f, delta.length()));
+    }
+    return shade;
+}
+
+public fun scene_lighting(
+    pixel: WorldPixel,
+    camera: GpuVec4,
+    visibility: float,
+    @readonly actors: GpuBuffer<GpuVec4>,
+    count: int,
+    season: float
+): GpuVec3 {
+    let color = toon_lighting(pixel, camera, visibility, season)
+        * actor_contact(pixel, actors, count);
+    let delta = GpuVec3(camera.x, camera.y, camera.z) - pixel.world;
+    let distance = delta.length();
+    let muzzle = GpuMath.clamp(actors[42].x * 18.0f, 0.0f, 1.0f);
+    let facing = GpuMath.max(
+        0.0f,
+        pixel.normal.normalize().dot(delta / GpuMath.max(0.01f, distance))
+    );
+    return color
+        + toon_color((int)(pixel.material + 0.5f), pixel.uv)
+        * GpuVec3(5.0f, 1.7f, 0.24f) * muzzle * facing / (1.0f + distance * distance * 0.15f);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+fun toon_fragment(
+    pixel: WorldPixel,
+    camera: GpuVec4,
+    @readonly actors: GpuBuffer<GpuVec4>,
+    actor_count: int,
+    shadow: GpuTexture,
+    shadow_filter: GpuSampler,
+    reflection: GpuTexture,
+    refraction: GpuTexture,
+    water_filter: GpuSampler,
+    look: GpuVec4,
+    aspect: float
+): GpuVec4 {
+    if pixel.view_model < 0.0f {
+        let plane = 0.09f;
+        if look.w > 2.5f {
+            plane = 0.44f;
+        }
+        if pixel.world.y > plane * 0.5f - 0.001f {
+            discard_fragment();
+        }
+        pixel.world.y = plane - pixel.world.y;
+        pixel.normal.y = -pixel.normal.y;
+    }
+    let visibility = raster_visibility(pixel, shadow, shadow_filter);
+    let color = scene_lighting(pixel, camera, visibility, actors, actor_count, look.w);
+    if pixel.material > 58.5f && pixel.material < 59.5f {
+        color = river_surface(pixel, camera, look, aspect, reflection, refraction, water_filter);
+    }
+    let distance = (pixel.world - GpuVec3(camera.x, camera.y, camera.z)).length();
+    return GpuVec4(color.x, color.y, color.z, GpuMath.log2(1.0f + distance) / 7.0f);
+}

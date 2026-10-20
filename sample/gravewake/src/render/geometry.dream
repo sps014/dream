@@ -1,0 +1,19 @@
+import system.gpu;
+
+public struct RenderBox {
+    public lo: GpuVec4;
+    public hi: GpuVec4;
+
+    public constructor(
+        x: float,
+        y: float,
+        z: float,
+        sx: float,
+        sy: float,
+        sz: float,
+        material: float
+    ) {
+        this.lo = GpuVec4(x - sx, y - sy, z - sz, material);
+        this.hi = GpuVec4(x + sx, y + sy, z + sz, 0.0f);
+    }
+}

@@ -1,0 +1,48 @@
+import system.gpu;
+
+public fun scene_layout(): GpuVec4 {
+    return GpuVec4(543640.0f, 944412.0f, 0.0f, 0.0f);
+}
+
+public fun model_triangle_count(index: int): int {
+    if index == 1 {
+        return 26848;
+    }
+    if index == 2 {
+        return 3000;
+    }
+    if index == 3 {
+        return 1140;
+    }
+    if index >= 196 && index < 388 {
+        return 1048;
+    }
+    return 1248;
+}
+
+public fun enemy_model(kind: int, distant: bool = false): int {
+    if kind == 2 {
+        return 3;
+    }
+    if distant {
+        return 196;
+    }
+    return 0;
+}
+
+public fun animation_pose_count(): int {
+    return 192;
+}
+
+public fun static_chunks(): GpuVec4[] {
+    return [
+        GpuVec4(-1.51062f, 7.86590f, -8.75708f, 85.34017f),
+        GpuVec4(0.00000f, 8192.00000f, 0.00000f, 0.00000f),
+        GpuVec4(0.89731f, 10.15710f, 49.77285f, 95.14396f),
+        GpuVec4(8192.00000f, 8192.00000f, 0.00000f, 0.00000f),
+        GpuVec4(0.00000f, 9.88549f, 69.37968f, 72.24111f),
+        GpuVec4(16384.00000f, 8192.00000f, 0.00000f, 0.00000f),
+        GpuVec4(43.89202f, 6.27700f, 68.52305f, 56.21901f),
+        GpuVec4(24576.00000f, 2272.00000f, 0.00000f, 0.00000f)
+    ];
+}

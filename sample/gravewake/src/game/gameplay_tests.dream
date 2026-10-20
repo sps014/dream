@@ -1,0 +1,557 @@
+import system;
+import system.gpu;
+import system.testing;
+import level;
+import level_geometry;
+import simulation;
+import enemy;
+import pickup;
+import first_person;
+
+fun inert_game(): Game {
+    let game = Game();
+    game.enemies = [];
+    game.waves.spawn_timer = 100000.0f;
+    game.pickups = [];
+    return game;
+}
+
+@test
+fun gravewake_collision_and_parallel_rays(): void {
+    let level = Game();
+    Assert.is_true(level.boxes.length <= 64);
+    Assert.is_true(level.enemies.length + level.pickups.length <= 32);
+    Assert.is_true(position_clear(level.boxes, level.position.x, level.position.z, 0.28f));
+    for (let enemy in level.enemies) {
+        if !position_clear(level.boxes, enemy.position.x, enemy.position.z, 0.5f) {
+            Assert.fail("blocked spawn " + enemy.position.to_string());
+        }
+    }
+    let game = inert_game();
+    game.boxes = [WorldBox(10.0f, 2.5f, 20.0f, 0.4f, 2.5f, 25.0f, 2.0f)];
+    game.position = GpuVec3(9.1f, 1.65f, 0.0f);
+    game.move(0.4f, 0.2f);
+    Assert.is_true(game.position.x < 9.2f);
+    Assert.is_true(game.position.z > 0.1f);
+    let box = WorldBox(0.0f, 1.0f, 5.0f, 1.0f, 1.0f, 1.0f, 2.0f);
+    Assert.is_true(
+        wall_distance([box], GpuVec3(0.0f, 1.0f, 0.0f), GpuVec3(0.0f, 0.0f, 1.0f)) == 4.0f
+    );
+    Assert.is_true(
+        wall_distance([box], GpuVec3(3.0f, 1.0f, 0.0f), GpuVec3(0.0f, 0.0f, 1.0f)) == 120.0f
+    );
+}
+
+@test
+fun gravewake_shots_and_cooldowns(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.enemies = [Enemy(0.0f, 4.0f, 0)];
+    game.fire();
+    Assert.eq(game.enemies[0].health, 30);
+    Assert.eq(game.bullets, 179);
+    game.fire();
+    Assert.eq(game.enemies[0].health, 30);
+    Assert.eq(game.bullets, 179);
+    game.cooldown = 0.0f;
+    game.bullets = 0;
+    game.fire();
+    Assert.eq(game.enemies[0].health, 30);
+    game.weapon = 1;
+    game.fire();
+    Assert.eq(game.shells, 29);
+    Assert.eq(game.kills, 1);
+    game.cooldown = 0.0f;
+    game.shells = 0;
+    game.fire();
+    Assert.eq(game.shells, 0);
+}
+
+@test
+fun gravewake_walls_block_shots_and_attacks(): void {
+    let game = inert_game();
+    game.boxes = [WorldBox(-6.0f, 2.5f, 10.0f, 3.7f, 2.5f, 0.5f, 2.0f)];
+    game.position = GpuVec3(-6.0f, 1.65f, 8.0f);
+    game.enemies = [Enemy(-6.0f, 12.0f, 1)];
+    game.enemies[0].cooldown = 0.0f;
+    game.fire();
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.enemies[0].health, 125);
+    Assert.eq(game.health, 100);
+    game.enemies[0].position.z = 12.5f;
+    game.position = GpuVec3(-6.0f, 1.65f, 14.0f);
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.health, 100);
+    for (let frame in 0..23) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.health, 91);
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.health, 91);
+}
+
+@test
+fun gravewake_supplies_and_pickups(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, 4.0f);
+    game.health = 40;
+    game.interact();
+    Assert.eq(game.health, 40);
+    game.credits = 150;
+    game.interact();
+    Assert.eq(game.health, 75);
+    Assert.eq(game.credits, 0);
+    Assert.eq(game.bullets, 252);
+    game.pickups = [Pickup(0.0f, 4.0f, 0), Pickup(0.0f, 4.0f, 1)];
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.health, 100);
+    Assert.eq(game.bullets, 312);
+    Assert.is_true(game.pickups[0].taken && game.pickups[1].taken);
+}
+
+@test
+fun gravewake_death_and_restart(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.enemies = [Enemy(0.0f, 1.0f, 0)];
+    game.enemies[0].cooldown = 0.0f;
+    game.health = 5;
+    for (let frame in 0..24) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.state, 1);
+    Assert.eq(game.health, 0);
+    let bullets = game.bullets;
+    game.fire();
+    Assert.eq(game.bullets, bullets);
+    game = Game();
+    Assert.eq(game.health, 100);
+    Assert.eq(game.state, 0);
+    Assert.eq(game.kills, 0);
+    Assert.eq(game.enemies.length, 12);
+}
+
+@test
+fun gravewake_fixed_step_and_diagonal_speed(): void {
+    let straight = inert_game();
+    let diagonal = inert_game();
+    for (let i in 0..60) {
+        straight.tick(1.0f / 60.0f, 1.0f, 0.0f, false, false);
+        diagonal.tick(1.0f / 60.0f, 1.0f, 1.0f, false, false);
+    }
+    let start = GpuVec3(0.0f, 1.65f, -1.5f);
+    let a = (straight.position - start).length();
+    let b = (diagonal.position - start).length();
+    Assert.is_true(Math.abs(a - b) < 0.01f);
+}
+
+@test
+fun gravewake_waves_scale_and_upgrades_are_one_per_break(): void {
+    let game = Game();
+    for (let frame in 0..4000) {
+        for (let enemy in game.enemies) {
+            if enemy.health > 0 {
+                Assert.is_true(
+                    position_clear(game.boxes, enemy.position.x, enemy.position.z, 0.5f)
+                );
+                Assert.is_true((enemy.position - game.position).length() > 9.0f);
+                enemy.health = 0;
+                enemy.animation_time = 9.0f;
+                game.reward_kill();
+            }
+        }
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+        if game.waves.intermission > 0.0f {
+            let bonus = game.damage_bonus;
+            game.upgrade(0);
+            game.upgrade(0);
+            Assert.eq(game.damage_bonus, bonus + 1);
+            game.waves.intermission = 0.01f;
+        }
+        if game.waves.number == 4 {
+            break;
+        }
+    }
+    Assert.eq(game.waves.number, 4);
+    Assert.eq(game.kills, 27);
+    Assert.eq(game.damage_bonus, 3);
+    Assert.is_true(game.waves.unspawned > 6);
+    Assert.eq(game.state, 0);
+}
+
+@test
+fun gravewake_shockwave_requires_charge_and_respects_cover(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.boxes = [WorldBox(2.0f, 1.0f, 0.0f, 0.2f, 2.0f, 2.0f, 3.0f)];
+    game.enemies = [Enemy(0.0f, 3.0f, 0), Enemy(4.0f, 0.0f, 0), Enemy(0.0f, 12.0f, 0)];
+    game.charge = 99;
+    game.shockwave();
+    Assert.eq(game.enemies[0].health, 90);
+    game.charge = 100;
+    game.shockwave();
+    Assert.is_true(game.enemies[0].health <= 0);
+    Assert.eq(game.enemies[1].health, 90);
+    Assert.eq(game.enemies[2].health, 90);
+    Assert.eq(game.kills, 1);
+    Assert.eq(game.charge, 15);
+    game.shockwave();
+    Assert.eq(game.kills, 1);
+}
+
+@test
+fun gravewake_combo_rewards_and_expires(): void {
+    let game = inert_game();
+    game.reward_kill();
+    game.reward_kill();
+    Assert.eq(game.score, 300);
+    Assert.eq(game.combo, 2);
+    Assert.eq(game.credits, 100);
+    for (let i in 0..220) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.combo, 0);
+    game.reward_kill();
+    Assert.eq(game.score, 400);
+}
+
+@test
+fun gravewake_continuous_camera_rotation(): void {
+    let game = inert_game();
+    for (let i in 0..100) {
+        game.look(1000.0f, 0.0f);
+    }
+    Assert.is_true(game.yaw >= 0.0f && game.yaw < 6.283186f);
+    let before = game.direction();
+    game.look(100.0f, 0.0f);
+    Assert.is_true((game.direction() - before).length() > 0.1f);
+    game.look(0.0f, -100000.0f);
+    Assert.is_true(game.pitch <= 1.35f);
+    game.look(-100000.0f, 100000.0f);
+    Assert.is_true(game.pitch >= -1.35f);
+    Assert.is_true(game.yaw >= 0.0f && game.yaw < 6.283186f);
+}
+
+@test
+fun gravewake_particle_lifecycle(): void {
+    let game = inert_game();
+    game.effects.burst(GpuVec3(0.0f, 1.0f, 0.0f), GpuVec3(0.0f, 0.0f, 1.0f), 0);
+    Assert.is_true(game.effects.particles[0].life > 0.0f);
+    for (let i in 0..300) {
+        game.effects.tick(1.0f / 60.0f);
+    }
+    for (let particle in game.effects.particles) {
+        Assert.is_true(particle.life == 0.0f);
+    }
+}
+
+@test
+fun gravewake_shot_feedback_and_hit_reactions(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.enemies = [Enemy(0.0f, 4.0f, 1)];
+    game.fire();
+    Assert.is_true(game.recoil > 0.0f);
+    Assert.eq(game.enemies[0].animation, 4);
+    let trails = 0;
+    let blood = 0;
+    for (let particle in game.effects.particles) {
+        if particle.kind == 3 && particle.life > 0.0f {
+            trails = trails + 1;
+            Assert.is_true(particle.velocity.z < game.enemies[0].position.z);
+        }
+        if particle.kind == 0 && particle.life > 0.0f {
+            blood = blood + 1;
+            Assert.is_true(particle.position.z < 3.5f);
+        }
+    }
+    Assert.eq(trails, 1);
+    Assert.eq(blood, 12);
+    let before = game.enemies[0].position;
+    game.enemies[0].cooldown = 0.0f;
+    for (let frame in 0..10) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.enemies[0].animation, 4);
+    Assert.is_true((game.enemies[0].position - before).length() < 0.001f);
+    Assert.eq(game.health, 100);
+    game.cooldown = 0.0f;
+    game.fire();
+    Assert.is_true(game.enemies[0].animation_time > 0.15f);
+}
+
+@test
+fun gravewake_wall_marks_and_attack_recovery(): void {
+    let game = inert_game();
+    game.boxes = [WorldBox(-6.0f, 2.5f, 10.0f, 3.7f, 2.5f, 0.5f, 2.0f)];
+    game.position = GpuVec3(-6.0f, 1.65f, 8.0f);
+    game.fire();
+    let marks = 0;
+    for (let particle in game.effects.particles) {
+        if particle.kind == 4 && particle.life > 0.0f {
+            marks = marks + 1;
+            let start = particle.position;
+            game.effects.tick(0.1f);
+            Assert.is_true((particle.position - start).length() < 0.001f);
+            Assert.is_true(particle.velocity.z < -0.99f);
+        }
+    }
+    Assert.eq(marks, 1);
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.enemies = [Enemy(0.0f, 1.5f, 0)];
+    game.enemies[0].cooldown = 0.0f;
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.enemies[0].animation, 2);
+    Assert.eq(game.health, 100);
+    for (let frame in 0..50) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.health, 91);
+    Assert.eq(game.enemies[0].animation, 0);
+    Assert.is_true(!game.enemies[0].attack_pending);
+}
+
+@test
+fun gravewake_magazines_and_reload(): void {
+    let game = inert_game();
+    for (let shot in 0..24) {
+        game.cooldown = 0.0f;
+        game.fire();
+    }
+    Assert.eq(game.controller.rifle_loaded, 0);
+    Assert.eq(game.bullets, 156);
+    game.cooldown = 0.0f;
+    game.fire();
+    Assert.is_true(game.controller.reload_remaining > 0.0f);
+    game.fire();
+    Assert.eq(game.bullets, 156);
+    for (let frame in 0..110) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.controller.rifle_loaded, 24);
+    Assert.eq(game.bullets, 156);
+    game.fire();
+    Assert.eq(game.controller.rifle_loaded, 23);
+    Assert.eq(game.bullets, 155);
+    game.weapon = 1;
+    game.cooldown = 0.0f;
+    game.shells = 3;
+    game.controller.shotgun_loaded = 0;
+    game.controller.start_reload(1, game.shells);
+    for (let frame in 0..140) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.controller.shotgun_loaded, 3);
+    Assert.eq(game.shells, 3);
+}
+
+@test
+fun gravewake_controller_acceleration_braking_aim_and_jump(): void {
+    let controller = FirstPerson();
+    controller.advance(1.0f / 60.0f, 1.0f, 0.0f, false, 0.0f, 100, 16, 30);
+    Assert.is_true(controller.velocity.z > 0.0f && controller.velocity.z < 3.8f);
+    for (let i in 0..60) {
+        controller.advance(1.0f / 60.0f, 1.0f, 1.0f, true, 0.0f, 100, 16, 30);
+    }
+    Assert.is_true(controller.velocity.length() <= 6.001f);
+    controller.aiming = true;
+    for (let i in 0..60) {
+        controller.advance(1.0f / 60.0f, 1.0f, 0.0f, true, 0.0f, 100, 16, 30);
+        controller.visual(1.0f / 60.0f, 0.0f, 0.0f);
+    }
+    Assert.is_true(controller.aim > 0.99f);
+    Assert.is_true(controller.velocity.length() < 2.201f);
+    Assert.is_true(controller.sprint < 0.001f);
+    controller.jump();
+    controller.advance(1.0f / 60.0f, 0.0f, 0.0f, false, 0.0f, 100, 16, 30);
+    Assert.is_true(controller.jump_height > 0.0f);
+    let velocity = controller.jump_velocity;
+    controller.jump();
+    Assert.eq(controller.jump_velocity, velocity);
+    for (let i in 0..90) {
+        controller.advance(1.0f / 60.0f, 0.0f, 0.0f, false, 0.0f, 100, 16, 30);
+    }
+    Assert.is_true(controller.velocity.length() < 0.001f);
+    Assert.eq(controller.jump_height, 0.0f);
+    controller.crouching = true;
+    controller.jump();
+    Assert.eq(controller.jump_velocity, 0.0f);
+    for (let i in 0..60) {
+        controller.advance(1.0f / 60.0f, 1.0f, 0.0f, true, 0.0f, 100, 16, 30);
+    }
+    Assert.is_true(controller.eye_height < 1.101f);
+    Assert.is_true(controller.velocity.length() < 1.801f);
+}
+
+@test
+fun gravewake_town_has_open_streets_and_no_ceiling(): void {
+    let game = Game();
+    Assert.is_true(position_clear(game.boxes, 24.0f, 12.0f, 0.28f));
+    Assert.is_true(position_clear(game.boxes, -24.0f, 37.0f, 0.28f));
+    Assert.is_true(
+        wall_distance(game.boxes, GpuVec3(0.0f, 2.0f, 0.0f), GpuVec3(0.0f, 1.0f, 0.0f)) == 120.0f
+    );
+    Assert.is_true(!position_clear(game.boxes, -53.0f, 0.0f, 0.28f));
+}
+
+@test
+fun gravewake_three_wave_combat_playthrough(): void {
+    let game = Game();
+    for (let frame in 0..30000) {
+        let target = -1;
+        let nearest = 120.0f;
+        for (let i in 0..game.enemies.length) {
+            let enemy = game.enemies[i];
+            if enemy.health <= 0 {
+                continue;
+            }
+            let delta = GpuVec3(enemy.position.x, 1.65f, enemy.position.z) - game.position;
+            let distance = delta.length();
+            if distance < nearest
+                && wall_distance(game.boxes, game.position, delta / distance) > distance {
+                nearest = distance;
+                target = i;
+            }
+        }
+        if target >= 0 {
+            let delta = game.enemies[target].position - game.position;
+            game.yaw = (float)Math.atan2(delta.x, delta.z);
+            game.pitch = 0.0f;
+        }
+        if game.waves.intermission > 0.0f {
+            game.upgrade(0);
+        }
+        if nearest < 5.0f {
+            game.shockwave();
+        }
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, target >= 0);
+        Assert.eq(game.state, 0);
+        if game.waves.number >= 4 {
+            break;
+        }
+    }
+    Assert.eq(game.waves.number, 4);
+    Assert.eq(game.kills, 27);
+    Assert.is_true(game.score >= 2700);
+    Assert.is_true(game.health > 0);
+}
+
+@test
+fun gravewake_explosions_chain_reward_and_respect_cover(): void {
+    let game = inert_game();
+    game.boxes = [WorldBox(3.0f, 1.0f, 0.0f, 0.2f, 2.0f, 2.0f, 3.0f)];
+    game.barrels.positions = [
+        GpuVec3(0.0f, 0.6f, 0.0f),
+        GpuVec3(0.0f, 0.6f, 5.0f),
+        GpuVec3(5.0f, 0.6f, 0.0f)
+    ];
+    game.barrels.active = [true, true, true];
+    game.enemies = [Enemy(0.0f, 2.0f, 0), Enemy(0.0f, 8.0f, 0), Enemy(5.0f, 0.0f, 0)];
+    let result = game.barrels.detonate(
+        0,
+        game.enemies,
+        game.boxes,
+        game.effects,
+        GpuVec3(0.0f, 1.65f, -2.0f)
+    );
+    Assert.eq((int)result.x, 2);
+    Assert.eq((int)result.y, 30);
+    Assert.is_true(!game.barrels.active[0] && !game.barrels.active[1]);
+    Assert.is_true(game.barrels.active[2]);
+    Assert.eq(game.enemies[2].health, 90);
+    let repeated = game.barrels.detonate(0, game.enemies, game.boxes, game.effects, game.position);
+    Assert.eq((int)repeated.x, 0);
+    Assert.eq((int)repeated.y, 0);
+}
+
+@test
+fun gravewake_barrel_shots_stop_at_cover_and_reward_kills(): void {
+    let game = inert_game();
+    game.boxes = [];
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.barrels.positions = [GpuVec3(0.0f, 1.4f, 7.0f)];
+    game.barrels.active = [true];
+    game.enemies = [Enemy(2.0f, 8.0f, 0), Enemy(-2.0f, 9.0f, 0)];
+    game.fire();
+    Assert.eq(game.kills, 2);
+    Assert.is_true(game.score >= 300);
+    Assert.is_true(!game.barrels.active[0]);
+    Assert.eq(game.health, 100);
+    game.barrels.reset();
+    game.boxes = [WorldBox(0.0f, 1.0f, 3.0f, 2.0f, 2.0f, 0.3f, 3.0f)];
+    game.cooldown = 0.0f;
+    game.fire();
+    Assert.is_true(game.barrels.active[0]);
+}
+
+@test
+fun gravewake_dash_has_cooldown_and_cannot_tunnel(): void {
+    let game = inert_game();
+    game.boxes = [WorldBox(0.0f, 1.0f, 2.0f, 5.0f, 2.0f, 0.15f, 3.0f)];
+    game.position = GpuVec3(0.0f, 1.65f, 0.0f);
+    game.dash();
+    Assert.is_true(game.position.z > 1.0f && game.position.z < 1.6f);
+    Assert.is_true(game.dash_guard > 0.0f);
+    let before = game.position;
+    game.dash();
+    Assert.is_true((game.position - before).length() < 0.001f);
+    for (let frame in 0..220) {
+        game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    }
+    Assert.eq(game.dash_cooldown, 0.0f);
+    game.yaw = 3.141593f;
+    game.dash();
+    Assert.is_true(game.position.z < -2.0f);
+}
+
+@test
+fun gravewake_expanded_routes_have_valid_wave_spawns(): void {
+    let game = Game();
+    let bounds = world_bounds();
+    Assert.is_true(bounds.y - bounds.x > 100.0f && bounds.w - bounds.z > 100.0f);
+    for (let point in [
+        GpuVec3(-28.0f, 1.65f, 53.0f),
+        GpuVec3(32.0f, 1.65f, 62.0f),
+        GpuVec3(0.0f, 1.65f, 80.0f)
+    ]) {
+        Assert.is_true(position_clear(game.boxes, point.x, point.z, 0.28f));
+        game.waves.spawn_timer = 0.0f;
+        game.waves.tick(1.0f / 60.0f, game.enemies, game.boxes, point);
+    }
+    Assert.eq(game.waves.alive(game.enemies), 3);
+    for (let enemy in game.enemies) {
+        if enemy.health > 0 {
+            Assert.is_true(position_clear(game.boxes, enemy.position.x, enemy.position.z, 0.5f));
+        }
+    }
+}
+
+@test
+fun gravewake_exploration_rewards_and_remote_supplies(): void {
+    let game = inert_game();
+    game.position = GpuVec3(34.0f, 1.65f, 66.0f);
+    game.pickups = [Pickup(34.0f, 66.0f, 2)];
+    game.charge = 0;
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.credits, 125);
+    Assert.eq(game.charge, 35);
+    Assert.is_true(game.pickups[0].taken);
+    game.tick(1.0f / 60.0f, 0.0f, 0.0f, false, false);
+    Assert.eq(game.credits, 125);
+    game.position = GpuVec3(33.0f, 1.65f, 62.0f);
+    game.health = 40;
+    game.credits = 150;
+    game.interact();
+    Assert.eq(game.health, 75);
+    Assert.eq(game.credits, 0);
+}
+
+@test
+fun gravewake_authored_barrel_clusters_chain_in_the_world(): void {
+    let game = inert_game();
+    game.position = GpuVec3(0.0f, 1.65f, -1.5f);
+    let result = game.barrels.detonate(0, game.enemies, game.boxes, game.effects, game.position);
+    Assert.eq((int)result.y, 0);
+    Assert.is_true(!game.barrels.active[0] && !game.barrels.active[1]);
+    Assert.is_true(game.barrels.active[2] && game.barrels.active[3]);
+}

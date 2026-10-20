@@ -1,0 +1,55 @@
+import system.gpu;
+
+public fun fresnel_schlick(f0: GpuVec3, cosine: float): GpuVec3 {
+    return f0 + (GpuVec3(1.0f) - f0) * GpuMath.pow(1.0f - GpuMath.clamp(cosine, 0.0f, 1.0f), 5.0f);
+}
+
+public fun surface_brdf(
+    base: GpuVec3,
+    roughness: float,
+    metallic: float,
+    normal: GpuVec3,
+    view: GpuVec3,
+    light: GpuVec3
+): GpuVec3 {
+    let ndl = GpuMath.max(0.0f, normal.dot(light));
+    let ndv = GpuMath.max(0.001f, normal.dot(view));
+    let halfway = (view + light).normalize();
+    let ndh = GpuMath.max(0.0f, normal.dot(halfway));
+    let alpha = GpuMath.max(0.045f, roughness) * GpuMath.max(0.045f, roughness);
+    let alpha2 = alpha * alpha;
+    let denominator = ndh * ndh * (alpha2 - 1.0f) + 1.0f;
+    let distribution = alpha2 / GpuMath.max(0.000001f, 3.141593f * denominator * denominator);
+    let visibility = 0.5f
+        / GpuMath.max(
+            0.00001f,
+            ndl
+                * GpuMath.sqrt(ndv * ndv * (1.0f - alpha2) + alpha2)
+                + ndv * GpuMath.sqrt(ndl * ndl * (1.0f - alpha2) + alpha2)
+        );
+    let fresnel = fresnel_schlick(
+        GpuVec3(0.04f) * (1.0f - metallic) + base * metallic,
+        halfway.dot(view)
+    );
+    // Metals have no diffuse lobe; reflected energy is removed from the dielectric diffuse lobe.
+    return (
+        (GpuVec3(1.0f) - fresnel)
+            * base * ((1.0f - metallic) / 3.141593f) + fresnel * distribution * visibility
+    ) * ndl;
+}
+
+public fun filmic_map(linear: GpuVec3): GpuVec3 {
+    let x = GpuMath.max(GpuVec3(0.0f), linear * 0.8f);
+    return GpuMath.clamp(
+        (x * (x * 2.51f + GpuVec3(0.03f))) / (x * (x * 2.43f + GpuVec3(0.59f)) + GpuVec3(0.14f)),
+        GpuVec3(0.0f),
+        GpuVec3(1.0f)
+    );
+}
+
+public fun encode_display(linear: GpuVec3): GpuVec3 {
+    let value = GpuMath.max(linear, GpuVec3(0.0f));
+    let low = value * 12.92f;
+    let high = GpuMath.pow(value, GpuVec3(1.0f / 2.4f)) * 1.055f - GpuVec3(0.055f);
+    return GpuMath.mix(low, high, GpuMath.step(GpuVec3(0.0031308f), value));
+}

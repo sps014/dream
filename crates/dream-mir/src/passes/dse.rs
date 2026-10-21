@@ -189,6 +189,7 @@ fn operand_touches_memory(op: &Operand) -> bool {
         Operand::Copy(Place::Field { .. })
             | Operand::Copy(Place::Index { .. })
             | Operand::Copy(Place::Deref { .. })
+            | Operand::Copy(Place::Global(_))
     )
 }
 
@@ -261,6 +262,41 @@ mod tests {
         assert!(
             !Dse.run(&mut func, &i),
             "store observed by a load must be kept"
+        );
+    }
+
+    #[test]
+    fn keeps_global_store_read_by_the_overwriting_value() {
+        // g = 0; x = g * 10; g = x + 1;  ->  the read of g observes the first store.
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("f", i.int());
+        let x = b.new_temp(i.int());
+        let g = Global(0);
+        b.assign(
+            Place::Global(g),
+            Rvalue::Use(Operand::Const(Const::Int(0))),
+        );
+        b.assign(
+            Place::Local(x),
+            Rvalue::Binary(
+                crate::BinOp::Mul,
+                Operand::Copy(Place::Global(g)),
+                Operand::Const(Const::Int(10)),
+            ),
+        );
+        b.assign(
+            Place::Global(g),
+            Rvalue::Binary(
+                crate::BinOp::Add,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Int(1)),
+            ),
+        );
+        b.terminate(Terminator::Return(None));
+        let mut func = b.finish();
+        assert!(
+            !Dse.run(&mut func, &i),
+            "a global store observed by a later read must be kept"
         );
     }
 

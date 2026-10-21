@@ -1,6 +1,6 @@
 ---
 title: Deploy
-summary: "Ship one codebase as a native executable, a browser module, a Node module, or a mobile app."
+summary: "Package apps for desktop, browser, Node, and mobile, and publish packages."
 icon: material/rocket-launch-outline
 hide: [toc]
 ---

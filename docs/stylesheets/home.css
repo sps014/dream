@@ -95,6 +95,30 @@
   display: none;
 }
 
+.md-typeset .dream-why {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.6rem 2rem;
+  margin: 1rem 0 0;
+}
+
+.md-typeset .dream-why h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.md-typeset .dream-why h3 .headerlink {
+  display: none;
+}
+
+.md-typeset .dream-why p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+}
+
 @media screen and (max-width: 60em) {
   .md-typeset .dream-hero {
     grid-template-columns: minmax(0, 1fr);
@@ -104,5 +128,9 @@
 
   .md-typeset h1.dream-hero__title {
     font-size: 1.75rem;
+  }
+
+  .md-typeset .dream-why {
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   }
 }

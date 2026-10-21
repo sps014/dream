@@ -18,7 +18,7 @@ struct OptFlags {
     /// Trimmed build; wasm-opt / cc default `-O3` (`-Os` with `--web`).
     #[arg(long)]
     release: bool,
-    /// wasm-opt and cc level (`0`-`4`, `s`, `z`; bare `-O` is `-Os`). Overrides `--release`.
+    /// Release wasm-opt and cc level (`0`-`4`, `s`, `z`; bare `-O` is `-Os`). Requires `--release`.
     #[arg(
         short = 'O',
         long = "optimize",
@@ -47,7 +47,7 @@ struct OptFlags {
 impl OptFlags {
     fn into_compile_flags(self) -> anyhow::Result<CompileFlags> {
         let flags = CompileFlags::from_cli(self.release, self.optimize, self.wasm)?;
-        Ok(flags.with_pgo(self.profile, self.use_profile))
+        flags.with_pgo(self.profile, self.use_profile)
     }
 }
 
@@ -397,7 +397,7 @@ fn main() -> ExitCode {
                 print_error("pack does not support --profile / --use-profile");
                 return ExitCode::FAILURE;
             }
-            match CompileFlags::for_pack(opt.release, opt.optimize, opt.wasm) {
+            match CompileFlags::for_pack(opt.optimize, opt.wasm) {
                 Ok(flags) => commands::pack::run(&cwd, &targets, package.as_deref(), flags),
                 Err(e) => {
                     print_error(e);

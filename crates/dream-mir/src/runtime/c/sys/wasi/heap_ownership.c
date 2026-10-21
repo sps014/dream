@@ -30,7 +30,9 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 void dream_pin_immortal(dream_ptr s) {
     if (!s) { return; }
     if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
+#if DREAM_HEAP_COUNTING
         __atomic_fetch_add(&pinned_objects, 1, __ATOMIC_RELAXED);
+#endif
     }
 }
 

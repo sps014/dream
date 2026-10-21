@@ -38,6 +38,9 @@ impl CompileFlags {
         {
             bail!("invalid optimization level '{lvl}' (expected one of: 0, 1, 2, 3, 4, s, z)");
         }
+        if optimize.is_some() && !release {
+            bail!("-O requires --release; debug builds always compile at -O0");
+        }
         Ok(Self {
             compile_profile: dream_abi::profile::CompileProfile::from_release(release),
             optimize: optimize.map(|s| s.to_ascii_lowercase()),
@@ -48,19 +51,21 @@ impl CompileFlags {
         })
     }
 
-    pub fn with_pgo(mut self, profile: bool, use_profile: Option<String>) -> Self {
+    pub fn with_pgo(mut self, profile: bool, use_profile: Option<String>) -> Result<Self> {
+        if (profile || use_profile.is_some()) && self.compile_profile.is_debug() {
+            bail!("--profile / --use-profile require --release");
+        }
         self.profile = profile;
         self.use_profile = use_profile;
-        self
+        Ok(self)
     }
 
-    /// Native pack: default `--release` (cc `-O3`). Explicit `-O` / `--release` match `dreamer run`.
-    pub fn for_pack(release: bool, optimize: Option<String>, wasm: bool) -> Result<Self> {
+    /// Native pack: always a release build (cc `-O3` unless `-O` picks another level).
+    pub fn for_pack(optimize: Option<String>, wasm: bool) -> Result<Self> {
         if wasm {
             bail!("pack produces a native executable; omit --wasm");
         }
-        let release = release || optimize.is_none();
-        let mut flags = Self::from_cli(release, optimize, false)?;
+        let mut flags = Self::from_cli(true, optimize, false)?;
         flags.relocatable = true;
         Ok(flags)
     }
@@ -132,14 +137,20 @@ mod tests {
 
     #[test]
     fn bare_optimize_is_size() {
-        let flags = CompileFlags::from_cli(false, Some("s".into()), false).unwrap();
+        let flags = CompileFlags::from_cli(true, Some("s".into()), false).unwrap();
         let mut cmd = Command::new("dream");
         flags.apply(&mut cmd);
         let args: Vec<_> = cmd
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
-        assert_eq!(args, ["-Os"]);
+        assert_eq!(args, ["--release", "-Os"]);
+    }
+
+    #[test]
+    fn optimize_requires_release() {
+        let error = CompileFlags::from_cli(false, Some("3".into()), false).unwrap_err();
+        assert!(error.to_string().contains("--release"));
     }
 
     #[test]
@@ -153,22 +164,24 @@ mod tests {
         };
         let base = CompileFlags::from_cli(true, None, false).unwrap();
         assert_eq!(
-            args(base.clone().with_pgo(true, None)),
+            args(base.clone().with_pgo(true, None).unwrap()),
             ["--release", "--profile"]
         );
         assert_eq!(
-            args(base.clone().with_pgo(false, Some(String::new()))),
+            args(base.clone().with_pgo(false, Some(String::new())).unwrap()),
             ["--release", "--use-profile"]
         );
         assert_eq!(
-            args(base.with_pgo(false, Some("run.profdata".into()))),
+            args(base.with_pgo(false, Some("run.profdata".into())).unwrap()),
             ["--release", "--use-profile=run.profdata"]
         );
+        let debug = CompileFlags::from_cli(false, None, false).unwrap();
+        assert!(debug.with_pgo(true, None).is_err());
     }
 
     #[test]
     fn pack_defaults_to_release() {
-        let flags = CompileFlags::for_pack(false, None, false).unwrap();
+        let flags = CompileFlags::for_pack(None, false).unwrap();
         assert!(!flags.compile_profile.is_debug());
         assert!(flags.optimize.is_none());
         assert_eq!(flags.native_artifact_subdir(), "release");
@@ -182,15 +195,15 @@ mod tests {
     }
 
     #[test]
-    fn pack_optimize_without_release_is_debug_like_run() {
-        let flags = CompileFlags::for_pack(false, Some("2".into()), false).unwrap();
-        assert!(flags.compile_profile.is_debug());
+    fn pack_optimize_stays_release() {
+        let flags = CompileFlags::for_pack(Some("2".into()), false).unwrap();
+        assert!(!flags.compile_profile.is_debug());
         assert_eq!(flags.optimize.as_deref(), Some("2"));
-        assert_eq!(flags.native_artifact_subdir(), "debug");
+        assert_eq!(flags.native_artifact_subdir(), "release");
     }
 
     #[test]
     fn pack_rejects_wasm() {
-        assert!(CompileFlags::for_pack(false, None, true).is_err());
+        assert!(CompileFlags::for_pack(None, true).is_err());
     }
 }

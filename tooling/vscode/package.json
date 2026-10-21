@@ -53,7 +53,7 @@
             "z"
           ],
           "enumDescriptions": [
-            "Use the mode default (none in Debug; -Os in Release)",
+            "Use the Release default (-Os); Debug always builds at -O0 and ignores this setting",
             "wasm-opt -O0",
             "wasm-opt -O1",
             "wasm-opt -O2",
@@ -146,7 +146,7 @@
                   "s",
                   "z"
                 ],
-                "description": "Optional wasm-opt -O level override. If omitted, uses workspace dream.optimizeLevel.",
+                "description": "Optional Release -O level override (ignored in Debug). If omitted, uses workspace dream.optimizeLevel.",
                 "default": "default"
               },
               "generator": {

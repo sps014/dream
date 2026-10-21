@@ -41,7 +41,7 @@ dreamer run --release --use-profile    # 2. merge <bin>.pgo/*.profraw → <bin>.
 dreamer build --release --use-profile=path/to/app.profdata   # or a .profraw / directory of them
 ```
 
-`--profile` and `--use-profile` are mutually exclusive. Profiles accumulate across runs of the
+`--profile` and `--use-profile` are mutually exclusive, and both require `--release`. Profiles accumulate across runs of the
 same instrumented binary; rebuilding it (changed source or flags) clears the old ones. The
 instrumented binary links through the pinned clang (zig's linker corrupts the profile counters),
 and the merge uses the pinned `llvm-profdata`, so both come from `dreamer toolchain install llvm`.

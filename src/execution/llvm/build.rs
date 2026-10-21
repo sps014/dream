@@ -310,7 +310,12 @@ pub fn compile_llvm(
     };
     let src = std::fs::read_to_string(ll_path)?;
     let need = runtime_need_from_module_text(&src);
-    let separate_runtime = compile_profile.is_debug() && *pgo == Pgo::Off;
+    // Debug links the separately compiled runtime objects, the only variant that counts heap
+    // allocations; release links the counter-free bitcode.
+    let separate_runtime = compile_profile.is_debug();
+    if separate_runtime && *pgo != Pgo::Off {
+        return Err("--profile / --use-profile require --release".into());
+    }
     let runtime_objects = if separate_runtime {
         super::runtime_objects::native(&tools, &spec, need, debug)?
     } else {
@@ -319,17 +324,7 @@ pub fn compile_llvm(
     let rt = if separate_runtime {
         None
     } else {
-        Some(llvm_runtime(
-            &tools,
-            &spec,
-            if compile_profile.is_debug() {
-                OptLevel::O0
-            } else {
-                opt
-            },
-            need,
-            debug,
-        )?)
+        Some(llvm_runtime(&tools, &spec, opt, need, debug)?)
     };
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;

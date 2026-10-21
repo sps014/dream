@@ -117,7 +117,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
     let compile = || {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dream"));
         command
-            .args(["--target", triple, "-O0", "-o"])
+            .args(["--target", triple, "-o"])
             .arg(&ir)
             .arg(&source)
             .env("DREAM_CC", &tools)

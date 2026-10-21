@@ -42,13 +42,14 @@ impl OptLevel {
         }
     }
 
-    /// `--release` without `-O` is `-O3`; no flags is `-O0` (debug `cc`).
+    /// `--release` without `-O` is `-O3`. Debug is always `-O0`: the debug runtime variant is
+    /// only built at that level.
     pub fn from_cli(release: bool, explicit: Option<Self>) -> Self {
-        explicit.unwrap_or(if release {
-            Self::RELEASE_DEFAULT
+        if release {
+            explicit.unwrap_or(Self::RELEASE_DEFAULT)
         } else {
             Self::O0
-        })
+        }
     }
 
     /// clang `-O` for wasm32 (no `-march=native`; wasm-opt applies the Binaryen level).
@@ -130,6 +131,7 @@ mod tests {
     #[test]
     fn from_cli_matches_dream_tokens() {
         assert_eq!(OptLevel::from_cli(false, None), OptLevel::O0);
+        assert_eq!(OptLevel::from_cli(false, Some(OptLevel::O3)), OptLevel::O0);
         assert_eq!(OptLevel::from_cli(true, None), OptLevel::O3);
         assert_eq!(
             OptLevel::from_cli(true, Some(OptLevel::Size)),

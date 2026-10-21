@@ -213,7 +213,7 @@ allocator 4.54 ns/op and character scan 0.10 ns/op; reserved builder append is
 minimum-of-five protocol rather than process medians; no confidence interval is
 available. Zero-precision substring/concat samples remain uninterpretable.
 
-Separate, untimed `DREAM_DEBUG_LEAKS=1`, one-pass suite executions both reported
+Separate, untimed leak-reporting one-pass suite executions both reported
 **live=0**, **total_allocations=4,885,241**, and no leaked types. These include the
 suite's own warmup. Retain/release event counters are unavailable; no instrumentation
 was introduced, so allocation equality is not an ARC-call-count measurement.

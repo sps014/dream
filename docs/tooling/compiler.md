@@ -34,15 +34,17 @@ The first command builds and runs the file. The second only builds it. The third
 | Option | Purpose |
 | --- | --- |
 | `--release` | Build an optimized version |
-| `-O0` through `-O4`, `-Os`, `-Oz` | Choose an optimization setting; overrides `--release` |
-| `-O` | Use size optimization when no level follows |
+| `--release -O0` through `-O4`, `-Os`, `-Oz` | Choose the release optimization setting; requires `--release` |
+| `--release -O` | Use size optimization when no level follows |
 | `-g`, `--debug-info` | Include debugger information and favor stepping through source and inspecting locals |
 | `--release --perf-symbols` | Include source and function names for profiling while keeping release optimizations |
 | `-o path`, `--output path` | Choose an output path |
 | `-v`, `--verbose` | Show more build progress |
 | `--relocatable` | Put required native libraries beside the program for sharing |
 | `--crate-type lib` or `bin` | Choose a library or runnable program |
-| `--profile`, `--use-profile[=path]` | Record or use measurements to improve native builds |
+| `--release --profile`, `--release --use-profile[=path]` | Record or use measurements to improve native builds |
+
+Debug builds (no `--release`) always compile without optimization so they can count allocations and print the exit-time leak report; passing `-O`, `--profile` or `--use-profile` without `--release` is an error. Release builds contain no allocation tracking.
 
 Native output normally goes under `target/debug/` or `target/release/`. Browser output goes under `target/web/`. [Build and run](build-run.md) explains profile-guided builds. [Library output](../deploy/native-libraries.md) explains exported libraries.
 

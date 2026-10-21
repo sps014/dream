@@ -65,7 +65,7 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
                 _ => isolated.push(**case),
             }
         }
-        let config = Arc::new(ToolchainConfig::default());
+        let config = corpus_config(release_build);
         let jobs: Vec<_> = projects.into_iter().collect();
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(
@@ -144,6 +144,14 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
     );
 }
 
+/// The release runtime counts no allocations, so release runs link the instrumented counter
+/// runtime to keep `Debug.live_objects` assertions meaningful under optimization.
+fn corpus_config(release_build: bool) -> Arc<ToolchainConfig> {
+    let mut config = ToolchainConfig::default();
+    config.runtime_counters |= release_build;
+    Arc::new(config)
+}
+
 pub(super) fn project_tests(case: &Case) -> Vec<String> {
     let path = case.source();
     let source = std::fs::read_to_string(&path).unwrap();
@@ -171,7 +179,7 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
         .prefix(case.stem)
         .tempdir()
         .unwrap();
-    let config = Arc::new(ToolchainConfig::default());
+    let config = corpus_config(release_build);
     let target = if host == TestHost::Native {
         Target::native()
     } else {

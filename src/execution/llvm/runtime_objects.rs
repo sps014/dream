@@ -8,6 +8,10 @@ use rayon::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 
+/// These objects are the debug runtime, the only variant that counts heap allocations and frees
+/// (`Debug.live_objects` and the exit-time leak report). Release links counter-free bitcode.
+const HEAP_COUNTERS_DEFINE: &str = "-DDREAM_HEAP_COUNTERS=1";
+
 fn compile_objects<T: Sync>(
     units: &[T],
     compile: impl Fn(usize, &T) -> Result<PathBuf, String> + Sync,
@@ -99,7 +103,7 @@ pub(super) fn wasm(
     let clang = tools.clang()?;
     let sysroot = super::wasm::wasi_sysroot(&clang)?;
     let identity = format!(
-        "wasm-objects-v1:{need:?}:{threads}:{}:{}:{:?}:{:?}",
+        "wasm-objects-v2:{need:?}:{threads}:{}:{}:{:?}:{:?}",
         config.fingerprint(),
         rt_stamp::content_fingerprint(vec![clang.clone()]),
         crate::driver::wasi::GUEST_FEATURES,
@@ -133,6 +137,7 @@ pub(super) fn wasm(
         if unit.path.extension().is_some_and(|ext| ext == "s") {
             command.args(["-x", "assembler-with-cpp"]);
         }
+        command.arg(HEAP_COUNTERS_DEFINE);
         if config.runtime_counters {
             command.arg("-DDREAM_RUNTIME_COUNTERS=1");
         }
@@ -164,7 +169,7 @@ pub(super) fn native(
     }
     let clang = tools.clang()?;
     let identity = format!(
-        "native-objects-v1:{spec:?}:{need:?}:{debug_info}:{}:{}",
+        "native-objects-v2:{spec:?}:{need:?}:{debug_info}:{}:{}",
         config.fingerprint(),
         rt_stamp::content_fingerprint(vec![clang.clone()])
     );
@@ -175,7 +180,7 @@ pub(super) fn native(
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let (mut units, vendors) = super::runtime::bitcode_units(&config.runtime_c, need);
     units.extend(vendors);
-    let mut flags = vec!["-O0"];
+    let mut flags = vec!["-O0", HEAP_COUNTERS_DEFINE];
     if !spec.is_windows() {
         flags.push("-fPIC");
     }

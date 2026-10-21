@@ -228,9 +228,9 @@ function buildDreamCliArgs(settings: DreamBuildSettings = readBuildSettings()): 
     const args: string[] = [];
     if (settings.buildMode === 'release') {
         args.push('--release');
-    }
-    if (settings.optimizeLevel !== 'default') {
-        args.push(`-O${settings.optimizeLevel}`);
+        if (settings.optimizeLevel !== 'default') {
+            args.push(`-O${settings.optimizeLevel}`);
+        }
     }
     if (settings.runtimeTarget === 'web') {
         args.push('--runtime', '--web');
@@ -817,7 +817,7 @@ async function pickOptimizeLevel(): Promise<void> {
         {
             label: 'Default',
             description: current === 'default' ? '(current)' : undefined,
-            detail: 'Mode default (none in Debug; -Os in Release)',
+            detail: 'Release default (-Os); Debug always builds at -O0',
             value: 'default'
         },
         { label: 'O0', detail: 'wasm-opt -O0', value: '0' },

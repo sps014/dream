@@ -61,7 +61,6 @@ fn compiler_without_any_host_libraries_compiles_and_runs() {
     let output = std::process::Command::new(&isolated)
         .arg("run")
         .arg(&source)
-        .arg("-O0")
         .env("DREAM_LLVM", tools.bin)
         .env("DREAM_HOME", directory.path())
         .env("DREAM_BIN", &isolated)

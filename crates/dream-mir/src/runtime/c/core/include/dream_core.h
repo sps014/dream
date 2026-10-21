@@ -22,6 +22,15 @@
 #if __STDC_HOSTED__
 #include <string.h>
 #endif
+/* Heap accounting (`Debug.live_objects`, `Debug.total_allocations`, the exit-time leak report)
+ * exists only in the debug runtime objects and the `DREAM_RUNTIME_COUNTERS` instrumented runtime.
+ * Release bitcode compiles every increment out, so its getters read 0. */
+#if (defined(DREAM_HEAP_COUNTERS) && DREAM_HEAP_COUNTERS) \
+    || (defined(DREAM_RUNTIME_COUNTERS) && DREAM_RUNTIME_COUNTERS)
+#define DREAM_HEAP_COUNTING 1
+#else
+#define DREAM_HEAP_COUNTING 0
+#endif
 /* Declaration-only cross emission needs no target libc SDK; the wasm units that define libc
  * build with -fno-builtin, which would leave every fixed-size copy (header words, SIMD lanes)
  * an out-of-line call. Clang supplies these intrinsics. */
@@ -49,7 +58,7 @@ typedef uint64_t dream_result;
 
 /* Foreign handoff enables publication through erased/interior owners. RC uses `TAG_SHARED`. */
 extern int dream_rt_mt;
-void dream_llvm_leak_report(int32_t always, int32_t heap_used);
+void dream_llvm_leak_report(int32_t heap_used);
 _Noreturn void dream_platform_abort(void);
 
 /* `core/inlines.c` redefines this to give every helper one external definition, so LLVM-emitted
@@ -453,8 +462,13 @@ DREAM_ALWAYS_INLINE void dream_block_activate(char *block, unsigned cls, int32_t
 }
 
 DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
+#if DREAM_HEAP_COUNTING
     uint64_t value = __atomic_load_n(c, __ATOMIC_RELAXED);
     __atomic_store_n(c, value + n, __ATOMIC_RELAXED);
+#else
+    (void)c;
+    (void)n;
+#endif
 }
 
 DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {

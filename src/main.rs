@@ -81,13 +81,14 @@ struct Cli {
     )]
     perf_symbols: bool,
 
-    /// Backend optimization level within the selected profile (0-4, s, z); bare -O means Os
+    /// Release optimization level (0-4, s, z); bare -O means Os. Debug builds always use -O0
     #[arg(
         short = 'O',
         long = "optimize",
         value_name = "LEVEL",
         num_args = 0..=1,
         default_missing_value = "s",
+        requires = "release",
         global = true
     )]
     optimize: Option<String>,
@@ -180,7 +181,7 @@ struct Cli {
 
     /// Native PGO step 1: build an instrumented binary; its runs record profiles into
     /// <output>.pgo/ next to it
-    #[arg(long, global = true, conflicts_with = "use_profile")]
+    #[arg(long, global = true, conflicts_with = "use_profile", requires = "release")]
     profile: bool,
 
     /// Native PGO step 2: optimize with a profile (default: merge the --profile runs; or
@@ -191,6 +192,7 @@ struct Cli {
         num_args = 0..=1,
         require_equals = true,
         default_missing_value = "",
+        requires = "release",
         global = true
     )]
     use_profile: Option<String>,
@@ -771,7 +773,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let unoptimized = !cli.release && optimize.is_none() && !debug_adapter;
+    let unoptimized = !cli.release && !debug_adapter;
     let run_dir = if output_kind.is_library() || cli.object || cli.emit_llvm {
         None
     } else {

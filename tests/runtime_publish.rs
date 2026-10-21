@@ -10,7 +10,7 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
     let temp = tempfile::tempdir().expect("publication test directory");
     let binary = temp.path().join("publish");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-    command.args(["-std=gnu11", "-O2", "-pthread"]);
+    command.args(["-std=gnu11", "-O2", "-pthread", "-DDREAM_HEAP_COUNTERS=1"]);
     if let Ok(sanitizer) = std::env::var("DREAM_WORKER_SANITIZER") {
         assert!(matches!(sanitizer.as_str(), "thread" | "address,undefined"));
         command.arg(format!("-fsanitize={sanitizer}")).arg("-g");

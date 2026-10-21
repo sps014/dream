@@ -27,7 +27,7 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
             .arg(String::from_utf8(sdk.stdout).unwrap().trim());
     }
     command
-        .args(["-std=gnu11", "-O1"])
+        .args(["-std=gnu11", "-O1", "-DDREAM_HEAP_COUNTERS=1"])
         .arg("-I")
         .arg(core.join("include"))
         .arg("-I")

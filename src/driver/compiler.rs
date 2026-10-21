@@ -166,14 +166,18 @@ impl Compiler {
         self.profile
     }
 
+    /// Debug builds never optimize: the debug runtime variant is built at `-O0` only.
     fn effective_optimize(&self) -> Option<OptLevel> {
-        self.optimize.or_else(|| {
-            (!self.profile.is_debug()).then_some(if self.runtimes.contains(&JsRuntimeTarget::Web) {
+        if self.profile.is_debug() {
+            return None;
+        }
+        Some(self.optimize.unwrap_or(
+            if self.runtimes.contains(&JsRuntimeTarget::Web) {
                 OptLevel::WEB_RELEASE_DEFAULT
             } else {
                 OptLevel::RELEASE_DEFAULT
-            })
-        })
+            },
+        ))
     }
 
     pub fn native_opt(&self) -> OptLevel {
@@ -252,9 +256,8 @@ impl Compiler {
         self
     }
 
-    /// Builder: post-process the emitted `.wasm` with Binaryen's `wasm-opt` at the given level.
-    /// `Some(level)` sets/overrides (including the [`OptLevel::RELEASE_DEFAULT`] from
-    /// [`Compiler::with_release`]); `None` restores the profile default.
+    /// Builder: optimization level for a release build. `Some(level)` overrides the
+    /// [`OptLevel::RELEASE_DEFAULT`]; `None` restores it. Debug builds ignore it and stay at `-O0`.
     pub fn with_optimize(mut self, level: Option<OptLevel>) -> Self {
         self.optimize = level;
         self

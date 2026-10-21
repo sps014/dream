@@ -30,7 +30,7 @@ public static extern fun runtime_counter(id: int): long
 
 ## `free_list_head`
 
-Allocator free-list address exposed for debugging.
+Memory-reuse probe that changes when the allocator frees storage. Release builds do not track frees and always read 0.
 
 ```dream
 public static get free_list_head(): int
@@ -46,7 +46,7 @@ public static get heap_ptr(): int
 
 ## `live_objects`
 
-Number of currently live managed allocations.
+Number of currently live managed allocations. Only debug builds count allocations; release builds always read 0.
 
 ```dream
 public static get live_objects(): long
@@ -54,7 +54,7 @@ public static get live_objects(): long
 
 ## `total_allocations`
 
-Total number of managed allocations made so far.
+Total number of managed allocations made so far. Only debug builds count allocations; release builds always read 0.
 
 ```dream
 public static get total_allocations(): long

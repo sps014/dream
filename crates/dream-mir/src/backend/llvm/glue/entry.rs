@@ -272,7 +272,6 @@ fn leak_live(l: &mut Lcx<'_>) {
 }
 
 fn native_main(l: &mut Lcx<'_>) {
-    let always = l.cx.leak_checks as i64;
     let mut fx = glue(l, "main");
     let (argc, argv) = (fx.arg(0), fx.arg(1));
     if fx.l.requirements.process_arguments {
@@ -282,8 +281,10 @@ fn native_main(l: &mut Lcx<'_>) {
     if fx.l.requirements.deferred_cleanup {
         fx.call("dream_defer_drain_all", &[]);
     }
-    let heap = fx.l.requirements.heap as i64;
-    fx.call("dream_llvm_leak_report", &[V::i32(always), V::i32(heap)]);
+    if fx.l.cx.leak_checks {
+        let heap = fx.l.requirements.heap as i64;
+        fx.call("dream_llvm_leak_report", &[V::i32(heap)]);
+    }
     fx.w.ret(Some(&rc.v));
     fx.finish();
 }

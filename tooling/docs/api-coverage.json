@@ -8534,26 +8534,26 @@
       },
       {
         "signature": "public static get free_list_head(): int",
-        "description": "Allocator free-list address exposed for debugging.",
-        "line": 31,
+        "description": "Memory-reuse probe that changes when the allocator frees storage. Release builds do not track frees and always read 0.",
+        "line": 32,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get heap_ptr(): int",
         "description": "Current heap address exposed for debugging.",
-        "line": 36,
+        "line": 37,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get live_objects(): long",
-        "description": "Number of currently live managed allocations.",
-        "line": 41,
+        "description": "Number of currently live managed allocations. Only debug builds count allocations; release builds always read 0.",
+        "line": 43,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get total_allocations(): long",
-        "description": "Total number of managed allocations made so far.",
-        "line": 46,
+        "description": "Total number of managed allocations made so far. Only debug builds count allocations; release builds always read 0.",
+        "line": 49,
         "page": "reference/api/debug.md"
       }
     ]

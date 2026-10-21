@@ -388,7 +388,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     let tmp = tempfile::tempdir().unwrap();
     let lib_dir = tmp.path().join("libpack");
     commands::init::run(&lib_dir, Some("libpack".to_string()), None, STATICLIB).unwrap();
-    let pack_flags = dreamer::compile_flags::CompileFlags::for_pack(false, None, false).unwrap();
+    let pack_flags = dreamer::compile_flags::CompileFlags::for_pack(None, false).unwrap();
     assert!(commands::pack::run(&lib_dir, &[], None, pack_flags.clone()).is_err());
 
     let bin_dir = tmp.path().join("binpack");

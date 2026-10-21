@@ -189,7 +189,7 @@ jobs:
           python scripts/test_corpus.py --release cli_arguments
       - name: Qualify async I/O and networking on native and Node
         run: python scripts/qualify-io-net.py
-      - name: Preserve phase 3–4 qualification results
+      - name: Preserve phase 3â€“4 qualification results
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -274,12 +274,12 @@ jobs:
           stress_dir=$(mktemp -d)
           native=crates/dream-mir/src/runtime/c/sys/native
           core=crates/dream-mir/src/runtime/c/core
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
             "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_weak.c \
             -o "$stress_dir/weak"
-          DREAM_DEBUG_LEAKS=1 "$stress_dir/weak"
+          "$stress_dir/weak"
       - name: Lock registry stress under ThreadSanitizer
         if: runner.os == 'macOS'
         shell: bash
@@ -287,12 +287,12 @@ jobs:
           stress_dir=$(mktemp -d)
           native=crates/dream-mir/src/runtime/c/sys/native
           core=crates/dream-mir/src/runtime/c/core
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
             "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$core/strings.c" tests/runtime_sync.c \
             -o "$stress_dir/sync"
-          DREAM_DEBUG_LEAKS=1 "$stress_dir/sync"
+          "$stress_dir/sync"
 
       - name: Worker registry stress under ThreadSanitizer
         if: runner.os == 'macOS'
@@ -301,12 +301,12 @@ jobs:
           stress_dir=$(mktemp -d)
           native=crates/dream-mir/src/runtime/c/sys/native
           core=crates/dream-mir/src/runtime/c/core
-          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -I"$core/include" -I"$native/include" -I"$core/../include" \
+          clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" \
             "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_worker.c \
             -o "$stress_dir/worker"
-          DREAM_DEBUG_LEAKS=1 "$stress_dir/worker"
+          "$stress_dir/worker"
 
   golden-corpus:
     name: Full native corpus and WASM parity

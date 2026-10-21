@@ -83,16 +83,20 @@ static dream_weak_node *weak_take_locked(void) {
     }
     dream_weak_node *node = free_nodes;
     free_nodes = node->next;
+#if DREAM_HEAP_COUNTING
     uint64_t allocations = __atomic_load_n(&dream_weak_allocations, __ATOMIC_RELAXED);
     __atomic_store_n(&dream_weak_allocations, allocations + 1, __ATOMIC_RELAXED);
+#endif
     return node;
 }
 
 static void weak_give_locked(dream_weak_node *node) {
     node->next = free_nodes;
     free_nodes = node;
+#if DREAM_HEAP_COUNTING
     uint64_t frees = __atomic_load_n(&dream_weak_frees, __ATOMIC_RELAXED);
     __atomic_store_n(&dream_weak_frees, frees + 1, __ATOMIC_RELAXED);
+#endif
 }
 
 static dream_weak_node **weak_bucket(dream_ptr target) {

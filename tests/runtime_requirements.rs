@@ -4,12 +4,20 @@ use dream::driver::compiler::Compiler;
 use dream_mir::backend::Target;
 
 fn compile(source: &str) -> (tempfile::TempDir, String, serde_json::Value) {
+    compile_profile(source, true)
+}
+
+fn compile_debug(source: &str) -> String {
+    compile_profile(source, false).1
+}
+
+fn compile_profile(source: &str, release: bool) -> (tempfile::TempDir, String, serde_json::Value) {
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("main.dream");
     let output = dir.path().join("main.ll");
     std::fs::write(&input, source).unwrap();
     Compiler::new(Target::native())
-        .with_release(true)
+        .with_release(release)
         .compile(&input.display().to_string(), output.to_str().unwrap())
         .unwrap();
     let ir = std::fs::read_to_string(&output).unwrap();
@@ -29,7 +37,48 @@ fn unused_imports_do_not_require_argument_capture_or_callback_startup() {
     for name in dream_abi::c_abi::EMBED_EXPORTS {
         assert!(!exports.iter().any(|e| e.as_str() == Some(name)));
     }
-    assert!(ir.contains("@dream_llvm_leak_report"));
+    assert!(!ir.contains("@dream_llvm_leak_report"));
+}
+
+#[test]
+fn release_entry_has_no_leak_report() {
+    let source = "import system; class Note { public constructor() {} } fun main(): void { let n = Note(); System.println(Debug.live_objects); }";
+    assert!(compile_debug(source).contains("call void @dream_llvm_leak_report(i32 1)"));
+    let (_dir, ir, _) = compile(source);
+    assert!(!ir.contains("dream_llvm_leak_report"));
+}
+
+#[test]
+fn allocation_counts_are_real_in_debug_and_zero_in_release() {
+    let source = "import system; class Note { public constructor() {} } fun main(): void { let n = Note(); System.println(Debug.live_objects > 0L); System.println(Debug.total_allocations > 0L); }";
+    let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
+    for (release, opt, expected) in [
+        (false, dream::driver::wasm_opt::OptLevel::O0, "true\ntrue"),
+        (true, dream::driver::wasm_opt::OptLevel::O2, "false\nfalse"),
+    ] {
+        let (dir, _, _) = compile_profile(source, release);
+        let output = dream::execution::native::compile_and_capture(
+            &config,
+            dir.path().join("main.ll").to_str().unwrap(),
+            opt,
+        )
+        .unwrap();
+        assert_eq!(output.replace("\r\n", "\n").trim(), expected, "release={release}");
+    }
+}
+
+#[test]
+fn release_wasm_has_no_live_count_export() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("main.dream");
+    let output = dir.path().join("main.ll");
+    std::fs::write(&input, "fun main(): void {}").unwrap();
+    Compiler::new(Target::wasm32())
+        .with_release(true)
+        .compile(&input.display().to_string(), output.to_str().unwrap())
+        .unwrap();
+    let ir = std::fs::read_to_string(&output).unwrap();
+    assert!(!ir.contains(dream_mir::abi::EXPORT_LEAK_LIVE));
 }
 
 #[test]
@@ -63,7 +112,7 @@ fn executable_path_keeps_process_capture() {
 
 #[test]
 fn deferred_destruction_keeps_final_drain_before_reporting() {
-    let (_dir, ir, _) = compile(
+    let ir = compile_debug(
         "import system; class Note { public constructor() {} } fun main(): void { defer { let n = Note(); } }",
     );
     let main = ir.split("define i32 @main(").nth(1).unwrap();
@@ -113,14 +162,14 @@ fn opaque_runtime_intrinsics_keep_owner_and_cleanup_services() {
 
 #[test]
 fn empty_entry_selects_zero_heap_reporting_but_numeric_formatting_keeps_real_counters() {
-    let (_dir, empty, _) = compile("fun main(): void {}");
-    assert!(empty.contains("call void @dream_llvm_leak_report(i32 0, i32 0)"));
+    let empty = compile_debug("fun main(): void {}");
+    assert!(empty.contains("call void @dream_llvm_leak_report(i32 0)"));
     for value in ["true", "123L", "123u", "123UL", "(byte)7"] {
-        let (_dir, ir, _) = compile(&format!(
+        let ir = compile_debug(&format!(
             "import system; fun main(): void {{ System.println({value}); }}"
         ));
         assert!(
-            ir.contains("call void @dream_llvm_leak_report(i32 0, i32 1)"),
+            ir.contains("call void @dream_llvm_leak_report(i32 1)"),
             "{value}"
         );
     }

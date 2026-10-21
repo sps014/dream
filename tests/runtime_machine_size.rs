@@ -14,6 +14,7 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         "-std=gnu11",
         "-O2",
         "-pthread",
+        "-DDREAM_HEAP_COUNTERS=1",
         "-Wall",
         "-Wextra",
         "-Werror",

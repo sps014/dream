@@ -22,7 +22,7 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         command.arg("-pthread");
         command
     };
-    command.args(["-std=gnu11", "-O2"]);
+    command.args(["-std=gnu11", "-O2", "-DDREAM_HEAP_COUNTERS=1"]);
     if let Ok(sanitizer) = std::env::var("DREAM_WORKER_SANITIZER") {
         assert!(matches!(sanitizer.as_str(), "thread" | "address,undefined"));
         command.arg(format!("-fsanitize={sanitizer}")).arg("-g");

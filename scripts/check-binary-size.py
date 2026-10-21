@@ -29,7 +29,7 @@ def measure(compiler, host_directory, llvm_directory):
         compile_env.update(DREAM_HOME=str(directory), DREAM_BIN=str(isolated_compiler), DREAM_TARGETS=str(directory / "targets"))
         compile_env["DREAM_LLVM"] = str(llvm_directory)
         subprocess.run(
-            [str(isolated_compiler), "-O3", "--relocatable", "-o", str(output),
+            [str(isolated_compiler), "--release", "-O3", "--relocatable", "-o", str(output),
              str(root / "tests/size/hello.dream")],
             check=True, env=compile_env,
         )

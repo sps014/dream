@@ -34,6 +34,8 @@ pub fn compile_and_capture_with_env(
     compile_and_capture_ex(config, ll_path, opt, extra_env, &[], None, 8)
 }
 
+/// Debug builds only exist at `-O0`, so `O0` links the debug runtime (heap counters and the
+/// exit-time leak report) and every other level links the release runtime.
 pub fn compile_and_capture_ex(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     ll_path: &str,
@@ -52,7 +54,7 @@ pub fn compile_and_capture_ex(
             opt_remarks: None,
             opt,
             debug: false,
-            profile: dream_abi::profile::CompileProfile::Release,
+            profile: dream_abi::profile::CompileProfile::from_release(opt != OptLevel::O0),
             pgo: &Pgo::Off,
             icon: None,
             relocatable: false,
@@ -147,7 +149,7 @@ pub fn capture_native_bin(
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn parse_leak_live(stderr: &str) -> Option<i32> {
+fn parse_leak_live(stderr: &str) -> Option<u64> {
     let marker = "[dream] leak check: live=";
     let i = stderr.find(marker)?;
     let rest = &stderr[i + marker.len()..];
@@ -308,4 +310,14 @@ pub(crate) fn native_bin_fresh(
     mtime(module).is_some_and(|t| t <= bin_t)
         && mtime(rt).is_some_and(|t| t <= bin_t)
         && profile.is_none_or(|p| mtime(p).is_some_and(|t| t <= bin_t))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn leak_live_parses_counts_past_i32() {
+        let stderr = "[dream] leak check: live=3000000000 total_allocations=3000000001 live_bytes=96000000000\n";
+        assert_eq!(super::parse_leak_live(stderr), Some(3_000_000_000));
+        assert_eq!(super::parse_leak_live("no report"), None);
+    }
 }

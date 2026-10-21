@@ -254,6 +254,28 @@ fn emit_opt_ll(source: &str, args: &[&str]) -> String {
     std::fs::read_to_string(out.with_extension("opt.ll")).unwrap()
 }
 
+#[cfg(feature = "native")]
+#[test]
+fn optimization_levels_require_release() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("main.dream");
+    std::fs::write(&src, "fun main(): void {}").unwrap();
+    for args in [&["-O3"][..], &["--profile"], &["--use-profile"]] {
+        let result = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .env("NO_COLOR", "1")
+            .arg(&src)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!result.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains("--release"),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+}
+
 /// Spans over borrowed and private owned sources, value-struct constructors and borrowed
 /// value parameters all scalarize: no RC in the loops, bounds checks fold, and only the
 /// private source owner keeps its cleanup.

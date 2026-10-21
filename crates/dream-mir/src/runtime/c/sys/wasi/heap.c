@@ -138,14 +138,20 @@ static void recycle_locked(dream_ptr ptr, int account);
 #define PRIV_SLAB (2 << 20)
 
 static void account_alloc(void) {
+#if DREAM_HEAP_COUNTING
     __atomic_fetch_add(&total_allocations, 1, __ATOMIC_RELAXED);
+#endif
 }
 
 static void account_free_n(int32_t n) {
+#if DREAM_HEAP_COUNTING
     __atomic_fetch_add(&last_freed, n, __ATOMIC_RELAXED);
     if (n > 0) {
         __atomic_fetch_add(&total_frees, n, __ATOMIC_RELAXED);
     }
+#else
+    (void)n;
+#endif
 }
 
 /* Per-instance exact-class freelists live in linear memory, indexed by class. `fast` aliases

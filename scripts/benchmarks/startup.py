@@ -85,7 +85,7 @@ def main():
     # A process launch includes loader, startup, workload and teardown. No phase attribution is
     # inferred from this timer; in-process suites measure workload throughput independently.
     environment = os.environ.copy()
-    for name in ("DREAM_RUNTIME_COUNTERS", "DREAM_BENCH_COUNTERS", "DREAM_DEBUG_LEAKS", "DREAM_ASAN", "DREAM_SANITIZE", "DREAM_NATIVE_SANITIZE"):
+    for name in ("DREAM_RUNTIME_COUNTERS", "DREAM_BENCH_COUNTERS", "DREAM_ASAN", "DREAM_SANITIZE", "DREAM_NATIVE_SANITIZE"):
         environment.pop(name, None)
     with (args.out / "raw.jsonl").open("w") as raw:
         for round_index in range(-args.warmup, args.rounds):

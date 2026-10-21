@@ -34,7 +34,7 @@ dreamer test --node
 |---|---|
 | `--filter <text>` | Run only tests whose `<file>::<name>` label contains the text |
 | `--release` | Build the runner with the release profile |
-| `-O <level>` / `--optimize <level>` | Optimization level (`0`–`4`, `s`, `z`); overrides `--release` |
+| `-O <level>` / `--optimize <level>` | Release optimization level (`0`–`4`, `s`, `z`); requires `--release`. Debug test builds always run unoptimized |
 | `--native` | Run on the native host instead of `[test].targets` |
 | `--node` | Run under Node instead of `[test].targets`; with `--native`, run on both |
 | `-p <name>` / `--package <name>` | Run one test project of a workspace |

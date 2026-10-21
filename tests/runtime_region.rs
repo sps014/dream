@@ -10,7 +10,7 @@ fn regions_chain_rewind_and_fall_back_independently_per_thread() {
     let temp = tempfile::tempdir().expect("region test directory");
     let binary = temp.path().join("region");
     let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-    command.args(["-std=gnu11", "-O2", "-pthread"]);
+    command.args(["-std=gnu11", "-O2", "-pthread", "-DDREAM_HEAP_COUNTERS=1"]);
     let runtime = native.parent().unwrap().parent().unwrap();
     command
         .arg("-I")

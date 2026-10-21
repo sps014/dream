@@ -9,6 +9,7 @@ fn repo(path: &str) -> PathBuf {
 
 fn compile(entry: &Path, output: &Path, optimize: Option<OptLevel>) -> Result<(), String> {
     Compiler::new(Target::wasm32())
+        .with_release(optimize.is_some())
         .with_optimize(optimize)
         .with_opt_ir(true)
         .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Node])

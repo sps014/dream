@@ -122,7 +122,9 @@ static void heap_sums(uint64_t *allocs, uint64_t *frees) {
 void dream_pin_immortal(dream_ptr s) {
     if (!s) { return; }
     if (__atomic_exchange_n(dream_rc_word(s), DREAM_RC_IMMORTAL, __ATOMIC_RELAXED) != DREAM_RC_IMMORTAL) {
+#if DREAM_HEAP_COUNTING
         __atomic_fetch_add(&pinned, 1u, __ATOMIC_RELAXED);
+#endif
     }
 }
 
@@ -472,12 +474,16 @@ int64_t debug_get_total_allocations(void) {
 int32_t debug_get_ref_count(dream_ptr ptr) {
     return ptr ? dream_rc_count(ptr) : 0;
 }
-int32_t debug_get_heap_ptr(void) { return (int32_t)arena_off; }
+/* Both probes return `int`; a value past INT32_MAX saturates rather than wrapping negative. */
+static int32_t saturate_i32(uint64_t value) {
+    return value > (uint64_t)INT32_MAX ? INT32_MAX : (int32_t)value;
+}
+int32_t debug_get_heap_ptr(void) { return saturate_i32((uint64_t)arena_off); }
 int32_t debug_get_free_list_head(void) {
     uint64_t a;
     uint64_t f;
     heap_sums(&a, &f);
-    return (int32_t)(f - __atomic_load_n(&pinned, __ATOMIC_RELAXED));
+    return saturate_i32(f - __atomic_load_n(&pinned, __ATOMIC_RELAXED));
 }
 
 void dream_recycle_slow(dream_ptr ptr) {

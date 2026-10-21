@@ -4,6 +4,7 @@ nav:
   - learn
   - language
   - library
+  - GPU and ML: library/gpu
   - web-server
   - deploy
   - tooling

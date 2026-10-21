@@ -1,6 +1,6 @@
 ---
 title: Language
-summary: "Every Dream language feature, grouped by topic."
+summary: "Reference counting, zero-cost generics, async and parallel work, interop, and the rest of the language."
 icon: material/code-braces
 hide: [toc]
 ---

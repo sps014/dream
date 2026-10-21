@@ -1,6 +1,6 @@
 ---
-title: GPU
-summary: Write shaders in Dream and run them on the GPU, from compute jobs to window rendering.
+title: GPU and ML
+summary: Write shaders in Dream and run compute, graphics, and small neural networks on the GPU.
 icon: material/expansion-card
 api: reference/api/system-gpu.md
 ---
@@ -10,7 +10,8 @@ api: reference/api/system-gpu.md
 Import `system.gpu` to run code on the graphics card. Shaders are ordinary Dream functions with a
 stage attribute such as `@compute`. When the program builds, Dream compiles them ahead of time for
 the GPU APIs you choose and generates a `GpuShaders` class that runs them with typed parameters.
-No shader source ships with the program, and nothing is compiled while it runs.
+No shader source ships with the program, and nothing is compiled while it runs. Automatic
+differentiation and small neural networks are covered in [Machine learning](machine-learning.md).
 
 ## Setup
 

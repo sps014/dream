@@ -6,6 +6,7 @@
 .md-typeset .dream-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  align-items: start;
   gap: 0.75rem;
   margin: 1em 0 2em;
 }
@@ -74,7 +75,6 @@
 }
 
 .md-typeset .dream-card__count {
-  margin-top: auto;
   padding-top: 0.4rem;
   font-size: 0.62rem;
   color: var(--md-default-fg-color--lighter);

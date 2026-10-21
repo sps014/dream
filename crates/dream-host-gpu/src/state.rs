@@ -239,7 +239,9 @@ pub struct State {
 static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| Mutex::new(State::default()));
 
 pub fn lock() -> MutexGuard<'static, State> {
-    STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl State {

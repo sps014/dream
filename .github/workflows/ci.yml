@@ -189,7 +189,7 @@ jobs:
           python scripts/test_corpus.py --release cli_arguments
       - name: Qualify async I/O and networking on native and Node
         run: python scripts/qualify-io-net.py
-      - name: Preserve phase 3â€“4 qualification results
+      - name: Preserve phase qualification results
         if: always()
         uses: actions/upload-artifact@v7
         with:

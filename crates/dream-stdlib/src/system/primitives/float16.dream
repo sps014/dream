@@ -42,6 +42,30 @@ extend float16: Comparable<float16> {
         return other;
     }
 
+    /// Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned
+    /// unchanged; the result is unspecified when `lo` is greater than `hi`.
+    public fun clamp(lo: float16, hi: float16): float16 {
+        if this < lo {
+            return lo;
+        }
+        if this > hi {
+            return hi;
+        }
+        return this;
+    }
+
+    /// Returns `1.0h` for a positive value, `-1.0h` for a negative value, and the value itself
+    /// for zero (keeping the sign of `-0.0h`) or NaN.
+    public fun signum(): float16 {
+        if this > 0.0h {
+            return 1.0h;
+        }
+        if this < 0.0h {
+            return -1.0h;
+        }
+        return this;
+    }
+
     /// Returns true when this value is NaN (not a number), for example the result of
     /// `0.0h / 0.0h`.
     public fun is_nan(): bool {

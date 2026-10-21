@@ -80,16 +80,18 @@ impl<'a> Analyzer<'a> {
                                 number.get_span(),
                             );
                         }
-                    } else if let Some(val) = dream_syntax::number::parse_int_literal(&t.text) {
+                    } else if let Some(val) =
+                        dream_syntax::number::parse_signed_literal(&t.text, 64)
+                    {
+                        let fits_signed = |bits| {
+                            dream_syntax::number::parse_signed_literal(&t.text, bits).is_some()
+                        };
                         let err = match &ty {
-                            Type::Integer(_) => val < i32::MIN as i64 || val > i32::MAX as i64,
+                            Type::Integer(_) => !fits_signed(32),
                             Type::Byte(_) => !(0i64..=255).contains(&val),
-                            Type::UInt(_) => val < 0 || val > u32::MAX as i64,
+                            Type::UInt(_) => !(0..=u32::MAX as i64).contains(&val),
                             Type::Long(_) => false,
-                            Type::ISize(_) => {
-                                self.target_layout.ptr_size == 4
-                                    && (val < i32::MIN as i64 || val > i32::MAX as i64)
-                            }
+                            Type::ISize(_) => self.target_layout.ptr_size == 4 && !fits_signed(32),
                             _ => false,
                         };
                         if err && matches!(ty, Type::Integer(_)) {

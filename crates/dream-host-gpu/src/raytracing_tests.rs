@@ -112,15 +112,38 @@ fn layout_builds_the_binding_table_in_program_order() {
 
 #[test]
 fn layout_rejects_truncated_out_of_range_and_conflicting_tables() {
-    assert!(Layout::decode(&[0, 0, 0], 1).is_err(), "missing callable count");
-    assert!(Layout::decode(&[0, 0, 0, 0, 9], 1).is_err(), "trailing words");
-    assert!(Layout::decode(&[1, 0, 0, 0], 1).is_err(), "ray generation out of range");
-    assert!(Layout::decode(&[0, 1, 5, 0, 0], 2).is_err(), "miss out of range");
-    assert!(Layout::decode(&[0, 0, 1, -1, -1, -1, 0], 2).is_err(), "hit group without closest hit");
+    assert!(
+        Layout::decode(&[0, 0, 0], 1).is_err(),
+        "missing callable count"
+    );
+    assert!(
+        Layout::decode(&[0, 0, 0, 0, 9], 1).is_err(),
+        "trailing words"
+    );
+    assert!(
+        Layout::decode(&[1, 0, 0, 0], 1).is_err(),
+        "ray generation out of range"
+    );
+    assert!(
+        Layout::decode(&[0, 1, 5, 0, 0], 2).is_err(),
+        "miss out of range"
+    );
+    assert!(
+        Layout::decode(&[0, 0, 1, -1, -1, -1, 0], 2).is_err(),
+        "hit group without closest hit"
+    );
     assert!(Layout::decode(&[0, -1, 0, 0], 2).is_err(), "negative count");
     let conflicting = Layout::decode(&[0, 1, 1, 1, 1, -1, -1, 0], 2).unwrap();
-    assert!(conflicting.program_entries().is_err(), "one entry as miss and closest hit");
-    assert!(Layout::decode(&[0, 0, 0, 0], 1).unwrap().program_entries().is_ok());
+    assert!(
+        conflicting.program_entries().is_err(),
+        "one entry as miss and closest hit"
+    );
+    assert!(
+        Layout::decode(&[0, 0, 0, 0], 1)
+            .unwrap()
+            .program_entries()
+            .is_ok()
+    );
 }
 
 proptest! {

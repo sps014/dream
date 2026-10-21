@@ -38,6 +38,22 @@ Returns the larger of this value and `other`; `other` when either is NaN.
 public fun max(other: float16): float16
 ```
 
+## `clamp`
+
+Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned unchanged; the result is unspecified when `lo` is greater than `hi`.
+
+```dream
+public fun clamp(lo: float16, hi: float16): float16
+```
+
+## `signum`
+
+Returns `1.0h` for a positive value, `-1.0h` for a negative value, and the value itself for zero (keeping the sign of `-0.0h`) or NaN.
+
+```dream
+public fun signum(): float16
+```
+
 ## `is_nan`
 
 Returns true when this value is NaN (not a number), for example the result of `0.0h / 0.0h`.

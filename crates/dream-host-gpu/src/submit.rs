@@ -85,7 +85,10 @@ impl<'a> Recorder<'a> {
     fn buffer(&mut self, handle: i32, what: &str) -> HostResult<(*mut c_void, u64)> {
         let entry = self.state.owned(handle, self.device, what)?;
         let Kind::Buffer(buffer) = &entry.kind else {
-            return Err(HostError::invalid(format!("the {what} is a {}", entry.kind.name())));
+            return Err(HostError::invalid(format!(
+                "the {what} is a {}",
+                entry.kind.name()
+            )));
         };
         self.used.push(handle);
         Ok((buffer.obj.raw(), buffer.size))
@@ -94,7 +97,10 @@ impl<'a> Recorder<'a> {
     fn texture(&mut self, handle: i32, what: &str) -> HostResult<*mut c_void> {
         let entry = self.state.owned(handle, self.device, what)?;
         let Kind::Texture(texture) = &entry.kind else {
-            return Err(HostError::invalid(format!("the {what} is a {}", entry.kind.name())));
+            return Err(HostError::invalid(format!(
+                "the {what} is a {}",
+                entry.kind.name()
+            )));
         };
         self.used.push(handle);
         Ok(texture.obj.raw())
@@ -103,14 +109,19 @@ impl<'a> Recorder<'a> {
     fn sampler(&mut self, handle: i32) -> HostResult<*mut c_void> {
         let entry = self.state.owned(handle, self.device, "sampler")?;
         let Kind::Sampler(sampler) = &entry.kind else {
-            return Err(HostError::invalid(format!("the sampler is a {}", entry.kind.name())));
+            return Err(HostError::invalid(format!(
+                "the sampler is a {}",
+                entry.kind.name()
+            )));
         };
         self.used.push(handle);
         Ok(sampler.raw())
     }
 
     fn acceleration_structure(&mut self, handle: i32) -> HostResult<*mut c_void> {
-        let entry = self.state.owned(handle, self.device, "acceleration structure")?;
+        let entry = self
+            .state
+            .owned(handle, self.device, "acceleration structure")?;
         let Kind::AccelerationStructure(structure) = &entry.kind else {
             return Err(HostError::invalid(format!(
                 "the acceleration structure is a {}",
@@ -118,7 +129,9 @@ impl<'a> Recorder<'a> {
             )));
         };
         if !structure.top_level {
-            return Err(validation("shaders trace rays against top-level acceleration structures"));
+            return Err(validation(
+                "shaders trace rays against top-level acceleration structures",
+            ));
         }
         self.used.push(handle);
         Ok(structure.obj.raw())
@@ -126,7 +139,11 @@ impl<'a> Recorder<'a> {
 
     fn in_pass(&self, wanted: Pass, what: &str) -> HostResult<()> {
         if self.pass != wanted {
-            let pass = if wanted == Pass::Render { "render" } else { "compute" };
+            let pass = if wanted == Pass::Render {
+                "render"
+            } else {
+                "compute"
+            };
             return Err(validation(format!("{what} needs an open {pass} pass")));
         }
         Ok(())
@@ -195,9 +212,16 @@ impl<'a> Recorder<'a> {
                 let state = self.state;
                 let entry = state.owned(handle, self.device, "pipeline")?;
                 let Kind::Pipeline(pipeline) = &entry.kind else {
-                    return Err(HostError::invalid(format!("the pipeline is a {}", entry.kind.name())));
+                    return Err(HostError::invalid(format!(
+                        "the pipeline is a {}",
+                        entry.kind.name()
+                    )));
                 };
-                let pass = if pipeline.kind == PipelineKind::Render { Pass::Render } else { Pass::Compute };
+                let pass = if pipeline.kind == PipelineKind::Render {
+                    Pass::Render
+                } else {
+                    Pass::Compute
+                };
                 self.in_pass(pass, "the pipeline")?;
                 check(unsafe { ffi::dgpu_enc_set_pipeline(e, pipeline.pipeline.raw()) })?;
                 self.used.push(handle);
@@ -212,7 +236,10 @@ impl<'a> Recorder<'a> {
             } => self.bind(stage, index, kind, a, b)?,
             Op::Dispatch(groups) => {
                 self.in_pass(Pass::Compute, "dispatch")?;
-                if self.pipeline.is_none_or(|p| p.kind != PipelineKind::Compute) {
+                if self
+                    .pipeline
+                    .is_none_or(|p| p.kind != PipelineKind::Compute)
+                {
                     return Err(validation("dispatch needs a compute pipeline"));
                 }
                 let [x, y, z] = [
@@ -222,19 +249,33 @@ impl<'a> Recorder<'a> {
                 ];
                 check(unsafe { ffi::dgpu_enc_dispatch(e, x, y, z) })?;
             }
-            Op::SetVertexBuffer { slot, buffer, offset } => {
+            Op::SetVertexBuffer {
+                slot,
+                buffer,
+                offset,
+            } => {
                 self.in_pass(Pass::Render, "set_vertex_buffer")?;
                 let slot = count(slot, "vertex buffer slot").and_then(|s| {
-                    if s < 16 { Ok(s) } else { Err(validation("vertex buffer slots stop at 15")) }
+                    if s < 16 {
+                        Ok(s)
+                    } else {
+                        Err(validation("vertex buffer slots stop at 15"))
+                    }
                 })?;
                 let (raw, size) = self.buffer(buffer, "vertex buffer")?;
                 let offset = count(offset, "vertex buffer offset")? as u64;
                 if offset > size {
-                    return Err(HostError::invalid("vertex buffer offset lies outside the buffer"));
+                    return Err(HostError::invalid(
+                        "vertex buffer offset lies outside the buffer",
+                    ));
                 }
                 check(unsafe { ffi::dgpu_enc_set_vertex_buffer(e, slot, raw, offset) })?;
             }
-            Op::SetIndexBuffer { buffer, format, offset } => {
+            Op::SetIndexBuffer {
+                buffer,
+                format,
+                offset,
+            } => {
                 self.in_pass(Pass::Render, "set_index_buffer")?;
                 if !(0..=1).contains(&format) {
                     return Err(HostError::invalid("unknown index format"));
@@ -242,14 +283,18 @@ impl<'a> Recorder<'a> {
                 let (raw, size) = self.buffer(buffer, "index buffer")?;
                 let offset = count(offset, "index buffer offset")? as u64;
                 if offset > size {
-                    return Err(HostError::invalid("index buffer offset lies outside the buffer"));
+                    return Err(HostError::invalid(
+                        "index buffer offset lies outside the buffer",
+                    ));
                 }
                 check(unsafe { ffi::dgpu_enc_set_index_buffer(e, raw, format as u32, offset) })?;
             }
             Op::SetViewport(v) => {
                 self.in_pass(Pass::Render, "set_viewport")?;
                 if v.iter().any(|f| !f.is_finite()) || v[2] < 0.0 || v[3] < 0.0 {
-                    return Err(validation("viewport values must be finite and sizes non-negative"));
+                    return Err(validation(
+                        "viewport values must be finite and sizes non-negative",
+                    ));
                 }
                 check(unsafe { ffi::dgpu_enc_set_viewport(e, v.as_ptr()) })?;
             }
@@ -268,7 +313,12 @@ impl<'a> Recorder<'a> {
                 if self.pipeline.is_none() {
                     return Err(validation("draw needs a render pipeline"));
                 }
-                let d = [count(d[0], "draw")?, count(d[1], "draw")?, count(d[2], "draw")?, count(d[3], "draw")?];
+                let d = [
+                    count(d[0], "draw")?,
+                    count(d[1], "draw")?,
+                    count(d[2], "draw")?,
+                    count(d[3], "draw")?,
+                ];
                 check(unsafe { ffi::dgpu_enc_draw(e, d[0], d[1], d[2], d[3]) })?;
             }
             Op::DrawIndexed(d) => {
@@ -305,11 +355,16 @@ impl<'a> Recorder<'a> {
                 if src_offset + size > src_size || dst_offset + size > dst_size {
                     return Err(HostError::invalid("copy range lies outside a buffer"));
                 }
-                check(unsafe { ffi::dgpu_enc_copy_buffer(e, dst, dst_offset, src, src_offset, size) })?;
+                check(unsafe {
+                    ffi::dgpu_enc_copy_buffer(e, dst, dst_offset, src, src_offset, size)
+                })?;
             }
             Op::TraceRays(size) => {
                 self.in_pass(Pass::Compute, "trace_rays")?;
-                if self.pipeline.is_none_or(|p| p.kind != PipelineKind::RayTracing) {
+                if self
+                    .pipeline
+                    .is_none_or(|p| p.kind != PipelineKind::RayTracing)
+                {
                     return Err(validation("trace_rays needs a ray tracing pipeline"));
                 }
                 let [width, height, depth] = [
@@ -334,13 +389,18 @@ impl<'a> Recorder<'a> {
             (PipelineKind::Render, 1) => 0,
             (PipelineKind::Render, 2) => 1,
             (PipelineKind::RayTracing, 3) => 0,
-            _ => return Err(validation(format!("the pipeline has no shader for stage {stage}"))),
+            _ => {
+                return Err(validation(format!(
+                    "the pipeline has no shader for stage {stage}"
+                )));
+            }
         };
         let param = usize::try_from(index)
             .ok()
             .and_then(|i| pipeline.stages[entry].get(i))
             .ok_or_else(|| HostError::invalid(format!("the shader has no parameter {index}")))?;
-        let kind = ArgKind::from_i32(kind).ok_or_else(|| HostError::invalid(format!("unknown argument kind {kind}")))?;
+        let kind = ArgKind::from_i32(kind)
+            .ok_or_else(|| HostError::invalid(format!("unknown argument kind {kind}")))?;
         if kind != param.kind {
             return Err(validation(format!(
                 "parameter `{}` takes {:?}, not {kind:?}",

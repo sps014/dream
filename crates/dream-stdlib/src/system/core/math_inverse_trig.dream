@@ -1,0 +1,232 @@
+module system.core;
+
+// Ports of fdlibm's asin, acos, atan and atan2 as used by musl.
+/// Inverse trigonometric functions with results in radians.
+internal static class MathInverseTrig {
+    /// `(asin(sqrt(z)) - sqrt(z)) / sqrt(z)^3` as a rational approximation in `z`.
+    static fun asin_ratio(z: double): double {
+        let p0 = 1.66666666666666657415e-01d;
+        let p1 = -3.25565818622400915405e-01d;
+        let p2 = 2.01212532134862925881e-01d;
+        let p3 = -4.00555345006794114027e-02d;
+        let p4 = 7.91534994289814532176e-04d;
+        let p5 = 3.47933107596021167570e-05d;
+        let q1 = -2.40339491173441421878e+00d;
+        let q2 = 2.02094576023350569471e+00d;
+        let q3 = -6.88283971605453293030e-01d;
+        let q4 = 7.70381505559019352791e-02d;
+
+        let p = z * (p0 + z * (p1 + z * (p2 + z * (p3 + z * (p4 + z * p5)))));
+        let q = 1.0d + z * (q1 + z * (q2 + z * (q3 + z * q4)));
+        return p / q;
+    }
+
+    /// The inverse sine of `x`.
+    internal static fun asin(x: double): double {
+        let pio2_hi = 1.57079632679489655800e+00d;
+        let pio2_lo = 6.12323399573676603587e-17d;
+        let hx = Math.high_word(x);
+        let ix = hx & 0x7FFFFFFF;
+        if ix >= 0x3FF00000 {
+            if ((ix - 0x3FF00000) | (int)Math.low_word(x)) == 0 {
+                return x * pio2_hi;
+            }
+            return 0.0d / (x - x);
+        }
+        if ix < 0x3FE00000 {
+            if ix < 0x3E500000 && ix >= 0x00100000 {
+                return x;
+            }
+            return x + x * MathInverseTrig.asin_ratio(x * x);
+        }
+        let z = (1.0d - Math.fabs(x)) * 0.5d;
+        let s = Math.sqrt(z);
+        let r = MathInverseTrig.asin_ratio(z);
+        let y = 0.0d;
+        if ix >= 0x3FEF3333 {
+            y = pio2_hi - (2.0d * (s + s * r) - pio2_lo);
+        } else {
+            // f + c is sqrt(z) with f exact in its high word.
+            let f = Math.clear_low_word(s);
+            let c = (z - f * f) / (s + f);
+            y = 0.5d * pio2_hi - (2.0d * s * r - (pio2_lo - 2.0d * c) - (0.5d * pio2_hi - 2.0d * f));
+        }
+        return hx < 0 ? -y : y;
+    }
+
+    /// The inverse cosine of `x`.
+    internal static fun acos(x: double): double {
+        let pio2_hi = 1.57079632679489655800e+00d;
+        let pio2_lo = 6.12323399573676603587e-17d;
+        let hx = Math.high_word(x);
+        let ix = hx & 0x7FFFFFFF;
+        if ix >= 0x3FF00000 {
+            if ((ix - 0x3FF00000) | (int)Math.low_word(x)) == 0 {
+                return hx < 0 ? 2.0d * pio2_hi : 0.0d;
+            }
+            return 0.0d / (x - x);
+        }
+        if ix < 0x3FE00000 {
+            if ix <= 0x3C600000 {
+                return pio2_hi;
+            }
+            return pio2_hi - (x - (pio2_lo - x * MathInverseTrig.asin_ratio(x * x)));
+        }
+        if hx < 0 {
+            let z = (1.0d + x) * 0.5d;
+            let s = Math.sqrt(z);
+            let w = MathInverseTrig.asin_ratio(z) * s - pio2_lo;
+            return 2.0d * (pio2_hi - (s + w));
+        }
+        let z = (1.0d - x) * 0.5d;
+        let s = Math.sqrt(z);
+        let df = Math.clear_low_word(s);
+        let c = (z - df * df) / (s + df);
+        let w = MathInverseTrig.asin_ratio(z) * s + c;
+        return 2.0d * (df + w);
+    }
+
+    /// The inverse tangent of `x`.
+    internal static fun atan(x: double): double {
+        let a0 = 3.33333333333329318027e-01d;
+        let a1 = -1.99999999998764832476e-01d;
+        let a2 = 1.42857142725034663711e-01d;
+        let a3 = -1.11111104054623557880e-01d;
+        let a4 = 9.09088713343650656196e-02d;
+        let a5 = -7.69187620504482999495e-02d;
+        let a6 = 6.66107313738753120669e-02d;
+        let a7 = -5.83357013379057348645e-02d;
+        let a8 = 4.97687799461593236017e-02d;
+        let a9 = -3.65315727442169155270e-02d;
+        let a10 = 1.62858201153657823623e-02d;
+
+        let hx = Math.high_word(x);
+        let ix = hx & 0x7FFFFFFF;
+        let negative = hx < 0;
+        if ix >= 0x44100000 {
+            if x != x {
+                return x;
+            }
+            return negative ? -1.57079632679489655800e+00d : 1.57079632679489655800e+00d;
+        }
+        // Reduce to |t| < 7/16 around one of atan(0), atan(0.5), atan(1), atan(1.5), atan(inf).
+        let id = -1;
+        let t = x;
+        if ix < 0x3FDC0000 {
+            if ix < 0x3E400000 {
+                return x;
+            }
+        } else {
+            t = Math.fabs(x);
+            if ix < 0x3FF30000 {
+                if ix < 0x3FE60000 {
+                    id = 0;
+                    t = (2.0d * t - 1.0d) / (2.0d + t);
+                } else {
+                    id = 1;
+                    t = (t - 1.0d) / (t + 1.0d);
+                }
+            } else if ix < 0x40038000 {
+                id = 2;
+                t = (t - 1.5d) / (1.0d + 1.5d * t);
+            } else {
+                id = 3;
+                t = -1.0d / t;
+            }
+        }
+        let z = t * t;
+        let w = z * z;
+        let s1 = z * (a0 + w * (a2 + w * (a4 + w * (a6 + w * (a8 + w * a10)))));
+        let s2 = w * (a1 + w * (a3 + w * (a5 + w * (a7 + w * a9))));
+        if id < 0 {
+            return t - t * (s1 + s2);
+        }
+        let hi = 0.0d;
+        let lo = 0.0d;
+        if id == 0 {
+            hi = 4.63647609000806093515e-01d;
+            lo = 2.26987774529616870924e-17d;
+        } else if id == 1 {
+            hi = 7.85398163397448278999e-01d;
+            lo = 3.06161699786838301793e-17d;
+        } else if id == 2 {
+            hi = 9.82793723247329054082e-01d;
+            lo = 1.39033110312309984516e-17d;
+        } else {
+            hi = 1.57079632679489655800e+00d;
+            lo = 6.12323399573676603587e-17d;
+        }
+        let r = hi - (t * (s1 + s2) - lo - t);
+        return negative ? -r : r;
+    }
+
+    /// The angle of the point `(x, y)`.
+    internal static fun atan2(y: double, x: double): double {
+        let pi = 3.1415926535897931160e+00d;
+        let pi_lo = 1.2246467991473531772e-16d;
+        if x != x || y != y {
+            return x + y;
+        }
+        let hx = Math.high_word(x);
+        let lx = (int)Math.low_word(x);
+        let hy = Math.high_word(y);
+        let ly = (int)Math.low_word(y);
+        if ((hx - 0x3FF00000) | lx) == 0 {
+            return MathInverseTrig.atan(y);
+        }
+        // Bit 0 is the sign of y and bit 1 the sign of x.
+        let m = ((hy >> 31) & 1) | ((hx >> 30) & 2);
+        let ix = hx & 0x7FFFFFFF;
+        let iy = hy & 0x7FFFFFFF;
+
+        if (iy | ly) == 0 {
+            if m == 0 || m == 1 {
+                return y;
+            }
+            return m == 2 ? pi : -pi;
+        }
+        if (ix | lx) == 0 {
+            return (m & 1) == 1 ? -pi / 2.0d : pi / 2.0d;
+        }
+        if ix == 0x7FF00000 {
+            if iy == 0x7FF00000 {
+                if m == 0 {
+                    return pi / 4.0d;
+                }
+                if m == 1 {
+                    return -pi / 4.0d;
+                }
+                if m == 2 {
+                    return 3.0d * pi / 4.0d;
+                }
+                return -3.0d * pi / 4.0d;
+            }
+            if m == 0 {
+                return 0.0d;
+            }
+            if m == 1 {
+                return -0.0d;
+            }
+            return m == 2 ? pi : -pi;
+        }
+        // A 64-binade exponent gap means |y/x| is beyond 2^64 or below 2^-64.
+        let gap = (long)(64 << 20);
+        if (long)ix + gap < (long)iy || iy == 0x7FF00000 {
+            return (m & 1) == 1 ? -pi / 2.0d : pi / 2.0d;
+        }
+        let z = 0.0d;
+        if (m & 2) == 0 || (long)iy + gap >= (long)ix {
+            z = MathInverseTrig.atan(Math.fabs(y / x));
+        }
+        if m == 0 {
+            return z;
+        }
+        if m == 1 {
+            return -z;
+        }
+        if m == 2 {
+            return pi - (z - pi_lo);
+        }
+        return (z - pi_lo) - pi;
+    }
+}

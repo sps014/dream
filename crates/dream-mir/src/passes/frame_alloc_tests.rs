@@ -46,6 +46,43 @@ fn frame_budget_includes_headers_and_alignment() {
 }
 
 #[test]
+fn frame_buffer_is_sized_by_the_constructed_class_not_the_declared_type() {
+    let mut ctx = TypeCtx::new();
+    let def = ctx.register(DefKind::Struct, "Value", vec![]);
+    let ty = ctx.interner.struct_ty(def, vec![]);
+    let mut mir = Mir::default();
+    mir.layouts.insert(
+        ty,
+        TypeLayout::from_fields(
+            &ctx.interner,
+            "Value",
+            [("n".into(), ctx.interner.int(), false, false)],
+        ),
+    );
+    let payload = mir.layouts.get(ty).unwrap().size;
+    let mut b = FunctionBuilder::new("erased", ctx.interner.void());
+    let erased = b.new_local(ctx.interner.object(), None);
+    b.assign(
+        Place::Local(erased),
+        Rvalue::New {
+            def,
+            ty,
+            ctor: None::<NewCtor>,
+            args: vec![],
+        },
+    );
+    b.push(Statement::Release(Operand::Copy(Place::Local(erased))));
+    b.terminate(Terminator::Return(None));
+    mir.functions.push(b.finish());
+    assert!(frame_alloc::run(&mut mir, &ctx.interner));
+    assert!(payload > 0);
+    assert_eq!(
+        mir.frame_objects.values().copied().collect::<Vec<_>>(),
+        vec![payload]
+    );
+}
+
+#[test]
 fn cycle_capable_frame_objects_require_no_incoming_heap_edges() {
     for escapes in [false, true] {
         let mut ctx = TypeCtx::new();

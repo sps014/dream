@@ -210,6 +210,26 @@ fn test_analyze_undefined_variable() {
 }
 
 #[test]
+fn test_missing_static_method_names_the_method_not_the_type() {
+    let code = "
+        class Tools { public static fun twice(x: int): int { return x * 2; } }
+        fun main(): void { let x = Tools.thrice(5); }
+    ";
+    let diagnostics = analyze_code(code);
+    let messages: Vec<_> = diagnostics.diagnostics.iter().map(|d| &d.message).collect();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("Type 'Tools' has no static method 'thrice'")),
+        "{messages:?}"
+    );
+    assert!(
+        !messages.iter().any(|m| m.contains("variable Tools")),
+        "{messages:?}"
+    );
+}
+
+#[test]
 fn test_analyze_array_operations() {
     let code = "
         fun main(): void { 

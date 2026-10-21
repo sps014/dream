@@ -3,7 +3,9 @@
 use crate::bundle::{self, Stage};
 use crate::error::{Code, HostError, HostResult, check};
 use crate::ffi;
-use crate::state::{self, DeviceCore, Entry, Kind, Pipeline, PipelineEntry, PipelineKind, Program, State};
+use crate::state::{
+    self, DeviceCore, Entry, Kind, Pipeline, PipelineEntry, PipelineKind, Program, State,
+};
 use std::ffi::CString;
 use std::sync::Arc;
 
@@ -33,7 +35,10 @@ pub fn library_load(device: i32, bytes: &[u8]) -> HostResult<i32> {
     })
 }
 
-pub(crate) fn library(state: &State, handle: i32) -> HostResult<(Arc<bundle::Target>, i32, Arc<DeviceCore>)> {
+pub(crate) fn library(
+    state: &State,
+    handle: i32,
+) -> HostResult<(Arc<bundle::Target>, i32, Arc<DeviceCore>)> {
     let entry = state.entry(handle)?;
     let Kind::Library(target) = &entry.kind else {
         return Err(HostError::invalid(format!(
@@ -45,7 +50,11 @@ pub(crate) fn library(state: &State, handle: i32) -> HostResult<(Arc<bundle::Tar
     Ok((target.clone(), entry.device, entry.core.clone()))
 }
 
-pub(crate) fn entry<'a>(target: &'a bundle::Target, name: &str, stage: Stage) -> HostResult<&'a bundle::Entry> {
+pub(crate) fn entry<'a>(
+    target: &'a bundle::Target,
+    name: &str,
+    stage: Stage,
+) -> HostResult<&'a bundle::Entry> {
     // Entry names come from wrappers generated with this bundle, so a missing one is a shader
     // whose `@gpu_targets` leave out this backend.
     let found = target
@@ -64,7 +73,10 @@ pub(crate) fn entry<'a>(target: &'a bundle::Target, name: &str, stage: Stage) ->
 pub(crate) fn require_capabilities(core: &DeviceCore, entry: &bundle::Entry) -> HostResult<()> {
     for name in &entry.capabilities {
         let bit = crate::error::feature::of_capability(name).ok_or_else(|| {
-            HostError::invalid(format!("`{}` needs the unknown capability `{name}`", entry.name))
+            HostError::invalid(format!(
+                "`{}` needs the unknown capability `{name}`",
+                entry.name
+            ))
         })?;
         if !core.has_feature(bit) {
             return Err(HostError::unsupported(bit));
@@ -75,7 +87,11 @@ pub(crate) fn require_capabilities(core: &DeviceCore, entry: &bundle::Entry) -> 
 
 /// One program per pipeline: the entries must come from one pipeline group, whose recorded
 /// layout binds exactly their globals.
-pub(crate) fn program(core: &DeviceCore, target: &bundle::Target, entries: &[&bundle::Entry]) -> HostResult<Program> {
+pub(crate) fn program(
+    core: &DeviceCore,
+    target: &bundle::Target,
+    entries: &[&bundle::Entry],
+) -> HostResult<Program> {
     let group = entries.first().map_or(0, |e| e.layout);
     if let Some(other) = entries.iter().find(|e| e.layout != group) {
         return Err(HostError::invalid(format!(
@@ -83,13 +99,18 @@ pub(crate) fn program(core: &DeviceCore, target: &bundle::Target, entries: &[&bu
             entries[0].name, other.name
         )));
     }
-    let layout = target
-        .layouts
-        .get(group)
-        .ok_or_else(|| HostError::invalid(format!("the bundle's {} target has no layout {group}", target.name)))?;
+    let layout = target.layouts.get(group).ok_or_else(|| {
+        HostError::invalid(format!(
+            "the bundle's {} target has no layout {group}",
+            target.name
+        ))
+    })?;
     let names: Vec<CString> = entries
         .iter()
-        .map(|e| CString::new(e.name.as_str()).map_err(|_| HostError::invalid("entry point name contains NUL")))
+        .map(|e| {
+            CString::new(e.name.as_str())
+                .map_err(|_| HostError::invalid("entry point name contains NUL"))
+        })
         .collect::<HostResult<_>>()?;
     let code: Vec<ffi::EntryCode> = entries
         .iter()
@@ -127,7 +148,10 @@ impl StageTables {
         for stage in stages {
             let stage_names: Vec<CString> = stage
                 .iter()
-                .map(|p| CString::new(p.name.as_str()).map_err(|_| HostError::invalid("parameter name contains NUL")))
+                .map(|p| {
+                    CString::new(p.name.as_str())
+                        .map_err(|_| HostError::invalid("parameter name contains NUL"))
+                })
                 .collect::<HostResult<_>>()?;
             params.push(
                 stage
@@ -174,7 +198,9 @@ pub fn compute_pipeline_create(library_handle: i32, name: &str) -> HostResult<i3
     let tables = StageTables::new(&stages)?;
     let views = tables.views();
     let mut raw = std::ptr::null_mut();
-    check(unsafe { ffi::dgpu_compute_pipeline_create(core.raw(), program.raw(), views.as_ptr(), &mut raw) })?;
+    check(unsafe {
+        ffi::dgpu_compute_pipeline_create(core.raw(), program.raw(), views.as_ptr(), &mut raw)
+    })?;
     state.insert(Entry {
         kind: Kind::Pipeline(PipelineEntry {
             pipeline: Pipeline::from_raw(raw),
@@ -189,7 +215,13 @@ pub fn compute_pipeline_create(library_handle: i32, name: &str) -> HostResult<i3
 }
 
 /// Decodes GpuRenderPipelineDesc.encode.
-fn render_desc(desc: &[i32]) -> HostResult<(ffi::RenderDesc, Vec<ffi::VertexBufferLayout>, Vec<ffi::VertexAttribute>)> {
+fn render_desc(
+    desc: &[i32],
+) -> HostResult<(
+    ffi::RenderDesc,
+    Vec<ffi::VertexBufferLayout>,
+    Vec<ffi::VertexAttribute>,
+)> {
     let malformed = || HostError::invalid("malformed render pipeline description");
     let head = desc.get(..9).ok_or_else(malformed)?;
     let in_range = |v: i32, max: i32| (0..=max).contains(&v);
@@ -236,7 +268,11 @@ fn render_desc(desc: &[i32]) -> HostResult<(ffi::RenderDesc, Vec<ffi::VertexBuff
     }
     // Most backends take attribute i as shader location i, so locations must be 0..n-1.
     attributes.sort_by_key(|a| a.location);
-    if attributes.iter().enumerate().any(|(i, a)| a.location != i as u32) {
+    if attributes
+        .iter()
+        .enumerate()
+        .any(|(i, a)| a.location != i as u32)
+    {
         return Err(HostError::new(
             Code::Validation,
             "vertex attribute locations must be 0, 1, 2, … without gaps or repeats",
@@ -294,7 +330,13 @@ pub fn render_pipeline_create(
     render.attribute_count = attributes.len() as u32;
     let mut raw = std::ptr::null_mut();
     check(unsafe {
-        ffi::dgpu_render_pipeline_create(core.raw(), program.raw(), views.as_ptr(), &render, &mut raw)
+        ffi::dgpu_render_pipeline_create(
+            core.raw(),
+            program.raw(),
+            views.as_ptr(),
+            &render,
+            &mut raw,
+        )
     })?;
     state.insert(Entry {
         kind: Kind::Pipeline(PipelineEntry {
@@ -326,19 +368,32 @@ mod tests {
 
     #[test]
     fn render_descriptions_decode_vertex_layouts() {
-        let desc = [2, 0, 2, 1, 11, 1, 1, 1, 2, 20, 0, 2, 1, 2, 0, 0, 1, 12, 16, 1, 1, 2, 3, 0];
+        let desc = [
+            2, 0, 2, 1, 11, 1, 1, 1, 2, 20, 0, 2, 1, 2, 0, 0, 1, 12, 16, 1, 1, 2, 3, 0,
+        ];
         let (render, buffers, attributes) = render_desc(&desc).unwrap();
-        assert_eq!((render.color_format, render.depth_format, render.samples), (2, 11, 1));
+        assert_eq!(
+            (render.color_format, render.depth_format, render.samples),
+            (2, 11, 1)
+        );
         assert_eq!(buffers.len(), 2);
         assert_eq!((buffers[1].stride, buffers[1].per_instance), (16, 1));
         assert_eq!(attributes.len(), 3);
         assert_eq!(
-            (attributes[0].location, attributes[0].format, attributes[0].offset),
+            (
+                attributes[0].location,
+                attributes[0].format,
+                attributes[0].offset
+            ),
             (0, 1, 12),
             "attributes are sorted by location"
         );
         assert_eq!(
-            (attributes[2].location, attributes[2].format, attributes[2].slot),
+            (
+                attributes[2].location,
+                attributes[2].format,
+                attributes[2].slot
+            ),
             (2, 3, 1)
         );
         let gap = [2, 0, 2, 1, 0, 1, 1, 1, 1, 8, 0, 1, 1, 1, 0];

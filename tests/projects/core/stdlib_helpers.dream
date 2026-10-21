@@ -61,7 +61,36 @@ fun c20a_verify_observation(borrow value: string): void {
 
 @test
 @timeout(180000)
+fun number_helpers(): void {
+    Assert.eq((5.5).clamp(0.0, 3.0), 3.0);
+    Assert.eq((-2.0).clamp(0.0, 3.0), 0.0);
+    Assert.eq((1.5).clamp(0.0, 3.0), 1.5);
+    Assert.eq((2.5h).clamp(0.0h, 1.0h), 1.0h);
+    Assert.eq((-0.5h).clamp(0.0h, 1.0h), 0.0h);
 
+    Assert.eq((4.0).signum(), 1.0);
+    Assert.eq((-4.0).signum(), -1.0);
+    Assert.eq((0.0).signum(), 0.0);
+    Assert.eq((7.0d).signum(), 1.0d);
+    Assert.eq((-7.0d).signum(), -1.0d);
+    Assert.eq((3.0h).signum(), 1.0h);
+    Assert.eq((-3.0h).signum(), -1.0h);
+    let zero = 0.0d;
+    let nan_sign = (zero / zero).signum();
+    Assert.is_true(nan_sign != nan_sign);
+
+    let negative: isize = -9;
+    let positive: isize = 9;
+    let none: isize = 0;
+    Assert.eq(negative.abs(), positive);
+    Assert.eq(positive.abs(), positive);
+    Assert.eq(negative.signum(), (isize)(-1));
+    Assert.eq(positive.signum(), (isize)1);
+    Assert.eq(none.signum(), none);
+}
+
+@test
+@timeout(180000)
 fun stdlib_helpers(): void {
     c20a_cursor = 0;
     c20a_body();

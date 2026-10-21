@@ -861,8 +861,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     let tag = runtime_tag(&self.l.cx, from);
                     let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
                     let address = self.ptr(&boxed);
-                    let payload =
-                        super::types::ll_ty(self.interner, from, &self.h(), &self.word());
+                    let payload = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
                     self.store_ty(&payload, &address, &src, size as u32);
                     return boxed;
                 }

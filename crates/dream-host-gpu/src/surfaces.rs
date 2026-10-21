@@ -25,7 +25,8 @@ fn window_surface_fn() -> Option<SurfaceFn> {
     }
     let symbol = std::ffi::CString::new(WINDOW_SURFACE_SYMBOL).ok()?;
     let address = lookup(&symbol);
-    (!address.is_null()).then(|| unsafe { std::mem::transmute::<*mut std::ffi::c_void, SurfaceFn>(address) })
+    (!address.is_null())
+        .then(|| unsafe { std::mem::transmute::<*mut std::ffi::c_void, SurfaceFn>(address) })
 }
 
 #[cfg(unix)]
@@ -46,13 +47,18 @@ fn lookup(symbol: &std::ffi::CStr) -> *mut std::ffi::c_void {
 
 fn configure(surface: &Surface, width: u32, height: u32, vsync: bool) -> HostResult<u32> {
     let mut format = 0;
-    check(unsafe { ffi::dgpu_surface_configure(surface.raw(), width, height, vsync as i32, &mut format) })?;
+    check(unsafe {
+        ffi::dgpu_surface_configure(surface.raw(), width, height, vsync as i32, &mut format)
+    })?;
     Ok(format)
 }
 
 pub fn surface_create(device: i32, window: i32, vsync: bool) -> HostResult<i32> {
     let surface_fn = window_surface_fn().ok_or_else(|| {
-        HostError::new(Code::Surface, "the window host is not loaded in this program")
+        HostError::new(
+            Code::Surface,
+            "the window host is not loaded in this program",
+        )
     })?;
     let mut native = WindowSurface::default();
     if unsafe { surface_fn(window, &mut native) } == 0 {
@@ -97,7 +103,10 @@ fn surface_mut(state: &mut state::State, handle: i32) -> HostResult<&mut Surface
     entry.core.alive()?;
     match &mut entry.kind {
         Kind::Surface(surface) => Ok(surface),
-        other => Err(HostError::invalid(format!("handle {handle} is a {}, not a surface", other.name()))),
+        other => Err(HostError::invalid(format!(
+            "handle {handle} is a {}, not a surface",
+            other.name()
+        ))),
     }
 }
 
@@ -117,7 +126,11 @@ pub fn surface_resize(handle: i32, width: i32, height: i32) -> HostResult<()> {
 pub fn surface_info(handle: i32) -> HostResult<[i32; 3]> {
     let mut state = state::lock();
     let surface = surface_mut(&mut state, handle)?;
-    Ok([surface.format as i32, surface.width as i32, surface.height as i32])
+    Ok([
+        surface.format as i32,
+        surface.width as i32,
+        surface.height as i32,
+    ])
 }
 
 pub fn acquire(future: usize, handle: i32) {
@@ -172,7 +185,10 @@ fn present_now(handle: i32) -> HostResult<()> {
     let mut state = state::lock();
     let surface = surface_mut(&mut state, handle)?;
     let Some(image) = surface.image.take() else {
-        return Err(HostError::new(Code::Validation, "present without an acquired image"));
+        return Err(HostError::new(
+            Code::Validation,
+            "present without an acquired image",
+        ));
     };
     let presented = check(unsafe { ffi::dgpu_surface_present(surface.surface.raw()) });
     state.release(image);

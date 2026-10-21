@@ -104,12 +104,10 @@ pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
         "c" | "c_call" | "marshal" | "packed" | "cpp" | "cpp_name" => "system.interop",
         "test" | "timeout" => "system.testing",
         "generator" | "generator_only" | "incremental" | "on_attribute" | "on_call"
-        | "syntax_block" | "uses_tool" => {
-            "system.codegen"
-        }
-        "attribute" | "repeatable" | "export" | "intrinsic" | "inline" | "noinline" | "unsafe"
-        | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "owned" | "js"
-        | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
+        | "syntax_block" | "uses_tool" => "system.codegen",
+        "attribute" | "repeatable" | "export" | "intrinsic" | "llvm" | "inline" | "noinline"
+        | "unsafe" | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "owned"
+        | "js" | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
         _ => return None,
     })
 }

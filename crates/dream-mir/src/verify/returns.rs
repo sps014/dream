@@ -161,15 +161,15 @@ fn apply_effects(
     locals: &mut [Sources],
     result: &mut Facts,
 ) -> bool {
-    let old = locals.to_vec();
+    let before = argument_sources(args, locals);
     let mut changed = result
         .escaped
-        .extend(&substitute(&facts.escaped, args, &old));
+        .extend(&substitute_sources(&facts.escaped, &before));
     for (index, sources) in facts.writes {
         if let Some(local) = args.get(index).and_then(argument_local)
             && refs.contains(f.local_ty(local))
         {
-            let effect = substitute(&sources, args, &old);
+            let effect = substitute_sources(&sources, &before);
             changed |= record_write(local, &effect, locals, result);
         }
     }
@@ -192,13 +192,23 @@ fn apply_call(callee: &Callee, args: &[Operand], returns: &Returns, locals: &[So
 }
 
 fn substitute(summary: &Sources, args: &[Operand], locals: &[Sources]) -> Sources {
+    substitute_sources(summary, &argument_sources(args, locals))
+}
+
+fn argument_sources(args: &[Operand], locals: &[Sources]) -> Vec<Sources> {
+    args.iter()
+        .map(|arg| operand_sources(arg, locals))
+        .collect()
+}
+
+fn substitute_sources(summary: &Sources, arguments: &[Sources]) -> Sources {
     let mut sources = Sources {
         fresh: summary.fresh,
         params: BTreeSet::new(),
     };
     for &index in &summary.params {
-        if let Some(arg) = args.get(index) {
-            sources.extend(&operand_sources(arg, locals));
+        if let Some(argument) = arguments.get(index) {
+            sources.extend(argument);
         }
     }
     sources

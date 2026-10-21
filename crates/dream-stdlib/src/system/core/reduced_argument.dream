@@ -1,0 +1,6 @@
+module system.core;
+
+/// An argument split for range reduction: `x = n * step + hi + lo`, where `hi + lo` is the
+/// remainder carried with extra precision in two doubles.
+internal struct ReducedArgument(n: int, hi: double, lo: double) {
+}

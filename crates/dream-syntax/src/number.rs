@@ -1,7 +1,16 @@
 //! Shared numeric-literal parsing. Lexer, classifier, HIR, and pattern ranges all go through
 //! these helpers so `0xFF` / `0b101` / `1e-3` never silently fail a `str::parse`.
 
+fn without_separators(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.contains('_') {
+        std::borrow::Cow::Owned(s.replace('_', ""))
+    } else {
+        std::borrow::Cow::Borrowed(s)
+    }
+}
+
 fn parse_u64_magnitude(s: &str) -> Option<u64> {
+    let s = &*without_separators(s);
     if let Some(hex) = strip_prefix_ci(s, "0x") {
         u64::from_str_radix(hex, 16).ok()
     } else if let Some(bin) = strip_bin_body(s) {
@@ -37,6 +46,33 @@ pub fn parse_int_literal(text: &str) -> Option<i64> {
     }
 }
 
+/// Whether a numeric token is spelled in hexadecimal, octal, or binary.
+pub fn is_radix_literal(text: &str) -> bool {
+    let s = text.trim();
+    strip_prefix_ci(s, "0x").is_some()
+        || strip_prefix_ci(s, "0o").is_some()
+        || strip_bin_body(s).is_some()
+}
+
+/// Value of a suffix-stripped token as a `bits`-wide signed integer. A `0x`/`0o`/`0b` literal
+/// spells a bit pattern, so any value up to the unsigned maximum of the width is accepted and read
+/// as two's complement (`0xFFFFFFFF` is `-1` at 32 bits). A decimal literal must fit the signed range.
+pub fn parse_signed_literal(text: &str, bits: u32) -> Option<i64> {
+    debug_assert!((1..=64).contains(&bits));
+    if is_radix_literal(text) {
+        let u = parse_u64_magnitude(text.trim())?;
+        let shift = 64 - bits;
+        if bits < 64 && u >> bits != 0 {
+            return None;
+        }
+        return Some(((u << shift) as i64) >> shift);
+    }
+    let v = parse_int_literal(text)?;
+    let min = i64::MIN >> (64 - bits);
+    let max = i64::MAX >> (64 - bits);
+    (min..=max).contains(&v).then_some(v)
+}
+
 /// Unsigned integer value of a suffix-stripped token. Rejects a leading `-`.
 pub fn parse_u64_literal(text: &str) -> Option<u64> {
     let t = text.trim();
@@ -58,27 +94,40 @@ pub fn parse_u32_literal(text: &str) -> Option<u32> {
 
 /// Float value of a suffix-stripped token (`3.14`, `1e-3`, `-2.5e10`).
 pub fn parse_float_literal(text: &str) -> Option<f64> {
-    text.trim().parse::<f64>().ok()
+    without_separators(text.trim()).parse::<f64>().ok()
 }
 
-/// Body (prefix + digits / decimal / exponent) and type suffix of a number token.
-/// `suffix` is lowercased (`"ul"`, `"f"`, …) or empty.
+/// Body (prefix + digits / decimal / exponent) and type suffix of a whole number token.
+/// `suffix` keeps its source spelling (`"UL"`, `"f"`, …) or is empty.
 pub fn split_numeric_literal(text: &str) -> Option<(&str, &str)> {
-    if text.is_empty() {
+    let unsigned = text.strip_prefix('-').unwrap_or(text);
+    let sign = text.len() - unsigned.len();
+    let (body, suffix) = scan_numeric_literal(unsigned)?;
+    if body + suffix != unsigned.len() {
         return None;
     }
-    let (neg, rest) = match text.strip_prefix('-') {
-        Some(r) => (true, r),
-        None => (false, text),
-    };
-    let (body_end, suffix) = split_unsigned(rest)?;
-    let body = if neg {
-        // Include the leading `-` in the body slice of `text`.
-        &text[..1 + body_end]
-    } else {
-        &text[..body_end]
-    };
-    Some((body, suffix))
+    Some((&text[..sign + body], &unsigned[body..]))
+}
+
+/// Byte lengths of the body and type suffix of the number at the start of `text`. `None` when
+/// the text starts like a number but is malformed (`0xG`, `0b2`, `1e`, `1_`, `1z`). A `_` may
+/// separate two digits of the same run (`1_000_000`, `0xFFFF_0000`).
+pub fn scan_numeric_literal(text: &str) -> Option<(usize, usize)> {
+    let bytes = text.as_bytes();
+    if !bytes.first().is_some_and(u8::is_ascii_digit) {
+        return None;
+    }
+    if bytes[0] == b'0' {
+        match bytes.get(1) {
+            Some(b'x' | b'X') => return scan_radix(bytes, is_hex_digit, false),
+            Some(b'o' | b'O') => return scan_radix(bytes, is_oct_digit, true),
+            Some(b'b' | b'B') if bytes.get(2).is_some_and(|&c| is_bin_digit(c)) => {
+                return scan_radix(bytes, is_bin_digit, true);
+            }
+            _ => {}
+        }
+    }
+    scan_decimal(bytes)
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -92,97 +141,82 @@ fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
 /// `0b`/`0B` followed by at least one binary digit — not the byte-suffix spelling `0b`.
 fn strip_bin_body(s: &str) -> Option<&str> {
     let rest = strip_prefix_ci(s, "0b")?;
-    if rest.is_empty() || !rest.bytes().all(|c| c == b'0' || c == b'1') {
+    if rest.is_empty() || !rest.bytes().all(|c| is_bin_digit(c) || c == b'_') {
         return None;
     }
     Some(rest)
 }
 
-fn split_unsigned(text: &str) -> Option<(usize, &str)> {
-    let bytes = text.as_bytes();
-    if bytes.is_empty() || !bytes[0].is_ascii_digit() {
-        return None;
-    }
-
-    if bytes[0] == b'0' && bytes.len() >= 2 {
-        match bytes[1] {
-            b'x' | b'X' => return split_radix(text, 2, is_hex_digit, false),
-            b'o' | b'O' => return split_radix(text, 2, is_oct_digit, true),
-            b'b' | b'B' if bytes.len() > 2 && (bytes[2] == b'0' || bytes[2] == b'1') => {
-                return split_radix(text, 2, is_bin_digit, true);
+/// End of the digit run starting at `start`. A `_` that is not followed by a digit is malformed.
+fn digit_run(bytes: &[u8], start: usize, is_digit: fn(u8) -> bool) -> Option<usize> {
+    let mut i = start;
+    while let Some(&c) = bytes.get(i) {
+        if is_digit(c) {
+            i += 1;
+        } else if c == b'_' && i > start {
+            if !bytes.get(i + 1).is_some_and(|&n| is_digit(n)) {
+                return None;
             }
-            _ => {}
+            i += 1;
+        } else {
+            break;
         }
     }
-
-    split_decimal(text)
+    (i > start).then_some(i)
 }
 
-fn split_radix(
-    text: &str,
-    prefix_len: usize,
+fn scan_radix(
+    bytes: &[u8],
     is_digit: fn(u8) -> bool,
     allow_byte_suffix: bool,
-) -> Option<(usize, &str)> {
-    let bytes = text.as_bytes();
-    let mut i = prefix_len;
-    while i < bytes.len() && is_digit(bytes[i]) {
-        i += 1;
-    }
-    if i == prefix_len {
-        return None;
-    }
-    let suffix = suffix_from(&text[i..], allow_byte_suffix, false)?;
-    Some((i, suffix))
+) -> Option<(usize, usize)> {
+    let end = digit_run(bytes, 2, is_digit)?;
+    let suffix = suffix_len(&bytes[end..], allow_byte_suffix, false)?;
+    Some((end, suffix))
 }
 
-fn split_decimal(text: &str) -> Option<(usize, &str)> {
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() && bytes[i].is_ascii_digit() {
-        i += 1;
-    }
+fn scan_decimal(bytes: &[u8]) -> Option<(usize, usize)> {
+    let mut i = digit_run(bytes, 0, |c| c.is_ascii_digit())?;
     let mut is_float = false;
-    if i < bytes.len() && bytes[i] == b'.' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
+    if bytes.get(i) == Some(&b'.') && bytes.get(i + 1).is_some_and(u8::is_ascii_digit) {
         is_float = true;
-        i += 1;
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            i += 1;
-        }
+        i = digit_run(bytes, i + 1, |c| c.is_ascii_digit())?;
     }
-    if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
+    if matches!(bytes.get(i), Some(b'e' | b'E')) {
         let mut j = i + 1;
-        if j < bytes.len() && (bytes[j] == b'+' || bytes[j] == b'-') {
+        if matches!(bytes.get(j), Some(b'+' | b'-')) {
             j += 1;
         }
-        let exp_start = j;
-        while j < bytes.len() && bytes[j].is_ascii_digit() {
-            j += 1;
-        }
-        if j == exp_start {
-            return None;
-        }
+        i = digit_run(bytes, j, |c| c.is_ascii_digit())?;
         is_float = true;
-        i = j;
     }
-    let suffix = suffix_from(&text[i..], true, is_float)?;
+    let suffix = suffix_len(&bytes[i..], true, is_float)?;
     Some((i, suffix))
 }
 
-fn suffix_from(rest: &str, allow_byte: bool, is_float: bool) -> Option<&str> {
-    if rest.is_empty() {
-        return Some("");
+/// Length of the type suffix at the start of `rest`. The whole alphanumeric run must be a suffix
+/// allowed for the literal's kind, so `1z` and `0xFFq` are malformed rather than split.
+fn suffix_len(rest: &[u8], allow_byte: bool, is_float: bool) -> Option<usize> {
+    let len = rest
+        .iter()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .count();
+    if len == 0 {
+        return Some(0);
     }
-    let lower = rest.to_ascii_lowercase();
+    let lower = rest[..len].to_ascii_lowercase();
     let ok = if is_float {
-        matches!(lower.as_str(), "f" | "d" | "h")
+        matches!(lower.as_slice(), b"f" | b"d" | b"h")
     } else if allow_byte {
-        matches!(lower.as_str(), "b" | "u" | "l" | "ul" | "lu" | "f" | "d" | "h")
+        matches!(
+            lower.as_slice(),
+            b"b" | b"u" | b"l" | b"ul" | b"lu" | b"f" | b"d" | b"h"
+        )
     } else {
         // Hex: `b`/`d`/`f` are digits, so only unsigned/long suffixes.
-        matches!(lower.as_str(), "u" | "l" | "ul" | "lu")
+        matches!(lower.as_slice(), b"u" | b"l" | b"ul" | b"lu")
     };
-    if ok { Some(rest) } else { None }
+    ok.then_some(len)
 }
 
 fn is_hex_digit(c: u8) -> bool {
@@ -210,6 +244,28 @@ pub fn numeric_body_is_float(body: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn radix_literals_spell_bit_patterns() {
+        assert_eq!(parse_signed_literal("0xFFFFFFFF", 32), Some(-1));
+        assert_eq!(
+            parse_signed_literal("0x80000000", 32),
+            Some(i64::from(i32::MIN))
+        );
+        assert_eq!(parse_signed_literal("0x7ff00000", 32), Some(0x7ff0_0000));
+        assert_eq!(parse_signed_literal("0x100000000", 32), None);
+        assert_eq!(
+            parse_signed_literal("0x8000000000000000", 64),
+            Some(i64::MIN)
+        );
+        assert_eq!(parse_signed_literal("0b11111111", 8), Some(-1));
+        assert_eq!(parse_signed_literal("4294967295", 32), None);
+        assert_eq!(
+            parse_signed_literal("-2147483648", 32),
+            Some(i64::from(i32::MIN))
+        );
+        assert_eq!(parse_signed_literal("-0x10", 32), Some(-16));
+    }
 
     #[test]
     fn parses_prefixes() {
@@ -247,5 +303,29 @@ mod tests {
         assert_eq!(split_numeric_literal("255b"), Some(("255", "b")));
         assert_eq!(split_numeric_literal("1.5h"), Some(("1.5", "h")));
         assert_eq!(split_numeric_literal("2H"), Some(("2", "H")));
+        assert_eq!(
+            split_numeric_literal("1_000_000L"),
+            Some(("1_000_000", "L"))
+        );
+        assert_eq!(
+            split_numeric_literal("0xFFFF_0000u"),
+            Some(("0xFFFF_0000", "u"))
+        );
+        assert_eq!(
+            split_numeric_literal("1_000.5e1_0"),
+            Some(("1_000.5e1_0", ""))
+        );
+        assert_eq!(split_numeric_literal("1_"), None);
+        assert_eq!(split_numeric_literal("1__0"), None);
+        assert_eq!(split_numeric_literal("0x_1"), None);
+        assert_eq!(split_numeric_literal("1z"), None);
+    }
+
+    #[test]
+    fn separators_do_not_change_values() {
+        assert_eq!(parse_int_literal("1_000_000"), Some(1_000_000));
+        assert_eq!(parse_u64_literal("0xFFFF_FFFF_FFFF_FFFF"), Some(u64::MAX));
+        assert_eq!(parse_signed_literal("0b1111_0000", 32), Some(240));
+        assert_eq!(parse_float_literal("1_000.25"), Some(1000.25));
     }
 }

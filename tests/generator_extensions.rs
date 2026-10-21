@@ -54,7 +54,10 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
     let changed = run();
     let changed_log = String::from_utf8_lossy(&changed.stderr);
     assert!(changed.status.success(), "{changed_log}");
-    assert!(changed_log.contains("gen gen::resources: run "), "{changed_log}");
+    assert!(
+        changed_log.contains("gen gen::resources: run "),
+        "{changed_log}"
+    );
     assert!(
         !changed_log.contains("gen gen::resources: result hit"),
         "{changed_log}"

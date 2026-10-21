@@ -62,6 +62,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/intrinsic_attribute.dream"),
         ),
         (
+            "<std>/system/core/llvm_attribute.dream",
+            include_str!("../system/core/llvm_attribute.dream"),
+        ),
+        (
             "<std>/system/core/inline_attribute.dream",
             include_str!("../system/core/inline_attribute.dream"),
         ),
@@ -332,6 +336,30 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/math.dream",
             include_str!("../system/core/math.dream"),
+        ),
+        (
+            "<std>/system/core/math_trig.dream",
+            include_str!("../system/core/math_trig.dream"),
+        ),
+        (
+            "<std>/system/core/math_pi_reduction.dream",
+            include_str!("../system/core/math_pi_reduction.dream"),
+        ),
+        (
+            "<std>/system/core/math_inverse_trig.dream",
+            include_str!("../system/core/math_inverse_trig.dream"),
+        ),
+        (
+            "<std>/system/core/math_exp_log.dream",
+            include_str!("../system/core/math_exp_log.dream"),
+        ),
+        (
+            "<std>/system/core/math_pow.dream",
+            include_str!("../system/core/math_pow.dream"),
+        ),
+        (
+            "<std>/system/core/reduced_argument.dream",
+            include_str!("../system/core/reduced_argument.dream"),
         ),
     ],
 };

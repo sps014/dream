@@ -171,13 +171,14 @@ impl Compiler {
         if self.profile.is_debug() {
             return None;
         }
-        Some(self.optimize.unwrap_or(
-            if self.runtimes.contains(&JsRuntimeTarget::Web) {
-                OptLevel::WEB_RELEASE_DEFAULT
-            } else {
-                OptLevel::RELEASE_DEFAULT
-            },
-        ))
+        Some(
+            self.optimize
+                .unwrap_or(if self.runtimes.contains(&JsRuntimeTarget::Web) {
+                    OptLevel::WEB_RELEASE_DEFAULT
+                } else {
+                    OptLevel::RELEASE_DEFAULT
+                }),
+        )
     }
 
     pub fn native_opt(&self) -> OptLevel {

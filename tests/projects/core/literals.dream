@@ -28,6 +28,21 @@ fun numeric_literals(): void {
     Assert.eq((0x10).to_string(), "16");
     Assert.eq((0b101).to_string(), "5");
     Assert.eq((0o10).to_string(), "8");
+    Assert.eq(0xFF, 255);
+    Assert.eq(0x7ff00000, 2146435072);
+    let all_bits: int = 0xFFFFFFFF;
+    Assert.eq(all_bits, -1);
+    let sign_bit: int = 0x80000000;
+    Assert.eq(sign_bit, -2147483647 - 1);
+    Assert.eq(0x8000000000000000L, -9223372036854775807L - 1L);
+    Assert.eq(0x7ff0000000000000L, 9218868437227405312L);
+    Assert.eq(0xFFFFFFFFFFFFFFFFuL.to_string(), "18446744073709551615");
+    Assert.eq(18446744073709551615uL.to_string(), "18446744073709551615");
+    Assert.eq(4294967295u.to_string(), "4294967295");
+    Assert.eq(0b1111_0000, 240);
+    Assert.eq(1_000_000, 1000000);
+    Assert.eq(0xFFFF_0000L, 4294901760L);
+    Assert.eq(1_000.5, 1000.5);
     let x: float = 1e2;
     Assert.eq(((int)x).to_string(), "100");
 

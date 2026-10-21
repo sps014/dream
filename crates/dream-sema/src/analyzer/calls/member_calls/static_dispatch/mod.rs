@@ -17,7 +17,8 @@ impl<'a> Analyzer<'a> {
     /// a local: discriminated-union variant construction, on-the-fly monomorphization of generic
     /// static methods (including the `Buffer.alloc` and promise-combinator intrinsics), and plain
     /// static-method resolution. Returns `Ok(Some(type))` when handled, `Ok(None)` when `id` is a
-    /// local or names no static member (so the caller falls through to instance dispatch).
+    /// local or names no type (so the caller falls through to instance dispatch), and reports a
+    /// missing static method when `id` names a type without one.
     pub(crate) fn try_analyze_static_method(
         &mut self,
         id: &SyntaxToken,
@@ -159,6 +160,20 @@ impl<'a> Analyzer<'a> {
                 ctx.symbol_table,
                 diagnostics,
             )?));
+        }
+
+        // Instance dispatch would analyze the type name as a value and report it as an unknown
+        // variable, hiding that only the member is missing.
+        if nominal_def.is_some() && self.function_info(&type_name).is_err() {
+            return Err(report_with_code(
+                diagnostics,
+                format!(
+                    "Type '{}' has no static method '{}'",
+                    type_name, method.text
+                ),
+                Some(method.position),
+                "missing-member",
+            ));
         }
 
         Ok(None)

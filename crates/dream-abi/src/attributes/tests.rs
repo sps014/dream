@@ -298,6 +298,10 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/llvm_attribute.dream"),
+            ),
+            (
+                "system.core",
                 include_str!("../../../dream-stdlib/src/system/core/inline_attribute.dream"),
             ),
             (

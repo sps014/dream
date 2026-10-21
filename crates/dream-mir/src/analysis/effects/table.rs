@@ -2,7 +2,7 @@
 
 use super::intrinsics::intrinsic_summary;
 use super::local::LocalSummary;
-use super::{Known, ModRef, pure_math_import, strong_children};
+use super::{Known, ModRef, strong_children};
 use crate::analysis::function_key::FunctionKeyRef;
 use crate::{Callee, Global, Mir, MirFunction, Place, Rvalue, Statement};
 use dream_abi::intrinsics::IntrinsicOp;
@@ -53,14 +53,11 @@ impl ModRefTable {
             .intrinsics
             .iter()
             .filter_map(|(def, key)| {
+                if dream_abi::intrinsics::is_llvm_intrinsic_key(key) {
+                    return Some((*def, ModRef::Known(Known::default())));
+                }
                 intrinsic_summary(IntrinsicOp::from_key(key)?).map(|s| (*def, s))
             })
-            .chain(
-                mir.imports
-                    .iter()
-                    .filter(|i| pure_math_import(i, interner))
-                    .map(|i| (i.def, ModRef::Known(Known::default()))),
-            )
             .collect();
         let globals: IndexMap<Global, TypeId> = mir.globals.iter().map(|g| (g.id, g.ty)).collect();
         let mut table = ModRefTable {

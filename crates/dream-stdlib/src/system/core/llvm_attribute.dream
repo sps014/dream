@@ -1,0 +1,10 @@
+module system.core;
+
+/// Binds a standard-library extern function to an LLVM intrinsic such as `llvm.sqrt.f64`. The
+/// extern's parameter and return types must match the intrinsic's signature and be numeric
+/// primitives.
+@attribute(AttributeTarget.ExternFunction)
+internal struct LlvmAttribute {
+    /// Full LLVM intrinsic name, including the `llvm.` prefix and type suffix.
+    public name: string;
+}

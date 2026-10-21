@@ -1,6 +1,6 @@
 //! Cursor inference: mark non-escaping field/index loads as non-owning aliases.
 
-use super::liveness::{self, live_after_stmt, stmt_reads_local};
+use super::liveness::{self, Liveness, stmt_reads_local};
 use crate::analysis::effects::ModRefTable;
 use crate::{Callee, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
@@ -257,7 +257,7 @@ pub(crate) fn infer_cursors(
         }
     }
 
-    let live_out = liveness::live_out(func);
+    let live = Liveness::new(func);
     let mut grew = true;
     while grew {
         grew = false;
@@ -272,8 +272,7 @@ pub(crate) fn infer_cursors(
             }
             // Last-use `y = x` is a move (dest owns). A still-live source is an alias cursor
             // (`t = s; return s`). Copies of field snapshots stay cursors.
-            if func.locals[src as usize].is_cursor || live_after_stmt(func, &live_out, bi, si, src)
-            {
+            if func.locals[src as usize].is_cursor || live.after_stmt(bi, si, src) {
                 func.locals[dest as usize].is_cursor = true;
                 grew = true;
             }

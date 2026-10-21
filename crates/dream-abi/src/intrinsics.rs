@@ -39,7 +39,12 @@ pub const INTRINSIC_ATTR: &str = "intrinsic";
 /// Extracts the intrinsic key from a declaration's attribute list, i.e. the `"name"` in
 /// `@intrinsic(Intrinsic.Member)`, or `None` if the declaration is not an intrinsic. Centralizes the
 /// attribute lookup + quote-stripping that was previously duplicated across layers.
+/// An `@llvm("llvm.sqrt.f64")` extern yields its LLVM intrinsic name as the key; see
+/// [`is_llvm_intrinsic_key`].
 pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Option<String> {
+    if let Some(name) = llvm_intrinsic_name(attributes) {
+        return Some(name.to_owned());
+    }
     let attr = attributes
         .iter()
         .find(|a| crate::attributes::is_compiler_attribute(a, INTRINSIC_ATTR))?;
@@ -49,11 +54,33 @@ pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Optio
     intrinsic_member_key(&path.last()?.text).map(str::to_owned)
 }
 
-/// True if `attributes` contains an `@intrinsic(...)` marker.
+/// True if `attributes` contains an `@intrinsic(...)` or `@llvm(...)` marker.
 pub fn has_intrinsic_attr(attributes: &[dream_syntax::nodes::AttributeNode]) -> bool {
+    attributes.iter().any(|a| {
+        crate::attributes::is_compiler_attribute(a, INTRINSIC_ATTR)
+            || crate::attributes::is_compiler_attribute(a, LLVM_ATTR)
+    })
+}
+
+pub const LLVM_ATTR: &str = "llvm";
+const LLVM_INTRINSIC_PREFIX: &str = "llvm.";
+
+/// The intrinsic named by `@llvm("llvm.sqrt.f64")`, or `None` when the attribute is absent or its
+/// argument is not an `llvm.`-prefixed string.
+pub fn llvm_intrinsic_name(attributes: &[dream_syntax::nodes::AttributeNode]) -> Option<&str> {
     attributes
         .iter()
-        .any(|a| crate::attributes::is_compiler_attribute(a, INTRINSIC_ATTR))
+        .find(|a| crate::attributes::is_compiler_attribute(a, LLVM_ATTR))?
+        .args
+        .first()?
+        .as_string()
+        .filter(|name| is_llvm_intrinsic_key(name))
+}
+
+/// True for an intrinsic key that names an LLVM intrinsic. The `llvm.` namespace is reserved by
+/// LLVM, so it never collides with a Dream [`IntrinsicOp`] key.
+pub fn is_llvm_intrinsic_key(key: &str) -> bool {
+    key.len() > LLVM_INTRINSIC_PREFIX.len() && key.starts_with(LLVM_INTRINSIC_PREFIX)
 }
 
 // --- Object-protocol builtin free functions -------------------------------------------------
@@ -377,11 +404,16 @@ pub enum IntrinsicOp {
     SimdV128Min,
     SimdV128Max,
     SimdV128Sum,
+    /// A `double` operation the backend emits inline (see [`FloatOp`]).
+    Float(FloatOp),
 }
 
 impl IntrinsicOp {
     /// Classifies an `@intrinsic(Intrinsic.Member)` attribute value, or `None` if `key` is unknown.
     pub fn from_key(key: &str) -> Option<IntrinsicOp> {
+        if let Some(op) = FloatOp::from_key(key) {
+            return Some(IntrinsicOp::Float(op));
+        }
         Some(match key {
             ATTR_RAW_LOAD => IntrinsicOp::RawLoad,
             ATTR_RAW_STORE => IntrinsicOp::RawStore,
@@ -554,5 +586,7 @@ pub fn holds_raw_borrow(key: &str) -> bool {
     IntrinsicOp::from_key(key).is_some_and(IntrinsicOp::holds_raw_borrow)
 }
 
+mod float;
 mod members;
+pub use float::FloatOp;
 pub use members::{INTRINSIC_MEMBERS, intrinsic_member_key};

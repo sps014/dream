@@ -68,7 +68,9 @@ fn new_buffer(core: &DeviceCore, size: u64, usage: u32, readback: bool) -> HostR
 pub fn buffer_create(device: i32, byte_size: i32, usage: i32) -> HostResult<i32> {
     let size = non_negative(byte_size, "buffer size")?;
     if usage & !0xF != 0 {
-        return Err(HostError::invalid(format!("unknown buffer usage {usage:#x}")));
+        return Err(HostError::invalid(format!(
+            "unknown buffer usage {usage:#x}"
+        )));
     }
     let mut state = state::lock();
     let core = state.device(device)?;
@@ -196,8 +198,9 @@ fn buffer_read_now(future: usize, handle: i32, byte_offset: i32, byte_size: i32)
     entry.core.alive()?;
     let size = non_negative(byte_size, "read size")?;
     let offset = range(byte_offset, size, buffer.size)?;
-    let out = OutBytes::alloc(size as usize)
-        .ok_or_else(|| HostError::new(Code::OutOfMemory, "the read result does not fit in memory"))?;
+    let out = OutBytes::alloc(size as usize).ok_or_else(|| {
+        HostError::new(Code::OutOfMemory, "the read result does not fit in memory")
+    })?;
     if size == 0 {
         waiter::complete(future, out.finish());
         return Ok(());
@@ -208,7 +211,11 @@ fn buffer_read_now(future: usize, handle: i32, byte_offset: i32, byte_size: i32)
         ));
     }
     // An aligned copy may run into the allocation's padding, which `padded` guarantees exists.
-    let copied = if offset.is_multiple_of(4) { padded(size) } else { size };
+    let copied = if offset.is_multiple_of(4) {
+        padded(size)
+    } else {
+        size
+    };
     let core = entry.core.clone();
     let source = buffer.obj.raw();
     let staging = new_buffer(&core, copied, 0, true)?;
@@ -237,7 +244,9 @@ pub fn texture_create(device: i32, desc: &[i32]) -> HostResult<i32> {
     }
     let longest = width.max(height) as u32;
     if mips as u32 > 32 - longest.leading_zeros() {
-        return Err(HostError::invalid("too many mip levels for the texture size"));
+        return Err(HostError::invalid(
+            "too many mip levels for the texture size",
+        ));
     }
     if !(0..=11).contains(&format) || usage & !3 != 0 || !(samples == 1 || samples == 4) {
         return Err(HostError::invalid(
@@ -275,7 +284,9 @@ fn subresource(texture: &TextureEntry, mip: i32, layer: i32) -> HostResult<(u32,
     let layer = u32::try_from(layer).ok().filter(|l| *l < texture.layers);
     match (mip, layer) {
         (Some(mip), Some(layer)) => Ok((mip, layer)),
-        _ => Err(HostError::invalid("the texture has no such mip level or layer")),
+        _ => Err(HostError::invalid(
+            "the texture has no such mip level or layer",
+        )),
     }
 }
 
@@ -310,8 +321,9 @@ fn texture_read_now(future: usize, handle: i32, mip: i32, layer: i32) -> HostRes
     let mut layout = ffi::ReadbackLayout::default();
     check(unsafe { ffi::dgpu_texture_readback_layout(raw, mip, &mut layout) })?;
     let bytes = layout.row_bytes * layout.rows as u64;
-    let out = OutBytes::alloc(bytes as usize)
-        .ok_or_else(|| HostError::new(Code::OutOfMemory, "the read result does not fit in memory"))?;
+    let out = OutBytes::alloc(bytes as usize).ok_or_else(|| {
+        HostError::new(Code::OutOfMemory, "the read result does not fit in memory")
+    })?;
     let core = entry.core.clone();
     let staging = new_buffer(&core, layout.staging_size, 0, true)?;
     let target = staging.raw();

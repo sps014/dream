@@ -2,22 +2,6 @@
 
 use super::{Known, ModRef};
 use dream_abi::intrinsics::IntrinsicOp;
-use dream_types::{TyKind, TypeId, TypeInterner};
-
-pub(crate) fn pure_math_import(imp: &dream_hir::HImport, interner: &TypeInterner) -> bool {
-    let field = if imp.field.is_empty() {
-        &imp.name
-    } else {
-        &imp.field
-    };
-    let numeric = |t: TypeId| matches!(interner.kind(t), TyKind::Prim(p) if *p != dream_types::PrimTy::String);
-    dream_abi::runtime_hosts::is_pure_math_env_import(&imp.module, field)
-        && !imp.is_async
-        && !imp.param_by_ref.iter().any(|&r| r)
-        && imp.params.iter().all(|&t| numeric(t))
-        && imp.ret.is_none_or(numeric)
-}
-
 /// Summary of a bodiless intrinsic's runtime helper, or `None` (opaque) if it may run user code
 /// or overwrite object slots.
 pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
@@ -50,6 +34,7 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::FromBytes
             | I::ArrayGetUnchecked
             | I::Regex
+            | I::Float(_)
     ) || op.is_simd();
     // A panic aborts the process and never unwinds, so no later read can observe what its hook
     // does; opaque here would taint every bounds-checked helper's callers.

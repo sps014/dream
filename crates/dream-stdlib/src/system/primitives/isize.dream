@@ -13,6 +13,28 @@ extend isize: Comparable<isize> {
         return 0;
     }
 
+    /// Returns the magnitude of this value. The most negative `isize` has no positive
+    /// counterpart and is returned unchanged.
+    public fun abs(): isize {
+        let zero = (isize)0;
+        if this < zero {
+            return zero - this;
+        }
+        return this;
+    }
+
+    /// Returns -1, 0, or 1 for a negative, zero, or positive value.
+    public fun signum(): isize {
+        let zero = (isize)0;
+        if this > zero {
+            return (isize)1;
+        }
+        if this < zero {
+            return (isize)(-1);
+        }
+        return zero;
+    }
+
     /// Returns the smaller of this value and `other`.
     public fun min(other: isize): isize {
         if this < other {

@@ -10,6 +10,7 @@ mod fx;
 mod glue;
 mod int_ops;
 mod into_reuse;
+mod intrinsic_calls;
 pub mod ir;
 mod js;
 mod lcx;

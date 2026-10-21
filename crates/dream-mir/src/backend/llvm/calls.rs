@@ -12,6 +12,15 @@ use dream_types::{TyKind, TypeId};
 impl<'l, 'a> Fx<'l, 'a> {
     pub fn call_expr(&mut self, callee: &Callee, args: &[Operand]) -> Option<V> {
         let raw = self.l.cx.callee_sym(callee.def, &callee.args);
+        if let Some(key) = self.l.cx.intrinsic_key(callee.def)
+            && dream_abi::intrinsics::is_llvm_intrinsic_key(key)
+        {
+            let key = key.to_owned();
+            return Some(self.llvm_intrinsic_call(&key, callee, args));
+        }
+        if let Some(IntrinsicOp::Float(op)) = IntrinsicOp::from_key(&raw) {
+            return Some(self.float_op(op, args));
+        }
         let name = runtime_c_name(&raw);
         if name == "dream_sb_push" && self.sb_push_units(args) {
             return None;

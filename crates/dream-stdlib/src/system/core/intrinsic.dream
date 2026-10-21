@@ -324,4 +324,8 @@ internal enum Intrinsic {
     DreamCancel,
     /// Identifies the start operation for an `@intrinsic` declaration.
     DreamStart,
+    /// Reinterprets a `double` as the `long` with the same bits.
+    F64ToBits,
+    /// Reinterprets a `long` as the `double` with the same bits.
+    F64FromBits,
 }

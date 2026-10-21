@@ -60,9 +60,7 @@ pub(crate) fn hash_fn(cx: &Cx<'_>, ty: TypeId) -> HashFn {
     }
     match cx.interner.kind(ty) {
         TyKind::Prim(PrimTy::String) => HashFn::Call("dream_string_hash".into()),
-        TyKind::Prim(PrimTy::Float | PrimTy::Float16) => {
-            HashFn::Call("dream_bitcast_f32".into())
-        }
+        TyKind::Prim(PrimTy::Float | PrimTy::Float16) => HashFn::Call("dream_bitcast_f32".into()),
         TyKind::Prim(PrimTy::Double) => HashFn::Call("dream_hash_double".into()),
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => HashFn::Call("dream_hash_long".into()),
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) if cx.mir.layouts.target.ptr_size == 8 => {

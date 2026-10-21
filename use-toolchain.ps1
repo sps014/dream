@@ -24,7 +24,9 @@ $UserDir = Join-Path $HOME ".dream"
 $BinDir = Join-Path $UserDir "bin"
 $EnvFile = Join-Path $UserDir "toolchain.env"
 $Names = @("dream.exe", "dreamer.exe", "dream-lsp.exe")
-$Capabilities = @("core", "unicode", "crypto", "process", "timezone", "net", "cli")
+$Capabilities = @(Get-ChildItem (Join-Path $Root "crates") -Directory -Filter "dream-host-*" |
+    ForEach-Object { $_.Name.Substring("dream-host-".Length) } |
+    Where-Object { $_ -ne "abi" })
 $Libs = @($Capabilities | ForEach-Object {
     "dream_host_$_.dll"
     "dream_host_$_.dll.lib"
@@ -46,7 +48,22 @@ function Split-PathList([string]$List) {
     return @($List -split ";" | Where-Object { $_ -and $_ -ne $BinDir })
 }
 
+function Test-BinJunction {
+    $item = Get-Item -LiteralPath $BinDir -Force -ErrorAction SilentlyContinue
+    return $null -ne $item -and $item.LinkType -eq "Junction"
+}
+
+# Deleting entries through a junction would delete the build outputs it points at; remove only
+# the junction itself.
+function Remove-BinJunction {
+    if (Test-BinJunction) { [System.IO.Directory]::Delete($BinDir) }
+}
+
 if ($Unlink) {
+    if (Test-BinJunction) {
+        Remove-BinJunction
+        Write-Host "Removed junction $BinDir"
+    }
     foreach ($n in $Names + $Libs) {
         $p = Join-Path $BinDir $n
         if (Test-Path $p) {
@@ -71,8 +88,17 @@ $BuildProfile = if ($DebugBuild) { "debug" } else { "release" }
 $DreamHome = Join-Path $Root "target\$BuildProfile"
 
 if (-not $SkipBuild) {
-    Write-Host "Building $BuildProfile toolchain and core host capabilities..."
-    $packages = @("dream", "dream-host", "dream-lsp", "dreamer") + @($Capabilities | ForEach-Object { "dream-host-$_" })
+    Write-Host "Building $BuildProfile toolchain and host capabilities..."
+    $packages = @("dream", "dream-host", "dreamer") + @($Capabilities | ForEach-Object { "dream-host-$_" })
+    # A running language server keeps its executable open, so Cargo cannot replace it.
+    $lspPaths = @((Join-Path $DreamHome "dream-lsp.exe"), (Join-Path $BinDir "dream-lsp.exe"))
+    $lspRunning = Get-Process dream-lsp -ErrorAction SilentlyContinue |
+        Where-Object { $lspPaths -contains $_.Path }
+    if ($lspRunning) {
+        Write-Warning "dream-lsp is running from this toolchain, so it was not rebuilt; close the editor window and re-run to update it"
+    } else {
+        $packages += "dream-lsp"
+    }
     $cargoArgs = @("build")
     foreach ($package in $packages) { $cargoArgs += @("-p", $package) }
     if ($BuildProfile -eq "release") { $cargoArgs += "--release" }
@@ -91,27 +117,37 @@ foreach ($n in $Names + @($Capabilities | ForEach-Object { "dream_host_$_.dll" }
     }
 }
 
+Remove-BinJunction
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
-# Symbolic links need Developer Mode or an elevated shell; without them fall back to copies,
-# which (unlike links) need this script re-run after each rebuild.
-$copied = $false
+$linked = $true
 foreach ($n in $Names + $Libs) {
     $src = Join-Path $DreamHome $n
     if (-not (Test-Path $src)) { continue }
     $dst = Join-Path $BinDir $n
     if (Test-Path $dst) { Remove-Item -Force $dst }
     try {
-        New-Item -ItemType SymbolicLink -Path $dst -Target $src | Out-Null
+        New-Item -ItemType SymbolicLink -Path $dst -Target $src -ErrorAction Stop | Out-Null
     } catch {
-        Copy-Item -Force $src $dst
-        $copied = $true
+        $linked = $false
+        break
     }
 }
-if ($copied) {
-    Write-Host "Copied binaries into $BinDir (enable Developer Mode for links that follow rebuilds)"
-} else {
+if ($linked) {
     Write-Host "Linked $BinDir\{dream,dreamer,dream-lsp}.exe -> $DreamHome\"
+} else {
+    # Symbolic links need Developer Mode or an elevated shell. A directory junction needs neither
+    # and, unlike copies, keeps serving every later rebuild.
+    Get-ChildItem -LiteralPath $BinDir -Force |
+        Where-Object { $_.Name -like "dream*" -or $_.Name -like "libdream_host_*" } |
+        Remove-Item -Force
+    $foreign = @(Get-ChildItem -LiteralPath $BinDir -Force)
+    if ($foreign.Count -gt 0) {
+        throw "$BinDir contains files this script did not install ($($foreign.Name -join ', ')); move them and re-run"
+    }
+    Remove-Item -LiteralPath $BinDir
+    New-Item -ItemType Junction -Path $BinDir -Target $DreamHome | Out-Null
+    Write-Host "Linked $BinDir -> $DreamHome\ (directory junction; enable Developer Mode for per-file links)"
 }
 
 $rtSrc = Join-Path $Root "crates\dream-mir\src\runtime\c"

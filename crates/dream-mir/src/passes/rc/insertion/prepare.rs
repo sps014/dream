@@ -1,6 +1,6 @@
 use super::super::{
     cursor,
-    liveness::{self, live_after_stmt},
+    liveness::Liveness,
     tokens::{
         TokenAnalysis, funcbox_env_rc_roots, is_owned_local, leftover_alias_parent, leftover_keep,
     },
@@ -41,7 +41,7 @@ pub(super) struct State {
     pub(super) n_orig: u32,
     pub(super) owned_flags: Vec<bool>,
     pub(super) realloc_readers: IndexMap<(usize, usize), Vec<u32>>,
-    pub(super) live_out_rc: Vec<IndexSet<u32>>,
+    pub(super) live_rc: Liveness,
     pub(super) is_async: bool,
     pub(super) resume_futures: Vec<IndexSet<u32>>,
     pub(super) in_loop: IndexSet<usize>,
@@ -77,14 +77,8 @@ impl State {
             .map(|s| leftover_keep(func, s.iter().copied()))
             .collect();
         let mut die_keep: IndexMap<(usize, usize), IndexSet<u32>> = IndexMap::new();
-        {
-            let mut groups: IndexMap<(usize, usize), Vec<u32>> = IndexMap::new();
-            for &(bi, si, local) in &analysis.die_after {
-                groups.entry((bi, si)).or_default().push(local);
-            }
-            for (k, ids) in groups {
-                die_keep.insert(k, leftover_keep(func, ids));
-            }
+        for (&at, ids) in &analysis.die_after {
+            die_keep.insert(at, leftover_keep(func, ids.iter().copied()));
         }
         let n_orig = func.locals.len() as u32;
         let owned_flags: Vec<bool> = (0..func.locals.len() as u32)
@@ -94,7 +88,7 @@ impl State {
 
         let mut realloc_readers: IndexMap<(usize, usize), Vec<u32>> = IndexMap::new();
         let mut slot_readers: IndexMap<SlotId, Vec<u32>> = IndexMap::new();
-        let live_out_rc = liveness::live_out(func);
+        let live_rc = Liveness::new(func);
         let is_async = func.is_async;
         // Resume blocks get their awaited future's Release from `insert_await_resume_releases`,
         // which runs after this loop and treats an existing `x = null` as "already handled".
@@ -151,7 +145,7 @@ impl State {
                 let ok: Vec<u32> = readers
                     .iter()
                     .copied()
-                    .filter(|&x| is_owned(x) && !live_after_stmt(func, &live_out_rc, bi, si, x))
+                    .filter(|&x| is_owned(x) && !live_rc.after_stmt(bi, si, x))
                     .collect();
                 if !ok.is_empty() {
                     realloc_readers.insert((bi, si), ok);
@@ -170,7 +164,7 @@ impl State {
             n_orig,
             owned_flags,
             realloc_readers,
-            live_out_rc,
+            live_rc,
             is_async,
             resume_futures,
             in_loop,

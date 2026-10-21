@@ -4,9 +4,8 @@ use super::super::lifetime::stmt_borrow;
 
 use super::super::is_borrowed_copy;
 use super::super::lifetime::StmtBorrow;
-use super::super::liveness;
-use super::super::liveness::live_after_stmt;
-use super::super::liveness::stmt_reads_local;
+use super::super::liveness::Liveness;
+use super::super::liveness::stmt_reads;
 use super::super::rvalue_reads_local;
 use super::super::uniqueness::collect_container_moves;
 use super::aliases::leftover_alias_parent;
@@ -30,13 +29,14 @@ use crate::Statement;
 use crate::Terminator;
 use dream_types::DefId;
 use dream_types::TypeInterner;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use std::collections::BTreeSet;
 
 pub(crate) struct TokenAnalysis {
     pub assign_move: IndexSet<(usize, usize)>,
     pub sink_move: IndexSet<(usize, usize, u32)>,
-    pub die_after: IndexSet<(usize, usize, u32)>,
+    /// Locals whose last use ends at (block, statement), in discovery order.
+    pub die_after: IndexMap<(usize, usize), Vec<u32>>,
     pub start_release: Vec<BTreeSet<u32>>,
     pub end_release: Vec<BTreeSet<u32>>,
     pub token_in: Vec<Vec<bool>>,
@@ -57,7 +57,7 @@ impl TokenAnalysis {
     ) -> TokenAnalysis {
         let n = func.blocks.len();
         let nloc = func.locals.len();
-        let live_out = liveness::live_out(func);
+        let live = Liveness::new(func);
         let take_params = take_param_set(func);
         let has_await = func
             .blocks
@@ -80,7 +80,7 @@ impl TokenAnalysis {
                 let Some(src) = move_source(rvalue, &is_owned) else {
                     continue;
                 };
-                if !live_after_stmt(func, &live_out, bi, si, src.0) {
+                if !live.after_stmt(bi, si, src.0) {
                     assign_move.insert((bi, si));
                 }
             }
@@ -93,7 +93,7 @@ impl TokenAnalysis {
                     continue;
                 }
                 for local in take_owned_arg_locals(stmt, &is_owned) {
-                    if !live_after_stmt(func, &live_out, bi, si, local) {
+                    if !live.after_stmt(bi, si, local) {
                         sink_move.insert((bi, si, local));
                     }
                 }
@@ -108,7 +108,7 @@ impl TokenAnalysis {
                 transferred.insert((bi, si, src.0));
             }
         }
-        collect_container_moves(func, interner, &live_out, is_owned, layouts, &mut sink_move);
+        collect_container_moves(func, interner, &live, is_owned, layouts, &mut sink_move);
         transferred.extend(sink_move.iter().copied());
 
         // Last-use destroy only at leftover (token_out / Return), Print, and a primitive field
@@ -118,7 +118,7 @@ impl TokenAnalysis {
         let rc_snaps = rc_snapshots_of(func, interner);
         let snapshot_locals: IndexSet<u32> = rc_snaps.values().flatten().copied().collect();
         let riders = cursor_riders(func);
-        let mut die_after: IndexSet<(usize, usize, u32)> = IndexSet::new();
+        let mut die_after: IndexMap<(usize, usize), Vec<u32>> = IndexMap::new();
         let site = DestroySite {
             func,
             interner,
@@ -129,7 +129,9 @@ impl TokenAnalysis {
         for (bi, block) in func.blocks.iter().enumerate() {
             let kept_await = call_args_kept_across_await(block, nloc);
             for (si, stmt) in block.stmts.iter().enumerate() {
-                for local in 0..nloc as u32 {
+                let mut reads: Vec<u32> = stmt_reads(stmt).into_iter().collect();
+                reads.sort_unstable();
+                for local in reads {
                     if !is_owned(local) || take_params.contains(&local) {
                         continue;
                     }
@@ -142,7 +144,7 @@ impl TokenAnalysis {
                     if kept_await.contains(&local) {
                         continue;
                     }
-                    if live_after_stmt(func, &live_out, bi, si, local) {
+                    if live.after_stmt(bi, si, local) {
                         continue;
                     }
                     // Do not unique-destroy on `x = rhs` merely because `x` is unread before a
@@ -150,19 +152,16 @@ impl TokenAnalysis {
                     if assigns_local(stmt, local) {
                         continue;
                     }
-                    if !stmt_reads_local(stmt, local) {
+                    if rc_snaps
+                        .get(&local)
+                        .is_some_and(|ds| ds.iter().any(|&d| live.after_stmt(bi, si, d)))
+                    {
                         continue;
                     }
-                    if rc_snaps.get(&local).is_some_and(|ds| {
-                        ds.iter()
-                            .any(|&d| live_after_stmt(func, &live_out, bi, si, d))
-                    }) {
-                        continue;
-                    }
-                    if riders.get(&local).is_some_and(|cs| {
-                        cs.iter()
-                            .any(|&c| live_after_stmt(func, &live_out, bi, si, c))
-                    }) {
+                    if riders
+                        .get(&local)
+                        .is_some_and(|cs| cs.iter().any(|&c| live.after_stmt(bi, si, c)))
+                    {
                         continue;
                     }
                     if !site.allows(stmt, local) {
@@ -177,7 +176,10 @@ impl TokenAnalysis {
                     {
                         continue;
                     }
-                    die_after.insert((bi, end, local));
+                    let dying = die_after.entry((bi, end)).or_default();
+                    if !dying.contains(&local) {
+                        dying.push(local);
+                    }
                 }
             }
         }
@@ -239,7 +241,7 @@ impl TokenAnalysis {
             assign_move: &assign_move,
             sink_move: &sink_move,
             die_after: &die_after,
-            live_out: &live_out,
+            live_out: live.out(),
             preds: &preds,
             entry,
             loop_headers: &loop_headers,

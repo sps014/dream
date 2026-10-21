@@ -1,140 +1,218 @@
 module system.core;
 
-// Mathematical functions. Trig and most transcendentals are host-native (`env.*`);
-// thin public wrappers expose them (Dream forbids `public` + `extern` on one symbol).
+// Every function is computed in Dream or by a hardware instruction, so results are identical on
+// all targets. The transcendental functions are ports of the fdlibm algorithms used by musl.
 /// Common mathematical operations on double-precision numbers. Trigonometric arguments and
 /// results use radians.
 public static class Math {
-    @js("env", "abs")
-    internal static extern fun abs_host(x: double): double;
+    @llvm("llvm.fabs.f64")
+    internal static extern fun fabs(x: double): double;
 
-    @js("env", "floor")
-    static extern fun floor_host(x: double): double;
+    @llvm("llvm.floor.f64")
+    static extern fun llvm_floor(x: double): double;
+
+    @llvm("llvm.ceil.f64")
+    static extern fun llvm_ceil(x: double): double;
+
+    @llvm("llvm.trunc.f64")
+    internal static extern fun trunc(x: double): double;
+
+    @llvm("llvm.sqrt.f64")
+    static extern fun llvm_sqrt(x: double): double;
+
+    @llvm("llvm.copysign.f64")
+    internal static extern fun copysign(magnitude: double, sign: double): double;
+
+    @intrinsic(Intrinsic.F64ToBits)
+    internal static extern fun to_bits(x: double): long;
+
+    @intrinsic(Intrinsic.F64FromBits)
+    internal static extern fun from_bits(bits: long): double;
+
+    /// Upper 32 bits of `x`: sign, exponent, and the top 20 mantissa bits.
+    internal static fun high_word(x: double): int {
+        return (int)(Math.to_bits(x) >> 32L);
+    }
+
+    /// Lower 32 mantissa bits of `x`.
+    internal static fun low_word(x: double): uint {
+        return (uint)Math.to_bits(x);
+    }
+
+    /// The double whose upper and lower 32 bits are `high` and `low`.
+    internal static fun from_words(high: int, low: uint): double {
+        return Math.from_bits(((long)high << 32L) | (long)low);
+    }
+
+    /// `x` with its lower 32 bits cleared, used to split a value into an exact high part.
+    internal static fun clear_low_word(x: double): double {
+        return Math.from_bits(Math.to_bits(x) & 0xFFFFFFFF_00000000L);
+    }
+
+    /// `x` with its upper 32 bits replaced by `high`.
+    internal static fun with_high_word(x: double, high: int): double {
+        return Math.from_words(high, Math.low_word(x));
+    }
+
+    /// `x * 2^n`, exact unless the result overflows or becomes subnormal.
+    internal static fun scalbn(x: double, n: int): double {
+        let y = x;
+        let e = n;
+        if e > 1023 {
+            y = y * Math.from_bits(0x7FE00000_00000000L);
+            e = e - 1023;
+            if e > 1023 {
+                y = y * Math.from_bits(0x7FE00000_00000000L);
+                e = e - 1023;
+                if e > 1023 {
+                    e = 1023;
+                }
+            }
+        } else if e < -1022 {
+            // Scaling by 2^-969 first keeps the final step above -53, so a subnormal result is
+            // rounded only once.
+            y = y * Math.from_bits(0x03600000_00000000L);
+            e = e + 969;
+            if e < -1022 {
+                y = y * Math.from_bits(0x03600000_00000000L);
+                e = e + 969;
+                if e < -1022 {
+                    e = -1022;
+                }
+            }
+        }
+        return y * Math.from_bits((long)(1023 + e) << 52L);
+    }
 
     /// Rounds `x` down to the nearest integer value.
     public static fun floor(x: double): double {
-        return Math.floor_host(x);
+        return Math.llvm_floor(x);
     }
-
-    @js("env", "ceil")
-    static extern fun ceil_host(x: double): double;
 
     /// Rounds `x` up to the nearest integer value.
     public static fun ceil(x: double): double {
-        return Math.ceil_host(x);
+        return Math.llvm_ceil(x);
     }
 
-    @js("env", "round")
-    static extern fun round_host(x: double): double;
-
-    /// Rounds `x` to the nearest integer value.
+    /// Rounds `x` to the nearest integer value. Halfway cases round away from zero, so
+    /// `round(2.5)` is `3` and `round(-2.5)` is `-3`.
     public static fun round(x: double): double {
-        return Math.round_host(x);
+        let t = Math.trunc(x);
+        if Math.fabs(x - t) >= 0.5d {
+            return t + Math.copysign(1.0d, x);
+        }
+        return t;
     }
 
-    @js("env", "sqrt")
-    static extern fun sqrt_host(x: double): double;
-
-    /// Square root. A negative input is NaN, same as `log` / `asin` and as libm.
+    /// Square root, correctly rounded. A negative input is NaN.
     public static fun sqrt(x: double): double {
-        return Math.sqrt_host(x);
+        return Math.llvm_sqrt(x);
     }
 
-    @js("env", "pow")
-    static extern fun pow_host(base: double, exponent: double): double;
-
-    /// Returns `base` raised to `exponent`.
+    /// Returns `base` raised to `exponent`. A negative `base` with a non-integer `exponent` is
+    /// NaN, and `pow(x, 0)` is `1` for every `x`, including NaN.
     public static fun pow(base: double, exponent: double): double {
-        return Math.pow_host(base, exponent);
+        return MathPow.pow(base, exponent);
     }
-
-    @js("env", "sin")
-    static extern fun sin_host(x: double): double;
 
     /// Returns the sine of `x`, measured in radians.
     public static fun sin(x: double): double {
-        return Math.sin_host(x);
+        return MathTrig.sin(x);
     }
-
-    @js("env", "cos")
-    static extern fun cos_host(x: double): double;
 
     /// Returns the cosine of `x`, measured in radians.
     public static fun cos(x: double): double {
-        return Math.cos_host(x);
+        return MathTrig.cos(x);
     }
-
-    @js("env", "tan")
-    static extern fun tan_host(x: double): double;
 
     /// Returns the tangent of `x`, measured in radians.
     public static fun tan(x: double): double {
-        return Math.tan_host(x);
+        return MathTrig.tan(x);
     }
-
-    @js("env", "asin")
-    static extern fun asin_host(x: double): double;
 
     /// Returns the inverse sine in radians; inputs outside [-1, 1] produce NaN.
     public static fun asin(x: double): double {
-        return Math.asin_host(x);
+        return MathInverseTrig.asin(x);
     }
-
-    @js("env", "acos")
-    static extern fun acos_host(x: double): double;
 
     /// Returns the inverse cosine in radians; inputs outside [-1, 1] produce NaN.
     public static fun acos(x: double): double {
-        return Math.acos_host(x);
+        return MathInverseTrig.acos(x);
     }
-
-    @js("env", "atan")
-    static extern fun atan_host(x: double): double;
 
     /// Returns the inverse tangent in radians.
     public static fun atan(x: double): double {
-        return Math.atan_host(x);
+        return MathInverseTrig.atan(x);
     }
-
-    @js("env", "atan2")
-    static extern fun atan2_host(y: double, x: double): double;
 
     /// Returns the angle of the point `(x, y)` in radians, using both signs to choose the
     /// quadrant.
     public static fun atan2(y: double, x: double): double {
-        return Math.atan2_host(y, x);
+        return MathInverseTrig.atan2(y, x);
     }
 
-    @js("env", "log")
-    static extern fun log_host(x: double): double;
-
-    /// Returns the natural logarithm of `x`.
+    /// Returns the natural logarithm of `x`. Zero gives negative infinity and a negative input
+    /// gives NaN.
     public static fun log(x: double): double {
-        return Math.log_host(x);
+        return MathExpLog.log(x);
     }
 
-    @js("env", "log10")
-    static extern fun log10_host(x: double): double;
-
-    /// Returns the base-ten logarithm of `x`.
+    /// Returns the base-ten logarithm of `x`. Zero gives negative infinity and a negative input
+    /// gives NaN.
     public static fun log10(x: double): double {
-        return Math.log10_host(x);
+        return MathExpLog.log10(x);
     }
-
-    @js("env", "exp")
-    static extern fun exp_host(x: double): double;
 
     /// Returns e raised to `x`.
     public static fun exp(x: double): double {
-        return Math.exp_host(x);
+        return MathExpLog.exp(x);
     }
 
-    @js("env", "hypot")
-    static extern fun hypot_host(x: double, y: double): double;
-
-    /// Returns the length of the vector `(x, y)`.
+    /// Returns the length of the vector `(x, y)` without overflow or underflow in the
+    /// intermediate squares. An infinite component gives infinity even when the other is NaN.
     public static fun hypot(x: double, y: double): double {
-        return Math.hypot_host(x, y);
+        let ux = Math.to_bits(x) & 0x7FFFFFFF_FFFFFFFFL;
+        let uy = Math.to_bits(y) & 0x7FFFFFFF_FFFFFFFFL;
+        if ux < uy {
+            let t = ux;
+            ux = uy;
+            uy = t;
+        }
+        let ex = (int)(ux >> 52L);
+        let ey = (int)(uy >> 52L);
+        let a = Math.from_bits(ux);
+        let b = Math.from_bits(uy);
+        if ey == 0x7FF {
+            return b;
+        }
+        if ex == 0x7FF || uy == 0L {
+            return a;
+        }
+        if ex - ey > 64 {
+            return a + b;
+        }
+        // Rescaling keeps the split squares below from overflowing or losing their low parts.
+        let z = 1.0d;
+        if ex > 0x3FF + 510 {
+            z = Math.from_bits(0x6BB00000_00000000L);
+            a = a * Math.from_bits(0x14300000_00000000L);
+            b = b * Math.from_bits(0x14300000_00000000L);
+        } else if ey < 0x3FF - 450 {
+            z = Math.from_bits(0x14300000_00000000L);
+            a = a * Math.from_bits(0x6BB00000_00000000L);
+            b = b * Math.from_bits(0x6BB00000_00000000L);
+        }
+        let ha = a * a;
+        let hb = b * b;
+        return z * Math.llvm_sqrt(Math.square_error(b, hb) + Math.square_error(a, ha) + hb + ha);
+    }
+
+    /// The rounding error of `square = x * x`, computed exactly by splitting `x` into halves.
+    static fun square_error(x: double, square: double): double {
+        let c = x * 134217729.0d;
+        let h = x - c + c;
+        let l = x - h;
+        return h * h - square + 2.0d * h * l + l * l;
     }
 
     /// Ratio of a circle's circumference to its diameter.

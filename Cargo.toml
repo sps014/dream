@@ -100,6 +100,11 @@ debug = "line-tables-only"
 [profile.dev.package.blake3]
 opt-level = 3
 
+# At opt-level 0 the cmake crate builds GLFW as a CMake `Debug` config, which links the debug
+# MSVC CRT (`MSVCRTD`) while Rust links the release CRT, and `link.exe` warns (LNK4098).
+[profile.dev.package.glfw-sys]
+opt-level = 1
+
 [profile.test]
 # `-O1` keeps the compiler-heavy e2e cases fast to *run* while cutting test *build* time
 # roughly in half versus `-O3` (the big crates are compiled a second time as test harnesses).

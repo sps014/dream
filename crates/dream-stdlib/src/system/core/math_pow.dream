@@ -1,0 +1,269 @@
+module system.core;
+
+// Port of fdlibm's pow as used by musl: log2(|x|) is computed in extra precision as t1 + t2,
+// multiplied by y, and 2 is raised to the product in two parts.
+/// Raising a double to a double power.
+internal static class MathPow {
+    /// Whether `y` is an odd integer (1), an even integer (2), or not an integer (0).
+    static fun integer_kind(iy: int, ly: uint): int {
+        if iy >= 0x43400000 {
+            return 2;
+        }
+        if iy < 0x3FF00000 {
+            return 0;
+        }
+        let k = (iy >> 20) - 0x3FF;
+        if k > 20 {
+            let shift = (uint)(52 - k);
+            let j = ly >> shift;
+            if (j << shift) == ly {
+                return 2 - (int)(j & 1u);
+            }
+        } else if ly == 0u {
+            let j = iy >> (20 - k);
+            if (j << (20 - k)) == iy {
+                return 2 - (j & 1);
+            }
+        }
+        return 0;
+    }
+
+    /// `x` raised to `y`.
+    internal static fun pow(x: double, y: double): double {
+        let huge = 1.0e300d;
+        let tiny = 1.0e-300d;
+
+        let hx = Math.high_word(x);
+        let lx = Math.low_word(x);
+        let hy = Math.high_word(y);
+        let ly = Math.low_word(y);
+        let ix = hx & 0x7FFFFFFF;
+        let iy = hy & 0x7FFFFFFF;
+
+        if (iy | (int)ly) == 0 {
+            return 1.0d;
+        }
+        if hx == 0x3FF00000 && lx == 0u {
+            return 1.0d;
+        }
+        if ix > 0x7FF00000
+            || (ix == 0x7FF00000 && lx != 0u)
+            || iy > 0x7FF00000
+            || (iy == 0x7FF00000 && ly != 0u)
+        {
+            return x + y;
+        }
+
+        let yisint = hx < 0 ? MathPow.integer_kind(iy, ly) : 0;
+
+        if ly == 0u {
+            if iy == 0x7FF00000 {
+                if ((ix - 0x3FF00000) | (int)lx) == 0 {
+                    return 1.0d;
+                }
+                if ix >= 0x3FF00000 {
+                    return hy >= 0 ? y : 0.0d;
+                }
+                return hy >= 0 ? 0.0d : -y;
+            }
+            if iy == 0x3FF00000 {
+                return hy >= 0 ? x : 1.0d / x;
+            }
+            if hy == 0x40000000 {
+                return x * x;
+            }
+            if hy == 0x3FE00000 && hx >= 0 {
+                return Math.sqrt(x);
+            }
+        }
+
+        let ax = Math.fabs(x);
+        if lx == 0u && (ix == 0x7FF00000 || ix == 0 || ix == 0x3FF00000) {
+            let z = hy < 0 ? 1.0d / ax : ax;
+            if hx < 0 {
+                if ((ix - 0x3FF00000) | yisint) == 0 {
+                    z = (z - z) / (z - z);
+                } else if yisint == 1 {
+                    z = -z;
+                }
+            }
+            return z;
+        }
+
+        let s = 1.0d;
+        if hx < 0 {
+            if yisint == 0 {
+                return (x - x) / (x - x);
+            }
+            if yisint == 1 {
+                s = -1.0d;
+            }
+        }
+
+        let t1 = 0.0d;
+        let t2 = 0.0d;
+        if iy > 0x41E00000 {
+            if iy > 0x43F00000 {
+                if ix <= 0x3FEFFFFF {
+                    return hy < 0 ? huge * huge : tiny * tiny;
+                }
+                return hy > 0 ? huge * huge : tiny * tiny;
+            }
+            if ix < 0x3FEFFFFF {
+                return hy < 0 ? s * huge * huge : s * tiny * tiny;
+            }
+            if ix > 0x3FF00000 {
+                return hy > 0 ? s * huge * huge : s * tiny * tiny;
+            }
+            // |1 - x| <= 2^-20, so log(x) is well approximated by x - x^2/2 + x^3/3 - x^4/4.
+            let ivln2 = 1.44269504088896338700e+00d;
+            let ivln2_h = 1.44269502162933349609e+00d;
+            let ivln2_l = 1.92596299112661746887e-08d;
+            let t = ax - 1.0d;
+            let w = (t * t) * (0.5d - t * (0.3333333333333333333333d - t * 0.25d));
+            let u = ivln2_h * t;
+            let v = t * ivln2_l - w * ivln2;
+            t1 = Math.clear_low_word(u + v);
+            t2 = v - (t1 - u);
+        } else {
+            let lt = MathPow.log2_parts(ax, ix);
+            t1 = lt.hi;
+            t2 = lt.lo;
+        }
+
+        // (y1 + y2) * (t1 + t2), with y1 exact in its high word.
+        let y1 = Math.clear_low_word(y);
+        let p_l = (y - y1) * t1 + y * t2;
+        let p_h = y1 * t1;
+        let z = p_l + p_h;
+        let j = Math.high_word(z);
+        let i = (int)Math.low_word(z);
+        let ovt = 8.0085662595372944372e-17d;
+        if j >= 0x40900000 {
+            if ((j - 0x40900000) | i) != 0 {
+                return s * huge * huge;
+            }
+            if p_l + ovt > z - p_h {
+                return s * huge * huge;
+            }
+        } else if (j & 0x7FFFFFFF) >= 0x4090CC00 {
+            if ((j - 0xC090CC00) | i) != 0 {
+                return s * tiny * tiny;
+            }
+            if p_l <= z - p_h {
+                return s * tiny * tiny;
+            }
+        }
+        return s * MathPow.exp2_parts(p_h, p_l, j);
+    }
+
+    /// log2(x) as `hi + lo` with `hi` exact in its high word. `x` is positive, finite, and
+    /// nonzero, and `high` is its high word.
+    static fun log2_parts(x: double, high: int): ReducedArgument {
+        let l1 = 5.99999999999994648725e-01d;
+        let l2 = 4.28571428578550184252e-01d;
+        let l3 = 3.33333329818377432918e-01d;
+        let l4 = 2.72728123808534006489e-01d;
+        let l5 = 2.30660745775561754067e-01d;
+        let l6 = 2.06975017800338417784e-01d;
+        let cp = 9.61796693925975554329e-01d;
+        let cp_h = 9.61796700954437255859e-01d;
+        let cp_l = -7.02846165095275826516e-09d;
+
+        let ax = x;
+        let ix = high;
+        let n = 0;
+        if ix < 0x00100000 {
+            ax = ax * 9007199254740992.0d;
+            n = n - 53;
+            ix = Math.high_word(ax);
+        }
+        n = n + (ix >> 20) - 0x3FF;
+        let j = ix & 0x000FFFFF;
+        ix = j | 0x3FF00000;
+        // Center the mantissa on 1 or 1.5 so the series below converges quickly.
+        let k = 0;
+        if j <= 0x3988E {
+            k = 0;
+        } else if j < 0xBB67A {
+            k = 1;
+        } else {
+            n = n + 1;
+            ix = ix - 0x00100000;
+        }
+        ax = Math.with_high_word(ax, ix);
+        let bp = k == 0 ? 1.0d : 1.5d;
+        let dp_h = k == 0 ? 0.0d : 5.84962487220764160156e-01d;
+        let dp_l = k == 0 ? 0.0d : 1.35003920212974897128e-08d;
+
+        // ss = s_h + s_l = (ax - bp) / (ax + bp)
+        let u = ax - bp;
+        let v = 1.0d / (ax + bp);
+        let ss = u * v;
+        let s_h = Math.clear_low_word(ss);
+        let t_h = Math.from_words(((ix >> 1) | 0x20000000) + 0x00080000 + (k << 18), 0u);
+        let t_l = ax - (t_h - bp);
+        let s_l = v * ((u - s_h * t_h) - s_h * t_l);
+
+        let s2 = ss * ss;
+        let r = s2 * s2 * (l1 + s2 * (l2 + s2 * (l3 + s2 * (l4 + s2 * (l5 + s2 * l6)))));
+        r = r + s_l * (s_h + ss);
+        s2 = s_h * s_h;
+        let t_h2 = Math.clear_low_word(3.0d + s2 + r);
+        let t_l2 = r - ((t_h2 - 3.0d) - s2);
+        u = s_h * t_h2;
+        v = s_l * t_h2 + t_l2 * ss;
+        let p_h = Math.clear_low_word(u + v);
+        let p_l = v - (p_h - u);
+        let z_h = cp_h * p_h;
+        let z_l = cp_l * p_h + p_l * cp + dp_l;
+        let t = (double)n;
+        let t1 = Math.clear_low_word(((z_h + z_l) + dp_h) + t);
+        let t2 = z_l - (((t1 - t) - dp_h) - z_h);
+        return ReducedArgument(0, t1, t2);
+    }
+
+    /// 2 raised to `p_h + p_l`, where `j` is the high word of their sum and the result neither
+    /// overflows nor underflows to zero.
+    static fun exp2_parts(high: double, low: double, j: int): double {
+        let p1 = 1.66666666666666019037e-01d;
+        let p2 = -2.77777777770155933842e-03d;
+        let p3 = 6.61375632143793436117e-05d;
+        let p4 = -1.65339022054652515390e-06d;
+        let p5 = 4.13813679705723846039e-08d;
+        let lg2 = 6.93147180559945286227e-01d;
+        let lg2_h = 6.93147182464599609375e-01d;
+        let lg2_l = -1.90465429995776804525e-09d;
+
+        let p_h = high;
+        let p_l = low;
+        let i = j & 0x7FFFFFFF;
+        let k = (i >> 20) - 0x3FF;
+        let n = 0;
+        if i > 0x3FE00000 {
+            // Split off n = round(p_h + p_l) so the remaining fraction is at most one half.
+            n = j + (0x00100000 >> (k + 1));
+            k = ((n & 0x7FFFFFFF) >> 20) - 0x3FF;
+            let t = Math.from_words(n & ~(0x000FFFFF >> k), 0u);
+            n = ((n & 0x000FFFFF) | 0x00100000) >> (20 - k);
+            if j < 0 {
+                n = -n;
+            }
+            p_h = p_h - t;
+        }
+        let t = Math.clear_low_word(p_l + p_h);
+        let u = t * lg2_h;
+        let v = (p_l - (t - p_h)) * lg2 + t * lg2_l;
+        let z = u + v;
+        let w = v - (z - u);
+        let tt = z * z;
+        let t1 = z - tt * (p1 + tt * (p2 + tt * (p3 + tt * (p4 + tt * p5))));
+        let r = (z * t1) / (t1 - 2.0d) - (w + z * w);
+        z = 1.0d - (r - z);
+        let hz = Math.high_word(z) + (n << 20);
+        if (hz >> 20) <= 0 {
+            return Math.scalbn(z, n);
+        }
+        return Math.with_high_word(z, hz);
+    }
+}

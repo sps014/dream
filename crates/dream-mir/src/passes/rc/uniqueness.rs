@@ -4,7 +4,7 @@
 //! local is the only live +1; Shared means a copy escaped or a still-live alias exists. Never
 //! under-retain: unproven uniqueness is Shared.
 
-use super::liveness::{live_after_stmt, stmt_reads_local};
+use super::liveness::{Liveness, stmt_reads_local};
 use super::tokens::move_source;
 use super::{is_borrowed_copy, rvalue_reads_local};
 use crate::{MirFunction, Operand, Place, Rvalue, Statement};
@@ -16,7 +16,7 @@ use indexmap::IndexSet;
 pub(crate) fn collect_container_moves(
     func: &MirFunction,
     interner: &TypeInterner,
-    live_out: &[IndexSet<u32>],
+    live: &Liveness,
     is_owned: impl Fn(u32) -> bool,
     layouts: &LayoutTable,
     sink_move: &mut IndexSet<(usize, usize, u32)>,
@@ -33,7 +33,7 @@ pub(crate) fn collect_container_moves(
                 if stmt_local_read_count(stmt, src) != 1 {
                     continue;
                 }
-                if live_after_stmt(func, live_out, bi, si, src) {
+                if live.after_stmt(bi, si, src) {
                     continue;
                 }
                 sink_move.insert((bi, si, src));

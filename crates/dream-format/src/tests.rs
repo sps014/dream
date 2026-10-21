@@ -223,7 +223,9 @@ fn attributes_keep_decl_spacing() {
 
 #[test]
 fn parameter_attributes_with_arguments_stay_apart_from_the_parameter() {
-    let out = format("fun f(@readonly @coop_shape(16, 32) a: int, @location(0) p: int, q: int): int { return (int)q; }");
+    let out = format(
+        "fun f(@readonly @coop_shape(16, 32) a: int, @location(0) p: int, q: int): int { return (int)q; }",
+    );
     assert!(
         out.contains("@readonly @coop_shape(16, 32) a: int, @location(0) p: int"),
         "got:\n{}",

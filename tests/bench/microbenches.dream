@@ -965,6 +965,16 @@ fun bench_iface_dispatch(iters: int): void {
         rounds = 1;
     }
     let sw = Stopwatch();
+    let acc = iface_dispatch_rounds(ops, rounds);
+    sw.stop();
+    report("iface_dispatch", sw.elapsed_nanos, rounds * IFACE_OPS, acc);
+    sink_int(acc);
+}
+
+// Kept out of line so the timed loop's code placement does not shift with the allocation
+// paths inlined into the setup around it.
+@noinline
+fun iface_dispatch_rounds(ops: List<BenchOp>, rounds: int): int {
     let acc = 0;
     let r = 0;
     while r < rounds {
@@ -973,9 +983,7 @@ fun bench_iface_dispatch(iters: int): void {
         }
         r = r + 1;
     }
-    sw.stop();
-    report("iface_dispatch", sw.elapsed_nanos, rounds * IFACE_OPS, acc);
-    sink_int(acc);
+    return acc;
 }
 
 // =====================================================================
@@ -1242,17 +1250,25 @@ fun closure_offset(offset: int): fun(int): int {
 
 fun bench_closure_dispatch(iters: int): void {
     let callback = closure_offset(int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1));
-    let total = 0;
     let sw = Stopwatch();
     sw.start();
+    let total = closure_dispatch_calls(callback, iters);
+    sw.stop();
+    sink_int(total);
+    report("closure_dispatch", sw.elapsed_nanos, iters, total);
+}
+
+// Kept out of line so the timed loop's code placement does not shift with the allocation
+// paths inlined into the setup around it.
+@noinline
+fun closure_dispatch_calls(callback: fun(int): int, iters: int): int {
+    let total = 0;
     let i = 0;
     while i < iters {
         total = total + callback(i);
         i = i + 1;
     }
-    sw.stop();
-    sink_int(total);
-    report("closure_dispatch", sw.elapsed_nanos, iters, total);
+    return total;
 }
 
 async fun scheduler_value(value: int): int {

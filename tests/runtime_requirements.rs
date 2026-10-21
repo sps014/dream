@@ -63,7 +63,11 @@ fn allocation_counts_are_real_in_debug_and_zero_in_release() {
             opt,
         )
         .unwrap();
-        assert_eq!(output.replace("\r\n", "\n").trim(), expected, "release={release}");
+        assert_eq!(
+            output.replace("\r\n", "\n").trim(),
+            expected,
+            "release={release}"
+        );
     }
 }
 

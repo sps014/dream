@@ -1,7 +1,7 @@
 //! Backward liveness of locals, used by last-use move in [`super::RcInsertion`].
 
 use crate::{MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use std::collections::BTreeSet;
 
 /// Per-block live-out set: locals that may be read on some path after the block's terminator.
@@ -48,22 +48,64 @@ pub(crate) fn live_in_of(
     inn
 }
 
-/// True if `local` may be read after statement `si` in block `bi` (not counting uses inside that
-/// statement itself).
-pub(crate) fn live_after_stmt(
-    func: &MirFunction,
-    live_out: &[IndexSet<u32>],
-    bi: usize,
-    si: usize,
-    local: u32,
-) -> bool {
-    let block = &func.blocks[bi];
-    let mut live = live_out[bi].clone();
-    add_terminator_reads(&block.terminator, &mut live);
-    for stmt in block.stmts[si + 1..].iter().rev() {
-        transfer_stmt(stmt, &mut live);
+/// Statement-level liveness of a function whose statements and terminators stay fixed while it is
+/// queried. Each block records, per local, the statements that read or overwrite it, so
+/// [`Liveness::after_stmt`] is a binary search instead of a rescan of the block tail; RC passes ask
+/// it for every statement and local, which made long straight-line blocks cubic.
+pub(crate) struct Liveness {
+    out: Vec<IndexSet<u32>>,
+    terminator_reads: Vec<IndexSet<u32>>,
+    /// `(statement, reads)`: `reads` is false for a statement that overwrites the local without
+    /// reading it.
+    events: Vec<IndexMap<u32, Vec<(usize, bool)>>>,
+}
+
+impl Liveness {
+    pub(crate) fn new(func: &MirFunction) -> Self {
+        let out = live_out(func);
+        let mut terminator_reads = Vec::with_capacity(func.blocks.len());
+        let mut events = Vec::with_capacity(func.blocks.len());
+        for block in &func.blocks {
+            let mut reads = IndexSet::new();
+            add_terminator_reads(&block.terminator, &mut reads);
+            terminator_reads.push(reads);
+            let mut block_events: IndexMap<u32, Vec<(usize, bool)>> = IndexMap::new();
+            for (si, stmt) in block.stmts.iter().enumerate() {
+                let reads = stmt_reads(stmt);
+                for &local in &reads {
+                    block_events.entry(local).or_default().push((si, true));
+                }
+                if let Statement::Assign(Place::Local(d), _) = stmt
+                    && !reads.contains(&d.0)
+                {
+                    block_events.entry(d.0).or_default().push((si, false));
+                }
+            }
+            events.push(block_events);
+        }
+        Self {
+            out,
+            terminator_reads,
+            events,
+        }
     }
-    live.contains(&local)
+
+    /// Per-block live-out sets, as returned by [`live_out`].
+    pub(crate) fn out(&self) -> &[IndexSet<u32>] {
+        &self.out
+    }
+
+    /// True if `local` may be read after statement `si` in block `bi` (not counting uses inside
+    /// that statement itself).
+    pub(crate) fn after_stmt(&self, bi: usize, si: usize, local: u32) -> bool {
+        if let Some(events) = self.events[bi].get(&local) {
+            let next = events.partition_point(|&(at, _)| at <= si);
+            if let Some(&(_, reads)) = events.get(next) {
+                return reads;
+            }
+        }
+        self.terminator_reads[bi].contains(&local) || self.out[bi].contains(&local)
+    }
 }
 
 fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut IndexSet<u32>) {
@@ -182,9 +224,14 @@ pub(crate) fn transfer_stmt(stmt: &Statement, live: &mut IndexSet<u32>) {
 
 /// True if `local` is read by `stmt` (plain operand, field/index base, or RC op).
 pub(crate) fn stmt_reads_local(stmt: &Statement, local: u32) -> bool {
+    stmt_reads(stmt).contains(&local)
+}
+
+/// Every local `stmt` reads (plain operand, field/index base, or RC op), in operand order.
+pub(crate) fn stmt_reads(stmt: &Statement) -> IndexSet<u32> {
     let mut live = IndexSet::new();
     transfer_stmt_reads_only(stmt, &mut live);
-    live.contains(&local)
+    live
 }
 
 fn transfer_stmt_reads_only(stmt: &Statement, live: &mut IndexSet<u32>) {

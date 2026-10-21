@@ -143,19 +143,33 @@ fn cli_reports_cached_builds_without_rewriting_the_artifact() {
 }
 
 #[test]
-fn builds_with_warnings_are_not_cached() {
+fn builds_with_warnings_are_cached_and_replay_their_warnings() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("main.dream");
-    let out = dir.path().join("main.ll");
+    let out = dir.path().join("main.o");
     std::fs::write(
         &source,
         "import system;\nfun main(): void { let unused = 1; System.println(\"w\"); }\n",
     )
     .unwrap();
-    assert!(matches!(
-        build(&source, &out, "O0"),
-        BuildOutcome::Built(None)
-    ));
+    let run = || {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .arg("--object")
+            .arg("--output")
+            .arg(&out)
+            .arg(&source)
+            .env("NO_COLOR", "1")
+            .output()
+            .unwrap();
+        let log = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "{log}");
+        log
+    };
+    let first = run();
+    assert!(first.contains("unused variable 'unused'"), "{first}");
+    let second = run();
+    assert!(second.contains("Finished cached in"), "{second}");
+    assert!(second.contains("unused variable 'unused'"), "{second}");
 }
 
 #[test]

@@ -136,12 +136,17 @@ pub fn has_runtime_attr(attributes: &[AttributeNode]) -> bool {
         .any(|a| is_compiler_attribute(a, "runtime"))
 }
 
-/// True when more than one of `@c`, `@js`, `@runtime`, or `@intrinsic` is on the same extern.
+/// True when more than one of `@c`, `@js`, `@runtime`, `@intrinsic`, or `@llvm` is on the same
+/// extern.
 pub fn extern_binding_conflict(attributes: &[AttributeNode]) -> bool {
     let n = u8::from(has_c_attr(attributes))
         + u8::from(js_import_target(attributes).is_some())
         + u8::from(has_runtime_attr(attributes))
-        + u8::from(crate::intrinsics::has_intrinsic_attr(attributes));
+        + u8::from(has_named_attr(
+            attributes,
+            crate::intrinsics::INTRINSIC_ATTR,
+        ))
+        + u8::from(has_named_attr(attributes, crate::intrinsics::LLVM_ATTR));
     n > 1
 }
 

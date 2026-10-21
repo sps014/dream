@@ -186,7 +186,10 @@ mod tests {
         assert!(decode(&[-1]).is_err());
         assert!(decode(&[6, 1, 1]).is_err());
         assert_eq!(decode(&[]).unwrap(), vec![]);
-        assert_eq!(decode(&[2, 3]).unwrap(), vec![Op::BeginComputePass, Op::EndPass]);
+        assert_eq!(
+            decode(&[2, 3]).unwrap(),
+            vec![Op::BeginComputePass, Op::EndPass]
+        );
     }
 
     proptest! {

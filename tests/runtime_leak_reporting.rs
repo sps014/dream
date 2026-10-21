@@ -74,12 +74,14 @@ fn leak_tally_counts_past_i32_and_never_drops_types() {
         "sync.c",
         "strings.c",
     ] {
-        let path =
-            dream_mir::runtime::native_runtime_units(&runtime, dream_mir::runtime::RuntimeNeed::CORE)
-                .into_iter()
-                .find(|entry| entry.path.file_name().is_some_and(|name| name == unit))
-                .unwrap()
-                .path;
+        let path = dream_mir::runtime::native_runtime_units(
+            &runtime,
+            dream_mir::runtime::RuntimeNeed::CORE,
+        )
+        .into_iter()
+        .find(|entry| entry.path.file_name().is_some_and(|name| name == unit))
+        .unwrap()
+        .path;
         command.arg(path);
     }
     let build = command

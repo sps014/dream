@@ -76,16 +76,24 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
                 object: *o,
                 fields,
                 life,
+                payload,
             });
         }
         if plans.is_empty() {
             continue;
         }
         apply(f, &plans);
-        marked.extend(plans.iter().map(|p| (f.def, f.instance.clone(), p.object)));
+        marked.extend(
+            plans
+                .iter()
+                .map(|p| ((f.def, f.instance.clone(), p.object), p.payload)),
+        );
     }
     let changed = !marked.is_empty();
-    mir.frame_objects.extend(marked);
+    for (key, payload) in marked {
+        let slot = mir.frame_objects.entry(key).or_insert(0);
+        *slot = (*slot).max(payload);
+    }
     changed
 }
 
@@ -96,6 +104,8 @@ struct Plan {
     object: Local,
     fields: Vec<(usize, TypeId)>,
     life: Lifetime,
+    /// Field bytes of the constructed class, after the heap header.
+    payload: u32,
 }
 
 /// The strong reference fields a death must release, or `None` if the type is not frameable.

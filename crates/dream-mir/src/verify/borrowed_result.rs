@@ -36,7 +36,7 @@ pub(crate) fn prepare(
         .collect();
     let rooted = aliases(f, layouts, borrowed.clone());
     let direct = direct_aliases(f, borrowed);
-    let live_out = crate::passes::rc::liveness::live_out(f);
+    let live = crate::passes::rc::liveness::Liveness::new(f);
     for (bi, block) in f.blocks.iter().enumerate() {
         for (si, stmt) in block.stmts.iter().enumerate() {
             let diverges = matches!(block.terminator, Terminator::Unreachable);
@@ -78,7 +78,7 @@ pub(crate) fn prepare(
                         !direct.contains(*local) && (i.is_rc_tracked(f.local_ty(**local)) || i.is_value_type(f.local_ty(**local)))
                     }).any(|local| {
                         !matches!(stmt, Statement::Assign(Place::Local(dest), _) if dest == local)
-                            && (crate::passes::rc::liveness::live_after_stmt(f, &live_out, bi, si, local.0)
+                            && (live.after_stmt(bi, si, local.0)
                                 || crate::passes::rc::stmt_reads_local(stmt, local.0))
                     });
                     assert!(

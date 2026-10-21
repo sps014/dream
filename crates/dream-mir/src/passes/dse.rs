@@ -272,10 +272,7 @@ mod tests {
         let mut b = FunctionBuilder::new("f", i.int());
         let x = b.new_temp(i.int());
         let g = Global(0);
-        b.assign(
-            Place::Global(g),
-            Rvalue::Use(Operand::Const(Const::Int(0))),
-        );
+        b.assign(Place::Global(g), Rvalue::Use(Operand::Const(Const::Int(0))));
         b.assign(
             Place::Local(x),
             Rvalue::Binary(

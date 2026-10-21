@@ -181,7 +181,12 @@ struct Cli {
 
     /// Native PGO step 1: build an instrumented binary; its runs record profiles into
     /// <output>.pgo/ next to it
-    #[arg(long, global = true, conflicts_with = "use_profile", requires = "release")]
+    #[arg(
+        long,
+        global = true,
+        conflicts_with = "use_profile",
+        requires = "release"
+    )]
     profile: bool,
 
     /// Native PGO step 2: optimize with a profile (default: merge the --profile runs; or

@@ -1,4 +1,6 @@
-use super::{dream_prefix, is_installed, tool_binary, tool_dir, toolchains_dir, toolchains_env_path};
+use super::{
+    dream_prefix, is_installed, tool_binary, tool_dir, toolchains_dir, toolchains_env_path,
+};
 use crate::fetch::cache_dir;
 use anyhow::{Context, Result, bail};
 use dream_abi::toolchain::{ArchiveKind, HostArchive, PINNED_TOOLS, PinnedTool};
@@ -31,7 +33,11 @@ pub fn install(tools: &[&'static PinnedTool]) -> Result<()> {
             continue;
         }
         let Some(archive) = tool.archive(host) else {
-            bail!("{} has no download for {host}: {}", tool.name, tool.install_hint);
+            bail!(
+                "{} has no download for {host}: {}",
+                tool.name,
+                tool.install_hint
+            );
         };
         install_one(tool, archive)?;
     }
@@ -88,7 +94,12 @@ fn install_one(tool: &PinnedTool, archive: &HostArchive) -> Result<()> {
             dest.display()
         );
     }
-    println!("Installed {} {} ({})", tool.name, tool.version, dest.display());
+    println!(
+        "Installed {} {} ({})",
+        tool.name,
+        tool.version,
+        dest.display()
+    );
     Ok(())
 }
 
@@ -121,9 +132,7 @@ fn download_verified(archive: &HostArchive) -> Result<PathBuf> {
     drop(file);
     if actual != expected {
         let _ = fs::remove_file(&tmp);
-        bail!(
-            "checksum mismatch for {filename}: expected {expected}, got {actual}"
-        );
+        bail!("checksum mismatch for {filename}: expected {expected}, got {actual}");
     }
     fs::rename(&tmp, &path)?;
     Ok(path)
@@ -285,7 +294,11 @@ fn write_toolchains_env() -> Result<()> {
     let mut body = String::from("# Written by `dreamer toolchain install`. Sourced from env.sh.\n");
     for tool in PINNED_TOOLS {
         if is_installed(tool) {
-            body.push_str(&format!("{}={}\n", tool.env, override_value(tool).display()));
+            body.push_str(&format!(
+                "{}={}\n",
+                tool.env,
+                override_value(tool).display()
+            ));
         }
     }
     fs::write(&path, body)?;

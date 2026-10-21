@@ -175,6 +175,8 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ),
     ("DreamCancel", "dream_cancel"),
     ("DreamStart", "dream_start"),
+    ("F64ToBits", "f64_to_bits"),
+    ("F64FromBits", "f64_from_bits"),
 ];
 
 pub fn intrinsic_member_key(member: &str) -> Option<&'static str> {

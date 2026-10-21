@@ -51,7 +51,12 @@ impl Backend {
 /// only runs compute shaders, so it is chosen only when asked for by name.
 pub fn auto_order(os: &str) -> &'static [Backend] {
     match os {
-        "windows" => &[Backend::Dx12, Backend::Vulkan, Backend::Dx11, Backend::WebGpu],
+        "windows" => &[
+            Backend::Dx12,
+            Backend::Vulkan,
+            Backend::Dx11,
+            Backend::WebGpu,
+        ],
         "macos" => &[Backend::Metal, Backend::Vulkan, Backend::WebGpu],
         _ => &[Backend::Vulkan, Backend::WebGpu],
     }
@@ -199,9 +204,7 @@ mod tests {
         assert_eq!(tried, vec![Backend::Vulkan], "no fallback to WebGPU");
 
         assert_eq!(
-            select(9, 0, &[], |_| Ok::<_, String>(()))
-                .unwrap_err()
-                .code,
+            select(9, 0, &[], |_| Ok::<_, String>(())).unwrap_err().code,
             Code::Invalid
         );
         let cuda = select(5, mask(&[Backend::Cuda]), &[], Ok::<_, String>).unwrap();

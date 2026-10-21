@@ -1,6 +1,6 @@
 use super::*;
 use crate::{BinOp, Callee, Const, build::FunctionBuilder};
-use dream_types::{DefKind, TypeCtx};
+use dream_types::{DefId, DefKind, TypeCtx};
 
 fn fixture(written_field: usize, shared: bool) -> (MirFunction, TypeInterner, Local, BlockId) {
     let mut ctx = TypeCtx::new();
@@ -54,7 +54,12 @@ fn disjoint_alias_store_allows_caching_after_the_first_iteration() {
     let (mut f, i, value, body) = fixture(1, false);
     let first = f.block(body).clone();
     let blocks = f.blocks.len();
-    assert!(hoist(&mut f, &i, &BTreeSet::new(), &mut Default::default()));
+    assert!(hoist(
+        &mut f,
+        &i,
+        &ModRefTable::default(),
+        &mut Default::default()
+    ));
     assert!(matches!(f.block(body).stmts[0], Statement::Nop));
     assert!(
         matches!(&f.blocks[blocks + 1].stmts[0], Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Field { .. }))) if *d == value)
@@ -69,7 +74,7 @@ fn disjoint_alias_store_allows_caching_after_the_first_iteration() {
     assert!(!hoist(
         &mut f,
         &i,
-        &BTreeSet::new(),
+        &ModRefTable::default(),
         &mut Default::default()
     ));
 }
@@ -81,7 +86,7 @@ fn same_field_through_an_alias_and_shared_objects_refuse_caching() {
         assert!(!hoist(
             &mut f,
             &i,
-            &BTreeSet::new(),
+            &ModRefTable::default(),
             &mut Default::default()
         ));
     }
@@ -117,7 +122,7 @@ fn unknown_call_release_and_raw_store_refuse_caching() {
         assert!(!hoist(
             &mut f,
             &i,
-            &BTreeSet::new(),
+            &ModRefTable::default(),
             &mut Default::default()
         ));
     }
@@ -138,7 +143,7 @@ fn source_reassignment_and_live_out_results_refuse_caching() {
         assert!(!hoist(
             &mut f,
             &i,
-            &BTreeSet::new(),
+            &ModRefTable::default(),
             &mut Default::default()
         ));
     }

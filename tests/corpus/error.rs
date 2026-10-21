@@ -3,7 +3,7 @@ use super::Case;
 pub(super) const CASES: &[Case] = &[
     Case::error(
         "attribute_errors",
-        "duplicate '@inline' attribute\n'@json' cannot be applied to a top-level function\nan extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`\nunknown attribute '@bogus'\n'@js' expects 2 argument(s), got 1\n'@route' argument 1 must be a string literal\n'@route' cannot be applied to a class\nunknown attribute '@page'\n'@route' expects 1 argument(s), got 2\n'@c_call' argument 1 must be a member of 'CCallConv'\n'@gpu_targets' argument 2 must be a member of 'GpuTarget', got 'GpuTarget.OpenGl'\n'@allow_cycle' does not take any arguments\n'@allow_cycle' cannot be applied to a struct\n'@generator' does not take any arguments",
+        "duplicate '@inline' attribute\n'@json' cannot be applied to a top-level function\nan extern function cannot combine `@c`, `@js`, `@runtime`, `@intrinsic`, or `@llvm`\nunknown attribute '@bogus'\n'@js' expects 2 argument(s), got 1\n'@route' argument 1 must be a string literal\n'@route' cannot be applied to a class\nunknown attribute '@page'\n'@route' expects 1 argument(s), got 2\n'@c_call' argument 1 must be a member of 'CCallConv'\n'@gpu_targets' argument 2 must be a member of 'GpuTarget', got 'GpuTarget.OpenGl'\n'@allow_cycle' does not take any arguments\n'@allow_cycle' cannot be applied to a struct\n'@generator' does not take any arguments",
         true,
     ),
     Case::error(

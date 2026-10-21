@@ -1,0 +1,250 @@
+module system.core;
+
+// Port of fdlibm's __rem_pio2_large (Payne-Hanek reduction) as used by musl, specialized for
+// double precision. It multiplies the argument by enough bits of 2/pi that the fractional part
+// of the product is exact to well beyond 53 bits.
+/// Reduction by pi/2 for arguments of at least 2^20 * pi/2.
+internal static class MathPiReduction {
+    /// 2/pi in 24-bit chunks, most significant first; 66 chunks cover every double exponent.
+    static fun two_over_pi(): int[] {
+        return [
+            0xA2F983, 0x6E4E44, 0x1529FC, 0x2757D1, 0xF534DD, 0xC0DB62, 0x95993C, 0x439041,
+            0xFE5163, 0xABDEBB, 0xC561B7, 0x246E3A, 0x424DD2, 0xE00649, 0x2EEA09, 0xD1921C,
+            0xFE1DEB, 0x1CB129, 0xA73EE8, 0x8235F5, 0x2EBB44, 0x84E99C, 0x7026B4, 0x5F7E41,
+            0x3991D6, 0x398353, 0x39F49C, 0x845F8B, 0xBDF928, 0x3B1FF8, 0x97FFDE, 0x05980F,
+            0xEF2F11, 0x8B5A0A, 0x6D1F6D, 0x367ECF, 0x27CB09, 0xB74F46, 0x3F669E, 0x5FEA2D,
+            0x7527BA, 0xC7EBE5, 0xF17B3D, 0x0739F7, 0x8A5292, 0xEA6BFB, 0x5FB11F, 0x8D5D08,
+            0x560330, 0x46FC7B, 0x6BABF0, 0xCFBC20, 0x9AF436, 0x1DA9E3, 0x91615E, 0xE61B08,
+            0x659985, 0x5F14A0, 0x68408D, 0xFFD880, 0x4D7327, 0x310606, 0x1556CA, 0x73A8C9,
+            0x60E27B, 0xC08C6B
+        ];
+    }
+
+    /// pi/2 split into eight doubles of 24 significant bits each.
+    static fun pio2_parts(): double[] {
+        return [
+            1.57079625129699707031e+00d,
+            7.54978941586159635335e-08d,
+            5.39030252995776476554e-15d,
+            3.28200341580791294123e-22d,
+            1.27065575308067607349e-29d,
+            1.22933308981111328932e-36d,
+            2.73370053816464559624e-44d,
+            2.16741683877804819444e-51d
+        ];
+    }
+
+    /// Writes a finite `x` with `|x| >= 2^20 * pi/2` as `n * pi/2 + hi + lo`, where only the
+    /// low three bits of `n` are kept.
+    internal static fun reduce_large(x: double): ReducedArgument {
+        let two24 = 16777216.0d;
+        let twom24 = 5.9604644775390625e-08d;
+        let bits = Math.to_bits(x);
+        let ix = Math.high_word(x) & 0x7FFFFFFF;
+
+        // Split |x| * 2^(23 - exponent) into three 24-bit integer chunks.
+        let z = Math.from_bits((bits & 0x000FFFFF_FFFFFFFFL) | ((long)(0x3FF + 23) << 52L));
+        let xs = Buffer.alloc<double>(3);
+        xs[0] = (double)(int)z;
+        z = (z - xs[0]) * two24;
+        xs[1] = (double)(int)z;
+        z = (z - xs[1]) * two24;
+        xs[2] = z;
+        let nx = 3;
+        while xs[nx - 1] == 0.0d {
+            nx = nx - 1;
+        }
+        let e0 = (ix >> 20) - (0x3FF + 23);
+
+        let ipio2 = MathPiReduction.two_over_pi();
+        let pio2 = MathPiReduction.pio2_parts();
+        let f = Buffer.alloc<double>(20);
+        let q = Buffer.alloc<double>(20);
+        let fq = Buffer.alloc<double>(20);
+        let iq = Buffer.alloc<int>(20);
+
+        let jk = 4;
+        let jx = nx - 1;
+        let jv = (e0 - 3) / 24;
+        if jv < 0 {
+            jv = 0;
+        }
+        let q0 = e0 - 24 * (jv + 1);
+
+        let i = 0;
+        let j = jv - jx;
+        while i <= jx + jk {
+            f[i] = j < 0 ? 0.0d : (double)ipio2[j];
+            i = i + 1;
+            j = j + 1;
+        }
+        let fw = 0.0d;
+        i = 0;
+        while i <= jk {
+            fw = 0.0d;
+            j = 0;
+            while j <= jx {
+                fw = fw + xs[j] * f[jx + i - j];
+                j = j + 1;
+            }
+            q[i] = fw;
+            i = i + 1;
+        }
+
+        let jz = jk;
+        let n = 0;
+        let ih = 0;
+        let k = 0;
+        while true {
+            // Distill q[] into 24-bit integers iq[], least significant last.
+            i = 0;
+            j = jz;
+            z = q[jz];
+            while j > 0 {
+                fw = (double)(int)(twom24 * z);
+                iq[i] = (int)(z - two24 * fw);
+                z = q[j - 1] + fw;
+                i = i + 1;
+                j = j - 1;
+            }
+
+            z = Math.scalbn(z, q0);
+            z = z - 8.0d * Math.floor(z * 0.125d);
+            n = (int)z;
+            z = z - (double)n;
+            ih = 0;
+            if q0 > 0 {
+                i = iq[jz - 1] >> (24 - q0);
+                n = n + i;
+                iq[jz - 1] = iq[jz - 1] - (i << (24 - q0));
+                ih = iq[jz - 1] >> (23 - q0);
+            } else if q0 == 0 {
+                ih = iq[jz - 1] >> 23;
+            } else if z >= 0.5d {
+                ih = 2;
+            }
+
+            if ih > 0 {
+                // The fraction is above one half: use 1 - fraction and round n up.
+                n = n + 1;
+                let carry = 0;
+                i = 0;
+                while i < jz {
+                    j = iq[i];
+                    if carry == 0 {
+                        if j != 0 {
+                            carry = 1;
+                            iq[i] = 0x1000000 - j;
+                        }
+                    } else {
+                        iq[i] = 0xFFFFFF - j;
+                    }
+                    i = i + 1;
+                }
+                if q0 == 1 {
+                    iq[jz - 1] = iq[jz - 1] & 0x7FFFFF;
+                } else if q0 == 2 {
+                    iq[jz - 1] = iq[jz - 1] & 0x3FFFFF;
+                }
+                if ih == 2 {
+                    z = 1.0d - z;
+                    if carry != 0 {
+                        z = z - Math.scalbn(1.0d, q0);
+                    }
+                }
+            }
+
+            if z != 0.0d {
+                break;
+            }
+            j = 0;
+            i = jz - 1;
+            while i >= jk {
+                j = j | iq[i];
+                i = i - 1;
+            }
+            if j != 0 {
+                break;
+            }
+            // Every retained chunk cancelled: pull in more bits of 2/pi and distill again.
+            k = 1;
+            while iq[jk - k] == 0 {
+                k = k + 1;
+            }
+            i = jz + 1;
+            while i <= jz + k {
+                f[jx + i] = (double)ipio2[jv + i];
+                fw = 0.0d;
+                j = 0;
+                while j <= jx {
+                    fw = fw + xs[j] * f[jx + i - j];
+                    j = j + 1;
+                }
+                q[i] = fw;
+                i = i + 1;
+            }
+            jz = jz + k;
+        }
+
+        if z == 0.0d {
+            jz = jz - 1;
+            q0 = q0 - 24;
+            while iq[jz] == 0 {
+                jz = jz - 1;
+                q0 = q0 - 24;
+            }
+        } else {
+            z = Math.scalbn(z, -q0);
+            if z >= two24 {
+                fw = (double)(int)(twom24 * z);
+                iq[jz] = (int)(z - two24 * fw);
+                jz = jz + 1;
+                q0 = q0 + 24;
+                iq[jz] = (int)fw;
+            } else {
+                iq[jz] = (int)z;
+            }
+        }
+
+        fw = Math.scalbn(1.0d, q0);
+        i = jz;
+        while i >= 0 {
+            q[i] = fw * (double)iq[i];
+            fw = fw * twom24;
+            i = i - 1;
+        }
+
+        // fq[] = pi/2 * q[], summed from the least significant term up.
+        i = jz;
+        while i >= 0 {
+            fw = 0.0d;
+            k = 0;
+            while k <= jk && k <= jz - i {
+                fw = fw + pio2[k] * q[i + k];
+                k = k + 1;
+            }
+            fq[jz - i] = fw;
+            i = i - 1;
+        }
+
+        fw = 0.0d;
+        i = jz;
+        while i >= 0 {
+            fw = fw + fq[i];
+            i = i - 1;
+        }
+        let hi = ih == 0 ? fw : -fw;
+        fw = fq[0] - fw;
+        i = 1;
+        while i <= jz {
+            fw = fw + fq[i];
+            i = i + 1;
+        }
+        let lo = ih == 0 ? fw : -fw;
+        n = n & 7;
+        if bits < 0L {
+            return ReducedArgument(-n, -hi, -lo);
+        }
+        return ReducedArgument(n, hi, lo);
+    }
+}

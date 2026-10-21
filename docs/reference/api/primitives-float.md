@@ -36,6 +36,22 @@ The larger of this and `other`.
 public fun max(other: float): float
 ```
 
+## `clamp`
+
+Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned unchanged; the result is unspecified when `lo` is greater than `hi`.
+
+```dream
+public fun clamp(lo: float, hi: float): float
+```
+
+## `signum`
+
+Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for zero (keeping the sign of `-0.0`) or NaN.
+
+```dream
+public fun signum(): float
+```
+
 ## `parse`
 
 Parses a decimal float from `text`.

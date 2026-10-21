@@ -105,8 +105,10 @@ pub struct Mir {
     pub type_symbols: dream_hir::TypeNameTable,
     pub object_methods: indexmap::IndexMap<TypeId, dream_hir::ObjectMethods>,
     /// `(function def, instance, local)` whose `New` is built in the function's C frame (see
-    /// `passes::frame_alloc`).
-    pub frame_objects: std::collections::BTreeSet<(DefId, Vec<TypeId>, Local)>,
+    /// `passes::frame_alloc`), mapped to the largest field payload, in bytes after the heap
+    /// header, of any class constructed into it. The local's declared type cannot size the
+    /// buffer: it may be a header-only supertype such as `object`.
+    pub frame_objects: std::collections::BTreeMap<(DefId, Vec<TypeId>, Local), u32>,
 }
 
 /// A module-level variable slot (declared as one mutable WASM global `$g{id}`).

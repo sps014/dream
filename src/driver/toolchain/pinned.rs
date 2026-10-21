@@ -20,7 +20,8 @@ impl LocatedTool {
         let path = if self.owns_root {
             self.root.join(relative)
         } else {
-            self.root.join(relative.rsplit('/').next().unwrap_or(relative))
+            self.root
+                .join(relative.rsplit('/').next().unwrap_or(relative))
         };
         exe(path)
     }
@@ -163,7 +164,9 @@ mod tests {
         let binaryen = pinned_tool("binaryen").unwrap();
         let loose = exe(temp.path().join("loose/wasm-opt"));
         executable(&loose);
-        config.tool_overrides.insert("binaryen".into(), loose.clone());
+        config
+            .tool_overrides
+            .insert("binaryen".into(), loose.clone());
         let located = config.locate_tool(binaryen).unwrap();
         assert!(!located.owns_root);
         assert_eq!(located.primary(), loose);

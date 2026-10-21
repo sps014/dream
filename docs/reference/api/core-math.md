@@ -30,7 +30,7 @@ public static fun ceil(x: double): double
 
 ## `round`
 
-Rounds `x` to the nearest integer value.
+Rounds `x` to the nearest integer value. Halfway cases round away from zero, so `round(2.5)` is `3` and `round(-2.5)` is `-3`.
 
 ```dream
 public static fun round(x: double): double
@@ -38,7 +38,7 @@ public static fun round(x: double): double
 
 ## `sqrt`
 
-Square root. A negative input is NaN, same as `log` / `asin` and as libm.
+Square root, correctly rounded. A negative input is NaN.
 
 ```dream
 public static fun sqrt(x: double): double
@@ -46,7 +46,7 @@ public static fun sqrt(x: double): double
 
 ## `pow`
 
-Returns `base` raised to `exponent`.
+Returns `base` raised to `exponent`. A negative `base` with a non-integer `exponent` is NaN, and `pow(x, 0)` is `1` for every `x`, including NaN.
 
 ```dream
 public static fun pow(base: double, exponent: double): double
@@ -110,7 +110,7 @@ public static fun atan2(y: double, x: double): double
 
 ## `log`
 
-Returns the natural logarithm of `x`.
+Returns the natural logarithm of `x`. Zero gives negative infinity and a negative input gives NaN.
 
 ```dream
 public static fun log(x: double): double
@@ -118,7 +118,7 @@ public static fun log(x: double): double
 
 ## `log10`
 
-Returns the base-ten logarithm of `x`.
+Returns the base-ten logarithm of `x`. Zero gives negative infinity and a negative input gives NaN.
 
 ```dream
 public static fun log10(x: double): double
@@ -134,7 +134,7 @@ public static fun exp(x: double): double
 
 ## `hypot`
 
-Returns the length of the vector `(x, y)`.
+Returns the length of the vector `(x, y)` without overflow or underflow in the intermediate squares. An infinite component gives infinity even when the other is NaN.
 
 ```dream
 public static fun hypot(x: double, y: double): double

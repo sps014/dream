@@ -7,7 +7,7 @@ use super::lcx::Lcx;
 use super::types::is_unsigned;
 use crate::backend::shared::abi_types::native_scalar_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
-use crate::backend::shared::place_policy::has_frame_buffer;
+use crate::backend::shared::place_policy::frame_buffer_payload;
 use crate::{Local, MirFunction, Operand, Place, Statement, Terminator};
 use dream_abi::names::THIS_NAME;
 use dream_types::{PrimTy, TyKind};
@@ -52,12 +52,11 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn frame_buffers(&mut self) {
         let f = self.f;
         self.frame_bufs = vec![None; f.locals.len()];
-        for (i, decl) in f.locals.iter().enumerate() {
-            if !has_frame_buffer(self.mir, f, Local(i as u32)) {
+        for i in 0..f.locals.len() {
+            let Some(payload) = frame_buffer_payload(self.mir, f, Local(i as u32)) else {
                 continue;
-            }
-            let size = self.l.cx.nstruct(decl.ty).map_or(0, |l| l.size);
-            let total = self.l.cx.target.abi().heap_header_size + size;
+            };
+            let total = self.l.cx.target.abi().heap_header_size + payload;
             self.frame_bufs[i] = Some(self.alloca_bytes(total as u64, 16));
         }
     }

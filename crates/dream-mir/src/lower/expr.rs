@@ -334,6 +334,13 @@ impl Lowerer<'_> {
             {
                 Rvalue::Use(self.lower_operand(e))
             }
+            // An integer constant does not carry its signedness, so the formatter reads it from a
+            // typed local (`18446744073709551615uL` must not print as a `long`).
+            HExprKind::ToString(e)
+                if IntTy::of(self.interner, e.ty, self.layouts.target.ptr_size).is_some() =>
+            {
+                Rvalue::ToString(Operand::Copy(Place::Local(self.operand_into_local(e))))
+            }
             HExprKind::ToString(e) => Rvalue::ToString(self.lower_operand(e)),
             HExprKind::Concat(a, b) => self.lower_concat(a, b),
             HExprKind::EnumName { value, arms } => Rvalue::EnumName {

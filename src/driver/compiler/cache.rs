@@ -2,7 +2,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const STAMP_HEADER: &str = "dream-build-cache-v4";
+const STAMP_HEADER: &str = "dream-build-cache-v5";
 
 /// What a cached compile produced: either fresh output whose artifacts the caller records once its
 /// own post-processing (native link, object emission) succeeds, or a verified earlier build.
@@ -20,6 +20,26 @@ pub struct BuildStamp {
     request: blake3::Hash,
     inputs: Vec<(PathBuf, String)>,
     early: bool,
+    warnings: Warnings,
+}
+
+/// Diagnostics a successful build printed, rendered both ways so a reuse prints exactly what the
+/// fresh build would print for the current terminal.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+struct Warnings {
+    plain: String,
+    color: String,
+}
+
+impl Warnings {
+    fn replay(&self) {
+        let text = if dream_diagnostics::color_enabled() {
+            &self.color
+        } else {
+            &self.plain
+        };
+        eprint!("{text}");
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -29,6 +49,7 @@ struct StoredBuild {
     request: String,
     inputs: Vec<(PathBuf, String)>,
     early: bool,
+    warnings: Warnings,
     artifacts: Vec<(PathBuf, String)>,
 }
 
@@ -63,20 +84,44 @@ fn input_hash(path: &Path) -> Option<String> {
     }
 }
 
-fn verified_artifacts(stored: &StoredBuild) -> Option<Vec<PathBuf>> {
+fn reuse(stored: &StoredBuild) -> Option<Vec<PathBuf>> {
     if stored.artifacts.is_empty() {
         return None;
     }
-    stored
+    let artifacts = stored
         .artifacts
         .iter()
         .map(|(path, hash)| {
             (blake3::hash(&fs::read(path).ok()?).to_hex().as_str() == hash).then(|| path.clone())
         })
-        .collect()
+        .collect::<Option<Vec<_>>>()?;
+    stored.warnings.replay();
+    Some(artifacts)
 }
 
 impl BuildStamp {
+    pub(super) fn with_warnings(
+        mut self,
+        diagnostics: &DiagnosticBag,
+        file_contents: &std::collections::HashMap<String, String>,
+    ) -> Self {
+        if !diagnostics.diagnostics.is_empty() {
+            let render = |color| {
+                format_diagnostics(
+                    diagnostics,
+                    file_contents,
+                    color,
+                    Some(highlight_dream_line),
+                )
+            };
+            self.warnings = Warnings {
+                plain: render(false),
+                color: render(true),
+            };
+        }
+        self
+    }
+
     pub fn store(&self, artifacts: &[PathBuf]) {
         let result = || -> Option<()> {
             if self
@@ -104,6 +149,7 @@ impl BuildStamp {
                 request: self.request.to_hex().to_string(),
                 inputs: self.inputs.clone(),
                 early: self.early,
+                warnings: self.warnings.clone(),
                 artifacts,
             };
             let bytes = serde_json::to_vec(&stored).ok()?;
@@ -147,7 +193,7 @@ impl BuildStamp {
         {
             return None;
         }
-        verified_artifacts(&stored)
+        reuse(&stored)
     }
 }
 
@@ -180,7 +226,7 @@ impl Compiler {
         {
             return None;
         }
-        verified_artifacts(&stored)
+        reuse(&stored)
     }
 
     fn request_key(
@@ -389,6 +435,7 @@ impl Compiler {
             inputs,
             early: self.virtual_entry.is_none()
                 && self.toolchain_config.compiler_environment.is_empty(),
+            warnings: Warnings::default(),
         })
     }
 }

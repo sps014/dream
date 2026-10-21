@@ -39,10 +39,10 @@ use windows_sys::Win32::System::SystemInformation::{
 };
 use windows_sys::Win32::System::Threading::{
     CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateMutexW, CreateProcessW,
-    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, INFINITE,
     InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
     PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-    INFINITE, PROCESS_INFORMATION, ReleaseMutex, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    PROCESS_INFORMATION, ReleaseMutex, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW,
     TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject,
 };
 use windows_sys::core::HRESULT;

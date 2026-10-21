@@ -83,45 +83,64 @@ pub(super) fn optimize_module_rounds(
 
 /// Ownership lowering is mandatory even when every optional optimization is disabled.
 pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
-    crate::prune_module(mir, interner);
-    let _ = ExpandSimpleCtors.run(mir, interner);
+    module_stage("prune", || crate::prune_module(mir, interner));
+    module_stage(ExpandSimpleCtors.name(), || {
+        ExpandSimpleCtors.run(mir, interner)
+    });
     dump.module(ExpandSimpleCtors.name(), mir, interner);
     // Before RC insertion: address-taken functions move their parameter retains to the callee so a
     // funcbox call site can pass at +0 (see `funcbox_abi`).
-    let _ = FuncboxAbi.run(mir, interner);
-    crate::prune_module(mir, interner);
+    module_stage(FuncboxAbi.name(), || {
+        let _ = FuncboxAbi.run(mir, interner);
+        crate::prune_module(mir, interner);
+    });
     dump.module(FuncboxAbi.name(), mir, interner);
-    let _ = function_targets::run(mir, interner);
+    module_stage(function_targets::STAGE, || {
+        function_targets::run(mir, interner)
+    });
     dump.module(function_targets::STAGE, mir, interner);
-    let _ = param_modes::run(mir, interner);
+    module_stage(param_modes::STAGE, || param_modes::run(mir, interner));
     dump.module(param_modes::STAGE, mir, interner);
-    ownership_args::run(mir, interner);
+    module_stage(ownership_args::STAGE, || ownership_args::run(mir, interner));
     dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();
     let holds = rc::lifetime::held_defs(&mir.intrinsics, &mir.imports);
-    for f in mir.functions.iter_mut().chain(&mut mir.polls) {
-        crate::verify::borrowed_result::prepare(
-            f,
-            interner,
-            &layouts,
-            &crate::analysis::effects::ModRefTable::default(),
-        );
-    }
-    let modref = crate::analysis::effects::ModRefTable::compute(mir, interner);
-    for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-        RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
-    }
+    module_stage("borrowed-result", || {
+        for f in mir.functions.iter_mut().chain(&mut mir.polls) {
+            crate::verify::borrowed_result::prepare(
+                f,
+                interner,
+                &layouts,
+                &crate::analysis::effects::ModRefTable::default(),
+            );
+        }
+    });
+    let modref = module_stage("modref", || {
+        crate::analysis::effects::ModRefTable::compute(mir, interner)
+    });
+    module_stage(MirPass::name(&RcInsertion), || {
+        for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
+            RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
+        }
+    });
     dump.module(MirPass::name(&RcInsertion), mir, interner);
     if crate::verify::enabled() {
         crate::verify::assert_inserted_tokens(mir, interner);
     }
 }
 
+fn module_stage<T>(pass: &'static str, run: impl FnOnce() -> T) -> T {
+    let _stage = tracing::info_span!("module_pass", pass).entered();
+    run()
+}
+
 pub fn prepare_debug_module(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
     prepare_ownership(mir, interner, dump);
-    let _ = value_borrow::run(mir, interner);
-    crate::verify::assert_inserted_tokens(mir, interner);
-    crate::verify::assert_module(mir, interner);
+    module_stage(value_borrow::STAGE, || value_borrow::run(mir, interner));
+    module_stage("verify-tokens", || {
+        crate::verify::assert_inserted_tokens(mir, interner)
+    });
+    module_stage("verify", || crate::verify::assert_module(mir, interner));
 }
 
 /// Runs `pipeline` over every function and `poll_pipeline` over every async poll body, then

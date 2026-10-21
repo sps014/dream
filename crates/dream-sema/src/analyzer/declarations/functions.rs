@@ -76,6 +76,67 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
+        self.check_llvm_intrinsic_declaration(function, diagnostics);
+    }
+
+    fn check_llvm_intrinsic_declaration(
+        &self,
+        function: &dream_syntax::nodes::FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        use dream_abi::intrinsics::{LLVM_ATTR, llvm_intrinsic_name};
+        let Some(attr) = function
+            .attributes
+            .iter()
+            .find(|a| dream_abi::attributes::is_compiler_attribute(a, LLVM_ATTR))
+        else {
+            return;
+        };
+        let at = Some(attr.name.position);
+        let in_std = function
+            .file_path
+            .as_deref()
+            .is_some_and(dream_stdlib::is_std_source);
+        if !in_std {
+            diagnostics.report_error("LLVM intrinsics are reserved for the stdlib".into(), at);
+            return;
+        }
+        if llvm_intrinsic_name(&function.attributes).is_none() {
+            diagnostics.report_error(
+                "'@llvm' expects an intrinsic name starting with `llvm.`".into(),
+                at,
+            );
+        }
+        if !function.is_extern || function.is_async || function.generic_parameters.is_some() {
+            diagnostics.report_error(
+                "'@llvm' applies only to synchronous, non-generic extern functions".into(),
+                at,
+            );
+        }
+        let scalar = |t: &Type| {
+            matches!(
+                t,
+                Type::Integer(_)
+                    | Type::Long(_)
+                    | Type::UInt(_)
+                    | Type::ULong(_)
+                    | Type::ISize(_)
+                    | Type::USize(_)
+                    | Type::Float16(_)
+                    | Type::Float(_)
+                    | Type::Double(_)
+            )
+        };
+        let params_ok = function
+            .parameters
+            .iter()
+            .all(|p| !p.is_ref && scalar(&p.type_));
+        if !params_ok || !function.return_type.as_ref().is_some_and(scalar) {
+            diagnostics.report_error(
+                "'@llvm' externs must take and return numeric values".into(),
+                at,
+            );
+        }
     }
 
     /// Pass 1: register every (non-generic) function signature; stash generic templates.

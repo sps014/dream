@@ -6503,109 +6503,109 @@
       {
         "signature": "public static fun floor(x: double): double",
         "description": "Rounds `x` down to the nearest integer value.",
-        "line": 15,
+        "line": 88,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun ceil(x: double): double",
         "description": "Rounds `x` up to the nearest integer value.",
-        "line": 23,
+        "line": 93,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun round(x: double): double",
-        "description": "Rounds `x` to the nearest integer value.",
-        "line": 31,
+        "description": "Rounds `x` to the nearest integer value. Halfway cases round away from zero, so `round(2.5)` is `3` and `round(-2.5)` is `-3`.",
+        "line": 99,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun sqrt(x: double): double",
-        "description": "Square root. A negative input is NaN, same as `log` / `asin` and as libm.",
-        "line": 39,
+        "description": "Square root, correctly rounded. A negative input is NaN.",
+        "line": 108,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun pow(base: double, exponent: double): double",
-        "description": "Returns `base` raised to `exponent`.",
-        "line": 47,
+        "description": "Returns `base` raised to `exponent`. A negative `base` with a non-integer `exponent` is NaN, and `pow(x, 0)` is `1` for every `x`, including NaN.",
+        "line": 114,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun sin(x: double): double",
         "description": "Returns the sine of `x`, measured in radians.",
-        "line": 55,
+        "line": 119,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun cos(x: double): double",
         "description": "Returns the cosine of `x`, measured in radians.",
-        "line": 63,
+        "line": 124,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun tan(x: double): double",
         "description": "Returns the tangent of `x`, measured in radians.",
-        "line": 71,
+        "line": 129,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun asin(x: double): double",
         "description": "Returns the inverse sine in radians; inputs outside [-1, 1] produce NaN.",
-        "line": 79,
+        "line": 134,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun acos(x: double): double",
         "description": "Returns the inverse cosine in radians; inputs outside [-1, 1] produce NaN.",
-        "line": 87,
+        "line": 139,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun atan(x: double): double",
         "description": "Returns the inverse tangent in radians.",
-        "line": 95,
+        "line": 144,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun atan2(y: double, x: double): double",
         "description": "Returns the angle of the point `(x, y)` in radians, using both signs to choose the quadrant.",
-        "line": 104,
+        "line": 150,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun log(x: double): double",
-        "description": "Returns the natural logarithm of `x`.",
-        "line": 112,
+        "description": "Returns the natural logarithm of `x`. Zero gives negative infinity and a negative input gives NaN.",
+        "line": 156,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun log10(x: double): double",
-        "description": "Returns the base-ten logarithm of `x`.",
-        "line": 120,
+        "description": "Returns the base-ten logarithm of `x`. Zero gives negative infinity and a negative input gives NaN.",
+        "line": 162,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun exp(x: double): double",
         "description": "Returns e raised to `x`.",
-        "line": 128,
+        "line": 167,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static fun hypot(x: double, y: double): double",
-        "description": "Returns the length of the vector `(x, y)`.",
-        "line": 136,
+        "description": "Returns the length of the vector `(x, y)` without overflow or underflow in the intermediate squares. An infinite component gives infinity even when the other is NaN.",
+        "line": 173,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static get PI(): double",
         "description": "Ratio of a circle's circumference to its diameter.",
-        "line": 141,
+        "line": 219,
         "page": "reference/api/core-math.md"
       },
       {
         "signature": "public static get E(): double",
         "description": "Base of the natural logarithm.",
-        "line": 146,
+        "line": 224,
         "page": "reference/api/core-math.md"
       }
     ]
@@ -15530,9 +15530,15 @@
         "page": "reference/api/primitives-double.md"
       },
       {
+        "signature": "public fun signum(): double",
+        "description": "Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for zero (keeping the sign of `-0.0`) or NaN.",
+        "line": 52,
+        "page": "reference/api/primitives-double.md"
+      },
+      {
         "signature": "public static fun parse(borrow text: string): Result<double, ParseError>",
         "description": "Parses a decimal double from `text`.",
-        "line": 51,
+        "line": 63,
         "page": "reference/api/primitives-double.md"
       }
     ]
@@ -15567,9 +15573,21 @@
         "page": "reference/api/primitives-float.md"
       },
       {
+        "signature": "public fun clamp(lo: float, hi: float): float",
+        "description": "Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned unchanged; the result is unspecified when `lo` is greater than `hi`.",
+        "line": 42,
+        "page": "reference/api/primitives-float.md"
+      },
+      {
+        "signature": "public fun signum(): float",
+        "description": "Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for zero (keeping the sign of `-0.0`) or NaN.",
+        "line": 54,
+        "page": "reference/api/primitives-float.md"
+      },
+      {
         "signature": "public static fun parse(borrow text: string): Result<float, ParseError>",
         "description": "Parses a decimal float from `text`.",
-        "line": 41,
+        "line": 65,
         "page": "reference/api/primitives-float.md"
       }
     ]
@@ -15604,39 +15622,51 @@
         "page": "reference/api/primitives-float16.md"
       },
       {
+        "signature": "public fun clamp(lo: float16, hi: float16): float16",
+        "description": "Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned unchanged; the result is unspecified when `lo` is greater than `hi`.",
+        "line": 47,
+        "page": "reference/api/primitives-float16.md"
+      },
+      {
+        "signature": "public fun signum(): float16",
+        "description": "Returns `1.0h` for a positive value, `-1.0h` for a negative value, and the value itself for zero (keeping the sign of `-0.0h`) or NaN.",
+        "line": 59,
+        "page": "reference/api/primitives-float16.md"
+      },
+      {
         "signature": "public fun is_nan(): bool",
         "description": "Returns true when this value is NaN (not a number), for example the result of `0.0h / 0.0h`.",
-        "line": 47,
+        "line": 71,
         "page": "reference/api/primitives-float16.md"
       },
       {
         "signature": "public fun is_infinite(): bool",
         "description": "Returns true when this value is positive or negative infinity, for example the result of `(float16)70000.0` or `1.0h / 0.0h`.",
-        "line": 53,
+        "line": 77,
         "page": "reference/api/primitives-float16.md"
       },
       {
         "signature": "public static fun parse(borrow text: string): Result<float16, ParseError>",
         "description": "Parses decimal text such as `\"0.125\"`, `\"-3\"`, or `\"6.1e-05\"` and rounds it to the nearest `float16`. Magnitudes of 65520 or more become infinity. Also accepts `\"nan\"`, `\"inf\"`, `\"+inf\"`, and `\"-inf\"`, so every string produced by `to_string` parses back to the same value. Parsing stops at the first character that cannot continue the number; text with no digits fails with a `ParseError`.",
-        "line": 63,
+        "line": 87,
         "page": "reference/api/primitives-float16.md"
       },
       {
         "signature": "public static get min_value(): float16",
         "description": "The most negative finite `float16`, -65504.",
-        "line": 81,
+        "line": 105,
         "page": "reference/api/primitives-float16.md"
       },
       {
         "signature": "public static get max_value(): float16",
         "description": "The largest finite `float16`, 65504.",
-        "line": 86,
+        "line": 110,
         "page": "reference/api/primitives-float16.md"
       },
       {
         "signature": "public static get epsilon(): float16",
         "description": "The gap between 1 and the next larger `float16`: 2^-10, or 0.0009765625. Values near 1 are spaced this far apart; the spacing scales with magnitude.",
-        "line": 92,
+        "line": 116,
         "page": "reference/api/primitives-float16.md"
       }
     ]
@@ -15708,27 +15738,39 @@
         "page": "reference/api/primitives-isize.md"
       },
       {
+        "signature": "public fun abs(): isize",
+        "description": "Returns the magnitude of this value. The most negative `isize` has no positive counterpart and is returned unchanged.",
+        "line": 18,
+        "page": "reference/api/primitives-isize.md"
+      },
+      {
+        "signature": "public fun signum(): isize",
+        "description": "Returns -1, 0, or 1 for a negative, zero, or positive value.",
+        "line": 27,
+        "page": "reference/api/primitives-isize.md"
+      },
+      {
         "signature": "public fun min(other: isize): isize",
         "description": "Returns the smaller of this value and `other`.",
-        "line": 17,
+        "line": 39,
         "page": "reference/api/primitives-isize.md"
       },
       {
         "signature": "public fun max(other: isize): isize",
         "description": "Returns the larger of this value and `other`.",
-        "line": 25,
+        "line": 47,
         "page": "reference/api/primitives-isize.md"
       },
       {
         "signature": "public fun clamp(lo: isize, hi: isize): isize",
         "description": "Returns the value limited to the inclusive range `lo` through `hi`.",
-        "line": 33,
+        "line": 55,
         "page": "reference/api/primitives-isize.md"
       },
       {
         "signature": "public static fun parse(borrow text: string): Result<isize, ParseError>",
         "description": "Parses the text as this numeric type; returns `ParseError` if invalid or out of range.",
-        "line": 38,
+        "line": 60,
         "page": "reference/api/primitives-isize.md"
       }
     ]

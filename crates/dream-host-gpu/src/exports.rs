@@ -85,7 +85,12 @@ pub unsafe extern "C" fn gpuBufferWrite(buffer: i32, byte_offset: i32, data: Dre
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn gpuBufferReadAsync(future_ptr: DreamPtr, buffer: i32, byte_offset: i32, byte_size: i32) -> i32 {
+pub extern "C" fn gpuBufferReadAsync(
+    future_ptr: DreamPtr,
+    buffer: i32,
+    byte_offset: i32,
+    byte_size: i32,
+) -> i32 {
     resources::buffer_read(future(future_ptr), buffer, byte_offset, byte_size);
     1
 }
@@ -101,13 +106,23 @@ pub unsafe extern "C" fn gpuTextureCreate(device: i32, desc: DreamPtr) -> i32 {
 /// # Safety
 /// `data` must be a readable guest byte array for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gpuTextureWrite(texture: i32, mip: i32, layer: i32, data: DreamPtr) -> i32 {
+pub unsafe extern "C" fn gpuTextureWrite(
+    texture: i32,
+    mip: i32,
+    layer: i32,
+    data: DreamPtr,
+) -> i32 {
     let bytes = unsafe { read_bytes(data) };
     status(resources::texture_write(texture, mip, layer, &bytes))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn gpuTextureReadAsync(future_ptr: DreamPtr, texture: i32, mip: i32, layer: i32) -> i32 {
+pub extern "C" fn gpuTextureReadAsync(
+    future_ptr: DreamPtr,
+    texture: i32,
+    mip: i32,
+    layer: i32,
+) -> i32 {
     resources::texture_read(future(future_ptr), texture, mip, layer);
     1
 }
@@ -173,14 +188,26 @@ pub unsafe extern "C" fn gpuRayTracingPipelineCreate(
     entries: DreamPtr,
     layout: DreamPtr,
 ) -> i32 {
-    let (libraries, entries, layout) = unsafe { (read_i32s(libraries), read_string(entries), read_i32s(layout)) };
-    handle(raytracing::ray_tracing_pipeline_create(device, &libraries, &entries, &layout))
+    let (libraries, entries, layout) = unsafe {
+        (
+            read_i32s(libraries),
+            read_string(entries),
+            read_i32s(layout),
+        )
+    };
+    handle(raytracing::ray_tracing_pipeline_create(
+        device, &libraries, &entries, &layout,
+    ))
 }
 
 /// # Safety
 /// `geometry` must be a readable guest int array for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gpuBottomLevelBuildAsync(future_ptr: DreamPtr, device: i32, geometry: DreamPtr) -> i32 {
+pub unsafe extern "C" fn gpuBottomLevelBuildAsync(
+    future_ptr: DreamPtr,
+    device: i32,
+    geometry: DreamPtr,
+) -> i32 {
     let geometry = unsafe { read_i32s(geometry) };
     raytracing::bottom_level_build(future(future_ptr), device, &geometry);
     1
@@ -197,7 +224,10 @@ pub unsafe extern "C" fn gpuTopLevelBuildAsync(
 ) -> i32 {
     // A guest float array has the int array's layout; the elements are reinterpreted.
     let (instances, transforms) = unsafe { (read_i32s(instances), read_i32s(transforms)) };
-    let transforms: Vec<f32> = transforms.into_iter().map(|bits| f32::from_bits(bits as u32)).collect();
+    let transforms: Vec<f32> = transforms
+        .into_iter()
+        .map(|bits| f32::from_bits(bits as u32))
+        .collect();
     raytracing::top_level_build(future(future_ptr), device, &instances, &transforms);
     1
 }
@@ -246,7 +276,12 @@ pub extern "C" fn gpuSurfacePresentAsync(future_ptr: DreamPtr, surface: i32) -> 
 /// # Safety
 /// `commands` and `data` must be readable guest arrays for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gpuSubmitAsync(future_ptr: DreamPtr, device: i32, commands: DreamPtr, data: DreamPtr) -> i32 {
+pub unsafe extern "C" fn gpuSubmitAsync(
+    future_ptr: DreamPtr,
+    device: i32,
+    commands: DreamPtr,
+    data: DreamPtr,
+) -> i32 {
     let (words, bytes) = unsafe { (read_i32s(commands), read_bytes(data)) };
     submit::submit(future(future_ptr), device, &words, &bytes);
     1

@@ -986,9 +986,10 @@ fn test_parse_suffixed_number_literals() {
     assert!(
         matches!(&body[4], StatementNode::Declaration(_, _, ExpressionNode::Literal(Type::Float16(t)), _, _) if t.text == "1.5")
     );
-    assert!(
-        matches!(&body[5], StatementNode::Declaration(_, Some(Type::Float16(_)), _, _, _))
-    );
+    assert!(matches!(
+        &body[5],
+        StatementNode::Declaration(_, Some(Type::Float16(_)), _, _, _)
+    ));
 }
 
 #[test]

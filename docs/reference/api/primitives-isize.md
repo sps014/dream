@@ -12,6 +12,22 @@ Returns a negative number, zero, or a positive number for less than, equal to, o
 public fun compare(other: isize): int
 ```
 
+## `abs`
+
+Returns the magnitude of this value. The most negative `isize` has no positive counterpart and is returned unchanged.
+
+```dream
+public fun abs(): isize
+```
+
+## `signum`
+
+Returns -1, 0, or 1 for a negative, zero, or positive value.
+
+```dream
+public fun signum(): isize
+```
+
 ## `min`
 
 Returns the smaller of this value and `other`.

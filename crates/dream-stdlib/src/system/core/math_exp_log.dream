@@ -1,0 +1,155 @@
+module system.core;
+
+// Ports of fdlibm's exp, log and log10 as used by musl.
+/// The exponential function and logarithms.
+internal static class MathExpLog {
+    /// e raised to `x`.
+    internal static fun exp(x: double): double {
+        let ln2_hi = 6.93147180369123816490e-01d;
+        let ln2_lo = 1.90821492927058770002e-10d;
+        let inv_ln2 = 1.44269504088896338700e+00d;
+        let p1 = 1.66666666666666019037e-01d;
+        let p2 = -2.77777777770155933842e-03d;
+        let p3 = 6.61375632143793436117e-05d;
+        let p4 = -1.65339022054652515390e-06d;
+        let p5 = 4.13813679705723846039e-08d;
+
+        let hx = Math.high_word(x);
+        let negative = hx < 0;
+        let ix = hx & 0x7FFFFFFF;
+        if ix >= 0x4086232B {
+            if x != x {
+                return x;
+            }
+            if x > 709.782712893383973096d {
+                return x * Math.from_bits(0x7FE00000_00000000L);
+            }
+            if x < -745.13321910194110842d {
+                return 0.0d;
+            }
+        }
+
+        // Reduce to x = k * ln2 + r with |r| <= ln2 / 2, carrying r as hi - lo.
+        let k = 0;
+        let hi = x;
+        let lo = 0.0d;
+        let r = x;
+        if ix > 0x3FD62E42 {
+            if ix >= 0x3FF0A2B2 {
+                k = (int)(inv_ln2 * x + (negative ? -0.5d : 0.5d));
+            } else {
+                k = negative ? -1 : 1;
+            }
+            hi = x - (double)k * ln2_hi;
+            lo = (double)k * ln2_lo;
+            r = hi - lo;
+        } else if ix <= 0x3E300000 {
+            return 1.0d + x;
+        }
+
+        let rr = r * r;
+        let c = r - rr * (p1 + rr * (p2 + rr * (p3 + rr * (p4 + rr * p5))));
+        let y = 1.0d + (r * c / (2.0d - c) - lo + hi);
+        if k == 0 {
+            return y;
+        }
+        return Math.scalbn(y, k);
+    }
+
+    /// Whether `log` and `log10` answer `x` directly: zero, negative, infinite, NaN, or one.
+    static fun is_special(x: double): bool {
+        let bits = Math.to_bits(x);
+        return (bits << 1L) == 0L
+            || bits < 0L
+            || (int)(bits >> 32L) >= 0x7FF00000
+            || x == 1.0d;
+    }
+
+    /// The logarithm of an input accepted by `is_special`, which is the same in every base.
+    static fun special(x: double): double {
+        let bits = Math.to_bits(x);
+        if (bits << 1L) == 0L {
+            return -1.0d / (x * x);
+        }
+        if bits < 0L {
+            return (x - x) / 0.0d;
+        }
+        if x == 1.0d {
+            return 0.0d;
+        }
+        return x;
+    }
+
+    /// Writes a positive finite `x` as `2^n * (1 + hi)` with `1 + hi` in [sqrt(2)/2, sqrt(2)).
+    static fun reduce(x: double): ReducedArgument {
+        let k = 0;
+        let v = x;
+        let hx = Math.high_word(v);
+        if hx < 0x00100000 {
+            k = -54;
+            v = v * 18014398509481984.0d;
+            hx = Math.high_word(v);
+        }
+        hx = hx + (0x3FF00000 - 0x3FE6A09E);
+        k = k + (hx >> 20) - 0x3FF;
+        hx = (hx & 0x000FFFFF) + 0x3FE6A09E;
+        return ReducedArgument(k, Math.with_high_word(v, hx) - 1.0d, 0.0d);
+    }
+
+    /// The correction `log(1 + f) - (f - f^2/2)` for `1 + f` in [sqrt(2)/2, sqrt(2)).
+    static fun series(f: double, hfsq: double): double {
+        let lg1 = 6.666666666666735130e-01d;
+        let lg2 = 3.999999999940941908e-01d;
+        let lg3 = 2.857142874366239149e-01d;
+        let lg4 = 2.222219843214978396e-01d;
+        let lg5 = 1.818357216161805012e-01d;
+        let lg6 = 1.531383769920937332e-01d;
+        let lg7 = 1.479819860511658591e-01d;
+
+        let s = f / (2.0d + f);
+        let z = s * s;
+        let w = z * z;
+        let t1 = w * (lg2 + w * (lg4 + w * lg6));
+        let t2 = z * (lg1 + w * (lg3 + w * (lg5 + w * lg7)));
+        return s * (hfsq + (t2 + t1));
+    }
+
+    /// The natural logarithm of `x`.
+    internal static fun log(x: double): double {
+        if MathExpLog.is_special(x) {
+            return MathExpLog.special(x);
+        }
+        let ln2_hi = 6.93147180369123816490e-01d;
+        let ln2_lo = 1.90821492927058770002e-10d;
+        let r = MathExpLog.reduce(x);
+        let f = r.hi;
+        let hfsq = 0.5d * f * f;
+        let dk = (double)r.n;
+        return MathExpLog.series(f, hfsq) + dk * ln2_lo - hfsq + f + dk * ln2_hi;
+    }
+
+    /// The base-ten logarithm of `x`.
+    internal static fun log10(x: double): double {
+        if MathExpLog.is_special(x) {
+            return MathExpLog.special(x);
+        }
+        let ivln10_hi = 4.34294481878168880939e-01d;
+        let ivln10_lo = 2.50829467116452752298e-11d;
+        let log10_2hi = 3.01029995663611771306e-01d;
+        let log10_2lo = 3.69423907715893078616e-13d;
+        let r = MathExpLog.reduce(x);
+        let f = r.hi;
+        let hfsq = 0.5d * f * f;
+
+        // hi + lo = log(1 + f), with hi exact in its high word so hi * ivln10_hi is exact.
+        let hi = Math.clear_low_word(f - hfsq);
+        let lo = f - hi - hfsq + MathExpLog.series(f, hfsq);
+        let val_hi = hi * ivln10_hi;
+        let dk = (double)r.n;
+        let y = dk * log10_2hi;
+        let val_lo = dk * log10_2lo + (lo + hi) * ivln10_lo + lo * ivln10_hi;
+        let w = y + val_hi;
+        val_lo = val_lo + (y - w) + val_hi;
+        return val_lo + w;
+    }
+}

@@ -37,6 +37,30 @@ extend float: Comparable<float> {
         return other;
     }
 
+    /// Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned
+    /// unchanged; the result is unspecified when `lo` is greater than `hi`.
+    public fun clamp(lo: float, hi: float): float {
+        if this < lo {
+            return lo;
+        }
+        if this > hi {
+            return hi;
+        }
+        return this;
+    }
+
+    /// Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for
+    /// zero (keeping the sign of `-0.0`) or NaN.
+    public fun signum(): float {
+        if this > 0.0 {
+            return 1.0;
+        }
+        if this < 0.0 {
+            return -1.0;
+        }
+        return this;
+    }
+
     /// Parses a decimal float from `text`.
     public static fun parse(borrow text: string): Result<float, ParseError> {
         return switch (double.parse(text)) {

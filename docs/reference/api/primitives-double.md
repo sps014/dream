@@ -44,6 +44,14 @@ Returns this value limited to the inclusive range `lo` through `hi`. NaN is retu
 public fun clamp(lo: double, hi: double): double
 ```
 
+## `signum`
+
+Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for zero (keeping the sign of `-0.0`) or NaN.
+
+```dream
+public fun signum(): double
+```
+
 ## `parse`
 
 Parses a decimal double from `text`.

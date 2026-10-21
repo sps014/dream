@@ -6,20 +6,16 @@
 //! this proof. The entry test and first iteration are peeled so zero-trip loops perform no
 //! extra reads and the initial loads keep their original ordering.
 
+use crate::analysis::effects::ModRefTable;
 use crate::{BlockId, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::{DefId, TyKind, TypeId, TypeInterner};
+use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::BTreeSet;
 
 pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
-    let math: BTreeSet<_> = mir
-        .imports
-        .iter()
-        .filter(|i| crate::analysis::effects::pure_math_import(i, interner))
-        .map(|i| i.def)
-        .collect();
+    let effects = ModRefTable::compute(mir, interner);
     for f in &mut mir.functions {
         let mut analyses = super::FunctionAnalyses::default();
-        while hoist(f, interner, &math, &mut analyses) {
+        while hoist(f, interner, &effects, &mut analyses) {
             analyses.invalidate();
         }
     }
@@ -28,7 +24,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) {
 fn hoist(
     f: &mut MirFunction,
     i: &TypeInterner,
-    math: &BTreeSet<DefId>,
+    effects: &ModRefTable,
     analyses: &mut super::FunctionAnalyses,
 ) -> bool {
     if f.is_async {
@@ -61,13 +57,13 @@ fn hoist(
             match s {
                 Statement::Assign(Place::Local(d), rv) => {
                     defs.insert(*d);
-                    quiet &= !f.locals[d.0 as usize].is_ref && quiet_rvalue(rv, f, i, math);
+                    quiet &= !f.locals[d.0 as usize].is_ref && quiet_rvalue(rv, f, i, effects);
                 }
                 Statement::Assign(Place::Field { base, field }, rv) => {
                     let ty = f.local_ty(*base);
                     quiet &= class_type(ty, i)
                         && !f.locals[base.0 as usize].is_ref
-                        && quiet_rvalue(rv, f, i, math);
+                        && quiet_rvalue(rv, f, i, effects);
                     writes.insert((ty, *field));
                 }
                 Statement::Nop | Statement::DebugLine(_) | Statement::SourceLine(_) => {}
@@ -172,14 +168,14 @@ fn quiet_operand(o: &Operand, f: &MirFunction, i: &TypeInterner) -> bool {
     }
 }
 
-fn quiet_rvalue(rv: &Rvalue, f: &MirFunction, i: &TypeInterner, math: &BTreeSet<DefId>) -> bool {
+fn quiet_rvalue(rv: &Rvalue, f: &MirFunction, i: &TypeInterner, effects: &ModRefTable) -> bool {
     match rv {
         Rvalue::Use(a) | Rvalue::Unary(_, a) | Rvalue::Cast(a, _, _) | Rvalue::ArrayLen(a) => {
             quiet_operand(a, f, i)
         }
         Rvalue::Binary(_, a, b) => quiet_operand(a, f, i) && quiet_operand(b, f, i),
         Rvalue::Call { callee, args } => {
-            math.contains(&callee.def) && args.iter().all(scalar_operand)
+            effects.call(callee).is_quiet() && args.iter().all(scalar_operand)
         }
         _ => false,
     }

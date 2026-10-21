@@ -110,8 +110,8 @@ The CLI enables `Compiler::with_build_cache`. After loading, the key is computed
 link options, toolchain configuration, `DREAM_*` environment variables and `dream.toml`. When
 `<out>.dream-cache` holds that key and every recorded artifact still has its recorded hash, the
 build returns `BuildOutcome::Cached` and analysis, emission, LLVM and linking are skipped. A
-fresh build is recorded only after its final artifacts exist, and only when it printed no
-diagnostics, so warnings are never hidden. Builds with native C/C++ sets, PGO or `--emit-mir`
+fresh build is recorded only after its final artifacts exist. Warnings it printed are stored
+with the stamp and printed again on every reuse, so a cached build never hides them. Builds with native C/C++ sets, PGO or `--emit-mir`
 bypass the cache because their inputs live outside the key. Analysis is whole-program
 (monomorphization crosses modules), so the whole build, not a single module, is the unit of reuse.
 Import aliases remain cacheable: their declarations and targets belong to the loaded module

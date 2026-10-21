@@ -12,8 +12,15 @@ impl<'a> Analyzer<'a> {
         let kind = match lit {
             Type::ULong(t) | Type::USize(t) => dream_syntax::number::parse_u64_literal(&t.text)
                 .map(|u| HExprKind::IntLit(u as i64)),
-            Type::Integer(t) | Type::Long(t) | Type::UInt(t) | Type::Byte(t) | Type::ISize(t) => {
-                dream_syntax::number::parse_int_literal(&t.text).map(HExprKind::IntLit)
+            Type::Integer(t) => {
+                dream_syntax::number::parse_signed_literal(&t.text, 32).map(HExprKind::IntLit)
+            }
+            Type::ISize(t) => {
+                dream_syntax::number::parse_signed_literal(&t.text, self.target_layout.ptr_size * 8)
+                    .map(HExprKind::IntLit)
+            }
+            Type::Long(t) | Type::UInt(t) | Type::Byte(t) => {
+                dream_syntax::number::parse_signed_literal(&t.text, 64).map(HExprKind::IntLit)
             }
             Type::Float16(t) | Type::Float(t) | Type::Double(t) => {
                 dream_syntax::number::parse_float_literal(&t.text).map(HExprKind::FloatLit)

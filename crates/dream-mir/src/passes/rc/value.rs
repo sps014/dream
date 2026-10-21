@@ -1,6 +1,6 @@
 //! Nested-reference ownership of value structs: copies, sink transfers, and last-use drops.
 
-use super::liveness::{self, live_after_stmt, stmt_reads_local};
+use super::liveness::{Liveness, stmt_reads};
 use super::tokens::{assigns_local, sink_call_args, source_line_end};
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_abi::names::THIS_NAME;
@@ -15,10 +15,11 @@ pub(super) fn insert_value_struct_moves(
     interner: &TypeInterner,
     changed: &mut bool,
 ) {
+    let defs = LocalDefs::new(func);
     let is_value_src = |idx: usize| {
         let d = &func.locals[idx];
         interner.is_value_type(d.ty)
-            && (d.is_ref || d.name.is_some() || defined_only_by_producers(func, idx as u32))
+            && (d.is_ref || d.name.is_some() || defs.only_producers(idx as u32))
     };
     let owns_source = |local: u32| {
         let decl = &func.locals[local as usize];
@@ -27,7 +28,7 @@ pub(super) fn insert_value_struct_moves(
             && decl.name.as_deref() != Some(THIS_NAME)
             && (!func.params.contains(&Local(local)) || decl.is_take)
     };
-    let live_out = liveness::live_out(func);
+    let live = Liveness::new(func);
     let mut retain_before: Vec<(usize, usize, u32, u32)> = Vec::new();
     let mut retain_after: Vec<(usize, usize, u32)> = Vec::new();
     let mut kill_after: Vec<(usize, usize, u32)> = Vec::new();
@@ -49,7 +50,7 @@ pub(super) fn insert_value_struct_moves(
                 && !func.locals[dest.0 as usize].is_ref
                 && interner.is_value_type(func.locals[dest.0 as usize].ty)
             {
-                if !owns_source(src.0) || live_after_stmt(func, &live_out, bi, si, src.0) {
+                if !owns_source(src.0) || live.after_stmt(bi, si, src.0) {
                     retain_after.push((bi, si, dest.0));
                 } else {
                     kill_after.push((bi, si, src.0));
@@ -57,12 +58,11 @@ pub(super) fn insert_value_struct_moves(
             }
             let mut counts: std::collections::BTreeMap<u32, u32> =
                 std::collections::BTreeMap::new();
-            for local in value_arg_locals(func, stmt, interner, &is_value_src) {
+            for local in value_arg_locals(func, &defs, stmt, interner, &is_value_src) {
                 *counts.entry(local).or_insert(0) += 1;
             }
             for (local, n) in counts {
-                let last_use =
-                    owns_source(local) && !live_after_stmt(func, &live_out, bi, si, local);
+                let last_use = owns_source(local) && !live.after_stmt(bi, si, local);
                 let retains = if last_use { n.saturating_sub(1) } else { n };
                 if retains > 0 {
                     retain_before.push((bi, si, local, retains));
@@ -103,31 +103,38 @@ pub(super) fn insert_value_struct_moves(
     blocks.sort_unstable();
     blocks.dedup();
     for bi in blocks {
-        let before = before_by.swap_remove(&bi).unwrap_or_default();
-        let after = after_by.swap_remove(&bi).unwrap_or_default();
-        let kills = kill_by.swap_remove(&bi).unwrap_or_default();
+        // Each list was collected in statement order.
+        let mut before = before_by
+            .swap_remove(&bi)
+            .unwrap_or_default()
+            .into_iter()
+            .peekable();
+        let mut after = after_by
+            .swap_remove(&bi)
+            .unwrap_or_default()
+            .into_iter()
+            .peekable();
+        let mut kills = kill_by
+            .swap_remove(&bi)
+            .unwrap_or_default()
+            .into_iter()
+            .peekable();
         let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + 4);
         for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
-            for (rsi, local, n) in &before {
-                if *rsi == si {
-                    for _ in 0..*n {
-                        out.push(Statement::ValueRetain(Local(*local)));
-                    }
-                    *changed = true;
+            while let Some((_, local, n)) = before.next_if(|&(at, _, _)| at == si) {
+                for _ in 0..n {
+                    out.push(Statement::ValueRetain(Local(local)));
                 }
+                *changed = true;
             }
             out.push(stmt);
-            for (asi, local) in &after {
-                if *asi == si {
-                    out.push(Statement::ValueRetain(Local(*local)));
-                    *changed = true;
-                }
+            while let Some((_, local)) = after.next_if(|&(at, _)| at == si) {
+                out.push(Statement::ValueRetain(Local(local)));
+                *changed = true;
             }
-            for (ksi, local) in &kills {
-                if *ksi == si {
-                    out.push(Statement::ValueKill(Local(*local)));
-                    *changed = true;
-                }
+            while let Some((_, local)) = kills.next_if(|&(at, _)| at == si) {
+                out.push(Statement::ValueKill(Local(local)));
+                *changed = true;
             }
         }
         func.blocks[bi].stmts = out;
@@ -164,6 +171,7 @@ fn insert_killed_value_exit_drops(
 
 fn value_arg_locals(
     func: &MirFunction,
+    defs: &LocalDefs,
     stmt: &Statement,
     interner: &TypeInterner,
     is_value_src: &dyn Fn(usize) -> bool,
@@ -181,7 +189,7 @@ fn value_arg_locals(
             continue;
         }
         if let Operand::Copy(Place::Local(l)) = arg {
-            let root = value_copy_root(func, l.0);
+            let root = defs.copy_root(func, l.0);
             if is_value_src(root as usize) && interner.is_value_type(func.locals[root as usize].ty)
             {
                 out.push(root);
@@ -191,37 +199,68 @@ fn value_arg_locals(
     out
 }
 
-/// Unnamed value temps that only copy a local are aliases of that local (emitter Borrow).
-fn value_copy_root(func: &MirFunction, local: u32) -> u32 {
-    let decl = &func.locals[local as usize];
-    if decl.name.is_some() || decl.is_ref {
-        return local;
+/// How each local is defined, summarized once per pass so classifying value temps does not rescan
+/// the function for every statement.
+struct LocalDefs {
+    count: Vec<u32>,
+    /// Source of the latest definition when it is a plain whole-local copy.
+    copy_src: Vec<Option<u32>>,
+    producers_only: Vec<bool>,
+}
+
+impl LocalDefs {
+    fn new(func: &MirFunction) -> Self {
+        let n = func.locals.len();
+        let mut defs = Self {
+            count: vec![0; n],
+            copy_src: vec![None; n],
+            producers_only: vec![true; n],
+        };
+        for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
+            let Statement::Assign(Place::Local(d), rv) = stmt else {
+                continue;
+            };
+            let i = d.0 as usize;
+            // Exit insertion assigns temps it declares only after the whole pass.
+            let Some(count) = defs.count.get_mut(i) else {
+                continue;
+            };
+            *count += 1;
+            defs.copy_src[i] = match rv {
+                Rvalue::Use(Operand::Copy(Place::Local(s))) => Some(s.0),
+                _ => None,
+            };
+            defs.producers_only[i] &= matches!(
+                rv,
+                Rvalue::Call { .. }
+                    | Rvalue::IndirectCall { .. }
+                    | Rvalue::InterfaceCall { .. }
+                    | Rvalue::New { .. }
+            );
+        }
+        defs
     }
-    let mut src = None;
-    let mut defs = 0u32;
-    for block in &func.blocks {
-        for stmt in &block.stmts {
-            if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(s)))) =
-                stmt
-            {
-                if d.0 == local {
-                    defs += 1;
-                    src = Some(s.0);
-                }
-            } else if let Statement::Assign(Place::Local(d), _) = stmt
-                && d.0 == local
-            {
-                defs += 1;
-                src = None;
-            }
+
+    /// Unnamed value temps that only copy a local are aliases of that local (emitter Borrow).
+    fn copy_root(&self, func: &MirFunction, local: u32) -> u32 {
+        let decl = &func.locals[local as usize];
+        if decl.name.is_some() || decl.is_ref {
+            return local;
+        }
+        match self.copy_src[local as usize] {
+            Some(src) if self.count[local as usize] == 1 => self.copy_root(func, src),
+            _ => local,
         }
     }
-    if defs == 1
-        && let Some(s) = src
-    {
-        return value_copy_root(func, s);
+
+    /// An unnamed temp holding a call or constructor result owns it, so passing it to a sink
+    /// parameter must move it (or the callee and frame teardown both drop it). Once a call is
+    /// inlined the temp is defined by a plain copy, which frame teardown treats as an alias, so its
+    /// drop must be placed here.
+    fn only_producers(&self, local: u32) -> bool {
+        let i = local as usize;
+        self.count[i] > 0 && self.producers_only[i]
     }
-    local
 }
 
 /// Returning a value local transfers nested refs via sret blit; skip frame-exit drop.
@@ -261,7 +300,12 @@ pub(super) fn mark_returned_value_locals_moved(
     }
 }
 
-fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize) -> bool {
+fn is_owning_value_local(
+    func: &MirFunction,
+    defs: &LocalDefs,
+    interner: &TypeInterner,
+    idx: usize,
+) -> bool {
     let decl = &func.locals[idx];
     if !interner.is_value_type(decl.ty) || decl.is_ref || decl.manual_drop {
         return false;
@@ -272,34 +316,7 @@ fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize
     if idx < func.params.len() {
         return false;
     }
-    decl.name.is_some() || defined_only_by_producers(func, idx as u32)
-}
-
-/// An unnamed temp holding a call or constructor result owns it, so passing it to a sink parameter
-/// must move it (or the callee and frame teardown both drop it). Once a call is inlined the temp is
-/// defined by a plain copy, which frame teardown treats as an alias, so its drop must be placed here.
-fn defined_only_by_producers(func: &MirFunction, local: u32) -> bool {
-    let mut seen = false;
-    for stmt in func.blocks.iter().flat_map(|b| &b.stmts) {
-        if let Statement::Assign(Place::Local(d), rv) = stmt {
-            if d.0 != local {
-                continue;
-            }
-            if !matches!(
-                rv,
-                Rvalue::Call { .. }
-                    | Rvalue::IndirectCall { .. }
-                    | Rvalue::InterfaceCall { .. }
-                    | Rvalue::New { .. }
-            ) {
-                return false;
-            }
-            seen = true;
-        } else if assigns_local(stmt, local) {
-            return false;
-        }
-    }
-    seen
+    decl.name.is_some() || defs.only_producers(idx as u32)
 }
 
 /// Early `ValueDrop` after the last use of an owning value local. Whole-value copy-out (`dest = src`)
@@ -311,9 +328,10 @@ pub(super) fn insert_complete_value_drops(
     skip: Option<u32>,
     changed: &mut bool,
 ) {
+    let defs = LocalDefs::new(func);
     let n = func.locals.len();
     for i in 0..n {
-        if skip == Some(i as u32) || !is_owning_value_local(func, interner, i) {
+        if skip == Some(i as u32) || !is_owning_value_local(func, &defs, interner, i) {
             continue;
         }
         let already = func.blocks[bi]
@@ -340,9 +358,10 @@ pub(super) fn insert_early_value_drops(
     changed: &mut bool,
     skip_await_blocks: bool,
 ) {
-    let live_out = liveness::live_out(func);
+    let live = Liveness::new(func);
+    let defs = LocalDefs::new(func);
     let owning: Vec<u32> = (0..func.locals.len())
-        .filter(|&i| is_owning_value_local(func, interner, i))
+        .filter(|&i| is_owning_value_local(func, &defs, interner, i))
         .map(|i| i as u32)
         .collect();
     if owning.is_empty() {
@@ -355,12 +374,13 @@ pub(super) fn insert_early_value_drops(
             continue;
         }
         for (si, stmt) in block.stmts.iter().enumerate() {
+            let reads = stmt_reads(stmt);
             for &local in &owning {
                 let deps = borrowers.get(&local).map_or(&[][..], |v| v.as_slice());
-                if deps
-                    .iter()
-                    .any(|&c| live_after_stmt(func, &live_out, bi, si, c))
-                {
+                let used = reads.contains(&local)
+                    || assigns_local(stmt, local)
+                    || deps.iter().any(|c| reads.contains(c));
+                if !used || deps.iter().any(|&c| live.after_stmt(bi, si, c)) {
                     continue;
                 }
                 if matches!(
@@ -378,10 +398,7 @@ pub(super) fn insert_early_value_drops(
                 if whole_copy_out {
                     continue;
                 }
-                let used = stmt_reads_local(stmt, local)
-                    || assigns_local(stmt, local)
-                    || deps.iter().any(|&c| stmt_reads_local(stmt, c));
-                if !used || live_after_stmt(func, &live_out, bi, si, local) {
+                if live.after_stmt(bi, si, local) {
                     continue;
                 }
                 drop_at.push((bi, source_line_end(block, si), local));
@@ -402,14 +419,14 @@ pub(super) fn insert_early_value_drops(
     }
     for (bi, sites) in by_block {
         let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + sites.len());
+        // `source_line_end` is monotone in the statement index, so sites are in statement order.
+        let mut sites = sites.into_iter().peekable();
         for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
             out.push(stmt);
-            for (ssi, local) in &sites {
-                if *ssi == si {
-                    out.push(Statement::ValueDrop(Local(*local)));
-                    out.push(Statement::ValueKill(Local(*local)));
-                    *changed = true;
-                }
+            while let Some((_, local)) = sites.next_if(|&(at, _)| at == si) {
+                out.push(Statement::ValueDrop(Local(local)));
+                out.push(Statement::ValueKill(Local(local)));
+                *changed = true;
             }
         }
         func.blocks[bi].stmts = out;

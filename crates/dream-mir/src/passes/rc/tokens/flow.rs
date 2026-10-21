@@ -28,7 +28,7 @@ pub(super) struct TokenFlow<'a> {
     pub(super) take_params: &'a IndexSet<u32>,
     pub(super) assign_move: &'a IndexSet<(usize, usize)>,
     pub(super) sink_move: &'a IndexSet<(usize, usize, u32)>,
-    pub(super) die_after: &'a IndexSet<(usize, usize, u32)>,
+    pub(super) die_after: &'a IndexMap<(usize, usize), Vec<u32>>,
     pub(super) live_out: &'a [IndexSet<u32>],
     pub(super) preds: &'a [Vec<crate::BlockId>],
     pub(super) entry: usize,
@@ -230,11 +230,9 @@ pub(super) fn transfer_block(
             |l| flow.sink_move.contains(&(bi, si, l)),
             &mut unique,
         );
-        for (local, slot) in tokens.iter_mut().enumerate() {
-            if flow.die_after.contains(&(bi, si, local as u32)) {
-                *slot = false;
-                unique[local] = false;
-            }
+        for &local in flow.die_after.get(&(bi, si)).into_iter().flatten() {
+            tokens[local as usize] = false;
+            unique[local as usize] = false;
         }
     }
 

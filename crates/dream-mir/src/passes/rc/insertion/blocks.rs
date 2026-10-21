@@ -25,7 +25,7 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
     let n_orig = state.n_orig;
     let owned_flags = &state.owned_flags;
     let realloc_readers = &state.realloc_readers;
-    let live_out_rc = &state.live_out_rc;
+    let live_out_rc = state.live_rc.out();
     let is_async = state.is_async;
     let resume_futures = &state.resume_futures;
     let in_loop = &state.in_loop;
@@ -272,9 +272,12 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                 }
             }
 
-            let dying: Vec<u32> = (0..tokens.len() as u32)
-                .filter(|&local| analysis.die_after.contains(&(bi, si, local)))
-                .collect();
+            let mut dying = analysis
+                .die_after
+                .get(&(bi, si))
+                .cloned()
+                .unwrap_or_default();
+            dying.sort_unstable();
             for local in leftover_order(leftover_parent, dying, env_defer) {
                 let one = IndexSet::from([local]);
                 let keep = die_keep.get(&(bi, si)).unwrap_or(&one);

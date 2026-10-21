@@ -16,7 +16,7 @@ extend double: Comparable<double> {
     /// Returns the magnitude of this value with the sign cleared, so `-0.0` becomes `0.0`
     /// and NaN stays NaN.
     public fun abs(): double {
-        return Math.abs_host(this);
+        return Math.fabs(this);
     }
 
     /// Returns the smaller of this value and `other`. When either is NaN, returns `other`.
@@ -43,6 +43,18 @@ extend double: Comparable<double> {
         }
         if this > hi {
             return hi;
+        }
+        return this;
+    }
+
+    /// Returns `1.0` for a positive value, `-1.0` for a negative value, and the value itself for
+    /// zero (keeping the sign of `-0.0`) or NaN.
+    public fun signum(): double {
+        if this > 0.0d {
+            return 1.0d;
+        }
+        if this < 0.0d {
+            return -1.0d;
         }
         return this;
     }

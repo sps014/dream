@@ -371,6 +371,46 @@ fn rc_golden_local_object_is_scalarized() {
 }
 
 #[test]
+fn rc_golden_frame_object_buffer_fits_the_constructed_class() {
+    let code = r#"
+        class Value {
+            public n: int;
+            public constructor(n: int) { this.n = n; }
+        }
+        fun main(): void {
+            let erased: object = Value(5);
+            let value = (Value)erased;
+            System.println(value.n);
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let main = ir_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "main_dream")
+        .expect("main should be emitted");
+    assert_eq!(
+        count_in(&main.body, "@dream_frame_object("),
+        1,
+        "the erased Value should be frame-allocated:\n{}",
+        main.body
+    );
+    let sizes: Vec<u64> = main
+        .body
+        .lines()
+        .filter_map(|line| {
+            let rest = line.split("= alloca [").nth(1)?;
+            rest.split(" x i8]").next()?.parse().ok()
+        })
+        .collect();
+    assert!(
+        sizes.iter().any(|&bytes| bytes >= 16 + 4),
+        "the frame buffer must hold the 16-byte header and the int field, \
+         not just the header an `object` local declares:\n{}",
+        main.body
+    );
+}
+
+#[test]
 fn rc_golden_unique_class_no_retain() {
     let code = r#"
         class Box {

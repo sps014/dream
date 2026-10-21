@@ -384,8 +384,14 @@ mod tests {
     #[test]
     fn float16_folds_round_to_nearest_even() {
         let h = |v: f64| Const::F16(half::f16::from_f64(v).to_bits());
-        assert_eq!(fold(&bin(BinOp::Add, h(2048.0), h(1.0)), None), Some(h(2048.0)));
-        assert_eq!(fold(&bin(BinOp::Add, h(2048.0), h(3.0)), None), Some(h(2052.0)));
+        assert_eq!(
+            fold(&bin(BinOp::Add, h(2048.0), h(1.0)), None),
+            Some(h(2048.0))
+        );
+        assert_eq!(
+            fold(&bin(BinOp::Add, h(2048.0), h(3.0)), None),
+            Some(h(2052.0))
+        );
         assert_eq!(
             fold(&bin(BinOp::Mul, h(65504.0), h(2.0)), None),
             Some(Const::F16(half::f16::INFINITY.to_bits()))

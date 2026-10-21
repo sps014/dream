@@ -207,8 +207,14 @@ pub(crate) fn is_value_place_alias(f: &MirFunction, local: Local, rv: &Rvalue) -
 
 /// `local`'s `New` is built in a stack frame buffer (see `passes::frame_alloc`).
 pub(crate) fn has_frame_buffer(mir: &crate::Mir, f: &MirFunction, local: Local) -> bool {
+    frame_buffer_payload(mir, f, local).is_some()
+}
+
+/// Field bytes after the heap header that `local`'s frame buffer must hold.
+pub(crate) fn frame_buffer_payload(mir: &crate::Mir, f: &MirFunction, local: Local) -> Option<u32> {
     mir.frame_objects
-        .contains(&(f.def, f.instance.clone(), local))
+        .get(&(f.def, f.instance.clone(), local))
+        .copied()
 }
 
 /// Value locals a sync return tears down (their reference fields released), skipping `skip`.

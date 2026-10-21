@@ -8,8 +8,8 @@ use crate::ffi;
 use crate::pipelines::{StageTables, entry, library, program, require_capabilities};
 use crate::resources::encode;
 use crate::state::{
-    self, AccelerationStructureEntry, DeviceCore, Entry, Kind, Obj, Pipeline, PipelineEntry, PipelineKind,
-    State,
+    self, AccelerationStructureEntry, DeviceCore, Entry, Kind, Obj, Pipeline, PipelineEntry,
+    PipelineKind, State,
 };
 use std::ffi::CString;
 use std::sync::Arc;
@@ -62,15 +62,21 @@ pub fn decode_geometry(words: &[i32]) -> HostResult<Geometry> {
     }
     let indices = (indices != 0).then_some((indices, index_count));
     match (kind, indices) {
-        (GeometryKind::Boxes, Some(_)) => return Err(HostError::invalid("boxes take no index buffer")),
+        (GeometryKind::Boxes, Some(_)) => {
+            return Err(HostError::invalid("boxes take no index buffer"));
+        }
         (GeometryKind::Boxes, None) if !vertex_count.is_multiple_of(2) => {
-            return Err(HostError::invalid("each box is a min and a max corner, so the count is even"));
+            return Err(HostError::invalid(
+                "each box is a min and a max corner, so the count is even",
+            ));
         }
         (GeometryKind::Triangles, Some((_, n))) if n == 0 || !n.is_multiple_of(3) => {
             return Err(HostError::invalid("triangle indices come in threes"));
         }
         (GeometryKind::Triangles, None) if !vertex_count.is_multiple_of(3) => {
-            return Err(HostError::invalid("unindexed triangle vertices come in threes"));
+            return Err(HostError::invalid(
+                "unindexed triangle vertices come in threes",
+            ));
         }
         _ => {}
     }
@@ -101,11 +107,17 @@ const TRANSFORM_FLOATS: usize = 12;
 /// `records` holds `[bottom_level, id, mask, hit_group_offset, flags]` per instance and
 /// `transforms` the matching row-major 3x4 matrices.
 pub fn decode_instances(records: &[i32], transforms: &[f32]) -> HostResult<Vec<InstanceRecord>> {
-    if !records.len().is_multiple_of(RECORD_WORDS) || transforms.len() != records.len() / RECORD_WORDS * TRANSFORM_FLOATS {
-        return Err(HostError::invalid("instance records and transforms do not match"));
+    if !records.len().is_multiple_of(RECORD_WORDS)
+        || transforms.len() != records.len() / RECORD_WORDS * TRANSFORM_FLOATS
+    {
+        return Err(HostError::invalid(
+            "instance records and transforms do not match",
+        ));
     }
     if records.is_empty() {
-        return Err(HostError::invalid("a top-level structure needs at least one instance"));
+        return Err(HostError::invalid(
+            "a top-level structure needs at least one instance",
+        ));
     }
     records
         .chunks(RECORD_WORDS)
@@ -115,7 +127,11 @@ pub fn decode_instances(records: &[i32], transforms: &[f32]) -> HostResult<Vec<I
                 u32::try_from(value)
                     .ok()
                     .filter(|v| *v < (1 << bits))
-                    .ok_or_else(|| HostError::invalid(format!("instance {what} {value} does not fit in {bits} bits")))
+                    .ok_or_else(|| {
+                        HostError::invalid(format!(
+                            "instance {what} {value} does not fit in {bits} bits"
+                        ))
+                    })
             };
             if t.iter().any(|v| !v.is_finite()) {
                 return Err(HostError::invalid("instance transforms must be finite"));
@@ -164,9 +180,19 @@ impl Layout {
             usize::try_from(word)
                 .ok()
                 .filter(|i| *i < entry_count)
-                .ok_or_else(|| HostError::invalid(format!("ray tracing layout names entry {word} of {entry_count}")))
+                .ok_or_else(|| {
+                    HostError::invalid(format!(
+                        "ray tracing layout names entry {word} of {entry_count}"
+                    ))
+                })
         };
-        let optional = |word: i32| if word == -1 { Ok(None) } else { index(word).map(Some) };
+        let optional = |word: i32| {
+            if word == -1 {
+                Ok(None)
+            } else {
+                index(word).map(Some)
+            }
+        };
         let ray_generation = index(next()?)?;
         let list = |next: &mut dyn FnMut() -> HostResult<i32>| -> HostResult<Vec<usize>> {
             let count = usize::try_from(next()?).map_err(|_| malformed())?;
@@ -246,10 +272,19 @@ fn require_acceleration_structures(core: &DeviceCore) -> HostResult<()> {
 }
 
 /// The raw buffer behind `handle`, checked to belong to `device` and to hold `bytes`.
-fn build_buffer(state: &State, handle: i32, device: i32, bytes: u64, what: &str) -> HostResult<*mut ffi::DgpuObject> {
+fn build_buffer(
+    state: &State,
+    handle: i32,
+    device: i32,
+    bytes: u64,
+    what: &str,
+) -> HostResult<*mut ffi::DgpuObject> {
     let entry = state.owned(handle, device, what)?;
     let Kind::Buffer(buffer) = &entry.kind else {
-        return Err(HostError::invalid(format!("the {what} is a {}", entry.kind.name())));
+        return Err(HostError::invalid(format!(
+            "the {what} is a {}",
+            entry.kind.name()
+        )));
     };
     if bytes > buffer.size {
         return Err(HostError::invalid(format!(
@@ -308,7 +343,13 @@ fn bottom_level_build_now(future: usize, device: i32, words: &[i32]) -> HostResu
     let core = state.device(device)?;
     require_acceleration_structures(&core)?;
     let vertex_bytes = u64::from(geometry.vertex_count) * u64::from(VEC3_BYTES);
-    let vertices = build_buffer(&state, geometry.vertices, device, vertex_bytes, "geometry buffer")?;
+    let vertices = build_buffer(
+        &state,
+        geometry.vertices,
+        device,
+        vertex_bytes,
+        "geometry buffer",
+    )?;
     let (indices, index_count) = match geometry.indices {
         Some((handle, count)) => (
             build_buffer(&state, handle, device, u64::from(count) * 4, "index buffer")?,
@@ -339,7 +380,15 @@ fn bottom_level_build_now(future: usize, device: i32, words: &[i32]) -> HostResu
         top_level: false,
         bottom_levels: Vec::new(),
     };
-    finish_build(&mut state, device, core, future, fence, built, vec![Obj::from_raw(scratch)])
+    finish_build(
+        &mut state,
+        device,
+        core,
+        future,
+        fence,
+        built,
+        vec![Obj::from_raw(scratch)],
+    )
 }
 
 pub fn top_level_build(future: usize, device: i32, records: &[i32], transforms: &[f32]) {
@@ -349,7 +398,12 @@ pub fn top_level_build(future: usize, device: i32, records: &[i32], transforms: 
     }
 }
 
-fn top_level_build_now(future: usize, device: i32, records: &[i32], transforms: &[f32]) -> HostResult<()> {
+fn top_level_build_now(
+    future: usize,
+    device: i32,
+    records: &[i32],
+    transforms: &[f32],
+) -> HostResult<()> {
     let instances = decode_instances(records, transforms)?;
     let mut state = state::lock();
     let core = state.device(device)?;
@@ -357,7 +411,11 @@ fn top_level_build_now(future: usize, device: i32, records: &[i32], transforms: 
     let mut bottom_levels = Vec::with_capacity(instances.len());
     let mut descs = Vec::with_capacity(instances.len());
     for instance in &instances {
-        let entry = state.owned(instance.bottom_level, device, "instance acceleration structure")?;
+        let entry = state.owned(
+            instance.bottom_level,
+            device,
+            "instance acceleration structure",
+        )?;
         let Kind::AccelerationStructure(blas) = &entry.kind else {
             return Err(HostError::invalid(format!(
                 "an instance names a {}, not an acceleration structure",
@@ -365,7 +423,9 @@ fn top_level_build_now(future: usize, device: i32, records: &[i32], transforms: 
             )));
         };
         if blas.top_level {
-            return Err(HostError::invalid("instances need bottom-level acceleration structures"));
+            return Err(HostError::invalid(
+                "instances need bottom-level acceleration structures",
+            ));
         }
         descs.push(ffi::Instance {
             bottom_level: blas.obj.raw(),
@@ -405,11 +465,22 @@ fn top_level_build_now(future: usize, device: i32, records: &[i32], transforms: 
 }
 
 /// `entries` are newline-separated names, `libraries[i]` the library of entry `i`.
-pub fn ray_tracing_pipeline_create(device: i32, libraries: &[i32], entries: &str, layout: &[i32]) -> HostResult<i32> {
+pub fn ray_tracing_pipeline_create(
+    device: i32,
+    libraries: &[i32],
+    entries: &str,
+    layout: &[i32],
+) -> HostResult<i32> {
     crate::strict_aot::check();
-    let names: Vec<&str> = if entries.is_empty() { Vec::new() } else { entries.split('\n').collect() };
+    let names: Vec<&str> = if entries.is_empty() {
+        Vec::new()
+    } else {
+        entries.split('\n').collect()
+    };
     if names.len() != libraries.len() || names.is_empty() {
-        return Err(HostError::invalid("every ray tracing entry needs its library"));
+        return Err(HostError::invalid(
+            "every ray tracing entry needs its library",
+        ));
     }
     let layout = Layout::decode(layout, names.len())?;
     let roles = layout.program_entries()?;
@@ -426,7 +497,10 @@ pub fn ray_tracing_pipeline_create(device: i32, libraries: &[i32], entries: &str
     }
     let (target, library_device, _) = library(&state, libraries[0])?;
     if library_device != device {
-        return Err(HostError::new(Code::WrongDevice, "ray tracing shader library"));
+        return Err(HostError::new(
+            Code::WrongDevice,
+            "ray tracing shader library",
+        ));
     }
     let resolved: Vec<&bundle::Entry> = roles
         .iter()

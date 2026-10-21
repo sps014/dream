@@ -9,80 +9,31 @@ use std::path::Path;
 use std::process::Command;
 
 const SMOKE_CASES: &[&str] = &[
-    "arithmetic",
-    "pointer_integers",
-    "classes",
-    "enum_basic",
-    "generic_structs",
-    "async_basic",
-    "async_generic_sink_reuse",
-    "collection_literals",
-    "array_repeat",
-    "map_basics",
-    "map_indexer_missing",
-    "container_clear_rc",
-    "unique_region_tree",
-    "cycle_tuple_field",
-    "cycle_via_value_struct",
-    "cycle_interface_field",
-    "receiver_mode_inference",
-    "weak_handle_lifecycle",
-    "borrow_after_last_use",
-    "buffer_clear_truncate",
-    "container_rewind_legal",
-    "arc_slot_read_retains",
-    "string_split_once",
+    "operators",
+    "class_basics",
     "interfaces",
-    "object_protocol",
-    "literal_methods",
+    "async_basic",
+    "task_basic",
+    "collection_literals",
+    "list_collection",
+    "string_methods",
     "path_helpers",
     "stdlib_helpers",
-    "diagnostics",
+    "arc_param",
+    "arc_complete",
+    "arc_global_reassign",
     "last_use_destroy",
     "defer_last_use",
-    "defer_zero",
-    "arc_global_reassign",
-    "defer_global_reassign",
-    "struct_last_use_move",
     "ui_render_tree",
-    "simd_f32x4",
-    "autovec_arr_add",
-    "heap_large_array",
-    "case_negative",
-    "case_duplicate",
-    "case_runtime_field",
-    "switch_bool",
-    "nested_self_realloc",
-    "literal_overflow",
-    "sizeof_unknown",
-    "sizeof",
-    "sizeof_case_duplicates",
-    "guarded_arm_nonreturn",
-    "char_literal_errors",
-    "defer_break",
-    "lock_await_rejected",
-    "await_non_async_lambda",
-    "await_sync_map_literal",
-    "await_sync_tuple_destructure",
-    "class_export",
-    "class_export_generic",
-    "class_export_option",
-    "class_export_enum",
-    "panic_div_zero",
-    "task_basic",
-    "task_local_alloc",
-    "task_spawn_no_leak",
     "promise_start_no_leak",
-    "hello_println",
-    "stdio_streams",
-    "stdlib_internal_hidden",
-    "cancellation_basic",
-    "cancellation_stdlib",
-    "primary_constructor",
-    "unit_variant_bare",
-    "union_named_single_field",
-    "class_indexer",
+    "stdio_pipe",
+    "isolated_ownership",
     "operator_overloading",
+    "cycle_errors",
+    "parse_errors",
+    "await_defer_errors",
+    "class_export",
+    "panic_div_zero",
 ];
 
 fn run_corpus(only: Option<&[&str]>) {
@@ -132,13 +83,7 @@ fn file_urls_round_trip_special_paths() {
 #[test]
 fn run_wasm_js_smoke_e2e() {
     crate::corpus::run::run_selected(
-        Some(&[
-            "println_basic",
-            "arithmetic",
-            "async_basic",
-            "task_basic",
-            "json_roundtrip",
-        ]),
+        Some(&["operators", "async_basic", "task_basic", "json_roundtrip"]),
         &[dream::driver::test::TestHost::Node],
     );
 }
@@ -146,11 +91,7 @@ fn run_wasm_js_smoke_e2e() {
 #[test]
 fn wasm_js_compile_errors_match_native() {
     crate::corpus::run::run_selected(
-        Some(&[
-            "task_value_struct_capture_violation",
-            "js_capturing_lambda_func",
-            "js_capturing_lambda_slot",
-        ]),
+        Some(&["task_capture_errors", "js_lambda_errors"]),
         &[dream::driver::test::TestHost::Node],
     );
 }
@@ -179,39 +120,24 @@ fn wasm_compiles_js_interop_samples() {
             .unwrap_or_else(|e| panic!("{} should compile to wasm32: {}", rel, e));
         let wasm = dest.with_extension("wasm");
         assert!(wasm.is_file(), "expected {}", wasm.display());
+        if stem == "option_fields" {
+            let ll = fs::read_to_string(dest.with_extension("ll")).unwrap();
+            assert!(
+                ll.contains("jsIsNull") && ll.contains("jsNull"),
+                "Option fields must marshal None as JS null, got marshaler without jsIsNull/jsNull:\n{}",
+                ll
+            );
+            assert!(
+                ll.contains("Profile_to_js"),
+                "expected Profile_to_js marshaler:\n{}",
+                ll
+            );
+        }
         let _ = fs::remove_file(&dest);
         let _ = fs::remove_file(&wasm);
         let _ = fs::remove_file(dest.with_extension("ll"));
         let _ = fs::remove_file(dest.with_extension("abi.json"));
     }
-}
-
-#[test]
-fn wasm32_js_option_struct_fields_are_marshaled() {
-    let src = Path::new("sample/interop/option_fields.dream");
-    let dest = std::env::temp_dir().join("dream_js_option_fields.wat");
-    let src_s = src.to_str().unwrap().to_string();
-    let dest_s = dest.to_str().unwrap().to_string();
-    Compiler::new(Target::wasm32())
-        .compile(&src_s, &dest_s)
-        .unwrap_or_else(|e| panic!("option_fields should compile to wasm32: {}", e));
-    let ll_path = dest.with_extension("ll");
-    let ll =
-        fs::read_to_string(&ll_path).unwrap_or_else(|e| panic!("read {}: {e}", ll_path.display()));
-    assert!(
-        ll.contains("jsIsNull") && ll.contains("jsNull"),
-        "Option fields must marshal None as JS null, got marshaler without jsIsNull/jsNull:\n{}",
-        ll
-    );
-    assert!(
-        ll.contains("Profile_to_js"),
-        "expected Profile_to_js marshaler:\n{}",
-        ll
-    );
-    let _ = fs::remove_file(&dest);
-    let _ = fs::remove_file(dest.with_extension("wasm"));
-    let _ = fs::remove_file(&ll_path);
-    let _ = fs::remove_file(dest.with_extension("abi.json"));
 }
 
 #[test]
@@ -222,17 +148,13 @@ fn run_smoke_e2e_cases() {
 #[test]
 fn run_core_services_e2e() {
     run_corpus(Some(&[
-        "file_bytes",
         "file_dir",
-        "file_stats",
-        "file_copy_rename",
-        "file_remove_dir",
+        "isolated_files",
         "process_args_basic",
         "console_read_line",
         "crypto_basic",
         "process_run_basic",
-        "process_spawn_basic",
-        "timezone_basic",
+        "datetime",
     ]));
 }
 
@@ -246,11 +168,7 @@ fn native_asan_focused_goldens() {
         eprintln!("skipping: set DREAM_NATIVE_SANITIZE=address,leak");
         return;
     }
-    run_corpus(Some(&[
-        "json_parse",
-        "json_roundtrip",
-        "promise_start_no_leak",
-    ]));
+    run_corpus(Some(&["json_roundtrip", "promise_start_no_leak"]));
 }
 
 /// Codegen must be reproducible: compiling the same program twice (each compile uses fresh,
@@ -260,17 +178,9 @@ fn native_asan_focused_goldens() {
 /// nondeterminism. Both runs write the same path: the output name is part of the module.
 #[test]
 fn codegen_is_deterministic() {
-    for name in [
-        "classes",
-        "async_basic",
-        "arc_cycles",
-        "arc_cycles_dynamic",
-        "arc_cycles_async_values",
-    ] {
+    for name in ["arc_cycles", "arc_cycles_dynamic"] {
         let src = crate::common::compiler_fixture(name);
-        if src.exists() {
-            assert_deterministic("dream_det", name, &src, None);
-        }
+        assert_deterministic("dream_det", name, &src, None);
     }
 }
 
@@ -301,18 +211,15 @@ fn codegen_is_deterministic_full_corpus() {
                 &text,
             )
             .unwrap();
-            let test = file
-                .tests
-                .iter()
-                .find(|test| test.name == case.stem)
-                .unwrap();
-            calls.push(format!(
-                "Test.{}(\"{}\", {}){};\n",
-                if test.is_async { "run_async" } else { "run" },
-                case.stem,
-                case.stem,
-                if test.is_async { ".await" } else { "" }
-            ));
+            for test in &file.tests {
+                calls.push(format!(
+                    "Test.{}(\"{}\", {}){};\n",
+                    if test.is_async { "run_async" } else { "run" },
+                    test.name,
+                    test.name,
+                    if test.is_async { ".await" } else { "" }
+                ));
+            }
         }
         source.push_str("@unsafe\nasync fun main(): void {\n");
         for call in calls {
@@ -413,57 +320,41 @@ fn dream_js_bundle_is_platform_independent() {
     );
 }
 
-/// An arithmetic program must not pull FS/crypto host chunks into its selective
-/// runtime (js bridges may still appear when layouts exist for marshaler keepalive).
+/// An arithmetic program must not pull FS/crypto host chunks into its selective runtime (js
+/// bridges may still appear when layouts exist for marshaler keepalive), nor export the
+/// worker-only publication entry.
 #[test]
-fn selective_runtime_omits_unused_host_chunks() {
+fn release_arithmetic_omits_unused_host_chunks_and_publication() {
     let src = &crate::common::compiler_fixture("arithmetic");
-    if !src.exists() {
-        return;
-    }
-    let out = std::env::temp_dir().join("dream_sel_runtime_check.wat");
-    let out_str = out.to_str().unwrap().to_string();
-    let src_str = src.to_str().unwrap().to_string();
-    Compiler::new(Target::wasm32())
-        .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
-        .compile(&src_str, &out_str)
-        .expect("arithmetic compile");
-    let rt = fs::read_to_string(out.with_extension("web.runtime.js")).expect("web.runtime.js");
-    let _ = fs::remove_file(&out);
-    let _ = fs::remove_file(out.with_extension("web.runtime.js"));
-    let _ = fs::remove_file(out.with_extension("wasm"));
-    let _ = fs::remove_file(out.with_extension("abi.json"));
-    assert!(!rt.contains("makeFsHost"), "fs chunk should be absent");
-    assert!(
-        !rt.contains("makeCryptoHost"),
-        "crypto chunk should be absent"
-    );
-    assert!(rt.contains("function load("));
-}
-
-#[test]
-fn release_arithmetic_omits_worker_publication() {
-    let src = &crate::common::compiler_fixture("arithmetic");
-    if !src.exists() {
-        return;
-    }
     let out = std::env::temp_dir().join("dream_arith_release_check.wat");
     let out_str = out.to_str().unwrap().to_string();
     let src_str = src.to_str().unwrap().to_string();
     Compiler::new(Target::wasm32())
         .with_release(true)
+        .with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Web])
         .compile(&src_str, &out_str)
         .expect("arithmetic --release compile");
-    let wasm_path = out.with_extension("wasm");
+    let rt = fs::read_to_string(out.with_extension("web.runtime.js")).expect("web.runtime.js");
     let wat = fs::read_to_string(&out).expect("arithmetic WAT");
+    for artifact in [
+        out.clone(),
+        out.with_extension("web.runtime.js"),
+        out.with_extension("wasm"),
+        out.with_extension("abi.json"),
+    ] {
+        let _ = fs::remove_file(artifact);
+    }
+    assert!(!rt.contains("makeFsHost"), "fs chunk should be absent");
+    assert!(
+        !rt.contains("makeCryptoHost"),
+        "crypto chunk should be absent"
+    );
+    assert!(rt.contains(" as load,"), "runtime must export load");
     wat::parse_str(&wat).expect("arithmetic WAT must parse");
     assert!(
         !wat.contains("(export \"dream_publish\""),
         "worker-only publication must not be exported by arithmetic"
     );
-    let _ = fs::remove_file(&out);
-    let _ = fs::remove_file(&wasm_path);
-    let _ = fs::remove_file(out.with_extension("abi.json"));
 }
 
 #[test]
@@ -488,26 +379,4 @@ fn release_music_player_compiles_to_wasm() {
     let _ = fs::remove_file(&out);
     let _ = fs::remove_file(&wasm_path);
     let _ = fs::remove_file(out.with_extension("abi.json"));
-}
-
-/// `@test` discovery + synthesized runner (`dream test` path).
-#[test]
-fn dream_test_runs_attr_marked_functions() {
-    let path = Path::new("tests/cases/support/attr_tests");
-    if !path.exists() {
-        return;
-    }
-    let result = dream::driver::test::run_tests(
-        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        path,
-        &dream::driver::test::TestOptions {
-            release: false,
-            filter: None,
-            verbose: false,
-            ..Default::default()
-        },
-    )
-    .expect("dream test should succeed");
-    assert!(result.ok());
-    assert_eq!(result.reports[0].passed.len(), 3);
 }

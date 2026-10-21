@@ -42,10 +42,6 @@ impl RuntimeRequirements {
             });
         let process_arguments = embedding
             || opaque_intrinsics
-            || mir
-                .functions
-                .iter()
-                .any(|f| f.name == crate::abi::ENTRY_FN && !f.params.is_empty())
             || mir.imports.iter().any(|i| {
                 i.module == js_abi::HOST_MODULE
                     && [runtime_hosts::PROCESS_ARGS, runtime_hosts::PROCESS_EXE_PATH]

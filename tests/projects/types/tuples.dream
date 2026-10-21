@@ -1,0 +1,54 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun tuple_nested_destructure() {
+    let (a, (b, c)) = (1, (2, 3));
+    Assert.eq((a).to_string(), "1");
+    Assert.eq((b).to_string(), "2");
+    Assert.eq((c).to_string(), "3");
+    let t = (10, (20, 30));
+    let (x, (y, _)) = t;
+    Assert.eq((x).to_string(), "10");
+    Assert.eq((y).to_string(), "20");
+}
+
+@test
+@timeout(180000)
+fun tuple_pattern_switch(): void {
+    let p: (int, int) = (0, 9);
+    let n = switch (p) {
+        (0, x) => x,
+        (_, _) => -1,
+    };
+    Assert.eq(n, 9);
+
+    let q: (int, int) = (3, 4);
+    Assert.eq(
+        switch (q) {
+            (0, x) => x,
+            (_, y) => y
+        },
+        4
+    );
+}
+
+@test
+@timeout(180000)
+fun tuple_print() {
+    let t = (1, "x");
+    Assert.eq((t).to_string(), "(1, x)");
+    let n = ((3, 4), false);
+    Assert.eq((n).to_string(), "((3, 4), false)");
+}
+
+@test
+@timeout(180000)
+fun tuple_value_semantics() {
+    let a = (1, 2);
+    let b = a;
+    b.0 = 99;
+    Assert.eq((a.0).to_string(), "1");
+    Assert.eq((b.0).to_string(), "99");
+}

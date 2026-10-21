@@ -1,0 +1,34 @@
+// Binding rules: const bindings are immutable, `_` discards, void has no value, and `weak`
+// needs a class.
+import system;
+
+const LIMIT: int = 5;
+
+fun const_local(): void {
+    const x: int = 1;
+    x = 2;
+    System.println(x);
+}
+
+fun const_global(): void {
+    LIMIT = 6;
+    System.println(LIMIT);
+}
+
+fun discard_read(): void {
+    let _ = 1;
+    System.println(_);
+}
+
+fun nothing(): void { }
+
+fun void_value(): void {
+    let r = nothing();
+    System.println(r);
+}
+
+fun weak_unmanaged(): void {
+    let weak handle = 42;
+}
+
+fun main(): void {}

@@ -1,17 +1,47 @@
+import system.interop;
 import system.testing;
 import system;
 
 @test
 @timeout(180000)
 fun process_usage(): void {
-    Assert.eq(
-        (
-            System.platform
-                == Platform.Native
-                || System.platform == Platform.Node || System.platform == Platform.Browser
-        ).to_string(),
-        "true"
+    Assert.is_true(
+        System.platform == Platform.Native
+            || System.platform == Platform.Node
+            || System.platform == Platform.Browser
     );
-    Assert.eq((System.cpu_time_nanos >= 0L).to_string(), "true");
-    Assert.eq((System.memory_bytes > 0L).to_string(), "true");
+    Assert.is_true(System.cpu_time_nanos >= 0L);
+    Assert.is_true(System.memory_bytes > 0L);
+}
+
+// `Option<string>` is a nullable `const char*`: a NULL result becomes `None`.
+@c("c", "getenv")
+extern fun c5e_getenv(name: string): Option<string>;
+
+@c("c", "strlen")
+extern fun c5e_strlen(s: string): usize;
+
+@c("c", "strstr")
+extern fun c5e_strstr(s: string, needle: string): Option<string>;
+
+@test
+@timeout(180000)
+fun c_option_getenv(): void {
+    Assert.eq(c5e_getenv("DREAM_SURELY_UNSET_VARIABLE").unwrap_or("(unset)"), "(unset)");
+    Assert.is_true(c5e_getenv("PATH").is_some());
+    Assert.eq((c5e_strlen("dream")).to_string(), "5");
+    Assert.eq((c5e_strlen("😀")).to_string(), "4");
+    Assert.eq((c5e_strlen("Aé日本😀!")).to_string(), "14");
+    Assert.eq(c5e_strstr("prefix😀日本!", "😀").unwrap(), "😀日本!");
+}
+
+@native
+fun c1ea_f(): string {
+    return "ok";
+}
+
+@test
+@timeout(180000)
+fun runtime_attr_ok(): void {
+    Assert.eq(c1ea_f(), "ok");
 }

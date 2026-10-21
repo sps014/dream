@@ -1,8 +1,0 @@
-// Integer overflow panics inside `checked { }`.
-import system;
-fun f(a: byte, b: byte): byte { checked { return a - b; } }
-fun main(): void {
-    System.println("start");
-    System.println(f(3b, 5b));
-    System.println("unreachable");
-}

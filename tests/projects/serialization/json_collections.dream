@@ -40,7 +40,9 @@ class c10d_Bundle {
     }
 }
 
-fun c10d_body(): void {
+@test
+@timeout(180000)
+fun json_collections(): void {
     let items = List<int>();
     items.push(1);
     items.push(2);
@@ -66,70 +68,110 @@ fun c10d_body(): void {
 
     let bundle = c10d_Bundle(items, tags, scores, ordered, trail, nested);
     let text = Json.serialize(bundle);
-    c10d_verify_observation((text).to_string());
+    Assert.eq(
+        text,
+        "{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}"
+    );
 
-    switch (Json.deserialize<c10d_Bundle>(text)) {
-        Ok(back) => {
-            c10d_verify_observation((back.items.length).to_string());
-            c10d_verify_observation((back.tags.length).to_string());
-            c10d_verify_observation((back.scores.get("ada").unwrap_or(-1)).to_string());
-            c10d_verify_observation((back.ordered.get("a").unwrap_or(-1)).to_string());
-            c10d_verify_observation((back.trail[0]).to_string());
-            c10d_verify_observation((back.nested[0].x).to_string());
-        },
-        Err(e) => c10d_verify_observation(("err:" + e.message()).to_string()),
-    }
+    let back = Json.deserialize<c10d_Bundle>(text).unwrap();
+    Assert.eq(back.items.length, 2);
+    Assert.eq(back.tags.length, 2);
+    Assert.eq(back.scores.get("ada").unwrap_or(-1), 10);
+    Assert.eq(back.ordered.get("a").unwrap_or(-1), 2);
+    Assert.eq(back.trail[0], 9);
+    Assert.eq(back.nested[0].x, 3);
 
     let top_list = List<int>();
     top_list.push(7);
     top_list.push(8);
-    c10d_verify_observation((Json.serialize<List<int>>(top_list)).to_string());
+    Assert.eq(Json.serialize<List<int>>(top_list), "[7,8]");
 
     let top_set = Set<string>();
     top_set.add("x");
     top_set.add("y");
-    c10d_verify_observation((Json.serialize<Set<string>>(top_set)).to_string());
+    Assert.eq(Json.serialize<Set<string>>(top_set), "[\"y\",\"x\"]");
 
     let top_map = Map<string, int>();
     top_map["k"] = 42;
-    c10d_verify_observation((Json.serialize<Map<string, int>>(top_map)).to_string());
+    Assert.eq(Json.serialize<Map<string, int>>(top_map), "{\"k\":42}");
 
-    switch (Json.deserialize<List<int>>("[9,10]")) {
-        Ok(xs) => c10d_verify_observation((xs[0]).to_string()),
-        Err(e) => c10d_verify_observation((e.message()).to_string()),
-    }
+    Assert.eq(Json.deserialize<List<int>>("[9,10]").unwrap()[0], 9);
 
-    c10d_verify_observation((Json.serialize(top_list)).to_string());
-    c10d_verify_observation((Json.serialize(top_set)).to_string());
-    c10d_verify_observation((Json.serialize(top_map)).to_string());
+    Assert.eq(Json.serialize(top_list), "[7,8]");
+    Assert.eq(Json.serialize(top_set), "[\"y\",\"x\"]");
+    Assert.eq(Json.serialize(top_map), "{\"k\":42}");
 
     let data: Map<string, string> = {
         "key": "value"
     };
-    c10d_verify_observation((Json.serialize(data)).to_string());
+    Assert.eq(Json.serialize(data), "{\"key\":\"value\"}");
 }
 
-let c10d_cursor: int = 0;
+@json
+class c10f_Record {
+    public values: int[];
+    public items: List<int>;
 
-fun c10d_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}\n2\n2\n10\n2\n9\n3\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n9\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n{\"key\":\"value\"}\n";
-    let end = c10d_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c10d_cursor, end));
-    c10d_cursor = end;
+    public constructor(values: int[], items: List<int>) {
+        this.values = values;
+        this.items = items;
+    }
+}
+
+fun c10f_check(text: string): string {
+    switch (Json.deserialize<c10f_Record>(text)) {
+        Ok(record) => {
+            return record.values.length.to_string() + "," + record.items.length.to_string();
+        },
+        Err(error) => {
+            return error.message();
+        },
+    }
 }
 
 @test
 @timeout(180000)
+fun json_container_whitespace(): void {
+    Assert.eq(c10f_check(" { \n\t\"values\" : [ 1 , 2 ] , \"items\" : [ 3 , 4 ] \r\n } "), "2,2");
+    Assert.eq(c10f_check("{\"values\": [ ], \"items\": [ ] }"), "0,0");
+    Assert.eq(c10f_check("{\"values\": [ 1 "), "invalid JSON input");
+    Assert.eq(c10f_check("{\"values\": [ true ] }"), "invalid JSON input");
+    Assert.eq(c10f_check("{\"values\": [1], \"items\": [2] "), "invalid JSON input");
+}
 
-fun json_collections(): void {
-    c10d_cursor = 0;
-    c10d_body();
+// `JsonValue` is the escape hatch for heterogeneous / unknown JSON: it carries its own shape, so
+// collections and `@json` fields holding one pass it straight through instead of decoding per type.
+@json
+class c124_Envelope {
+    public id: int;
+    public payload: JsonValue;
+
+    public constructor(id: int, payload: JsonValue) {
+        this.id = id;
+        this.payload = payload;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_value_collections(): void {
+    let items: List<JsonValue> = [JsonValue.from_int(1), JsonValue.from_string("x")];
+    Assert.eq(Json.serialize(items), "[1,\"x\"]");
+
+    let map: Map<string, JsonValue> = {
+        "n": JsonValue.from_int(42)
+    };
+    Assert.eq(Json.serialize(map), "{\"n\":42}");
+
+    let back = Json.deserialize<Map<string, JsonValue>>("{\"a\":7}").unwrap();
+    Assert.eq(Json.serialize(back), "{\"a\":7}");
+
+    // A nested tree survives a round trip through a typed `@json` field untouched.
+    let raw = Json.deserialize<JsonValue>("{\"deep\":{\"n\":[1,2]}}").unwrap();
+    let text = Json.serialize(c124_Envelope(9, raw));
+    Assert.eq(text, "{\"id\":9,\"payload\":{\"deep\":{\"n\":[1,2]}}}");
     Assert.eq(
-        c10d_cursor,
-        (
-            "{\"items\":[1,2],\"tags\":[\"a\",\"b\"],\"scores\":{\"ada\":10},\"ordered\":{\"a\":2,\"z\":1},\"trail\":[9,8],\"nested\":[{\"x\":3,\"y\":4}]}\n2\n2\n10\n2\n9\n3\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n9\n[7,8]\n[\"y\",\"x\"]\n{\"k\":42}\n{\"key\":\"value\"}\n"
-        ).length
+        Json.serialize(Json.deserialize<c124_Envelope>(text).unwrap()),
+        "{\"id\":9,\"payload\":{\"deep\":{\"n\":[1,2]}}}"
     );
 }

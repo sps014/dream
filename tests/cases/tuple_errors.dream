@@ -1,6 +1,0 @@
-import system;
-
-fun main() {
-    let t = (1, 2);
-    System.println(t[0]);
-}

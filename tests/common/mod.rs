@@ -104,15 +104,35 @@ pub fn emit_ll_for(
         wasm_opt: OptLevel::O0,
         opt_remarks: None,
     };
-    let toolchain = Toolchain {
-        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        opt: OptLevel::O0,
-        debug: false,
-    };
-    let runtime = toolchain
-        .runtime_sigs(&req)
-        .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
-    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&runtime.text)
+    // Fingerprinting the runtime inputs rehashes the pinned clang on hosts without a change-time
+    // stamp, so one test process resolves each distinct request once.
+    type SigCache = std::collections::BTreeMap<String, String>;
+    static SIGS: std::sync::OnceLock<std::sync::Mutex<SigCache>> = std::sync::OnceLock::new();
+    let key = format!("{:?} {:?}", target.spec(), req.need);
+    let cached = SIGS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .get(&key)
+        .cloned();
+    let text = cached.unwrap_or_else(|| {
+        let toolchain = Toolchain {
+            config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+            opt: OptLevel::O0,
+            debug: false,
+        };
+        let text = toolchain
+            .runtime_sigs(&req)
+            .unwrap_or_else(|e| panic!("runtime signatures: {}", e))
+            .text;
+        SIGS.get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert(key, text.clone());
+        text
+    });
+    let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&text)
         .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
     sigs.validate_target(target.spec())
         .unwrap_or_else(|e| panic!("runtime signatures: {}", e));
@@ -481,14 +501,16 @@ pub fn corpus_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
 
 /// Programs whose compilation or process entrypoint is itself under test.
 pub fn compiler_fixture(stem: &str) -> std::path::PathBuf {
-    let case = crate::corpus::cases()
-        .find(|case| case.stem == stem)
-        .unwrap_or_else(|| panic!("unregistered compiler fixture {stem}"));
-    if matches!(case.expectation, crate::corpus::Expectation::Project(_)) {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/compiler")
-            .join(format!("{stem}.dream"))
-    } else {
-        case.source()
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/compiler")
+        .join(format!("{stem}.dream"));
+    if fixture.is_file() {
+        return fixture;
     }
+    crate::corpus::cases()
+        .find(|case| {
+            case.stem == stem && !matches!(case.expectation, crate::corpus::Expectation::Project(_))
+        })
+        .unwrap_or_else(|| panic!("no compiler fixture or isolated corpus case {stem}"))
+        .source()
 }

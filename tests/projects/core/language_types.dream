@@ -1,0 +1,235 @@
+import system.testing;
+import system;
+import system.json;
+
+// `next` is a self-reference, so the structural cycle check needs an explicit opt-in.
+@allow_cycle
+class c130_Node {
+    public value: int;
+    public next: Option<c130_Node>;
+
+    public constructor(value: int, next: Option<c130_Node>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+fun c130_create_node(val: int): c130_Node {
+    let no_next: Option<c130_Node> = Option.None;
+    let n = c130_Node(val, no_next);
+    return n;
+}
+
+class c16a_Box<T> {
+    public v: T;
+
+    public constructor(v: T) {
+        this.v = v;
+    }
+}
+
+class c16a_Pair<A, B> {
+    public first: A;
+    public second: B;
+
+    public constructor(first: A, second: B) {
+        this.first = first;
+        this.second = second;
+    }
+}
+
+let c208_last_level: int = 0;
+
+class c208_Settings {
+    public static get version(): int {
+        return 7;
+    }
+
+    public static set level(value: int) {
+        c208_last_level = value;
+    }
+}
+
+// A sealed class may still implement an interface and inherit its default methods, which are
+// injected as a compiler-synthesized `extend` that the sealed check exempts.
+interface c1f0_Greeter {
+    fun name(): string;
+
+    public fun greet(): string {
+        return this.name();
+    }
+}
+
+sealed class c1f0_Robot: c1f0_Greeter {
+    public fun name(): string {
+        return "beep";
+    }
+}
+
+interface c108_Animal {
+    fun speak(): int;
+}
+
+class c108_Cat: c108_Animal {
+    public fun speak(): int {
+        return 3;
+    }
+}
+
+class c108_Dog: c108_Animal {
+    public fun speak(): int {
+        return 0;
+    }
+}
+
+// The `is` binding is used in a later conjunct, both directly and past a plain-bool conjunct.
+fun c108_describe(a: c108_Animal, flag: bool): string {
+    if a is c108_Cat t && t.speak() >= 0 && flag {
+        return "flagged cat";
+    }
+    return "other";
+}
+
+// Inside a generic instantiation a dead `is` branch is only valid for other type arguments, so it
+// must stay unchecked: `x * 2` is fine for `T = int` and skipped for `T = string`.
+fun c10a_describe<T>(x: T): string {
+    if (x is int) {
+        return (x * 2).to_string();
+    } else {
+        return "not an int";
+    }
+}
+
+class cae_User {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+
+    public fun greet(): string {
+        return "hi " + this.name;
+    }
+}
+
+fun cae_helper(): int {
+    return 1;
+}
+
+@attribute(AttributeTarget.Function)
+public struct c287_route {
+    public path: string;
+}
+
+let c287_calls: int = 0;
+
+@c287_route("/users")
+public fun c287_list_users(): void {
+    c287_calls = c287_calls + 1;
+}
+
+fun cbe_side(): int {
+    return 7;
+}
+
+async fun cbe_tick(): int {
+    return 1;
+}
+
+@test
+@timeout(180000)
+fun linked_list(): void {
+    let head = c130_create_node(10);
+    let second = c130_create_node(20);
+    let third = c130_create_node(30);
+    second.next = Option.Some(third);
+    head.next = Option.Some(second);
+
+    let values = "";
+    let curr: Option<c130_Node> = Option.Some(head);
+    let done = false;
+    while !done {
+        switch (curr) {
+            Some(n) => {
+                values = values + n.value.to_string() + ";";
+                curr = n.next;
+            }
+            None => {
+                done = true;
+            }
+        }
+    }
+    Assert.eq(values, "10;20;30;");
+}
+
+@test
+@timeout(180000)
+fun nested_generics(): void {
+    let b = c16a_Box<c16a_Box<int>>(c16a_Box<int>(7));
+    Assert.eq(b.v.v, 7);
+
+    let p = c16a_Pair<c16a_Box<int>, int>(c16a_Box<int>(99), 5);
+    Assert.eq(p.first.v, 99);
+    Assert.eq(p.second, 5);
+}
+
+@test
+@timeout(180000)
+fun static_property(): void {
+    Assert.eq(c208_Settings.version, 7);
+    c208_Settings.level = 3;
+    Assert.eq(c208_last_level, 3);
+    c208_Settings.level = c208_Settings.version;
+    Assert.eq(c208_last_level, 7);
+}
+
+@test
+@timeout(180000)
+fun sealed_interface(): void {
+    let r = c1f0_Robot();
+    Assert.eq(r.greet(), "beep");
+
+    let g: c1f0_Greeter = (c1f0_Greeter)r;
+    Assert.eq(g.greet(), "beep");
+}
+
+@test
+@timeout(180000)
+fun is_checks(): void {
+    Assert.eq(c108_describe(c108_Cat(), true), "flagged cat");
+    Assert.eq(c108_describe(c108_Cat(), false), "other");
+    Assert.eq(c108_describe(c108_Dog(), true), "other");
+
+    Assert.eq(c10a_describe<int>(21), "42");
+    Assert.eq(c10a_describe<string>("hi"), "not an int");
+}
+
+@test
+@timeout(180000)
+fun declof(): void {
+    Assert.eq((declof(cae_User)).to_string(), "::cae_User");
+    Assert.eq((declof(cae_User.greet)).to_string(), "::cae_User.greet");
+    Assert.eq((declof(cae_helper)).to_string(), "::cae_helper");
+    Assert.eq((declof(Json.serialize)).to_string(), "system.json::Json.serialize");
+    Assert.eq((declof(List)).to_string(), "system.collections::List");
+}
+
+@test
+@timeout(180000)
+fun user_attribute(): void {
+    c287_calls = 0;
+    c287_list_users();
+    Assert.eq(c287_calls, 1);
+}
+
+@test
+@timeout(180000)
+async fun discard_binding(): void {
+    let _ = 1;
+    let _ = cbe_side();
+    let (_, _) = (1, 2);
+    let (_, y) = (3, 4);
+    Assert.eq(y, 4);
+    let _ = cbe_tick().await;
+    cbe_tick().await;
+}

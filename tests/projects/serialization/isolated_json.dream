@@ -1,0 +1,92 @@
+import system;
+import system.testing;
+import system.json;
+
+// --- tuple_json: tuple fields serialize as JSON arrays and round-trip. ---
+
+@json
+class iso_TupleRow {
+    public pair: (int, string);
+    public constructor(pair: (int, string)) {
+        this.pair = pair;
+    }
+}
+
+@test
+fun iso_tuple_json(): void {
+    let r = iso_TupleRow((3, "hi"));
+    let text = Json.serialize(r);
+    Assert.eq(text, "{\"pair\":[3,\"hi\"]}");
+    let back = Json.deserialize<iso_TupleRow>(text).unwrap_or(r);
+    Assert.eq(back.pair.0, 3);
+    Assert.eq(back.pair.1, "hi");
+}
+
+// --- json_scalar_defaults: missing or mistyped scalar fields decode to zero values, and
+// malformed or mistyped documents are rejected. ---
+
+let iso_scalar_destroyed: int = 0;
+
+@json
+class iso_ScalarDefaults {
+    public text: string;
+    public number: int;
+    public enabled: bool;
+    public precise: double;
+
+    public constructor(text: string, number: int, enabled: bool, precise: double) {
+        this.text = text;
+        this.number = number;
+        this.enabled = enabled;
+        this.precise = precise;
+    }
+
+    del() {
+        iso_scalar_destroyed = iso_scalar_destroyed + 1;
+    }
+}
+
+@json
+class iso_NumberArray {
+    public values: int[];
+
+    public constructor(values: int[]) {
+        this.values = values;
+    }
+}
+
+@json
+class iso_NumberList {
+    public values: List<int>;
+
+    public constructor(values: List<int>) {
+        this.values = values;
+    }
+}
+
+fun iso_check_scalar_defaults(value: iso_ScalarDefaults): void {
+    Assert.eq(value.text, "");
+    Assert.eq(value.number, 0);
+    Assert.is_false(value.enabled);
+    Assert.is_true(value.precise == 0.0d);
+}
+
+@test
+fun iso_json_scalar_defaults(): void {
+    iso_scalar_destroyed = 0;
+    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(JsonValue.null()));
+    Assert.eq(iso_scalar_destroyed, 1);
+    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(JsonValue.dict()));
+    Assert.eq(iso_scalar_destroyed, 2);
+    let wrong = Json.deserialize<JsonValue>(
+        "{\"text\":1,\"number\":true,\"enabled\":\"x\",\"precise\":{}}"
+    ).unwrap_or(JsonValue.null());
+    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(wrong));
+    Assert.eq(iso_scalar_destroyed, 3);
+    Assert.is_true(Json.deserialize<iso_ScalarDefaults>("{").is_err());
+    Assert.eq(iso_scalar_destroyed, 4);
+    Assert.is_true(Json.deserialize<iso_NumberArray>("{\"values\":[").is_err());
+    Assert.is_true(Json.deserialize<iso_NumberArray>("{\"values\":[\"x\"]}").is_err());
+    Assert.is_true(Json.deserialize<iso_NumberList>("{\"values\":[\"x\"]}").is_err());
+    Assert.is_true(Json.deserialize<iso_NumberList>("{\"values\":[1,2]}").is_ok());
+}

@@ -1,4 +1,6 @@
-// Promise.start must retain until settle, then drop — fire-and-forget must not leak.
+// Promise.start must retain until settle, then drop — fire-and-forget must not leak. The
+// earlier phases pin async-frame ownership: aliasing copies, reassignment, owned returns, and
+// values transferred across a suspension.
 import system;
 
 class Tracked {
@@ -14,6 +16,60 @@ class Tracked {
     }
 }
 
+fun identity(item: Tracked): Tracked {
+    return item;
+}
+
+async fun frame_transfers(): void {
+    let i = 0;
+    while i < 3 {
+        let item = identity(Tracked(i));
+        let alias = item;
+        System.println(item.id);
+        Time.sleep(0).await;
+        System.println(alias.id);
+        i = i + 1;
+    }
+}
+
+// Without poll RcInsertion, `let b = a` shares one count and completion bulk-releases both.
+async fun use_alias(t: Tracked): int {
+    let a = t;
+    let b = a;
+    Time.sleep(0).await;
+    return a.id + b.id;
+}
+
+async fun run_alias(): void {
+    let t = Tracked(3);
+    let n = use_alias(t).await;
+    System.println(n);
+}
+
+async fun swap(): int {
+    let t = Tracked(1);
+    Time.sleep(0).await;
+    t = Tracked(2);
+    Time.sleep(0).await;
+    return t.id;
+}
+
+async fun run_reassign(): void {
+    System.println(swap().await);
+}
+
+// Returning an owned local must not release it before the result is packed.
+async fun greet(name: string): string {
+    Time.sleep(0).await;
+    let msg = "Hello, " + name + "!";
+    return msg;
+}
+
+async fun run_return(): void {
+    let g = greet("World").await;
+    System.println(g);
+}
+
 async fun work(): void {
     let _t = Tracked(1);
     Time.sleep(0).await;
@@ -23,10 +79,38 @@ async fun kick(): void {
     Promise.start(work());
 }
 
-async fun main(): void {
+// Each phase takes its baseline in a fresh frame: an awaited Future is released when its awaiting
+// frame resumes, so a baseline taken after an earlier await would count that release.
+async fun measure_alias(): void {
+    let base = Debug.live_objects;
+    run_alias().await;
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
+}
+
+async fun measure_reassign(): void {
+    let base = Debug.live_objects;
+    run_reassign().await;
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
+}
+
+async fun measure_return(): void {
+    let base = Debug.live_objects;
+    run_return().await;
+    System.println("live_delta=" + (Debug.live_objects - base).to_string());
+}
+
+async fun measure_start(): void {
     Time.sleep(0).await;
     let base = Debug.live_objects;
     kick().await;
     Time.sleep(10).await;
     System.println("live_delta=" + (Debug.live_objects - base).to_string());
+}
+
+async fun main(): void {
+    frame_transfers().await;
+    measure_alias().await;
+    measure_reassign().await;
+    measure_return().await;
+    measure_start().await;
 }

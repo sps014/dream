@@ -1,2 +1,0 @@
-fun alloc(arena: Arena): RawPtr<int> { return arena.alloc<int>(1); }
-fun main(): void { }

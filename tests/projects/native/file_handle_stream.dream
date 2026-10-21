@@ -1,23 +1,23 @@
 import system.testing;
-// Exercises FileHandle streaming over a live handle (no whole-file preload).
 import system;
 import system.io;
 import system.encoding;
 
-async fun cd1_body(): void {
+// Exercises FileHandle streaming over a live handle (no whole-file preload).
+@test
+@timeout(180000)
+async fun file_handle_stream(): void {
     let path = "dream_file_handle_e2e.tmp";
 
     File.write(path, "Dream\nrocks\n").await;
 
-    // FileHandle.open (OS-backed; no whole-file preload).
     let stream = FileHandle.open(path, FileMode.Read).unwrap();
-    cd1_verify_observation(Encoding.utf8_decode(stream.read(5).unwrap()));
-    cd1_verify_observation((stream.tell().unwrap()).to_string());
+    Assert.eq(Encoding.utf8_decode(stream.read(5).unwrap()), "Dream");
+    Assert.eq(stream.tell().unwrap(), 5L);
     stream.seek(6L).unwrap();
-    cd1_verify_observation((Streams.read_text(stream).unwrap()).to_string());
+    Assert.eq(Streams.read_text(stream).unwrap(), "rocks\n");
     stream.close().unwrap();
 
-    // FileHandle write mode (sync primary API).
     let write_path = "dream_file_handle_write.tmp";
     let writer = FileHandle.open(write_path, FileMode.Write).unwrap();
     let data = Array.alloc<byte>(3);
@@ -26,38 +26,16 @@ async fun cd1_body(): void {
     data[2] = (byte)67;
     writer.write(data).unwrap();
     writer.close().unwrap();
-    let echoed = File.read(write_path).await;
-    cd1_verify_observation((echoed.unwrap_or("")).to_string());
+    Assert.eq(File.read(write_path).await.unwrap_or(""), "ABC");
 
-    // Async variants still work.
     let reader = (FileHandle.open_async(path, FileMode.Read).await).unwrap();
     let chunk = reader.read_async(5).await;
-    cd1_verify_observation((chunk.unwrap_or(Array.alloc<byte>(0)).length).to_string());
+    Assert.eq(chunk.unwrap_or(Array.alloc<byte>(0)).length, 5);
     reader.close().unwrap();
 
     File.delete(path).await;
     File.delete(write_path).await;
-}
-
-let cd1_cursor: int = 0;
-
-fun cd1_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "Dream\n5\nrocks\n\nABC\n5\n";
-    let end = cd1_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(cd1_cursor, end));
-    cd1_cursor = end;
-}
-
-@test
-@timeout(180000)
-
-async fun file_handle_stream(): void {
-    cd1_cursor = 0;
-    cd1_body().await;
     file_modes_preserve_truncate_and_append().await;
-    Assert.eq(cd1_cursor, ("Dream\n5\nrocks\n\nABC\n5\n").length);
 }
 
 async fun file_modes_preserve_truncate_and_append(): void {
@@ -81,4 +59,173 @@ async fun file_modes_preserve_truncate_and_append(): void {
     Assert.eq(truncated.size().unwrap(), 0L);
     truncated.close().unwrap();
     File.delete(path).await.unwrap();
+}
+
+@test
+async fun io_safety(): void {
+    let path = "dream_io_safety.tmp";
+    let writer = FileHandle.open(path, FileMode.Write).unwrap();
+    Assert.is_true(writer.read(1).is_err());
+    writer.write_all(Encoding.utf8_encode("one\r\ntwo\rthree\nlast")).unwrap();
+    writer.close().unwrap();
+    writer.close().unwrap();
+    Assert.eq(writer.read(0).unwrap_err().code(), "ECLOSED");
+    Assert.eq(writer.read_exact(0).unwrap_err().code(), "ECLOSED");
+    Assert.eq(writer.write_all([]).unwrap_err().code(), "ECLOSED");
+
+    let reader = FileHandle.open(path, FileMode.Read).unwrap();
+    Assert.eq(reader.read_line().unwrap().unwrap(), "one");
+    Assert.eq(reader.tell().unwrap(), 5L);
+    Assert.is_true(reader.seek(0L - 1L).is_err());
+    Assert.eq(reader.tell().unwrap(), 5L);
+    Assert.eq(reader.read_line().unwrap().unwrap(), "two\rthree");
+    reader.seek(0L).unwrap();
+    Assert.eq(Encoding.utf8_decode(reader.read(3).unwrap()), "one");
+    reader.close().unwrap();
+
+    let stream = FileHandle.open(path, FileMode.Read).unwrap();
+    Assert.eq(stream.tell().unwrap(), 0L);
+    Assert.is_true(stream.seek(0L - 1L).is_err());
+    Assert.eq(stream.tell().unwrap(), 0L);
+    stream.close().unwrap();
+    Assert.is_true(stream.read(1).is_err());
+    Assert.is_true(stream.size().is_err());
+    File.delete(path).await.unwrap();
+}
+
+async fun copy_one(path: string): Result<Unit, IoError> {
+    let file = FileHandle.open_async(path, FileMode.WriteRead).await?;
+    let bytes = Encoding.utf8_encode("hello 日本語");
+    let count = file.write_async(bytes).await?;
+    Assert.eq(count, bytes.length);
+    file.seek_async(0L).await?;
+    let read = file.read_async(4096).await?;
+    Assert.eq(Encoding.utf8_decode(read), "hello 日本語");
+    Assert.eq(file.read_async(1).await?.length, 0);
+    file.flush_async().await?;
+    file.close()?;
+    Assert.is_true(file.read_async(1).await.is_err());
+    return Result.Ok(Unit());
+}
+
+@test
+async fun async_file_lifecycle(): void {
+    let results = Promise.all(
+        [
+            copy_one("async_lifecycle_a.tmp"),
+            copy_one("async_lifecycle_b.tmp"),
+            copy_one("async_lifecycle_c.tmp")
+        ]
+    ).await;
+    for (let i = 0; i < results.length; i = i + 1) {
+        Assert.is_true(results[i].is_ok());
+    }
+    let cancellation = CancellationSource();
+    cancellation.cancel();
+    Assert.is_true(
+        FileHandle.open_async(
+            "async_lifecycle_a.tmp",
+            FileMode.Read,
+            Option.Some(cancellation.token)
+        ).await.is_err()
+    );
+    let file = FileHandle.open("async_lifecycle_a.tmp", FileMode.Read).unwrap();
+    Assert.is_true(file.read_async(1, Option.Some(cancellation.token)).await.is_err());
+    Assert.eq(file.tell().unwrap(), 0L);
+    file.close().unwrap();
+    File.delete("async_lifecycle_a.tmp");
+    File.delete("async_lifecycle_b.tmp");
+    File.delete("async_lifecycle_c.tmp");
+    async_file_copy_and_read_ahead().await;
+}
+
+async fun async_file_copy_and_read_ahead(): void {
+    let source = FileHandle.open("async_copy_source.tmp", FileMode.WriteRead).unwrap();
+    source.write_all(Encoding.utf8_encode("first\r\nsecond\nlast")).unwrap();
+    source.seek(0L).unwrap();
+    Assert.eq(source.read_line().unwrap().unwrap(), "first");
+    Assert.eq(Encoding.utf8_decode(source.read_async(6).await.unwrap()), "second");
+    source.seek_async(0L).await.unwrap();
+    let destination = FileHandle.open_async("async_copy_destination.tmp", FileMode.WriteRead)
+        .await
+        .unwrap();
+    Assert.eq(Streams.copy_async(source, destination, 3).await.unwrap(), 18L);
+    destination.seek_async(0L).await.unwrap();
+    Assert.eq(
+        Encoding.utf8_decode(destination.read_async(100).await.unwrap()),
+        "first\r\nsecond\nlast"
+    );
+    source.close().unwrap();
+    destination.close().unwrap();
+    File.delete("async_copy_source.tmp");
+    File.delete("async_copy_destination.tmp");
+}
+
+class StreamingShortWriter: Writer {
+    public memory: MemoryStream;
+    public fail: bool;
+
+    public constructor() {
+        this.memory = MemoryStream();
+        this.fail = false;
+    }
+
+    public fun write(bytes: byte[]): Result<int, IoError> {
+        if this.fail {
+            return Result.Err(IoError.other("", "injected failure"));
+        }
+        if bytes.length == 0 {
+            return Result.Ok(0);
+        }
+        this.memory.write([bytes[0]])?;
+        return Result.Ok(1);
+    }
+
+    public unique fun flush(): Result<Unit, IoError> {
+        return Result.Ok(Unit());
+    }
+}
+
+@test
+fun streaming_io(): void {
+    let input = MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast"));
+    let reader = BufferedReader(input, 2);
+    Assert.eq(reader.read_line().unwrap().unwrap(), "a");
+    Assert.eq(reader.read_line().unwrap().unwrap(), "b\rc");
+    Assert.eq(reader.read_line().unwrap().unwrap(), "last");
+    Assert.is_true(reader.read_line().unwrap().is_none());
+    Assert.eq(input.read(0).unwrap().length, 0);
+    Assert.is_true(input.read_exact(1).is_err());
+
+    let destination = StreamingShortWriter();
+    let buffered = BufferedWriter(destination, 3);
+    buffered.write_all(Encoding.utf8_encode("abcdefg")).unwrap();
+    destination.fail = true;
+    Assert.is_true(buffered.finish().is_err());
+    destination.fail = false;
+    buffered.finish().unwrap();
+    buffered.finish().unwrap();
+    Assert.eq(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
+    Assert.is_true(buffered.write([(byte)1]).is_err());
+
+    input.seek(0L).unwrap();
+    let output = MemoryStream();
+    Assert.eq(Streams.copy(input, output, 1).unwrap(), 11L);
+    Assert.eq(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
+    output.seek(15L).unwrap();
+    output.write([(byte)65]).unwrap();
+    let sparse = output.to_bytes().unwrap();
+    Assert.eq(sparse.length, 16);
+    Assert.eq((int)sparse[14], 0);
+    output.close().unwrap();
+    Assert.is_true(output.read(1).is_err());
+    Assert.is_true(BufferedReader(input, 0).read(1).is_err());
+    Assert.is_true(BufferedWriter(destination, 0).finish().is_err());
+    let seek_source = MemoryStream(Encoding.utf8_encode("first\nsecond\n"));
+    let seek_reader = BufferedReader(seek_source, 8192);
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");
+    Assert.is_true(seek_reader.seek(0L - 1L).is_err());
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "second");
+    seek_reader.seek(0L).unwrap();
+    Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");
 }

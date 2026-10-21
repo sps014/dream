@@ -1,0 +1,116 @@
+import system.testing;
+import system;
+
+// Because Dream monomorphizes generics, a call through a `T : Comparable<T>` constraint binds to
+// the concrete type's method (static dispatch, no boxing).
+class ce1_Money: Comparable<ce1_Money> {
+    public cents: int;
+
+    public constructor(cents: int) {
+        this.cents = cents;
+    }
+
+    public fun compare(other: ce1_Money): int {
+        return this.cents - other.cents;
+    }
+}
+
+fun ce1_max_of<T: Comparable<T>>(a: T, b: T): T {
+    if a.compare(b) > 0 {
+        return a;
+    }
+    return b;
+}
+
+fun ce3_natural_order<T: Comparable<T>>(a: T, b: T): int {
+    return a.compare(b);
+}
+
+fun ce3_apply_cmp(cmp: fun(int, int): int, a: int, b: int): int {
+    return cmp(a, b);
+}
+
+class ce9_Pair<T> {
+    public a: int;
+    public b: int;
+
+    public constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+
+    public static fun of(a: int, b: int): ce9_Pair<T> {
+        return ce9_Pair<T>(a, b);
+    }
+
+    public fun sum(): int {
+        return this.a + this.b;
+    }
+}
+
+class cea_Util {
+    public static fun id<T>(x: T): T {
+        return x;
+    }
+
+    public static fun pair<A, B>(a: A, b: B): string {
+        return a.to_string() + "," + b.to_string();
+    }
+}
+
+@test
+@timeout(180000)
+fun generic_constraints(): void {
+    let bigger = ce1_max_of(ce1_Money(100), ce1_Money(250));
+    Assert.eq(bigger.cents, 250);
+
+    let smaller = ce1_max_of(ce1_Money(40), ce1_Money(15));
+    Assert.eq(smaller.cents, 40);
+}
+
+@test
+@timeout(180000)
+fun generic_fn_value(): void {
+    let f: fun(int, int): int = ce3_natural_order;
+    Assert.eq((ce3_apply_cmp(f, 3, 9)).to_string(), "-1");
+    Assert.eq((ce3_apply_cmp(f, 9, 3)).to_string(), "1");
+    Assert.eq((ce3_apply_cmp(f, 4, 4)).to_string(), "0");
+}
+
+@test
+@timeout(180000)
+fun generic_fn_value_no_annotation(): void {
+    let f = ce3_natural_order;
+    Assert.eq((f(3, 1)).to_string(), "1");
+    let g: fun(int, int): int = f;
+    Assert.eq((g(1, 2)).to_string(), "-1");
+}
+
+@test
+@timeout(180000)
+fun generic_lambda(): void {
+    let id: fun(int): int = < T >(x: T) => x;
+    Assert.eq((id(42)).to_string(), "42");
+
+    let poly = < T >(x: T) => x;
+    let as_string: fun(string): string = poly;
+    Assert.eq((as_string("hi")).to_string(), "hi");
+}
+
+@test
+@timeout(180000)
+fun generic_static_method(): void {
+    let p = ce9_Pair<int>.of(3, 4);
+    Assert.eq((p.sum()).to_string(), "7");
+
+    let q = ce9_Pair<int>.of(10, 20);
+    Assert.eq((q.sum()).to_string(), "30");
+}
+
+@test
+@timeout(180000)
+fun generic_static_method_call(): void {
+    Assert.eq((cea_Util.id(42)).to_string(), "42");
+    Assert.eq((cea_Util.id("hi")).to_string(), "hi");
+    Assert.eq((cea_Util.pair(1, true)).to_string(), "1,true");
+}

@@ -1,0 +1,90 @@
+import system.testing;
+import system;
+
+fun cd5_twice(x: int): int {
+    return x * 2;
+}
+
+fun cd5_thrice(x: int): int {
+    return x * 3;
+}
+
+fun cd5_apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+fun cd5_map_sum(arr: int[], f: fun(int): int): int {
+    let sum: int = 0;
+    for (let x in arr) {
+        sum += f(x);
+    }
+    return sum;
+}
+
+fun ccb_make_adder(n: int): fun(int): int {
+    return (x: int) => x + n;
+}
+
+fun c1b1_first<T>(xs: T[]): T {
+    return xs[0];
+}
+
+fun c194_add(a: int, b: int): int {
+    return a + b;
+}
+
+fun c194_add(a: double, b: double): double {
+    return a + b + 0.5d;
+}
+
+fun c194_add(a: string, b: string): string {
+    return a + b;
+}
+
+fun c194_apply(f: fun(int, int): int, x: int, y: int): int {
+    return f(x, y);
+}
+
+@test
+@timeout(180000)
+fun first_class_fn(): void {
+    Assert.eq(cd5_apply(cd5_twice, 5), 10);
+    Assert.eq(cd5_apply(cd5_thrice, 5), 15);
+
+    let arr: int[] = [1, 2, 3];
+    Assert.eq(cd5_map_sum(arr, cd5_twice), 12);
+    Assert.eq(cd5_map_sum(arr, cd5_thrice), 18);
+
+    let g: fun(int): int = cd5_twice;
+    Assert.eq(g(7), 14);
+}
+
+@test
+@timeout(180000)
+fun expr_indirect_call(): void {
+    Assert.eq(ccb_make_adder(5)(1), 6);
+    let f: fun(int): int = ccb_make_adder(10);
+    Assert.eq((f)(2), 12);
+}
+
+@test
+@timeout(180000)
+fun postfix_generic_call(): void {
+    let xs: int[] = [7, 8];
+    let n = (c1b1_first)<int>(xs);
+    Assert.eq(n, 7);
+    let f = c1b1_first;
+    Assert.eq(f<int>(xs), 7);
+}
+
+@test
+@timeout(180000)
+fun overload_function_value(): void {
+    let fi: fun(int, int): int = c194_add;
+    let fd: fun(double, double): double = c194_add;
+    let fs: fun(string, string): string = c194_add;
+    Assert.eq(fi(2, 3), 5);
+    Assert.eq(fd(1.0d, 2.0d).to_string(), "3.5");
+    Assert.eq(fs("a", "b"), "ab");
+    Assert.eq(c194_apply(c194_add, 4, 5), 9);
+}

@@ -1,0 +1,158 @@
+import system.testing;
+import system;
+
+struct c231_Vec2 {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public fun sum(): int {
+        return this.x + this.y;
+    }
+}
+
+fun c231_bump(v: c231_Vec2): int {
+    v.x = v.x + 1000;
+    return v.x;
+}
+
+struct c233_Pair {
+    public a: int;
+    public b: int;
+
+    public constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+class c233_Box {
+    public p: c233_Pair;
+
+    public constructor(p: c233_Pair) {
+        this.p = p;
+    }
+}
+
+enum c233_Opt {
+    Some(c233_Pair),
+    None,
+}
+
+// `ref struct` behaves like an ordinary value struct for locals, parameters, and returns; the
+// compiler additionally rejects any use that would let it escape the current stack frame.
+ref struct c1d5_Pair {
+    public a: int;
+    public b: int;
+
+    public constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+fun c1d5_sum(p: c1d5_Pair): int {
+    return p.a + p.b;
+}
+
+fun c1d5_swapped(p: c1d5_Pair): c1d5_Pair {
+    return c1d5_Pair(p.b, p.a);
+}
+
+struct SaftHolder {
+    public words: int[];
+}
+
+struct c291_Point {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+}
+
+struct c291_Wrapper<T> {
+    public inner: Option<T>;
+
+    public constructor(inner: Option<T>) {
+        this.inner = inner;
+    }
+}
+
+@test
+@timeout(180000)
+fun struct_basic() {
+    let a = c231_Vec2(1, 2);
+    let b = a;
+    b.x = 100;
+
+    Assert.eq((a.x).to_string(), "1");
+    Assert.eq((b.x).to_string(), "100");
+    Assert.eq((a.sum()).to_string(), "3");
+    Assert.eq((b.sum()).to_string(), "102");
+
+    Assert.eq((c231_bump(a)).to_string(), "1001");
+    Assert.eq((a.x).to_string(), "1");
+}
+
+@test
+@timeout(180000)
+fun struct_containers(): void {
+    let arr = [c233_Pair(1, 2), c233_Pair(3, 4)];
+    Assert.eq(arr[0].a, 1);
+    Assert.eq(arr[1].b, 4);
+    arr[0].a = 100;
+    Assert.eq(arr[0].a, 100);
+    Assert.eq(arr[1].a, 3);
+
+    let box = c233_Box(c233_Pair(5, 6));
+    Assert.eq(box.p.a, 5);
+    box.p.b = 60;
+    Assert.eq(box.p.b, 60);
+
+    let o = c233_Opt.Some(c233_Pair(7, 8));
+    let r = switch (o) {
+        Some(pr) => pr.a + pr.b,
+        None => 0,
+    };
+    Assert.eq(r, 15);
+}
+
+@test
+@timeout(180000)
+fun ref_struct_basic(): void {
+    let p = c1d5_Pair(3, 4);
+    Assert.eq(c1d5_sum(p), 7);
+
+    let s = c1d5_swapped(p);
+    Assert.eq(s.a, 4);
+    Assert.eq(s.b, 3);
+
+    let copy = p;
+    Assert.eq(c1d5_sum(copy), 7);
+}
+
+@test
+@timeout(180000)
+fun struct_array_field_to_string(): void {
+    let holder = SaftHolder();
+    holder.words = [1, 2];
+    Assert.eq(holder.to_string(), "SaftHolder { words: [1, 2] }");
+}
+
+@test
+@timeout(180000)
+fun value_struct_generic_nullable(): void {
+    let w = c291_Wrapper<c291_Point>(Option.Some(c291_Point(1)));
+    let p: c291_Point = w.inner ?? c291_Point(-1);
+    Assert.eq((p.x).to_string(), "1");
+
+    let no_point: Option<c291_Point> = Option.None;
+    let empty = c291_Wrapper<c291_Point>(no_point);
+    let q: c291_Point = empty.inner ?? c291_Point(-1);
+    Assert.eq((q.x).to_string(), "-1");
+}

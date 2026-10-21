@@ -1,9 +1,0 @@
-import system.webapi;
-
-fun main(): void {}
-
-@router("")
-class Routes {
-@get("/users/{id}")
-public static fun route(): string { return "ok"; }
-}

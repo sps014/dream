@@ -13,7 +13,41 @@ class Tracked {
     }
 }
 
+struct Holder {
+    public item: Tracked;
+
+    public constructor(item: Tracked) {
+        this.item = item;
+    }
+}
+
+struct Inner {
+    public item: Tracked;
+
+    public constructor(item: Tracked) {
+        this.item = item;
+    }
+}
+
+struct Outer {
+    public inner: Inner;
+
+    public constructor(inner: Inner) {
+        this.inner = inner;
+    }
+}
+
 let slot: Tracked = Tracked(0);
+let value_slot: Holder = Holder(Tracked(10));
+
+// Overwriting a value `struct` (global or field) must drop nested RC fields of the old bits.
+fun value_nested_reassign() {
+    value_slot = Holder(Tracked(11));
+    System.println("g");
+    let o = Outer(Inner(Tracked(20)));
+    o.inner = Inner(Tracked(21));
+    System.println("o");
+}
 
 fun wrap(t: Tracked): Tracked {
     return Tracked(t.id + 10);
@@ -24,6 +58,7 @@ fun same(t: Tracked): Tracked {
 }
 
 fun main() {
+    value_nested_reassign();
     slot = Tracked(1);
     System.println("a");
     let x = Tracked(2);

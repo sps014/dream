@@ -1,0 +1,151 @@
+import system.testing;
+import system;
+
+fun c181_double_int(n: int): int {
+    return n * 2;
+}
+
+fun c1e7_parse_even(s: string): Result<int, ParseError> {
+    let parsed = int.parse(s);
+    if parsed.is_err() {
+        return Result.Err(ParseError.invalid("parse"));
+    }
+    let n = parsed.unwrap_or(0);
+    if (n % 2) != 0 {
+        return Result.Err(ParseError.invalid("odd"));
+    }
+    return Result.Ok(n);
+}
+
+fun c1e7_double_ok(n: int): Result<int, ParseError> {
+    return Result.Ok(n * 2);
+}
+
+fun c265_half(n: int): Result<int, string> {
+    if n % 2 != 0 {
+        return Result.Err("odd");
+    }
+    return Result.Ok(n / 2);
+}
+
+fun c265_quarter(n: int): Result<int, string> {
+    let h = c265_half(n)?;
+    let q = c265_half(h)?;
+    return Result.Ok(q);
+}
+
+fun c265_first_positive(xs: int[]): Option<int> {
+    for (let x in xs) {
+        if x > 0 {
+            return Option.Some(x);
+        }
+    }
+    return Option.None;
+}
+
+fun c265_describe_first_positive(xs: int[]): Option<string> {
+    let v = c265_first_positive(xs)?;
+    return Option.Some("first positive: " + v.to_string());
+}
+
+// `?` before a binary operator is try-propagation unless a matching ternary `:` follows.
+fun c265_quarter_plus_one(n: int): Result<int, string> {
+    return Result.Ok(c265_half(n)? +1);
+}
+
+class c1e8_MyError: Error {
+    _m: string;
+
+    public constructor(m: string) {
+        this._m = m;
+    }
+
+    public fun message(): string {
+        return this._m;
+    }
+
+    public fun code(): string {
+        return "EMINE";
+    }
+}
+
+fun c1e8_fail(): Result<Unit, c1e8_MyError> {
+    return Result.Err(c1e8_MyError("boom"));
+}
+
+fun c1e8_ok(): Result<Unit, c1e8_MyError> {
+    return Result.Ok(Unit());
+}
+
+fun c1e8_via_try(): Result<Unit, Error> {
+    let v = c1e8_fail()?;
+    return Result.Ok(v);
+}
+
+fun c1e8_via_return(): Result<Unit, Error> {
+    return c1e8_fail();
+}
+
+@test
+@timeout(180000)
+fun option_map(): void {
+    let some = Option.Some(21);
+    Assert.eq(some.map(c181_double_int).unwrap_or(0), 42);
+
+    let none: Option<int> = Option.None;
+    Assert.is_true(none.map(c181_double_int).is_none());
+
+    Assert.eq(Option.Some(10).map(c181_double_int).unwrap_or(0), 20);
+}
+
+@test
+@timeout(180000)
+fun result_and_then(): void {
+    Assert.eq(c1e7_parse_even("10").and_then(c1e7_double_ok).unwrap_or(0), 20);
+    switch (c1e7_parse_even("3").and_then(c1e7_double_ok)) {
+        Ok(v) => Assert.fail("unexpected ok " + v),
+        Err(e) => Assert.eq(e.message(), "odd"),
+    }
+}
+
+@test
+@timeout(180000)
+fun try_propagation(): void {
+    Assert.eq(c265_quarter(20).unwrap_or(0), 5);
+    switch (c265_quarter(21)) {
+        Ok(v) => Assert.fail("unexpected ok " + v),
+        Err(e) => Assert.eq(e, "odd"),
+    }
+    switch (c265_quarter(22)) {
+        Ok(v) => Assert.fail("unexpected ok " + v),
+        Err(e) => Assert.eq(e, "odd"),
+    }
+
+    Assert.eq(c265_describe_first_positive([-3, -1, 4, 5]).unwrap_or("none"), "first positive: 4");
+    Assert.is_true(c265_describe_first_positive([-3, -1]).is_none());
+
+    Assert.eq(c265_quarter_plus_one(20).unwrap_or(0), 11);
+}
+
+// `Result<T, MyError>` is assignable to `Result<T, Error>` when `MyError : Error`, and `?`
+// rebuilds `Err` at the function's Result type while interface dispatch on `E` still works.
+@test
+@timeout(180000)
+fun result_error_interface(): void {
+    let r: Result<Unit, Error> = c1e8_via_return();
+    switch (r) {
+        Ok(_) => Assert.fail("unexpected ok"),
+        Err(e) => {
+            Assert.eq(e.code(), "EMINE");
+            Assert.eq(e.message(), "boom");
+        }
+    }
+
+    switch (c1e8_via_try()) {
+        Ok(_) => Assert.fail("unexpected try ok"),
+        Err(e) => Assert.eq(e.code(), "EMINE"),
+    }
+
+    let lifted: Result<Unit, Error> = c1e8_ok();
+    Assert.is_true(lifted.is_ok());
+}

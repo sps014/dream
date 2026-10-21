@@ -98,8 +98,22 @@ fn c_package_keeps_a_stored_native_callback_alive() {
 }
 
 #[test]
-fn cpp_package_runs_through_the_generated_shim() {
-    let out = run(&repo("sample/native_cpp/src/main.dream"), "cpp_sample").unwrap();
+fn cpp_package_runs_through_the_generated_shim_deterministically() {
+    let entry = repo("sample/native_cpp/src/main.dream");
+    let out = run(&entry, "cpp_sample").unwrap();
+    let read = |ll: PathBuf| {
+        let shim = ll.parent().unwrap().join("native-c/kvstore/shim.cpp");
+        (
+            fs::read_to_string(&ll).unwrap(),
+            fs::read_to_string(shim).unwrap(),
+        )
+    };
+    let (ll_a, shim_a) = read(out_dir("cpp_sample").join("main.ll"));
+    let (ll_b, shim_b) = read(build(&entry, "cpp_det").unwrap());
+    assert!(shim_a == shim_b, "shim.cpp differs between two compiles");
+    assert!(ll_a == ll_b, ".ll differs between two compiles");
+    assert_contains(&shim_a, "extern \"C\"");
+    assert_contains(&shim_a, "#line ");
     assert_eq!(
         out.trim(),
         "changed: a,ab,b\n\
@@ -624,34 +638,6 @@ fn links_conflict_names_both_manifests() {
         assert_contains(&err, &manifest.display().to_string());
     }
     let _ = fs::remove_dir_all(&root);
-}
-
-#[test]
-fn cpp_shim_and_ir_are_deterministic() {
-    let entry = repo("sample/native_cpp/src/main.dream");
-    let read = |tag: &str| {
-        let ll = build(&entry, tag).unwrap();
-        let shim = ll.parent().unwrap().join("native-c/kvstore/shim.cpp");
-        (
-            fs::read_to_string(&ll).unwrap(),
-            fs::read_to_string(shim).unwrap(),
-        )
-    };
-    let (ll_a, shim_a) = read("det_a");
-    let (ll_b, shim_b) = read("det_b");
-    assert!(shim_a == shim_b, "shim.cpp differs between two compiles");
-    assert!(ll_a == ll_b, ".ll differs between two compiles");
-    assert_contains(&shim_a, "extern \"C\"");
-    assert_contains(&shim_a, "#line ");
-}
-
-#[test]
-fn wasm32_compiles_cpp_package() {
-    let entry = repo("sample/native_cpp/src/main.dream");
-    let out = out_dir("wasm-cpp").join("main.wat");
-    compile(Target::wasm32(), &entry, &out).unwrap();
-    let wat = fs::read_to_string(out).unwrap();
-    assert!(!wat.contains("(import \"c/"), "{}", wat);
 }
 
 #[test]

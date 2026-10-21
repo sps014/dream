@@ -24,7 +24,45 @@ fun attach(borrow p: Node, c: Node) {
     p.children.push(c);
 }
 
+class Target {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    del() { System.println("target dropped"); }
+}
+
+// Tearing down a holder of several weak fields must unregister each of them from the target.
+class WeakHolder {
+    public weak typed: Option<Target>;
+    public weak second: Option<Target>;
+    public constructor(borrow target: Target) {
+        this.typed = Option.Some(target);
+        this.second = Option.Some(target);
+    }
+    del() { System.println("holder dropped"); }
+}
+
+fun observe(borrow target: Target): void {
+    let holder = WeakHolder(target);
+    switch (holder.typed) {
+        Some(value) => System.println(value.value),
+        None => System.println(-1),
+    }
+    switch (holder.second) {
+        Some(value) => System.println(value.value),
+        None => System.println(-1),
+    }
+}
+
+fun weak_holder_teardown(): void {
+    let target = Target(42);
+    observe(target);
+    let replacement = Target(7);
+    System.println(replacement.value);
+    System.println(target.value);
+}
+
 fun main() {
+    weak_holder_teardown();
     let base = Debug.live_objects;
     let root = Node(1);
     let child = Node(2);

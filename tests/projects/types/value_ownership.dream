@@ -1,0 +1,245 @@
+import system.testing;
+import system;
+
+// Ownership of reference payloads inside inline (`enum struct`) unions: pattern bindings keep the
+// union alive, a switch over an inlined call result, a moved-on-one-path `take` parameter, and a
+// discarded call result must neither free early nor leak.
+class cc7_Note {
+    public text: string;
+
+    public constructor(text: string) {
+        this.text = text;
+    }
+
+    public fun shout(): string {
+        return this.text + "!";
+    }
+}
+
+enum struct cc7_Res {
+    Ok(int),
+    Err(cc7_Note),
+}
+
+enum struct cc7_Tag {
+    Named(string),
+    Boxed(cc7_Note),
+    Blank,
+}
+
+fun cc7_fail(): cc7_Res {
+    return cc7_Res.Err(cc7_Note("boom" + 1.to_string()));
+}
+
+fun cc7_pass(): cc7_Res {
+    return cc7_Res.Ok(7);
+}
+
+fun cc7_describe_fail(): string {
+    return switch (cc7_fail()) {
+        Ok(v) => v.to_string(),
+        Err(n) => n.text,
+    };
+}
+
+fun cc7_describe_pass(): string {
+    return switch (cc7_pass()) {
+        Ok(v) => v.to_string(),
+        Err(n) => n.text,
+    };
+}
+
+fun cc7_wrap(ok: bool, t: cc7_Tag): Result<cc7_Tag, string> {
+    if ok {
+        return Result.Ok(t);
+    }
+    return Result.Err("no");
+}
+
+fun cc7_countdown(n: int): cc7_Res {
+    if n <= 0 {
+        return cc7_Res.Err(cc7_Note("done" + n.to_string()));
+    }
+    return cc7_countdown(n - 1);
+}
+
+struct c28f_View {
+    public source: string;
+    public count: int;
+
+    public constructor(borrow source: string, count: int) {
+        if count < 0 || count > source.length {
+            System.panic("invalid view");
+        }
+        this.source = source;
+        this.count = count;
+    }
+}
+
+@noinline
+fun c28f_read(borrow view: c28f_View): string {
+    let copy = view;
+    return copy.source.substring(0, copy.count);
+}
+
+@noinline
+fun c28f_span_sum(borrow span: Span<int>): int {
+    let sum = 0;
+    for (let x in span) {
+        sum = sum + x;
+    }
+    return sum;
+}
+
+@noinline
+fun c28f_span_text(borrow span: ReadOnlySpan<char>): bool {
+    let copy = span;
+    return copy == "number=42";
+}
+
+// A struct copied by a last-use move and then only read in a loop header is still released at
+// function exit.
+struct c290_P {
+    public a: int[];
+
+    public constructor(a: int[]) {
+        this.a = a;
+    }
+
+    public get n(): int {
+        return this.a.length;
+    }
+}
+
+fun c290_count(): int {
+    let p = c290_P([1, 2, 3]);
+    let q = p;
+    let i = 0;
+    while i < q.n {
+        i = i + 1;
+    }
+    return i;
+}
+
+// A value struct whose managed field is carried through a chain of returning factories. Each
+// return is a move, so exactly one owner may release the field no matter how deep the inliner
+// fuses the chain: an extra drop here is a double free, a missing one is a leak.
+enum c294_Slot {
+    First = 0,
+    Second = 1
+}
+
+struct c294_Desc {
+    public n: int;
+    public slot: Option<c294_Slot>;
+    public label: string;
+
+    public static fun base(n: int): c294_Desc {
+        let d = c294_Desc();
+        d.n = n;
+        d.slot = Option.None;
+        d.label = "base";
+        return d;
+    }
+
+    public static fun wide(n: int): c294_Desc {
+        let d = c294_Desc.base(n);
+        d.n = n + 1;
+        d.slot = Option.Some(c294_Slot.Second);
+        return d;
+    }
+
+    public static fun widest(n: int): c294_Desc {
+        let d = c294_Desc.wide(n);
+        d.label = "widest";
+        return d;
+    }
+}
+
+class c294_Sink {
+    // Takes the struct by value, so the caller's copy must transfer rather than share.
+    public static fun consume(d: c294_Desc): int {
+        let bump = 0;
+        if d.slot.is_some() {
+            bump = d.slot.unwrap();
+        }
+        return d.n + bump + d.label.length;
+    }
+
+    public static fun through_wide(n: int): int {
+        let d = c294_Desc.wide(n);
+        return c294_Sink.consume(d);
+    }
+
+    public static fun through_widest(n: int): int {
+        let d = c294_Desc.widest(n);
+        return c294_Sink.consume(d);
+    }
+}
+
+@test
+@timeout(180000)
+fun enum_struct_ownership(): void {
+    let r = cc7_fail();
+    switch (r) {
+        Ok(_) => {
+            Assert.fail("expected Err");
+        }
+        Err(n) => {
+            let filler = cc7_Note("filler" + 2.to_string());
+            Assert.eq(n.shout(), "boom1!");
+            Assert.eq(filler.text, "filler2");
+            Assert.eq(n.shout(), "boom1!");
+        }
+    }
+
+    Assert.eq(cc7_describe_fail(), "boom1");
+    Assert.eq(cc7_describe_pass(), "7");
+
+    let a = cc7_Tag.Named("a" + 3.to_string());
+    let a2 = cc7_wrap(true, a).unwrap_or(cc7_Tag.Blank);
+    Assert.eq(a2.to_string(), "Named(a3)");
+    let b = cc7_Tag.Boxed(cc7_Note("b" + 4.to_string()));
+    let b2 = cc7_wrap(false, b).unwrap_or(cc7_Tag.Blank);
+    Assert.eq(b2.to_string(), "Blank");
+
+    cc7_countdown(3);
+}
+
+@test
+@timeout(180000)
+fun value_struct_borrow(): void {
+    let source = "number=" + 42;
+    let view = c28f_View(source, 6);
+    Assert.eq(c28f_read(view), "number");
+    Assert.eq(c28f_read(view), "number");
+    Assert.eq(view.source, "number=42");
+    let xs = [1, 2, 3, 4, 5];
+    let span = Span<int>(xs, 1, 3);
+    Assert.eq(c28f_span_sum(span), 9);
+    Assert.eq(c28f_span_sum(span), 9);
+    Assert.eq(span.length, 3);
+    Assert.is_true(c28f_span_text(source.span()));
+    Assert.eq(source, "number=42");
+}
+
+@test
+@timeout(180000)
+fun value_struct_copy_loop_drop(): void {
+    Assert.eq(c290_count(), 3);
+}
+
+@test
+@timeout(180000)
+fun value_struct_managed_field_chain(): void {
+    Assert.eq(c294_Sink.consume(c294_Desc.base(10)), 14);
+    Assert.eq(c294_Sink.through_wide(20), 26);
+    Assert.eq(c294_Sink.through_widest(30), 38);
+
+    // Repeat in a loop so a stale field pointer left by an earlier iteration would be reused.
+    let total = 0;
+    for (let i = 0; i < 4; i = i + 1) {
+        total = total + c294_Sink.through_widest(i);
+    }
+    Assert.eq(total, 38);
+}

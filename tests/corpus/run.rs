@@ -1,6 +1,6 @@
 use super::{Case, Expectation, cases};
 use dream::driver::compiler::Compiler;
-use dream::driver::test::{TestHost, TestOptions, run_tests};
+use dream::driver::test::{TestHost, TestOptions, discover_tests_in_source, run_tests};
 use dream::driver::toolchain::ToolchainConfig;
 use dream::driver::wasm_opt::OptLevel;
 use dream_mir::backend::Target;
@@ -61,7 +61,7 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
                 Expectation::Project(suite) => projects
                     .entry(suite)
                     .or_default()
-                    .push(case.stem.to_string()),
+                    .extend(project_tests(case)),
                 _ => isolated.push(**case),
             }
         }
@@ -142,6 +142,14 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
         "corpus failures:\n{}",
         failures.join("\n")
     );
+}
+
+pub(super) fn project_tests(case: &Case) -> Vec<String> {
+    let path = case.source();
+    let source = std::fs::read_to_string(&path).unwrap();
+    let found = discover_tests_in_source(&path.to_string_lossy(), &source)
+        .unwrap_or_else(|error| panic!("{}: {error}", case.stem));
+    found.tests.into_iter().map(|test| test.name).collect()
 }
 
 fn check<T>(run: impl FnOnce() -> T) -> Result<T, String> {

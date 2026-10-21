@@ -1,0 +1,78 @@
+// Operator and cast declarations, and operator overload resolution.
+import system;
+
+class Ambiguous {
+    fun operator +(other: long): int { return 1; }
+    fun operator +(other: double): int { return 2; }
+}
+
+fun ambiguous(): void {
+    let v = Ambiguous();
+    System.println(v + 1);
+}
+
+class Vector2 {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+
+    fun operator +(other: Vector2): Vector2 {
+        return Vector2(this.x + other.x);
+    }
+
+    fun operator +(other: Vector2): Vector2 {
+        return Vector2(this.x + other.x);
+    }
+}
+
+class DuplicateReturn {
+    fun operator +(other: int): int { return other; }
+    fun operator +(other: int): long { return other; }
+}
+
+class EqualityReturn {
+    fun operator ==(other: int): int { return other; }
+}
+
+class Value {
+    fun operator +(other: int): int { return other; }
+    fun operator +(other: long): long { return other; }
+}
+
+fun bool_operand(): void {
+    let v = Value();
+    let x = v + true;
+}
+
+fun value_operand(): void {
+    let v = Value();
+    let y = v + v;
+}
+
+class Flag {
+    public value: bool;
+
+    public constructor(value: bool) {
+        this.value = value;
+    }
+
+    fun operator &&(other: Flag): Flag {
+        return Flag(this.value && other.value);
+    }
+}
+
+class Wrapper {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+
+    fun implicit() {
+        this.value = this.value;
+    }
+}
+
+fun main(): void {}

@@ -1,0 +1,32 @@
+import system.testing;
+import system;
+
+@test
+@timeout(180000)
+fun math_advanced(): void {
+    Assert.eq(Math.pow(2.0d, 3.0d).to_string(), "8");
+    Assert.eq(Math.floor(3.7d).to_string(), "3");
+    Assert.eq(Math.ceil(3.2d).to_string(), "4");
+    Assert.eq(Math.round(3.5d).to_string(), "4");
+    Assert.eq((-42.5d).abs().to_string(), "42.5");
+    Assert.eq(Math.sqrt(16.0d).to_string(), "4");
+    Assert.eq(Math.sin(0.0d).to_string(), "0");
+    Assert.eq(Math.asin(0.0d).to_string(), "0");
+    Assert.eq(Math.acos(1.0d).to_string(), "0");
+    Assert.eq(Math.atan(0.0d).to_string(), "0");
+}
+
+@test
+@timeout(180000)
+fun random_basic(): void {
+    let a = Random((uint)42);
+    let b = Random((uint)42);
+    Assert.is_true(a.next_int(100) == b.next_int(100));
+    Assert.is_true(a.next_bool() == b.next_bool());
+    let c = Random((uint)7);
+    Assert.is_true(c.next_int(10) >= 0);
+    let rejection = Random(1584200935u);
+    Assert.eq(rejection.next_int(2147483647), 253982);
+    Assert.eq(Random(1u).next_int(1), 0);
+    Assert.eq(Random(1u).next_int(0), 0);
+}

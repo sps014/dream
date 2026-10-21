@@ -1,7 +1,0 @@
-class Counter {
-    public fun clear(): void {}
-}
-
-fun main(): void {
-    Counter.clear();
-}

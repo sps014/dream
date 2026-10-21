@@ -5,27 +5,183 @@ import system.collections;
 @test
 @timeout(180000)
 fun collections_capacity(): void {
-    // List with default capacity
     let l1 = List<int>();
-    Assert.eq(("l1 cap: " + l1.capacity).to_string(), "l1 cap: 8"); // Should be 8
+    Assert.eq(l1.capacity, 8);
 
-    // List with custom capacity
     let l2 = List<int>(32);
-    Assert.eq(("l2 cap: " + l2.capacity).to_string(), "l2 cap: 32"); // Should be 32
+    Assert.eq(l2.capacity, 32);
 
-    // Map with default capacity
     let m1 = Map<string, int>();
-    Assert.eq(("m1 cap: " + m1.capacity).to_string(), "m1 cap: 8"); // Should be 8
+    Assert.eq(m1.capacity, 8);
 
-    // Map with custom capacity (should round up to next power of 2)
+    // Requested hash capacities round up to the next power of two.
     let m2 = Map<string, int>(100);
-    Assert.eq(("m2 cap: " + m2.capacity).to_string(), "m2 cap: 128"); // Should be 128
+    Assert.eq(m2.capacity, 128);
 
-    // Set with default capacity
     let s1 = Set<int>();
-    Assert.eq(("s1 cap: " + s1.capacity).to_string(), "s1 cap: 8"); // Should be 8
+    Assert.eq(s1.capacity, 8);
 
-    // Set with custom capacity
     let s2 = Set<int>(20);
-    Assert.eq(("s2 cap: " + s2.capacity).to_string(), "s2 cap: 32"); // Should be 32
+    Assert.eq(s2.capacity, 32);
+}
+
+@test
+@timeout(180000)
+fun collections_hash_churn(): void {
+    let m = Map<int, string>(8);
+    let s = Set<int>(8);
+    for (let i = 0; i < 5; i = i + 1) {
+        m[i * 8] = i.to_string();
+        s.add(i * 8);
+    }
+    m[32] = "updated";
+    Assert.eq(m.capacity, 8);
+    Assert.is_false(s.add(32));
+    Assert.eq(s.capacity, 8);
+    for (let i = 0; i < 4; i = i + 1) {
+        m.remove(i * 8);
+        s.remove(i * 8);
+    }
+    m[40] = "new";
+    s.add(40);
+    Assert.eq(m.capacity, 16);
+    Assert.eq(s.capacity, 16);
+    Assert.eq(m[32], "updated");
+    Assert.eq(m[40], "new");
+    Assert.is_true(s.contains(32) && s.contains(40));
+    for (let i = 0; i < 100; i = i + 1) {
+        m[i + 100] = "value";
+        s.add(i + 100);
+        m.remove(i + 100);
+        s.remove(i + 100);
+    }
+    Assert.eq(m.capacity, 128);
+    Assert.eq(s.capacity, 128);
+    Assert.eq(m.length, 2);
+    Assert.eq(s.length, 2);
+}
+
+@test
+@timeout(180000)
+fun collection_clear_reuse(): void {
+    let xs = List<int>();
+    let round = 0;
+    while round < 3 {
+        xs.push(round);
+        xs.push(round + 10);
+        Assert.eq(xs.length, 2);
+        Assert.eq(xs[0], round);
+        xs.clear();
+        Assert.eq(xs.length, 0);
+        Assert.eq(xs.capacity, 8);
+        round = round + 1;
+    }
+
+    let m = Map<int, int>();
+    m[1] = 10;
+    m[2] = 20;
+    Assert.eq(m.length, 2);
+    m.clear();
+    Assert.eq(m.length, 0);
+    m[3] = 30;
+    Assert.eq(m.get(3).unwrap_or(0), 30);
+
+    let s = Set<int>();
+    s.add(7);
+    s.add(8);
+    Assert.eq(s.length, 2);
+    s.clear();
+    Assert.eq(s.length, 0);
+    s.add(9);
+    Assert.is_true(s.contains(9));
+
+    let names = List<string>();
+    names.push("a");
+    names.push("b");
+    Assert.eq(names.length, 2);
+    names.clear();
+    Assert.eq(names.length, 0);
+    names.push("c");
+    Assert.eq(names[0], "c");
+}
+
+@test
+fun reserve_properties(): void {
+    let list = List<int>();
+    let queue = Queue<int>();
+    let map = Map<int, int>();
+    let set = Set<int>();
+    let random = Random(314159);
+    let expected = List<int>();
+    for (let round = 0; round < 200; round = round + 1) {
+        let count = random.next_int(20);
+        list.reserve(count).unwrap();
+        queue.reserve(count).unwrap();
+        map.reserve(count).unwrap();
+        set.reserve(count).unwrap();
+        let list_capacity = list.capacity;
+        let queue_capacity = queue.capacity;
+        let map_capacity = map.capacity;
+        let set_capacity = set.capacity;
+        for (let i = 0; i < count; i = i + 1) {
+            let value = round * 20 + i;
+            list.push(value);
+            queue.enqueue(value);
+            map[value] = value;
+            set.add(value);
+            expected.push(value);
+        }
+        Assert.eq(list.capacity, list_capacity);
+        Assert.eq(queue.capacity, queue_capacity);
+        Assert.eq(map.capacity, map_capacity);
+        Assert.eq(set.capacity, set_capacity);
+        Assert.eq(list.length, expected.length);
+        Assert.eq(queue.length, expected.length);
+        if round % 3 == 0 && expected.length > 0 {
+            let value = expected[0];
+            expected.remove_at(0);
+            Assert.eq(queue.dequeue().unwrap(), value);
+            Assert.eq(list[0], value);
+            list.remove_at(0);
+            Assert.is_true(map.remove(value));
+            Assert.is_true(set.remove(value));
+        }
+    }
+    for (let value in expected) {
+        Assert.eq(queue.dequeue().unwrap(), value);
+        Assert.eq(map.get(value).unwrap(), value);
+        Assert.is_true(set.contains(value));
+    }
+    Assert.is_true(list.reserve(0 - 1).is_err());
+    Assert.is_true(queue.reserve(0 - 1).is_err());
+    Assert.is_true(map.reserve(2147483647).is_err());
+    Assert.is_true(set.reserve(2147483647).is_err());
+}
+
+@test
+@timeout(180000)
+fun collections_bulk_alias(): void {
+    let xs = List<int>(8);
+    for (let i = 0; i < 8; i = i + 1) {
+        xs.push(i);
+    }
+    let view = xs.as_span();
+    xs.push_all(view.to_array());
+    xs.reserve(4096).unwrap();
+    Assert.eq(xs.length, 16);
+    Assert.is_true(xs.capacity >= 4096);
+    Assert.eq(xs[15], 7);
+    Assert.eq(view[7], 7);
+    // The span aliases the pre-growth buffer, so writes through it no longer reach the list.
+    view[0] = 99;
+    Assert.eq(xs[0], 0);
+
+    let names = List<string>(8);
+    names.push("one");
+    names.push("two");
+    let old = names.as_read_only_span();
+    names.push_all(["three", "four", "five", "six", "seven", "eight", "nine"]);
+    names.clear();
+    Assert.eq(old[0], "one");
+    Assert.eq(old[1], "two");
 }

@@ -1,9 +1,9 @@
 import system.testing;
-// Regression test: passing a reference (class) into a function must not invalidate
-// the caller's binding. The callee now retains its parameter on entry so the matching
-// release at exit keeps the reference count balanced.
 import system;
 
+// Passing a reference (class) into a function must not invalidate the caller's binding. The
+// callee retains its parameter on entry so the matching release at exit keeps the reference
+// count balanced.
 class c1a_Box {
     public value: int;
 
@@ -27,7 +27,149 @@ fun c1a_read_twice(b: c1a_Box): int {
 fun arc_param() {
     let b = c1a_Box(21);
     let total = c1a_read_twice(b);
-    // `b` must still be valid here after being passed through two function calls.
-    Assert.eq((b.value).to_string(), "21");
-    Assert.eq((total).to_string(), "42");
+    Assert.eq(b.value, 21);
+    Assert.eq(total, 42);
+}
+
+class c18_Value {
+    public n: int;
+
+    public constructor(n: int) {
+        this.n = n;
+    }
+}
+
+@test
+@timeout(180000)
+fun arc_object_local() {
+    let erased: object = c18_Value(5);
+    let value = (c18_Value)erased;
+    Assert.eq(value.n, 5);
+}
+
+class c19_OptionalScalar {
+    public number: Option<int>;
+    public text: Option<string>;
+
+    public constructor() {
+        this.number = Option.None;
+        this.text = Option.None;
+    }
+}
+
+@test
+@timeout(180000)
+fun arc_optional_scalar() {
+    let value = c19_OptionalScalar();
+    Assert.is_true(value.number.is_none());
+    Assert.is_true(value.text.is_none());
+}
+
+class c1d_Node {
+    public val: int;
+
+    public constructor(val: int) {
+        this.val = val;
+    }
+}
+
+fun c1d_create_node(v: int): c1d_Node {
+    let n = c1d_Node(v);
+    return n;
+}
+
+@test
+@timeout(180000)
+fun arc_return(): void {
+    let n1 = c1d_create_node(10);
+    Assert.eq(n1.val, 10);
+}
+
+// The caller holds a single reference but owes the callee one per parameter. A last-use move
+// that nulled the source once per slot would transfer that one reference twice; the callee then
+// released it twice, corrupting the free list and crashing a later allocation that walked it.
+fun c1e_sum_lengths(a: int[], b: int[], c: int[]): int {
+    return a.length + b.length + c.length;
+}
+
+class c1e_Holder {
+    public n: int;
+
+    public constructor(first: int[], second: int[]) {
+        this.n = first.length + second.length;
+    }
+}
+
+@test
+@timeout(180000)
+fun arc_same_arg_twice(): void {
+    let xs = Array.alloc<int>(3);
+    Assert.eq(c1e_sum_lengths(xs, xs, xs), 9);
+    let ys = Array.alloc<int>(5);
+    Assert.eq(c1e_sum_lengths(ys, xs, ys), 13);
+
+    let h = c1e_Holder(xs, xs);
+    Assert.eq(h.n, 6);
+
+    // These allocations walk the free list, so a double release above shows up here rather
+    // than at the call itself.
+    let a = Array.alloc<int>(4);
+    a[0] = 7;
+    let b = Array.alloc<int>(8);
+    b[0] = 9;
+    let c = Array.alloc<int>(16);
+    Assert.eq(a[0], 7);
+    Assert.eq(b[0], 9);
+    Assert.eq(c.length, 16);
+    Assert.eq(xs.length, 3);
+    Assert.eq(ys.length, 5);
+}
+
+struct c28c_Payload {
+    public data: string;
+
+    public constructor(borrow data: string) {
+        this.data = data;
+    }
+}
+
+interface c28c_Reader {
+    fun read(value: c28c_Payload): string;
+}
+
+class c28c_Echo: c28c_Reader {
+    public fun read(value: c28c_Payload): string {
+        return value.data;
+    }
+
+    fun identity(value: c28c_Payload): c28c_Payload {
+        return value;
+    }
+}
+
+@noinline
+fun c28c_call_reader(reader: c28c_Reader, value: c28c_Payload): string {
+    return reader.read(value);
+}
+
+fun c28c_read(value: c28c_Payload): string {
+    return value.data;
+}
+
+fun c28c_identity(value: c28c_Payload): c28c_Payload {
+    return value;
+}
+
+@test
+@timeout(180000)
+fun value_argument_indirect_ownership(): void {
+    let value = c28c_Payload("hello" + System.env("DREAM_VALUE_SUFFIX").unwrap_or(" world"));
+    let callback: fun(c28c_Payload): string = c28c_read;
+    Assert.eq(callback(value), "hello world");
+    Assert.eq(callback(value), "hello world");
+    Assert.eq(c28c_call_reader(c28c_Echo(), value), "hello world");
+    let identity_callback: fun(c28c_Payload): c28c_Payload = c28c_identity;
+    let copy = identity_callback(value);
+    Assert.eq(copy.data, "hello world");
+    Assert.eq(value.data, "hello world");
 }

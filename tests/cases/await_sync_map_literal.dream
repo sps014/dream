@@ -1,9 +1,0 @@
-// `await` nested inside a map-literal value in a non-async function was previously missed by the
-// await-placement expression walk.
-import system;
-async fun work(): int { return 1; }
-fun f() {
-    let m: Map<string, int> = { "k": work().await };
-    System.println(m["k"]);
-}
-fun main() { }

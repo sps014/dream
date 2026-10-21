@@ -1,8 +1,0 @@
-import system.testing;
-import system;
-
-@test
-@timeout(180000)
-fun interp_inner_string() {
-    Assert.eq(($"x is {"hi"}").to_string(), "x is hi");
-}

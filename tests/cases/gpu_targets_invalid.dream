@@ -1,7 +1,0 @@
-import system.gpu;
-
-@gpu_targets(GpuTarget.Vulkan, GpuTarget.OpenGl)
-
-fun helper(): void {}
-
-fun main(): void {}

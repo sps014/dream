@@ -1,9 +1,0 @@
-import system.webapi;
-
-fun main(): void {}
-
-@router("")
-class Routes {
-@post("/")
-public static fun route(@file file: int): int { return file; }
-}

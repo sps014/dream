@@ -1,0 +1,37 @@
+// A value struct embedding a non-shared class copies into the closure environment, so its heap
+// pointer would be aliased across threads.
+import system;
+import system.task;
+
+class Counter {
+    public value: int;
+
+    public constructor() {
+        this.value = 0;
+    }
+}
+
+struct Wrap {
+    public counter: Counter;
+
+    public constructor(c: Counter) {
+        this.counter = c;
+    }
+}
+
+async fun scoped(): void {
+    let wrap = Wrap(Counter());
+    Task.scope<int, string>(async (scope) => {
+        scope.spawn_parallel<int>(() => wrap.counter.value);
+        return Result.Ok(0);
+    }).await;
+}
+
+async fun spawned(): void {
+    let wrap = Wrap(Counter());
+    let _ = Task.spawn(() => {
+        return wrap.counter.value;
+    }).await;
+}
+
+fun main(): void {}

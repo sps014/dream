@@ -26,8 +26,13 @@ fun mutual_cycle() {
     first.next = Option.None;
     second.next = Option.None;
 }
+fun deferred_cycle() {
+    defer { self_cycle(); System.println("inside"); }
+    System.println("outside");
+}
 fun main() {
     self_cycle();
     mutual_cycle();
+    deferred_cycle();
     System.println("done");
 }

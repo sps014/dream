@@ -97,7 +97,7 @@ A `@model_validator` returns `ValidationIssue` values with codes you choose.
 
 JSON types are strict: `"12"` does not become an integer, and a fractional number cannot fill an integer field. Integer fields also check their range, so `3000000000` fails for an `int`. Fields are required unless they are `Option<T>` or have `@default_json`. Defaults apply only when a property is absent, never to an explicitly invalid value.
 
-Rules apply recursively through nested `@json` models, arrays, lists, sets, and string-keyed maps. Validation collects every independent failure in declaration order instead of stopping at the first one.
+Rules apply recursively through nested `@json` models, arrays, lists, sets, string-keyed `Map` and `SortedMap` fields, and tuples. A tuple must arrive as a JSON array with exactly one element per position, and each element is checked against its own position's type; issue locations name the position as a decimal index. Validation collects every independent failure in declaration order instead of stopping at the first one.
 
 ## Custom checks
 

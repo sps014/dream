@@ -1,0 +1,176 @@
+import system.testing;
+import system;
+
+fun cfd_uint_max(): uint {
+    return 4294967295u;
+}
+
+fun cfd_ulong_max(): ulong {
+    return 18446744073709551615uL;
+}
+
+fun c184_bump(x: int): int {
+    return x + 1;
+}
+
+fun c184_mul_long(a: long, b: long): long {
+    return a * b;
+}
+
+fun c184_mul_ulong(a: ulong, b: ulong): ulong {
+    return a * b;
+}
+
+fun c184_hash(data: byte[]): uint {
+    let h: uint = 2166136261u;
+    for (let b in data) {
+        h = (h ^ (uint)b) * 16777619u;
+    }
+    return h;
+}
+
+struct c1ae_WordPair {
+    public signed: isize;
+    public unsigned: usize;
+}
+
+fun c1ae_signed_step(x: isize): isize {
+    return x - (isize)1;
+}
+
+fun c1ae_unsigned_half(x: usize): usize {
+    return x / (usize)2;
+}
+
+async fun c1ae_async_word(x: usize): usize {
+    return x + (usize)1;
+}
+
+@test
+@timeout(180000)
+fun new_integer_types(): void {
+    let b: byte = 200b;
+    let u: uint = 4000000000u;
+    let l: long = 9000000000L;
+    let ul: ulong = 18000000000uL;
+    Assert.eq(b, 200b);
+    Assert.eq(u, 4000000000u);
+    Assert.eq(l, 9000000000L);
+    Assert.eq(ul, 18000000000uL);
+    Assert.eq(l * 2L, 18000000000L);
+    Assert.eq(u / 3u, 1333333333u);
+    Assert.eq((byte)(200b + 100b), 44b);
+
+    let w: long = 5;
+    let d: double = l;
+    let ul2: ulong = u;
+    Assert.eq(w, 5L);
+    Assert.eq(d, 9000000000d);
+    Assert.eq(ul2, 4000000000uL);
+    Assert.eq((int)l, 410065408);
+
+    let o: object = l;
+    Assert.eq(o.to_string(), "9000000000");
+    Assert.eq("v=" + ul, "v=18000000000");
+    let arr: byte[] = [10b, 20b, 30b];
+    Assert.eq(arr[2], 30b);
+    Assert.eq(arr.to_string(), "[10, 20, 30]");
+    Assert.eq((0L - 7L).abs(), 7L);
+    Assert.eq(l.max(w), 9000000000L);
+    Assert.eq(byte.parse("250").unwrap_or(0b), 250b);
+    let big: uint = 3000000000u;
+    Assert.is_true(big > 1000000000u);
+}
+
+// Values above the signed range compare, divide, and shift as unsigned even when only known at runtime.
+@test
+@timeout(180000)
+fun integer_unsigned_semantics(): void {
+    let u = cfd_uint_max();
+    Assert.is_true(u > 1u);
+    Assert.eq((u / 2u).to_string(), "2147483647");
+    Assert.eq((u % 10u).to_string(), "5");
+    Assert.eq((u >> 28u).to_string(), "15");
+    Assert.is_true(u + 1u == 0u);
+
+    let l = cfd_ulong_max();
+    Assert.is_true(l > 1uL);
+    Assert.eq((l / 2uL).to_string(), "9223372036854775807");
+    Assert.eq((l % 10uL).to_string(), "5");
+    Assert.eq((l >> 60uL).to_string(), "15");
+}
+
+// Arithmetic wraps by default, `checked { }` panics on overflow, and `unchecked { }` restores
+// wrapping inside it. The mode is lexical: it covers lambdas written in the block but not
+// functions called from it.
+@test
+@timeout(180000)
+fun overflow_blocks(): void {
+    let big: int = 2147483647;
+    Assert.eq((big + 1).to_string(), "-2147483648");
+    let b: byte = 250b;
+    b += 10b;
+    Assert.eq(b.to_string(), "4");
+    let zero: byte = 0b;
+    Assert.eq((zero - 1b).to_string(), "255");
+    let lmax: long = 9223372036854775807L;
+    Assert.eq((lmax + 1L).to_string(), "-9223372036854775808");
+    let times: fun(int): int = (v) => v * 1000000000;
+    Assert.eq(times(7).to_string(), "-1589934592");
+    checked {
+        Assert.eq(c184_bump(big).to_string(), "-2147483648");
+        unchecked {
+            let u: uint = 0u;
+            u--;
+            Assert.eq(u.to_string(), "4294967295");
+        }
+        let double_it: fun(int): int = (v) => v * 2;
+        Assert.eq(double_it(21).to_string(), "42");
+        Assert.eq((big - 1).to_string(), "2147483646");
+    }
+    Assert.eq(c184_hash([100b, 114b, 101b, 97b, 109b]).to_string(), "2193733020");
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += i;
+    }
+    Assert.eq(sum, 45);
+    Assert.eq(c184_mul_long(-3000000000L, 3000000000L).to_string(), "-9000000000000000000");
+    Assert.eq(c184_mul_ulong(4000000000uL, 4000000000uL).to_string(), "16000000000000000000");
+}
+
+@test
+@timeout(180000)
+async fun pointer_integers(): void {
+    let signed: isize = 42;
+    let unsigned: usize = 42;
+    Assert.is_true(sizeof(isize) == sizeof(string));
+    Assert.is_true(sizeof(usize) == sizeof(string));
+    Assert.is_true(sizeof(c1ae_WordPair) == sizeof(string) * 2);
+    Assert.eq(c1ae_signed_step(signed).to_string(), "41");
+    Assert.eq(c1ae_unsigned_half(unsigned).to_string(), "21");
+    let maximum: usize = ~(usize)0;
+    Assert.is_true(maximum > unsigned);
+    Assert.is_true((maximum + (usize)1) == (usize)0);
+    Assert.is_true((maximum >>(usize)(sizeof(usize) * 8 - 1)) == (usize)1);
+    let negative: isize = (isize)0 - (isize)1;
+    Assert.is_true(negative < (isize)0);
+    Assert.is_true((negative >>(isize)1) == negative);
+    let words: usize[] = [unsigned, (usize)9];
+    Assert.eq(words[1].to_string(), "9");
+    let box: object = unsigned;
+    Assert.is_true((usize)box == unsigned);
+    Assert.eq((typeof(box)).to_string(), "usize");
+    Assert.eq(box.to_string(), "42");
+    let call: fun(usize): usize = c1ae_unsigned_half;
+    Assert.eq(call(unsigned).to_string(), "21");
+    let capture = () => c1ae_unsigned_half(unsigned);
+    Assert.eq(capture().to_string(), "21");
+    let result = c1ae_async_word(unsigned).await;
+    Assert.eq(result.to_string(), "43");
+    Assert.eq(usize.parse("42").unwrap_or((usize)0).to_string(), "42");
+    Assert.eq(isize.parse("-42").unwrap_or((isize)0).to_string(), "-42");
+    Assert.is_true(usize.parse("4294967296").is_err() == (sizeof(usize) == 4));
+    Assert.is_true(isize.parse("2147483648").is_err() == (sizeof(isize) == 4));
+    Assert.eq(unsigned.compare((usize)9), 1);
+    Assert.is_true(maximum.to_string().length >= 10);
+}

@@ -1,0 +1,40 @@
+// Private fields, methods, and constructors are not accessible outside their class.
+import system;
+
+class Box {
+    _secret: int;
+    value: int;
+
+    public constructor(v: int) {
+        this._secret = v;
+        this.value = v;
+    }
+
+    fun reveal(): int {
+        return this.value;
+    }
+}
+
+fun apply(f: fun(): int): int {
+    return f();
+}
+
+fun private_field(): void {
+    let b = Box(42);
+    System.println(b._secret);
+}
+
+fun private_method_group(): void {
+    let b = Box(42);
+    System.println(apply(b.reveal));
+}
+
+class Hidden {
+    constructor() {}
+}
+
+fun private_constructor(): void {
+    let h = Hidden();
+}
+
+fun main(): void {}

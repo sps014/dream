@@ -1,5 +1,6 @@
 import system.testing;
 import system;
+import system.text;
 
 public class c6f_CharacterCell {
     public before: byte;
@@ -30,57 +31,47 @@ fun c6f_read_value(value: c6f_CharacterValue): int {
 }
 
 @noinline
-fun c6f_read_chars(borrow chars: char[]): void {
+fun c6f_read_chars(borrow chars: char[]): string {
     let span = Span<char>.of(chars);
     let read_only = span.as_read_only();
+    let out = "";
     let i = 0;
     while i < span.length {
-        c6f_verify_observation(((int)read_only[i]).to_string());
+        out = out + ((int)read_only[i]).to_string() + ",";
         i = i + 1;
     }
     span[1] = '界';
-    c6f_verify_observation(((int)span[1]).to_string());
-}
-
-fun c6f_body(): void {
-    let chars = ['Ω', '界', '😀'];
-    c6f_read_chars(chars);
-    let allocated = Array.alloc<char>(2);
-    allocated[0] = '😀';
-    allocated[1] = 'Ω';
-    c6f_read_chars(allocated);
-    c6f_verify_observation((c6f_read_cell(c6f_CharacterCell('界'))).to_string());
-    let value = c6f_CharacterValue();
-    value.before = 123;
-    value.value = '😀';
-    value.after = 456;
-    c6f_verify_observation((c6f_read_value(value)).to_string());
-    let list = List<char>();
-    list.push('Ω');
-    list.push('😀');
-    c6f_verify_observation(((int)list[0]).to_string());
-    c6f_verify_observation(((int)list[1]).to_string());
-}
-
-let c6f_cursor: int = 0;
-
-fun c6f_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "937\n30028\n128512\n30028\n128512\n937\n30028\n30607\n129091\n937\n128512\n";
-    let end = c6f_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c6f_cursor, end));
-    c6f_cursor = end;
+    return out + ((int)span[1]).to_string();
 }
 
 @test
 @timeout(180000)
-
 fun char_storage_unicode(): void {
-    c6f_cursor = 0;
-    c6f_body();
-    Assert.eq(
-        c6f_cursor,
-        ("937\n30028\n128512\n30028\n128512\n937\n30028\n30607\n129091\n937\n128512\n").length
-    );
+    let chars = ['Ω', '界', '😀'];
+    Assert.eq(c6f_read_chars(chars), "937,30028,128512,30028");
+    let allocated = Array.alloc<char>(2);
+    allocated[0] = '😀';
+    allocated[1] = 'Ω';
+    Assert.eq(c6f_read_chars(allocated), "128512,937,30028");
+    Assert.eq(c6f_read_cell(c6f_CharacterCell('界')), 30607);
+    let value = c6f_CharacterValue();
+    value.before = 123;
+    value.value = '😀';
+    value.after = 456;
+    Assert.eq(c6f_read_value(value), 129091);
+    let list = List<char>();
+    list.push('Ω');
+    list.push('😀');
+    Assert.eq((int)list[0], 937);
+    Assert.eq((int)list[1], 128512);
+}
+
+@test
+@timeout(180000)
+fun char_parse(): void {
+    Assert.eq(char.parse("A").unwrap().to_string(), "A");
+    let accented = char.parse("é").unwrap();
+    Assert.eq((int)accented, 233);
+    Assert.eq(char.parse("ab").unwrap_err().code(), "EPARSE");
+    Assert.eq(char.parse("").unwrap_err().code(), "EPARSE");
 }

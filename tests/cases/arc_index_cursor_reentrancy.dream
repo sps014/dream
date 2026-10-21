@@ -12,6 +12,18 @@ class CursorItem {
     }
 }
 
+class MapItem {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+
+    del() {
+        System.println("drop " + this.name);
+    }
+}
+
 @noinline
 fun replace_cursor_item(borrow values: List<CursorItem>): void {
     values[0] = CursorItem("new");
@@ -34,7 +46,25 @@ fun overwrite_index_alias(): void {
     System.println(value.name);
 }
 
+// Slot-walk value pairs must own snapshots across mutation of the map.
+@noinline
+fun overwrite_map_entry(borrow values: Map<int, MapItem>): void {
+    for (let entry in values) {
+        values[entry.key] = MapItem("map new");
+        System.println(entry.value.name);
+    }
+}
+
+@noinline
+fun map_slot_walk_mutation(): void {
+    let values = Map<int, MapItem>();
+    values[1] = MapItem("map old");
+    overwrite_map_entry(values);
+    System.println("map done");
+}
+
 fun main(): void {
+    map_slot_walk_mutation();
     let values = List<CursorItem>();
     values.push(CursorItem("old"));
     scan_cursor_items(values);

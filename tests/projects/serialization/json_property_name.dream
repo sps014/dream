@@ -38,3 +38,116 @@ fun json_property_name(): void {
     Assert.eq((deserialized.name).to_string(), "Widget");
     Assert.eq((deserialized.product_id).to_string(), "42");
 }
+
+@json
+class c116_User {
+    public name: string;
+    public age: int;
+
+    @json_ignore
+    public password: string;
+
+    @json_ignore
+    public login_count: int;
+
+    @json_ignore
+    public nickname: Option<string>;
+
+    public constructor(
+        name: string,
+        age: int,
+        password: string,
+        login_count: int,
+        nickname: Option<string>
+    ) {
+        this.name = name;
+        this.age = age;
+        this.password = password;
+        this.login_count = login_count;
+        this.nickname = nickname;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_ignore(): void {
+    let u = c116_User("Ada", 36, "secret", 7, Option.Some("Countess"));
+    let text = Json.serialize(u);
+    Assert.eq(text, "{\"name\":\"Ada\",\"age\":36}");
+
+    let back = Json.deserialize<c116_User>(text).unwrap_or(u);
+    Assert.eq(back.name, "Ada");
+    Assert.eq(back.age, 36);
+    Assert.eq(back.password, "");
+    Assert.eq(back.login_count, 0);
+    Assert.is_true(back.nickname.is_none());
+}
+
+@json
+class c126_Reply {
+    public ok: bool;
+    public tags: List<string>;
+
+    public constructor() {
+        this.ok = false;
+        this.tags = List<string>();
+    }
+}
+
+@test
+@timeout(180000)
+fun json_zero_arg_constructor(): void {
+    let r = c126_Reply();
+    r.ok = true;
+    r.tags.push("a");
+    Assert.eq(Json.serialize(r), "{\"ok\":true,\"tags\":[\"a\"]}");
+    let b = Json.deserialize<c126_Reply>("{\"ok\":true,\"tags\":[\"x\",\"y\"]}").unwrap();
+    Assert.is_true(b.ok);
+    Assert.eq(b.tags.length, 2);
+}
+
+@json
+class c11d_Address {
+    city: string;
+    zip: string;
+
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
+}
+
+@json
+class c11d_User {
+    name: string;
+    age: int;
+    address: c11d_Address;
+    tags: string[];
+
+    public constructor(name: string, age: int, address: c11d_Address, tags: string[]) {
+        this.name = name;
+        this.age = age;
+        this.address = address;
+        this.tags = tags;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_pretty(): void {
+    let u = c11d_User("Ada", 36, c11d_Address("London", "NW1"), ["dev", "math"]);
+    Assert.eq(
+        Json.serialize_pretty(u.to_json(), 2),
+        "{\n  \"name\": \"Ada\",\n  \"age\": 36,\n  \"address\": {\n    \"city\": \"London\",\n    \"zip\": \"NW1\"\n  },\n  \"tags\": [\n    \"dev\",\n    \"math\"\n  ]\n}"
+    );
+
+    let v = Json.deserialize<JsonValue>("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}")
+        .unwrap_or(JsonValue.null());
+    Assert.eq(
+        Json.serialize_pretty(v, 4),
+        "{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    },\n    \"d\": []\n}"
+    );
+
+    // indent 0 falls back to compact output.
+    Assert.eq(Json.serialize_pretty(v, 0), "{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}");
+}

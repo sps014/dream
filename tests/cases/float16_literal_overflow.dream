@@ -1,3 +1,0 @@
-fun main(): void {
-    let value = 70000.0h;
-}

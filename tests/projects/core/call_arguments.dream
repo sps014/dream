@@ -1,0 +1,226 @@
+import system.testing;
+import system;
+
+fun cb0_add(base: int, delta: int = 10): int {
+    return base + delta;
+}
+
+class cb0_Greeter {
+    public factor: int;
+
+    public constructor(factor: int = 3) {
+        this.factor = factor;
+    }
+
+    public fun scale(n: int, by: int = 2): int {
+        return n * by * this.factor;
+    }
+}
+
+fun c161_greet(name: string, greeting: string = "Hello", punctuation: string = "!"): string {
+    return greeting + ", " + name + punctuation;
+}
+
+class c161_Rect {
+    public width: int;
+    public height: int;
+
+    public constructor(width: int, height: int = 1) {
+        this.width = width;
+        this.height = height;
+    }
+
+    public fun area(scale: int = 1, offset: int = 0): int {
+        return (this.width * this.height * scale) + offset;
+    }
+}
+
+fun c162_h(x: int): int {
+    return x;
+}
+
+fun c162_h(x: string): int {
+    return 1;
+}
+
+class c163_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int) {
+        this.x = x;
+        this.y = 0;
+    }
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class c164_Calc {
+    public fun add(x: int): int {
+        return x;
+    }
+
+    public fun add(x: int, y: int): int {
+        return x + y;
+    }
+}
+
+fun c298_sum(...nums: int[]): int {
+    let total = 0;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c298_sum_with_base(base: int, ...nums: int[]): int {
+    let total = base;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+class c298_Counter {
+    public fun join_all(...items: string[]): string {
+        let joined = "";
+        for (let item in items) {
+            joined = joined + item + ";";
+        }
+        return joined + items.length.to_string();
+    }
+}
+
+fun c29b_h(x: int, ...rest: int[]): int {
+    let total = x;
+    for (let n in rest) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c29b_h(x: string, ...rest: string[]): int {
+    return 1;
+}
+
+fun c199_scale(n: int, by: int = 2): int {
+    return n * by;
+}
+
+fun c199_scale(s: string): string {
+    return s + s;
+}
+
+extend int {
+    public fun combine(other: int): int {
+        return this + other;
+    }
+
+    public fun combine(other: string): int {
+        return this + 100;
+    }
+}
+
+class c9d_Point {
+    public x: int;
+    public y: int;
+
+    public constructor() {
+        this.x = 0;
+        this.y = 0;
+    }
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public constructor(both: int) {
+        this.x = both;
+        this.y = both;
+    }
+
+    public fun describe(): string {
+        return "(" + this.x + ", " + this.y + ")";
+    }
+}
+
+@test
+@timeout(180000)
+fun default_params(): void {
+    Assert.eq(cb0_add(5), 15);
+    Assert.eq(cb0_add(5, 1), 6);
+
+    let g = cb0_Greeter();
+    let h = cb0_Greeter(10);
+    Assert.eq(g.scale(4), 24);
+    Assert.eq(g.scale(4, 5), 60);
+    Assert.eq(h.scale(4), 80);
+}
+
+@test
+@timeout(180000)
+fun named_arguments(): void {
+    Assert.eq(c161_greet(name: "Ada"), "Hello, Ada!");
+    Assert.eq(c161_greet(name: "Lin", greeting: "Hi"), "Hi, Lin!");
+    Assert.eq(c161_greet(greeting: "Hi", name: "Grace"), "Hi, Grace!");
+    Assert.eq(c161_greet("Bob", punctuation: "?"), "Hello, Bob?");
+    Assert.eq(c161_greet(name: "Amy", punctuation: "."), "Hello, Amy.");
+
+    let r = c161_Rect(width: 3, height: 4);
+    Assert.eq(r.area(), 12);
+    Assert.eq(r.area(offset: 5), 17);
+    Assert.eq(r.area(scale: 2), 24);
+
+    Assert.eq(c162_h(x: 5), 5);
+
+    let p = c163_Point(x: 3, y: 4);
+    Assert.eq(p.x, 3);
+    Assert.eq(p.y, 4);
+
+    let c = c164_Calc();
+    Assert.eq(c.add(x: 5), 5);
+    Assert.eq(c.add(x: 2, y: 3), 5);
+
+    Assert.eq(c298_sum_with_base(base: 10, 1, 2, 3), 16);
+    Assert.eq(c298_sum_with_base(base: 5), 5);
+}
+
+@test
+@timeout(180000)
+fun variadic_functions(): void {
+    Assert.eq(c298_sum(), 0);
+    Assert.eq(c298_sum(1), 1);
+    Assert.eq(c298_sum(1, 2, 3), 6);
+
+    Assert.eq(c298_sum_with_base(10), 10);
+    Assert.eq(c298_sum_with_base(10, 1, 2, 3), 16);
+
+    let c = c298_Counter();
+    Assert.eq(c.join_all(), "0");
+    Assert.eq(c.join_all("a", "b"), "a;b;2");
+
+    Assert.eq(c29b_h(1, 2, 3), 6);
+}
+
+@test
+@timeout(180000)
+fun overload_resolution(): void {
+    Assert.eq(c199_scale(5), 10);
+    Assert.eq(c199_scale(5, 3), 15);
+    Assert.eq(c199_scale("ab"), "abab");
+
+    let n: int = 5;
+    Assert.eq(n.combine(3), 8);
+    Assert.eq(n.combine("x"), 105);
+
+    let a = c9d_Point();
+    let b = c9d_Point(3, 4);
+    let c = c9d_Point(5);
+    Assert.eq(a.describe(), "(0, 0)");
+    Assert.eq(b.describe(), "(3, 4)");
+    Assert.eq(c.describe(), "(5, 5)");
+}

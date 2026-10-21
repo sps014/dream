@@ -1,8 +1,0 @@
-import system;
-
-fun nothing(): void { }
-
-fun main(): void {
-    let r = nothing();
-    System.println(r);
-}

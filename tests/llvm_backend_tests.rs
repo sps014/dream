@@ -1,4 +1,4 @@
-//! The LLVM backend at `-O0` and `-O3` on a feature-spanning slice of the golden corpus, runtime
+//! The LLVM backend at `-O3` on a feature-spanning slice of the golden corpus, runtime
 //! declarations in lockstep with `dream_rt.bc`, IR shapes, and byte-identical `.ll` across
 //! compiles. Skipped (with a message) when the pinned LLVM toolchain is not installed.
 
@@ -17,46 +17,44 @@ use crate::common;
 /// trap, classes, retain/release, destruction through `del`, ownership transfer, borrowed and
 /// sink params, return ownership, interface dispatch, strings, List/Map, weak refs, async, tasks.
 const CASES: &[&str] = &[
-    "arithmetic",
-    "functions",
-    "for_each",
-    "struct_basic",
-    "struct_rc",
-    "arrays",
+    "operators",
+    "functions_misc",
+    "control_flow",
+    "value_structs",
     "array_alloc",
-    "abc_post_loop_trap",
     "list_index_oob_trap",
-    "classes",
-    "class_methods",
+    "span_range_trap",
+    "class_basics",
     "arc_param",
-    "arc_return",
-    "arc_factory",
-    "arc_same_arg_twice",
+    "arc_complete",
     "arc_global_reassign",
     "destroy_long_chain",
-    "struct_last_use_move",
-    "param_modes_borrow",
-    "async_generic_sink_reuse",
+    "isolated_ownership",
     "interfaces",
-    "interface_default_method",
-    "generic_interfaces",
-    "value_struct_interface_box",
-    "strings",
+    "generics",
+    "string_methods",
     "string_builder",
-    "string_interpolation",
-    "list_basics",
-    "map_basics",
-    "union_match",
-    "union_rc",
-    "closure_capture",
-    "closure_env_reclaim",
+    "list_collection",
+    "map_set",
+    "unions",
+    "closures",
     "weak_field_runtime",
-    "weak_handle_lifecycle",
     "async_basic",
     "async_value_struct_locals",
-    "async_wide_scalar_return",
     "task_basic",
     "task_map",
+];
+
+/// Cover classes, interfaces, async, tasks, strings, maps, weak refs and unions between them.
+const DETERMINISM_CASES: &[&str] = &[
+    "classes",
+    "async_basic",
+    "interfaces",
+    "union_rc",
+    "strings",
+    "task_basic",
+    "weak_handle_lifecycle",
+    "map_basics",
 ];
 
 fn llvm_available() -> bool {
@@ -291,26 +289,33 @@ fn llvm_relocatable_binary_runs_after_move() {
     );
 }
 
+/// The debug corpus already runs these cases at `-O0`; this is the default optimized execution.
 #[test]
-fn llvm_runs_feature_cases_at_o0_and_o3() {
+fn llvm_runs_feature_cases_at_o3() {
     if !llvm_available() {
         return;
     }
-    for release in [false, true] {
-        crate::corpus::run::run_selected_profile(
-            Some(CASES),
-            &[dream::driver::test::TestHost::Native],
-            release,
-        );
-    }
+    crate::corpus::run::run_selected_profile(
+        Some(CASES),
+        &[dream::driver::test::TestHost::Native],
+        true,
+    );
 }
 
+/// Two compiles of each case must emit byte-identical `.ll`, and every function the module
+/// declares or exports that the runtime bitcode also has must carry the runtime's exact type; a
+/// mismatch would link silently and call through the wrong ABI.
 #[test]
-fn llvm_ir_is_deterministic() {
+fn llvm_ir_is_deterministic_and_matches_runtime_declarations() {
     if !llvm_available() {
         return;
     }
-    for stem in ["classes", "async_basic", "interfaces", "union_rc"] {
+    let toolchain = Toolchain {
+        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        opt: OptLevel::O2,
+        debug: false,
+    };
+    for stem in DETERMINISM_CASES {
         let dir = out_dir("llvm-backend-det");
         let texts: Vec<String> = (0..2)
             .map(|run| {
@@ -320,32 +325,8 @@ fn llvm_ir_is_deterministic() {
             })
             .collect();
         assert!(texts[0] == texts[1], "nondeterministic .ll for {}", stem);
-    }
-}
-
-/// Every function the emitted module declares or exports that the runtime bitcode also has must
-/// carry the runtime's exact type; a mismatch would link silently and call through the wrong ABI.
-#[test]
-fn llvm_runtime_declarations_match_bitcode() {
-    if !llvm_available() {
-        return;
-    }
-    let toolchain = Toolchain {
-        config: std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
-        opt: OptLevel::O2,
-        debug: false,
-    };
-    for stem in [
-        "strings",
-        "async_basic",
-        "task_basic",
-        "weak_handle_lifecycle",
-        "map_basics",
-    ] {
-        let ll = out_dir("llvm-backend-lockstep").join(format!("{stem}.ll"));
-        compile_ll(&case(stem), &ll, OptLevel::O2);
-        let text = fs::read_to_string(&ll).unwrap();
-        let need = dream_mir::runtime::runtime_need_from_module_text(&text);
+        let text = &texts[0];
+        let need = dream_mir::runtime::runtime_need_from_module_text(text);
         let req = LlvmRuntimeRequest {
             profile: dream_abi::profile::CompileProfile::Debug,
             need,
@@ -356,7 +337,7 @@ fn llvm_runtime_declarations_match_bitcode() {
         };
         let runtime = toolchain.runtime_sigs(&req).unwrap();
         let rt = RuntimeSigs::parse(&runtime.text).unwrap();
-        let ours = RuntimeSigs::parse(&text).unwrap();
+        let ours = RuntimeSigs::parse(text).unwrap();
         assert_eq!(ours.triple, rt.triple, "{stem}: target triple");
         assert_eq!(ours.datalayout, rt.datalayout, "{stem}: datalayout");
         let mut checked = 0;

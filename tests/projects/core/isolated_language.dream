@@ -1,0 +1,217 @@
+import system;
+import system.testing;
+
+// --- enum_basic: plain enums with explicit values, switch dispatch, and flag operators. ---
+
+enum iso_Color { Red, Green, Blue }
+enum iso_Status { Active = 10, Inactive = 20 }
+enum iso_Flags { None = 0, Read = 1, Write = 2, ReadWrite = 3 }
+
+fun iso_describe_color(c: iso_Color): string {
+    switch (c) {
+        case iso_Color.Red:
+            return "red";
+        case iso_Color.Green:
+            return "green";
+        default:
+            return "other";
+    }
+}
+
+@test
+fun iso_enum_basic(): void {
+    let c: iso_Color = iso_Color.Green;
+    Assert.eq(iso_describe_color(c), "green");
+    Assert.eq(iso_describe_color(iso_Color.Blue), "other");
+    Assert.is_true(c == iso_Color.Green);
+    Assert.is_true((iso_Color.Red | iso_Color.Green) == iso_Color.Green);
+    let s: iso_Status = iso_Status.Inactive;
+    Assert.is_true(s == iso_Status.Inactive);
+    Assert.is_true(s != iso_Status.Active);
+    let flags = iso_Flags.Read | iso_Flags.Write;
+    Assert.is_true(flags == iso_Flags.ReadWrite);
+    Assert.is_true((flags & iso_Flags.Read) != iso_Flags.None);
+    Assert.is_true((iso_Flags.Write & iso_Flags.Read) == iso_Flags.None);
+}
+
+// --- enum_name: `to_string` yields the choice name, including after explicit values. ---
+
+enum iso_Direction {
+    North,
+    East = 10,
+    South,
+    West,
+}
+
+@test
+fun iso_enum_name(): void {
+    let d = iso_Direction.South;
+    Assert.eq(d.to_string(), "South");
+    Assert.eq(iso_Direction.North.to_string(), "North");
+    Assert.eq(iso_Direction.West.to_string(), "West");
+    Assert.eq(iso_Direction.East.to_string() + "!", "East!");
+}
+
+// --- switch_basic: multi-value cases, defaults, and string cases without fallthrough. ---
+
+fun iso_classify(n: int): string {
+    switch (n) {
+        case 1, 2, 3:
+            return "small";
+        case 10:
+            return "ten";
+        default:
+            return "other";
+    }
+}
+
+fun iso_greeting_code(s: string): int {
+    let code = -1;
+    switch (s) {
+        case "hi":
+            code = 1;
+        case "bye":
+            code = 2;
+        default:
+            code = 0;
+    }
+    return code;
+}
+
+@test
+fun iso_switch_basic(): void {
+    Assert.eq(iso_classify(2), "small");
+    Assert.eq(iso_classify(10), "ten");
+    Assert.eq(iso_classify(99), "other");
+    Assert.eq(iso_greeting_code("hi"), 1);
+    Assert.eq(iso_greeting_code("bye"), 2);
+    Assert.eq(iso_greeting_code("other"), 0);
+}
+
+// --- integer_wrap_runtime: runtime arithmetic wraps at the type's own width, shift counts are
+// masked, and `MIN / -1` wraps instead of trapping. ---
+
+// A mutable global keeps the operands opaque to constant folding.
+let iso_wrap_zero: int = 0;
+
+@noinline
+fun iso_wrap_add(a: int, b: int): int { return a + b; }
+@noinline
+fun iso_wrap_addb(a: byte, b: byte): byte { return a + b; }
+@noinline
+fun iso_wrap_mull(a: long, b: long): long { return a * b; }
+@noinline
+fun iso_wrap_shl(a: int, n: int): int { return a << n; }
+@noinline
+fun iso_wrap_neg(a: int): int { return -a; }
+@noinline
+fun iso_wrap_sdiv(a: int, b: int): int { return a / b; }
+@noinline
+fun iso_wrap_srem(a: int, b: int): int { return a % b; }
+@noinline
+fun iso_wrap_notb(a: byte): byte { return ~a; }
+
+@test
+fun iso_integer_wrap_runtime(): void {
+    let big = iso_wrap_add(2147483647, iso_wrap_zero + 1);
+    Assert.eq(big, -2147483647 - 1);
+    Assert.is_true(big < 0);
+
+    let b = iso_wrap_addb(250b, 10b);
+    Assert.eq(b, 4b);
+    Assert.is_true(b < 100b);
+
+    Assert.eq(iso_wrap_mull(9223372036854775807L, 2L), -2L);
+    Assert.eq(iso_wrap_shl(1, 33 + iso_wrap_zero), 2);
+    let min = -2147483647 - 1 + iso_wrap_zero;
+    Assert.eq(iso_wrap_neg(min), min);
+    Assert.eq(iso_wrap_sdiv(min, -1), min);
+    Assert.eq(iso_wrap_srem(min, -1), 0);
+    Assert.eq(iso_wrap_notb(0b), 255b);
+}
+
+// --- scalar_array_recursive_borrow: borrowed scalar arrays across recursion and a global owner. ---
+
+fun iso_reverse_range(values: int[], lo: int, hi: int): void {
+    if lo >= hi { return; }
+    let first = values[lo];
+    values[lo] = values[hi];
+    values[hi] = first;
+    iso_reverse_range(values, lo + 1, hi - 1);
+}
+
+fun iso_add_twice(left: int[], right: int[], n: int): int {
+    if n == 0 { return 0; }
+    return left[n - 1] + right[n - 1] + iso_add_twice(left, right, n - 1);
+}
+
+let iso_shared_values: int[] = [1, 2, 3];
+
+fun iso_clear_owner_then_read(values: int[]): int {
+    iso_shared_values = [99];
+    return values[2];
+}
+
+@test
+fun iso_scalar_array_recursive_borrow(): void {
+    let values: int[] = [10, 20, 30, 40, 50];
+    iso_reverse_range(values, 0, 4);
+    Assert.eq(values[0], 50);
+    Assert.eq(values[4], 10);
+    Assert.eq(iso_add_twice(values, values, 5), 300);
+    Assert.eq(iso_clear_owner_then_read(iso_shared_values), 3);
+    Assert.eq(iso_shared_values[0], 99);
+    iso_reverse_range(values, 3, 2);
+    Assert.eq(values[3], 20);
+}
+
+// --- top_level_vars: globals initialize once, in order, and may reference earlier globals. ---
+
+let iso_counter: int = 10;
+const ISO_FACTOR: int = 3;
+let iso_derived: int = iso_counter * ISO_FACTOR;
+
+@test
+fun iso_top_level_vars(): void {
+    Assert.eq(iso_counter, 10);
+    Assert.eq(ISO_FACTOR, 3);
+    Assert.eq(iso_derived, 30);
+    iso_counter = iso_counter + 5;
+    Assert.eq(iso_counter, 15);
+    iso_derived = iso_counter * ISO_FACTOR;
+    Assert.eq(iso_derived, 45);
+}
+
+// --- print_fun_value: a function value renders as its signature. ---
+
+fun iso_fun_add(a: int, b: int): int {
+    return a + b;
+}
+
+@test
+fun iso_print_fun_value(): void {
+    let f: fun(int, int): int = iso_fun_add;
+    Assert.eq(f.to_string(), "fun(int, int): int");
+    Assert.eq("" + f, "fun(int, int): int");
+}
+
+// --- type_alias: aliases are interchangeable with their target types. ---
+
+type iso_Number = int;
+type iso_Text = string;
+
+fun iso_alias_add(a: iso_Number, b: iso_Number): iso_Number {
+    return a + b;
+}
+
+@test
+fun iso_type_alias(): void {
+    let x: iso_Number = 7;
+    let y: iso_Number = 5;
+    Assert.eq(iso_alias_add(x, y), 12);
+    let plain: int = iso_alias_add(x, y);
+    Assert.eq(plain, 12);
+    let greeting: iso_Text = "hello";
+    let text: string = greeting;
+    Assert.eq(text, "hello");
+}

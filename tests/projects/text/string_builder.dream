@@ -5,57 +5,134 @@ import system.testing;
 import system;
 import system.text;
 
-fun c20f_body(): void {
+@test
+@timeout(180000)
+fun string_builder(): void {
     let sb = StringBuilder();
-    c20f_verify_observation((sb.is_empty()).to_string());
+    Assert.is_true(sb.is_empty());
     sb.append("Hello, ");
     sb.append("world");
     sb.append_char('!');
-    c20f_verify_observation((sb.length).to_string());
-    c20f_verify_observation((sb.is_empty()).to_string());
-    c20f_verify_observation((sb.build()).to_string());
+    Assert.eq(sb.length, 13);
+    Assert.is_false(sb.is_empty());
+    Assert.eq(sb.build(), "Hello, world!");
 
-    // `to_string()` override: `print` and `+` both use it without an explicit `.build()`.
-    c20f_verify_observation((sb).to_string());
-    c20f_verify_observation(("say: " + sb).to_string());
+    Assert.eq(sb.to_string(), "Hello, world!");
+    Assert.eq("say: " + sb, "say: Hello, world!");
 
     sb.clear();
-    c20f_verify_observation((sb.is_empty()).to_string());
+    Assert.is_true(sb.is_empty());
     sb.append_line("line1");
     sb.append("line2");
-    c20f_verify_observation((sb.build()).to_string());
+    Assert.eq(sb.build(), "line1\nline2");
 
-    // Force multiple growths past a small initial capacity.
     let sb2 = StringBuilder(2);
     let i = 0;
     while i < 50 {
         sb2.append_char('x');
         i = i + 1;
     }
-    c20f_verify_observation((sb2.length).to_string());
+    Assert.eq(sb2.length, 50);
+
+    let small = StringBuilder();
+    small.append("[");
+    small.append("x");
+    Assert.eq(small.build(), "[x");
+    let o: Option<string> = Option.Some("a");
+    Assert.is_true(o.is_some());
+    Assert.eq(o.unwrap_or(""), "a");
 }
 
-let c20f_cursor: int = 0;
-
-fun c20f_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n";
-    let end = c20f_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c20f_cursor, end));
-    c20f_cursor = end;
-}
-
+// Formatting signed minima must not overflow while taking the magnitude.
 @test
 @timeout(180000)
+fun string_builder_int_extremes(): void {
+    let sb = StringBuilder();
+    let lo = 0 - 2147483647 - 1;
+    let llo: long = 0L - 9223372036854775807L - 1L;
+    sb.append("[");
+    sb.append_int(lo);
+    sb.append("|");
+    sb.append_long(llo);
+    sb.append("|");
+    sb.append_int(2147483647);
+    sb.append("]");
+    Assert.eq(sb.build(), "[-2147483648|-9223372036854775808|2147483647]");
+    string_builder_int_extremes_digit_boundaries();
+}
 
-fun string_builder(): void {
-    c20f_cursor = 0;
-    c20f_body();
-    Assert.eq(
-        c20f_cursor,
-        (
-            "true\n13\nfalse\nHello, world!\nHello, world!\nsay: Hello, world!\ntrue\nline1\nline2\n50\n"
-        ).length
-    );
+fun string_builder_int_extremes_digit_boundaries(): void {
+    let values = [
+        (-2147483647 - 1), -1000000001, -1000000000, -999999999, -100000001,
+        -100000000, -99999999, -10000001, -10000000, -9999999,
+        -1000001, -1000000, -999999, -100001, -100000,
+        -99999, -10001, -10000, -9999, -1001,
+        -1000, -999, -101, -100, -99,
+        -11, -10, -9, -2, -1,
+        0, 1, 2, 9, 10,
+        11, 99, 100, 101, 999,
+        1000, 1001, 9999, 10000, 10001,
+        99999, 100000, 100001, 999999, 1000000,
+        1000001, 9999999, 10000000, 10000001, 99999999,
+        100000000, 100000001, 999999999, 1000000000, 1000000001,
+        2147483647,
+    ];
+    let expected = [
+        "-2147483648", "-1000000001", "-1000000000", "-999999999", "-100000001",
+        "-100000000", "-99999999", "-10000001", "-10000000", "-9999999",
+        "-1000001", "-1000000", "-999999", "-100001", "-100000",
+        "-99999", "-10001", "-10000", "-9999", "-1001",
+        "-1000", "-999", "-101", "-100", "-99",
+        "-11", "-10", "-9", "-2", "-1",
+        "0", "1", "2", "9", "10",
+        "11", "99", "100", "101", "999",
+        "1000", "1001", "9999", "10000", "10001",
+        "99999", "100000", "100001", "999999", "1000000",
+        "1000001", "9999999", "10000000", "10000001", "99999999",
+        "100000000", "100000001", "999999999", "1000000000", "1000000001",
+        "2147483647",
+    ];
+    let i = 0;
+    while i < values.length {
+        let value = values[i];
+        Assert.eq(value.to_string(), expected[i]);
+        Assert.eq("α[" + value.to_string() + "]🧪", "α[" + expected[i] + "]🧪");
+        let builder = StringBuilder();
+        builder.append_int(value);
+        Assert.eq(builder.build(), expected[i]);
+        i = i + 1;
+    }
+    i = 0;
+    while i < 1000 {
+        Assert.eq(int.parse(i.to_string()).unwrap(), i);
+        let negative = -i;
+        Assert.eq(int.parse(negative.to_string()).unwrap(), negative);
+        i = i + 1;
+    }
+}
+
+// `StringBuilder.as_span()` views the appended units without copying; the view is a snapshot
+// that later appends and `clear` do not change.
+@test
+@timeout(180000)
+fun string_builder_span(): void {
+    let sb = StringBuilder();
+    sb.append("hello ");
+    sb.append("world");
+    let v = sb.as_span();
+    Assert.eq(v.slice(0, 5).to_string(), "hello");
+    let snap = v.to_string();
+    sb.clear();
+    sb.append("XXXXXXXXXXX");
+    Assert.eq(snap + "|" + v.to_string() + "|" + sb.to_string(), "hello world|hello world|XXXXXXXXXXX");
+    Assert.is_true(v.hash_code() == "hello world".hash_code());
+    let i = 0;
+    while i < 40 {
+        sb.append_char('y');
+        i = i + 1;
+    }
+    let w = sb.as_span();
+    Assert.eq(w.length, 51);
+    Assert.eq(v.length, 11);
+    Assert.is_true(StringBuilder().as_span().is_empty());
 }

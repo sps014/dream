@@ -1,5 +1,0 @@
-import system.testing;
-
-fun main(): void {
-    Assert.eq("actual", "expected");
-}

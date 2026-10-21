@@ -36,3 +36,149 @@ fun window_headless_state(): void {
     window.close();
     Assert.is_false(window.is_open);
 }
+
+@test
+@timeout(180000)
+fun window_event_order(): void {
+    let window = Window.headless(WindowDesc("events", 320, 200));
+    window.simulate(WindowEvent.Text("hé"));
+    window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Q, "a", KeyModifiers.Shift, false)));
+    window.simulate(WindowEvent.FileDropped("/tmp/level.map"));
+    window.simulate(WindowEvent.GamepadConnected(3));
+    let frame = window.poll();
+    Assert.eq(frame.events.length, 4);
+    let seen = "";
+    for (let event in frame.events) {
+        switch (event) {
+            WindowEvent.Text(text) => {
+                seen = seen + "text:" + text + ";";
+            }
+            WindowEvent.KeyDown(key) => {
+                Assert.is_true(key.code == KeyCode.Q);
+                Assert.is_true((key.modifiers & KeyModifiers.Shift) != KeyModifiers.None);
+                seen = seen + "key:" + key.key + ";";
+            }
+            WindowEvent.FileDropped(path) => {
+                seen = seen + "file:" + path + ";";
+            }
+            WindowEvent.GamepadConnected(slot) => {
+                seen = seen + "pad:" + slot.to_string() + ";";
+            }
+            _ => {
+                seen = seen + "other;";
+            }
+        }
+    }
+    Assert.eq(seen, "text:hé;key:a;file:/tmp/level.map;pad:3;");
+}
+
+@test
+@timeout(180000)
+fun window_focus_release(): void {
+    let window = Window.headless(WindowDesc("focus", 320, 200));
+    window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.ShiftLeft, "", KeyModifiers.None, false)));
+    window.simulate(WindowEvent.MouseDown(MouseButton.Right));
+    window.poll();
+    window.simulate(WindowEvent.Unfocused);
+    let frame = window.poll();
+    Assert.is_false(window.is_focused);
+    Assert.is_false(frame.keyboard.is_down(KeyCode.ShiftLeft));
+    Assert.is_true(frame.keyboard.released(KeyCode.ShiftLeft));
+    Assert.is_true(frame.mouse.released(MouseButton.Right));
+    window.simulate(WindowEvent.Focused);
+    window.poll();
+    Assert.is_true(window.is_focused);
+}
+
+@test
+@timeout(180000)
+fun window_key_edges(): void {
+    let window = Window.headless(WindowDesc("keys", 320, 200));
+    window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.A, "", KeyModifiers.None, false)));
+    let first = window.poll();
+    Assert.is_true(first.keyboard.is_down(KeyCode.A));
+    Assert.is_true(first.keyboard.pressed(KeyCode.A));
+    Assert.is_false(first.keyboard.released(KeyCode.A));
+    Assert.is_false(first.keyboard.is_down(KeyCode.D));
+
+    window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.A, "", KeyModifiers.None, true)));
+    let held = window.poll();
+    Assert.is_true(held.keyboard.is_down(KeyCode.A));
+    Assert.is_false(held.keyboard.pressed(KeyCode.A));
+    Assert.eq(held.events.length, 1);
+
+    window.simulate(WindowEvent.KeyUp(KeyEvent(KeyCode.A, "", KeyModifiers.None, false)));
+    let up = window.poll();
+    Assert.is_false(up.keyboard.is_down(KeyCode.A));
+    Assert.is_true(up.keyboard.released(KeyCode.A));
+
+    let idle = window.poll();
+    Assert.is_false(idle.keyboard.released(KeyCode.A));
+    Assert.eq(idle.events.length, 0);
+    Assert.is_true(first.keyboard.pressed(KeyCode.A));
+
+    // A tap between two polls reports both edges; a repeat never counts as a press.
+    let tapped = Window.headless(WindowDesc("tap", 320, 200));
+    tapped.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
+    tapped.simulate(WindowEvent.KeyUp(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
+    let tap = tapped.poll();
+    Assert.is_true(tap.keyboard.pressed(KeyCode.Space));
+    Assert.is_true(tap.keyboard.released(KeyCode.Space));
+    Assert.is_false(tap.keyboard.is_down(KeyCode.Space));
+
+    tapped.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.W, "", KeyModifiers.None, true)));
+    Assert.is_false(tapped.poll().keyboard.is_down(KeyCode.W));
+}
+
+@test
+@timeout(180000)
+fun window_mouse_state(): void {
+    let window = Window.headless(WindowDesc("mouse", 320, 200));
+    window.simulate(WindowEvent.MouseMove(WindowVector(100.0f, 50.0f)));
+    window.simulate(WindowEvent.MouseDown(MouseButton.Left));
+    window.simulate(WindowEvent.Scroll(WindowVector(0.0f, 1.0f)));
+    window.simulate(WindowEvent.Scroll(WindowVector(0.5f, 2.0f)));
+    let first = window.poll();
+    Assert.eq(first.mouse.position.x, 100.0f);
+    Assert.eq(first.mouse.delta.x, 0.0f);
+    Assert.eq(first.mouse.scroll.y, 3.0f);
+    Assert.eq(first.mouse.scroll.x, 0.5f);
+    Assert.is_true(first.mouse.pressed(MouseButton.Left));
+    Assert.is_false(first.mouse.is_down(MouseButton.Right));
+
+    window.simulate(WindowEvent.MouseMove(WindowVector(110.0f, 45.0f)));
+    window.simulate(WindowEvent.MouseMove(WindowVector(130.0f, 40.0f)));
+    window.simulate(WindowEvent.MouseUp(MouseButton.Left));
+    let second = window.poll();
+    Assert.eq(second.mouse.delta.x, 30.0f);
+    Assert.eq(second.mouse.delta.y, -10.0f);
+    Assert.eq(second.mouse.position.y, 40.0f);
+    Assert.eq(second.mouse.scroll.y, 0.0f);
+    Assert.is_false(second.mouse.pressed(MouseButton.Left));
+    Assert.is_true(second.mouse.released(MouseButton.Left));
+    Assert.eq(window.poll().mouse.delta.x, 0.0f);
+}
+
+@test
+@timeout(180000)
+fun window_open_display(): void {
+    let invalid = Window.open(WindowDesc("bad", 0, 100));
+    Assert.is_true(invalid.is_err());
+    switch (invalid) {
+        Err(error) => Assert.eq(error.code(), "EINVAL"),
+        Ok(_) => Assert.fail("a zero-width window must be rejected"),
+    }
+    // A desktop session opens a real window; servers, CI without a display and Node report it.
+    switch (Window.open(WindowDesc("probe", 160, 120).resizable(false))) {
+        Ok(window) => {
+            Assert.is_true(window.is_open);
+            window.poll();
+            Assert.eq(window.size.width, 160);
+            Assert.is_true(window.scale_factor >= 1.0f);
+            window.close();
+            Assert.is_false(window.is_open);
+            Assert.eq(window.poll().events.length, 0);
+        }
+        Err(error) => Assert.eq(error.code(), "ENODISPLAY"),
+    }
+}

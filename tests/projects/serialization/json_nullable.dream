@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.json;
+import system.collections;
 
 @json
 class c118_Address {
@@ -71,4 +72,103 @@ fun json_nullable(): void {
         .unwrap_or(p1);
     Assert.eq((b3.nickname ?? "<none>").to_string(), "<none>");
     Assert.eq((b3.address.is_none()).to_string(), "true");
+}
+
+@json
+class c11a_Address {
+    public city: string;
+
+    public constructor(city: string) {
+        this.city = city;
+    }
+}
+
+@json
+class c11a_Bag {
+    public tags: Option<int[]>;
+    public names: Option<string[]>;
+    public places: Option<c11a_Address[]>;
+
+    public constructor(
+        tags: Option<int[]>,
+        names: Option<string[]>,
+        places: Option<c11a_Address[]>
+    ) {
+        this.tags = tags;
+        this.names = names;
+        this.places = places;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_optional_arrays(): void {
+    let tags = Array.alloc<int>(2);
+    tags[0] = 1;
+    tags[1] = 2;
+    let names = Array.alloc<string>(1);
+    names[0] = "a";
+    let places = Array.alloc<c11a_Address>(1);
+    places[0] = c11a_Address("NYC");
+
+    let b1 = c11a_Bag(Option.Some(tags), Option.Some(names), Option.Some(places));
+    let t1 = Json.serialize(b1);
+    Assert.eq(t1, "{\"tags\":[1,2],\"names\":[\"a\"],\"places\":[{\"city\":\"NYC\"}]}");
+    let r1 = Json.deserialize<c11a_Bag>(t1).unwrap_or(b1);
+    Assert.eq((r1.tags ?? Array.alloc<int>(0)).length, 2);
+    Assert.eq((r1.names ?? Array.alloc<string>(0))[0], "a");
+    Assert.eq((r1.places ?? Array.alloc<c11a_Address>(0))[0].city, "NYC");
+
+    let none_tags: Option<int[]> = Option.None;
+    let none_names: Option<string[]> = Option.None;
+    let none_places: Option<c11a_Address[]> = Option.None;
+    let b2 = c11a_Bag(none_tags, none_names, none_places);
+    let t2 = Json.serialize(b2);
+    Assert.eq(t2, "{\"tags\":null,\"names\":null,\"places\":null}");
+    let r2 = Json.deserialize<c11a_Bag>(t2).unwrap_or(b2);
+    Assert.is_true(r2.tags.is_none());
+    Assert.is_true(r2.names.is_none());
+    Assert.is_true(r2.places.is_none());
+}
+
+// `@json` field widening: `Option<T>` round-trips numeric/bool payloads, and `Map<string, V>`
+// fields are encoded as a JSON object keyed by the map's string keys.
+@json
+class c119_Widened {
+    public a: Option<int>;
+    public b: Option<double>;
+    public c: Option<bool>;
+    public scores: Map<string, int>;
+
+    public constructor(
+        a: Option<int>,
+        b: Option<double>,
+        c: Option<bool>,
+        scores: Map<string, int>
+    ) {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.scores = scores;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_option_map_widen(): void {
+    let scores = Map<string, int>();
+    scores["alice"] = 10;
+    scores["bob"] = 20;
+
+    let w = c119_Widened(Option.Some(5), Option.None, Option.Some(true), scores);
+    let s = Json.serialize(w);
+    Assert.eq(s, "{\"a\":5,\"b\":null,\"c\":true,\"scores\":{\"bob\":20,\"alice\":10}}");
+
+    let back = Json.deserialize<c119_Widened>(s).unwrap();
+    Assert.eq(back.a.unwrap_or(-1), 5);
+    Assert.is_true(back.b.is_none());
+    Assert.is_true(back.c.unwrap_or(false));
+    Assert.eq(back.scores.length, 2);
+    Assert.eq(back.scores.get("alice").unwrap_or(-1), 10);
+    Assert.eq(back.scores.get("bob").unwrap_or(-1), 20);
 }

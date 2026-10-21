@@ -1,9 +1,0 @@
-// A division by zero must panic even when its result is never used.
-import system;
-fun main(): void {
-    let a = 10;
-    let b = 0;
-    System.println("before");
-    let _q = a / b;
-    System.println("after");
-}

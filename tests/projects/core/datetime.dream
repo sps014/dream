@@ -1,0 +1,95 @@
+import system.testing;
+import system;
+import system.text;
+
+// Built from fixed instants (never `now()`) so the results are deterministic.
+@test
+@timeout(180000)
+fun datetime_basic(): void {
+    let dt = DateTime.of(2026, 7, 2, 10, 35, 0, 250);
+    Assert.eq(dt.to_iso8601(), "2026-07-02T10:35:00.250Z");
+    Assert.eq(dt.year, 2026);
+    Assert.eq(dt.month, 7);
+    Assert.eq(dt.day, 2);
+    Assert.eq(dt.hour, 10);
+    Assert.eq(dt.minute, 35);
+    Assert.eq(dt.second, 0);
+    Assert.eq(dt.millisecond, 250);
+    Assert.eq(dt.day_of_week.to_string(), "4");
+    Assert.eq(dt.day_of_year, 183);
+
+    let later = dt.add(Duration.from_days(30L));
+    Assert.eq(later.to_iso8601(), "2026-08-01T10:35:00.250Z");
+
+    let earlier = dt.add(Duration.from_hours(0L - 15L));
+    Assert.eq(earlier.to_iso8601(), "2026-07-01T19:35:00.250Z");
+
+    Assert.is_true(dt.is_before(later));
+    Assert.is_true(later.is_after(dt));
+    Assert.is_true(dt.equals(dt));
+    Assert.eq(dt.compare(later), -1);
+    Assert.eq(later.compare(dt), 1);
+    Assert.eq(dt.compare(dt), 0);
+
+    let epoch = DateTime.from_epoch_millis(0L);
+    Assert.eq(epoch.to_iso8601(), "1970-01-01T00:00:00.000Z");
+
+    let offset_dt = DateTime(19800000L, 330);
+    Assert.eq(offset_dt.to_iso8601(), "1970-01-01T11:00:00.000+05:30");
+    Assert.eq(offset_dt.to_utc().to_iso8601(), "1970-01-01T05:30:00.000Z");
+    Assert.eq(offset_dt.to_string(), "1970-01-01 11:00:00 +05:30");
+
+    // Dates before the epoch exercise the floor-division paths.
+    let before_epoch = DateTime.of(1969, 12, 31, 23, 59, 59, 500);
+    Assert.eq(before_epoch.to_iso8601(), "1969-12-31T23:59:59.500Z");
+    Assert.eq(before_epoch.day_of_week.to_string(), "3");
+}
+
+@test
+@timeout(180000)
+fun datetime_parse(): void {
+    let fallback = DateTime.from_epoch_millis(0L);
+    let a = DateTime.parse("2026-07-02T10:35:00.250Z");
+    Assert.is_true(a.is_ok());
+    Assert.eq(a.unwrap_or(fallback).to_iso8601(), "2026-07-02T10:35:00.250Z");
+
+    let b_dt = DateTime.parse("2026-07-02T16:05:00+05:30").unwrap_or(fallback);
+    Assert.eq(b_dt.to_iso8601(), "2026-07-02T16:05:00.000+05:30");
+    Assert.eq(b_dt.to_utc().to_iso8601(), "2026-07-02T10:35:00.000Z");
+
+    let c = DateTime.parse("2026-07-02T10:35:00.1234567Z");
+    Assert.eq(c.unwrap_or(fallback).millisecond, 123);
+
+    Assert.is_true(DateTime.parse("not-a-date").is_err());
+    Assert.is_true(DateTime.parse("2026-13-02T10:35:00Z").is_err());
+
+    let g = DateTime.parse("2026-07-02T10:35:00");
+    Assert.eq(g.unwrap_or(fallback).to_iso8601(), "2026-07-02T10:35:00.000Z");
+}
+
+@test
+@timeout(180000)
+fun timezone_basic(): void {
+    switch (TimeZone.of("America/New_York")) {
+        Ok(ny) => {
+            Assert.eq(ny.name, "America/New_York");
+            let winter = DateTime.of(2024, 1, 15, 12, 0, 0, 0);
+            Assert.eq(winter.to_zone(ny).offset_minutes, -300);
+            let summer = DateTime.of(2024, 7, 15, 12, 0, 0, 0);
+            Assert.eq(summer.to_zone(ny).offset_minutes, -240);
+
+            let zoned = DateTime.of_zoned(2024, 7, 15, 9, 0, 0, 0, ny);
+            Assert.eq(zoned.to_utc().hour, 13);
+        },
+        Err(e) => Assert.fail("unexpected error: " + e.message()),
+    }
+
+    switch (TimeZone.of("Not/AZone")) {
+        Ok(z) => Assert.fail("unexpected ok"),
+        Err(e) => Assert.eq(e.code(), "EPARSE"),
+    }
+
+    Assert.eq(TimeZone.utc.name, "UTC");
+    Assert.eq(TimeZone.utc.offset_minutes_at(0L), 0);
+    Assert.is_false(TimeZone.local.name.is_empty());
+}

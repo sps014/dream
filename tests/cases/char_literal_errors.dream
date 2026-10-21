@@ -1,5 +1,0 @@
-fun main() {
-    let a = '';
-    let b = 'ab';
-    let c = '\q';
-}

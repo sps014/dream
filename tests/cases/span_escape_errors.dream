@@ -1,0 +1,78 @@
+// Stack-only values (`ref struct`, spans, `ref` parameters) may not escape to the heap through
+// fields, generic arguments, arrays, closures, or coroutine state.
+import system;
+import system.collections;
+
+ref struct Pair {
+    public a: int;
+    public b: int;
+
+    public constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+async fun sum(p: Pair): int {
+    return p.a + p.b;
+}
+
+fun closure_capture(): void {
+    let p = Pair(1, 2);
+    let f: fun(): int = () => p.a + p.b;
+    System.println(f());
+}
+
+class Holder {
+    public pair: Pair;
+
+    public constructor(pair: Pair) {
+        this.pair = pair;
+    }
+}
+
+fun generic_argument(): void {
+    let xs: List<Pair> = List<Pair>();
+    xs.add(Pair(1, 2));
+}
+
+fun array_element(): void {
+    let views = ["abc".span(), "de".span()];
+    System.println(views.length);
+}
+
+fun store<T>(x: T): void {
+    let l = List<T>();
+    l.push(x);
+}
+
+fun generic_function(): void {
+    store("abc".span());
+}
+
+async fun foreach_await(xs: int[]): int {
+    let t = 0;
+    for (let x in Span<int>.of(xs)) {
+        Time.sleep(1).await;
+        t = t + x;
+    }
+    return t;
+}
+
+async fun local_await(s: string): int {
+    let v = s.span(0, 2);
+    Time.sleep(1).await;
+    return v.length;
+}
+
+fun make_reader(ref x: int): fun(): int {
+    let read: fun(): int = () => x;
+    return read;
+}
+
+fun read_only_index_write(): void {
+    let view = "abc".span();
+    view[0] = 'x';
+}
+
+fun main(): void {}

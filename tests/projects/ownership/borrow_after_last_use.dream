@@ -1,8 +1,8 @@
 import system.testing;
-// Mutating after the cursor's final read is legal — the borrow has ended.
 import system;
 import system.collections;
 
+// Mutating after the cursor's final read is legal — the borrow has ended.
 @test
 @timeout(180000)
 fun borrow_after_last_use(): void {
@@ -10,9 +10,48 @@ fun borrow_after_last_use(): void {
     xs.push(1);
     xs.push(2);
     let cur = xs.iterator();
-    Assert.eq((cur.next().unwrap_or(-1)).to_string(), "1");
-    // Cursor not used again — safe to mutate.
+    Assert.eq(cur.next().unwrap_or(-1), 1);
     xs.push(3);
     xs.sort();
-    Assert.eq((xs.length.to_string()).to_string(), "3");
+    Assert.eq(xs.length, 3);
+}
+
+// An owned local whose last use is a borrowed call argument is released once the call returns,
+// unless the same source line rebinds it: the release point is the end of the line, which
+// would then drop the new value.
+fun c52_cut(borrow s: string, n: int): string {
+    return s.substring(0, n);
+}
+
+fun c52_wrap(borrow s: string): string {
+    return "[" + s + "]";
+}
+
+@test
+@timeout(180000)
+fun borrow_arg_rebind_same_line(): void {
+    let s = "abcdef" + "ghij";
+    let i = 0;
+    while i < 3 {
+        s = c52_wrap(c52_cut(s, s.length - 1));
+        i = i + 1;
+    }
+    Assert.eq(s, "[[[abcdefghi]");
+
+    let rest = "  key = \"value\"  ";
+    let key = rest.substring(0, 6).trim();
+    rest = rest.substring(7, rest.length).trim();
+    Assert.eq(key, "key");
+    Assert.eq(rest, "\"value\"");
+    Assert.is_true(rest.starts_with("\""));
+}
+
+// Compiler-emitted string last-ref inside `defer` must not crash (native may delay the free).
+@test
+@timeout(180000)
+fun defer_string_last_use() {
+    defer {
+        let s = "ab" + "cd";
+        Assert.eq(s, "abcd");
+    }
 }

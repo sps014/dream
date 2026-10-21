@@ -1,0 +1,18 @@
+// Lambdas need a matching `fun(...)` context: async lambdas return futures, sync lambdas do not.
+import system;
+
+async fun async_against_sync(): void {
+    let f: fun(int): int = async (x) => x * 2;
+    System.println(f(21).await);
+}
+
+async fun sync_against_future(): void {
+    let f: fun(int): Future<int> = (x) => x * 2;
+    System.println(f(21).await);
+}
+
+fun untyped(): void {
+    let f = (x) => x * 2;
+}
+
+fun main(): void {}

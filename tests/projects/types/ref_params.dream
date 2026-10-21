@@ -1,0 +1,176 @@
+import system.testing;
+import system;
+
+// A local or parameter passed by `ref` but never closure-captured gets its own private stack slot
+// via the shadow-stack frame value-struct locals already use: no heap allocation, no reference
+// counting. A closure-captured local instead shares the closure's heap box.
+fun c1cb_swap(ref a: int, ref b: int): void {
+    let tmp: int = a;
+    a = b;
+    b = tmp;
+}
+
+fun c1cb_increment(ref x: int): void {
+    x = x + 1;
+}
+
+fun c1cb_add_to_both(ref a: int, b: int): int {
+    a = a + b;
+    return a;
+}
+
+struct c1cf_Counter {
+    public value: int;
+
+    public constructor() {
+        this.value = 0;
+    }
+}
+
+struct c1d1_Doubler {
+    public constructor() {}
+
+    public fun apply(ref x: int): void {
+        x = x * 2;
+    }
+
+    public static fun apply_static(ref x: int): void {
+        x = x * 2;
+    }
+}
+
+class RgsmSwap {
+    public static fun replace<T>(ref slot: T, value: T): T {
+        let old = slot;
+        slot = value;
+        return old;
+    }
+}
+
+public struct c1da_P {
+    public x: double;
+    public y: double;
+}
+
+let c1da_notes: int = 0;
+
+fun c1da_note(borrow event: string): void {
+    c1da_notes = c1da_notes + event.length;
+}
+
+fun c1da_set(ref p: c1da_P): void {
+    p.x = 1.5;
+    p.y = 2.5;
+    c1da_note("set");
+    c1da_note("set");
+    c1da_note("set");
+    c1da_note("set");
+}
+
+fun c1da_wrap(ref p: c1da_P): void {
+    c1da_set(ref p);
+}
+
+@test
+@timeout(180000)
+fun ref_basic(): void {
+    let p: int = 1;
+    let q: int = 2;
+    c1cb_swap(ref p, ref q);
+    Assert.eq((p).to_string(), "2");
+    Assert.eq((q).to_string(), "1");
+
+    c1cb_increment(ref p);
+    Assert.eq((p).to_string(), "3");
+
+    let sum: int = c1cb_add_to_both(ref p, 10);
+    Assert.eq((sum).to_string(), "13");
+    Assert.eq((p).to_string(), "13");
+}
+
+@test
+@timeout(180000)
+fun ref_array_element(): void {
+    let arr: int[] = [1, 2, 3];
+    c1cb_increment(ref arr[0]);
+    Assert.eq((arr[0]).to_string(), "2");
+    Assert.eq((arr[1]).to_string(), "2");
+}
+
+@test
+@timeout(180000)
+fun ref_field(): void {
+    let c: c1cf_Counter = c1cf_Counter();
+    c1cb_increment(ref c.value);
+    Assert.eq((c.value).to_string(), "1");
+}
+
+@test
+@timeout(180000)
+fun ref_closure_capture(): void {
+    let counter: int = 0;
+    let inc: fun(): int = () => {
+        c1cb_increment(ref counter);
+        return counter;
+    };
+    Assert.eq((inc()).to_string(), "1");
+    Assert.eq((inc()).to_string(), "2");
+    Assert.eq((counter).to_string(), "2");
+
+    c1cb_increment(ref counter);
+    Assert.eq((inc()).to_string(), "4");
+}
+
+@test
+@timeout(180000)
+fun ref_lambda_param(): void {
+    let inc: fun(ref int): void = (ref n: int) => {
+        n = n + 1;
+    };
+    let a: int = 5;
+    inc(ref a);
+    Assert.eq((a).to_string(), "6");
+
+    let bump: fun(ref int): int = (ref n) => {
+        n = n + 1;
+        return n;
+    };
+    Assert.eq((bump(ref a)).to_string(), "7");
+    Assert.eq((a).to_string(), "7");
+}
+
+@test
+@timeout(180000)
+fun ref_method(): void {
+    let d: c1d1_Doubler = c1d1_Doubler();
+    let n: int = 5;
+    d.apply(ref n);
+    Assert.eq((n).to_string(), "10");
+
+    c1d1_Doubler.apply_static(ref n);
+    Assert.eq((n).to_string(), "20");
+}
+
+@test
+@timeout(180000)
+fun ref_generic_static_method(): void {
+    let count = 1;
+    let old = RgsmSwap.replace(ref count, 7);
+    Assert.eq(old, 1);
+    Assert.eq(count, 7);
+
+    let label = "a";
+    RgsmSwap.replace(ref label, "b");
+    Assert.eq(label, "b");
+}
+
+@test
+@timeout(180000)
+fun ref_value_inline_passthrough(): void {
+    c1da_notes = 0;
+    let p = c1da_P();
+    c1da_wrap(ref p);
+    Assert.eq(c1da_notes, 12);
+    Assert.eq(p.x, 1.5);
+    Assert.eq(p.y, 2.5);
+}

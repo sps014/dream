@@ -1,0 +1,207 @@
+import system.testing;
+import system;
+
+struct c1f7_Point {
+    public x: int;
+    public y: int;
+}
+
+struct c1f7_Inner {
+    public text: string;
+    public count: int;
+}
+
+struct c1f7_Outer {
+    public tag: byte;
+    public inner: c1f7_Inner;
+    public total: double;
+}
+
+class c1f7_Box {
+    public value: int;
+}
+
+struct c271_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+enum c271_Color {
+    Red,
+    Green
+}
+
+interface c270_Shape {
+    fun area(): int;
+}
+
+class c270_Circle: c270_Shape {
+    public fun area(): int {
+        return 3;
+    }
+}
+
+class c270_Square: c270_Shape {
+    public fun area(): int {
+        return 4;
+    }
+}
+
+class c272_Mixed {
+    public b1: bool;
+    public i1: int;
+    public d1: double;
+    public b2: bool;
+
+    public constructor(b1: bool, i1: int, d1: double, b2: bool) {
+        this.b1 = b1;
+        this.i1 = i1;
+        this.d1 = d1;
+        this.b2 = b2;
+    }
+}
+
+@test
+@timeout(180000)
+fun sizeof(): void {
+    let pointer = sizeof(string);
+    Assert.is_true(pointer == 8 || pointer == 4);
+    Assert.eq(sizeof(int), 4);
+    Assert.eq(sizeof(long), 8);
+    Assert.eq(sizeof(byte), 1);
+    Assert.eq(sizeof(bool), 1);
+    Assert.eq(sizeof(int[]), pointer);
+    Assert.eq(sizeof(c1f7_Point), 8);
+    Assert.eq(sizeof(c1f7_Box), pointer);
+    Assert.eq(sizeof(List<int>), pointer);
+    Assert.eq(sizeof(c1f7_Outer), pointer == 8 ? 32 : 24);
+
+    let folded = false;
+    switch (sizeof(c1f7_Outer)) {
+        case sizeof(c1f7_Outer):
+            folded = true;
+        default:
+            folded = false;
+    }
+    Assert.is_true(folded);
+}
+
+// `typeof(x)` on an operand whose static type already pins the concrete type folds to a compile-
+// time string: no allocation, no runtime tag read.
+@test
+@timeout(180000)
+fun typeof_static() {
+    let i: int = 7;
+    let l: long = 7;
+    let d: double = 1.5;
+    let b: bool = true;
+    let c: char = 'z';
+    let s: string = "hi";
+    Assert.eq(typeof(i), "int");
+    Assert.eq(typeof(l), "long");
+    Assert.eq(typeof(d), "double");
+    Assert.eq(typeof(b), "bool");
+    Assert.eq(typeof(c), "char");
+    Assert.eq(typeof(s), "string");
+
+    let nums: int[] = [1, 2, 3];
+    Assert.eq(typeof(nums), "int[]");
+
+    let p: c271_Point = c271_Point(1, 2);
+    Assert.eq(typeof(p), "c271_Point");
+
+    let col: c271_Color = c271_Color.Green;
+    Assert.eq(typeof(col), "c271_Color");
+
+    // Generic instantiations report their source spelling, not the mangled symbol name.
+    let m: Map<string, object> = {
+        "ok": "ko"
+    };
+    Assert.eq(typeof(m), "Map<string, object>");
+
+    let list: List<int> = [1, 2];
+    Assert.eq(typeof(list), "List<int>");
+
+    Assert.eq(typeof(i + 1), "int");
+    Assert.eq(typeof(s.length), "int");
+}
+
+// `typeof(x)` on an `object` or interface operand reads the value's runtime heap tag.
+@test
+@timeout(180000)
+fun typeof_dynamic() {
+    let n: object = 5;
+    let g: long = 9;
+    let big: object = g;
+    let f: object = 2.5;
+    let dbl: double = 2.5;
+    let wide: object = dbl;
+    let flag: object = true;
+    let text: object = "hello";
+    Assert.eq(typeof(n), "int");
+    Assert.eq(typeof(big), "long");
+    Assert.eq(typeof(f), "float");
+    Assert.eq(typeof(wide), "double");
+    Assert.eq(typeof(flag), "bool");
+    Assert.eq(typeof(text), "string");
+
+    // Arrays share one runtime tag, so the element type is not recoverable.
+    let arr: object = [1, 2, 3];
+    Assert.eq(typeof(arr), "array");
+
+    let boxed: object = c270_Circle();
+    Assert.eq(typeof(boxed), "c270_Circle");
+
+    let s: c270_Shape = c270_Square();
+    Assert.eq(typeof(s), "c270_Square");
+
+    let m: Map<string, int> = {
+        "a": 1
+    };
+    let anymap: object = m;
+    Assert.eq(typeof(anymap), "Map<string, int>");
+}
+
+@test
+@timeout(180000)
+fun types_alignment(): void {
+    let m = c272_Mixed(true, 42, 3.14159d, false);
+    Assert.is_true(m.b1);
+    Assert.is_false(m.b2);
+    Assert.eq(m.i1.to_string(), "42");
+    Assert.eq(m.d1.to_string(), "3.14159");
+
+    m.d1 = 2.718d;
+    Assert.eq(m.d1.to_string(), "2.718");
+}
+
+// An array literal in an array-typed context takes that element type rather than its first
+// element's, so heterogeneous `object` collections build from a literal and box their scalars.
+@test
+@timeout(180000)
+fun object_array_literal() {
+    let mixed: object[] = [1, "s", true];
+    Assert.eq(
+        mixed[0].to_string() + "," + mixed[1].to_string() + "," + mixed[2].to_string(),
+        "1,s,true"
+    );
+
+    let strings: object[] = ["a", "b"];
+    Assert.eq(strings.length, 2);
+
+    let list: List<object> = [1, "two"];
+    Assert.eq(list.length, 2);
+
+    let map: Map<string, object> = {
+        "a": 1, "b": "s"
+    };
+    Assert.eq(map.length, 2);
+
+    let widened: double[] = [1.0, 2.0];
+    Assert.eq(widened[1].to_string(), "2");
+}

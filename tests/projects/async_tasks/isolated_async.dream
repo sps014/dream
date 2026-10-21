@@ -1,0 +1,118 @@
+import system;
+import system.testing;
+import system.collections;
+import system.task;
+
+// --- async_combinator_owned_results: `Promise.all` results own their payloads. ---
+
+let iso_combinator_log: string = "";
+
+class iso_CombinatorItem {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+    del() { iso_combinator_log = iso_combinator_log + "drop " + this.id + ";"; }
+}
+
+struct iso_CombinatorValue {
+    public item: iso_CombinatorItem;
+    public constructor(item: iso_CombinatorItem) { this.item = item; }
+}
+
+async fun iso_combinator_item(id: int): iso_CombinatorItem { return iso_CombinatorItem(id); }
+
+async fun iso_combinator_value(id: int): iso_CombinatorValue { return iso_CombinatorValue(iso_CombinatorItem(id)); }
+
+async fun iso_combinator_exercise(): void {
+    let items = Promise.all([iso_combinator_item(1), iso_combinator_item(2)]).await;
+    Assert.eq("items " + items[0].id + " " + items[1].id, "items 1 2");
+    let values = Promise.all([iso_combinator_value(3), iso_combinator_value(4)]).await;
+    Assert.eq("values " + values[0].item.id + " " + values[1].item.id, "values 3 4");
+    Assert.eq(iso_combinator_log, "");
+}
+
+@test
+async fun iso_async_combinator_owned_results(): void {
+    iso_combinator_log = "";
+    iso_combinator_exercise().await;
+    Assert.eq(iso_combinator_log, "drop 1;drop 2;drop 3;drop 4;");
+    iso_combinator_log = "";
+}
+
+// --- scheduler_queue_bursts: bursts larger than the ready queue, with cancellations. ---
+
+let iso_burst_completed = 0;
+
+async fun iso_burst_work(n: int): int {
+    iso_burst_completed = iso_burst_completed + 1;
+    return n;
+}
+
+@test
+async fun iso_scheduler_queue_bursts(): void {
+    let start = iso_burst_completed;
+    let total = 0;
+    let round = 0;
+    while round < 3 {
+        let futures = List<Future<int>>();
+        let i = 0;
+        while i < 257 {
+            let future = iso_burst_work(i);
+            Promise.start(future);
+            futures.push(future);
+            i = i + 1;
+        }
+        Promise.cancel(futures[0]);
+        Promise.cancel(futures[128]);
+        Promise.cancel(futures[256]);
+        i = 1;
+        while i < 256 {
+            if i != 128 { total = total + futures[i].await; }
+            i = i + 1;
+        }
+        round = round + 1;
+    }
+    Assert.eq(iso_burst_completed - start, 762);
+    Assert.eq(total, 97536);
+}
+
+// --- task_local_alloc: worker-local string churn stays on the worker's private heap. ---
+
+fun iso_task_churn(): string {
+    let n = 0;
+    let i = 0;
+    while i < 100 {
+        let s = i.to_string() + "x";
+        n = n + s.length;
+        i = i + 1;
+    }
+    return n.to_string();
+}
+
+@test
+async fun iso_task_local_alloc(): void {
+    let base = Debug.live_objects;
+    let a = Task.spawn(() => iso_task_churn());
+    let b = Task.spawn(() => iso_task_churn());
+    Assert.eq(a.await, "290");
+    Assert.eq(b.await, "290");
+    Assert.is_true(Debug.live_objects - base >= 0L);
+}
+
+// --- task_spawn_no_leak: a finished spawn joins and drops its env and function box. ---
+
+fun iso_task_work(): int {
+    return 1;
+}
+
+@test
+async fun iso_task_spawn_no_leak(): void {
+    let _ = Task.spawn(() => iso_task_work()).await;
+    let _ = Task.spawn(() => iso_task_work()).await;
+    let base = Debug.live_objects;
+    let i = 0;
+    while i < 20 {
+        let _ = Task.spawn(() => iso_task_work()).await;
+        i = i + 1;
+    }
+    Assert.eq(Debug.live_objects - base, 0L);
+}

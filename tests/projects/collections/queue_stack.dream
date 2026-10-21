@@ -19,3 +19,196 @@ fun queue_stack(): void {
     Assert.eq((s.pop().unwrap_or(0)).to_string(), "20");
     Assert.eq((s.peek().unwrap_or(0)).to_string(), "10");
 }
+
+@test
+@timeout(180000)
+fun queue_ring(): void {
+    let q = Queue<int>();
+    let i = 0;
+    while i < 100 {
+        q.enqueue(i);
+        i = i + 1;
+    }
+    i = 0;
+    while i < 50 {
+        Assert.eq(q.dequeue().unwrap_or(0 - 1), i);
+        i = i + 1;
+    }
+    i = 100;
+    while i < 150 {
+        q.enqueue(i);
+        i = i + 1;
+    }
+    Assert.eq(q.length, 100);
+    Assert.eq(q.peek().unwrap_or(0 - 1), 50);
+    let sum = 0;
+    for (let x in q) {
+        sum = sum + x;
+    }
+    Assert.eq(sum, 9950);
+}
+
+@test
+@timeout(180000)
+fun priority_queue_basic(): void {
+    let pq = PriorityQueue<int>();
+    pq.push(5);
+    pq.push(1);
+    pq.push(3);
+    pq.push(2);
+    pq.push(4);
+    Assert.eq(pq.length, 5);
+    Assert.eq(pq.peek().unwrap_or(0 - 1), 1);
+    let expected = 1;
+    while pq.is_empty() == false {
+        Assert.eq(pq.pop().unwrap_or(0 - 1), expected);
+        expected = expected + 1;
+    }
+    Assert.eq(expected, 6);
+    Assert.eq(pq.pop().unwrap_or(0 - 1), -1);
+
+    let maxq = PriorityQueue<int>((a, b) => b - a);
+    maxq.push(5);
+    maxq.push(1);
+    maxq.push(3);
+    Assert.eq(maxq.pop().unwrap_or(0 - 1), 5);
+    Assert.eq(maxq.pop().unwrap_or(0 - 1), 3);
+    Assert.eq(maxq.pop().unwrap_or(0 - 1), 1);
+}
+
+let pq_drops = 0;
+
+class PqOwned: Comparable<PqOwned> {
+    public key: int;
+
+    public constructor(key: int) {
+        this.key = key;
+    }
+
+    public fun compare(borrow other: PqOwned): int {
+        return this.key - other.key;
+    }
+
+    del() {
+        pq_drops = pq_drops + 1;
+    }
+}
+
+class PqCustomOnly {
+    public key: int;
+
+    public constructor(key: int) {
+        this.key = key;
+    }
+}
+
+struct PqRecord: Comparable<PqRecord> {
+    public item: PqOwned;
+
+    public constructor(item: PqOwned) {
+        this.item = item;
+    }
+
+    public fun compare(borrow other: PqRecord): int {
+        return this.item.key - other.item.key;
+    }
+}
+
+@allow_cycle
+class PqSnapshotCase {
+    public q: PriorityQueue<PqOwned>;
+    public snapshot: PriorityQueueIterator<PqOwned>;
+
+    public constructor() {
+        this.q = PriorityQueue<PqOwned>();
+        let i = 127;
+        while i >= 0 {
+            this.q.push(PqOwned(i));
+            i = i - 1;
+        }
+        this.snapshot = this.q.iterator();
+    }
+}
+
+fun pq_owned_run(): void {
+    let fixture = PqSnapshotCase();
+    let i = 0;
+    while i < 128 {
+        Assert.eq(fixture.q.pop().unwrap().key, i);
+        i = i + 1;
+    }
+    Assert.is_true(fixture.q.pop().is_none());
+    i = 0;
+    while i < 128 {
+        Assert.eq(fixture.snapshot.next().unwrap().key, i);
+        i = i + 1;
+    }
+    Assert.is_true(fixture.snapshot.next().is_none());
+}
+
+fun pq_record_run(): void {
+    let q = PriorityQueue<PqRecord>();
+    let repeated = PqOwned(3);
+    q.push(PqRecord(repeated));
+    q.push(PqRecord(repeated));
+    q.push(PqRecord(PqOwned(1)));
+    q.push(PqRecord(PqOwned(2)));
+    Assert.eq(q.pop().unwrap().item.key, 1);
+    Assert.eq(q.pop().unwrap().item.key, 2);
+    Assert.eq(q.pop().unwrap().item.key, 3);
+    q.clear();
+    q.push(PqRecord(PqOwned(4)));
+    Assert.eq(q.pop().unwrap().item.key, 4);
+}
+
+@test
+fun priority_queue_ownership(): void {
+    let custom = PriorityQueue<PqCustomOnly>((a, b) => b.key - a.key);
+    custom.push(PqCustomOnly(1));
+    custom.push(PqCustomOnly(3));
+    custom.push(PqCustomOnly(2));
+    Assert.eq(custom.pop().unwrap().key, 3);
+    Assert.eq(custom.pop().unwrap().key, 2);
+    Assert.eq(custom.pop().unwrap().key, 1);
+    let before = pq_drops;
+    pq_owned_run();
+    Assert.eq(pq_drops - before, 128);
+    pq_record_run();
+    Assert.eq(pq_drops - before, 132);
+    let comparisons = 0;
+    let reverse = PriorityQueue<int>(
+        (a, b) => {
+            comparisons = comparisons + 1;
+            return b - a;
+        }
+    );
+    let i = 0;
+    while i < 100 {
+        reverse.push(i % 7);
+        i = i + 1;
+    }
+    let previous = 7;
+    while reverse.is_empty() == false {
+        let value = reverse.pop().unwrap();
+        Assert.is_true(value <= previous);
+        previous = value;
+    }
+    Assert.is_true(comparisons > 0);
+    reverse.push(9);
+    Assert.eq(reverse.pop().unwrap(), 9);
+    reverse.clear();
+    Assert.is_true(reverse.is_empty());
+    let q = PriorityQueue<int>();
+    i = 0;
+    while i < 200 {
+        q.push(i * 2);
+        q.push(i * 2 + 1);
+        Assert.eq(q.pop().unwrap(), i);
+        i = i + 1;
+    }
+    while i < 400 {
+        Assert.eq(q.pop().unwrap(), i);
+        i = i + 1;
+    }
+    Assert.is_true(q.is_empty());
+}

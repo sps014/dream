@@ -1,5 +1,0 @@
-import system;
-
-fun main() {
-    System.println("Hello, world!");
-}

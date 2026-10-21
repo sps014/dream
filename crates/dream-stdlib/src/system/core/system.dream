@@ -1,9 +1,56 @@
 module system.core;
 
-/// Halt used by bootstrap (`Option.unwrap`, bounds checks). Full console I/O lives on `extend System`
-/// in `system.dream` (`import system;`).
+/// Process basics available without an import: stopping with `panic` and reading command-line
+/// arguments. `import system;` adds console I/O and the other process services.
 public static class System {
     /// Stops execution and reports `message`.
     @intrinsic(Intrinsic.DreamPanic)
     public static extern fun panic(borrow message: string): void;
+
+    @runtime("processArgs")
+    static extern fun host_args(): byte[];
+
+    static fun argument_length(bytes: byte[], cursor: int): int {
+        if bytes.length - cursor < 4 {
+            System.panic("truncated host argument length");
+        }
+        let value = 0u;
+        for (let i = 0; i < 4; i = i + 1) {
+            value = value | ((uint)bytes[cursor + i] << (uint)(i * 8));
+        }
+        if value > 2147483647u {
+            System.panic("host argument length exceeds guest limit");
+        }
+        return (int)value;
+    }
+
+    /// Command-line arguments, excluding the executable path. Empty strings and embedded
+    /// newlines are preserved. `fun main(args: string[])` receives the same array.
+    public static get args(): string[] {
+        let wire = System.host_args();
+        let cursor = 0;
+        let count = System.argument_length(wire, cursor);
+        cursor = cursor + 4;
+        if count >(wire.length - cursor) / 4 {
+            System.panic("invalid host argument count");
+        }
+        let args = Buffer.alloc<string>(count);
+        for (let i = 0; i < count; i = i + 1) {
+            let size = System.argument_length(wire, cursor);
+            cursor = cursor + 4;
+            if size > wire.length - cursor {
+                System.panic("truncated host argument");
+            }
+            let bytes = Buffer.alloc<byte>(size);
+            for (let j = 0; j < size; j = j + 1) {
+                bytes[j] = wire[cursor + j];
+            }
+            args[i] = string.from_utf8(bytes);
+            cursor = cursor + size;
+        }
+        if cursor != wire.length {
+            System.panic("trailing host argument bytes");
+        }
+        return args;
+    }
 }

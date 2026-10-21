@@ -1,0 +1,106 @@
+// Call resolution: overloads, named arguments, `ref` passing, and static/instance dispatch.
+import system;
+import system.collections;
+
+class Point {
+    x: int;
+    y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public constructor(both: int) {
+        this.x = both;
+        this.y = both;
+    }
+}
+
+fun constructor_no_match(): void {
+    let p = Point("hello");
+    System.println(p.x.toString());
+}
+
+// Both overloads match (int, int) equally well through `object` widening.
+fun g(a: object, b: int): int { return 1; }
+fun g(a: int, b: object): int { return 2; }
+
+fun ambiguous_call(): void {
+    System.println(g(5, 5));
+}
+
+fun add(a: int, b: int): int { return a + b; }
+fun add(a: double, b: double): double { return a + b; }
+
+fun ambiguous_function_value(): void {
+    let f = add;
+}
+
+fun unmatched_function_value(): void {
+    let g: fun(bool, bool): bool = add;
+}
+
+fun h(x: int): int { return 1; }
+fun h(x: string): int { return 2; }
+
+fun no_overload(): void {
+    let b: bool = true;
+    System.println(h(b));
+}
+
+fun greet(name: string): string {
+    return "Hello, " + name;
+}
+
+fun unknown_named_argument(): void {
+    System.println(greet(nam: "Ada"));
+}
+
+fun sum(...nums: int[]): int {
+    let total = 0;
+    for (let n in nums) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun named_variadic(): void {
+    System.println(sum(nums: 1, 2));
+}
+
+fun takes_ref(ref x: int): void {
+    x = x + 1;
+}
+
+fun missing_ref(): void {
+    let a: int = 1;
+    takes_ref(a);
+}
+
+fun takes_value(x: int): void {
+    System.println(x);
+}
+
+fun unexpected_ref(): void {
+    let a: int = 1;
+    takes_value(ref a);
+}
+
+class Counter {
+    public fun clear(): void {}
+}
+
+fun instance_method_as_static(): void {
+    Counter.clear();
+}
+
+fun take(xs: List<List<int>>): void {
+    System.println(xs.length);
+}
+
+fun nested_type_display(): void {
+    take(List<int>());
+}
+
+fun main(): void {}

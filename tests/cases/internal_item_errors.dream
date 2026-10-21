@@ -1,0 +1,26 @@
+// Internal stdlib types, helpers, and host constructors are not part of the public API.
+import system;
+import system.process;
+import system.collections;
+
+fun internal_types(): void {
+    let _r = ProcessWireReader(Array.alloc<char>(0));
+    let _m = MapSlot<int, int>(0, 0, 0);
+    let _s = Stdout();
+}
+
+fun buffer_zero(): void {
+    let x = Buffer.zero<string>();
+    System.println(x);
+}
+
+fun slot_transfer(): void {
+    let items = [1, 2];
+    CollectionStorage.exchange<int>(items, 0, items, 1);
+}
+
+class HiddenWeakTarget {}
+
+fun weak_type(value: Weak<HiddenWeakTarget>): void {}
+
+fun main(): void {}

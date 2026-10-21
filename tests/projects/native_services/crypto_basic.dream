@@ -41,3 +41,50 @@ fun crypto_basic(): void {
     SecureRandom.fill(buf).unwrap();
     Assert.eq((buf.length).to_string(), "16");
 }
+
+@test
+@timeout(180000)
+fun aes_gcm_basic(): void {
+    let key = AesGcmKey.generate().unwrap();
+    Assert.eq(key.to_bytes().length, 32);
+
+    let nonce = AesGcm.generate_nonce().unwrap();
+    Assert.eq(nonce.length, 12);
+
+    let aad = Encoding.utf8_encode("header");
+    let plaintext = Encoding.utf8_encode("attack at dawn");
+
+    let ciphertext = AesGcm.encrypt(key, nonce, plaintext, aad).unwrap_or(Array.alloc<byte>(0));
+    Assert.eq(ciphertext.length, 30);
+
+    switch (AesGcm.decrypt(key, nonce, ciphertext, aad)) {
+        Ok(recovered) => Assert.eq(Encoding.utf8_decode(recovered), "attack at dawn"),
+        Err(e) => Assert.fail("unexpected error: " + e.message()),
+    }
+
+    // Wrong AAD must fail authentication.
+    let wrong_aad = Encoding.utf8_encode("wrong");
+    switch (AesGcm.decrypt(key, nonce, ciphertext, wrong_aad)) {
+        Ok(recovered) => Assert.fail("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Err(e) => Assert.eq(e.code(), "EDECRYPT"),
+    }
+
+    // Wrong key must fail authentication.
+    let other_key = AesGcmKey.generate().unwrap();
+    switch (AesGcm.decrypt(other_key, nonce, ciphertext, aad)) {
+        Ok(recovered) => Assert.fail("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Err(e) => Assert.eq(e.code(), "EDECRYPT"),
+    }
+
+    // Bad key length is rejected before touching the host.
+    switch (AesGcmKey.from_bytes(Array.alloc<byte>(10))) {
+        Ok(_) => Assert.fail("a 10-byte AES key must be rejected"),
+        Err(e) => Assert.eq(e.code(), "EINVAL_KEY"),
+    }
+
+    // Bad nonce length is rejected before touching the host.
+    switch (AesGcm.encrypt(key, Array.alloc<byte>(4), plaintext, aad)) {
+        Ok(_) => Assert.fail("a 4-byte nonce must be rejected"),
+        Err(e) => Assert.eq(e.code(), "EINVAL_NONCE"),
+    }
+}

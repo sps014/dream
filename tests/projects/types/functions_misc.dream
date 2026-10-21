@@ -1,0 +1,65 @@
+import system.testing;
+import system;
+
+class c150_Counter {
+    public value: int;
+
+    public constructor(start: int) {
+        this.value = start;
+    }
+
+    public fun increment(): void {
+        this.value = this.value + 1;
+    }
+
+    public fun addTo(n: int): int {
+        return this.value + n;
+    }
+}
+
+fun c150_apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+fun c150_run(f: fun(): void): void {
+    f();
+}
+
+extend int {
+    public fun doubled(): int {
+        return this * 2;
+    }
+}
+
+@test
+@timeout(180000)
+fun method_group_basic(): void {
+    let counter = c150_Counter(10);
+
+    Assert.eq((c150_apply(counter.addTo, 5)).to_string(), "15");
+
+    let inc: fun(): void = counter.increment;
+    c150_run(inc);
+    c150_run(inc);
+    Assert.eq(counter.value.to_string(), "12");
+
+    let sq: fun(int): int = c150_Counter.square;
+    Assert.eq((sq(6)).to_string(), "36");
+}
+
+@test
+@timeout(180000)
+fun extend_primitives(): void {
+    let n: int = -7;
+    Assert.eq((n.abs()).to_string(), "7");
+    Assert.eq((n.doubled()).to_string(), "-14");
+
+    let s: string = "hello";
+    Assert.eq((s.length).to_string(), "5");
+}
+
+extend c150_Counter {
+    public static fun square(x: int): int {
+        return x * x;
+    }
+}

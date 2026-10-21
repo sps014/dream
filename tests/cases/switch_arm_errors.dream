@@ -1,0 +1,25 @@
+// Switch arms after a catch-all are unreachable, and a guard error must not hide a missing return.
+import system;
+
+enum Light {
+    Red(int),
+    Green,
+    Blue,
+}
+
+fun name(l: Light): string {
+    return switch (l) {
+        Red(b) => "red",
+        _      => "other",
+        Blue   => "blue",
+    };
+}
+
+fun f(x: int): int {
+    switch (x) {
+        1 if undeclared => { return 1; }
+        2 => { return 2; }
+    }
+}
+
+fun main(): void {}

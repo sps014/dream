@@ -1,4 +1,0 @@
-class Value {
-    fun operator ==(other: int): int { return other; }
-}
-fun main(): void { }

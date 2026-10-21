@@ -1,8 +1,0 @@
-// Constructing a non-public class from another file is a compile error.
-import system;
-import helpers.vis_lib;
-
-fun main(): void {
-    let b = PrivateBox(1);
-    System.println(b.value);
-}

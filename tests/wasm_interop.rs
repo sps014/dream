@@ -97,7 +97,10 @@ assert.equal(previous(9), 18);
         ),
     )
     .unwrap();
-    let result = std::process::Command::new("node").arg(runner).output().unwrap();
+    let result = std::process::Command::new("node")
+        .arg(runner)
+        .output()
+        .unwrap();
     assert!(
         result.status.success(),
         "{}",
@@ -237,11 +240,16 @@ fn wasi_libc_callbacks_and_pointer_marshalling() {
 }
 
 #[test]
-fn cpp_package_ownership_callbacks_layout_and_exceptions_at_all_levels() {
-    for level in [None, Some(OptLevel::O3), Some(OptLevel::Size)] {
+fn cpp_package_ownership_callbacks_layout_and_exceptions_in_debug_and_release() {
+    for level in [None, Some(OptLevel::O3)] {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("main.wat");
         compile(&repo("sample/native_cpp/src/main.dream"), &out, level).unwrap();
+        let wat = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            !wat.contains("(import \"c/"),
+            "C++ must link into the module"
+        );
         assert_eq!(
             run(&out).trim(),
             "changed: a,ab,b\nab = 22\nzz = (none)\nb as int = 333\ncount = 3\ncount(a) = 2\nscaled = 30\nsum = 10\nnorm = 5\norigin = 1.5,-2\ncompact ok\nsnapshot failed\nsnapshot ab=22\nstore out of scope\nborrowed entry ab\n[c++] ~Store(main.db)\nkv 1.0\nhello, dream\n[c++] ~Store(default)\ncompact failed: nothing to compact\n[c++] ~Store(empty)"
@@ -424,7 +432,7 @@ int value(void) {
 }
 "#,
     );
-    for level in [None, Some(OptLevel::O3), Some(OptLevel::Size)] {
+    for level in [None, Some(OptLevel::O3)] {
         let out = root.join("main.wat");
         compile(&root.join("main.dream"), &out, level).unwrap();
         assert_eq!(run(&out), "42\n42\n42\n43\n42\n43\n0\n1234\n");

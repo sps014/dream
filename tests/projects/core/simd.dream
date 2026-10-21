@@ -1,0 +1,137 @@
+import system.testing;
+import system;
+import system.simd;
+
+@noinline
+fun c13c_fill(borrow dst: int[], borrow lhs: int[], borrow rhs: int[], n: int): void {
+    let i = 0;
+    while i < n {
+        dst[i] = lhs[i] + rhs[i];
+        i = i + 1;
+    }
+}
+
+@noinline
+fun c13c_fold(borrow values: double[]): double {
+    let result: double = 0;
+    let i = 0;
+    while i < values.length {
+        result = result + values[i];
+        i = i + 1;
+    }
+    return result;
+}
+
+@noinline
+fun c13c_shift(dst: Span<int>, src: Span<int>): void {
+    let i = 0;
+    while i < dst.length {
+        dst[i] = src[i] + 1;
+        i = i + 1;
+    }
+}
+
+@noinline
+fun c13c_fill_float(borrow dst: float[], borrow lhs: float[], borrow rhs: float[]): void {
+    let i = 0;
+    while i < dst.length {
+        dst[i] = lhs[i] + rhs[i];
+        i = i + 1;
+    }
+}
+
+@test
+@timeout(180000)
+fun llvm_simd_hotloops(): void {
+    let sizes = [0, 1, 3, 4, 7, 16, 17, 33];
+    let total = 0;
+    for (let n in sizes) {
+        let lhs = Array.alloc<int>(n);
+        let rhs = Array.alloc<int>(n);
+        let dst = Array.alloc<int>(n);
+        let i = 0;
+        while i < n {
+            lhs[i] = 2147483647;
+            rhs[i] = i + 1;
+            i = i + 1;
+        }
+        c13c_fill(dst, lhs, rhs, n);
+        i = 0;
+        while i < n {
+            Assert.eq(dst[i], 2147483647 + (i + 1));
+            total = total + 1;
+            i = i + 1;
+        }
+        c13c_fill(lhs, lhs, rhs, n);
+        i = 0;
+        while i < n {
+            Assert.eq(lhs[i], dst[i]);
+            i = i + 1;
+        }
+    }
+    Assert.eq(total, 81);
+    Assert.eq("hé🙂z".length, 5);
+
+    let values: double[] = [1e20, 1, -1e20, 3];
+    Assert.is_true(c13c_fold(values) == 3);
+
+    let overlap = Array.alloc<int>(34);
+    let i = 0;
+    while i < overlap.length {
+        overlap[i] = 1;
+        i = i + 1;
+    }
+    c13c_shift(Span<int>(overlap, 1, 33), Span<int>(overlap, 0, 33));
+    i = 0;
+    while i < overlap.length {
+        Assert.eq(overlap[i], i + 1);
+        i = i + 1;
+    }
+
+    let a = Array.alloc<float>(17);
+    let b = Array.alloc<float>(17);
+    let c = Array.alloc<float>(17);
+    let infinity: float = (float)1 / (float)0;
+    i = 0;
+    while i < a.length {
+        a[i] = -(float)0;
+        b[i] = -(float)0;
+        i = i + 1;
+    }
+    a[0] = infinity;
+    b[0] = -infinity;
+    a[1] = infinity;
+    b[1] = 1;
+    a[2] = -infinity;
+    b[2] = 1;
+    c13c_fill_float(c, a, b);
+    Assert.is_true(c[0] != c[0]);
+    Assert.is_true(c[1] == infinity);
+    Assert.is_true(c[2] == -infinity);
+    i = 3;
+    while i < c.length {
+        Assert.is_true((float)1 / c[i] == -infinity);
+        i = i + 1;
+    }
+}
+
+@test
+@timeout(180000)
+fun simd_f32x4(): void {
+    let a = [1, 2, 3, 4];
+    let b = [10, 20, 30, 40];
+    let c = [0, 0, 0, 0];
+    (Vector<int>.load(a, 0) + Vector<int>.load(b, 0)).store(c, 0);
+    Assert.eq(c[0], 11);
+    Assert.eq(c[1], 22);
+    Assert.eq(c[2], 33);
+    Assert.eq(c[3], 44);
+
+    let fa = [(float)1, (float)2, (float)3, (float)4];
+    let fb = [(float)1, (float)1, (float)1, (float)1];
+    let fc = [(float)0, (float)0, (float)0, (float)0];
+    (Vector<float>.load(fa, 0) + Vector<float>.load(fb, 0)).store(fc, 0);
+    Assert.eq((int)fc[0], 2);
+    Assert.eq(Vector<int>.lane_count(), 4);
+    Assert.eq(Vector<float>.lane_count(), 4);
+}

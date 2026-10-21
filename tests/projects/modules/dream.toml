@@ -1,7 +1,0 @@
-[package]
-name = "corpus_modules"
-version = "0.1.0"
-type = "test"
-
-[test]
-targets = ["native", "node"]

@@ -1,0 +1,100 @@
+import system;
+import system.testing;
+import system.collections;
+
+// --- container_clear_rc: `clear()` on managed-element containers releases elements at once. ---
+// Elements are literals on purpose: dynamic strings would pollute the counter via interning.
+
+fun iso_clear_queue(): void {
+    let q = Queue<string>();
+    q.enqueue("alpha");
+    q.enqueue("beta");
+    q.enqueue("gamma");
+    q.enqueue("delta");
+    q.clear();
+}
+
+fun iso_clear_priority_queue(): void {
+    let pq = PriorityQueue<string>();
+    pq.push("alpha");
+    pq.push("beta");
+    pq.push("gamma");
+    pq.pop();
+    pq.clear();
+}
+
+fun iso_clear_list(): void {
+    let l = List<string>();
+    l.push("alpha");
+    l.push("beta");
+    l.push("gamma");
+    l.clear();
+}
+
+@test
+fun iso_container_clear_rc(): void {
+    let before = Debug.live_objects;
+    iso_clear_queue();
+    iso_clear_priority_queue();
+    iso_clear_list();
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- set_remove_releases_key: `Set.remove` releases a managed key immediately. ---
+
+@test
+fun iso_set_remove_releases_key(): void {
+    let s = Set<string>();
+    let i = 0;
+    while i < 4 {
+        s.add(i.to_string() + "-key");
+        i = i + 1;
+    }
+    let base = Debug.live_objects;
+    Assert.is_true(s.remove("2-key"));
+    Assert.is_false(s.remove("2-key"));
+    Assert.eq(Debug.live_objects - base, -1L);
+    Assert.eq(s.length, 3);
+    Assert.is_true(s.contains("1-key"));
+    Assert.is_false(s.contains("2-key"));
+}
+
+// --- list_insert_class: insert/remove_at shift class elements without extra releases. ---
+
+let iso_insert_log: string = "";
+
+class iso_InsertItem {
+    public kind: int;
+    public constructor(kind: int) { this.kind = kind; }
+    del() { iso_insert_log = iso_insert_log + "free " + this.kind.to_string() + ";"; }
+}
+
+fun iso_insert_dump(borrow items: List<iso_InsertItem>): string {
+    let s = "len=" + items.length.to_string() + ":";
+    for (let item in items) {
+        s = s + " " + item.kind.to_string();
+    }
+    return s;
+}
+
+@noinline
+fun iso_insert_exercise(): void {
+    let items = List<iso_InsertItem>();
+    items.push(iso_InsertItem(1));
+    items.insert(0, iso_InsertItem(0));
+    Assert.eq(iso_insert_dump(items), "len=2: 0 1");
+    items.push(iso_InsertItem(3));
+    items.insert(2, iso_InsertItem(2));
+    Assert.eq(iso_insert_dump(items), "len=4: 0 1 2 3");
+    items.remove_at(1);
+    Assert.eq(iso_insert_log, "free 1;");
+    Assert.eq(iso_insert_dump(items), "len=3: 0 2 3");
+}
+
+@test
+fun iso_list_insert_class(): void {
+    iso_insert_log = "";
+    iso_insert_exercise();
+    Assert.eq(iso_insert_log, "free 1;free 0;free 2;free 3;");
+    iso_insert_log = "";
+}

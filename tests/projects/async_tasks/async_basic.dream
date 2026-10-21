@@ -9,9 +9,176 @@ async fun c2e_delayedDouble(n: int): int {
 @test
 @timeout(180000)
 async fun async_basic(): void {
-    Assert.eq(("start").to_string(), "start");
     let a = c2e_delayedDouble(10).await;
     let b = c2e_delayedDouble(a).await;
-    Assert.eq(("result = " + b).to_string(), "result = 40");
-    Assert.eq(("done").to_string(), "done");
+    Assert.eq(b, 40);
+}
+
+async fun c31_work(id: int): int {
+    Time.sleep(50).await;
+    return id * id;
+}
+
+@test
+@timeout(180000)
+async fun async_combinators(): void {
+    let a = c31_work(2);
+    let b = c31_work(3);
+    let results = Promise.all([a, b]).await;
+    Assert.eq(results[0], 4);
+    Assert.eq(results[1], 9);
+
+    let first = Promise.any([c31_work(10), c31_work(20)]).await;
+    Assert.eq(first, 100);
+}
+
+async fun c32_delayed_triple(n: int): int {
+    Time.sleep(1).await;
+    return n * 3;
+}
+
+async fun c32_run(f: fun(int): Future<int>, v: int): int {
+    return f(v).await;
+}
+
+@test
+@timeout(180000)
+async fun async_fun_as_value(): void {
+    let f: fun(int): Future<int> = c32_delayed_triple;
+    Assert.eq(f(7).await, 21);
+    Assert.eq(c32_run(c32_delayed_triple, 4).await, 12);
+}
+
+async fun c35_apply_async(f: fun(int): Future<int>, v: int): int {
+    return f(v).await;
+}
+
+@test
+@timeout(180000)
+async fun async_lambda_basic(): void {
+    let twice: fun(int): Future<int> = async (x) => {
+        Time.sleep(1).await;
+        return x * 2;
+    };
+    Assert.eq(twice(21).await, 42);
+    Assert.eq(c35_apply_async(async (n) => n + 100, 1).await, 101);
+}
+
+fun c36_make_async_adder(n: int): fun(int): Future<int> {
+    return async (x) => {
+        Time.sleep(1).await;
+        return x + n;
+    };
+}
+
+fun c36_make_async_offset(n: int, offset: int): fun(int): Future<int> {
+    return async (x) => {
+        Time.sleep(1).await;
+        return x + n + offset;
+    };
+}
+
+@test
+@timeout(180000)
+async fun async_lambda_capture(): void {
+    let add5: fun(int): Future<int> = c36_make_async_adder(5);
+    Assert.eq(add5(10).await, 15);
+    Assert.eq(add5(20).await, 25);
+    let add7: fun(int): Future<int> = c36_make_async_adder(7);
+    let pending5 = add5(30);
+    let pending7 = add7(40);
+    Assert.eq(pending5.await, 35);
+    Assert.eq(pending7.await, 47);
+    let offset: fun(int): Future<int> = c36_make_async_offset(5, 7);
+    let pending = offset(50);
+    let _abandoned = offset(60);
+    Assert.eq(pending.await, 62);
+}
+
+class c38_Worker {
+    public base: int;
+
+    public constructor(base: int) {
+        this.base = base;
+    }
+
+    public async fun compute(n: int): int {
+        Time.sleep(10).await;
+        return this.base + n;
+    }
+
+    public async fun twice(n: int): int {
+        let once = this.compute(n).await;
+        return once + once;
+    }
+}
+
+@test
+@timeout(180000)
+async fun async_method(): void {
+    let w = c38_Worker(100);
+    Assert.eq(w.compute(5).await, 105);
+    Assert.eq(w.twice(1).await, 202);
+}
+
+// Each monomorphization (`Cell<int>`, `Cell<string>`) regenerates its own async state machine, so
+// awaiting a generic method resolves with the concrete type.
+class c33_Cell<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+
+    public async fun get(): T {
+        Time.sleep(10).await;
+        return this.value;
+    }
+}
+
+@test
+@timeout(180000)
+async fun async_generic_method(): void {
+    let a = c33_Cell<int>(42);
+    Assert.eq(a.get().await, 42);
+
+    let b = c33_Cell<string>("hello");
+    Assert.eq(b.get().await, "hello");
+}
+
+// Reference-typed parameters and locals across suspension points: string params must be retained
+// by the async frame, string locals released when the task completes, and sink params store the
+// caller's +1 without a second constructor retain.
+async fun c3d_greet(name: string): string {
+    Time.sleep(0).await;
+    let msg = "Hello, " + name + "!";
+    return msg;
+}
+
+async fun c3d_echo(value: string): string {
+    let prefix = "echo: ";
+    Time.sleep(0).await;
+    return prefix + value;
+}
+
+@test
+@timeout(180000)
+async fun async_ref_params(): void {
+    Assert.eq(c3d_greet("World").await, "Hello, World!");
+    Assert.eq(c3d_echo("dream").await, "echo: dream");
+}
+
+@async_host
+@runtime("delayMs")
+extern async fun first_delay(ms: int): void;
+
+@async_host
+@runtime("delayMs")
+extern async fun second_delay(ms: int): void;
+
+@test
+async fun async_duplicate_host(): void {
+    first_delay(1).await;
+    second_delay(1).await;
+    Time.delay(1).await;
 }

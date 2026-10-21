@@ -147,8 +147,13 @@ fn compile_sum_to() -> String {
 }
 
 #[test]
-fn hir_to_ir_pipeline_emits_expected_shape() {
+fn hir_to_ir_pipeline_emits_expected_shape_deterministically() {
     let ll = compile_sum_to();
+    assert_eq!(
+        ll,
+        compile_sum_to(),
+        "the new backend pipeline must be byte-for-byte deterministic"
+    );
     let body = {
         let start = ll.find("@sum_to(").expect("missing function");
         let start = ll[..start].rfind("define ").expect("sum_to is not defined");
@@ -175,26 +180,67 @@ fn hir_to_ir_pipeline_emits_expected_shape() {
     assert!(body.contains("br i1 "), "missing loop exit:\n{}", body);
 }
 
+/// `checked { }` covers compound assignment, `++` on unsigned operands, and lambdas written in the
+/// block even when they are called outside it; arithmetic outside the block stays unchecked.
+#[cfg(feature = "native")]
 #[test]
-fn hir_to_ir_pipeline_is_deterministic() {
-    let first = compile_sum_to();
-    let second = compile_sum_to();
-    assert_eq!(
-        first, second,
-        "the new backend pipeline must be byte-for-byte deterministic"
+fn checked_blocks_emit_overflow_intrinsics() {
+    let ir = emit_opt_ll(
+        r#"
+        fun compound(a: int): int { let x = a; checked { x += 1; } return x; }
+        fun increment(a: uint): uint { let x = a; checked { x++; } return x; }
+        fun make_times(): fun(int): int {
+            let times: fun(int): int = (v) => v;
+            checked {
+                times = (v) => v * 1000000000;
+            }
+            return times;
+        }
+        fun unchecked_mul(a: int): int { return a * 1000000000; }
+        fun main(): void {
+            let times = make_times();
+            let total = compound(1) + times(7) + unchecked_mul(2);
+            let more = increment(1u);
+        }
+        "#,
+        &["--emit-llvm"],
+    );
+    let compound = common::ir_func_body(&ir, "compound");
+    assert!(
+        compound.contains("@llvm.sadd.with.overflow.i32("),
+        "checked `+=` lost its overflow check:\n{compound}"
+    );
+    let increment = common::ir_func_body(&ir, "increment");
+    assert!(
+        increment.contains("@llvm.uadd.with.overflow.i32("),
+        "checked `++` on uint lost its overflow check:\n{increment}"
+    );
+    let unchecked = common::ir_func_body(&ir, "unchecked_mul");
+    assert!(
+        !unchecked.contains("with.overflow"),
+        "arithmetic outside `checked` must wrap:\n{unchecked}"
+    );
+    assert!(
+        ir.contains("call { i32, i1 } @llvm.smul.with.overflow.i32("),
+        "the lambda written in `checked` lost its overflow check:\n{ir}"
     );
 }
 
 /// Compiles `source` with `--release --emit-llvm` and returns the LLVM-optimized module.
 #[cfg(feature = "native")]
 fn release_opt_ll(source: &str) -> String {
+    emit_opt_ll(source, &["--release", "--emit-llvm"])
+}
+
+#[cfg(feature = "native")]
+fn emit_opt_ll(source: &str, args: &[&str]) -> String {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("spans.dream");
     let out = dir.path().join("out/spans.ll");
     std::fs::write(&src, source).unwrap();
     let result = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
         .env("NO_COLOR", "1")
-        .args(["--release", "--emit-llvm"])
+        .args(args)
         .arg(&src)
         .arg("-o")
         .arg(&out)
@@ -208,11 +254,12 @@ fn release_opt_ll(source: &str) -> String {
     std::fs::read_to_string(out.with_extension("opt.ll")).unwrap()
 }
 
-/// Spans over a borrowed source scalarize into registers with no RC, so LLVM folds `length`
-/// and removes the indexer's bounds checks from the hot loop.
+/// Spans over borrowed and private owned sources, value-struct constructors and borrowed
+/// value parameters all scalarize: no RC in the loops, bounds checks fold, and only the
+/// private source owner keeps its cleanup.
 #[cfg(feature = "native")]
 #[test]
-fn spans_scalarize_and_drop_bounds_checks() {
+fn spans_and_value_structs_scalarize_without_reference_counting() {
     let ir = release_opt_ll(
         r#"
         import system;
@@ -237,39 +284,6 @@ fn spans_scalarize_and_drop_bounds_checks() {
             }
             return acc;
         }
-        fun main(): void {
-            System.println(span_len("hello world, this is a fairly long literal for spans", 100));
-            let a = [1, 2, 3, 4, 5];
-            System.println(sum_span(Span.of(a)));
-        }
-    "#,
-    );
-    let span_len = common::ir_func_body(&ir, "span_len");
-    for needle in ["alloca", "atomic"] {
-        assert!(
-            !span_len.contains(needle),
-            "`{needle}` left in span_len:\n{span_len}"
-        );
-    }
-    assert!(
-        !span_len
-            .lines()
-            .any(|l| l.contains("call ") && !l.contains("@llvm.")),
-        "runtime call left in span_len:\n{span_len}"
-    );
-    let sum_span = common::ir_func_body(&ir, "sum_span");
-    assert!(
-        sum_span.contains("vector.body"),
-        "sum_span did not vectorize:\n{sum_span}"
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
-    let ir = release_opt_ll(
-        r#"
-        import system;
         @noinline
         fun owned_span(borrow suffix: string, n: int): int {
             let source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + suffix;
@@ -283,37 +297,6 @@ fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
             }
             return sum;
         }
-        fun main(): void {
-            System.println(owned_span(System.env("DREAM_SPAN_INPUT").unwrap_or("!"), 100));
-        }
-    "#,
-    );
-    let body = common::ir_func_body(&ir, "owned_span");
-    assert_eq!(
-        (
-            body.matches("@dream_rc_last_slow(").count(),
-            body.matches("@dream_rc_last_observed(").count()
-        ),
-        (1, 1),
-        "only the observed/unobserved branches of the source owner's cleanup may remain:\n{body}"
-    );
-    assert_eq!(
-        body.matches("@dream_free(").count(),
-        1,
-        "one source owner: {body}"
-    );
-    assert!(
-        !body.contains("atomicrmw"),
-        "a span retained its private source:\n{body}"
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn value_struct_constructors_and_borrow_parameters_elide_arc() {
-    let ir = release_opt_ll(
-        r#"
-        import system;
         struct View {
             public source: string;
             public count: int;
@@ -362,6 +345,10 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
             return s == other.span();
         }
         fun main(): void {
+            System.println(span_len("hello world, this is a fairly long literal for spans", 100));
+            let a = [1, 2, 3, 4, 5];
+            System.println(sum_span(Span.of(a)));
+            System.println(owned_span(System.env("DREAM_SPAN_INPUT").unwrap_or("!"), 100));
             let xs = [1, 2, 3, 4];
             System.println(array_view(xs, 1, 2));
             System.println(readonly_view(xs, 1, 2));
@@ -374,6 +361,44 @@ fn value_struct_constructors_and_borrow_parameters_elide_arc() {
         }
         "#,
     );
+    let span_len = common::ir_func_body(&ir, "span_len");
+    for needle in ["alloca", "atomic"] {
+        assert!(
+            !span_len.contains(needle),
+            "`{needle}` left in span_len:\n{span_len}"
+        );
+    }
+    assert!(
+        !span_len
+            .lines()
+            .any(|l| l.contains("call ") && !l.contains("@llvm.")),
+        "runtime call left in span_len:\n{span_len}"
+    );
+    let sum_span = common::ir_func_body(&ir, "sum_span");
+    assert!(
+        sum_span.contains("vector.body"),
+        "sum_span did not vectorize:\n{sum_span}"
+    );
+    {
+        let body = common::ir_func_body(&ir, "owned_span");
+        assert_eq!(
+            (
+                body.matches("@dream_rc_last_slow(").count(),
+                body.matches("@dream_rc_last_observed(").count()
+            ),
+            (1, 1),
+            "only the observed/unobserved branches of the source owner's cleanup may remain:\n{body}"
+        );
+        assert_eq!(
+            body.matches("@dream_free(").count(),
+            1,
+            "one source owner: {body}"
+        );
+        assert!(
+            !body.contains("atomicrmw"),
+            "a span retained its private source:\n{body}"
+        );
+    }
     for name in [
         "array_view",
         "readonly_view",

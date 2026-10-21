@@ -1,0 +1,15 @@
+import system;
+import system.testing;
+import system.io;
+
+// --- file_io: write, append, read back, then delete a file through the async File API. ---
+
+@test
+async fun iso_file_io(): void {
+    let path = "dream_iso_file_io.tmp";
+    File.write(path, "hello\n").await;
+    File.append(path, "dream").await;
+    let text = File.read(path).await;
+    File.delete(path).await;
+    Assert.eq(text.unwrap_or("").replace("\r\n", "\n"), "hello\ndream");
+}

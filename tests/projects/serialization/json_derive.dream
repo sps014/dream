@@ -71,3 +71,216 @@ fun json_derive(): void {
         "{\"name\":\"Ada\",\"age\":36,\"active\":true,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"tags\":[\"dev\",\"math\"],\"scores\":[10,20,30]}"
     );
 }
+
+@json
+class c110_Geo {
+    public lat: double;
+    public lng: double;
+
+    public constructor(lat: double, lng: double) {
+        this.lat = lat;
+        this.lng = lng;
+    }
+}
+
+@json
+class c110_Address {
+    public city: string;
+    public zip: string;
+    public geo: c110_Geo;
+
+    public constructor(city: string, zip: string, geo: c110_Geo) {
+        this.city = city;
+        this.zip = zip;
+        this.geo = geo;
+    }
+}
+
+@json
+class c110_Company {
+    public name: string;
+    public address: c110_Address;
+
+    public constructor(name: string, address: c110_Address) {
+        this.name = name;
+        this.address = address;
+    }
+}
+
+@json
+class c110_User {
+    public name: string;
+    public age: int;
+    public company: c110_Company;
+    public tags: string[];
+
+    public constructor(name: string, age: int, company: c110_Company, tags: string[]) {
+        this.name = name;
+        this.age = age;
+        this.company = company;
+        this.tags = tags;
+    }
+}
+
+@json
+class c110_Team {
+    public title: string;
+    public lead: c110_User;
+    public members: c110_User[];
+
+    public constructor(title: string, lead: c110_User, members: c110_User[]) {
+        this.title = title;
+        this.lead = lead;
+        this.members = members;
+    }
+}
+
+fun c110_mk_user(name: string, age: int, city: string): c110_User {
+    return c110_User(
+        name,
+        age,
+        c110_Company(city + " Corp", c110_Address(city, "00000", c110_Geo(1.5d, 2.5d))),
+        [name, city]
+    );
+}
+
+@test
+@timeout(180000)
+fun json_deep_nesting(): void {
+    let team = c110_Team(
+        "Core",
+        c110_mk_user("Ada", 36, "London"),
+        [c110_mk_user("Bob", 30, "Paris"), c110_mk_user("Cee", 41, "Berlin")]
+    );
+
+    let text = Json.serialize(team);
+    Assert.eq(
+        (text).to_string(),
+        "{\"title\":\"Core\",\"lead\":{\"name\":\"Ada\",\"age\":36,\"company\":{\"name\":\"London Corp\",\"address\":{\"city\":\"London\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Ada\",\"London\"]},\"members\":[{\"name\":\"Bob\",\"age\":30,\"company\":{\"name\":\"Paris Corp\",\"address\":{\"city\":\"Paris\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Bob\",\"Paris\"]},{\"name\":\"Cee\",\"age\":41,\"company\":{\"name\":\"Berlin Corp\",\"address\":{\"city\":\"Berlin\",\"zip\":\"00000\",\"geo\":{\"lat\":1.5,\"lng\":2.5}}},\"tags\":[\"Cee\",\"Berlin\"]}]}"
+    );
+
+    let back = Json.deserialize<c110_Team>(text).unwrap_or(team);
+    Assert.eq((back.title).to_string(), "Core");
+    Assert.eq((back.lead.name).to_string(), "Ada");
+    Assert.eq((back.lead.company.name).to_string(), "London Corp");
+    Assert.eq((back.lead.company.address.city).to_string(), "London");
+    Assert.eq((back.lead.company.address.geo.lat).to_string(), "1.5");
+    Assert.eq((back.lead.tags[1]).to_string(), "London");
+    Assert.eq((back.members.length).to_string(), "2");
+    Assert.eq((back.members[0].name).to_string(), "Bob");
+    Assert.eq((back.members[1].company.address.geo.lng).to_string(), "2.5");
+    Assert.eq((back.members[1].age).to_string(), "41");
+
+    // Round-trips identically.
+    Assert.eq((Json.serialize(back) == text).to_string(), "true");
+}
+
+// @json on a generic class: the derive attaches to the template `Box<T>` and each concrete
+// instantiation gets its own `to_json`/`from_json`. Type-parameter fields round-trip through
+// `Json.serialize`/`Json.deserialize`, which the analyzer resolves per instance, so `Box<Point>`
+// delegates to `Point`'s (also `@json`) converters.
+@json
+struct c114_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+struct c114_Box<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+}
+
+@test
+@timeout(180000)
+fun json_generic_class(): void {
+    let b = c114_Box<c114_Point>(c114_Point(3, 4));
+    let s = Json.serialize<c114_Box<c114_Point>>(b);
+    Assert.eq((s).to_string(), "{\"value\":{\"x\":3,\"y\":4}}");
+    let back = Json.deserialize<c114_Box<c114_Point>>(s).unwrap_or(b);
+    Assert.eq((back.value.x).to_string(), "3");
+    Assert.eq((back.value.y).to_string(), "4");
+
+    let p = c114_Point(5, 6);
+    let point_text = Json.serialize(p);
+    Assert.eq(point_text, "{\"x\":5,\"y\":6}");
+    let point_back = Json.deserialize<c114_Point>(point_text).unwrap_or(p);
+    Assert.eq(point_back.x, 5);
+    Assert.eq(point_back.y, 6);
+}
+
+@json
+class c112_Address {
+    public city: string;
+    public zip: string;
+
+    public constructor(city: string, zip: string) {
+        this.city = city;
+        this.zip = zip;
+    }
+}
+
+@json
+class c112_User {
+    public name: string;
+    public age: int;
+    public address: c112_Address;
+    public scores: int[];
+
+    public constructor(name: string, age: int, address: c112_Address, scores: int[]) {
+        this.name = name;
+        this.age = age;
+        this.address = address;
+        this.scores = scores;
+    }
+}
+
+fun c112_make_user(): c112_User {
+    return c112_User("Ada", 36, c112_Address("London", "NW1"), [10, 20, 30]);
+}
+
+fun c112_serialize_loop(iters: int): int {
+    let u = c112_make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        acc = acc + Json.serialize(u).byte_size();
+        i = i + 1;
+    }
+    sw.stop();
+    return acc;
+}
+
+fun c112_deserialize_loop(iters: int): int {
+    let text = Json.serialize(c112_make_user());
+    let fallback = c112_make_user();
+    let sw = Stopwatch();
+    let acc = 0;
+    let i = 0;
+    while i < iters {
+        let back = Json.deserialize<c112_User>(text).unwrap_or(fallback);
+        acc = acc + back.age + back.scores[2];
+        i = i + 1;
+    }
+    sw.stop();
+    Assert.eq(
+        text,
+        "{\"name\":\"Ada\",\"age\":36,\"address\":{\"city\":\"London\",\"zip\":\"NW1\"},\"scores\":[10,20,30]}"
+    );
+    return acc;
+}
+
+@test
+@timeout(180000)
+fun json_deserialize_borrow_loop(): void {
+    Assert.eq(c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500), 199000);
+}

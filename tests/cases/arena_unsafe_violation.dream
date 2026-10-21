@@ -1,1 +1,0 @@
-fun main(): void { let arena = Arena(16); }

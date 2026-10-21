@@ -1,0 +1,159 @@
+import system.testing;
+import system;
+
+class c95_P {
+    public v: int;
+
+    public constructor(v: int) {
+        this.v = v;
+    }
+}
+
+fun c4e_uflip(x: uint): uint {
+    return ~x;
+}
+
+fun c4e_flip(x: byte): byte {
+    return ~x;
+}
+
+let c1f5_side_calls: int = 0;
+
+fun c1f5_side(): bool {
+    c1f5_side_calls = c1f5_side_calls + 1;
+    return true;
+}
+
+@test
+@timeout(180000)
+fun arithmetic(): void {
+    let a = 10;
+    let b = 3;
+
+    Assert.eq(a + b, 13);
+    Assert.eq(a - b, 7);
+    Assert.eq(a * b, 30);
+    Assert.eq(a / b, 3);
+    Assert.eq(a % b, 1);
+
+    let x = 1.5;
+    let y = 2.0;
+    Assert.eq(x + y, 3.5);
+    Assert.eq(x * y, 3.0);
+
+    Assert.eq(1 + 2 * 3, 7);
+    Assert.eq((1 + 2) * 3, 9);
+
+    const pi: int = 3;
+    let r: int = 2;
+    Assert.eq(pi * r * r, 12);
+}
+
+@test
+@timeout(180000)
+fun compound_assign(): void {
+    let x: int = 10;
+    x += 5;
+    Assert.eq(x, 15);
+    x -= 3;
+    Assert.eq(x, 12);
+    x *= 2;
+    Assert.eq(x, 24);
+    x /= 4;
+    Assert.eq(x, 6);
+    x %= 4;
+    Assert.eq(x, 2);
+    x++;
+    Assert.eq(x, 3);
+    x--;
+    Assert.eq(x, 2);
+
+    let arr: int[] = [1, 2, 3];
+    arr[1] += 10;
+    Assert.eq(arr[1], 12);
+
+    let p = c95_P(5);
+    p.v += 7;
+    Assert.eq(p.v, 12);
+}
+
+@test
+@timeout(180000)
+fun short_circuit(): void {
+    c1f5_side_calls = 0;
+    let reached = 0;
+
+    let f: bool = false;
+    if f && c1f5_side() {
+        reached = 1;
+    }
+
+    let t: bool = true;
+    if t || c1f5_side() {
+        reached = 2;
+    }
+
+    Assert.eq(reached, 2);
+    Assert.eq(c1f5_side_calls, 0);
+}
+
+// `>>` is arithmetic (sign-extending) on the signed types and logical (zero-filling) on the
+// unsigned types; `byte` results wrap into `0..255`.
+@test
+@timeout(180000)
+fun bitwise_operators(): void {
+    let a = 12;
+    let b = 10;
+    Assert.eq((a & b).to_string(), "8");
+    Assert.eq((a | b).to_string(), "14");
+    Assert.eq((a ^ b).to_string(), "6");
+    Assert.eq((a << 2).to_string(), "48");
+    Assert.eq((a >> 1).to_string(), "6");
+    Assert.eq((~a).to_string(), "-13");
+    let neg: int = 0 - 1;
+    Assert.eq((neg >> 1).to_string(), "-1");
+
+    let la: long = 12l;
+    let lb: long = 10l;
+    Assert.eq((la & lb).to_string(), "8");
+    Assert.eq((la | lb).to_string(), "14");
+    Assert.eq((la ^ lb).to_string(), "6");
+    Assert.eq((la << 2l).to_string(), "48");
+    Assert.eq((la >> 1l).to_string(), "6");
+    Assert.eq((~la).to_string(), "-13");
+    let lneg: long = 0l - 1l;
+    Assert.eq((lneg >> 1l).to_string(), "-1");
+
+    let ua: uint = 12u;
+    let ub: uint = 10u;
+    Assert.eq((ua & ub).to_string(), "8");
+    Assert.eq((ua | ub).to_string(), "14");
+    Assert.eq((ua ^ ub).to_string(), "6");
+    Assert.eq((ua << 2u).to_string(), "48");
+    Assert.eq((ua >> 1u).to_string(), "6");
+    Assert.eq((~ua).to_string(), "4294967283");
+    Assert.eq((4000000000u >> 1u).to_string(), "2000000000");
+
+    let uga: ulong = 12ul;
+    let ugb: ulong = 10ul;
+    Assert.eq((uga & ugb).to_string(), "8");
+    Assert.eq((uga | ugb).to_string(), "14");
+    Assert.eq((uga ^ ugb).to_string(), "6");
+    Assert.eq((uga << 2ul).to_string(), "48");
+    Assert.eq((uga >> 1ul).to_string(), "6");
+    Assert.eq((~uga).to_string(), "18446744073709551603");
+
+    let ba: byte = 12b;
+    let bb: byte = 10b;
+    Assert.eq((ba & bb).to_string(), "8");
+    Assert.eq((ba | bb).to_string(), "14");
+    Assert.eq((ba ^ bb).to_string(), "6");
+    Assert.eq((ba << 2b).to_string(), "48");
+    Assert.eq((200b >> 2b).to_string(), "50");
+    Assert.eq((~ba).to_string(), "243");
+    Assert.eq((~5b).to_string(), "250");
+
+    // Values routed through calls exercise runtime masking rather than constant folding.
+    Assert.eq((c4e_flip((byte)(5 + 0))).to_string(), "250");
+    Assert.eq("v=" + c4e_uflip(12u).to_string(), "v=4294967283");
+}

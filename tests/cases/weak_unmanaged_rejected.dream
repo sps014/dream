@@ -1,3 +1,0 @@
-fun main(): void {
-    let weak handle = 42;
-}

@@ -1,0 +1,48 @@
+// Parser diagnostics: recovery must keep reporting each malformed declaration below.
+import system;
+import system.collections;
+
+static let flag: int = 1;
+
+ref class Pair {
+    public a: int;
+}
+
+class Point {
+    x: int,
+    y: int,
+}
+
+fun char_literals() {
+    let a = '';
+    let b = 'ab';
+    let c = '\q';
+}
+
+fun mixed_collection_literal(): void {
+    let s: Set<int> = {1, 2: 3};
+    System.println(s.length);
+}
+
+fun ref_default(ref x: int = 5): void {
+    x = x + 1;
+}
+
+fun ref_variadic(ref ...xs: int[]): void {
+    System.println(xs.length);
+}
+
+fun reserved_word(): void {
+    let string: int = 5;
+    System.println(string);
+}
+
+fun variadic_non_array(...n: int): int {
+    return n;
+}
+
+fun variadic_not_last(...nums: int[], extra: int): int {
+    return extra;
+}
+
+fun main(): void {}

@@ -1,6 +1,0 @@
-import system;
-import system.collections;
-fun main(): void {
-    let items = [1, 2];
-    CollectionStorage.exchange<int>(items, 0, items, 1);
-}

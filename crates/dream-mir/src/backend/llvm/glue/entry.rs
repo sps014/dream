@@ -156,18 +156,12 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
     let host_scheduled = l.cx.target.spec().capabilities.js_interop;
     let mut fx = glue(l, crate::abi::GUEST_ENTRY_FN);
     fx.call("dream_runtime_init", &[]);
-    let args = if main.params.is_empty() {
-        vec![]
-    } else {
-        let ps = fx.l.cx.target.abi().ptr_size as i64;
-        vec![fx.call_v("dream_array_new", &[V::i32(0), V::i32(ps)])]
-    };
     let value_ty = if exit == EntryExit::Code {
         Ty::I32
     } else {
         fx.h()
     };
-    let r = fx.call(&main_name, &args);
+    let r = fx.call(&main_name, &[]);
     if main.is_async {
         let mf = r
             .clone()

@@ -1,37 +1,85 @@
 import system.testing;
-// `Task.map` fans a `body` out over `items`.
 import system;
 import system.task;
+import system.text;
 
+// `TaskPool.map` fans a `body` out over `items`.
 fun c250_square(x: string): string {
     let n = int.parse(x).unwrap_or(0);
     return (n * n).to_string();
 }
 
-async fun c250_body(): void {
+@test
+@timeout(180000)
+async fun task_map(): void {
     let items = ["1", "2", "3", "4", "5"];
     let results = TaskPool(4).map(items, c250_square).await.unwrap();
-    for (let r in results) {
-        c250_verify_observation((r).to_string());
-    }
+    Assert.eq(results.length, 5);
+    Assert.eq(results[0], "1");
+    Assert.eq(results[1], "4");
+    Assert.eq(results[2], "9");
+    Assert.eq(results[3], "16");
+    Assert.eq(results[4], "25");
 }
 
-let c250_cursor: int = 0;
-
-fun c250_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "1\n4\n9\n16\n25\n";
-    let end = c250_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c250_cursor, end));
-    c250_cursor = end;
+async fun c247_fetchLike(url: string): string {
+    Time.sleep(1).await;
+    return "resp:" + url;
 }
 
 @test
 @timeout(180000)
+async fun task_async_map(): void {
+    let urls = ["a", "b", "c"];
+    let results = TaskPool(4).map_async(urls, c247_fetchLike).await.unwrap();
+    Assert.eq(results.length, 3);
+    Assert.eq(results[0], "resp:a");
+    Assert.eq(results[1], "resp:b");
+    Assert.eq(results[2], "resp:c");
+}
 
-async fun task_map(): void {
-    c250_cursor = 0;
-    c250_body().await;
-    Assert.eq(c250_cursor, ("1\n4\n9\n16\n25\n").length);
+@test
+@timeout(180000)
+async fun task_async_lambda_map(): void {
+    let urls = ["a", "b"];
+    let results = TaskPool(4).map_async(
+        urls,
+        async (url) => {
+            Time.sleep(1).await.unwrap();
+            return "resp:" + url;
+        }
+    ).await.unwrap();
+    Assert.eq(results.length, 2);
+    Assert.eq(results[0], "resp:a");
+    Assert.eq(results[1], "resp:b");
+}
+
+// Per-element map replaces array wire: `T[]` itself is not shared.
+struct c240_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@test
+@timeout(180000)
+async fun task_array_wire(): void {
+    let nums = [1, 2, 3, 4, 5];
+    let doubled = TaskPool(4).map(nums, (n) => n * 2).await.unwrap();
+    Assert.eq(doubled.length, 5);
+    for (let i = 0; i < doubled.length; i = i + 1) {
+        Assert.eq(doubled[i], (i + 1) * 2);
+    }
+
+    let points = [c240_Point(1, 2), c240_Point(3, 4)];
+    let shifted = TaskPool(4).map(points, (p) => c240_Point(p.x + 1, p.y + 1)).await.unwrap();
+    Assert.eq(shifted.length, 2);
+    Assert.eq(shifted[0].x, 2);
+    Assert.eq(shifted[0].y, 3);
+    Assert.eq(shifted[1].x, 4);
+    Assert.eq(shifted[1].y, 5);
 }

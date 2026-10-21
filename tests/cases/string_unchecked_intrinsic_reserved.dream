@@ -1,6 +1,0 @@
-module system.core;
-
-@intrinsic(Intrinsic.StringCharAtUnchecked)
-extern fun read_unit(borrow text: string, index: int): char;
-
-fun main(): void {}

@@ -1,9 +1,0 @@
-import system;
-fun main(): void {
-    let missing: Option<string> = Option.None;
-    System.print(missing ?? "fallback");
-    System.print("\n");
-
-    let present: Option<string> = Option.Some("hello");
-    System.print(present ?? "fallback");
-}

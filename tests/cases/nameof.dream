@@ -1,8 +1,11 @@
 import system;
 
+@export fun exportedAdd(a: int, b: int): int { return a + b; }
+
 fun main(): void {
     System.println(nameof(main));
     System.println(nameof(System.println));
     let local_name = 1;
     System.println(nameof(local_name));
+    System.println(exportedAdd(20, 22));
 }

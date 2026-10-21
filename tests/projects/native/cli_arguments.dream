@@ -1,4 +1,7 @@
+import system;
+import system.io;
 import system.cli;
+import system.config;
 import system.testing;
 
 @test
@@ -70,4 +73,37 @@ fun cli_arguments(): void {
     Assert.eq(values[0], "");
     Assert.eq(values[2], "first\nsecond");
     Assert.eq(values[3], "こんにちは");
+}
+
+@test
+fun cli_config(): void {
+    let temporary = TempFile.create_in(".").unwrap();
+    temporary.file.write_all(Encoding.utf8_encode("{\"port\":9000}")).unwrap();
+    temporary.file.flush().unwrap();
+    System.set_env("DREAM_TEST_CONFIG_PORT", "9100").unwrap();
+    let command = Command("test").int_option("port", default_value: 1111);
+    let parsed = command.parse(["--port", "9200"]).unwrap();
+    let overrides = ConfigBuilder()
+        .default_value("port", "8080")
+        .cli(parsed)
+        .environment("DREAM_TEST_CONFIG_")
+        .json_file(temporary.path)
+        .build()
+        .unwrap();
+    Assert.eq(overrides.get_int("port").unwrap(), 9200);
+    let no_args: string[] = [];
+    let omitted = command.parse(no_args).unwrap();
+    Assert.eq(
+        ConfigBuilder()
+            .default_value("port", "8080")
+            .cli(omitted)
+            .environment("DREAM_TEST_CONFIG_")
+            .build()
+            .unwrap()
+            .get_int("port")
+            .unwrap(),
+        9100
+    );
+    System.unset_env("DREAM_TEST_CONFIG_PORT").unwrap();
+    temporary.close().unwrap();
 }

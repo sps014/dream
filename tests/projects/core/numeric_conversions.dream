@@ -1,0 +1,77 @@
+import system.testing;
+import system;
+
+class c173_Calc {
+    public static fun identity(x: double): double {
+        return x;
+    }
+
+    public static fun add(a: double, b: double): double {
+        return a + b;
+    }
+}
+
+// Bare literals returned from wider-typed functions widen to the declared return type.
+fun c1e9_asDouble(): double {
+    return 2.71828;
+}
+
+fun c1e9_asFloat(): float {
+    return 1.5;
+}
+
+fun c1e9_asLong(): long {
+    return 42;
+}
+
+@test
+@timeout(180000)
+fun double_cast(): void {
+    let i: int = 7;
+    let d: double = (double)i;
+    Assert.eq(d.to_string(), "7");
+
+    let f: float = (float)d;
+    Assert.eq(f.to_string(), "7");
+
+    let back: int = (int)d;
+    Assert.eq(back, 7);
+
+    let g: double = (double)f;
+    Assert.eq(g.to_string(), "7");
+}
+
+@test
+@timeout(180000)
+fun numeric_widening(): void {
+    Assert.eq(c173_Calc.identity(1.5f).to_string(), "1.5");
+    Assert.eq(c173_Calc.identity(3).to_string(), "3");
+    Assert.eq(c173_Calc.add(10, 20).to_string(), "30");
+
+    Assert.eq("" + c1e9_asDouble(), "2.71828");
+    Assert.eq("" + c1e9_asFloat(), "1.5");
+    Assert.eq("" + c1e9_asLong(), "42");
+}
+
+@test
+@timeout(180000)
+fun numeric_widen_assign(): void {
+    let x: float = 0.0;
+    x = 2;
+    Assert.eq(x.to_string(), "2");
+
+    let L: long = 1;
+    L = 2;
+    Assert.eq((int)L, 2);
+
+    let D: double = 1;
+    D = 2;
+    Assert.eq((int)D, 2);
+
+    let arr = Array.alloc<float>(4);
+    for (let i = 0; i < arr.length; i = i + 1) {
+        arr[i] = i;
+    }
+    Assert.eq(arr[0].to_string(), "0");
+    Assert.eq(arr[3].to_string(), "3");
+}

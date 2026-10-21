@@ -1,0 +1,33 @@
+// Class and interface declaration rules.
+import system;
+
+class Bad {
+    id: int;
+
+    del(extra: int) {
+        System.println(this.id);
+    }
+}
+
+class Foo {
+    x: int;
+
+    public fun to_string(): string {
+        return "foo";
+    }
+}
+
+interface Left : Right {
+    fun left(): int;
+}
+
+interface Right : Left {
+    fun right(): int;
+}
+
+class Cyclic : Left {
+    public fun left(): int { return 1; }
+    public fun right(): int { return 2; }
+}
+
+fun main(): void {}

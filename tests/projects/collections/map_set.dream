@@ -1,0 +1,163 @@
+import system.testing;
+import system;
+import system.collections;
+import system.text;
+
+// `m[k]` (via `at`) panics on a missing key, matching `List[i]`; `get(k)` stays the
+// absence-tolerant read returning `Option<V>`. `for (let pair in m)` yields
+// `KeyValuePair<K, V>` in unspecified order, so only order-independent aggregates are checked.
+@test
+@timeout(180000)
+fun map_foreach(): void {
+    let m = Map<string, int>();
+    m["a"] = 1;
+    m["b"] = 2;
+    m["c"] = 3;
+
+    let vtotal = 0;
+    let count = 0;
+    for (let pair in m) {
+        vtotal = vtotal + pair.value;
+        count = count + 1;
+    }
+    Assert.eq(vtotal, 6);
+    Assert.eq(count, 3);
+
+    Assert.eq(m["a"], 1);
+    Assert.eq(m["b"], 2);
+    Assert.eq(m.get("z").unwrap_or(-1), -1);
+    Assert.eq(m.get("missing").unwrap_or(-9), -9);
+}
+
+@test
+@timeout(180000)
+fun set(): void {
+    let s = Set<int>();
+    Assert.is_true(s.is_empty());
+    Assert.eq(s.length, 0);
+
+    Assert.is_true(s.add(1));
+    Assert.is_true(s.add(2));
+    Assert.is_true(s.add(3));
+    Assert.is_false(s.add(2));
+
+    Assert.is_false(s.is_empty());
+    Assert.eq(s.length, 3);
+
+    Assert.is_true(s.contains(1));
+    Assert.is_false(s.contains(4));
+
+    Assert.is_true(s.remove(2));
+    Assert.is_false(s.remove(4));
+    Assert.is_false(s.contains(2));
+    Assert.eq(s.length, 2);
+
+    let l = List<int>();
+    for (let x in s) {
+        l.push(x);
+    }
+    l.sort();
+    Assert.eq(l.length, 2);
+    Assert.eq(l[0], 1);
+    Assert.eq(l[1], 3);
+
+    s.clear();
+    Assert.eq(s.length, 0);
+}
+
+@test
+@timeout(180000)
+fun sorted_map_basic(): void {
+    let m = SortedMap<int, string>();
+    m[5] = "five";
+    m[1] = "one";
+    m[3] = "three";
+    m[2] = "two";
+    Assert.eq(m.length, 4);
+    Assert.eq(m[1], "one");
+    Assert.is_true(m.contains(3));
+    Assert.is_false(m.contains(9));
+    Assert.eq(m.get(3).unwrap_or("?"), "three");
+    Assert.eq(m.get(4).unwrap_or("none"), "none");
+    Assert.eq(m.first_key().unwrap_or(0 - 1), 1);
+    Assert.eq(m.last_key().unwrap_or(0 - 1), 5);
+    Assert.eq(m.ceiling_key(4).unwrap_or(0 - 1), 5);
+    Assert.eq(m.floor_key(4).unwrap_or(0 - 1), 3);
+    Assert.eq(m.ceiling_key(10).unwrap_or(0 - 1), -1);
+    Assert.eq(m.floor_key(0).unwrap_or(0 - 1), -1);
+
+    let entries = List<string>();
+    for (let entry in m) {
+        entries.push(entry.key + " -> " + entry.value);
+    }
+    Assert.eq(entries.join(", "), "1 -> one, 2 -> two, 3 -> three, 5 -> five");
+
+    m.remove(3);
+    Assert.eq(m.length, 3);
+    Assert.is_false(m.contains(3));
+}
+
+enum c8c_Color {
+    Red,
+    Green,
+    Blue,
+}
+
+struct c8c_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class c8c_User {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+@test
+@timeout(180000)
+fun collections_advanced(): void {
+    let m = Map<c8c_Color, c8c_Point>();
+    m[c8c_Color.Red] = c8c_Point(10, 20);
+    m[c8c_Color.Green] = c8c_Point(30, 40);
+
+    Assert.eq(m.length, 2);
+    let p1 = m.get(c8c_Color.Red).unwrap_or(c8c_Point(0, 0));
+    Assert.eq("Red x: " + p1.x + ", y: " + p1.y, "Red x: 10, y: 20");
+
+    let p2 = m.get(c8c_Color.Green).unwrap_or(c8c_Point(0, 0));
+    Assert.eq("Green x: " + p2.x + ", y: " + p2.y, "Green x: 30, y: 40");
+
+    // Class keys hash by reference identity, not by field contents.
+    let s = Set<c8c_User>();
+    let u1 = c8c_User("Alice");
+    let u2 = c8c_User("Bob");
+    Assert.is_true(s.add(u1));
+    Assert.is_true(s.add(u2));
+    Assert.is_false(s.add(u1));
+
+    let u3 = c8c_User("Alice");
+    Assert.is_true(s.add(u3));
+    Assert.eq(s.length, 3);
+    Assert.is_true(s.contains(u1));
+    Assert.is_true(s.contains(u3));
+
+    let class_map = Map<c8c_User, string>();
+    class_map[u1] = "Admin";
+    class_map[u2] = "Editor";
+    Assert.eq(class_map.get(u1).unwrap_or("None"), "Admin");
+    Assert.eq(class_map.get(u2).unwrap_or("None"), "Editor");
+    Assert.eq(class_map.get(u3).unwrap_or("None"), "None");
+
+    let pointSet = Set<c8c_Point>();
+    let pt = c8c_Point(5, 5);
+    Assert.is_true(pointSet.add(pt));
+    Assert.is_false(pointSet.contains(pt));
+}

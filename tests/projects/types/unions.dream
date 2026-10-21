@@ -1,0 +1,198 @@
+import system.testing;
+import system;
+import system.json;
+
+enum c278_Shape {
+    Circle(int),
+    Rect(width: int, height: int),
+    Empty,
+}
+
+fun c278_area(s: c278_Shape): int {
+    return switch (s) {
+        Circle(r) => r * r * 3,
+        Rect(w, h) => w * h,
+        Empty => 0,
+    };
+}
+
+fun c278_describe(o: Option<int>): string {
+    return switch (o) {
+        Some(0) => "zero",
+        Some(n)if n > 10 => "big",
+        Some(n) => "small",
+        None => "none",
+    };
+}
+
+enum c27a_Pair {
+    Both(left: Option<int>, right: Option<int>),
+    Neither,
+}
+
+// `Both(...)` is covered by refutable nested patterns, so a `_` arm is required for
+// exhaustiveness (v1 does not enumerate inner variants); `Neither` is covered explicitly.
+fun c27a_classify(p: c27a_Pair): string {
+    return switch (p) {
+        Both(Some(0), None) => "zero-left, empty-right",
+        Both(Some(x), Some(y)) => "two values",
+        Both(None, None) => "both empty",
+        Neither => "neither",
+        _ => "other",
+    };
+}
+
+@json
+enum c279_Box {
+    Full(value: int),
+    Empty,
+}
+
+@json
+enum c279_Pair {
+    Pos(int),
+    Named(x: int),
+}
+
+fun c279_take_box(b: c279_Box): int {
+    return switch (b) {
+        Full(v) => v,
+        Empty => 0,
+    };
+}
+
+fun c279_take_pair(p: c279_Pair): int {
+    return switch (p) {
+        Pos(n) => n,
+        Named(n) => n,
+    };
+}
+
+// `enum struct` allows any number of non-self-referential reference-typed payload fields inline:
+// refs across different variants (Either), multiple refs in one variant (Pair), and refs mixed
+// with primitives in one variant (Outcome).
+enum struct c27f_Either {
+    Left(string),
+    Right(string),
+}
+
+enum struct c27f_Pair {
+    Both(a: string, b: string),
+}
+
+enum struct c27e_Outcome {
+    Success(int),
+    Failure(code: int, reason: string),
+}
+
+fun c27f_side(e: c27f_Either): string {
+    return switch (e) {
+        Left(v) => "L:" + v,
+        Right(v) => "R:" + v,
+    };
+}
+
+fun c27f_join(p: c27f_Pair): string {
+    return switch (p) {
+        Both(a, b) => a + "|" + b,
+    };
+}
+
+fun c27e_describe(o: c27e_Outcome): string {
+    return switch (o) {
+        Success(c) => "ok:" + c.to_string(),
+        Failure(c, r) => "fail:" + c.to_string() + ":" + r,
+    };
+}
+
+@test
+@timeout(180000)
+fun union_match(): void {
+    Assert.eq(c278_area(c278_Shape.Circle(2)), 12);
+    Assert.eq(c278_area(c278_Shape.Rect(3, 4)), 12);
+    Assert.eq(c278_area(c278_Shape.Empty), 0);
+
+    let a: Option<int> = Option.Some(0);
+    let b: Option<int> = Option.Some(42);
+    let d: Option<int> = Option.Some(5);
+    let n: Option<int> = Option.None;
+    Assert.eq(c278_describe(a), "zero");
+    Assert.eq(c278_describe(b), "big");
+    Assert.eq(c278_describe(d), "small");
+    Assert.eq(c278_describe(n), "none");
+
+    let payload = 0;
+    switch (b) {
+        Some(x) => {
+            payload = x;
+        }
+        None => Assert.fail("expected Some"),
+    }
+    Assert.eq(payload, 42);
+}
+
+@test
+@timeout(180000)
+fun union_nested(): void {
+    let a: Option<int> = Option.Some(0);
+    let b: Option<int> = Option.Some(5);
+    let n: Option<int> = Option.None;
+
+    Assert.eq(c27a_classify(c27a_Pair.Both(a, n)), "zero-left, empty-right");
+    Assert.eq(c27a_classify(c27a_Pair.Both(b, b)), "two values");
+    Assert.eq(c27a_classify(c27a_Pair.Both(n, n)), "both empty");
+    Assert.eq(c27a_classify(c27a_Pair.Neither), "neither");
+    Assert.eq(c27a_classify(c27a_Pair.Both(b, n)), "other");
+}
+
+@test
+@timeout(180000)
+fun union_hash_code(): void {
+    Assert.is_true(c278_Shape.Circle(5).hash_code() == c278_Shape.Circle(5).hash_code());
+    Assert.is_false(c278_Shape.Circle(5).hash_code() == c278_Shape.Circle(6).hash_code());
+    Assert.is_false(c278_Shape.Circle(5).hash_code() == c278_Shape.Empty.hash_code());
+    Assert.is_false(c278_Shape.Rect(3, 4).hash_code() == c278_Shape.Rect(4, 3).hash_code());
+}
+
+@test
+@timeout(180000)
+fun union_to_string(): void {
+    Assert.eq(c278_Shape.Circle(5).to_string(), "Circle(5)");
+    Assert.eq(c278_Shape.Rect(3, 4).to_string(), "Rect(width: 3, height: 4)");
+    Assert.eq(c278_Shape.Empty.to_string(), "Empty");
+
+    // Via the universal `object` type (tag dispatch through the object protocol).
+    let o: object = c278_Shape.Circle(9);
+    Assert.eq(o.to_string(), "Circle(9)");
+
+    Assert.eq(Option.Some(42).to_string(), "Some(42)");
+    let none: Option<int> = Option.None;
+    Assert.eq(none.to_string(), "None");
+}
+
+@test
+@timeout(180000)
+fun union_named_single_field(): void {
+    let a = c279_Box.Full(7);
+    let b = c279_Box.Full(value: 9);
+    Assert.eq(c279_take_box(a), 7);
+    Assert.eq(c279_take_box(b), 9);
+    Assert.eq(Json.serialize(a), "{\"type\":\"Full\",\"value\":7}");
+    Assert.eq(c279_take_pair(c279_Pair.Pos(1)), 1);
+    Assert.eq(c279_take_pair(c279_Pair.Named(x: 2)), 2);
+    Assert.eq(Json.serialize(c279_Pair.Pos(3)), "{\"type\":\"Pos\",\"_0\":3}");
+    Assert.eq(Json.serialize(c279_Pair.Named(4)), "{\"type\":\"Named\",\"x\":4}");
+}
+
+@test
+@timeout(180000)
+fun union_stack_multi_ref(): void {
+    Assert.eq(c27f_side(c27f_Either.Left("hi")), "L:hi");
+    Assert.eq(c27f_side(c27f_Either.Right("bye")), "R:bye");
+    Assert.eq(c27f_join(c27f_Pair.Both("x", "y")), "x|y");
+
+    let s: c27e_Outcome = c27e_Outcome.Success(0);
+    let f: c27e_Outcome = c27e_Outcome.Failure(1, "disk full");
+    Assert.eq(c27e_describe(s), "ok:0");
+    Assert.eq(c27e_describe(f), "fail:1:disk full");
+}

@@ -1,0 +1,44 @@
+// Strong ownership cycles need `@allow_cycle`, whether the back edge goes through a generic
+// argument, an interface, a tuple, or an inline value struct.
+
+class Node<T> {
+    public next: Option<Node<T>>;
+    public constructor() { this.next = Option.None; }
+}
+
+interface Handler {
+    borrow fun handle(): void;
+}
+
+// An interface-typed field could hold a back-reference: Owner -> Handler -> HandlerImpl -> Owner.
+class Owner {
+    handler: Option<Handler>;
+    public constructor() { this.handler = Option.None; }
+}
+
+class HandlerImpl : Handler {
+    owner: Option<Owner>;
+    public constructor() { this.owner = Option.None; }
+    public fun handle(): void {}
+}
+
+class Data {
+    r: (Data, int);
+}
+
+// C -> Holder -> Back -> C, even though Holder is an inline value type.
+struct Holder {
+    d: Back;
+}
+
+class Back {
+    back: Option<C>;
+}
+
+class C {
+    h: Holder;
+}
+
+fun main(): void {
+    let node = Node<int>();
+}

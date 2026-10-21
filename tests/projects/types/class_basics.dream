@@ -1,0 +1,122 @@
+import system.testing;
+import system;
+
+class c79_Point {
+    public x: int;
+    public y: int;
+}
+
+class c79_Rect {
+    public p1: c79_Point;
+    public p2: c79_Point;
+}
+
+class c70_Point<T> {
+    public x: T;
+    public y: T;
+
+    public constructor(x: T, y: T) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class c70_Pixel {
+    public r: int;
+    public g: int;
+
+    public constructor(r: int, g: int) {
+        this.r = r;
+        this.g = g;
+    }
+}
+
+// Primary constructor: header params become fields plus a synthesized constructor.
+class c1b3_Point(x: int, y: int);
+
+struct c1b3_Vec2(x: int, y: int);
+
+// Receiver modes are inferred from bodies: reads-only = borrow, writes/mutating-calls = unique.
+public class c1c9_IntStack {
+    items: int[];
+    count: int;
+
+    public constructor() {
+        this.items = Array.alloc<int>(16);
+        this.count = 0;
+    }
+
+    public fun push(v: int): void {
+        if this.count == this.items.length {
+            return;
+        }
+        this.items[this.count] = v;
+        this.count = this.count + 1;
+    }
+
+    public fun peek(): int {
+        return this.items[this.count - 1];
+    }
+
+    public fun depth(): int {
+        return this.count;
+    }
+}
+
+@test
+@timeout(180000)
+fun classes(): void {
+    let p1 = c79_Point();
+    p1.x = 10;
+    p1.y = 20;
+    let p2 = c79_Point();
+    p2.x = 30;
+    p2.y = 40;
+
+    let r = c79_Rect();
+    r.p1 = p1;
+    r.p2 = p2;
+
+    Assert.eq((r.p1.x).to_string(), "10");
+    Assert.eq((r.p1.y).to_string(), "20");
+    Assert.eq((r.p2.x).to_string(), "30");
+    Assert.eq((r.p2.y).to_string(), "40");
+
+    r.p1.x = 100;
+    Assert.eq((r.p1.x).to_string(), "100");
+    Assert.eq((p1.x).to_string(), "100");
+}
+
+@test
+@timeout(180000)
+fun class_arrays() {
+    let pts: c70_Point<int>[] = [c70_Point<int>(1, 2), c70_Point<int>(3, 4)];
+    Assert.eq((pts.length).to_string(), "2");
+    Assert.eq((pts[0].x).to_string(), "1");
+    Assert.eq((pts[1].y).to_string(), "4");
+
+    let px: c70_Pixel[] = [c70_Pixel(10, 20)];
+    Assert.eq((px[0].r).to_string(), "10");
+    Assert.eq((px[0].g).to_string(), "20");
+}
+
+@test
+@timeout(180000)
+fun primary_constructor() {
+    let p = c1b3_Point(3, 4);
+    Assert.eq((p.x).to_string(), "3");
+    Assert.eq((p.y).to_string(), "4");
+    let v = c1b3_Vec2(1, 2);
+    Assert.eq((v.x).to_string(), "1");
+    Assert.eq((v.y).to_string(), "2");
+}
+
+@test
+@timeout(180000)
+fun receiver_mode_inference(): void {
+    let s = c1c9_IntStack();
+    s.push(10);
+    s.push(20);
+    Assert.eq(s.peek().to_string(), "20");
+    Assert.eq(s.depth().to_string(), "2");
+}

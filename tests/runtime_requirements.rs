@@ -93,7 +93,9 @@ fn wasm_c_imports_do_not_add_native_embedding_exports_to_the_manifest() {
 
 #[test]
 fn local_native_callback_keeps_owner_without_c_imports_or_argument_capture() {
-    let (_dir, ir, _) = compile(include_str!("cases/native_callback_local.dream"));
+    let (_dir, ir, _) = compile(include_str!(
+        "fixtures/compiler/native_callback_local.dream"
+    ));
     assert!(ir.contains("call void @dream_thread_attach"));
     assert!(ir.contains("call void @dream_callback_owner_finish"));
     assert!(!ir.contains("call void @dream_process_capture_args"));

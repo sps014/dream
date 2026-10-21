@@ -1,0 +1,206 @@
+import system.testing;
+import system;
+
+// `break` and `continue` inside a pattern-switch arm act on the enclosing loop.
+async fun switch_arm_async_sum(values: int[]): int {
+    let total = 0;
+    for (let v in values) {
+        switch (Option.Some(v)) {
+            Some(x) => {
+                if x % 2 == 0 {
+                    continue;
+                }
+                if x > 7 {
+                    break;
+                }
+                total = total + x;
+            }
+            None => {}
+        }
+    }
+    return total;
+}
+
+fun c23a_pick(b: bool): string {
+    return switch (b) {
+        true => "yes",
+        false => "no",
+    };
+}
+
+enum c23c_Shape {
+    Circle(float),
+    Square,
+    Triangle,
+    Empty
+}
+
+fun c23c_grade(score: int): string {
+    return switch (score) {
+        90..100 => "A",
+        80..89 => "B",
+        70..79 => "C",
+        _ => "F",
+    };
+}
+
+fun c23c_is_vowel(c: char): bool {
+    return switch (c) {
+        'a' | 'e' | 'i' | 'o' | 'u' => true,
+        _ => false,
+    };
+}
+
+// A unit-variant or-pattern alongside a payload variant elsewhere in the same union.
+fun c23c_has_straight_edges(s: c23c_Shape): bool {
+    return switch (s) {
+        Square | Triangle => true,
+        Circle(_) | Empty => false,
+    };
+}
+
+enum c23d_E {
+    A(int),
+    B(int)
+}
+
+fun c23d_tag(e: c23d_E): int {
+    return switch (e) {
+        A(_) => 1,
+        B(_) => 2,
+    };
+}
+
+// A bare identifier arm that names no variant binds the whole subject and acts as a catch-all.
+fun c23d_f(e: c23d_E): int {
+    return switch (e) {
+        A(n) => n,
+        rest => c23d_tag(rest) + 100,
+    };
+}
+
+fun c284_take_opt(o: Option<int>): int {
+    return switch (o) {
+        Some(v) => v,
+        None => 0,
+    };
+}
+
+enum c23b_Inner {
+    A(int),
+    B
+}
+
+enum c23b_Outer {
+    Wrap(c23b_Inner),
+    Bare
+}
+
+// `Wrap(A(n))` + `Wrap(B)` cover all of `Wrap`, so no `_` arm is needed.
+fun c23b_describe(o: c23b_Outer): int {
+    return switch (o) {
+        Wrap(A(n)) => n,
+        Wrap(B) => -1,
+        Bare => 0,
+    };
+}
+
+@test
+@timeout(180000)
+async fun switch_arm_loop_control(): void {
+    let seen = List<int>();
+    for (let v in [1, 2, 3, 4, 5]) {
+        switch (Option.Some(v)) {
+            Some(x) => {
+                if x == 2 {
+                    continue;
+                }
+                if x == 4 {
+                    break;
+                }
+                seen.push(x);
+            }
+            None => {}
+        }
+    }
+    Assert.eq(seen.length, 2);
+    Assert.eq(seen[0], 1);
+    Assert.eq(seen[1], 3);
+
+    let visited = 0;
+    let i = 0;
+    while i < 10 {
+        i = i + 1;
+        switch (i) {
+            2 => {
+                continue;
+            }
+            5 => {
+                break;
+            }
+            _ => {
+                visited = visited + 1;
+            }
+        }
+    }
+    Assert.eq(i, 5);
+    Assert.eq(visited, 3);
+
+    Assert.eq(switch_arm_async_sum([1, 2, 3, 4, 5, 9, 11]).await, 9);
+}
+
+@test
+@timeout(180000)
+fun switch_case_statements(): void {
+    Assert.eq(c23a_pick(true), "yes");
+    Assert.eq(c23a_pick(false), "no");
+
+    let trace = "";
+    let flag = false;
+    switch (flag) {
+        case true:
+            trace = trace + "t";
+        default:
+            trace = trace + "d";
+    }
+
+    let x = -1;
+    switch (x) {
+        case -1:
+            trace = trace + "neg";
+        case 01:
+            trace = trace + "one";
+        default:
+            trace = trace + "def";
+    }
+    Assert.eq(trace, "dneg");
+}
+
+@test
+@timeout(180000)
+fun switch_range_or_patterns(): void {
+    Assert.eq(c23c_grade(95), "A");
+    Assert.eq(c23c_grade(82), "B");
+    Assert.eq(c23c_grade(71), "C");
+    Assert.eq(c23c_grade(10), "F");
+    Assert.is_true(c23c_is_vowel('e'));
+    Assert.is_false(c23c_is_vowel('z'));
+    Assert.is_true(c23c_has_straight_edges(c23c_Shape.Triangle));
+    Assert.is_false(c23c_has_straight_edges(c23c_Shape.Circle(2.0)));
+}
+
+@test
+@timeout(180000)
+fun switch_bindings(): void {
+    Assert.eq(c23d_f(c23d_E.A(5)), 5);
+    Assert.eq(c23d_f(c23d_E.B(6)), 102);
+
+    let a: Option<int> = None;
+    let b: Option<int> = Some(7);
+    Assert.eq(c284_take_opt(a), 0);
+    Assert.eq(c284_take_opt(b), 7);
+
+    Assert.eq(c23b_describe(c23b_Outer.Wrap(c23b_Inner.A(42))), 42);
+    Assert.eq(c23b_describe(c23b_Outer.Wrap(c23b_Inner.B)), -1);
+    Assert.eq(c23b_describe(c23b_Outer.Bare), 0);
+}

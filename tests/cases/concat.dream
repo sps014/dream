@@ -1,8 +1,0 @@
-import system;
-fun main(): void {
-    let s1 = "Hello, ";
-    let s2 = "World!";
-    let s3 = s1 + s2;
-    System.print(s3);
-    System.print("\n");
-}

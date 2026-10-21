@@ -28,12 +28,33 @@ class Sensor {
     }
 }
 
+// An `unowned` self-reference does not keep its object alive, so no cycle annotation is needed.
+class SelfLoop {
+    public unowned next: SelfLoop;
+    public value: int;
+
+    public constructor() {
+        this.next = this;
+        this.value = 42;
+    }
+
+    del() {
+        System.println("self loop dropped");
+    }
+}
+
+fun unowned_self_cycle(): void {
+    let node = SelfLoop();
+    System.println(node.next.value);
+}
+
 fun holder_scope(borrow e: Engine): void {
     let s = Sensor(e, "a");
     System.println(s.engine.id);
 }
 
 fun main() {
+    unowned_self_cycle();
     let e = Engine(7);
     holder_scope(e);
     // Holder destroyed above; the engine outlives it and must still read cleanly.

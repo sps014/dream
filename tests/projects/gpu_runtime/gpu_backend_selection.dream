@@ -132,3 +132,408 @@ async fun gpu_backend_selection(): void {
         }
     }
 }
+
+fun half_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun half_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println("SKIP gpu_float16_buffers on " + half_label(backend) + ": " + reason);
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println("SKIP gpu_float16_buffers on " + half_label(backend) + ": " + reason);
+        }
+        Err(e) => {
+            Assert.fail("gpu_float16_buffers on " + half_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun half_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+// Half-precision `a * x + y`, its square root, and the result widened to `float`.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64)
+fun half_axpy(
+    @readonly x: GpuBuffer<float16>,
+    @readonly y: GpuBuffer<float16>,
+    out: GpuBuffer<float16>,
+    roots: GpuBuffer<float16>,
+    wide: GpuBuffer<float>,
+    a: float16,
+    n: int
+): void {
+    let i = global_id().x;
+    if i >= n {
+        return;
+    }
+    let r = a * x[i] + y[i];
+    out[i] = r;
+    roots[i] = GpuMath.sqrt(x[i]);
+    let widened: float = r;
+    wide[i] = widened * 0.5f;
+}
+
+@test
+@timeout(180000)
+async fun gpu_float16_buffers(): void {
+    // An odd count makes the buffers' byte sizes not a multiple of 4.
+    let n = 257;
+    let xs = Array.alloc<float16>(n);
+    let ys = Array.alloc<float16>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        xs[i] = (float16)((float)(i % 64) * 0.125f);
+        ys[i] = (float16)((float)(i % 5) * 0.5f - 1.0f);
+    }
+    for (let backend in GpuShaders.backends()) {
+        switch (half_device(backend).await) {
+            Some(device) => {
+                let label = half_label(backend);
+                // Buffers of float16 need no device feature; only shaders that use it do.
+                let x = half_ok(device.buffer_from(xs), "x");
+                let uploaded = half_ok(x.read().await, "read x on " + label);
+                Assert.eq(uploaded.length, n);
+                for (let i = 0; i < n; i = i + 1) {
+                    Assert.eq(uploaded[i], xs[i]);
+                }
+
+                if !device.supports(GpuFeature.Float16) {
+                    System.println("SKIP gpu_float16_buffers shaders on " + label + ": no Float16");
+                    continue;
+                }
+                let y = half_ok(device.buffer_from(ys), "y");
+                let out = half_ok(device.buffer_alloc<float16>(n), "out");
+                let roots = half_ok(device.buffer_alloc<float16>(n), "roots");
+                let wide = half_ok(device.buffer_alloc<float>(n), "wide");
+                half_ok(
+                    GpuShaders.half_axpy.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        x,
+                        y,
+                        out,
+                        roots,
+                        wide,
+                        2.0h,
+                        n
+                    ).await,
+                    "half_axpy on " + label
+                );
+
+                let results = half_ok(out.read().await, "read out on " + label);
+                let square_roots = half_ok(roots.read().await, "read roots on " + label);
+                let halves = half_ok(wide.read().await, "read wide on " + label);
+                for (let i = 0; i < n; i = i + 1) {
+                    // Every input is a multiple of 1/8 below 8, so the half results are exact.
+                    let expected = 2.0h * xs[i] + ys[i];
+                    Assert.eq(results[i], expected);
+                    Assert.eq(halves[i], (float)expected * 0.5f);
+                    let root = Math.sqrt((double)xs[i]);
+                    Assert.approx((double)square_roots[i], root, 1e-3d * (1.0d).max(root));
+                }
+                System.println(label + " float16 buffers and half arithmetic match the CPU");
+            }
+            None => {}
+        }
+    }
+}
+
+// Three shaders with 12 storage buffers together, more than any WebGPU device binds per stage.
+// Each pipeline binds only its own shader's 4, so every one of them runs.
+
+fun layouts_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+async fun layouts_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_pipeline_layouts on " + layouts_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_pipeline_layouts on " + layouts_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail("gpu_pipeline_layouts on " + layouts_label(backend) + ": " + e.message());
+        }
+    }
+    return Option.None;
+}
+
+fun layouts_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64)
+fun add_three(
+    @readonly a: GpuBuffer<float>,
+    @readonly b: GpuBuffer<float>,
+    @readonly c: GpuBuffer<float>,
+    out: GpuBuffer<float>
+): void {
+    let i = global_id().x;
+    out[i] = a[i] + b[i] + c[i];
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64)
+fun multiply_three(
+    @readonly a: GpuBuffer<float>,
+    @readonly b: GpuBuffer<float>,
+    @readonly c: GpuBuffer<float>,
+    out: GpuBuffer<float>
+): void {
+    let i = global_id().x;
+    out[i] = a[i] * b[i] * c[i];
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(64)
+fun largest_of_three(
+    @readonly a: GpuBuffer<float>,
+    @readonly b: GpuBuffer<float>,
+    @readonly c: GpuBuffer<float>,
+    out: GpuBuffer<float>
+): void {
+    let i = global_id().x;
+    out[i] = GpuMath.max(a[i], GpuMath.max(b[i], c[i]));
+}
+
+@test
+@timeout(180000)
+async fun gpu_pipeline_layouts(): void {
+    let n = 64;
+    let xs = Array.alloc<float>(n);
+    let ys = Array.alloc<float>(n);
+    let zs = Array.alloc<float>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        xs[i] = (float)i;
+        ys[i] = 2.0f;
+        zs[i] = (float)(n - i);
+    }
+    for (let backend in GpuShaders.backends()) {
+        switch (layouts_device(backend).await) {
+            Some(device) => {
+                let label = layouts_label(backend);
+                let a = layouts_ok(device.buffer_from(xs), "a");
+                let b = layouts_ok(device.buffer_from(ys), "b");
+                let c = layouts_ok(device.buffer_from(zs), "c");
+                let sums = layouts_ok(device.buffer_alloc<float>(n), "sums");
+                let products = layouts_ok(device.buffer_alloc<float>(n), "products");
+                let largest = layouts_ok(device.buffer_alloc<float>(n), "largest");
+                let threads = GpuDispatch.threads_1d(n);
+
+                layouts_ok(
+                    GpuShaders.add_three.dispatch(device, threads, a, b, c, sums).await,
+                    "add_three on " + label
+                );
+                layouts_ok(
+                    GpuShaders.multiply_three.dispatch(device, threads, a, b, c, products).await,
+                    "multiply_three on " + label
+                );
+                layouts_ok(
+                    GpuShaders.largest_of_three.dispatch(device, threads, a, b, c, largest).await,
+                    "largest_of_three on " + label
+                );
+
+                let sum_values = layouts_ok(sums.read().await, "read sums on " + label);
+                let product_values = layouts_ok(products.read().await, "read products on " + label);
+                let largest_values = layouts_ok(largest.read().await, "read largest on " + label);
+                for (let i = 0; i < n; i = i + 1) {
+                    Assert.eq(sum_values[i], (float)i + 2.0f + (float)(n - i));
+                    Assert.eq(product_values[i], (float)i * 2.0f * (float)(n - i));
+                    let expected = (float)i;
+                    if (float)(n - i) > expected {
+                        expected = (float)(n - i);
+                    }
+                    if expected < 2.0f {
+                        expected = 2.0f;
+                    }
+                    Assert.eq(largest_values[i], expected);
+                }
+                System.println(label + " runs three shaders binding 12 storage buffers together");
+            }
+            None => {}
+        }
+    }
+}
+
+fun reduction_label(backend: GpuBackend): string {
+    let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
+    let index: int = backend;
+    return names[index];
+}
+
+// Opens `backend`, or prints why this machine cannot run it and returns None.
+async fun reduction_device(backend: GpuBackend): Option<GpuDevice> {
+    switch (GpuDevice.create(backend).await) {
+        Ok(device) => {
+            return Option.Some(device);
+        }
+        Err(GpuError.BackendUnavailable(reason)) => {
+            System.println(
+                "SKIP gpu_workgroup_reduction on " + reduction_label(backend) + ": " + reason
+            );
+        }
+        Err(GpuError.NoDevice(reason)) => {
+            System.println(
+                "SKIP gpu_workgroup_reduction on " + reduction_label(backend) + ": " + reason
+            );
+        }
+        Err(e) => {
+            Assert.fail(
+                "gpu_workgroup_reduction on " + reduction_label(backend) + ": " + e.message()
+            );
+        }
+    }
+    return Option.None;
+}
+
+fun reduction_ok<T>(result: Result<T, GpuError>, what: string): T {
+    switch (result) {
+        Ok(value) => {
+            return value;
+        }
+        Err(e) => {
+            Assert.fail(what + ": " + e.message());
+            return result.unwrap();
+        }
+    }
+}
+
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(256)
+fun workgroup_sum(@readonly input: GpuBuffer<uint>, out: GpuBuffer<uint>, n: int): void {
+    let partial = workgroup_array<uint>(256);
+    let i = global_id().x;
+    let lane = local_id().x;
+    partial[lane] = i < n ? input[i] : 0u;
+    workgroup_barrier();
+    let stride = 128;
+    while stride > 0 {
+        if lane < stride {
+            partial[lane] = partial[lane] + partial[lane + stride];
+        }
+        workgroup_barrier();
+        stride = stride / 2;
+    }
+    if lane == 0 {
+        GpuAtomic.add(out, 0, partial[0]);
+    }
+}
+
+// Each subgroup adds its lanes in registers, then one elected lane per subgroup publishes the
+// subgroup's total, so the atomic sees one add per subgroup instead of one per thread.
+@gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.WebGpu)
+@compute(256)
+fun subgroup_sum(@readonly input: GpuBuffer<uint>, out: GpuBuffer<uint>, n: int): void {
+    let i = global_id().x;
+    let value = i < n ? input[i] : 0u;
+    let total = subgroup_add(value);
+    let active = subgroup_count(value != 0u);
+    if subgroup_elect() {
+        GpuAtomic.add(out, 0, total);
+        GpuAtomic.add(out, 1, active);
+        GpuAtomic.max(out, 2, subgroup_size());
+    }
+}
+
+@test
+@timeout(180000)
+async fun gpu_workgroup_reduction(): void {
+    let n = 5000;
+    let values = Array.alloc<uint>(n);
+    let expected = 0u;
+    for (let i = 0; i < n; i = i + 1) {
+        values[i] = (uint)(i % 97);
+        expected = expected + values[i];
+    }
+    let nonzero = 0u;
+    for (let v in values) {
+        if v != 0u {
+            nonzero = nonzero + 1u;
+        }
+    }
+    for (let backend in GpuShaders.backends()) {
+        switch (reduction_device(backend).await) {
+            Some(device) => {
+                let label = reduction_label(backend);
+                let input = reduction_ok(device.buffer_from(values), "input");
+
+                let sums = reduction_ok(device.buffer_alloc<uint>(1), "sums");
+                reduction_ok(
+                    GpuShaders.workgroup_sum.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        input,
+                        sums,
+                        n
+                    ).await,
+                    "workgroup_sum on " + label
+                );
+                Assert.eq(reduction_ok(sums.read().await, "read")[0], expected);
+
+                if !device.supports(GpuFeature.Subgroups) {
+                    System.println(
+                        "SKIP gpu_workgroup_reduction subgroups on " + label + ": not supported"
+                    );
+                    continue;
+                }
+                let stats = reduction_ok(device.buffer_alloc<uint>(3), "stats");
+                reduction_ok(
+                    GpuShaders.subgroup_sum.dispatch(
+                        device,
+                        GpuDispatch.threads_1d(n),
+                        input,
+                        stats,
+                        n
+                    ).await,
+                    "subgroup_sum on " + label
+                );
+                let result = reduction_ok(stats.read().await, "read stats");
+                Assert.eq(result[0], expected);
+                Assert.eq(result[1], nonzero);
+                Assert.is_true(result[2] >= 4u && result[2] <= 128u);
+                System.println(label + " subgroup size " + result[2].to_string());
+            }
+            None => {}
+        }
+    }
+}

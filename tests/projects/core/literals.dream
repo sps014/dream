@@ -1,0 +1,107 @@
+import system.testing;
+import system;
+import system.collections;
+import system.text;
+
+enum c97_Color {
+    Red,
+    Green,
+    Blue
+}
+
+class c97_P {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+}
+
+/**
+ * JSDoc-style multi-line comment.
+ * Describes the test.
+ * @returns nothing
+ */
+@test
+@timeout(180000)
+fun numeric_literals(): void {
+    Assert.eq((0x10).to_string(), "16");
+    Assert.eq((0b101).to_string(), "5");
+    Assert.eq((0o10).to_string(), "8");
+    let x: float = 1e2;
+    Assert.eq(((int)x).to_string(), "100");
+
+    let d: double = 3.14;
+    let zero: double = 0;
+    Assert.eq(d.to_string(), "3.14");
+    Assert.eq(zero.to_string(), "0");
+
+    /* a plain block
+    comment spanning
+    multiple lines */
+    let answer: int = 42; // a trailing line comment
+    Assert.eq(answer, 42);
+}
+
+@test
+@timeout(180000)
+fun literal_methods(): void {
+    Assert.eq("Hello, World".substring(0, 5), "Hello");
+    Assert.eq(15.clamp(0, 10), 10);
+    Assert.eq(true.to_int(), 1);
+    Assert.is_true('A'.is_alpha());
+    Assert.eq([1, 2, 3].length, 3);
+    let y = "hi";
+    Assert.eq($"x{y}".byte_size(), 6);
+    Assert.eq($"x is {"hi"}", "x is hi");
+}
+
+@test
+@timeout(180000)
+fun array_literals(): void {
+    let xs: int[] = [];
+    Assert.eq(xs.length, 0);
+    let ys: string[] = [];
+    Assert.eq(ys.length, 0);
+
+    let grid: int[][] = [[1, 2, 3], [4, 5, 6]];
+    Assert.eq(grid.length, 2);
+    Assert.eq(grid[0].length, 3);
+    Assert.eq(grid[1][2], 6);
+
+    let words: string[][] = [["hello", "world"], ["foo"]];
+    Assert.eq(words[0][1], "world");
+    Assert.eq(words[1][0], "foo");
+}
+
+// Concatenation and interpolation stringify a C-style enum by variant name, not discriminant.
+@test
+@timeout(180000)
+fun concat_enum_name(): void {
+    let c = c97_Color.Green;
+    Assert.eq(c.to_string(), "Green");
+    Assert.eq("c=" + c, "c=Green");
+    Assert.eq($"c={c}", "c=Green");
+    Assert.eq("n=" + 42 + " b=" + true + " p=" + c97_P(3), "n=42 b=true p=c97_P { x: 3 }");
+}
+
+@test
+@timeout(180000)
+fun length_consistent(): void {
+    let a = Array.alloc<int>(4);
+    Assert.eq(a.length, 4);
+
+    let s = "hello";
+    Assert.eq(s.length, 5);
+
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+    Assert.eq(xs.length, 3);
+
+    let m = Map<string, int>();
+    m["a"] = 1;
+    m["b"] = 2;
+    Assert.eq(m.length, 2);
+}

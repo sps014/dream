@@ -190,7 +190,7 @@ public fun clear(): void where T: unmanaged
 
 ## `insert`
 
-Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.
+Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.
 
 ```dream
 public fun insert(index: int, value: T): bool

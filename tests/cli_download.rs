@@ -16,7 +16,11 @@ fn successful(output: Output) -> String {
 fn cli_parsing_is_rejected_on_web_and_node() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("main.dream");
-    std::fs::write(&source, include_str!("cases/cli_wasm_unsupported.dream")).unwrap();
+    std::fs::write(
+        &source,
+        include_str!("cases/support/cli_wasm_unsupported.dream"),
+    )
+    .unwrap();
     for target in ["web", "node"] {
         let output = Command::new(env!("CARGO_BIN_EXE_dream"))
             .arg(format!("--{target}"))

@@ -1,0 +1,1156 @@
+import system;
+import system.testing;
+import system.collections;
+
+// Destructor and call-order log for tests that do not measure live objects.
+let iso_log: string = "";
+
+// Pre-sized integer event log for tests that also measure `Debug.live_objects`: pushing within
+// capacity never allocates, so the log cannot disturb the measurement.
+let iso_events: List<int> = List<int>(64);
+
+fun iso_events_text(): string {
+    let text = "";
+    for (let event in iso_events) {
+        text = text + event.to_string() + ";";
+    }
+    return text;
+}
+
+// --- arc_discarded_result: discarded call results are released, globals are not. ---
+
+let iso_discard_destroyed: int = 0;
+
+class iso_DiscardItem {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+    del() { iso_discard_destroyed = iso_discard_destroyed + 1; }
+}
+
+let iso_discard_resident = iso_DiscardItem(7);
+
+@noinline
+fun iso_discard_make(): iso_DiscardItem { return iso_DiscardItem(1); }
+
+@noinline
+fun iso_discard_forward(item: iso_DiscardItem): iso_DiscardItem { return item; }
+
+@noinline
+fun iso_discard_exercise(): int {
+    iso_discard_make();
+    let factory: fun(): iso_DiscardItem = iso_discard_make;
+    factory();
+    iso_discard_forward(iso_discard_resident);
+    return iso_discard_resident.value;
+}
+
+@test
+fun iso_arc_discarded_result(): void {
+    let before = iso_discard_destroyed;
+    Assert.eq(iso_discard_exercise(), 7);
+    Assert.eq(iso_discard_destroyed - before, 2);
+    Assert.eq(iso_discard_resident.value, 7);
+}
+
+// --- arc_private_graph_region: private graphs are reclaimed whether discarded, kept, or cycled. ---
+
+@allow_cycle
+class iso_GraphNode {
+    public left: Option<iso_GraphNode>;
+    public right: Option<iso_GraphNode>;
+
+    public constructor(left: Option<iso_GraphNode>, right: Option<iso_GraphNode>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+fun iso_graph_make(depth: int): Option<iso_GraphNode> {
+    let none: Option<iso_GraphNode> = Option.None;
+    if depth <= 0 {
+        return none;
+    }
+    return Option.Some(iso_GraphNode(iso_graph_make(depth - 1), iso_graph_make(depth - 1)));
+}
+
+fun iso_graph_count(tree: Option<iso_GraphNode>): int {
+    switch (tree) {
+        Some(node) => { return 1 + iso_graph_count(node.left) + iso_graph_count(node.right); }
+        None => { return 0; }
+    }
+}
+
+fun iso_graph_discarded(rounds: int): int {
+    let built = 0;
+    let i = 0;
+    while i < rounds {
+        switch (iso_graph_make(6)) {
+            Some(root) => { built = built + 1; }
+            None => { built = built - 1; }
+        }
+        i = i + 1;
+    }
+    return built;
+}
+
+fun iso_graph_kept(): int {
+    let keep = List<Option<iso_GraphNode>>(2);
+    keep.push(iso_graph_make(4));
+    keep.push(iso_graph_make(3));
+    return iso_graph_count(keep[0]) + iso_graph_count(keep[1]);
+}
+
+fun iso_graph_cycled(): int {
+    switch (iso_graph_make(3)) {
+        Some(root) => {
+            root.right = Option.Some(root);
+            let result = iso_graph_count(root.left);
+            root.right = Option.None;
+            return result;
+        }
+        None => { return -1; }
+    }
+}
+
+@test
+fun iso_arc_private_graph_region(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_graph_discarded(5), 5);
+    Assert.eq(iso_graph_kept(), 22);
+    Assert.eq(iso_graph_cycled(), 3);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- arc_private_initialization: constructors with side effects still finalize. ---
+
+@allow_cycle
+class iso_PrivateTree {
+    public left: Option<iso_PrivateTree>;
+    public right: Option<iso_PrivateTree>;
+    public constructor(left: Option<iso_PrivateTree>, right: Option<iso_PrivateTree>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+fun iso_private_build(depth: int): Option<iso_PrivateTree> {
+    if depth == 0 { return Option.None; }
+    return Option.Some(iso_PrivateTree(iso_private_build(depth - 1), iso_private_build(depth - 1)));
+}
+
+fun iso_private_count(tree: Option<iso_PrivateTree>): int {
+    switch (tree) {
+        Some(node) => { return 1 + iso_private_count(node.left) + iso_private_count(node.right); }
+        None => { return 0; }
+    }
+}
+
+fun iso_private_tree(): int {
+    let tree = iso_private_build(6);
+    return iso_private_count(tree);
+}
+
+fun iso_private_escaped(): int {
+    let keep = List<Option<iso_PrivateTree>>();
+    keep.push(iso_private_build(4));
+    return iso_private_count(keep[0]);
+}
+
+@allow_cycle
+class iso_CallbackTree {
+    public next: Option<iso_CallbackTree>;
+    public constructor() {
+        this.next = Option.None;
+        iso_log = iso_log + "callback;";
+    }
+    del() { iso_log = iso_log + "finalized;"; }
+}
+
+fun iso_private_callback(): void {
+    let node = iso_CallbackTree();
+    node.next = Option.Some(node);
+    node.next = Option.None;
+}
+
+@test
+fun iso_arc_private_initialization(): void {
+    iso_log = "";
+    Assert.eq(iso_private_tree(), 63);
+    Assert.eq(iso_private_escaped(), 15);
+    iso_private_callback();
+    Assert.eq(iso_log, "callback;finalized;");
+    iso_log = "";
+}
+
+// --- arc_string_field_store: a concat stored straight into a field adopts its +1. ---
+
+class iso_Tagged {
+    public tag: string;
+    public note: string;
+
+    public constructor(a: string, b: string) {
+        this.tag = a + "/" + b;
+        let n = a + "-" + b;
+        this.note = n;
+    }
+
+    public fun retag(a: string, b: string): void {
+        this.tag = a + ":" + b;
+    }
+}
+
+class iso_Counted {
+    public label: string;
+
+    public constructor(n: int) {
+        this.label = "n=" + n.to_string();
+    }
+}
+
+fun iso_tagged_churn(): int {
+    let t = iso_Tagged("x", "y");
+    t.retag("p", "q");
+    let c = iso_Counted(t.tag.length);
+    return t.tag.length + t.note.length + c.label.length;
+}
+
+@test
+fun iso_arc_string_field_store(): void {
+    let w = 0;
+    while w < 20 {
+        iso_tagged_churn();
+        w = w + 1;
+    }
+    let base = Debug.live_objects;
+    let i = 0;
+    while i < 100 {
+        iso_tagged_churn();
+        i = i + 1;
+    }
+    Assert.eq(Debug.live_objects - base, 0L);
+
+    let t = iso_Tagged("x", "y");
+    Assert.eq(t.tag, "x/y");
+    Assert.eq(t.note, "x-y");
+    t.retag("p", "q");
+    Assert.eq(t.tag, "p:q");
+    Assert.eq(iso_Counted(7).label, "n=7");
+}
+
+// --- struct_container_rc: a value struct owning a reference, embedded in each container kind. ---
+
+class iso_ContainerTracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        iso_events.push(-this.id);
+    }
+}
+
+struct iso_ContainerRef {
+    public t: iso_ContainerTracked;
+
+    public constructor(t: iso_ContainerTracked) {
+        this.t = t;
+    }
+
+    public fun id(): int {
+        return this.t.id;
+    }
+}
+
+class iso_ContainerWrap {
+    public r: iso_ContainerRef;
+
+    public constructor(r: iso_ContainerRef) {
+        this.r = r;
+    }
+}
+
+enum iso_ContainerOpt {
+    Some(iso_ContainerRef),
+    None,
+}
+
+fun iso_container_in_class() {
+    let w = iso_ContainerWrap(iso_ContainerRef(iso_ContainerTracked(1)));
+    iso_events.push(w.r.id());
+}
+
+fun iso_container_in_array() {
+    let xs = [iso_ContainerRef(iso_ContainerTracked(2)), iso_ContainerRef(iso_ContainerTracked(3))];
+    iso_events.push(xs[0].id());
+    iso_events.push(xs[1].id());
+}
+
+fun iso_container_in_union() {
+    let o = iso_ContainerOpt.Some(iso_ContainerRef(iso_ContainerTracked(4)));
+    let r = switch (o) {
+        Some(rf) => rf.id(),
+        None => 0,
+    };
+    iso_events.push(r);
+}
+
+@test
+fun iso_struct_container_rc(): void {
+    iso_events.clear();
+    let base = Debug.live_objects;
+    iso_container_in_class();
+    iso_container_in_array();
+    iso_container_in_union();
+    Assert.eq(Debug.live_objects - base, 0L);
+    Assert.eq(iso_events_text(), "1;-1;2;3;-2;-3;-4;4;");
+}
+
+// --- destructor_typed_generic: generic destructors run per instantiation; `<Class>_del` is a
+// plain function, not a destructor. ---
+
+let iso_typed_destroyed: int = 0;
+
+class iso_TypedBox<T> {
+    public value: T;
+    public constructor(value: T) { this.value = value; }
+    del() { iso_typed_destroyed = iso_typed_destroyed + 1; }
+}
+
+class iso_Plain {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+fun iso_Plain_del(item: iso_Plain): void { iso_typed_destroyed = iso_typed_destroyed + item.value; }
+
+@noinline
+fun iso_typed_exercise(): string {
+    let number = iso_TypedBox<int>(42);
+    let text = iso_TypedBox<string>("typed");
+    let plain = iso_Plain(7);
+    return number.value.to_string() + " " + text.value + " " + plain.value.to_string();
+}
+
+@test
+fun iso_destructor_typed_generic(): void {
+    iso_typed_destroyed = 0;
+    let before = Debug.live_objects;
+    Assert.eq(iso_typed_exercise(), "42 typed 7");
+    Assert.eq(iso_typed_destroyed, 2);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- param_modes_borrow: inferred borrowed sink parameters keep ARC destruction timing. ---
+
+@allow_cycle
+class iso_ModeNode {
+    public value: int;
+    public next: Option<iso_ModeNode>;
+
+    public constructor(value: int, next: Option<iso_ModeNode>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+class iso_ModeHolder {
+    public node: iso_ModeNode;
+
+    public constructor(node: iso_ModeNode) {
+        this.node = node;
+    }
+}
+
+class iso_Noisy {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        iso_log = iso_log + "del " + this.id.to_string() + ";";
+    }
+}
+
+fun iso_mode_churn(): int {
+    let a = iso_ModeNode(7, Option.None);
+    let b = iso_ModeNode(8, Option.Some(a));
+    return b.value;
+}
+
+fun iso_mode_value_of(n: iso_ModeNode): int {
+    return n.value;
+}
+
+// Forwarded at its last use: both frames must agree on the mode.
+fun iso_mode_twice(n: iso_ModeNode): int {
+    return iso_mode_value_of(n) + iso_mode_value_of(n);
+}
+
+fun iso_mode_outer(n: iso_ModeNode): int {
+    return iso_mode_twice(n);
+}
+
+// Overwrites the slot that owns the argument before reading it.
+fun iso_mode_replace_then_read(h: iso_ModeHolder, n: iso_ModeNode): int {
+    h.node = iso_ModeNode(100, Option.None);
+    let x = iso_mode_churn();
+    return n.value + x;
+}
+
+fun iso_mode_noisy_id(n: iso_Noisy): int {
+    return n.id;
+}
+
+fun iso_mode_label(s: string): int {
+    return s.length;
+}
+
+@test
+fun iso_param_modes_borrow(): void {
+    let before = Debug.live_objects;
+
+    // A fresh temporary handed over at its last use is freed by the callee's exit.
+    let v = iso_mode_value_of(iso_ModeNode(5, Option.None));
+    Assert.eq(Debug.live_objects - before, 0L);
+    Assert.eq(v, 5);
+
+    let n = iso_ModeNode(3, Option.None);
+    Assert.eq(iso_mode_outer(n), 6);
+    Assert.eq(iso_mode_outer(iso_ModeNode(4, Option.None)), 8);
+    Assert.eq(Debug.live_objects - before, 0L);
+
+    let h = iso_ModeHolder(iso_ModeNode(9, Option.None));
+    Assert.eq(iso_mode_replace_then_read(h, h.node), 17);
+    Assert.eq(h.node.value, 100);
+
+    // `del` runs when the sink parameter dies, before the caller's next statement.
+    iso_log = "";
+    let first = iso_mode_noisy_id(iso_Noisy(1));
+    iso_log = iso_log + first.to_string() + ";after 1;";
+    let keep = iso_Noisy(2);
+    let second = iso_mode_noisy_id(keep);
+    iso_log = iso_log + second.to_string() + ";after 2;";
+    Assert.eq(iso_log, "del 1;1;after 1;del 2;2;after 2;");
+    iso_log = "";
+
+    let s = "hello";
+    let total = 0;
+    let i = 0;
+    while i < 3 {
+        total = total + iso_mode_label(s) + iso_mode_label("abc");
+        i = i + 1;
+    }
+    Assert.eq(total, 24);
+}
+
+// --- interface_effect_owner_snapshot: a snapshot survives owner mutation through dispatch. ---
+
+class iso_EffectHolder {
+    public value: string;
+    public constructor(value: string) { this.value = value; }
+}
+
+interface iso_Mutator {
+    fun change(borrow holder: iso_EffectHolder): void;
+}
+
+class iso_Replace: iso_Mutator {
+    @noinline
+    public fun change(borrow holder: iso_EffectHolder): void {
+        holder.value = "replacement";
+        let reuse = string.clone("trash");
+        iso_log = iso_log + reuse.length.to_string() + ";";
+    }
+}
+
+class iso_Unchanged: iso_Mutator {
+    public fun change(borrow holder: iso_EffectHolder): void {}
+}
+
+@noinline
+fun iso_effect_dispatch(borrow op: iso_Mutator, borrow holder: iso_EffectHolder): void { op.change(holder); }
+
+@noinline
+fun iso_effect_wrapped(borrow op: iso_Mutator, borrow holder: iso_EffectHolder): void { iso_effect_dispatch(op, holder); }
+
+@noinline
+fun iso_effect_snapshot(borrow op: iso_Mutator, borrow holder: iso_EffectHolder): int {
+    let previous = holder.value;
+    iso_effect_wrapped(op, holder);
+    return previous.length;
+}
+
+@allow_cycle
+class iso_EffectOnDrop {
+    op: iso_Mutator;
+    holder: iso_EffectHolder;
+    public constructor(borrow op: iso_Mutator, borrow holder: iso_EffectHolder) {
+        this.op = op;
+        this.holder = holder;
+    }
+    del() { iso_effect_wrapped(this.op, this.holder); }
+}
+
+@noinline
+fun iso_effect_destructor_snapshot(borrow op: iso_Mutator, borrow holder: iso_EffectHolder): int {
+    let previous = holder.value;
+    if true { let _cleanup = iso_EffectOnDrop(op, holder); }
+    return previous.length;
+}
+
+@test
+fun iso_interface_effect_owner_snapshot(): void {
+    iso_log = "";
+    let replace = iso_Replace();
+    let unchanged = iso_Unchanged();
+    let holder = iso_EffectHolder(string.clone("original"));
+    Assert.eq(iso_effect_snapshot(replace, holder), 8);
+    Assert.eq(holder.value.length, 11);
+    Assert.eq(iso_effect_snapshot(unchanged, holder), 11);
+    holder.value = string.clone("original");
+    Assert.eq(iso_effect_destructor_snapshot(replace, holder), 8);
+    Assert.eq(holder.value.length, 11);
+    Assert.eq(iso_log, "5;5;");
+    iso_log = "";
+}
+
+// --- value_temporary_sink: a temporary value struct passed to a sink is released once. ---
+
+class iso_SinkItem {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+    del() { iso_events.push(-this.id); }
+}
+
+struct iso_SinkHolder {
+    public item: Option<iso_SinkItem>;
+    public constructor(item: Option<iso_SinkItem>) { this.item = item; }
+}
+
+@noinline
+fun iso_sink_make_holder(): iso_SinkHolder {
+    return iso_SinkHolder(Option.Some(iso_SinkItem(7)));
+}
+
+@noinline
+fun iso_sink_consume(h: iso_SinkHolder): Result<iso_SinkItem, int> {
+    let id = h.item.unwrap().id;
+    return Result.Ok(iso_SinkItem(id + 1));
+}
+
+fun iso_sink_run(): void {
+    let result = iso_sink_consume(iso_sink_make_holder());
+    iso_events.push(result.unwrap().id);
+}
+
+@test
+fun iso_value_temporary_sink(): void {
+    iso_events.clear();
+    let before = Debug.live_objects;
+    iso_sink_run();
+    Assert.eq(Debug.live_objects - before, 0L);
+    Assert.eq(iso_events_text(), "-7;8;-8;");
+}
+
+// --- weak_handle_lifecycle: a weak handle captured by a closure outlives its target. ---
+
+class iso_Session {
+    public id: int;
+    public constructor(id: int) {
+        this.id = id;
+    }
+}
+
+fun iso_weak_make_and_drop(): fun(): Option<iso_Session> {
+    let session = iso_Session(1);
+    let weak observer = session;
+    return () => observer;
+}
+
+@test
+fun iso_weak_handle_lifecycle(): void {
+    let dead = iso_weak_make_and_drop();
+    Assert.is_true(dead().is_none());
+    let engine = iso_Session(99);
+    let weak alive = engine;
+    Assert.is_false(alive.is_none());
+    Assert.eq(Debug.ref_count(engine), 1);
+}
+
+// --- cursor_copy_outlives_base / sroa_ref_fields / frame_alloc_arg_object share these shapes. ---
+
+class iso_Label {
+    public text: string;
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+class iso_Pair {
+    public name: string;
+    public label: Option<iso_Label>;
+    public n: int;
+    public constructor(name: string) {
+        this.name = name;
+        this.n = 0;
+    }
+}
+
+// `peek` is called through a closure, so `p` escapes and stays a heap object whose only count
+// is `p`'s; `q` is a cursor of it that is read after `p`'s last use.
+fun iso_cursor_copy_run(k: int, peek: fun(iso_Pair): int): int {
+    let total = 0;
+    for (let i = 0; i < k; i++) {
+        let p = iso_Pair("p" + i.to_string());
+        let q = p;
+        q.label = Option.Some(iso_Label("l" + i.to_string()));
+        total = total + peek(p);
+        total = total + p.n;
+        total = total + q.name.length;
+        switch (q.label) {
+            Some(l) => { total = total + l.text.length; }
+            None => {}
+        }
+    }
+    return total;
+}
+
+@test
+fun iso_cursor_copy_outlives_base(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_cursor_copy_run(100, (x: iso_Pair) => x.n + 1), 680);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+fun iso_sroa_run(k: int): int {
+    let total = 0;
+    for (let i = 0; i < k; i++) {
+        let p = iso_Pair("p" + i.to_string());
+        let q = p;
+        q.n = i;
+        if (i % 3 == 0) {
+            q.label = Option.Some(iso_Label("third"));
+        }
+        p.name = p.name + "!";
+        if (i % 5 == 0) {
+            p.label = Option.None;
+        }
+        total = total + q.name.length + p.n;
+        switch (q.label) {
+            Some(l) => { total = total + l.text.length; }
+            None => {}
+        }
+    }
+    return total;
+}
+
+@test
+fun iso_sroa_ref_fields(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_sroa_run(10), 90);
+    Assert.eq(iso_sroa_run(1000), 505725);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+class iso_Acc {
+    public name: string;
+    public label: Option<iso_Label>;
+    public total: int;
+    public constructor(name: string) {
+        this.name = name;
+        this.total = 0;
+    }
+}
+
+// Too big to inline, so `acc` reaches it as an argument.
+fun iso_frame_describe(acc: iso_Acc, rounds: int): int {
+    let s = 0;
+    for (let i = 0; i < rounds; i++) {
+        s = s + acc.name.length + acc.total;
+        if (s % 7 == 3) { s = s + 1; }
+        if (s % 11 == 5) { s = s + 2; }
+        if (s % 13 == 6) { s = s + 3; }
+        if (s % 17 == 7) { s = s + 4; }
+        if (s % 19 == 8) { s = s + 5; }
+        if (s % 23 == 9) { s = s + 6; }
+    }
+    switch (acc.label) {
+        Some(l) => { s = s + l.text.length; }
+        None => {}
+    }
+    return s;
+}
+
+fun iso_frame_run(n: int): int {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        let acc = iso_Acc("acc" + i.to_string());
+        acc.total = i;
+        if (i % 2 == 0) {
+            acc.label = Option.Some(iso_Label("even"));
+        }
+        acc.name = acc.name + "!";
+        total = total + iso_frame_describe(acc, 3);
+    }
+    return total;
+}
+
+@test
+fun iso_frame_alloc_arg_object(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_frame_run(10), 346);
+    Assert.eq(iso_frame_run(1000), 1525006);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- cursor_family_mutation: loop-carried cursors stay valid while the chain is mutated. ---
+// Each walk frees part of the chain mid-walk and then allocates same-sized nodes, so a dangling
+// cursor would read recycled memory.
+
+@allow_cycle
+class iso_ChainNode {
+    public value: int;
+    public next: Option<iso_ChainNode>;
+
+    public constructor(value: int, next: Option<iso_ChainNode>) {
+        this.value = value;
+        this.next = next;
+    }
+}
+
+class iso_ChainHolder {
+    public head: Option<iso_ChainNode>;
+
+    public constructor(head: Option<iso_ChainNode>) {
+        this.head = head;
+    }
+}
+
+fun iso_chain(n: int, base: int): Option<iso_ChainNode> {
+    let head: Option<iso_ChainNode> = Option.None;
+    let i = 0;
+    while i < n {
+        head = Option.Some(iso_ChainNode(base + i, head));
+        i = i + 1;
+    }
+    return head;
+}
+
+fun iso_chain_sum(list: Option<iso_ChainNode>): int {
+    let acc = 0;
+    let curr = list;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+            }
+            None => { done = true; }
+        }
+    }
+    return acc;
+}
+
+fun iso_chain_churn(base: int): int {
+    let junk = iso_chain(8, base);
+    return iso_chain_sum(junk) - iso_chain_sum(junk);
+}
+
+fun iso_chain_cut(n: iso_ChainNode): void {
+    n.next = Option.None;
+}
+
+fun iso_chain_reset(h: iso_ChainHolder): void {
+    h.head = iso_chain(3, 500);
+}
+
+// Store to the traversed `next` slot while `curr` points at the detached successor.
+fun iso_walk_detach(): int {
+    let head = iso_chain(8, 0);
+    let acc = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                node.next = Option.None;
+                acc = acc + iso_chain_churn(1000);
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + iso_chain_sum(head);
+}
+
+// A callee overwrites the traversed slot.
+fun iso_walk_cut_call(): int {
+    let head = iso_chain(8, 50);
+    let acc = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                iso_chain_cut(node);
+                acc = acc + iso_chain_churn(2000);
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + iso_chain_sum(head);
+}
+
+// A callee replaces the whole chain held by the walk's root object.
+fun iso_walk_reset_call(): int {
+    let h = iso_ChainHolder(iso_chain(6, 10));
+    let acc = 0;
+    let steps = 0;
+    let curr = h.head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                steps = steps + 1;
+                if steps == 2 {
+                    iso_chain_reset(h);
+                    acc = acc + iso_chain_churn(3000);
+                }
+                curr = node.next;
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + iso_chain_sum(h.head);
+}
+
+// The walk's root is rebound mid-walk, dropping the old chain's owner.
+fun iso_walk_rebind_head(): int {
+    let head = iso_chain(6, 20);
+    let acc = 0;
+    let steps = 0;
+    let curr = head;
+    let done = false;
+    while done == false {
+        switch (curr) {
+            Some(node) => {
+                acc = acc * 3 + node.value;
+                curr = node.next;
+                steps = steps + 1;
+                if steps == 2 {
+                    head = iso_chain(2, 900);
+                    acc = acc + iso_chain_churn(4000);
+                }
+            }
+            None => { done = true; }
+        }
+    }
+    return acc + iso_chain_sum(head);
+}
+
+// Read-only walks rooted at a borrowed field and at a loop-invariant local.
+fun iso_walk_readonly(): int {
+    let h = iso_ChainHolder(iso_chain(10, 7));
+    let acc = 0;
+    let i = 0;
+    while i < 3 {
+        acc = acc + iso_chain_sum(h.head);
+        let curr = h.head;
+        let done = false;
+        while done == false {
+            switch (curr) {
+                Some(node) => {
+                    acc = acc + node.value;
+                    curr = node.next;
+                }
+                None => { done = true; }
+            }
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+@test
+fun iso_cursor_family_mutation(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_walk_detach(), 21331);
+    Assert.eq(iso_walk_cut_call(), 185381);
+    Assert.eq(iso_walk_reset_call(), 11802);
+    Assert.eq(iso_walk_rebind_head(), 12524);
+    Assert.eq(iso_walk_readonly(), 1373226);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- held_snapshot_mutation: a snapshot of a slot survives the slot's owner being replaced. ---
+
+class iso_SnapBox {
+    public s: string;
+
+    public constructor(s: string) {
+        this.s = s;
+    }
+}
+
+fun iso_snap_churn(n: int): int {
+    let acc = 0;
+    let i = 0;
+    while i < n {
+        let t = "junk" + i.to_string();
+        acc = acc + t.length;
+        i = i + 1;
+    }
+    return acc;
+}
+
+fun iso_snap_replace(b: iso_SnapBox, i: int) {
+    b.s = "replaced" + i.to_string();
+}
+
+fun iso_snap_overwrite(a: string[], i: int) {
+    a[i] = "gone" + i.to_string();
+}
+
+fun iso_snap_read_only(b: iso_SnapBox): int {
+    return b.s.length;
+}
+
+fun iso_snap_field_replaced_by_callee(): int {
+    let b = iso_SnapBox("hello" + "!!");
+    let total = 0;
+    let i = 0;
+    while i < 3 {
+        let s = b.s;
+        iso_snap_replace(b, i);
+        total = total + iso_snap_churn(4);
+        total = total * 7 + s.length + ((int)s[0]);
+        i = i + 1;
+    }
+    return total + b.s.length;
+}
+
+fun iso_snap_field_replaced_inline(): int {
+    let b = iso_SnapBox("world" + "??");
+    let s = b.s;
+    b.s = "x" + "y";
+    let t = iso_snap_churn(5);
+    return s.length * 100 + ((int)s[1]) + t;
+}
+
+fun iso_snap_element_overwritten(): int {
+    let a = ["one" + "1", "two" + "2", "three" + "3"];
+    let total = 0;
+    let k = 0;
+    while k < a.length {
+        let w = a[k];
+        iso_snap_overwrite(a, k);
+        total = total + iso_snap_churn(3);
+        total = total * 5 + w.length + ((int)w[0]);
+        k = k + 1;
+    }
+    return total + a[0].length;
+}
+
+fun iso_snap_owner_rebound(): int {
+    let b = iso_SnapBox("owner" + "1");
+    let s = b.s;
+    b = iso_SnapBox("other" + "2");
+    let t = iso_snap_churn(6);
+    return s.length * 1000 + ((int)s[4]) + b.s.length + t;
+}
+
+fun iso_snap_read_only_walk(): int {
+    let b = iso_SnapBox("stable" + "text");
+    let a = ["a" + "b", "cd" + "e", "fgh" + "ij"];
+    let total = 0;
+    let i = 0;
+    while i < 4 {
+        let s = b.s;
+        let w = a[i % 3];
+        total = total + iso_snap_read_only(b) + s.length + w.length + iso_snap_churn(1);
+        i = i + 1;
+    }
+    return total;
+}
+
+@test
+fun iso_held_snapshot_mutation(): void {
+    let before = Debug.live_objects;
+    Assert.eq(iso_snap_field_replaced_by_callee(), 14412);
+    Assert.eq(iso_snap_field_replaced_inline(), 836);
+    Assert.eq(iso_snap_element_overwritten(), 5927);
+    Assert.eq(iso_snap_owner_rebound(), 6150);
+    Assert.eq(iso_snap_read_only_walk(), 112);
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- inlined_return_ownership: inlined owned and borrowed returns keep their counts. ---
+
+class iso_ReturnHolder {
+    public value: string;
+    public constructor() {
+        this.value = "";
+    }
+}
+
+fun iso_return_fresh(text: string, first: bool): string {
+    if first {
+        return text.substring(0, 2);
+    }
+    return text.substring(2, 4);
+}
+
+fun iso_return_borrowed(text: string): string {
+    return text;
+}
+
+enum iso_Chain {
+    Cons(head: int, tail: iso_Chain),
+    Nil,
+}
+
+fun iso_return_make_chain(n: int): iso_Chain {
+    let result = iso_Chain.Nil;
+    let i = 0;
+    while i < n {
+        result = iso_Chain.Cons(i, result);
+        i = i + 1;
+    }
+    return result;
+}
+
+fun iso_return_length(borrow value: iso_Chain): int {
+    return switch (value) {
+        Cons(_, tail) => 1 + iso_return_length(tail),
+        Nil => 0,
+    };
+}
+
+fun iso_return_exercise(): void {
+    let values: string[] = ["", ""];
+    let holder = iso_ReturnHolder();
+    let chains: iso_Chain[] = [iso_Chain.Nil];
+    let i = 0;
+    while i < 3 {
+        values[0] = iso_return_fresh("abcd", true);
+        values[1] = iso_return_fresh("abcd", false);
+        holder.value = iso_return_borrowed(values[0]);
+        chains[0] = iso_return_make_chain(3);
+        Assert.eq(holder.value + values[1], "abcd");
+        i = i + 1;
+    }
+    Assert.eq(iso_return_length(chains[0]), 3);
+}
+
+@test
+fun iso_inlined_return_ownership(): void {
+    let before = Debug.live_objects;
+    iso_return_exercise();
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- closure_env_reclaim / closure_env_escape: capturing closures reclaim box and env. ---
+
+fun iso_make_adder(n: int): fun(int): int {
+    return (x) => x + n;
+}
+
+fun iso_closure_once(i: int): void {
+    let f: fun(int): int = iso_make_adder(i);
+    let _ = f(1);
+}
+
+@test
+fun iso_closure_env_reclaim(): void {
+    let warm: fun(int): int = iso_make_adder(0);
+    warm(0);
+    warm = iso_make_adder(0);
+
+    let base = Debug.live_objects;
+    let i = 0;
+    while i < 50 {
+        iso_closure_once(i);
+        i = i + 1;
+    }
+    Assert.eq(Debug.live_objects - base, 0L);
+}
+
+@test
+fun iso_closure_env_escape(): void {
+    let _warm: fun(int): int = iso_make_adder(0);
+    _warm = iso_make_adder(0);
+    let base = Debug.live_objects;
+
+    let _held: fun(int): int = iso_make_adder(7);
+    let mid = Debug.live_objects - base;
+    _held = iso_make_adder(0);
+    _held = iso_make_adder(0);
+    let after = Debug.live_objects - base;
+
+    Assert.eq(mid, 2L);
+    Assert.eq(after, 2L);
+}
+
+// --- native_callback_local: a local NativeCallback is released at scope exit. ---
+
+fun iso_native_callback_exercise(): bool {
+    let callback = NativeCallback<fun(int): int>((value: int) => value + 1);
+    return Debug.ref_count(callback) > 0;
+}
+
+@test
+fun iso_native_callback_local(): void {
+    let before = Debug.live_objects;
+    Assert.is_true(iso_native_callback_exercise());
+    Assert.eq(Debug.live_objects - before, 0L);
+}
+
+// --- region_mutual_escape: mutually recursive allocators publishing into a global. ---
+
+class iso_RegionNode {
+    public value: int;
+    public constructor(value: int) { this.value = value; }
+}
+
+let iso_region_escaped: Option<iso_RegionNode> = Option.None;
+
+@noinline
+fun iso_region_first(depth: int): iso_RegionNode {
+    let node = iso_RegionNode(depth);
+    if depth > 0 {
+        let child = iso_region_second(depth - 1);
+        node.value = node.value + child.value;
+    }
+    iso_region_escaped = Option.Some(node);
+    return node;
+}
+
+@noinline
+fun iso_region_second(depth: int): iso_RegionNode {
+    let node = iso_RegionNode(depth);
+    if depth > 0 {
+        let child = iso_region_first(depth - 1);
+        node.value = node.value + child.value;
+    }
+    return node;
+}
+
+@test
+fun iso_region_mutual_escape(): void {
+    let root = iso_region_second(3);
+    Assert.eq(root.value, 6);
+    switch (iso_region_escaped) {
+        Some(node) => Assert.eq(node.value, 3),
+        None => Assert.fail("escaped node missing"),
+    }
+    iso_region_escaped = Option.None;
+}

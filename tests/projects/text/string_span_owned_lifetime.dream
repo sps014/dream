@@ -20,8 +20,8 @@ fun c22d_replaced_owner(borrow suffix: string): void {
     let source = "hello " + suffix;
     let view = source.span(0, 5);
     source = "changed " + suffix;
-    c22d_verify_observation((view.to_string()).to_string());
-    c22d_verify_observation((source.span(0, 7).to_string()).to_string());
+    Assert.eq(view.to_string(), "hello");
+    Assert.eq(source.span(0, 7).to_string(), "changed");
 }
 
 fun c22d_loop_owner(): void {
@@ -32,34 +32,112 @@ fun c22d_loop_owner(): void {
         if i == 0 {
             saved = source.span(0, 5);
         } else {
-            c22d_verify_observation((saved[0]).to_string());
+            Assert.eq(saved[0], 'f');
         }
         i = i + 1;
     }
 }
 
-fun c22d_body(): void {
-    c22d_verify_observation((c22d_owned_views("!")).to_string());
+@test
+@timeout(180000)
+fun string_span_owned_lifetime(): void {
+    Assert.eq(c22d_owned_views("!"), 1016);
     c22d_replaced_owner("world");
     c22d_loop_owner();
 }
 
-let c22d_cursor: int = 0;
+// Release builds inline the span producers below, turning `dest = call` into copies out of
+// inliner temporaries; each must still hand its references to the destination exactly once.
+@noinline
+fun sio_saved_view(): int {
+    let saved = "".span();
+    let i = 0;
+    let n = 0;
+    while i < 3 {
+        let source = "first " + i.to_string();
+        if i == 0 {
+            saved = source.span(0, 5);
+        } else {
+            n = n + (int)saved[0];
+        }
+        i = i + 1;
+    }
+    return n;
+}
 
-fun c22d_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "1016\nhello\nchanged\nf\nf\n";
-    let end = c22d_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c22d_cursor, end));
-    c22d_cursor = end;
+@noinline
+fun sio_split_array(): int {
+    let split = ReadOnlySpan<char>.of(['a', ',', 'b']).split_iter(',');
+    let n = 0;
+    while split.move_next() {
+        n = n + split.current.length;
+    }
+    return n;
+}
+
+@noinline
+fun sio_lines_array(): int {
+    let lines = ReadOnlySpan<char>.of(['x', '\n', 'y']).lines();
+    let n = 0;
+    while lines.move_next() {
+        n = n + lines.current.length;
+    }
+    return n;
 }
 
 @test
 @timeout(180000)
+fun span_inlined_ownership(): void {
+    let before = Debug.live_objects;
+    Assert.eq(sio_saved_view(), 204);
+    Assert.eq(sio_split_array(), 2);
+    Assert.eq(sio_lines_array(), 2);
+    Assert.eq(Debug.live_objects - before, 0);
+}
 
-fun string_span_owned_lifetime(): void {
-    c22d_cursor = 0;
-    c22d_body();
-    Assert.eq(c22d_cursor, ("1016\nhello\nchanged\nf\nf\n").length);
+@noinline
+fun c225_scan(borrow suffix: string): int {
+    let source = "abcdefghijklmnopqrstuvwxyz" + suffix;
+    let other = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + suffix;
+    let sum = 0;
+    let i = 0;
+    while i < 100 {
+        let view = source.span(i & 7, 20);
+        sum = sum + (int)view[0];
+        let second = other.span(i & 7, 20);
+        sum = sum + (int)second[0];
+        i = i + 1;
+    }
+    let sliced = source.substring(2, 20);
+    i = 0;
+    while i < 100 {
+        let view = sliced.span(i & 3, 8);
+        sum = sum + (int)view[0];
+        i = i + 1;
+    }
+    return sum;
+}
+
+@test
+@timeout(180000)
+fun string_span_borrowed_loop(): void {
+    Assert.eq(c225_scan(System.env("DREAM_SPAN_SUFFIX").unwrap_or("!")), 26934);
+}
+
+// The span's uses live in a synchronous helper, so no span is in scope at the `await`.
+fun c224_head_length(s: string): int {
+    let v = s.span(0, 2).trim();
+    return v.length;
+}
+
+async fun c224_run(s: string): int {
+    let n = c224_head_length(s);
+    Time.sleep(1).await;
+    return n + 1;
+}
+
+@test
+@timeout(180000)
+async fun string_span_await_ok(): void {
+    Assert.eq(c224_run(" bc").await, 2);
 }

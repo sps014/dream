@@ -12,3 +12,55 @@ fun array_alloc(): void {
     a[1] = 42;
     Assert.eq((a[1]).to_string(), "42");
 }
+
+// Native bump used to mmap 4MiB chunks and still return a pointer for larger
+// payloads (HTTP bodies, `Array.alloc`), then memset walked off the mapping.
+@test
+@timeout(180000)
+fun heap_large_array(): void {
+    let n = 5000000;
+    let a = Array.alloc<byte>(n);
+    a[0] = (byte)1;
+    a[n - 1] = (byte)2;
+    Assert.eq((int)a[0], 1);
+    Assert.eq((int)a[n - 1], 2);
+    Assert.eq(a.length, 5000000);
+}
+
+@test
+@timeout(180000)
+fun array_repeat(): void {
+    // Zero-init fast path: lowers straight to Array.alloc (no fill loop).
+    let zeros = [0; 4];
+    Assert.eq(zeros.length, 4);
+    Assert.eq(zeros[0] + zeros[3], 0);
+
+    // Non-zero scalar: value evaluated once, copied into every slot.
+    let sevens = [7; 3];
+    Assert.eq(sevens.length, 3);
+    let i = 0;
+    while i < sevens.length {
+        Assert.eq(sevens[i], 7);
+        i = i + 1;
+    }
+
+    let n = 5;
+    let scaled = [2; n * 2];
+    Assert.eq(scaled.length, 10);
+    Assert.eq(scaled[9], 2);
+
+    // Every row is a distinct array: mutating one row must not affect the others.
+    let grid = [[0; 3]; 2];
+    grid[0][1] = 42;
+    Assert.eq(grid[0].length, 3);
+    Assert.eq(grid[0][1], 42);
+    Assert.eq(grid[1][1], 0);
+
+    // Reference-typed init: slots share one ARC-retained value.
+    let names = ["dream"; 2];
+    Assert.eq(names[0], "dream");
+
+    // List context composes with the collection-literal desugar.
+    let xs: List<int> = [9; 2];
+    Assert.eq(xs.length, 2);
+}

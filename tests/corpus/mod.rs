@@ -107,8 +107,18 @@ pub fn cases() -> impl Iterator<Item = &'static Case> {
 #[test]
 fn every_case_has_one_source_and_assertions() {
     let mut names = std::collections::BTreeSet::new();
+    let mut tests = std::collections::BTreeSet::new();
     for case in cases() {
         assert!(names.insert(case.stem), "duplicate {}", case.stem);
+        if let Expectation::Project(suite) = case.expectation {
+            for test in run::project_tests(case) {
+                // The runner calls every selected test of a suite by its bare name.
+                assert!(
+                    tests.insert((suite, test.clone())),
+                    "duplicate @test {test} in suite {suite}"
+                );
+            }
+        }
         assert!(
             case.source().is_file(),
             "missing {}",

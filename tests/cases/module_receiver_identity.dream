@@ -1,8 +1,25 @@
+// Same-named types from different modules keep distinct identities as receivers, payloads, and
+// generic arguments; `internal` members are reachable module-wide; `public` declarations from a
+// module-less file are usable from another file.
 import system;
 import helpers.module_receiver_a;
 import helpers.module_receiver_b;
+import helpers.module_users_a;
+import helpers.module_users_b;
+import helpers.module_internal_member;
+import helpers.module_internal_member_partner;
+import helpers.vis_lib;
 
 fun main(): void {
     System.println(first_counter());
     System.println(second_counter());
+    System.println(first_user_value());
+    System.println(second_user_value());
+    System.println(combine(make_vector(3)));
+    System.println(public_add(2, 3));
+    let b = PublicBox(40);
+    System.println(b.get());
+    System.println(Gadget.make(9));
+    let c = OpenCache<int>.make(11);
+    System.println(c.v);
 }

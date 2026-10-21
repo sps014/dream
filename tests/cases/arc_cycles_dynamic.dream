@@ -18,7 +18,18 @@ class ContainerNode {
     public constructor() { this.children = List<ContainerNode>(); }
     del() { System.println("container"); }
 }
+@allow_cycle
+class ValueFrameNode {
+    public future: Option<Future<int>>;
+    public constructor() { this.future = Option.None; }
+    del() { System.println("value-frame"); }
+}
+struct ValueFrameHolder {
+    public node: ValueFrameNode;
+    public constructor(node: ValueFrameNode) { this.node = node; }
+}
 async fun hold(_node: FutureNode): int { return 1; }
+async fun hold_value(value: ValueFrameHolder): int { let _keep = value.node; return 1; }
 fun closures() {
     let node = ClosureNode();
     node.action = Option.Some(() => { let _keep = node; return 1; });
@@ -29,6 +40,11 @@ fun futures() {
     node.future = Option.Some(hold(node));
     node.future = Option.None;
 }
+fun value_frames() {
+    let node = ValueFrameNode();
+    node.future = Option.Some(hold_value(ValueFrameHolder(node)));
+    node.future = Option.None;
+}
 fun containers() {
     let node = ContainerNode();
     node.children.push(node);
@@ -37,6 +53,7 @@ fun containers() {
 fun main() {
     closures();
     futures();
+    value_frames();
     containers();
     System.println("done");
 }

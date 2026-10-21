@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.task;
+
 shared class c256_Counter {
     public value: int;
 
@@ -38,5 +39,73 @@ async fun task_shared_class(): void {
     a.await;
     b.await;
 
-    Assert.eq((counter.value).to_string(), "2");
+    Assert.eq(counter.value, 2);
+}
+
+shared class c255_Named {
+    public label: string;
+
+    public constructor(label: string) {
+        this.label = label;
+    }
+}
+
+@test
+@timeout(180000)
+async fun task_publish_shared_children(): void {
+    let n = c255_Named("first" + " child");
+    Assert.eq(Task.spawn(() => n.label + "!").await, "first child!");
+    lock (n) {
+        n.label = "second" + " child";
+    }
+    Assert.eq(Task.spawn(() => n.label + "!").await, "second child!");
+    let labels = ["array" + " child", "closure" + " child"];
+    Assert.eq(
+        Task.spawn(() => labels[0] + ", " + labels[1]).await,
+        "array child, closure child"
+    );
+}
+
+shared class TaskWeakSession {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+}
+
+fun task_dead_weak_reader(): fun(): Option<TaskWeakSession> {
+    let weak dead = TaskWeakSession(7);
+    return () => dead;
+}
+
+@test
+async fun task_weak_optional(): void {
+    let session = TaskWeakSession(42);
+    let weak alive = session;
+    Assert.is_true(Task.spawn(() => alive.unwrap().id == 42).await);
+    session.id = 43;
+    let dead = task_dead_weak_reader();
+    Assert.is_true(Task.spawn(() => dead().is_none()).await);
+}
+
+// try_acquire / try_acquire_for on Lock and Semaphore (single-threaded).
+@test
+@timeout(180000)
+fun lock_try_acquire(): void {
+    let lock1 = Lock();
+    Assert.is_true(lock1.try_acquire());
+    Assert.is_true(lock1.try_acquire());
+    lock1.release();
+    lock1.release();
+    Assert.is_true(lock1.try_acquire_for(0));
+    lock1.release();
+
+    let sem = Semaphore(1);
+    Assert.is_true(sem.try_acquire());
+    Assert.is_false(sem.try_acquire());
+    Assert.is_false(sem.try_acquire_for(1));
+    sem.release();
+    Assert.is_true(sem.try_acquire_for(100));
+    sem.release();
 }

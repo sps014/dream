@@ -1,0 +1,36 @@
+// Receiver contracts and live borrows are enforced at compile time.
+import system;
+import system.collections;
+
+class Ledger {
+    balance: int;
+    public constructor() { this.balance = 0; }
+
+    public borrow fun audit(): void {
+        this.balance = this.balance + 999;
+    }
+}
+
+interface Repository {
+    unique fun save(id: int): void;
+}
+
+class MemoryRepo : Repository {
+    saved: int;
+    public constructor() { this.saved = 0; }
+
+    // Inferred borrow (read-only body) but the interface declares unique.
+    public fun save(id: int): void {
+        System.println(id);
+    }
+}
+
+fun iterator_invalidation(): void {
+    let xs = List<int>();
+    xs.push(1);
+    let cur = xs.iterator();
+    xs.push(2);
+    System.println(cur.next().unwrap_or(-1));
+}
+
+fun main(): void {}

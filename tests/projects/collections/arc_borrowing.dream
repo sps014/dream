@@ -104,3 +104,41 @@ fun arc_borrowing(): void {
     Assert.eq(arc_inferred_destructor_read(ArcBorrowingItem("temporary")), 9);
     Assert.eq(arc_borrowing_drops, 5);
 }
+
+// Rewinding a counter without clearing slots is legal: dead slots hold valid
+// references until the array is dropped, at which point every slot releases.
+class ca1_Cache {
+    entries: string[];
+    count: int;
+
+    public constructor() {
+        this.entries = Array.alloc<string>(16);
+        this.count = 0;
+    }
+
+    public fun add(v: string): void {
+        if this.count >= this.entries.length {
+            return;
+        }
+        this.entries[this.count] = v;
+        this.count = this.count + 1;
+    }
+
+    public fun reset(): void {
+        this.count = 0;
+    }
+
+    public fun len(): int {
+        return this.count;
+    }
+}
+
+@test
+@timeout(180000)
+fun container_rewind_legal(): void {
+    let c = ca1_Cache();
+    c.add("hello");
+    c.add("world");
+    c.reset();
+    Assert.eq(c.len(), 0);
+}

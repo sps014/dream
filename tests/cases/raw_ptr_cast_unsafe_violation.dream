@@ -1,2 +1,0 @@
-fun cast(p: RawPtr<int>): RawPtr<byte> { return p.cast<byte>(); }
-fun main(): void { }

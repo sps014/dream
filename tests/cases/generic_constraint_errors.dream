@@ -1,0 +1,23 @@
+// Constrained extensions are unavailable when a type argument does not satisfy the constraint.
+import system;
+import system.collections;
+
+class Widget {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun sort_without_comparable(): void {
+    // `List<T>.sort()` requires `T : Comparable<T>`.
+    let xs = List<Widget>();
+    xs.push(Widget(3));
+    xs.sort();
+}
+
+fun span_lookup_without_string_key(): void {
+    // Span lookups require a `string`-keyed map (`K : StringKey`).
+    let m = Map<int, int>();
+    let x = m.get("1".span());
+}
+
+fun main(): void {}

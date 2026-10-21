@@ -1,0 +1,21 @@
+// `{...}` literals need a Map or Set target type, and only fit a matching target.
+import system;
+import system.collections;
+
+fun map_without_target(): void {
+    let m = {"a": 1, "b": 2};
+    System.println(m);
+}
+
+fun set_without_target(): void {
+    // Unlike `[...]`, a Set literal has no bare-element fallback type.
+    let s = {1, 2, 3};
+    System.println(s);
+}
+
+fun set_for_list(): void {
+    let xs: List<int> = {1, 2, 3};
+    System.println(xs.length);
+}
+
+fun main(): void {}

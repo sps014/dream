@@ -1,0 +1,85 @@
+import system.testing;
+import system;
+
+fun cfa_parse_or_propagate(s: string): Result<int, ParseError> {
+    let n = int.parse(s)?;
+    return Result.Ok(n);
+}
+
+@test
+@timeout(180000)
+fun int_parse(): void {
+    Assert.eq(int.parse("123").unwrap_or(0), 123);
+    Assert.eq(int.parse("-45").unwrap_or(0), -45);
+    Assert.eq(int.parse("7").unwrap_or(0), 7);
+    let n = 0 - 9;
+    Assert.eq(n.abs(), 9);
+    let two = 2;
+    Assert.eq(two.pow(8), 256);
+    let a = 10;
+    Assert.eq(a.clamp(0, 5), 5);
+    let b = 3;
+    Assert.eq(b.min(7), 3);
+    Assert.eq(b.max(7), 7);
+}
+
+@test
+@timeout(180000)
+fun integer_parse_range(): void {
+    Assert.eq(int.parse("2147483647").unwrap_or(0).to_string(), "2147483647");
+    Assert.eq(int.parse("-2147483648").unwrap_or(0).to_string(), "-2147483648");
+    Assert.is_true(int.parse("2147483648").is_err());
+    Assert.is_true(int.parse("-2147483649").is_err());
+    Assert.is_true(int.parse("99999999999999999999999").is_err());
+    Assert.eq(uint.parse("4294967295").unwrap_or(0u).to_string(), "4294967295");
+    Assert.is_true(uint.parse("4294967296").is_err());
+    Assert.eq(
+        long.parse("9223372036854775807").unwrap_or(0L).to_string(),
+        "9223372036854775807"
+    );
+    Assert.eq(
+        long.parse("-9223372036854775808").unwrap_or(0L).to_string(),
+        "-9223372036854775808"
+    );
+    Assert.is_true(long.parse("9223372036854775808").is_err());
+    Assert.is_true(long.parse("-9223372036854775809").is_err());
+    Assert.eq(
+        ulong.parse("18446744073709551615").unwrap_or(0uL).to_string(),
+        "18446744073709551615"
+    );
+    Assert.is_true(ulong.parse("18446744073709551616").is_err());
+    Assert.is_true(byte.parse("256").is_err());
+    Assert.is_true(double.parse("1e99999999999").unwrap_or(0.0d) > 1.0d);
+}
+
+@test
+@timeout(180000)
+fun bool_parse(): void {
+    Assert.is_true(bool.parse("true").unwrap_or(false));
+    Assert.is_false(bool.parse("false").unwrap_or(true));
+    switch (bool.parse("True")) {
+        Ok(v) => Assert.fail("parsed True as " + v),
+        Err(e) => Assert.eq(e.code(), "EPARSE"),
+    }
+    switch (bool.parse("")) {
+        Ok(v) => Assert.fail("parsed empty string as " + v),
+        Err(e) => Assert.eq(e.code(), "EPARSE"),
+    }
+}
+
+@test
+@timeout(180000)
+fun parse_error(): void {
+    Assert.eq(int.parse("42").unwrap_or(0), 42);
+    switch (int.parse("nope")) {
+        Ok(n) => Assert.fail("parsed nope as " + n),
+        Err(e) => Assert.eq(e.code() + ":" + e.message(), "EPARSE:cannot parse int: invalid digit"),
+    }
+    Assert.eq(float.parse("1.5").unwrap_or(0.0f).to_string(), "1.5");
+
+    Assert.eq(cfa_parse_or_propagate("42").unwrap_or(0), 42);
+    switch (cfa_parse_or_propagate("nope")) {
+        Ok(n) => Assert.fail("propagated nope as " + n),
+        Err(e) => Assert.eq(e.message(), "cannot parse int: invalid digit"),
+    }
+}

@@ -131,3 +131,17 @@ async fun utility_value(): int {
 async fun await_value_for_assertion(): void {
     Assert.eq_async(utility_value(), 42).await;
 }
+
+@test
+@timeout(180000)
+async fun cancellation_stdlib(): void {
+    let src = CancellationSource();
+    src.cancel();
+    let tok = src.token;
+    let opt = Option.Some(tok);
+
+    switch (File.read("missing.txt", opt).await) {
+        Ok(t) => Assert.fail("cancelled read returned: " + t),
+        Err(e) => Assert.eq(e.code(), "ECANCELLED"),
+    }
+}

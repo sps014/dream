@@ -108,7 +108,7 @@ static let x = 1; // error: 'static' cannot modify a top-level variable
 
 ## The entry point
 
-`main` cannot be overloaded and must be declared as `main()` or `main(args: string[])`.
+`main` cannot be overloaded and must be declared as `main()` or `main(args: string[])`. `args` holds the command-line arguments without the executable path, the same values `System.args` returns.
 
 ```dream
 // good shapes (pick one)

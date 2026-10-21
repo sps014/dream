@@ -1,2 +1,0 @@
-@unsafe
-fun main(): void { let p = RawPtr<MissingType>.alloc(1); }

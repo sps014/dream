@@ -140,7 +140,7 @@ pub(super) fn leftover_waits_for_live_parent(
 
 /// Locals in `ids` that should `Release`. Dest leftover is delayed until the parent leftover
 /// site (`order_parent` skip in `transfer_block`) so extras and `this` share one batch;
-/// skip-coalesce here last-refs a map occupant (`union_json`) or leaks extras (`json_parse`).
+/// skip-coalesce here last-refs a map occupant (`union_json`) or leaks extras (`json_roundtrip`).
 pub(crate) fn leftover_keep(
     _func: &MirFunction,
     ids: impl IntoIterator<Item = u32>,

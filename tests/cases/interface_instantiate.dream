@@ -1,9 +1,0 @@
-// Interfaces cannot be instantiated directly.
-
-interface Animal {
-    fun speak(): string;
-}
-
-fun main(): void {
-    let a = Animal();
-}

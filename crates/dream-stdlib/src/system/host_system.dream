@@ -33,9 +33,6 @@ extend System {
     @runtime("processMemoryBytes")
     static extern fun host_memory_bytes(): long;
 
-    @runtime("processArgs")
-    static extern fun host_args(): byte[];
-
     @runtime("processExePath")
     static extern fun host_exe_path(): string;
 
@@ -104,49 +101,6 @@ extend System {
     /// Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.
     public static get memory_bytes(): long {
         return System.host_memory_bytes();
-    }
-
-    static fun argument_length(bytes: byte[], cursor: int): int {
-        if bytes.length - cursor < 4 {
-            System.panic("truncated host argument length");
-        }
-        let value = 0u;
-        for (let i = 0; i < 4; i = i + 1) {
-            value = value | ((uint)bytes[cursor + i] << (uint)(i * 8));
-        }
-        if value > 2147483647u {
-            System.panic("host argument length exceeds guest limit");
-        }
-        return (int)value;
-    }
-
-    /// Process arguments exclude the executable and preserve empty strings and embedded newlines.
-    public static get args(): string[] {
-        let wire = System.host_args();
-        let cursor = 0;
-        let count = System.argument_length(wire, cursor);
-        cursor = cursor + 4;
-        if count >(wire.length - cursor) / 4 {
-            System.panic("invalid host argument count");
-        }
-        let args = Buffer.alloc<string>(count);
-        for (let i = 0; i < count; i = i + 1) {
-            let size = System.argument_length(wire, cursor);
-            cursor = cursor + 4;
-            if size > wire.length - cursor {
-                System.panic("truncated host argument");
-            }
-            let bytes = Buffer.alloc<byte>(size);
-            for (let j = 0; j < size; j = j + 1) {
-                bytes[j] = wire[cursor + j];
-            }
-            args[i] = Encoding.utf8_decode(bytes);
-            cursor = cursor + size;
-        }
-        if cursor != wire.length {
-            System.panic("trailing host argument bytes");
-        }
-        return args;
     }
 
     /// Absolute path of the running executable when known.

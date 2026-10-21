@@ -14,5 +14,42 @@ async fun c241_work(): string {
 @test
 @timeout(180000)
 async fun task_async_body(): void {
-    Assert.eq((Task.spawn_async(c241_work).await).to_string(), "hi!");
+    Assert.eq(Task.spawn_async(c241_work).await, "hi!");
+}
+
+async fun c242_computeInt(): int {
+    Time.sleep(1).await;
+    return 21 * 2;
+}
+
+@test
+@timeout(180000)
+async fun task_async_body_non_string(): void {
+    Assert.eq(Task.spawn_async(c242_computeInt).await, 42);
+}
+
+@test
+@timeout(180000)
+async fun task_async_lambda(): void {
+    let msg = "hi";
+    let result = Task.spawn_async(
+        async () => {
+            Time.sleep(1).await;
+            return msg + "!";
+        }
+    ).await;
+    Assert.eq(result, "hi!");
+}
+
+@test
+@timeout(180000)
+async fun task_async_lambda_int(): void {
+    let n = 21;
+    let result = Task.spawn_async(
+        async () => {
+            Time.sleep(1).await;
+            return n * 2;
+        }
+    ).await;
+    Assert.eq(result, 42);
 }

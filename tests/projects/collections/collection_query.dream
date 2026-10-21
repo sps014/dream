@@ -68,6 +68,7 @@ fun collection_query(): void {
 
     let from_iface: Collection<int> = xs;
     Assert.eq((from_iface.seq().to_list().length).to_string(), "4");
+    Assert.eq(from_iface.length.to_string() + ":" + from_iface.is_empty().to_string(), "4:false");
 
     Assert.eq((xs.seq().distinct().to_list().length).to_string(), "4");
     Assert.eq((xs.seq().sort_by(c8b_asc).to_list()[0]).to_string(), "1");
@@ -106,4 +107,109 @@ fun c8b_lazy_stages(): void {
     Assert.eq(first, 6);
     Assert.eq(query.to_list()[0], 6);
     Assert.eq(values.seq().skip(-2).take(-1).count(), 0);
+}
+
+fun c28_sum(xs: IndexedCollection<int>): int {
+    let total = 0;
+    let i = 0;
+    while i < xs.length {
+        total = total + xs[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fun c28_sum_collection(xs: Collection<int>): int {
+    return xs.seq().reduce(0, c8b_add);
+}
+
+@test
+@timeout(180000)
+fun array_collection(): void {
+    let arr: int[] = [10, 20, 30];
+    Assert.eq(c28_sum(arr), 60);
+    Assert.is_false(arr.is_empty());
+    Assert.eq(arr.first().unwrap_or(-1), 10);
+    Assert.eq(arr.last().unwrap_or(-1), 30);
+
+    let c: Collection<int> = arr;
+    Assert.eq(c28_sum_collection(c), 60);
+    let seen = List<string>();
+    for (let x in c) {
+        seen.push(x.to_string());
+    }
+    Assert.eq(seen.join(","), "10,20,30");
+
+    Assert.eq(arr.seq().filter(c8b_is_even).to_list().length, 3);
+    Assert.eq(arr.seq().map(c8b_times_two).reduce(0, c8b_add), 120);
+
+    let xs = List<int>();
+    xs.push(3);
+    xs.push(1);
+    xs.push(2);
+    xs.push(1);
+    Assert.eq(xs.seq().distinct().to_list().length, 3);
+    Assert.eq(xs.seq().sort_by(c8b_asc).to_list()[0], 1);
+}
+
+fun c82_sum_collection(xs: Collection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c82_sum_indexed(xs: IndexedCollection<int>): int {
+    let total = 0;
+    for (let n in xs) {
+        total = total + n;
+    }
+    return total;
+}
+
+fun c82_sum_iterator(it: Iterator<int>): int {
+    let total = 0;
+    for (let n in it) {
+        total = total + n;
+    }
+    return total;
+}
+
+@test
+@timeout(180000)
+fun collection_foreach_iface(): void {
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+    Assert.eq(c82_sum_collection(xs), 60);
+    Assert.eq(c82_sum_indexed(xs), 60);
+    Assert.eq(c82_sum_iterator(xs.iterator()), 60);
+}
+
+fun c89_total_size(xs: Collection<string>): int {
+    return xs.length;
+}
+
+@test
+@timeout(180000)
+fun collection_option_stdlib(): void {
+    let list: List<string> = ["ab", "c"];
+    Assert.eq(c89_total_size(list), 2);
+
+    let set = Set<string>();
+    set.add("hi");
+    set.add("there");
+    Assert.eq(c89_total_size(set), 2);
+
+    let opt = Option.Some(21);
+    let mapped = opt.map(c8b_times_two);
+    Assert.eq(mapped.unwrap_or(0), 42);
+
+    let lengths = List<string>();
+    for (let s in list) {
+        lengths.push(s.length.to_string());
+    }
+    Assert.eq(lengths.join(","), "2,1");
 }

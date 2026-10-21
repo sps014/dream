@@ -1,0 +1,56 @@
+// `await` placement and `defer`/`lock` body restrictions.
+import system;
+
+async fun work(): int { return 1; }
+
+async fun non_async_lambda() {
+    // The lambda is its own function for await placement, even inside an async function.
+    let g = () => work().await;
+}
+
+fun sync_map_literal() {
+    let m: Map<string, int> = { "k": work().await };
+    System.println(m["k"]);
+}
+
+fun sync_tuple_destructure() {
+    let (a, b) = (work().await, 1);
+    System.println(a + b);
+}
+
+async fun await_in_defer(): void {
+    defer {
+        Time.sleep(1).await;
+    }
+}
+
+fun jumps_in_defer() {
+    while true {
+        defer {
+            break;
+            continue;
+            return;
+        }
+    }
+}
+
+fun defer_int_budget(): void {
+    let n = 1;
+    defer(n) {
+    }
+}
+
+shared class Cell {
+    public v: int;
+    public constructor() { this.v = 0; }
+}
+
+// Locks are held per OS thread and coroutines share one thread, so a suspend point under a lock
+// would break mutual exclusion between tasks.
+async fun await_in_lock(c: Cell): int {
+    lock (c) {
+        return work().await;
+    }
+}
+
+fun main() { }

@@ -17,8 +17,7 @@ async fun c2c_in_branch(b: int): int {
     let acc = 0;
     if b == 2 {
         acc = acc + c2c_g(3).await;
-    } // `.await` inside a branch body
-    else {
+    } else {
         acc = acc + c2c_g(7).await;
     }
     return acc;
@@ -30,8 +29,8 @@ async fun c2c_in_loop(): int {
     while i < 4 {
         sum = sum + c2c_g(i).await;
         i = i + 1;
-    } // `.await` every iteration
-    return sum; // 0+1+2+3 = 6
+    }
+    return sum;
 }
 
 async fun c2c_in_foreach(): int {
@@ -39,8 +38,8 @@ async fun c2c_in_foreach(): int {
     let total = 0;
     for (let x in xs) {
         total = total + c2c_g(x * 2).await;
-    } // `.await` inside for-in
-    return total; // 2+4+6 = 12
+    }
+    return total;
 }
 
 async fun c2c_in_switch(n: int): int {
@@ -54,42 +53,85 @@ async fun c2c_in_switch(n: int): int {
 }
 
 async fun c2c_in_ternary(flag: bool): int {
-    let v = flag ? c2c_g(7).await : c2c_g(9).await; // `.await` in a ternary arm
+    let v = flag ? c2c_g(7).await : c2c_g(9).await;
     return v;
 }
 
 async fun c2c_in_shortcircuit(flag: bool): bool {
-    let ok = flag && c2c_ready().await; // `.await` in the right operand of `&&`
+    let ok = flag && c2c_ready().await;
     return ok;
-}
-
-async fun c2c_body(): void {
-    c2c_verify_observation((c2c_in_branch(2).await).to_string()); // 3
-    c2c_verify_observation((c2c_in_branch(5).await).to_string()); // 7
-    c2c_verify_observation((c2c_in_loop().await).to_string()); // 6
-    c2c_verify_observation((c2c_in_foreach().await).to_string()); // 12
-    c2c_verify_observation((c2c_in_switch(0).await).to_string()); // 100
-    c2c_verify_observation((c2c_in_switch(1).await).to_string()); // 200
-    c2c_verify_observation((c2c_in_ternary(true).await).to_string()); // 7
-    c2c_verify_observation((c2c_in_shortcircuit(true).await).to_string()); // true
-}
-
-let c2c_cursor: int = 0;
-
-fun c2c_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "3\n7\n6\n12\n100\n200\n7\ntrue\n";
-    let end = c2c_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c2c_cursor, end));
-    c2c_cursor = end;
 }
 
 @test
 @timeout(180000)
-
 async fun async_await_in_control_flow(): void {
-    c2c_cursor = 0;
-    c2c_body().await;
-    Assert.eq(c2c_cursor, ("3\n7\n6\n12\n100\n200\n7\ntrue\n").length);
+    Assert.eq(c2c_in_branch(2).await, 3);
+    Assert.eq(c2c_in_branch(5).await, 7);
+    Assert.eq(c2c_in_loop().await, 6);
+    Assert.eq(c2c_in_foreach().await, 12);
+    Assert.eq(c2c_in_switch(0).await, 100);
+    Assert.eq(c2c_in_switch(1).await, 200);
+    Assert.eq(c2c_in_ternary(true).await, 7);
+    Assert.is_true(c2c_in_shortcircuit(true).await);
+}
+
+// Control flow (branches, loops, early returns) that runs *before* an `await` must not prematurely
+// complete the async task: each poll segment's natural fall-through hands control to the suspend,
+// while an explicit `return` still completes. Regression for segments whose plain code has an `if`.
+async fun c2f_g(n: int): int {
+    return n;
+}
+
+async fun c2f_pick(early: bool): int {
+    if early {
+        return 99;
+    }
+    let y = c2f_g(5).await;
+    return y + 1;
+}
+
+async fun c2f_run(): int {
+    let sum = 0;
+    let i = 0;
+    while i < 4 {
+        sum = sum + i;
+        i = i + 1;
+    }
+    let a = c2f_g(1).await;
+    if a == 1 {
+        a = a + 10;
+    }
+    let b = c2f_g(2).await;
+    return sum + a + b;
+}
+
+@test
+@timeout(180000)
+async fun async_branch_before_await(): void {
+    Assert.eq(c2f_pick(true).await, 99);
+    Assert.eq(c2f_pick(false).await, 6);
+    Assert.eq(c2f_run().await, 19);
+}
+
+// `await` may appear in unconditionally-evaluated sub-expressions: call arguments, operands, array
+// literals, etc. The compiler hoists each nested `.await` into a top-level temporary before the async
+// coroutine transform, preserving left-to-right evaluation order.
+async fun c48_val(n: int): int {
+    Time.sleep(5).await;
+    return n;
+}
+
+fun c48_add(a: int, b: int): int {
+    return a + b;
+}
+
+@test
+@timeout(180000)
+async fun await_in_subexpr(): void {
+    Assert.eq(c48_add(c48_val(3).await, c48_val(4).await), 7);
+    let s = (c48_val(10).await) + (c48_val(20).await);
+    Assert.eq(s, 30);
+    Assert.eq(c48_val(c48_val(42).await).await, 42);
+    let arr = [c48_val(1).await, c48_val(2).await, c48_val(3).await];
+    Assert.eq(arr[2], 3);
 }

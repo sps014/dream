@@ -59,3 +59,133 @@ fun union_json(): void {
         "Located(c276_Point { x: 1, y: 2 })"
     );
 }
+
+@json
+class c277_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+enum c277_Tags {
+    Many(string[]),
+    Counts(int[]),
+    Points(c277_Point[]),
+    Empty,
+}
+
+fun c277_describe(tags: c277_Tags): string {
+    switch (tags) {
+        Many(items) => {
+            return items.length.to_string() + ":" + items[0] + "," + items[1];
+        }
+        Counts(nums) => {
+            return (nums[0] + nums[1] + nums[2]).to_string();
+        }
+        Points(pts) => {
+            return pts[0].x.to_string() + "," + pts[0].y.to_string();
+        }
+        _ => {
+            return "bad";
+        }
+    }
+}
+
+@test
+@timeout(180000)
+fun union_json_arrays(): void {
+    let items = Array.alloc<string>(2);
+    items[0] = "a";
+    items[1] = "b";
+    let m = c277_Tags.Many(items);
+    Assert.eq(Json.serialize(m), "{\"type\":\"Many\",\"_0\":[\"a\",\"b\"]}");
+    Assert.eq(c277_describe(Json.deserialize<c277_Tags>(Json.serialize(m)).unwrap_or(m)), "2:a,b");
+
+    let nums = Array.alloc<int>(3);
+    nums[0] = 1;
+    nums[1] = 2;
+    nums[2] = 3;
+    let c = c277_Tags.Counts(nums);
+    Assert.eq(Json.serialize(c), "{\"type\":\"Counts\",\"_0\":[1,2,3]}");
+    Assert.eq(c277_describe(Json.deserialize<c277_Tags>(Json.serialize(c)).unwrap_or(c)), "6");
+
+    let pts = Array.alloc<c277_Point>(1);
+    pts[0] = c277_Point(4, 5);
+    let p = c277_Tags.Points(pts);
+    Assert.eq(Json.serialize(p), "{\"type\":\"Points\",\"_0\":[{\"x\":4,\"y\":5}]}");
+    Assert.eq(c277_describe(Json.deserialize<c277_Tags>(Json.serialize(p)).unwrap_or(p)), "4,5");
+}
+
+// @json on a generic discriminated union: the derive attaches to the template `Opt<T>` and each
+// concrete instantiation gets its own converters. Type-parameter payloads round-trip through
+// `Json.serialize`/`Json.deserialize`, resolved per instance by the monomorphizer.
+@json
+struct c115_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@json
+enum c115_Opt<T> {
+    Some(T),
+    None,
+}
+
+fun c115_describe(value: c115_Opt<c115_Point>): string {
+    switch (value) {
+        Some(point) => {
+            return point.x.to_string() + "," + point.y.to_string();
+        }
+        None => {
+            return "none";
+        }
+    }
+}
+
+@test
+@timeout(180000)
+fun json_generic_union(): void {
+    let a: c115_Opt<c115_Point> = c115_Opt.Some(c115_Point(3, 4));
+    let sa = Json.serialize<c115_Opt<c115_Point>>(a);
+    Assert.eq(sa, "{\"type\":\"Some\",\"_0\":{\"x\":3,\"y\":4}}");
+    Assert.eq(c115_describe(Json.deserialize<c115_Opt<c115_Point>>(sa).unwrap_or(a)), "3,4");
+
+    let b: c115_Opt<c115_Point> = c115_Opt.None;
+    let sb = Json.serialize<c115_Opt<c115_Point>>(b);
+    Assert.eq(sb, "{\"type\":\"None\"}");
+    Assert.eq(c115_describe(Json.deserialize<c115_Opt<c115_Point>>(sb).unwrap_or(b)), "none");
+}
+
+// `Json.deserialize<T>` reports an unknown discriminated-union `"type"` tag as `Err(ParseError)`
+// instead of silently falling back to the first variant.
+@json
+enum c122_Shape {
+    Circle(int),
+    Rect(width: int, height: int),
+}
+
+@test
+@timeout(180000)
+fun json_union_strict_variant(): void {
+    let c = c122_Shape.Circle(7);
+    let s = Json.serialize(c);
+    Assert.eq(s, "{\"type\":\"Circle\",\"_0\":7}");
+    Assert.eq(Json.deserialize<c122_Shape>(s).unwrap().to_string(), "Circle(7)");
+
+    let bad = Json.deserialize<c122_Shape>("{\"type\":\"Triangle\"}").unwrap_err();
+    Assert.eq(bad.message(), "unknown variant 'Triangle' for union 'c122_Shape'");
+
+    let missing = Json.deserialize<c122_Shape>("{}").unwrap_err();
+    Assert.eq(missing.code(), "EPARSE");
+    Assert.eq(missing.message(), "unknown variant '' for union 'c122_Shape'");
+}

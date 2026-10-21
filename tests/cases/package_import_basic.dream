@@ -1,9 +1,12 @@
 // A bare `import <pkg>;` (no dot) resolves through dream_packages/<pkg>/src/<pkg>.dream — the
-// package's self-named entry file — once no local file matches, exercising the `dreamer`
-// package-manager integration in `resolve_import_path` (see dream_packages/greeter/).
+// package's self-named entry file — once no local file matches. A dotted
+// `import <pkg>.<item-file>;` resolves through dream_packages/<pkg>/src/<item-file>.dream. Both
+// exercise the `dreamer` package-manager integration in `resolve_import_path`.
 import system;
 import greeter;
+import mathpkg.ops;
 
 fun main(): void {
     System.println(hello());
+    System.println(times_two(21));
 }

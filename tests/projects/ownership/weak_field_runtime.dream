@@ -21,25 +21,20 @@ fun c2a4_attach_weak_parent(child: c2a4_Node) {
     child.parent = Option.Some(parent);
     switch (child.parent) {
         Some(p) => {
-            c2a4_verify_observation(("inside: parent.value=" + p.value.to_string()).to_string());
+            Assert.eq(p.value, 99);
         }
         None => {
-            c2a4_verify_observation(("inside: parent is None (unexpected)").to_string());
+            Assert.fail("weak parent is None while its referent is alive");
         }
     }
 }
 
-fun c2a4_body() {
+@test
+@timeout(180000)
+fun weak_field_runtime(): void {
     let child = c2a4_Node(1);
     c2a4_attach_weak_parent(child);
-    switch (child.parent) {
-        Some(p) => {
-            c2a4_verify_observation(("after: parent.value=" + p.value.to_string()).to_string());
-        }
-        None => {
-            c2a4_verify_observation(("after: parent is None").to_string());
-        }
-    }
+    Assert.is_true(child.parent.is_none());
 
     // Reassigning a `weak` field to a *live* referent must still work like an ordinary read: it does
     // not retain the new referent either.
@@ -47,33 +42,158 @@ fun c2a4_body() {
     child.parent = Option.Some(other);
     switch (child.parent) {
         Some(p) => {
-            c2a4_verify_observation(("live: parent.value=" + p.value.to_string()).to_string());
+            Assert.eq(p.value, 2);
         }
         None => {
-            c2a4_verify_observation(("live: parent is None (unexpected)").to_string());
+            Assert.fail("weak parent is None while its referent is alive");
         }
     }
 }
 
-let c2a4_cursor: int = 0;
+class WeakLocalSession {
+    public id: int;
 
-fun c2a4_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n";
-    let end = c2a4_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c2a4_cursor, end));
-    c2a4_cursor = end;
+    public constructor(id: int) {
+        this.id = id;
+    }
+}
+
+fun dead_weak_reader(): fun(): Option<WeakLocalSession> {
+    let session = WeakLocalSession(7);
+    let weak observer = session;
+    return () => observer;
+}
+
+@test
+fun weak_get_optional(): void {
+    let session = WeakLocalSession(42);
+    let weak observer = session;
+    Assert.eq(observer.unwrap().id, 42);
+    session.id = 43;
+    Assert.eq(observer.unwrap().id, 43);
+    let other = WeakLocalSession(99);
+    observer = other;
+    Assert.eq(observer.unwrap().id, 99);
+    other.id = 100;
+    observer = Option<WeakLocalSession>.None;
+    Assert.is_true(observer.is_none());
+    observer = Option.Some(session);
+    Assert.eq(observer.unwrap().id, 43);
+    session.id = 44;
+    let dead = dead_weak_reader();
+    Assert.is_true(dead().is_none());
+    let const_reader = () => observer;
+    observer = other;
+    Assert.eq(const_reader().unwrap().id, 100);
+    other.id = 101;
+    weak_local_breaks_callback_cycle();
+    weak_storage_uses_builtin_identity();
+}
+
+let weak_callback_drops: int = 0;
+
+@allow_cycle
+class WeakCallbackOwner {
+    public callback: fun(): int;
+    public value: int;
+
+    public constructor() {
+        this.value = 5;
+        this.callback = () => 0;
+    }
+
+    del() {
+        weak_callback_drops = weak_callback_drops + 1;
+    }
+}
+
+fun make_weak_callback(): fun(): int {
+    let owner = WeakCallbackOwner();
+    const weak observer = owner;
+    owner.callback = () => {
+        return switch (observer) {
+            Some(live) => live.value,
+            None => -1,
+        };
+    };
+    let callback = owner.callback;
+    Assert.eq(callback(), 5);
+    return owner.callback;
+}
+
+fun weak_local_breaks_callback_cycle(): void {
+    weak_callback_drops = 0;
+    let callback = make_weak_callback();
+    Assert.eq(weak_callback_drops, 1);
+    Assert.eq(callback(), -1);
+}
+
+class Weak {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+fun weak_storage_uses_builtin_identity(): void {
+    let target = Weak(17);
+    let weak observer = target;
+    Assert.eq(observer.unwrap().value, 17);
+    target.value = 18;
+    Assert.eq(observer.unwrap().value, 18);
+}
+
+@allow_cycle
+class c25_ForestNode {
+    public left: Option<c25_ForestNode>;
+    public right: Option<c25_ForestNode>;
+    public weak parent: Option<c25_ForestNode>;
+
+    public constructor() {
+        this.left = Option.None;
+        this.right = Option.None;
+        this.parent = Option.None;
+    }
+}
+
+fun c25_forest(depth: int): c25_ForestNode {
+    let node = c25_ForestNode();
+    if depth > 1 {
+        let left = c25_forest(depth - 1);
+        left.parent = Option.Some(node);
+        let right = c25_forest(depth - 1);
+        right.parent = Option.Some(node);
+        node.left = Option.Some(left);
+        node.right = Option.Some(right);
+    }
+    return node;
 }
 
 @test
 @timeout(180000)
+fun arc_weak_forest(): void {
+    let root: Option<c25_ForestNode> = Option.Some(c25_forest(5));
+    let kept: Option<c25_ForestNode> = Option.None;
+    switch (root) {
+        Some(node) => {
+            kept = node.left;
+        }
+        None => {}
+    }
+    Assert.is_true(kept.is_some());
+    switch (kept) {
+        Some(child) => {
+            Assert.is_true(child.parent.is_some());
+        }
+        None => {}
+    }
 
-fun weak_field_runtime(): void {
-    c2a4_cursor = 0;
-    c2a4_body();
-    Assert.eq(
-        c2a4_cursor,
-        ("inside: parent.value=99\nafter: parent is None\nlive: parent.value=2\n").length
-    );
+    root = Option.None;
+    switch (kept) {
+        Some(child) => {
+            Assert.is_true(child.parent.is_none());
+        }
+        None => {}
+    }
 }

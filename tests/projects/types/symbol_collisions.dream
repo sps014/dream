@@ -1,0 +1,68 @@
+import system.testing;
+import system;
+
+class ce5_B {
+    public value: string;
+
+    public constructor(value: string) {
+        this.value = value;
+    }
+}
+
+class ce5_A<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+}
+
+class ce5_A_B {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+class ce5_Box<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+}
+
+fun c238_foo<T>(value: T): T {
+    return value;
+}
+
+fun c238_foo__0(): int {
+    return 20;
+}
+
+fun c238_foo__12(): int {
+    return 30;
+}
+
+fun c238__Dg0_3_foo_6_p3_int(): int {
+    return 40;
+}
+
+@test
+@timeout(180000)
+fun generic_identity_collision(): void {
+    let flat = ce5_Box<ce5_A_B>(ce5_A_B(17));
+    let nested = ce5_Box<ce5_A<ce5_B>>(ce5_A<ce5_B>(ce5_B("second")));
+    Assert.eq((flat.value.value).to_string(), "17");
+    Assert.eq((nested.value.value.value).to_string(), "second");
+}
+
+@test
+@timeout(180000)
+fun structural_symbols() {
+    Assert.eq((c238_foo<int>(10)).to_string(), "10");
+    Assert.eq((c238_foo__0()).to_string(), "20");
+    Assert.eq((c238_foo__12()).to_string(), "30");
+    Assert.eq((c238__Dg0_3_foo_6_p3_int()).to_string(), "40");
+}

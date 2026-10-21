@@ -108,3 +108,34 @@ fun arc_readers_and_storage(): void {
     Assert.eq(values[0], "c");
     Assert.eq(values[2], "a");
 }
+
+// `Buffer.realloc<T>`/`Buffer.free<T>` give manual, non-ARC control over an
+// array's backing block via the allocator's `$realloc`/`$free`.
+@test
+@timeout(180000)
+@unsafe
+fun buffer_realloc_free(): void {
+    let xs = Array.alloc<int>(3);
+    xs[0] = 10;
+    xs[1] = 20;
+    xs[2] = 30;
+
+    // Grow: the overlapping prefix survives, the new tail is zero-initialized.
+    xs = Buffer.realloc<int>(xs, 5);
+    Assert.eq(xs.length, 5);
+    Assert.eq(xs[0], 10);
+    Assert.eq(xs[1], 20);
+    Assert.eq(xs[2], 30);
+    Assert.eq(xs[3], 0);
+    Assert.eq(xs[4], 0);
+
+    xs[3] = 40;
+    xs[4] = 50;
+
+    xs = Buffer.realloc<int>(xs, 2);
+    Assert.eq(xs.length, 2);
+    Assert.eq(xs[0], 10);
+    Assert.eq(xs[1], 20);
+
+    Buffer.free<int>(xs);
+}

@@ -1,0 +1,209 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c128_apply(f: fun(int): int, v: int): int {
+    return f(v);
+}
+
+// The outer lambda only forwards `a`/`b`/`c` to the inner one: a multi-level, multi-capture chain.
+fun c7f_make(a: int, b: int): fun(): fun(): int {
+    let c: int = 100;
+    return () => {
+        return () => {
+            c = c + 1;
+            return a + b + c;
+        };
+    };
+}
+
+fun c7a_wrap_bool(handler: fun(bool): void): fun(string): void {
+    return (body: string) => handler(body == "1");
+}
+
+fun c7a_wrap_pair(handler: fun(int, int): void): fun(string): void {
+    return (body: string) => {
+        let parts = body.split('\n');
+        handler(int.parse(parts[0]).unwrap_or(0), int.parse(parts[1]).unwrap_or(0));
+    };
+}
+
+fun c7a_wrap_value(get: fun(): int): fun(): int {
+    return () => get() * 2;
+}
+
+class c7c_Counter {
+    public count: int;
+
+    public constructor() {
+        this.count = 0;
+    }
+}
+
+class c7c_Named {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+fun c7c_make(ok: bool): Result<c7c_Named, string> {
+    if ok {
+        return Result.Ok(c7c_Named("view"));
+    }
+    return Result.Err("nope");
+}
+
+class c80_Counter {
+    public value: int;
+
+    public constructor(start: int) {
+        this.value = start;
+    }
+}
+
+fun c80_run(f: fun(): void): void {
+    f();
+}
+
+@test
+@timeout(180000)
+fun lambda_basics(): void {
+    let add: fun(int, int): int = (x: int, y: int) => x + y;
+    Assert.eq(add(2, 3), 5);
+
+    let square: fun(int): int = (x: int) => {
+        let r = x * x;
+        return r;
+    };
+    Assert.eq(square(5), 25);
+
+    Assert.eq(c128_apply((x: int) => x + 100, 1), 101);
+
+    let nums: List<int> = List<int>();
+    nums.push(3);
+    nums.push(1);
+    nums.push(2);
+    nums.sort_by((a, b) => a - b);
+    Assert.eq(nums[0], 1);
+    Assert.eq(nums[1], 2);
+    Assert.eq(nums[2], 3);
+
+    let doubled = (x: int) => x * 2;
+    Assert.eq(doubled(21), 42);
+}
+
+@test
+@timeout(180000)
+fun closure_multi_capture(): void {
+    let a: int = 1;
+    let b: int = 2;
+    let f: fun(): int = () => a + b;
+    Assert.eq(f(), 3);
+
+    let x: int = 10;
+    let y: int = 20;
+    let z: int = 30;
+    let g: fun(): int = () => {
+        x = x + 1;
+        return x + y + z;
+    };
+    Assert.eq(g(), 61);
+    Assert.eq(x, 11);
+
+    let l1: fun(): fun(): int = c7f_make(1, 2);
+    let l2: fun(): int = l1();
+    Assert.eq(l2(), 104);
+    Assert.eq(l2(), 105);
+}
+
+// The callee is read through its capture cell, including `void` callees used as statements.
+@test
+@timeout(180000)
+fun closure_calls_captured_fun(): void {
+    let log = List<string>();
+    let fired = List<fun(string): void>();
+    fired.push(c7a_wrap_bool((on: bool) => log.push("flag " + on)));
+    fired.push(c7a_wrap_pair((a: int, b: int) => log.push("pair " + (a + b))));
+    fired[0]("1");
+    fired[0]("0");
+    fired[1]("20\n22");
+    Assert.eq(log.length, 3);
+    Assert.eq(log[0], "flag true");
+    Assert.eq(log[1], "flag false");
+    Assert.eq(log[2], "pair 42");
+
+    let doubled = c7a_wrap_value(() => 21);
+    Assert.eq(doubled(), 42);
+}
+
+// Switch-arm payloads and for-each elements are bound by lowering, not by a `let`, so a capturing
+// lambda must still receive them through a capture cell and read them after the arm / iteration.
+@test
+@timeout(180000)
+fun closure_capture_pattern_binding(): void {
+    let log = List<string>();
+    let counter = c7c_Counter();
+    let fs: List<fun(): void> = List<fun(): void>();
+    switch (c7c_make(true)) {
+        Ok(named) => {
+            fs.push(
+                () => {
+                    counter.count = counter.count + 1;
+                    log.push(named.name + " " + counter.count.to_string());
+                }
+            );
+        },
+        Err(e) => log.push(e),
+    }
+    switch (c7c_make(false)) {
+        Ok(named) => log.push(named.name),
+        Err(e) => {
+            fs.push(() => log.push("err " + e));
+        },
+    }
+    let names: string[] = ["a", "b"];
+    for (let n in names) {
+        fs.push(() => log.push("array " + n));
+    }
+    let list = List<c7c_Named>();
+    list.push(c7c_Named("x"));
+    list.push(c7c_Named("y"));
+    for (let item in list) {
+        fs.push(
+            () => {
+                counter.count = counter.count + 1;
+                log.push("list " + item.name + " " + counter.count.to_string());
+            }
+        );
+    }
+    Assert.eq(log.length, 0);
+    for (let f in fs) {
+        f();
+    }
+    Assert.eq(log.length, 6);
+    Assert.eq(log[0], "view 1");
+    Assert.eq(log[1], "err nope");
+    Assert.eq(log[2], "array a");
+    Assert.eq(log[3], "array b");
+    Assert.eq(log[4], "list x 2");
+    Assert.eq(log[5], "list y 3");
+}
+
+// A capturing `fun(): void` called through its boxed value has no result to materialize.
+@test
+@timeout(180000)
+fun closure_void_indirect_call(): void {
+    let counter = c80_Counter(10);
+    let inc: fun(): void = () => {
+        counter.value = counter.value + 1;
+    };
+
+    inc();
+    inc();
+    Assert.eq(counter.value, 12);
+
+    c80_run(inc);
+    Assert.eq(counter.value, 13);
+}

@@ -1,8 +1,0 @@
-import system;
-fun notAsync(): void {
-    let x = Time.sleep(10).await;
-}
-
-fun main(): void {
-    notAsync();
-}

@@ -1,7 +1,0 @@
-// `@route` without a matching `@attribute struct route` is unknown.
-@route("/users")
-public fun list(): void {
-}
-
-fun main(): void {
-}

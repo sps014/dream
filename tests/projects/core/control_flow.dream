@@ -1,53 +1,227 @@
 import system.testing;
 import system;
+import system.collections;
 
-fun ca2_body(): void {
-    let x = 10;
+class cd8_Box {
+    public items: List<string>;
 
-    if x > 5 {
-        ca2_verify_observation((1).to_string());
-    } else {
-        ca2_verify_observation((0).to_string());
-    }
-
-    if x < 5 {
-        ca2_verify_observation((0).to_string());
-    } else if (x == 10) {
-        ca2_verify_observation((2).to_string());
-    } else {
-        ca2_verify_observation((0).to_string());
-    }
-
-    let i = 0;
-    while i < 3 {
-        ca2_verify_observation((i).to_string());
-        i = i + 1;
-    }
-
-    for (let j = 0; j < 3; j = j + 1) {
-        if j == 1 {
-            continue;
-        }
-        ca2_verify_observation((j).to_string());
+    public constructor() {
+        this.items = List<string>();
     }
 }
 
-let ca2_cursor: int = 0;
+fun cd8_make(n: int): List<int> {
+    let xs = List<int>();
+    for (let i = 0; i < n; i++) {
+        xs.push(i);
+    }
+    return xs;
+}
 
-fun ca2_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "1\n2\n0\n1\n2\n0\n2\n";
-    let end = ca2_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(ca2_cursor, end));
-    ca2_cursor = end;
+let c2a3_logged: int = 0;
+let c2a3_last: int = 0;
+
+fun c2a3_log_positive(n: int): void {
+    if n < 0 {
+        return;
+    }
+    c2a3_logged = c2a3_logged + 1;
+    c2a3_last = n;
+}
+
+fun cc8_side(): int {
+    return 9;
 }
 
 @test
 @timeout(180000)
+fun branching(): void {
+    let x = 10;
+    let trace = "";
 
-fun control_flow(): void {
-    ca2_cursor = 0;
-    ca2_body();
-    Assert.eq(ca2_cursor, ("1\n2\n0\n1\n2\n0\n2\n").length);
+    if x > 5 {
+        if x < 15 {
+            if x == 10 {
+                trace = trace + "1;";
+            } else {
+                trace = trace + "0;";
+            }
+        } else {
+            trace = trace + "0;";
+        }
+    } else {
+        trace = trace + "0;";
+    }
+
+    if x < 5 {
+        trace = trace + "0;";
+    } else if (x == 10) {
+        trace = trace + "2;";
+    } else if (x > 10) {
+        trace = trace + "0;";
+    } else {
+        trace = trace + "0;";
+    }
+
+    let i = 0;
+    while i < 10 {
+        if i == 3 {
+            break;
+        }
+        trace = trace + i.to_string() + ";";
+        i = i + 1;
+    }
+
+    for (let j = 0; j < 5; j = j + 1) {
+        if j == 1 {
+            continue;
+        }
+        if j == 3 {
+            continue;
+        }
+        trace = trace + j.to_string() + ";";
+    }
+
+    for (let a = 0; a < 2; a = a + 1) {
+        for (let b = 0; b < 2; b = b + 1) {
+            trace = trace + (a * 10 + b).to_string() + ";";
+        }
+    }
+
+    Assert.eq(trace, "1;2;0;1;2;0;2;4;0;1;10;11;");
+}
+
+@test
+@timeout(180000)
+fun do_while(): void {
+    let trace = "";
+    let i: int = 0;
+    do {
+        trace = trace + i.to_string() + ";";
+        i = i + 1;
+    } while (i < 3);
+
+    let j: int = 10;
+    do {
+        trace = trace + j.to_string() + ";";
+        j = j + 1;
+    } while (j < 5);
+
+    Assert.eq(trace, "0;1;2;10;");
+}
+
+@test
+@timeout(180000)
+fun labeled_loops(): void {
+    let trace = "";
+    outer: for (let i: int = 0; i < 3; i = i + 1) {
+        for (let j: int = 0; j < 3; j = j + 1) {
+            if j == 1 {
+                continue outer;
+            }
+            if i == 2 {
+                break outer;
+            }
+            trace = trace + (i * 10 + j).to_string() + ";";
+        }
+    }
+    Assert.eq(trace, "0;10;");
+}
+
+@test
+@timeout(180000)
+fun ergonomics_basics(): void {
+    let trace = "";
+    let n = 3;
+    if (n > 0)trace = trace + "1;";
+    else trace = trace + "0;";
+    let i = 0;
+    while i < 2 {
+        trace = trace + i.to_string() + ";";
+        i++;
+    }
+    for (let j = 0; j < 2; j++)trace = trace + j.to_string() + ";";
+    Assert.eq(trace, "1;0;1;0;1;");
+
+    let k = 0;
+    let a = k++;
+    let b =++k;
+    Assert.eq(a, 0);
+    Assert.eq(b, 2);
+    cc8_side() + 1;
+}
+
+// A bare `return;` exits a `void` function early.
+@test
+@timeout(180000)
+fun void_early_return(): void {
+    c2a3_logged = 0;
+    c2a3_log_positive(0 - 5);
+    Assert.eq(c2a3_logged, 0);
+    c2a3_log_positive(7);
+    Assert.eq(c2a3_last, 7);
+    c2a3_log_positive(0 - 1);
+    Assert.eq(c2a3_last, 7);
+    c2a3_log_positive(42);
+    Assert.eq(c2a3_last, 42);
+    Assert.eq(c2a3_logged, 2);
+}
+
+@test
+@timeout(180000)
+fun foreach_list(): void {
+    let total = 0;
+    for (let x in cd8_make(10)) {
+        if x == 2 {
+            continue;
+        }
+        if x == 7 {
+            break;
+        }
+        total = total + x;
+    }
+    Assert.eq(total, 19);
+
+    let words = List<string>();
+    words.push("alpha");
+    words.push("beta");
+    words.push("gamma");
+    let joined = "";
+    for (let w in words) {
+        joined = joined + w + ";";
+    }
+    Assert.eq(joined, "alpha;beta;gamma;");
+
+    let grid = List<List<string>>();
+    grid.push(words);
+    grid.push(List<string>());
+    let inner = List<string>();
+    inner.push("z");
+    grid.push(inner);
+    let count = 0;
+    outer: for (let row in grid) {
+        for (let cell in row) {
+            count = count + 1;
+            if cell == "z" {
+                break outer;
+            }
+        }
+    }
+    Assert.eq(count, 4);
+
+    let b = cd8_Box();
+    b.items.push("x");
+    b.items.push("y");
+    let items = "";
+    for (let s in b.items) {
+        items = items + s + ";";
+    }
+    Assert.eq(items, "x;y;");
+
+    let empty = List<int>();
+    let visited = 0;
+    for (let e in empty) {
+        visited = visited + 1;
+    }
+    Assert.eq(visited, 0);
 }

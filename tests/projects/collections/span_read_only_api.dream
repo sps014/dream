@@ -1,6 +1,7 @@
 import system.testing;
 // `Span<T>` / `ReadOnlySpan<T>` shared ops and by-value for-each (an index loop, no iterator).
 import system;
+import system.collections;
 
 fun c203_sum(xs: ReadOnlySpan<int>): int {
     let t = 0;
@@ -10,49 +11,129 @@ fun c203_sum(xs: ReadOnlySpan<int>): int {
     return t;
 }
 
-fun c203_body(): void {
+@test
+@timeout(180000)
+fun span_read_only_api(): void {
     let arr = [1, 2, 3, 4, 5];
     let s = Span<int>.of(arr);
-    c203_verify_observation((c203_sum(s.as_read_only())).to_string());
-    c203_verify_observation((c203_sum(s.slice(1, 4).as_read_only())).to_string());
-    c203_verify_observation((s.slice(2).length).to_string());
-    c203_verify_observation((s.index_of(4).unwrap_or(-1)).to_string());
-    c203_verify_observation((s.contains(9)).to_string());
+    Assert.eq(c203_sum(s.as_read_only()), 15);
+    Assert.eq(c203_sum(s.slice(1, 4).as_read_only()), 9);
+    Assert.eq(s.slice(2).length, 3);
+    Assert.eq(s.index_of(4).unwrap_or(-1), 3);
+    Assert.is_false(s.contains(9));
     let dst = Span<int>.of([0, 0, 0, 0, 0, 0]);
     s.copy_to(dst);
-    c203_verify_observation(
-        (dst.to_array().length.to_string() + " " + dst[4].to_string()).to_string()
-    );
-    c203_verify_observation((s.sequence_equal(dst.slice(0, 5))).to_string());
-    c203_verify_observation(
-        (s.as_read_only().sequence_equal(dst.slice(1, 6).as_read_only())).to_string()
-    );
+    Assert.eq(dst.to_array().length.to_string() + " " + dst[4].to_string(), "6 5");
+    Assert.is_true(s.sequence_equal(dst.slice(0, 5)));
+    Assert.is_false(s.as_read_only().sequence_equal(dst.slice(1, 6).as_read_only()));
+    let tail = List<string>();
     for (let x in s.slice(3)) {
-        c203_verify_observation((x).to_string());
+        tail.push(x.to_string());
     }
+    Assert.eq(tail.join(","), "4,5");
     let words = ReadOnlySpan<string>.of(["a", "b" + "c", "d"]);
-    c203_verify_observation((words.index_of("bc").unwrap_or(-1)).to_string());
+    Assert.eq(words.index_of("bc").unwrap_or(-1), 1);
+    // Overlapping copy must behave like memmove.
     let buf = ["x", "y", "z", "w"];
     Span<string>.of(buf).slice(0, 3).copy_to(Span<string>.of(buf).slice(1, 4));
-    c203_verify_observation((buf[0] + buf[1] + buf[2] + buf[3]).to_string());
+    Assert.eq(buf[0] + buf[1] + buf[2] + buf[3], "xxyz");
 }
 
-let c203_cursor: int = 0;
-
-fun c203_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "15\n9\n3\n3\nfalse\n6 5\ntrue\nfalse\n4\n5\n1\nxxyz\n";
-    let end = c203_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c203_cursor, end));
-    c203_cursor = end;
+// `Span<T>` is a bounds-checked, non-owning view over an existing array's elements: no copy, no
+// heap allocation of its own (it's a `ref struct`), and its own logical range is enforced
+// independently of the backing array's actual size.
+fun c1fc_sum(s: Span<int>): int {
+    let total = 0;
+    let i = 0;
+    while i < s.length {
+        total = total + s[i];
+        i = i + 1;
+    }
+    return total;
 }
 
 @test
 @timeout(180000)
+fun span_basic(): void {
+    let xs = [1, 2, 3, 4, 5];
 
-fun span_read_only_api(): void {
-    c203_cursor = 0;
-    c203_body();
-    Assert.eq(c203_cursor, ("15\n9\n3\n3\nfalse\n6 5\ntrue\nfalse\n4\n5\n1\nxxyz\n").length);
+    let whole = Span<int>.of(xs);
+    Assert.eq(whole.length, 5);
+    Assert.eq(c1fc_sum(whole), 15);
+
+    let mid = whole.slice(1, 4);
+    Assert.eq(mid.length, 3);
+    Assert.eq(c1fc_sum(mid), 9);
+
+    mid[0] = 20;
+    Assert.eq(xs[1], 20);
+
+    let copy = mid.to_array();
+    Assert.eq(copy.length, 3);
+    Assert.eq(copy[0], 20);
+
+    let inner = mid.slice(1, 3);
+    Assert.eq(c1fc_sum(inner), 7);
+}
+
+// `List.as_span()` views the backing array it was taken from: writes go through to the list,
+// and after the list grows the span keeps showing the old array.
+class c200_Box {
+    public v: int;
+
+    public constructor(v: int) {
+        this.v = v;
+    }
+}
+
+@test
+@timeout(180000)
+fun span_list_stale(): void {
+    let names = List<string>();
+    names.push("a" + "1");
+    names.push("bb");
+    let view = names.as_read_only_span();
+    let i = 0;
+    while i < 20 {
+        names.push("n" + i.to_string());
+        i = i + 1;
+    }
+    let seen = List<string>();
+    for (let n in view) {
+        seen.push(n);
+    }
+    Assert.eq(seen.join(","), "a1,bb");
+    Assert.eq(view.length, 2);
+    Assert.eq(names.length, 22);
+
+    let boxes = List<c200_Box>();
+    boxes.push(c200_Box(7));
+    boxes.push(c200_Box(8));
+    let bs = boxes.as_span();
+    bs[0] = c200_Box(70);
+    Assert.eq(boxes[0].v + bs[1].v, 78);
+}
+
+@test
+@timeout(180000)
+fun span_map_inline(): void {
+    let map = Map<string, int>();
+    map["Ω界😀"] = 42;
+    map[""] = 7;
+    let chars = ['x', 'Ω', '界', (char)55357, (char)56832, 'y'];
+    let view = ReadOnlySpan<char>.of(chars).slice(1, 5);
+    Assert.is_true(view.hash_code() == "Ω界😀".hash_code());
+    Assert.eq(map.get(view).unwrap_or(-1), 42);
+    Assert.eq(map.get("xΩ界😀y".span(1, 5)).unwrap_or(-1), 42);
+    let empty: char[] = [];
+    Assert.eq(map.get(ReadOnlySpan<char>.of(empty)).unwrap_or(-1), 7);
+    Assert.is_false(map.contains(ReadOnlySpan<char>.of(['Ω', '界'])));
+    Assert.is_true(map.remove("Ω界😀"));
+    Assert.eq(map.get(view).unwrap_or(-1), -1);
+    map["Ω界😀"] = 99;
+    Assert.eq(map.get(view).unwrap_or(-1), 99);
+    map.clear();
+    Assert.eq(map.get(view).unwrap_or(-1), -1);
+    map["Ω界😀"] = 100;
+    Assert.eq(map.get(view).unwrap_or(-1), 100);
 }

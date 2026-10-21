@@ -76,14 +76,6 @@ Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.
 public static get memory_bytes(): long
 ```
 
-## `args`
-
-Process arguments exclude the executable and preserve empty strings and embedded newlines.
-
-```dream
-public static get args(): string[]
-```
-
 ## `exe_path`
 
 Absolute path of the running executable when known.

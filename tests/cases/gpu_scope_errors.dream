@@ -1,0 +1,14 @@
+// GPU builtins and buffer indexing are only available inside `@compute` shaders.
+import system;
+import system.gpu;
+
+fun builtin_outside_shader(): void {
+    let id = global_id();
+    System.println(id.x);
+}
+
+fun first(buffer: GpuBuffer<float>): float {
+    return buffer[0];
+}
+
+fun main(): void {}

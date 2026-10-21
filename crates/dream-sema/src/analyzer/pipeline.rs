@@ -51,7 +51,11 @@ impl<'a> Analyzer<'a> {
         let imports = self.hir_build_imports(node);
         let intrinsics = self.hir_build_intrinsics(node);
         let interfaces = self.hir_build_interfaces();
-        let hir_functions = std::mem::take(&mut self.hir.functions);
+        let mut hir_functions = std::mem::take(&mut self.hir.functions);
+        self.hir_bind_entry_args(&mut hir_functions, diagnostics);
+        if diagnostics.has_errors() {
+            return Err(SemanticError::AnalysisFailed);
+        }
         let hir_globals = std::mem::take(&mut self.hir.global_decls);
         let type_symbols = self
             .type_ctx

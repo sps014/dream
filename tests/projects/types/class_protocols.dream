@@ -1,0 +1,123 @@
+import system.testing;
+import system;
+
+// A user class opting into `for let x in obj` via the enumerator protocol: `iterator()`
+// returns an object whose `next(): Option<T>` yields elements until `None`.
+class c75_RangeIter {
+    current: int;
+    end: int;
+
+    public constructor(start: int, end: int) {
+        this.current = start;
+        this.end = end;
+    }
+
+    public fun next(): Option<int> {
+        if this.current >= this.end {
+            return Option.None;
+        }
+        let v = this.current;
+        this.current = this.current + 1;
+        return Option.Some(v);
+    }
+}
+
+class c75_Range {
+    start: int;
+    end: int;
+
+    public constructor(start: int, end: int) {
+        this.start = start;
+        this.end = end;
+    }
+
+    public fun iterator(): c75_RangeIter {
+        return c75_RangeIter(this.start, this.end);
+    }
+}
+
+// A user class opting into `obj[i]` / `obj[i] = v` via `fun this[...]`.
+class c76_Grid {
+    cells: int[];
+
+    public constructor(size: int) {
+        this.cells = Array.alloc<int>(size);
+    }
+
+    public fun this[index: int]: int {
+        return this.cells[index];
+    }
+
+    public fun this[index: int] = value: int {
+        this.cells[index] = value;
+    }
+}
+
+// TypeScript-style property accessors: `obj.prop` calls the getter, `obj.prop = v` calls the
+// setter.
+class c78_Temperature {
+    celsius: float;
+
+    public constructor(celsius: float) {
+        this.celsius = celsius;
+    }
+
+    public get fahrenheit(): float {
+        return this.celsius * 9.0f / 5.0f + 32.0f;
+    }
+
+    public set fahrenheit(value: float) {
+        this.celsius = (value - 32.0f) * 5.0f / 9.0f;
+    }
+
+    public get raw(): float {
+        return this.celsius;
+    }
+}
+
+@test
+@timeout(180000)
+fun class_foreach(): void {
+    let total = 0;
+    for (let x in c75_Range(0, 6)) {
+        if x == 2 {
+            continue;
+        }
+        if x == 5 {
+            break;
+        }
+        total = total + x;
+    }
+    Assert.eq(total, 8);
+
+    let seen = "";
+    for (let y in c75_Range(10, 13)) {
+        seen = seen + y.to_string() + ",";
+    }
+    Assert.eq(seen, "10,11,12,");
+}
+
+@test
+@timeout(180000)
+fun class_indexer() {
+    let g = c76_Grid(4);
+    g[0] = 5;
+    g[1] = 10;
+    g[2] = g[0] + g[1];
+    Assert.eq((g[0]).to_string(), "5");
+    Assert.eq((g[1]).to_string(), "10");
+    Assert.eq((g[2]).to_string(), "15");
+}
+
+@test
+@timeout(180000)
+fun class_property(): void {
+    let t = c78_Temperature(0.0f);
+    Assert.eq(t.fahrenheit, 32.0f);
+
+    t.fahrenheit = 212.0f;
+    Assert.eq(t.raw, 100.0f);
+
+    t.fahrenheit = 98.6f;
+    Assert.approx((double)t.fahrenheit, 98.6d, 0.00001d);
+}

@@ -1,0 +1,30 @@
+// Module visibility: file-private and module-internal items cannot be reached from this unnamed
+// root module, and two files of the same module still share one namespace.
+import system;
+import helpers.module_private_item;
+import helpers.module_utils_math;
+import helpers.module_internal_member;
+import helpers.module_dup_a;
+import helpers.module_dup_b;
+
+import priv.mod.private_only as p;
+import utils.math.shared_helper as h;
+
+fun private_alias(): void {
+    System.println(p());
+}
+
+fun internal_alias(): void {
+    System.println(h());
+}
+
+fun internal_member(): void {
+    let v: Vector = make_vector(5);
+    System.println(v.x);
+}
+
+fun duplicate_overload(): void {
+    System.println(add(1, 2));
+}
+
+fun main(): void {}

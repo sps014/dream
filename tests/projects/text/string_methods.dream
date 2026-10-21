@@ -1,23 +1,142 @@
 import system.testing;
 import system;
+import system.encoding;
 import system.text;
 
 @test
 @timeout(180000)
 fun string_methods(): void {
     let s = "Hello, World";
-    Assert.eq((s.length).to_string(), "12");
-    Assert.eq((s.substring(0, 5)).to_string(), "Hello");
-    Assert.eq((s.substring(7, 12)).to_string(), "World");
-    Assert.eq((s.to_lower()).to_string(), "hello, world");
-    Assert.eq((s.to_upper()).to_string(), "HELLO, WORLD");
-    Assert.eq((s.index_of('o').unwrap_or(0 - 1)).to_string(), "4");
-    Assert.eq((s.contains("World")).to_string(), "true");
-    Assert.eq((s.starts_with("Hell")).to_string(), "true");
-    Assert.eq((s.ends_with("rld")).to_string(), "true");
+    Assert.eq(s.length, 12);
+    Assert.eq(s.substring(0, 5), "Hello");
+    Assert.eq(s.substring(7, 12), "World");
+    Assert.eq(s.to_lower(), "hello, world");
+    Assert.eq(s.to_upper(), "HELLO, WORLD");
+    Assert.eq(s.index_of('o').unwrap_or(0 - 1), 4);
+    Assert.is_true(s.contains("World"));
+    Assert.is_true(s.starts_with("Hell"));
+    Assert.is_true(s.ends_with("rld"));
     let pad = "  trimmed  ";
-    Assert.eq((pad.trim()).to_string(), "trimmed");
+    Assert.eq(pad.trim(), "trimmed");
     let ab = "ab";
-    Assert.eq((ab.repeat(3)).to_string(), "ababab");
-    Assert.eq((s.equals("Hello, World")).to_string(), "true");
+    Assert.eq(ab.repeat(3), "ababab");
+    Assert.is_true(s.equals("Hello, World"));
+
+    let parts = "a,b,c".split(',');
+    Assert.eq(parts.length, 3);
+    Assert.eq(parts[0], "a");
+    Assert.eq(parts[2], "c");
+    Assert.eq("hello world".replace("world", "dream"), "hello dream");
+
+    // `s[i] = c` writes in place; concat allocates a fresh heap buffer so no literal is mutated.
+    let written = "hel" + "lo";
+    written[0] = 'H';
+    written[4] = 'O';
+    Assert.eq(written, "HellO");
+    Assert.eq(written[0], 'H');
+    Assert.eq(written[4], 'O');
+}
+
+@test
+@timeout(180000)
+fun string_empty(): void {
+    let a = "";
+    let blank = "";
+    let b = blank.substring(0, 0);
+    let c = Encoding.utf8_decode(Array.alloc<byte>(0));
+    let d = "hello" + "";
+    let e = "" + "world";
+    let x = "x";
+    Assert.eq(a.length, 0);
+    Assert.is_true(a.is_empty());
+    Assert.is_true(b == a);
+    Assert.is_true(c == a);
+    Assert.eq(d, "hello");
+    Assert.eq(e, "world");
+    Assert.is_true(x.repeat(0) == "");
+}
+
+// `split_once` splits at the first occurrence into exactly two parts; a miss yields `[this]`
+// (never empty), matching `split`'s whole-string fallback.
+fun c22e_parts(parts: string[]): string {
+    return parts.length.to_string() + ":" + parts.join("|");
+}
+
+@test
+@timeout(180000)
+fun string_split_once(): void {
+    let hit = "k=v=w".split_once("=");
+    Assert.eq(hit[0] + "," + hit[1], "k,v=w");
+    Assert.eq(c22e_parts("no-separator".split_once("-")), "2:no|separator");
+    Assert.eq(c22e_parts("a-b-c".split_once('-')), "2:a|b-c");
+    Assert.eq(c22e_parts("miss".split_once('?')), "1:miss");
+    Assert.eq(c22e_parts("leading-x".split_once("leading-")), "2:|x");
+}
+
+@test
+@timeout(180000)
+fun string_interpolation(): void {
+    let x = 5;
+    let y = 2;
+    Assert.eq($"{y+68} is {x}", "70 is 5");
+    Assert.eq($"sum = {x + y}", "sum = 7");
+    // `{{` / `}}` escape to literal braces; the trailing hole is still interpolated.
+    Assert.eq($"{{literal braces}} and {x}", "{literal braces} and 5");
+    Assert.eq($"squared {x.pow(2)}", "squared 25");
+}
+
+@test
+@timeout(180000)
+fun string_scalar_index(): void {
+    let s = "aé🙂";
+    Assert.eq(s.length, 4);
+    Assert.eq(s.byte_size(), 8);
+    Assert.eq((int)s[0], 97);
+    Assert.eq((int)s[1], 233);
+    Assert.eq((int)s[2], 55357);
+    Assert.eq(s.byte_at(0).to_string(), "97");
+    Assert.eq(s.byte_at(1).to_string(), "0");
+    Assert.eq(s.byte_at(2).to_string(), "233");
+    let units = List<string>();
+    let i = 0;
+    while i < s.length {
+        units.push(((int)s[i]).to_string());
+        i = i + 1;
+    }
+    Assert.eq(units.join(","), "97,233,55357,56898");
+}
+
+@test
+@timeout(180000)
+fun unicode_normalize(): void {
+    let s = "Straße";
+    Assert.eq(s.normalize(UnicodeNormForm.Nfc), "Straße");
+    Assert.eq(s.to_lower_unicode(), "straße");
+    Assert.eq(s.to_upper_unicode(), "STRASSE");
+    Assert.eq(("straße").to_upper_unicode(), "STRASSE");
+    let gs = s.graphemes();
+    Assert.eq(gs.length, 6);
+    Assert.eq(gs[0], "S");
+    Assert.eq(gs[gs.length - 1], "e");
+}
+
+@test
+@timeout(180000)
+fun fmt_basic(): void {
+    let args1: object[] = Array.alloc<object>(2);
+    args1[0] = "world";
+    args1[1] = 42;
+    Assert.eq(Fmt.format("Hello, {0}! The answer is {1}.", args1), "Hello, world! The answer is 42.");
+
+    let args2: object[] = Array.alloc<object>(1);
+    args2[0] = 3.14159d;
+    Assert.eq(Fmt.format("Pi ~= {0:.2}", args2), "Pi ~= 3.14");
+
+    let args3: object[] = Array.alloc<object>(2);
+    args3[0] = 1;
+    args3[1] = 1;
+    Assert.eq(Fmt.format("{0} + {1} = {0}", args3), "1 + 1 = 1");
+
+    let args4: object[] = Array.alloc<object>(0);
+    Assert.eq(Fmt.format("literal {{braces}} stay", args4), "literal {braces} stay");
 }

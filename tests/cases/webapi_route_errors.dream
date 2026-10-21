@@ -1,0 +1,35 @@
+// Per-route validation reports every invalid handler signature in one pass.
+import system.webapi;
+
+fun wrong(): int { return 1; }
+
+@router("")
+class Routes {
+    @post("/body")
+    public static fun body_type(@body value: int): int { return value; }
+
+    @get("/")
+    public static fun no_extractor(value: int): int { return value; }
+
+    @get("/users/{id}")
+    public static fun missing_path_param(): string { return "ok"; }
+
+    @use(missing)
+    @get("/use-unknown")
+    public static fun use_unknown(): string { return "ok"; }
+
+    @use(wrong)
+    @get("/use-signature")
+    public static fun use_signature(): string { return "ok"; }
+
+    @post("/mix")
+    public static fun body_form_mix(@body body: string, @form name: string): string { return body + name; }
+
+    @post("/file")
+    public static fun file_type(@file file: int): int { return file; }
+
+    @websocket("/ws")
+    public static fun websocket_parameter(): void {}
+}
+
+fun main(): void {}

@@ -122,3 +122,55 @@ fun arc_slot_walk(): void {
     Assert.eq(slot_walk_owned_indexer(), 6);
     arc_map_set_rehash_preserves_entries();
 }
+
+// Reading a container slot into a local, then overwriting the same slot must keep both
+// references alive (regression: cursor aliasing freed the object at the slot store).
+class c20_Job {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+class c20_SlotBox {
+    public head: Option<c20_Job>;
+
+    public constructor() {
+        this.head = Option.None;
+    }
+}
+
+@test
+@timeout(180000)
+fun arc_slot_overwrite_snapshot(): void {
+    let q = c20_SlotBox();
+    q.head = Option.Some(c20_Job("j"));
+    let taken = q.head;
+    q.head = Option.None;
+    Assert.eq(taken.unwrap().name, "j");
+}
+
+// `f = Buffer.realloc(f, ..)` self-grow: a field snapshot retained across the grow must be
+// released before the backing block is consumed.
+class c1f_Bucket {
+    public names: List<string>;
+
+    public constructor() {
+        this.names = List<string>();
+    }
+}
+
+@test
+@timeout(180000)
+fun arc_self_realloc_grow(): void {
+    let b = c1f_Bucket();
+    let i = 0;
+    while i < 64 {
+        b.names.push("item" + i.to_string());
+        i = i + 1;
+    }
+    Assert.eq(b.names.length, 64);
+    Assert.eq(b.names[0], "item0");
+    Assert.eq(b.names[63], "item63");
+}

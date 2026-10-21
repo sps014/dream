@@ -1,8 +1,6 @@
 import system.testing;
-// Interfaces: multiple implementations, dynamic dispatch through an interface-typed value,
-// implicit class->interface upcasts at call sites, and `is`-with-binding for both a reference
-// (interface) value and a boxed primitive.
 import system;
+import system.collections;
 
 interface c106_Animal {
     fun speak(): string;
@@ -29,51 +27,285 @@ class c106_Dog: c106_Animal {
     }
 }
 
-// Passing a concrete class where the interface is expected is an implicit upcast; the call
-// inside dispatches dynamically to the concrete method.
-fun c106_describe(a: c106_Animal): void {
-    c106_verify_observation((a.speak()).to_string());
-    c106_verify_observation((a.legs()).to_string());
+fun c106_describe(a: c106_Animal): string {
+    return a.speak() + ":" + a.legs().to_string();
 }
 
-fun c106_body(): void {
-    let c = c106_Cat();
-    let d = c106_Dog();
-    c106_describe(c);
-    c106_describe(d);
+interface cff_Fetcher {
+    async fun fetch(): int;
+}
 
-    let a: c106_Animal = (c106_Animal)c;
-    // `is`-with-binding on a reference/interface value: `cc` aliases the same object as `Cat`.
-    if a is c106_Cat cc {
-        c106_verify_observation((cc.speak()).to_string());
-    }
-    if a is c106_Dog dd {
-        c106_verify_observation(("unexpected").to_string());
+class cff_Remote: cff_Fetcher {
+    public base: int;
+
+    public constructor(base: int) {
+        this.base = base;
     }
 
-    // `is`-with-binding on a boxed primitive: `n` unboxes the object to `int`.
-    let o: object = 42;
-    if o is int n {
-        c106_verify_observation((n + 1).to_string());
+    public async fun fetch(): int {
+        Time.sleep(10).await;
+        return this.base + 1;
     }
 }
 
-let c106_cursor: int = 0;
+class cff_Cached: cff_Fetcher {
+    public value: int;
 
-fun c106_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "meow\n4\nwoof\n2\nmeow\n43\n";
-    let end = c106_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c106_cursor, end));
-    c106_cursor = end;
+    public constructor(value: int) {
+        this.value = value;
+    }
+
+    public async fun fetch(): int {
+        return this.value;
+    }
+}
+
+async fun cff_run(f: cff_Fetcher): int {
+    return f.fetch().await;
+}
+
+// `greet` has a default body; the default calls `name` on `this`, which dispatches to the
+// concrete implementation. `Robot` overrides the default; `Person` inherits it.
+interface c100_Greeter {
+    fun name(): string;
+
+    fun greet(): string {
+        return "Hello, I am " + this.name();
+    }
+}
+
+class c100_Person: c100_Greeter {
+    public fun name(): string {
+        return "Ada";
+    }
+}
+
+class c100_Robot: c100_Greeter {
+    public fun name(): string {
+        return "R2";
+    }
+
+    public fun greet(): string {
+        return "BEEP " + this.name();
+    }
+}
+
+fun c100_announce(g: c100_Greeter): string {
+    return g.greet();
+}
+
+fun c102_as_collection(xs: Collection<int>): int {
+    return xs.length;
+}
+
+fun c102_as_indexed(xs: IndexedCollection<int>): int {
+    let n = xs.length;
+    let first = xs.first().unwrap_or(-1);
+    return n + first;
+}
+
+interface c102_Readable {
+    fun read(): int;
+}
+
+interface c102_Writable {
+    unique fun write(v: int): void;
+}
+
+interface c102_ReadWrite: c102_Readable + c102_Writable {
+    // Implementors reset state here, so the contract must grant mutation rights
+    // (signature-only methods default to borrow; a mutating body infers unique).
+    unique fun flush(): void;
+}
+
+class c102_Store: c102_ReadWrite {
+    value: int;
+
+    public constructor() {
+        this.value = 0;
+    }
+
+    public fun read(): int {
+        return this.value;
+    }
+
+    public fun write(v: int): void {
+        this.value = v;
+    }
+
+    public fun flush(): void {
+        this.value = 0;
+    }
+}
+
+fun c102_use_readable(r: c102_Readable): int {
+    return r.read();
+}
+
+fun c102_use_writable(w: c102_Writable): void {
+    w.write(42);
+}
+
+interface ce7_Container<T> {
+    fun get(): T;
+    get length(): int;
+}
+
+class ce7_Box<T>: ce7_Container<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+
+    public fun get(): T {
+        return this.value;
+    }
+
+    public get length(): int {
+        return 1;
+    }
+}
+
+class ce7_Pair<T>: ce7_Container<T> {
+    public first: T;
+    public second: T;
+
+    public constructor(first: T, second: T) {
+        this.first = first;
+        this.second = second;
+    }
+
+    public fun get(): T {
+        return this.first;
+    }
+
+    public get length(): int {
+        return 2;
+    }
+}
+
+fun ce7_describe(c: ce7_Container<int>): string {
+    return c.get().to_string() + ":" + c.length.to_string();
+}
+
+// `firstOr`'s signature uses the interface type parameter, so it exercises signature
+// substitution from the `implements` clause; `count` does not.
+interface ce6_Container<T> {
+    fun get(): T;
+
+    public fun firstOr(fallback: T): T {
+        return this.get();
+    }
+
+    public fun count(): int {
+        return 1;
+    }
+}
+
+class ce6_Box<T>: ce6_Container<T> {
+    public value: T;
+
+    public constructor(value: T) {
+        this.value = value;
+    }
+
+    public fun get(): T {
+        return this.value;
+    }
+}
+
+class ce6_IntBox: ce6_Container<int> {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+
+    public fun get(): int {
+        return this.value;
+    }
 }
 
 @test
 @timeout(180000)
-
 fun interfaces(): void {
-    c106_cursor = 0;
-    c106_body();
-    Assert.eq(c106_cursor, ("meow\n4\nwoof\n2\nmeow\n43\n").length);
+    let c = c106_Cat();
+    let d = c106_Dog();
+    Assert.eq(c106_describe(c), "meow:4");
+    Assert.eq(c106_describe(d), "woof:2");
+
+    let a: c106_Animal = (c106_Animal)c;
+    let matched = "";
+    if a is c106_Cat cc {
+        matched = cc.speak();
+    }
+    if a is c106_Dog dd {
+        Assert.fail("interface value matched the wrong class");
+    }
+    Assert.eq(matched, "meow");
+
+    let o: object = 42;
+    let unboxed = 0;
+    if o is int n {
+        unboxed = n + 1;
+    }
+    Assert.eq(unboxed, 43);
+}
+
+@test
+@timeout(180000)
+async fun interface_async(): void {
+    Assert.eq(cff_run(cff_Remote(41)).await, 42);
+    Assert.eq(cff_run(cff_Cached(99)).await, 99);
+}
+
+@test
+@timeout(180000)
+fun interface_default_method(): void {
+    Assert.eq(c100_announce(c100_Person()), "Hello, I am Ada");
+    Assert.eq(c100_announce(c100_Robot()), "BEEP R2");
+}
+
+@test
+@timeout(180000)
+fun interface_inheritance(): void {
+    let xs = List<int>();
+    xs.push(10);
+    xs.push(20);
+    Assert.eq((c102_as_collection(xs)).to_string(), "2");
+    Assert.eq((c102_as_indexed(xs)).to_string(), "12");
+
+    let buf = c102_Store();
+    c102_use_writable(buf);
+    Assert.eq((c102_use_readable(buf)).to_string(), "42");
+    let rw: c102_ReadWrite = buf;
+    Assert.eq((rw.read()).to_string(), "42");
+    rw.flush();
+    Assert.eq((rw.read()).to_string(), "0");
+}
+
+@test
+@timeout(180000)
+fun generic_interfaces(): void {
+    let b = ce7_Box<int>(7);
+    Assert.eq(ce7_describe(b), "7:1");
+
+    let p = ce7_Pair<int>(10, 20);
+    Assert.eq(ce7_describe(p), "10:2");
+
+    let c = (ce7_Container<int>)b;
+    Assert.eq(c.get(), 7);
+}
+
+@test
+@timeout(180000)
+fun generic_interface_default(): void {
+    let b = ce6_Box<int>(7);
+    Assert.eq((b.firstOr(9)).to_string(), "7");
+    Assert.eq((b.count()).to_string(), "1");
+
+    let a = ce6_IntBox(42);
+    Assert.eq((a.firstOr(9)).to_string(), "42");
+    Assert.eq((a.count()).to_string(), "1");
 }

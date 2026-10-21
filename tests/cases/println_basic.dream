@@ -1,9 +1,0 @@
-import system;
-fun main(): void {
-    System.print("a");
-    System.print("b");
-    System.println("c");
-    System.println(1);
-    System.print(2);
-    System.println(3);
-}

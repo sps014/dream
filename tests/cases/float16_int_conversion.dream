@@ -1,4 +1,0 @@
-fun main(): void {
-    let count: int = 3;
-    let value: float16 = count;
-}

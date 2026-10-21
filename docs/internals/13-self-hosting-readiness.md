@@ -26,7 +26,7 @@ size assertions.
 
 - **FFI-2, pointer-sized integers:** `isize` and `usize` follow the selected target.
   Target tests (`tests/target_spec.rs`) check literal ranges, and the
-  pointer-integer golden (`tests/cases/pointer_integers.dream`) exercises
+  pointer-integer golden (`tests/projects/core/integer_types.dream`) exercises
   arithmetic, layout, boxing, collections, closures and async values on native
   and wasm32. These types permit sizes and offsets to cross C boundaries without
   encoding the host's pointer width as a language-level `int`.

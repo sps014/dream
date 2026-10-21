@@ -98,6 +98,17 @@ internal static class ValidationGenerator {
             schema["items"] = ValidationGenerator.type_schema(ty.arg(0), ctx, definitions);
             return schema;
         }
+        if ty.kind == TypeRefKind.Tuple {
+            let positions = JsonValue.array();
+            for (let element in ty.args) {
+                positions.push(ValidationGenerator.type_schema(element, ctx, definitions));
+            }
+            schema["type"] = JsonValue.from_string("array");
+            schema["prefixItems"] = positions;
+            schema["minItems"] = JsonValue.from_int(ty.args.length);
+            schema["maxItems"] = JsonValue.from_int(ty.args.length);
+            return schema;
+        }
         if collection == CollectionKind.Map || collection == CollectionKind.SortedMap {
             schema["type"] = JsonValue.from_string("object");
             schema["additionalProperties"] = ValidationGenerator.type_schema(

@@ -2,21 +2,46 @@ import system;
 import system.process;
 import system.testing;
 import system.encoding;
-async fun main(): void {
-    let args = System.args;
-    if args.length > 0 && args[0] == "echo-hex" {
+
+fun process_fixture_args(mode: string): string[] {
+    if System.platform != Platform.Node { return [mode]; }
+    if mode == "flood" { return ["-e", "process.stdout.write('a'.repeat(200000));process.stderr.write('b'.repeat(200000));process.stdin.resume();"]; }
+    if mode == "env" { return ["-e", "console.log(process.env.DREAM_PHASE6)"]; }
+    return ["-e", "setInterval(()=>{},1000)"];
+}
+
+// Child modes re-entered through `System.exe_path`; returns true when this process is a child.
+async fun run_child_mode(args: string[]): bool {
+    if args.length == 0 { return false; }
+    if args[0] == "echo-hex" {
         for (let i = 1; i < args.length; i = i + 1) {
             System.println(Encoding.hex_encode(Encoding.utf8_encode(args[i])));
         }
-        return;
+        return true;
     }
-    if args.length > 0 && args[0] == "echo" {
+    if args[0] == "echo" {
         System.println(args[1] + " " + args[2]);
-        return;
+        return true;
     }
-    // A broken argv decoder must fail the child rather than recursively spawning this fixture.
-    Assert.is_false(System.env("DREAM_PROCESS_FIXTURE_CHILD").is_some());
-    System.set_env("DREAM_PROCESS_FIXTURE_CHILD", "1").unwrap();
+    if args[0] == "echo-lines" {
+        while true {
+            System.println(System.read_line());
+        }
+    }
+    if args[0] == "flood" {
+        System.print("a".repeat(200000));
+        System.stderr.write_all(Encoding.utf8_encode("b".repeat(200000))).unwrap();
+        System.stderr.flush().unwrap();
+        let consumed = 0;
+        while consumed < 200000 { consumed = consumed + System.read_line().length; }
+        return true;
+    }
+    if args[0] == "env" { System.println(System.env("DREAM_PHASE6").unwrap()); return true; }
+    if args[0] == "sleep" { Time.delay(10000).await; return true; }
+    return false;
+}
+
+async fun run_basic(): void {
     let child_args = ["echo", "hello", "world"];
     if System.platform == Platform.Node {
         child_args = ["-e", "console.log(process.argv.slice(1).join(' '))", "hello", "world"];
@@ -53,4 +78,66 @@ async fun main(): void {
         Ok(out) => System.println("unexpected success"),
         Err(e) => System.println(e.code()),
     }
+}
+
+async fun run_spawn(): void {
+    let child_args = ["echo-lines"];
+    if System.platform == Platform.Node {
+        child_args = ["-e", "process.stdin.on('data', data => process.stdout.write(data))"];
+    }
+    let spawned = Process.spawn(System.exe_path.unwrap_or(""), child_args).await;
+    switch (spawned) {
+        Ok(child) => {
+            child.stdin.write_async(Encoding.utf8_encode("line1\n")).await.unwrap();
+            child.stdin.write_async(Encoding.utf8_encode("line2\n")).await.unwrap();
+            let stdout = child.stdout;
+            let l1 = stdout.read_line().await.unwrap();
+            System.println(l1.unwrap_or("NONE"));
+            let l2 = stdout.read_line().await.unwrap();
+            System.println(l2.unwrap_or("NONE"));
+            child.close().await.unwrap();
+            System.println(true);
+        },
+        Err(e) => System.println("spawn failed: " + e.message()),
+    }
+}
+
+async fun run_options(): void {
+    let executable = System.exe_path.unwrap();
+    let options = ProcessOptions();
+    options.env["DREAM_PHASE6"] = "custom 日本語";
+    options.timeout_ms = 5000;
+    options.input = Encoding.utf8_encode("x".repeat(200000) + "\n");
+    let flooded = Process.run(executable, process_fixture_args("flood"), options: options).await.unwrap();
+    Assert.eq(flooded.stdout.length, 200000);
+    Assert.is_true(flooded.stderr.starts_with("b".repeat(200000)));
+    options.input = Array.alloc<byte>(0);
+    let environment = Process.run(executable, process_fixture_args("env"), options: options).await.unwrap();
+    Assert.eq(environment.stdout.trim(), "custom 日本語");
+    options.timeout_ms = 20;
+    let timeout = Process.run(executable, process_fixture_args("sleep"), options: options).await;
+    Assert.eq(timeout.unwrap_err().code(), "ETIMEOUT");
+    options.timeout_ms = 0;
+    let source = CancellationSource();
+    let pending = Process.run(executable, process_fixture_args("sleep"), options: options, token: Option.Some(source.token));
+    Promise.start(pending);
+    Time.delay(30).await;
+    source.cancel();
+    Assert.eq(pending.await.unwrap_err().code(), "ECANCELLED");
+    options.max_output_bytes = 1000;
+    let limited = Process.run(executable, process_fixture_args("flood"), options: options).await;
+    Assert.eq(limited.unwrap_err().code(), "ELIMIT");
+    System.println("process options ok");
+}
+
+async fun main(): void {
+    if run_child_mode(System.args).await {
+        return;
+    }
+    // A broken argv decoder must fail the child rather than recursively spawning this fixture.
+    Assert.is_false(System.env("DREAM_PROCESS_FIXTURE_CHILD").is_some());
+    System.set_env("DREAM_PROCESS_FIXTURE_CHILD", "1").unwrap();
+    run_basic().await;
+    run_spawn().await;
+    run_options().await;
 }

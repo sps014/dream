@@ -1,7 +1,0 @@
-import system;
-import helpers.module_internal_member;
-import helpers.module_internal_member_partner;
-
-fun main(): void {
-    System.println(combine(make_vector(3)));
-}

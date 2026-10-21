@@ -1,9 +1,0 @@
-import system.webapi;
-
-fun main(): void {}
-
-@router("")
-class Routes {
-@post("/")
-public static fun route(@body body: string, @form name: string): string { return body + name; }
-}

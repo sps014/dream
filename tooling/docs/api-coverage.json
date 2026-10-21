@@ -4271,68 +4271,68 @@
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
-        "description": "Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.",
-        "line": 279,
+        "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
+        "line": 277,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T: unmanaged",
-        "description": "Inserts `value` at `index`, shifting later elements right. Returns false if the index is outside 0 through length.",
-        "line": 298,
+        "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
+        "line": 296,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 317,
+        "line": 315,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 333,
+        "line": 331,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 341,
+        "line": 339,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 348,
+        "line": 346,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 353,
+        "line": 351,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 366,
+        "line": 364,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T: Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 420,
+        "line": 418,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 428,
+        "line": 426,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 447,
+        "line": 445,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -7925,7 +7925,7 @@
     "declarations": [
       {
         "signature": "public static class System",
-        "description": "Halt used by bootstrap (`Option.unwrap`, bounds checks). Full console I/O lives on `extend System` in `system.dream` (`import system;`).",
+        "description": "Process basics available without an import: stopping with `panic` and reading command-line arguments. `import system;` adds console I/O and the other process services.",
         "line": 5,
         "page": "reference/api/core-system.md"
       },
@@ -7933,6 +7933,12 @@
         "signature": "public static extern fun panic(borrow message: string): void",
         "description": "Stops execution and reports `message`.",
         "line": 8,
+        "page": "reference/api/core-system.md"
+      },
+      {
+        "signature": "public static get args(): string[]",
+        "description": "Command-line arguments, excluding the executable path. Empty strings and embedded newlines are preserved. `fun main(args: string[])` receives the same array.",
+        "line": 29,
         "page": "reference/api/core-system.md"
       }
     ]
@@ -12500,127 +12506,121 @@
       {
         "signature": "public static fun read_line(): string",
         "description": "Reads a line of input from stdin.",
-        "line": 56,
+        "line": 53,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun read_key(): char",
         "description": "Reads a single keypress from stdin.",
-        "line": 61,
+        "line": 58,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun exit(code: int): void",
         "description": "Terminates the process with the given exit code.",
-        "line": 68,
+        "line": 65,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get platform(): Platform",
         "description": "The current host platform.",
-        "line": 73,
+        "line": 70,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get os_family(): OsFamily",
         "description": "The OS family on native hosts (Unknown elsewhere).",
-        "line": 88,
+        "line": 85,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get cpu_time_nanos(): long",
         "description": "User+system CPU time of this process since it started, in nanoseconds (`0` if unknown).",
-        "line": 100,
+        "line": 97,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get memory_bytes(): long",
         "description": "Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.",
-        "line": 105,
-        "page": "reference/api/host-system.md"
-      },
-      {
-        "signature": "public static get args(): string[]",
-        "description": "Process arguments exclude the executable and preserve empty strings and embedded newlines.",
-        "line": 124,
+        "line": 102,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get exe_path(): Option<string>",
         "description": "Absolute path of the running executable when known.",
-        "line": 153,
+        "line": 107,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun env(borrow name: string): Option<string>",
         "description": "Value of environment variable `name`, or `None` when unset.",
-        "line": 162,
+        "line": 116,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_env(borrow name: string, borrow value: string): Result<Unit, ArgumentError>",
         "description": "Sets environment variable `name` to `value`.",
-        "line": 174,
+        "line": 128,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun unset_env(borrow name: string): Result<Unit, ArgumentError>",
         "description": "Unsets environment variable `name`.",
-        "line": 195,
+        "line": 149,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get env_keys(): string[]",
         "description": "Names of all environment variables (empty on hosts without an env block).",
-        "line": 204,
+        "line": 158,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get temp_dir(): string",
         "description": "Process temp directory (`TMPDIR` / `GetTempPath` / `\"/tmp\"` in the browser).",
-        "line": 213,
+        "line": 167,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get home_dir(): Option<string>",
         "description": "User home directory when the host provides one.",
-        "line": 222,
+        "line": 176,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get cwd(): Result<string, IoError>",
         "description": "Current working directory.",
-        "line": 231,
+        "line": 185,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_cwd(borrow path: string): Result<Unit, IoError>",
         "description": "Sets the current working directory.",
-        "line": 240,
+        "line": 194,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun clear(): void",
         "description": "Clears the terminal screen.",
-        "line": 248,
+        "line": 202,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_foreground(color: ConsoleColor): void",
         "description": "Sets the foreground color for subsequent output.",
-        "line": 293,
+        "line": 247,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_background(color: ConsoleColor): void",
         "description": "Sets the background color for subsequent output.",
-        "line": 301,
+        "line": 255,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun reset_color(): void",
         "description": "Resets console colors to the terminal default.",
-        "line": 309,
+        "line": 263,
         "page": "reference/api/host-system.md"
       }
     ]

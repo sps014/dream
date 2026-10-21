@@ -164,7 +164,156 @@ fun check_ref_counts() {
     System.println(arr.length.to_string());
 }
 
+// --- Deterministic reclamation for owned values that are not direct constructor calls. ---
+
+class Factory {
+    public base: int;
+
+    public constructor(base: int) {
+        this.base = base;
+    }
+
+    public fun create(n: int): Tracked {
+        return Tracked(this.base + n);
+    }
+}
+
+class Named {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+
+    del() {
+        System.print("bye ");
+        System.println(this.name);
+    }
+}
+
+fun make(id: int): Tracked {
+    return Tracked(id);
+}
+
+fun make_named(n: string): Named {
+    return Named(n);
+}
+
+fun consume(t: Tracked) {
+    System.print("consume ");
+    System.println(t.id);
+}
+
+// Factory result bound to a single local: dropped at scope exit.
+fun use_once(id: int) {
+    let a = make(id);
+    System.print("use ");
+    System.println(a.id);
+}
+
+// Reassigning a local with fresh factory results drops the previous value each time.
+fun loop_reassign() {
+    let _t = make(0);
+    let i = 1;
+    while i <= 3 {
+        _t = make(i);
+        i = i + 1;
+    }
+}
+
+fun method_factory() {
+    let f = Factory(10);
+    let m = f.create(5);
+    System.println(m.id);
+}
+
+// Freeing a class that owns a string field must not corrupt the interned literal.
+fun ref_field() {
+    let x = make_named("Zaphod");
+    System.println(x.name);
+}
+
+// An owned temporary passed straight into a call is reclaimed after the call returns.
+fun arg_temp() {
+    consume(make(5));
+}
+
+fun factories() {
+    use_once(1);
+    System.println(0);
+    loop_reassign();
+    System.println(0);
+    method_factory();
+    System.println(0);
+    ref_field();
+    System.println(0);
+    arg_temp();
+    System.println(0);
+}
+
+// --- Indexed loads retain: every live owner adds one to the reference count. ---
+//   after store:        w(1) + slot(2)              -> 2
+//   after first read:   w + slot + x                -> 3
+//   after second read:  w + slot + x + y            -> 4
+//   after overwrite:    slot released; w + x + y    -> 3
+
+class Widget {
+    public id: int;
+    public constructor(id: int) { this.id = id; }
+}
+
+fun slot_read_retains() {
+    let w = Widget(7);
+    let arr = Array.alloc<Widget>(4);
+    arr[0] = w;
+    System.println(Debug.ref_count(w));
+    let x = arr[0];
+    System.println(Debug.ref_count(x));
+    let y = arr[0];
+    System.println(Debug.ref_count(y));
+    arr[0] = Widget(99);
+    System.println(Debug.ref_count(w));
+}
+
+// --- Last use of a glue struct local transfers nested counts; a live copy still retains. ---
+
+class Leaf {
+    public constructor() {}
+}
+
+struct Wrap {
+    public n: Leaf;
+    public constructor(n: Leaf) {
+        this.n = n;
+    }
+}
+
+fun take(w: Wrap): void {
+    System.println(Debug.ref_count(w.n).to_string());
+}
+
+fun take_leaf(x: Leaf): void {
+    System.println(Debug.ref_count(x).to_string());
+}
+
+fun struct_last_use_move() {
+    let a = Wrap(Leaf());
+    take(a);
+
+    let b = Wrap(Leaf());
+    let c = b;
+    take(b);
+    take(c);
+
+    let d = Wrap(Leaf());
+    take_leaf(d.n);
+    take(d);
+}
+
 fun main() {
+    factories();
+    slot_read_retains();
+    struct_last_use_move();
     check_ref_counts();
 
     // Warm up so the freelist/heap reach steady state, then capture the baseline.

@@ -14,11 +14,102 @@ fun c249_twice(msg: string): string {
 @test
 @timeout(180000)
 async fun task_basic(): void {
-    Assert.eq((Task.spawn(() => c249_shout("hello")).await).to_string(), "hello!");
-    Assert.eq((Task.spawn(() => c249_shout("world")).await).to_string(), "world!");
+    Assert.eq(Task.spawn(() => c249_shout("hello")).await, "hello!");
+    Assert.eq(Task.spawn(() => c249_shout("world")).await, "world!");
 
     let a = Task.spawn(() => c249_shout("A"));
     let b = Task.spawn(() => c249_twice("B"));
-    Assert.eq((a.await).to_string(), "A!");
-    Assert.eq((b.await).to_string(), "BB");
+    Assert.eq(a.await, "A!");
+    Assert.eq(b.await, "BB");
+}
+
+@test
+@timeout(180000)
+async fun task_string_capture(): void {
+    let name = "dream";
+    Assert.eq(Task.spawn(() => "hello, " + name).await, "hello, dream");
+}
+
+// Heap-allocated (non-interned) string captured by a worker: publish must mark TAG_SHARED
+// so owner + worker retain/release is atomic.
+@test
+@timeout(180000)
+async fun task_heap_string_capture(): void {
+    let s = 42.to_string();
+    let t = Task.spawn(() => s + "!").await;
+    Assert.eq(s, "42");
+    Assert.eq(t, "42!");
+}
+
+// Capturing plain unmanaged/value locals into a `Task` body is allowed.
+@test
+@timeout(180000)
+async fun task_capture_unmanaged(): void {
+    let scale = 3;
+    let offset = 3;
+    let prefix = "result=";
+
+    let outcome = Task.spawn(
+        () => {
+            let result = scale + offset;
+            if result == 6 {
+                return prefix + "ok";
+            }
+            return prefix + "bad";
+        }
+    ).await;
+    Assert.eq(outcome, "result=ok");
+}
+
+// Arrays are not `shared`, but a managed heap value can be *moved* into a worker body:
+// the pointer is handed off and the sender-side binding cannot be used afterwards.
+@test
+@timeout(180000)
+async fun task_move_array(): void {
+    let nums = [1, 2, 3];
+    let result = Task.spawn(() => nums.length);
+    Assert.eq(result.await, 3);
+}
+
+struct c25a_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+fun c25a_shift(p: c25a_Point): c25a_Point {
+    return c25a_Point(p.x + 1, p.y + 1);
+}
+
+@test
+@timeout(180000)
+async fun task_struct_wire(): void {
+    let p = c25a_Point(1, 2);
+    let r = Task.spawn(() => c25a_shift(p)).await;
+    Assert.eq(r.x, 2);
+    Assert.eq(r.y, 3);
+}
+
+// Class/method type arguments on `Task.spawn` / `.map` are inferred.
+fun c24e_shout(msg: string): string {
+    return msg + "!";
+}
+
+@test
+@timeout(180000)
+async fun task_infer_spawn(): void {
+    Assert.eq(Task.spawn(() => c24e_shout("hello")).await, "hello!");
+
+    let n = 6;
+    Assert.eq(Task.spawn(() => n * n).await, 36);
+
+    let items = ["1", "2"];
+    let results = TaskPool(4).map(items, c24e_shout).await.unwrap();
+    Assert.eq(results.length, 2);
+    Assert.eq(results[0], "1!");
+    Assert.eq(results[1], "2!");
 }

@@ -43,3 +43,12 @@ fun incremental_utf8(): void {
     Assert.is_true(Encoding.uri_decode_component("%ff").is_err());
     Assert.is_true(Encoding.uri_decode_component("%a").is_err());
 }
+
+@test
+@timeout(180000)
+fun encoding_hex(): void {
+    let bytes = Encoding.utf8_encode("hi");
+    Assert.eq(Encoding.hex_encode(bytes), "6869");
+    Assert.eq(Encoding.utf8_decode(Encoding.hex_decode("6869").unwrap()), "hi");
+    Assert.eq(Encoding.hex_decode("xyz").unwrap_err().code(), "EPARSE");
+}

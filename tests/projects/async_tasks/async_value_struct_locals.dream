@@ -1,11 +1,10 @@
 import system.testing;
-// Regression test: value(`struct`) locals inside an `async fun` body each need their own inline
-// storage in the coroutine's `Future` frame. They previously all aliased frame offset zero (never
-// assigned a real address, unlike a normal function's shadow-stack locals), so any two or more
-// value-struct temporaries in the same async body - including every element past the first in a
-// value-struct array literal - silently collapsed onto the last one written.
 import system;
 
+// Value(`struct`) locals inside an `async fun` body each need their own inline storage in the
+// coroutine's `Future` frame. They previously all aliased frame offset zero, so any two or more
+// value-struct temporaries in the same async body - including every element past the first in a
+// value-struct array literal - silently collapsed onto the last one written.
 struct c3e_Point {
     public x: int;
     public y: int;
@@ -16,34 +15,123 @@ struct c3e_Point {
     }
 }
 
-async fun c3e_body(): void {
+@test
+@timeout(180000)
+async fun async_value_struct_locals(): void {
     let a = c3e_Point(1, 2);
     let b = c3e_Point(3, 4);
-    c3e_verify_observation(("" + a.x + "," + a.y).to_string());
-    c3e_verify_observation(("" + b.x + "," + b.y).to_string());
+    Assert.eq(a.x, 1);
+    Assert.eq(a.y, 2);
+    Assert.eq(b.x, 3);
+    Assert.eq(b.y, 4);
 
     let pts = [c3e_Point(5, 6), c3e_Point(7, 8), c3e_Point(9, 10)];
     for (let i = 0; i < pts.length; i = i + 1) {
-        c3e_verify_observation(("" + pts[i].x + "," + pts[i].y).to_string());
+        Assert.eq(pts[i].x, 5 + 2 * i);
+        Assert.eq(pts[i].y, 6 + 2 * i);
     }
 }
 
-let c3e_cursor: int = 0;
+// An `async fun` parameter of a value(`struct`) type must be copied by value into the coroutine's
+// own `Future` frame, not aliased to the caller's (possibly transient) storage.
+struct c3f_Point {
+    public x: int;
+    public y: int;
 
-fun c3e_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "1,2\n3,4\n5,6\n7,8\n9,10\n";
-    let end = c3e_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c3e_cursor, end));
-    c3e_cursor = end;
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+async fun c3f_shift(p: c3f_Point): c3f_Point {
+    Time.sleep(1).await;
+    return c3f_Point(p.x + 1, p.y + 1);
 }
 
 @test
 @timeout(180000)
+async fun async_value_struct_param(): void {
+    let a = c3f_shift(c3f_Point(1, 2)).await;
+    let b = c3f_shift(c3f_Point(3, 4)).await;
+    Assert.eq(a.x, 2);
+    Assert.eq(a.y, 3);
+    Assert.eq(b.x, 4);
+    Assert.eq(b.y, 5);
+}
 
-async fun async_value_struct_locals(): void {
-    c3e_cursor = 0;
-    c3e_body().await;
-    Assert.eq(c3e_cursor, ("1,2\n3,4\n5,6\n7,8\n9,10\n").length);
+// Async value(`struct`) params that embed references must retain those fields when copied into the
+// Future frame. Otherwise the caller can drop the original before the first poll and leave the
+// frame holding dangling pointers.
+struct c40_Named {
+    public name: string;
+    public n: int;
+
+    public constructor(name: string, n: int) {
+        this.name = name;
+        this.n = n;
+    }
+}
+
+async fun c40_use_named(p: c40_Named): string {
+    Time.sleep(1).await;
+    return p.name + ":" + p.n;
+}
+
+@test
+@timeout(180000)
+async fun async_value_struct_param_refs(): void {
+    let a = c40_Named("hello", 1);
+    let fut = c40_use_named(a);
+    a = c40_Named("gone", 2);
+    Assert.eq(fut.await, "hello:1");
+}
+
+// Wide scalars (`long`/`float`/`double`) do not fit the scheduler's single-word `Future.result`
+// slot: they are boxed on completion and unboxed at the `await` resume site.
+async fun c41_bigNumber(): long {
+    Time.sleep(1).await;
+    return 9000000000;
+}
+
+async fun c41_ratio(): float {
+    Time.sleep(1).await;
+    return 3.5f;
+}
+
+async fun c41_precise(): double {
+    Time.sleep(1).await;
+    return 2.71828;
+}
+
+@test
+@timeout(180000)
+async fun async_wide_scalar_return(): void {
+    let l = c41_bigNumber().await;
+    let f = c41_ratio().await;
+    let d = c41_precise().await;
+    Assert.eq("" + l, "9000000000");
+    Assert.eq("" + f, "3.5");
+    Assert.eq("" + d, "2.71828");
+}
+
+// A generic async callee must still advertise sink params at the call site so a live
+// class argument is retained across the suspend (otherwise the poll frame releases it).
+class c34_Handle {
+    public id: int;
+}
+
+async fun c34_id_of<T>(h: c34_Handle, _t: T): int {
+    Time.sleep(0).await;
+    return h.id;
+}
+
+@test
+@timeout(180000)
+async fun async_generic_sink_reuse(): void {
+    let h = c34_Handle();
+    h.id = 7;
+    Assert.eq(c34_id_of(h, 1).await, 7);
+    Assert.eq(c34_id_of(h, 2).await, 7);
+    Assert.eq(h.id, 7);
 }

@@ -1,0 +1,40 @@
+// Web API declaration and dependency-graph errors are all reported before routes are validated.
+import system.webapi;
+
+fun typed_provider(): string { return "value"; }
+fun cyclic_provider(): string { return "value"; }
+fun a(@dep(b) value: int): int { return value; }
+fun b(@dep(a) value: int): int { return value; }
+
+class Overrides {
+    @dependency_override(typed_provider)
+    public static fun wrong_type(): int { return 1; }
+
+    @dependency_override(cyclic_provider)
+    public static fun cyclic(@dep(cyclic_provider) value: string): string { return value; }
+}
+
+class Group {
+    @get("/group")
+    public fun route(): string { return "ok"; }
+}
+
+@router("")
+class Routes {
+    @get("/typed")
+    public static fun typed(@dep(typed_provider) value: string): string { return value; }
+
+    @get("/cyclic")
+    public static fun cyclic(@dep(cyclic_provider) value: string): string { return value; }
+
+    @get("/deps")
+    public static fun deps(@dep(a) value: int): int { return value; }
+
+    @get("/same")
+    public static fun first(): string { return "a"; }
+
+    @get("/same")
+    public static fun second(): string { return "b"; }
+}
+
+fun main(): void {}

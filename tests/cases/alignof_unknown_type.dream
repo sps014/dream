@@ -1,1 +1,0 @@
-fun main(): void { let alignment = alignof(MissingType); }

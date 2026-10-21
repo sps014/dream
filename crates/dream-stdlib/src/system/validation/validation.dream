@@ -138,11 +138,18 @@ public static class Validation {
         }
         if kind == "array" {
             let items = value.as_array().unwrap();
+            let positions = schema.get("prefixItems").unwrap_or(JsonValue.null())
+                .as_array()
+                .unwrap_or(List<JsonValue>());
             let i = 0;
             for (let item in items) {
+                let rule = schema.get("items").unwrap_or(JsonValue.null());
+                if i < positions.length {
+                    rule = positions[i];
+                }
                 Validation.walk(
                     item,
-                    schema.get("items").unwrap_or(JsonValue.null()),
+                    rule,
                     definitions,
                     Validation.child(location, i.to_string()),
                     errors

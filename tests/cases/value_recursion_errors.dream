@@ -1,0 +1,13 @@
+// Inline value types cannot contain themselves: that would require infinite storage.
+
+struct Node {
+    public value: int;
+    public next: Node;
+}
+
+enum struct List {
+    Nil,
+    Cons(head: int, tail: List),
+}
+
+fun main(): void {}

@@ -1,4 +1,0 @@
-fun main(): void {
-    let wide: float = 1.5f;
-    let narrow: float16 = wide;
-}

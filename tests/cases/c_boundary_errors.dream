@@ -1,0 +1,29 @@
+// `@c` externs need C-representable types, explicit ownership, and named callbacks.
+import system.interop;
+import system;
+
+@c("c", "malloc") extern fun leaky(n: usize): OwnedCPtr;
+
+@c("c", "strlen") @owned("free") extern fun counted(s: string): usize;
+
+@c("c", "malloc") @owned("free me") extern fun spaced(n: usize): OwnedCPtr;
+
+@c("c", "dream_cs_x") extern fun reserved(): int;
+
+@c("c", "qsort")
+extern fun qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
+
+@c("c", "puts")
+extern fun puts(lines: List<string>): int;
+
+fun ascending(a: CPtr, b: CPtr): int {
+    return Ffi.read_int(a, 0) - Ffi.read_int(b, 0);
+}
+
+fun function_value(): void {
+    let xs: int[] = [2, 1];
+    let cmp = ascending;
+    qsort(xs, (usize)2, (usize)sizeof(int), cmp);
+}
+
+fun main(): void {}

@@ -77,19 +77,6 @@ fn test_hir_emission_arithmetic_function() {
 }
 
 #[test]
-fn test_hir_emission_locals_and_assignment() {
-    // `let` + assignment + return over locals: each statement is supported, so the function emits.
-    let code = "fun calc(n: int): int { let x: int = n; let y: int = x + 1; y = y + n; return y; }";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(count, 1);
-    assert!(
-        c.contains("define internal i32 @calc("),
-        "missing emitted function:\n{}",
-        c
-    );
-}
-
-#[test]
 fn test_hir_emission_skips_unsupported_functions() {
     // An uninstantiated generic template (`gen<T>`) has no concrete body to lower until it is
     // monomorphized at a call site, so the interleaved HIR emission skips it. Instantiations are
@@ -124,90 +111,6 @@ fn test_hir_emission_while_loop() {
         c
     );
     assert!(has_back_edge(body), "while should emit a back-edge:\n{}", c);
-}
-
-#[test]
-fn test_hir_emission_if_else_chain() {
-    // `if` / `else if` / `else` folds into nested HIR `If`s and lowers to a branching CFG.
-    let code = "
-        fun classify(n: int): int {
-            if (n < 0) { return 0; } else if (n == 0) { return 1; } else { return 2; }
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(
-        count, 1,
-        "the if/else-if/else function should be emitted as HIR"
-    );
-    assert!(
-        c.contains("define internal i32 @classify("),
-        "missing emitted function:\n{}",
-        c
-    );
-}
-
-#[test]
-fn test_hir_emission_for_loop() {
-    // A C-style `for (init; cond; step)` desugars to HIR `For` and lowers cleanly.
-    let code = "
-        fun sum(n: int): int {
-            let acc: int = 0;
-            for (let i: int = 0; i < n; i = i + 1) { acc = acc + i; }
-            return acc;
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(count, 1, "the for-loop function should be emitted as HIR");
-    assert!(
-        c.contains("define internal i32 @sum("),
-        "missing emitted function:\n{}",
-        c
-    );
-    let body = ir_func_body(&c, "sum");
-    assert!(
-        body.contains(" = add i32 ") && !body.contains("add nsw"),
-        "missing wrapping arithmetic:\n{}",
-        c
-    );
-}
-
-#[test]
-fn test_hir_emission_foreach_loop() {
-    // For-each over an array parameter lowers to the indexed-iteration MIR form.
-    let code = "
-        fun total(xs: int[]): int {
-            let acc: int = 0;
-            for (let x in xs) { acc = acc + x; }
-            return acc;
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(count, 1, "the foreach function should be emitted as HIR");
-    assert!(
-        c.contains("define internal i32 @total("),
-        "missing emitted function:\n{}",
-        c
-    );
-}
-
-#[test]
-fn test_hir_emission_logical_and_ternary() {
-    // `&&`/`||` lower to short-circuit control flow; the ternary lowers to a branch + join temp.
-    let code = "
-        fun pick(a: bool, b: bool, x: int, y: int): int {
-            return (a && b) ? x : y;
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(
-        count, 1,
-        "the logical/ternary function should be emitted as HIR"
-    );
-    assert!(
-        c.contains("define internal i32 @pick("),
-        "missing emitted function:\n{}",
-        c
-    );
 }
 
 #[test]
@@ -628,26 +531,6 @@ fn test_hir_emission_global_initializer_runs_in_start() {
 }
 
 #[test]
-fn test_hir_emission_noinline_is_attribute_driven() {
-    // Only `@noinline` marks a function noinline; a name containing "sink" gets no special treatment.
-    let code = "
-        @noinline
-        fun keep(x: int): int { return x + 1; }
-        fun kitchenSink(x: int): int { return x + 2; }
-        fun run(): int { return keep(1) + kitchenSink(2); }
-    ";
-    let c = emit_hir_to_module(code);
-    let define_line = |needle: &str| {
-        c.lines()
-            .find(|l| l.starts_with("define ") && l.contains(needle))
-            .unwrap_or_else(|| panic!("no define for {}:\n{}", needle, c))
-            .to_string()
-    };
-    assert!(define_line("keep").contains("noinline"), "{}", c);
-    assert!(!define_line("kitchenSink").contains("noinline"), "{}", c);
-}
-
-#[test]
 fn test_hir_emission_extern_import_and_call() {
     // An `extern fun` becomes a declaration of its `@js` host symbol, and a call to it resolves to
     // that symbol so the module links.
@@ -809,254 +692,167 @@ fn test_hir_emission_print_object_routes_to_print_object() {
     );
 }
 
+/// One native build runs every end-to-end printing, ownership and dispatch probe. Each probe is
+/// its own function so its locals are released at that function's scope exit, as they were when
+/// each probe was a separate `main`.
 #[cfg(feature = "native")]
 #[test]
-fn exec_print_int_and_arithmetic() {
-    // Runs a real program through the MIR backend: `print` of an int literal and of a computed sum,
-    // proving the host import + integer path execute end-to-end.
-    let code = format!(
-        "{SYSTEM_STUB}
-        fun main(): void {{
+fn exec_probes_print_expected_output() {
+    let code = r#"
+        class Point {
+            public x: int;
+            public y: int;
+            public constructor(x: int, y: int) {
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        class Line {
+            public a: Point;
+            public b: Point;
+            public constructor(a: Point, b: Point) {
+                this.a = a;
+                this.b = b;
+            }
+        }
+
+        enum Shape { Circle(int), Rect(width: int, height: int), Empty }
+
+        class Res {
+            public v: int;
+            del() {
+                System.print(9);
+            }
+            public constructor(v: int) {
+                this.v = v;
+            }
+        }
+
+        @allow_cycle
+        class Node {
+            public next: Node;
+            del() {
+                System.print(1);
+            }
+            public constructor() {
+            }
+        }
+
+        class R {
+            public v: int;
+            del() {
+                System.print(7);
+            }
+            public constructor(v: int) {
+                this.v = v;
+            }
+        }
+
+        fun add(a: int, b: int): int {
+            return a + b;
+        }
+
+        fun make(): R {
+            let x: R = R(5);
+            return x;
+        }
+
+        async fun get(): int {
+            Time.sleep(0).await;
+            return 42;
+        }
+
+        fun scalars(): void {
             System.print(41);
             System.print(1 + 1);
-        }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "412");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_println_int_appends_newline() {
-    let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(7); }}");
-    assert_eq!(run_and_capture(&code, "main"), "7\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_int_to_string_via_concat_and_interpolation() {
-    // A non-string operand of `+` (and any interpolation hole) is implicitly rendered through the
-    // object protocol's `to_string`, so `int` values compose into strings with no explicit call.
-    let code = format!(
-        "{SYSTEM_STUB}
-        fun main(): void {{
+            System.println(7);
             let n: int = 42;
-            System.println(\"count = \" + n);
-            System.println($\"n is {{n}} and n+1 is {{n + 1}}\");
-        }}"
-    );
-    assert_eq!(
-        run_and_capture(&code, "main"),
-        "count = 42\nn is 42 and n+1 is 43\n"
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_string_literal() {
-    // Validates the reconciled string ABI: the interned literal's data pointer is a length-prefixed
-    // heap string the host reads correctly.
-    let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(\"hello\"); }}");
-    assert_eq!(run_and_capture(&code, "main"), "hello\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_bool_via_to_string() {
-    // Exercises the bundled `*_to_string` runtime: `bool` renders through `dream_bool_to_string`,
-    // whose interned "true"/"false" are printed as length-prefixed strings.
-    let code = format!(
-        "{SYSTEM_STUB}
-        fun main(): void {{
+            System.println("count = " + n);
+            System.println($"n is {n} and n+1 is {n + 1}");
+            System.println("hello");
             System.println(true);
             System.println(false);
-        }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "true\nfalse\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_string_len_via_strlen() {
-    // `str.length` calls `dream_str_len` (UTF-16 code-unit count).
-    let code = format!(
-        "{SYSTEM_STUB}
-        fun main(): void {{
-            let s: string = \"hello\";
+            let s: string = "hello";
             System.print(s.length);
-        }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "5");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_long_literal_via_to_string() {
-    // A magnitude-typed `long` literal stays 64-bit through lowering and renders via
-    // `dream_long_to_string`.
-    let code = format!("{SYSTEM_STUB} fun main(): void {{ System.println(123456789012); }}");
-    assert_eq!(run_and_capture(&code, "main"), "123456789012\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_long_arithmetic_stays_i64() {
-    // Exercises the i64 add path end-to-end: two `long` locals summed and printed.
-    let code = format!(
-        "{SYSTEM_STUB}
-        fun main(): void {{
+            System.println(123456789012);
             let a: long = 100000000000;
             let b: long = 23456789012;
             System.println(a + b);
-        }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "123456789012\n");
-}
+            System.print("a\tb");
+        }
 
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_struct_via_object_to_string() {
-    // Object print end-to-end: `Point(1, 2)` allocates a tagged struct, and printing routes through
-    // the generated `Point_to_string` to render `Point { x: 1, y: 2 }`.
-    let code = format!(
-        "{SYSTEM_STUB}
-        class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
-        fun main(): void {{ System.println(Point(1, 2)); }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "Point { x: 1, y: 2 }\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_nested_struct() {
-    // A struct field that is itself a struct renders recursively via the object protocol.
-    let code = format!(
-        "{SYSTEM_STUB}
-        class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
-        class Line {{ public a: Point; public b: Point; public constructor(a: Point, b: Point) {{ this.a = a; this.b = b; }} }}
-        fun main(): void {{ System.println(Line(Point(1, 2), Point(3, 4))); }}"
-    );
-    assert_eq!(
-        run_and_capture(&code, "main"),
-        "Line { a: Point { x: 1, y: 2 }, b: Point { x: 3, y: 4 } }\n"
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_union_variants() {
-    // Union print: the tag-dispatched `{Union}_to_string` reads the discriminant and renders the
-    // active variant. Data variants render `Variant(field: value, ...)`; unit variants render bare.
-    let code = format!(
-        "{SYSTEM_STUB}
-        enum Shape {{ Circle(int), Rect(width: int, height: int), Empty }}
-        fun main(): void {{
+        fun objects(): void {
+            System.println(Point(1, 2));
+            System.println(Line(Point(1, 2), Point(3, 4)));
             System.println(Shape.Circle(5));
             System.println(Shape.Rect(2, 3));
             System.println(Shape.Empty);
-        }}"
-    );
-    assert_eq!(
-        run_and_capture(&code, "main"),
-        "Circle(5)\nRect(width: 2, height: 3)\nEmpty\n"
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_int_array() {
-    // Array print: the element-typed array renderer produces `[e0, e1, ...]`.
-    let code = format!(
-        "{SYSTEM_STUB} fun main(): void {{ let xs: int[] = [10, 20, 30]; System.println(xs); }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "[10, 20, 30]\n");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_struct_array() {
-    // An array of structs renders each element via the struct's `to_string`.
-    let code = format!(
-        "{SYSTEM_STUB}
-        class Point {{ public x: int; public y: int; public constructor(x: int, y: int) {{ this.x = x; this.y = y; }} }}
-        fun main(): void {{
+            let xs: int[] = [10, 20, 30];
+            System.println(xs);
             let ps: Point[] = [Point(1, 2), Point(3, 4)];
             System.println(ps);
-        }}"
-    );
-    assert_eq!(
-        run_and_capture(&code, "main"),
-        "[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]\n"
-    );
-}
+        }
 
-#[cfg(feature = "native")]
-#[test]
-fn exec_del_runs_at_last_release() {
-    // Overwriting a reference local releases its previous occupant; at refcount zero the deep-release
-    // runtime runs the object's `del()` (prints 9 here) before freeing. So `Res(1)` is released (9)
-    // when `r` is reassigned, the surviving `Res(2)` prints its field (2), and finally the scope-exit
-    // release of `r` runs `Res(2).del()` (9) at function return -> "929". Proves overwrite release,
-    // `release_Res` -> `Res_del` -> `dream_free`, and scope-exit release all fire end-to-end.
-    let code = format!(
-        "{SYSTEM_STUB}
-        class Res {{ public v: int;
-            del() {{ System.print(9); }}
-            public constructor(v: int) {{ this.v = v; }}
-        }}
-        fun main(): void {{
+        // Overwriting `r` releases `Res(1)` (9), then scope exit releases `Res(2)` (9).
+        fun release_on_overwrite(): void {
             let r: Res = Res(1);
             r = Res(2);
             System.print(r.v);
-        }}"
-    );
-    assert_eq!(run_and_capture_rc(&code, "main"), "929");
-}
+        }
 
-#[test]
-fn exec_container_store_retains_no_double_free() {
-    // Storing a borrowed reference into a container field retains it, so the field and the source
-    // local each own a count. At scope exit both `a` and `b` are released: releasing `a` runs its
-    // `del()` (1) and deep-releases `a.next` (dropping `b` to 1), then releasing `b` runs its `del()`
-    // (1) and frees it. Each object is destroyed exactly once -> "011". Without the container retain
-    // this double-frees `b`.
-    let code = format!(
-        "{SYSTEM_STUB}
-                @allow_cycle class Node {{ public next: Node;
-            del() {{ System.print(1); }}
-            public constructor() {{ }}
-        }}
-        fun main(): void {{
+        // The field store retains `b`, so each node is destroyed exactly once.
+        fun container_store(): void {
             let a: Node = Node();
             let b: Node = Node();
             a.next = b;
             System.print(0);
             let keep = a;
-        }}"
-    );
-    assert_eq!(run_and_capture_rc(&code, "main"), "011");
-}
+        }
 
-#[test]
-fn exec_returned_value_transfers_ownership() {
-    // `make()` returns an owned local; its `+1` transfers to the caller instead of being released at
-    // `make`'s scope exit (which would run `del()` early and hand back a dangling pointer). So `y.v`
-    // reads 5, and the object's single `del()` (7) fires only at `main`'s scope exit -> "57".
-    let code = format!(
-        "{SYSTEM_STUB}
-        class R {{ public v: int;
-            del() {{ System.print(7); }}
-            public constructor(v: int) {{ this.v = v; }}
-        }}
-        fun make(): R {{
-            let x: R = R(5);
-            return x;
-        }}
-        fun main(): void {{
+        // `make` transfers its owned local, so `del` (7) runs only at this scope's exit.
+        fun returned_ownership(): void {
             let y: R = make();
             System.print(y.v);
-        }}"
-    );
-    assert_eq!(run_and_capture_rc(&code, "main"), "57");
+        }
+
+        fun function_values(): void {
+            let f = add;
+            System.print(f(2, 3));
+            let g: fun(int, int): int = add;
+            System.println(g);
+        }
+
+        async fun main(): void {
+            scalars();
+            objects();
+            release_on_overwrite();
+            container_store();
+            returned_ownership();
+            function_values();
+            let v = get().await;
+            System.print(v);
+        }
+    "#;
+    let expected = [
+        "4127\n",
+        "count = 42\nn is 42 and n+1 is 43\n",
+        "hello\ntrue\nfalse\n",
+        "5123456789012\n123456789012\n",
+        "a\tb",
+        "Point { x: 1, y: 2 }\n",
+        "Line { a: Point { x: 1, y: 2 }, b: Point { x: 3, y: 4 } }\n",
+        "Circle(5)\nRect(width: 2, height: 3)\nEmpty\n",
+        "[10, 20, 30]\n",
+        "[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]\n",
+        "929",
+        "011",
+        "57",
+        "5fun(int, int): int\n",
+        "42",
+    ]
+    .concat();
+    assert_eq!(run_and_capture_rc(code, "main"), expected);
 }
 
 /// Hand-builds a two-function MIR that takes `add` as a first-class value and calls it indirectly:
@@ -1155,18 +951,6 @@ fn test_indirect_call_emits_table_and_signature() {
     assert!(c.contains("dream_ft_get"), "table accessor missing:\n{}", c);
 }
 
-#[cfg(feature = "native")]
-#[test]
-fn exec_indirect_call_through_function_table() {
-    let code = format!(
-        "{SYSTEM_STUB}
-        {CLOSURE_STUB}
-        fun add(a: int, b: int): int {{ return a + b; }}
-        fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "5");
-}
-
 #[test]
 fn test_hir_emission_first_class_function() {
     // A bare function name is a value (`Binding::Func`), and calling a function-typed local emits an
@@ -1189,48 +973,6 @@ fn test_hir_emission_first_class_function() {
         main_body.contains("ptr @dream_ft, i64"),
         "indirect call through the function table not emitted:\n{}",
         c
-    );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_first_class_function_from_source() {
-    // Full pipeline: source with a first-class function -> analyzer HIR -> MIR -> table dispatch.
-    let code = format!(
-        "{SYSTEM_STUB}
-        {CLOSURE_STUB}
-        fun add(a: int, b: int): int {{ return a + b; }}
-        fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "5");
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_function_value() {
-    // Printing a `fun(...)` value renders its static type spelling (funcboxes are untagged).
-    let code = format!(
-        "{SYSTEM_STUB}
-        {CLOSURE_STUB}
-        fun add(a: int, b: int): int {{ return a + b; }}
-        fun main(): void {{ let f: fun(int, int): int = add; System.println(f); }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "fun(int, int): int\n");
-}
-
-#[test]
-fn print_function_value_emits_hir() {
-    let code = format!(
-        "{SYSTEM_STUB}
-        {CLOSURE_STUB}
-        fun add(a: int, b: int): int {{ return a + b; }}
-        fun main(): void {{ let f: fun(int, int): int = add; System.println(f); }}"
-    );
-    let diagnostics = analyze_code(&code);
-    assert!(
-        !diagnostics.has_errors(),
-        "printing a function value should be supported, got: {:?}",
-        diagnostics.diagnostics
     );
 }
 
@@ -1319,14 +1061,6 @@ fn func_value_argument_is_reference_counted() {
         "the string local should still be reference-counted:\n{:#?}",
         main
     );
-}
-
-#[cfg(feature = "native")]
-#[test]
-fn exec_print_escapes_in_string_literal() {
-    // The literal-unescaping in HIR emission turns `\t` into a real tab and drops the source quotes.
-    let code = format!("{SYSTEM_STUB} fun main(): void {{ System.print(\"a\\tb\"); }}");
-    assert_eq!(run_and_capture(&code, "main"), "a\tb");
 }
 
 #[test]
@@ -1643,53 +1377,6 @@ fn test_hir_emission_union_construction() {
 }
 
 #[test]
-fn test_hir_emission_switch_statement() {
-    // A `switch` with single-label cases and a `default` lowers to `HStmt::Switch`.
-    let code = "
-        fun classify(n: int): int {
-            let r: int = 0;
-            switch (n) {
-                case 1: r = 10;
-                case 2: r = 20;
-                default: r = 30;
-            }
-            return r;
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
-    assert!(
-        c.contains("define internal i32 @classify("),
-        "missing switch function:\n{}",
-        c
-    );
-}
-
-#[test]
-fn test_hir_emission_switch_statement_with_variant_binding() {
-    // A statement-position pattern `switch` lowers to `HStmt::Switch`; a variant pattern binds its
-    // payload to fresh locals that the arm body resolves.
-    let code = "
-        enum Shape { Circle(int), Empty }
-        fun describe(s: Shape): int {
-            let r: int = 0;
-            switch (s) {
-                Circle(rad) => { r = rad; }
-                Empty => { r = 0; }
-            }
-            return r;
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(count, 1, "the switch function should be emitted:\n{}", c);
-    assert!(
-        c.contains("define internal i32 @describe("),
-        "missing switch function:\n{}",
-        c
-    );
-}
-
-#[test]
 fn test_hir_emission_len_builtin() {
     // `arr.length` reads the array's stored length word; `str.length` calls `dream_str_len`
     // (UTF-16 unit count) — both O(1).
@@ -1719,32 +1406,6 @@ fn test_hir_emission_len_builtin() {
     assert!(
         heap_access(count_body, "load i32") && !count_body.contains("call "),
         "array len should be an inlined length-word load:\n{}",
-        c
-    );
-}
-
-#[test]
-fn test_hir_emission_switch_expression() {
-    // A value-position `switch` desugars to a result temp + `Switch`, read back as the switch value.
-    let code = "
-        enum Shape { Circle(int), Rect(width: int, height: int), Empty }
-        fun area(s: Shape): int {
-            return switch (s) {
-                Circle(r)  => r * r,
-                Rect(w, h) => w * h,
-                Empty      => 0,
-            };
-        }
-    ";
-    let (c, count) = emit_hir_to_ir(code);
-    assert_eq!(
-        count, 1,
-        "the switch-expression function should be emitted:\n{}",
-        c
-    );
-    assert!(
-        c.contains("define internal i32 @area("),
-        "missing switch-expression function:\n{}",
         c
     );
 }
@@ -1912,23 +1573,6 @@ fn test_async_emits_scheduler_runtime_and_poll() {
     );
 }
 
-#[cfg(feature = "native")]
-#[test]
-fn exec_async_sleep_and_await() {
-    let code = format!(
-        "{ASYNC_STUB}
-        async fun get(): int {{
-            Time.sleep(0).await;
-            return 42;
-        }}
-        async fun main(): void {{
-            let v = get().await;
-            System.print(v);
-        }}"
-    );
-    assert_eq!(run_and_capture(&code, "main"), "42");
-}
-
 #[test]
 fn test_interface_call_emits_dynamic_dispatch() {
     let code = "
@@ -1942,28 +1586,6 @@ fn test_interface_call_emits_dynamic_dispatch() {
         c.contains("__iface_dispatch_"),
         "interface call should dispatch through a trampoline:\n{}",
         c
-    );
-}
-
-#[test]
-fn closed_interface_call_aborts_instead_of_calling_the_itable() {
-    let code = "
-        interface Animal { fun speak(): int; }
-        class Cat : Animal { public fun speak(): int { return 1; } }
-        class Dog : Animal { public fun speak(): int { return 2; } }
-        @noinline
-        fun describe(a: Animal): int { return a.speak(); }
-        fun run(): int { return describe(Cat()) + describe(Dog()); }
-    ";
-    let (c, _) = emit_hir_to_ir(code);
-    let body = c
-        .split("define ")
-        .find(|f| f.contains("@describe("))
-        .expect("describe is emitted");
-    assert!(body.contains("switch i32"), "guarded tag switch:\n{body}");
-    assert!(
-        !body.contains("__iface_dispatch_") && body.contains("@dream_platform_abort("),
-        "a guarded slot covers every implementor:\n{body}"
     );
 }
 

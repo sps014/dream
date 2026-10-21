@@ -64,13 +64,24 @@ fn passing_tests_across_files_build_one_runner() {
                 "nested/text.dream",
                 "@test\nfun joins(): void { Assert.eq(\"a\" + \"b\", \"ab\"); }\n",
             ),
-            ("data/.keep", ""),
+            ("data/words.txt", "alpha\nbeta\n"),
+            (
+                "assets.dream",
+                "@test\nfun reads_asset(): void {\n    let stream = FileHandle.open(\"data/words.txt\", FileMode.Read).unwrap();\n    Assert.eq(Streams.read_text(stream).unwrap(), \"alpha\\nbeta\\n\");\n    stream.close().unwrap();\n}\n",
+            ),
         ],
     );
     let report = run(dir.path(), Vec::new());
     assert!(report.ok(), "{report:?}");
-    assert_eq!(report.passed, labels(&["math::adds", "nested.text::joins"]));
-    assert!(dir.path().join("target/test/debug").is_dir());
+    assert_eq!(
+        report.passed,
+        labels(&["assets::reads_asset", "math::adds", "nested.text::joins"])
+    );
+    assert!(
+        dir.path()
+            .join("target/test/debug/data/words.txt")
+            .is_file()
+    );
 }
 
 #[test]
@@ -141,27 +152,6 @@ fn leaked_objects_fail_the_exit_gate() {
     assert_eq!(report.leak_hints.len(), 1, "{report:?}");
     assert!(!report.ok());
     assert!(report.problem.is_some());
-}
-
-#[test]
-fn assets_are_readable_from_the_runner_directory() {
-    let dir = project(
-        "\"native\"",
-        &[
-            ("data/words.txt", "alpha\nbeta\n"),
-            (
-                "assets.dream",
-                "@test\nfun reads_asset(): void {\n    let stream = FileHandle.open(\"data/words.txt\", FileMode.Read).unwrap();\n    Assert.eq(Streams.read_text(stream).unwrap(), \"alpha\\nbeta\\n\");\n    stream.close().unwrap();\n}\n",
-            ),
-        ],
-    );
-    let report = run(dir.path(), Vec::new());
-    assert!(report.ok(), "{report:?}");
-    assert!(
-        dir.path()
-            .join("target/test/debug/data/words.txt")
-            .is_file()
-    );
 }
 
 #[test]

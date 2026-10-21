@@ -121,15 +121,11 @@ fn project(root: &Path, source: &str) {
     fs::write(root.join("src/lib.dream"), source).unwrap();
 }
 
-#[test]
-fn c_links_both_library_kinds_and_uses_plain_exports() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().join("mylib");
-    project(
-        &root,
-        r#"import system.interop;
+const LIBRARY_SOURCE: &str = r#"import system.interop;
 
 import system;
+import system.collections;
+import dep.helper;
 let base: int = 40;
 @export fun add(a: int, b: int): int { return base + a + b; }
 @export fun wide(x: long): long { return x + 1; }
@@ -144,34 +140,37 @@ class Tracked { public constructor() {} del() { System.println("destroyed"); } }
 @c extern fun c_add(a: int, b: int): int;
 @export fun nativeAdd(a: int, b: int): int { return c_add(a, b); }
 fun privateHelper(): int { return 999; }
-"#,
-    );
-    fs::create_dir_all(root.join("native")).unwrap();
-    fs::write(
-        root.join("native/bridge.c"),
-        "#include <stdint.h>\nint32_t c_add(int32_t a, int32_t b) { return a + b; }\n",
-    )
-    .unwrap();
-    for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
-        let product = build(&root, kind, &["--release"]);
-        let ir = fs::read_to_string(root.join("lib.opt.ll")).unwrap();
-        assert!(
-            !ir.lines()
-                .any(|l| l.starts_with("define ") && l.contains("@main("))
-        );
-        assert!(!ir.contains("privateHelper"));
-        let header = fs::read_to_string(root.join("lib.h")).unwrap();
-        assert!(header.contains("int32_t add(int32_t arg0, int32_t arg1);"));
-        assert!(!header.contains(temp.path().to_str().unwrap()));
-        let exe = consumer(
-            &root,
-            &product,
-            kind,
-            r#"
+fun helper(): void {
+    System.panic("own");
+}
+@export fun own(): void { helper(); }
+@export fun std(): void {
+    let xs = List<int>();
+    xs[0];
+}
+@export fun dependency(): void {
+    depFail();
+}
+"#;
+
+/// The consumer checks the exports without arguments and panics through the named export
+/// otherwise, reporting the panic location through the installed hook.
+const CONSUMER_SOURCE: &str = r#"
 #include "lib.h"
 #include <assert.h>
-int main(void) {
+#include <stdio.h>
+static void hook(const char *message, const char *location) {
+    (void)message; printf("LOCATION:%s\n", location); fflush(stdout);
+}
+int main(int argc, char **argv) {
     dream_thread_attach();
+    if (argc > 1) {
+        dream_set_panic_hook(hook);
+        if (argv[1][0] == 'o') own();
+        else if (argv[1][0] == 's') std();
+        else dependency();
+        return 0;
+    }
     assert(add(1, 1) == 42);
     assert(add(2, 3) == 45);
     assert(wide(4294967296LL) == 4294967297LL);
@@ -183,10 +182,68 @@ int main(void) {
     dream_thread_detach();
     return 0;
 }
-"#,
+"#;
+
+#[test]
+fn c_links_both_library_kinds_with_plain_exports_and_relative_panic_locations() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("mylib");
+    project(&root, LIBRARY_SOURCE);
+    fs::create_dir_all(root.join("native")).unwrap();
+    fs::write(
+        root.join("native/bridge.c"),
+        "#include <stdint.h>\nint32_t c_add(int32_t a, int32_t b) { return a + b; }\n",
+    )
+    .unwrap();
+    let dep = root.join("dream_packages/dep/src");
+    fs::create_dir_all(&dep).unwrap();
+    fs::write(
+        dep.join("helper.dream"),
+        "module dep.helper;\nimport system;\npublic fun depFail(): void { System.panic(\"dep\"); }\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("dream_packages/dep/dream.toml"),
+        "[package]\nname = \"dep\"\n",
+    )
+    .unwrap();
+    let line_of = |needle: &str| {
+        LIBRARY_SOURCE
+            .lines()
+            .position(|line| line.contains(needle))
+            .unwrap()
+            + 1
+    };
+    let panics = [
+        ("own", line_of("System.panic(\"own\")")),
+        ("std", line_of("xs[0];")),
+        ("dep", line_of("depFail();")),
+    ];
+    for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
+        let product = build(&root, kind, &["--release"]);
+        let ir = fs::read_to_string(root.join("lib.opt.ll")).unwrap();
+        assert!(
+            !ir.lines()
+                .any(|l| l.starts_with("define ") && l.contains("@main("))
         );
+        assert!(!ir.contains("privateHelper"));
+        assert!(!ir.contains(temp.path().to_str().unwrap()));
+        let header = fs::read_to_string(root.join("lib.h")).unwrap();
+        assert!(header.contains("int32_t add(int32_t arg0, int32_t arg1);"));
+        assert!(!header.contains(temp.path().to_str().unwrap()));
+        let exe = consumer(&root, &product, kind, CONSUMER_SOURCE);
         let out = command(run_consumer(&exe));
         assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), "destroyed");
+        for (arg, line) in panics {
+            let out = run_consumer(&exe).arg(arg).output().unwrap();
+            assert!(!out.status.success());
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            assert!(
+                stdout.contains(&format!("LOCATION:mylib/src/lib.dream:{line}")),
+                "{stdout}\n{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
         if !cfg!(windows) {
             let mut nm = Command::new("nm");
             nm.arg(if cfg!(target_os = "macos") {
@@ -211,59 +268,6 @@ int main(void) {
                     symbols
                 );
             }
-        }
-    }
-}
-
-#[test]
-fn library_panic_locations_are_relative_and_belong_to_the_library() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().join("mylib");
-    project(
-        &root,
-        "import system;\nimport system.collections;\nimport dep.helper;\nfun helper(): void {\n    System.panic(\"own\");\n}\n@export fun own(): void { helper(); }\n@export fun std(): void {\n    let xs = List<int>();\n    xs[0];\n}\n@export fun dependency(): void {\n    depFail();\n}\n",
-    );
-    let dep = root.join("dream_packages/dep/src");
-    fs::create_dir_all(&dep).unwrap();
-    fs::write(dep.join("helper.dream"), "module dep.helper;\nimport system;\npublic fun depFail(): void { System.panic(\"dep\"); }\n").unwrap();
-    fs::write(
-        root.join("dream_packages/dep/dream.toml"),
-        "[package]\nname = \"dep\"\n",
-    )
-    .unwrap();
-    for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
-        let product = build(&root, kind, &["--release"]);
-        let ir = fs::read_to_string(root.join("lib.opt.ll")).unwrap();
-        assert!(!ir.contains(temp.path().to_str().unwrap()));
-        let exe = consumer(
-            &root,
-            &product,
-            kind,
-            r#"
-#include "lib.h"
-#include <stdio.h>
-static void hook(const char *message, const char *location) {
-    (void)message; printf("LOCATION:%s\n", location); fflush(stdout);
-}
-int main(int argc, char **argv) {
-    (void)argc;
-    dream_thread_attach(); dream_set_panic_hook(hook);
-    if (argv[1][0] == 'o') own();
-    else if (argv[1][0] == 's') std();
-    else dependency();
-    return 0;
-}
-"#,
-        );
-        for (arg, line) in [("own", 5), ("std", 10), ("dep", 13)] {
-            let out = run_consumer(&exe).arg(arg).output().unwrap();
-            assert!(!out.status.success());
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            assert!(
-                stdout.contains(&format!("LOCATION:mylib/src/lib.dream:{line}")),
-                "{stdout}\n{}",
-                String::from_utf8_lossy(&out.stderr)
-            );
         }
     }
 }

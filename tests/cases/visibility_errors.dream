@@ -1,0 +1,30 @@
+// Items from another file are visible only when public, and class-private members stay private
+// even on a visible class.
+import system;
+import helpers.vis_lib;
+
+fun generic_class(): void {
+    let c = HiddenCache<int>.make(1);
+    System.println(c.v);
+}
+
+fun generic_static_private(): void {
+    let c = OpenCache<int>.locked(1);
+    System.println(c.v);
+}
+
+fun private_class(): void {
+    let b = PrivateBox(1);
+    System.println(b.value);
+}
+
+fun private_function(): void {
+    System.println(private_secret());
+}
+
+fun private_generic_static(): void {
+    // The generic static-call path must apply the same privacy check.
+    System.println(Gadget.hidden<int>(3));
+}
+
+fun main(): void {}

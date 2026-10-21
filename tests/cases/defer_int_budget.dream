@@ -1,6 +1,0 @@
-import system;
-fun main(): void {
-    let n = 1;
-    defer(n) {
-    }
-}

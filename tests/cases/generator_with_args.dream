@@ -1,8 +1,0 @@
-import system.codegen;
-// `@generator` takes no string name; the function name is the generator name.
-@generator("routes")
-public fun routes(): void {
-}
-
-fun main(): void {
-}

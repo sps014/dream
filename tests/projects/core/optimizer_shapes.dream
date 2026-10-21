@@ -1,0 +1,361 @@
+import system.testing;
+import system;
+import system.collections;
+
+fun c0_sum_down(a: int[]): int {
+    let total = 0;
+    let i = a.length - 1;
+    while i >= 0 {
+        total = total + a[i];
+        i = i - 1;
+    }
+    return total;
+}
+
+fun c0_sum_inclusive(a: int[]): int {
+    let total = 0;
+    let last = a.length - 1;
+    let i = 0;
+    while i <= last {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fun c0_sum_prefix(a: int[], n: int): int {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+        total = total + a[i];
+    }
+    return total;
+}
+
+class c142_Particle {
+    public x: double;
+    public velocity: double;
+
+    public constructor(x: double) {
+        this.x = x;
+        this.velocity = 0.0d;
+    }
+}
+
+@noinline
+fun c142_sum(borrow source: c142_Particle, borrow alias: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.velocity = alias.velocity + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun c142_changing(borrow source: c142_Particle, borrow alias: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + source.x;
+        alias.x = alias.x + 1.0d;
+        k = k + 1;
+    }
+    return total;
+}
+
+@noinline
+fun c142_mutate(borrow p: c142_Particle): void {
+    p.x = p.x + 1.0d;
+}
+
+@noinline
+fun c142_calling(borrow p: c142_Particle, n: int): double {
+    let total = 0.0d;
+    let k = 0;
+    while k < n {
+        total = total + p.x;
+        c142_mutate(p);
+        k = k + 1;
+    }
+    return total;
+}
+
+fun c1ed_count_paths(n: int): int {
+    if n < 2 {
+        return n;
+    }
+    return c1ed_count_paths(n - 1) + c1ed_count_paths(n - 2);
+}
+
+fun c1ed_signed_sum(n: int): int {
+    if n < 2 {
+        return n * 3;
+    }
+    return c1ed_signed_sum(n - 1) - c1ed_signed_sum(n - 2);
+}
+
+fun c1ed_duplicate(n: int, x: double): double {
+    if n < 1 {
+        return x;
+    }
+    return c1ed_duplicate(n - 1, x) + c1ed_duplicate(n - 1, x);
+}
+
+fun c1ed_wrap_sum(n: int, x: int): int {
+    if n < 1 {
+        return x;
+    }
+    return c1ed_wrap_sum(n - 1, x) + c1ed_wrap_sum(n - 1, x);
+}
+
+class ca3_Box {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+fun ca3_identity<T>(value: T): T {
+    return value;
+}
+
+class c1a7_Holder {
+    public items: int[];
+
+    public constructor(items: int[]) {
+        this.items = items;
+    }
+}
+
+fun c1a7_store(items: int[]): int {
+    let holder = c1a7_Holder([]);
+    let original = items[0];
+    if original > 0 {
+        let items = [7];
+        holder.items = items;
+        Assert.eq(items[0], 7);
+    }
+    return original + holder.items[0];
+}
+
+interface cbc_Shape {
+    fun area(): int;
+    fun name(): string;
+}
+
+class cbc_Circle: cbc_Shape {
+    public r: int;
+
+    public constructor(r: int) {
+        this.r = r;
+    }
+
+    public fun area(): int {
+        return 3 * this.r * this.r;
+    }
+
+    public fun name(): string {
+        return "circle";
+    }
+}
+
+class cbc_Square: cbc_Shape {
+    public s: int;
+
+    public constructor(s: int) {
+        this.s = s;
+    }
+
+    public fun area(): int {
+        return this.s * this.s;
+    }
+
+    public fun name(): string {
+        return "square";
+    }
+}
+
+interface cbc_Op {
+    fun apply(x: int): int;
+}
+
+class cbc_AddOp: cbc_Op {
+    public fun apply(x: int): int {
+        return x + 10;
+    }
+}
+
+class cbc_MulOp: cbc_Op {
+    public fun apply(x: int): int {
+        return x * 10;
+    }
+}
+
+class cbc_NegOp: cbc_Op {
+    public fun apply(x: int): int {
+        return 0 - x;
+    }
+}
+
+interface cbc_Sized {
+    fun size(): int;
+}
+
+@allow_cycle
+class cbc_Holder<T>: cbc_Sized {
+    public items: List<T>;
+
+    public constructor() {
+        this.items = List<T>();
+    }
+
+    public fun size(): int {
+        return this.items.length;
+    }
+}
+
+fun cbc_make_op(kind: int): cbc_Op {
+    if kind == 0 {
+        return cbc_AddOp();
+    }
+    if kind == 1 {
+        return cbc_MulOp();
+    }
+    return cbc_NegOp();
+}
+
+fun cbc_make_mul(): cbc_Op {
+    return cbc_MulOp();
+}
+
+fun cbc_total_area(shapes: List<cbc_Shape>, log: List<string>): int {
+    let sum = 0;
+    let i = 0;
+    while i < shapes.length {
+        let s = shapes[i];
+        log.push(s.name() + " " + s.area().to_string());
+        sum = sum + s.area();
+        i = i + 1;
+    }
+    return sum;
+}
+
+fun cbc_total_size(items: List<cbc_Sized>): int {
+    let sum = 0;
+    let i = 0;
+    while i < items.length {
+        sum = sum + items[i].size();
+        i = i + 1;
+    }
+    return sum;
+}
+
+// Index accesses the bounds-check eliminator proves in range must still compute what checked code does.
+@test
+@timeout(180000)
+fun abc_loop_shapes(): void {
+    let a: int[] = [3, 1, 4, 1, 5, 9, 2, 6];
+    Assert.eq(c0_sum_down(a), 31);
+    Assert.eq(c0_sum_inclusive(a), 31);
+    Assert.eq(c0_sum_prefix(a, 5), 14);
+    Assert.eq(c0_sum_prefix(a, 0), 0);
+
+    let empty: int[] = [];
+    Assert.eq(c0_sum_down(empty), 0);
+    Assert.eq(c0_sum_inclusive(empty), 0);
+}
+
+@test
+@timeout(180000)
+fun loop_field_cache(): void {
+    let p = c142_Particle(2.0d);
+    Assert.eq((int)c142_sum(p, p, 10), 20);
+    Assert.eq((int)p.velocity, 10);
+    Assert.eq((int)c142_sum(p, p, 0), 0);
+    Assert.eq((int)c142_sum(p, p, -1), 0);
+    Assert.eq((int)c142_changing(p, p, 3), 9);
+    Assert.eq((int)c142_calling(p, 3), 18);
+    Assert.eq((int)p.x, 8);
+    let q = c142_Particle(20.0d);
+    Assert.eq((int)c142_sum(p, q, 2), 16);
+    Assert.eq((int)q.velocity, 2);
+}
+
+@test
+@timeout(180000)
+fun scalar_recursive_expansion(): void {
+    Assert.eq(c1ed_count_paths(-7), -7);
+    Assert.eq(c1ed_count_paths(0), 0);
+    Assert.eq(c1ed_count_paths(1), 1);
+    Assert.eq(c1ed_count_paths(10), 55);
+    Assert.eq(c1ed_count_paths(20), 6765);
+    Assert.eq(c1ed_signed_sum(12), 0);
+    Assert.eq(c1ed_wrap_sum(1, 2147483647), -2);
+    let infinity: double = (double)1 / (double)0;
+    Assert.is_true((double)1 / c1ed_duplicate(3, -(double)0) == -infinity);
+    Assert.is_true(c1ed_duplicate(3, infinity) == infinity);
+    let nan = c1ed_duplicate(3, infinity - infinity);
+    Assert.is_true(nan != nan);
+}
+
+@test
+@timeout(180000)
+fun copy_prop_self_assignment(): void {
+    let result = ca3_identity<int>(0);
+    for (let i = 0; i < 0; i++) {
+        if (i % 2 == 0) {
+            result += i;
+        } else {
+            result -= i;
+        }
+    }
+    let box = ca3_Box(result);
+    result = box.value;
+    result = result;
+    Assert.eq(result, 0);
+
+    Assert.eq(c1a7_store([1]), 8);
+}
+
+// Exact receivers from `new` (direct, via an inlined factory, across an if/else join),
+// tag-guarded dispatch for two-implementor slots (including generic instances), and plain
+// itable dispatch for a three-implementor slot.
+@test
+@timeout(180000)
+fun devirt_dispatch(): void {
+    let direct: cbc_Op = cbc_AddOp();
+    Assert.eq(direct.apply(1), 11);
+    Assert.eq(cbc_make_mul().apply(2), 20);
+
+    let flag = System.env("DREAM_DEVIRT_CASE_UNSET").is_some();
+    let joined: cbc_Op = cbc_AddOp();
+    if flag {
+        joined = cbc_NegOp();
+    }
+    Assert.eq(joined.apply(3), 13);
+
+    Assert.eq(cbc_make_op(0).apply(4), 14);
+    Assert.eq(cbc_make_op(1).apply(4), 40);
+    Assert.eq(cbc_make_op(2).apply(4), -4);
+
+    let shapes = List<cbc_Shape>();
+    shapes.push(cbc_Circle(2));
+    shapes.push(cbc_Square(3));
+    shapes.push(cbc_Circle(1));
+    let log = List<string>();
+    Assert.eq(cbc_total_area(shapes, log), 24);
+    Assert.eq(log.join(";"), "circle 12;square 9;circle 3");
+
+    let ints = cbc_Holder<int>();
+    ints.items.push(1);
+    ints.items.push(2);
+    let strs = cbc_Holder<string>();
+    strs.items.push("a");
+    let sized = List<cbc_Sized>();
+    sized.push(ints);
+    sized.push(strs);
+    Assert.eq(cbc_total_size(sized), 3);
+}

@@ -1,0 +1,201 @@
+import system.testing;
+import system;
+import system.task;
+
+async fun c65_sleeper(): int {
+    Time.sleep(10000).await;
+    return 1;
+}
+
+@test
+@timeout(180000)
+async fun cancellation_basic(): void {
+    let src = CancellationSource();
+    let tok = src.token;
+    Assert.is_false(tok.is_cancelled);
+    src.cancel();
+    Assert.is_true(tok.is_cancelled);
+    Assert.is_true(tok.check().is_err());
+
+    let f = c65_sleeper();
+    Promise.cancel(f);
+}
+
+async fun event_value(ms: int): string {
+    Time.delay(ms).await;
+    return "completed 日本語";
+}
+
+async fun event_void(): void {
+    Time.delay(0).await;
+}
+
+fun detached_token_wait(): Future<Result<string, CancelledError>> {
+    let source = CancellationSource();
+    return source.token.wait(event_value(0));
+}
+
+@test
+async fun event_cancellation(): void {
+    Assert.eq(detached_token_wait().await.unwrap(), "completed 日本語");
+    let source = CancellationSource();
+    for (let i = 0; i < 100; i = i + 1) {
+        Assert.eq(source.token.wait(event_value(0)).await.unwrap(), "completed 日本語");
+    }
+    Assert.is_true(source.token.wait_void(event_void()).await.is_ok());
+    source.cancel();
+    Assert.is_true(source.token.wait_void(event_void()).await.is_err());
+    Assert.is_true(source.token.wait(event_value(0)).await.is_err());
+    source.cancel();
+    Assert.is_true(source.token.wait_cancelled().await);
+
+    let pending_source = CancellationSource();
+    let never = CancellationSource();
+    let first = pending_source.token.wait(never.token.wait_cancelled());
+    let second = pending_source.token.wait(never.token.wait_cancelled());
+    Promise.start(first);
+    Promise.start(second);
+    Time.delay(1).await;
+    pending_source.cancel();
+    Assert.is_true(first.await.is_err());
+    Assert.is_true(second.await.is_err());
+
+    let late_source = CancellationSource();
+    let abandoned = late_source.token.wait_cancelled();
+    Promise.start(abandoned);
+    Time.delay(1).await;
+    Promise.cancel(abandoned);
+    late_source.cancel();
+    late_source.cancel();
+    Time.delay(1).await;
+    Assert.is_true(Debug.ref_count(abandoned) > 0);
+
+    let worker_source = CancellationSource();
+    let waiting = worker_source.token.wait(never.token.wait_cancelled());
+    Promise.start(waiting);
+    Time.delay(1).await;
+    let worker = Task.spawn(
+        () => {
+            worker_source.cancel();
+            return 0;
+        }
+    );
+    Promise.start(worker);
+    Assert.is_true(waiting.await.is_err());
+    worker.await;
+}
+
+let cac_shared: Option<Future<bool>> = Option.None;
+
+async fun cac_wait_owned(signal: CancellationSource): bool {
+    return signal.token.wait_cancelled().await;
+}
+
+async fun cac_wait_shared(signal: CancellationSource): bool {
+    let child = signal.token.wait_cancelled();
+    cac_shared = Option.Some(child);
+    return child.await;
+}
+
+// The awaited registration is owned only by the cancelled frame, so cancelling the frame must
+// detach it; otherwise the signal that never fires keeps the child and the process alive.
+@noinline
+async fun cac_cancel_owned(): void {
+    let signal = CancellationSource();
+    let waiter = cac_wait_owned(signal);
+    Promise.start(waiter);
+    Time.sleep(1).await;
+    Promise.cancel(waiter);
+}
+
+@test
+@timeout(180000)
+async fun cancel_awaited_child(): void {
+    cac_cancel_owned().await;
+    let before = Debug.live_objects;
+    cac_cancel_owned().await;
+    cac_cancel_owned().await;
+    Assert.eq(Debug.live_objects - before, 0);
+
+    let signal = CancellationSource();
+    let waiter = cac_wait_shared(signal);
+    Promise.start(waiter);
+    Time.sleep(1).await;
+    Promise.cancel(waiter);
+    signal.cancel();
+    Assert.is_true(cac_shared.unwrap().await);
+    cac_shared = Option.None;
+}
+
+async fun c3c_value(n: int): int {
+    return n;
+}
+
+@test
+@timeout(180000)
+async fun async_ready_overflow_cancel(): void {
+    let pending = Array.alloc<Future<int>>(512);
+    for (let i = 0; i < pending.length; i = i + 1) {
+        pending[i] = c3c_value(i);
+        Promise.start(pending[i]);
+    }
+    for (let i = 0; i < pending.length; i = i + 2) {
+        Promise.cancel(pending[i]);
+    }
+    let results = Promise.all(pending).await;
+    let sum = 0;
+    for (let i = 0; i < results.length; i = i + 1) {
+        sum = sum + results[i];
+    }
+    Assert.eq(sum, 65536);
+}
+
+let tcr_parked: Option<Future<int>> = Option.None;
+
+async fun tcr_later(): int {
+    return 1;
+}
+
+// The parked future inherits the scope's token as its task context and outlives the scope, so
+// freeing it drops the token's last reference.
+@noinline
+async fun tcr_scope_with_parked_child(): void {
+    Task.scope<Unit, string>(
+        async (scope: TaskScope<string>) => {
+            tcr_parked = Option.Some(tcr_later());
+            let result: Result<Unit, TaskFailure<string>> = Result.Ok(Unit());
+            return result;
+        }
+    ).await;
+    tcr_parked = Option.None;
+}
+
+@test
+@timeout(180000)
+async fun task_context_release(): void {
+    tcr_scope_with_parked_child().await;
+    let before = Debug.live_objects;
+    tcr_scope_with_parked_child().await;
+    tcr_scope_with_parked_child().await;
+    Assert.eq(Debug.live_objects - before, 0);
+}
+
+// `Promise.start(f)` launches a lazy future without awaiting it (fire-and-forget). The body runs
+// at the next scheduler pass, here while the test is suspended on the timer.
+let c1bc_steps: int = 0;
+
+async fun c1bc_work(): void {
+    Assert.eq(c1bc_steps, 1);
+    c1bc_steps = 2;
+}
+
+@test
+@timeout(180000)
+async fun promise_start_fire_and_forget(): void {
+    c1bc_steps = 0;
+    let f = c1bc_work();
+    c1bc_steps = 1;
+    Promise.start(f);
+    Time.sleep(10).await;
+    Assert.eq(c1bc_steps, 2);
+}

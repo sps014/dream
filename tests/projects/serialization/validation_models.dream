@@ -1,0 +1,112 @@
+import system;
+import system.json;
+import system.validation;
+import system.testing;
+
+fun valid_name(value: string): Option<string> {
+    if value == "reserved" {
+        return Option.Some("reserved name");
+    }
+    return Option.None;
+}
+
+@json
+class ValidatedUser {
+    @min_length(2)
+    @max_length(20)
+    @validate_with(valid_name)
+    public name: string;
+
+    @minimum(1.0)
+    @maximum(120.0)
+    @default_json("18")
+    public age: int;
+
+    public constructor(name: string, age: int) {
+        this.name = name;
+        this.age = age;
+    }
+
+    @model_validator
+    public static fun adult_name(value: ValidatedUser): List<ValidationIssue> {
+        let issues = List<ValidationIssue>();
+        if value.age < 18 && value.name == "admin" {
+            issues.push(ValidationIssue(List<string>(), "model", "admin must be adult"));
+        }
+        return issues;
+    }
+}
+
+@json
+class ValidatedEnvelope {
+    public user: ValidatedUser;
+    public tags: List<string>;
+
+    public constructor(user: ValidatedUser, tags: List<string>) {
+        this.user = user;
+        this.tags = tags;
+    }
+}
+
+@test
+fun validation_models(): void {
+    let user = Validation.decode<ValidatedUser>("{\"name\":\"Dream\"}").unwrap();
+    Assert.eq(user.age, 18);
+    Assert.eq(user.name, "Dream");
+    let invalid = Validation.decode<ValidatedUser>("{\"name\":3,\"age\":0,\"extra\":true}")
+        .unwrap_err();
+    Assert.eq(invalid.issues.length, 3);
+    Assert.eq(invalid.issues[0].location[0], "name");
+    Assert.is_true(Validation.decode<ValidatedUser>("{\"name\":\"reserved\"}").is_err());
+    Assert.is_true(Validation.validate(ValidatedUser("admin", 15)).is_err());
+    Assert.is_true(Validation.decode<ValidatedUser>("{").is_err());
+    Assert.is_true(Validation.decode<ValidatedUser>("{\"name\":\"Dream\",\"age\":null}").is_err());
+    Assert.is_true(Validation.decode<ValidatedUser>("{\"name\":\"Dream\",\"age\":2.5}").is_err());
+    let nested = Validation.decode<ValidatedEnvelope>(
+        "{\"user\":{\"name\":\"Dream\"},\"tags\":[true]}"
+    ).unwrap_err();
+    Assert.eq(nested.issues[0].location[0], "tags");
+    Assert.eq(nested.issues[0].location[1], "0");
+    Assert.is_true(
+        Validation.schema<ValidatedUser>()["properties"]["age"].contains("minimum")
+    );
+}
+
+@json
+class ValidatedShapes {
+    public scores: SortedMap<string, ValidatedUser>;
+    public pair: (int, ValidatedUser);
+
+    public constructor(scores: SortedMap<string, ValidatedUser>, pair: (int, ValidatedUser)) {
+        this.scores = scores;
+        this.pair = pair;
+    }
+}
+
+@test
+fun validation_sorted_maps_and_tuples(): void {
+    let shapes = Validation.decode<ValidatedShapes>(
+        "{\"scores\":{\"a\":{\"name\":\"Dream\"}},\"pair\":[1,{\"name\":\"Dream\"}]}"
+    ).unwrap();
+    Assert.eq(shapes.pair.0, 1);
+    Assert.eq(shapes.pair.1.age, 18);
+
+    let short = Validation.decode<ValidatedShapes>(
+        "{\"scores\":{},\"pair\":[1]}"
+    ).unwrap_err();
+    Assert.eq(short.issues[0].location[0], "pair");
+
+    let mistyped = Validation.decode<ValidatedShapes>(
+        "{\"scores\":{},\"pair\":[\"one\",{\"name\":\"Dream\"}]}"
+    ).unwrap_err();
+    Assert.eq(mistyped.issues[0].location[1], "0");
+
+    let nested = Validation.decode<ValidatedShapes>(
+        "{\"scores\":{\"a\":{\"name\":\"reserved\"}},\"pair\":[1,{\"name\":\"reserved\"}]}"
+    ).unwrap_err();
+    Assert.eq(nested.issues.length, 2);
+    Assert.eq(nested.issues[0].location[0], "scores");
+    Assert.eq(nested.issues[0].location[1], "a");
+    Assert.eq(nested.issues[1].location[0], "pair");
+    Assert.eq(nested.issues[1].location[1], "1");
+}

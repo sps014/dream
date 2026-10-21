@@ -1,0 +1,28 @@
+import system;
+import system.testing;
+
+// --- string_chars: `iterator()` yields each char of a string. ---
+
+@test
+fun iso_string_chars(): void {
+    let s = "hi";
+    let out = "";
+    for (let c in s.iterator()) {
+        out = out + c;
+    }
+    Assert.eq(out, "hi");
+}
+
+// --- string_foreach: a string is indexable (`s[i]` -> char) and directly iterable. ---
+
+@test
+fun iso_string_foreach(): void {
+    let s = "abc";
+    Assert.eq(s[0], 'a');
+    Assert.eq(s[2], 'c');
+    let out = "";
+    for (let c in s) {
+        out = out + c;
+    }
+    Assert.eq(out, "abc");
+}

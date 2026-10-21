@@ -65,3 +65,30 @@ async fun webapi_isolation(): void {
     Assert.is_true(reserved.listen("127.0.0.1", 0).await.is_err());
     client.close().unwrap();
 }
+
+@test
+async fun webapi_lifespan(): void {
+    let app = WebApp();
+    let order = List<string>();
+    app.lifespan(
+        async (app: WebApp) => {
+            order.push("first");
+            return Result.Ok(Unit());
+        },
+        async (app: WebApp) => {
+            order.push("stop-first");
+        }
+    ).unwrap();
+    app.lifespan(
+        async (app: WebApp) => {
+            order.push("second");
+            return Result.Err(IoError.other("", "startup failed"));
+        },
+        async (app: WebApp) => {
+            order.push("stop-second");
+        }
+    ).unwrap();
+    Assert.is_true(app.listen("127.0.0.1", 0).await.is_err());
+    Assert.eq(order.length, 3);
+    Assert.eq(order[2], "stop-first");
+}

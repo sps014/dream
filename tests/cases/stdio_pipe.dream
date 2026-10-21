@@ -1,7 +1,23 @@
 import system;
 import system.io;
+import system.encoding;
+
+// `System.print` and the `Writer` view of stdout share one stream, so their output interleaves.
+fun write_streams(): void {
+    let output: Writer = System.stdout;
+    output.write_all(Encoding.utf8_encode("hello-out\n")).unwrap();
+    output.flush().unwrap();
+    System.print("a");
+    output.write_all(Encoding.utf8_encode("b")).unwrap();
+    System.print("c");
+    output.flush().unwrap();
+    System.stderr.write_all([]).unwrap();
+    System.stderr.flush().unwrap();
+    System.println("");
+}
 
 fun main(): void {
+    write_streams();
     let temporary = TempFile.create().unwrap();
     let input: Reader = System.stdin;
     if !input.read(-1).is_err() || input.read(0).unwrap().length != 0 {

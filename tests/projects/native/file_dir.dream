@@ -1,18 +1,20 @@
 import system.testing;
-// Directory File.create_dir / create_dir_all / is_dir / list on native.
 import system;
 import system.io;
 
-async fun cd0_body(): void {
+// Directory File.create_dir / create_dir_all / is_dir / list on native.
+@test
+@timeout(180000)
+async fun file_dir(): void {
     let root = "dream_file_dir_e2e";
     switch (File.create_dir(root).await) {
-        Ok(_) => cd0_verify_observation((File.is_dir(root)).to_string()),
-        Err(e) => cd0_verify_observation((e.message()).to_string()),
+        Ok(_) => Assert.is_true(File.is_dir(root)),
+        Err(e) => Assert.fail(e.message()),
     }
 
     switch (File.create_dir_all(root + "/nested/leaf").await) {
-        Ok(_) => cd0_verify_observation((File.is_dir(root + "/nested/leaf")).to_string()),
-        Err(e) => cd0_verify_observation((e.message()).to_string()),
+        Ok(_) => Assert.is_true(File.is_dir(root + "/nested/leaf")),
+        Err(e) => Assert.fail(e.message()),
     }
 
     let marker = Array.alloc<byte>(1);
@@ -20,33 +22,108 @@ async fun cd0_body(): void {
     File.write_bytes(root + "/a.bin", marker).await;
 
     let names = (File.list(root).await).unwrap_or(Array.alloc<string>(0));
-    cd0_verify_observation((names.length).to_string());
-    cd0_verify_observation((names[0]).to_string());
-    cd0_verify_observation((names[1]).to_string());
+    Assert.eq(names.length, 2);
+    Assert.eq(names[0], "a.bin");
+    Assert.eq(names[1], "nested");
 
     File.delete(root + "/a.bin").await;
     File.delete(root + "/nested/leaf").await;
     File.delete(root + "/nested").await;
-    cd0_verify_observation((File.delete(root).await.is_ok()).to_string());
-    cd0_verify_observation((!File.exists(root)).to_string());
+    Assert.is_true(File.delete(root).await.is_ok());
+    Assert.is_false(File.exists(root));
 }
 
-let cd0_cursor: int = 0;
+// Binary File.read_bytes / write_bytes on native (NUL-safe, no string round-trip).
+@test
+@timeout(180000)
+async fun file_bytes(): void {
+    let path = "dream_file_bytes_e2e.bin";
+    let data = Array.alloc<byte>(4);
+    data[0] = (byte)1;
+    data[1] = (byte)0;
+    data[2] = (byte)255;
+    data[3] = (byte)2;
 
-fun cd0_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "true\ntrue\n2\na.bin\nnested\ntrue\ntrue\n";
-    let end = cd0_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(cd0_cursor, end));
-    cd0_cursor = end;
+    switch (File.write_bytes(path, data).await) {
+        Ok(n) => Assert.eq(n, 4),
+        Err(e) => Assert.fail(e.message()),
+    }
+
+    switch (File.read_bytes(path).await) {
+        Ok(got) => {
+            Assert.eq(got.length, 4);
+            Assert.eq((int)got[0], 1);
+            Assert.eq((int)got[1], 0);
+            Assert.eq((int)got[2], 255);
+            Assert.eq((int)got[3], 2);
+        },
+        Err(e) => Assert.fail(e.message()),
+    }
+
+    File.delete(path).await;
 }
 
 @test
 @timeout(180000)
+async fun file_copy_rename(): void {
+    let root = "dream_file_copy_rename_e2e";
+    File.create_dir(root).await;
+    File.write(root + "/src.txt", "abc").await;
+    switch (File.copy(root + "/src.txt", root + "/dst.txt").await) {
+        Ok(_) => Assert.eq((File.read(root + "/dst.txt").await).unwrap_or(""), "abc"),
+        Err(e) => Assert.fail(e.message()),
+    }
+    switch (File.rename(root + "/dst.txt", root + "/renamed.txt").await) {
+        Ok(_) => {
+            Assert.is_false(File.exists(root + "/dst.txt"));
+            Assert.eq((File.read(root + "/renamed.txt").await).unwrap_or(""), "abc");
+        },
+        Err(e) => Assert.fail(e.message()),
+    }
+    File.delete(root + "/src.txt").await;
+    File.delete(root + "/renamed.txt").await;
+    File.remove_dir(root).await;
+}
 
-async fun file_dir(): void {
-    cd0_cursor = 0;
-    cd0_body().await;
-    Assert.eq(cd0_cursor, ("true\ntrue\n2\na.bin\nnested\ntrue\ntrue\n").length);
+@test
+@timeout(180000)
+async fun file_remove_dir(): void {
+    let root = "dream_file_remove_dir_e2e";
+    File.create_dir_all(root + "/nested/leaf").await;
+    File.write(root + "/nested/leaf/x.txt", "x").await;
+    Assert.is_true(File.remove_dir(root + "/nested/leaf").await.is_err());
+    switch (File.remove_dir_all(root).await) {
+        Ok(_) => Assert.is_false(File.exists(root)),
+        Err(e) => Assert.fail(e.message()),
+    }
+}
+
+@test
+@timeout(180000)
+async fun file_stats(): void {
+    let root = "dream_file_stats_e2e";
+    File.create_dir(root).await;
+    File.write(root + "/a.txt", "hi").await;
+
+    Assert.is_true(File.exists(root));
+    Assert.is_true(File.is_dir(root));
+    Assert.is_true(File.is_file(root + "/a.txt"));
+    Assert.is_false(File.is_file(root));
+
+    switch (File.stat(root + "/a.txt")) {
+        Ok(st) => {
+            Assert.is_true(st.is_file);
+            Assert.eq(st.size, 2L);
+            Assert.is_true(st.mtime_millis > 0L);
+        },
+        Err(e) => Assert.fail(e.message()),
+    }
+
+    switch (File.stat(root)) {
+        Ok(st) => Assert.is_true(st.is_dir),
+        Err(e) => Assert.fail(e.message()),
+    }
+
+    File.delete(root + "/a.txt").await;
+    File.remove_dir(root).await;
 }

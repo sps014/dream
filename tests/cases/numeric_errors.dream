@@ -1,0 +1,43 @@
+// Numeric conversions, literal ranges, and integer-only operators are checked at compile time.
+import system;
+
+fun narrowing(): void {
+    let a: int = 1.5;
+    let b: float = (double)1.0;
+    let c: uint = 1;
+    let d: int = 5L;
+}
+
+fun float16_narrowing(): void {
+    let wide: float = 1.5f;
+    let narrow: float16 = wide;
+}
+
+fun float16_from_int(): void {
+    let count: int = 3;
+    let value: float16 = count;
+}
+
+fun float16_literal(): void {
+    let value = 70000.0h;
+}
+
+fun literal_overflow(): void {
+    let a = 99999999999999999999;
+    let b: byte = 300;
+}
+
+fun bitwise_not(): void {
+    let a: bool = true;
+    System.println(~a);
+}
+
+fun ranges(): void {
+    let fractional = 0.5..2;
+    let text = "a"..2;
+    let wide: long = 1L;
+    let wrong_width = wide..2;
+    let chained = 0..2..3;
+}
+
+fun main(): void {}

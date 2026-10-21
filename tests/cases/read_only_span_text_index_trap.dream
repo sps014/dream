@@ -1,6 +1,0 @@
-import system;
-
-fun main(): void {
-    let view = "xabcx".span(1, 4);
-    System.println(view[3]);
-}

@@ -2,13 +2,12 @@ import system.testing;
 // `List<T>` as a class-based collection, its `Comparable`-constrained `sort`/`binary_search`, the
 // `for (let x in xs)` enumerator, and polymorphism through the `IndexedCollection<T>` interface,
 // including the interface's default methods.
-
-// Sums any indexed collection through the interface: exercises dynamic dispatch of `size()` and the
-// value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
 import system;
 import system.collections;
 import system.text;
 
+// Sums any indexed collection through the interface: exercises dynamic dispatch of `size()` and the
+// value-returning `get()` (an sret `Option<int>`) through the itable trampoline.
 fun c132_sum(xs: IndexedCollection<int>): int {
     let total = 0;
     let i = 0;
@@ -19,64 +18,48 @@ fun c132_sum(xs: IndexedCollection<int>): int {
     return total;
 }
 
-fun c132_body(): void {
+@test
+@timeout(180000)
+fun list_collection(): void {
+    interface_indexer_roundtrip();
+
     let a = List<int>();
     a.push(30);
     a.push(10);
     a.push(20);
-
-    c132_verify_observation((a.length).to_string());
+    Assert.eq(a.length, 3);
 
     a.sort();
+    let sorted = List<string>();
     for (let x in a) {
-        c132_verify_observation((x).to_string());
+        sorted.push(x.to_string());
     }
+    Assert.eq(sorted.join(","), "10,20,30");
 
-    c132_verify_observation((a.binary_search(20).unwrap_or(-1)).to_string());
-    c132_verify_observation((a.contains(10)).to_string());
-    c132_verify_observation((a.index_of(30).unwrap_or(-1)).to_string());
+    Assert.eq(a.binary_search(20).unwrap_or(-1), 1);
+    Assert.is_true(a.contains(10));
+    Assert.eq(a.index_of(30).unwrap_or(-1), 2);
 
     // IndexedCollection<T> default methods dispatched on the concrete class.
-    c132_verify_observation((a.is_empty()).to_string());
-    c132_verify_observation((a.first().unwrap_or(-1)).to_string());
-    c132_verify_observation((a.last().unwrap_or(-1)).to_string());
+    Assert.is_false(a.is_empty());
+    Assert.eq(a.first().unwrap_or(-1), 10);
+    Assert.eq(a.last().unwrap_or(-1), 30);
 
     let popped = a.pop();
-    c132_verify_observation((popped.unwrap_or(-1)).to_string());
-    c132_verify_observation((a.length).to_string());
+    Assert.eq(popped.unwrap_or(-1), 30);
+    Assert.eq(a.length, 2);
 
     // Polymorphism: two independent `List<int>` instances both flow through `IndexedCollection<int>`.
     let b = List<int>();
     b.push(1);
     b.push(2);
     b.push(3);
-    c132_verify_observation((c132_sum(b)).to_string());
+    Assert.eq(c132_sum(b), 6);
 
     let l = List<int>();
     l.push(4);
     l.push(5);
-    c132_verify_observation((c132_sum(l)).to_string());
-}
-
-let c132_cursor: int = 0;
-
-fun c132_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n";
-    let end = c132_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c132_cursor, end));
-    c132_cursor = end;
-}
-
-@test
-@timeout(180000)
-
-fun list_collection(): void {
-    interface_indexer_roundtrip();
-    c132_cursor = 0;
-    c132_body();
-    Assert.eq(c132_cursor, ("3\n10\n20\n30\n1\ntrue\n2\nfalse\n10\n30\n30\n2\n6\n9\n").length);
+    Assert.eq(c132_sum(l), 9);
 }
 
 interface MutableIndex {
@@ -109,4 +92,55 @@ fun interface_indexer_roundtrip(): void {
     let values = MutableIndexValue();
     Assert.eq(mutate_through_indexer(values), 8);
     Assert.eq(values[1], 9);
+}
+
+@test
+@timeout(180000)
+fun list_insert(): void {
+    let xs = List<int>();
+    xs.push(1);
+    xs.push(3);
+    xs.insert(1, 2);
+    Assert.eq(xs[0], 1);
+    Assert.eq(xs[1], 2);
+    Assert.eq(xs[2], 3);
+
+    xs[2] = 30;
+    let sum = 0;
+    for (let x in xs) {
+        sum = sum + x;
+    }
+    Assert.eq(sum, 33);
+
+    xs.remove(2);
+    Assert.eq(xs.length, 2);
+}
+
+// `join` on a temporary List<string>: the string elements' `to_string` must hand out an owned
+// reference, or freeing the temporary list double-frees its elements.
+fun c137_make(): List<string> {
+    let out = List<string>();
+    out.push("a" + "1");
+    out.push("b" + "2");
+    return out;
+}
+
+class c137_Box {
+    public static get items(): List<string> {
+        return c137_make();
+    }
+}
+
+@test
+@timeout(180000)
+fun list_join_temporary(): void {
+    let i = 0;
+    while i < 3 {
+        Assert.eq(c137_make().join(","), "a1,b2");
+        Assert.eq(c137_Box.items.join(";"), "a1;b2");
+        i = i + 1;
+    }
+    let kept = c137_make();
+    Assert.eq(kept.join("+"), "a1+b2");
+    Assert.eq(kept.join("+"), "a1+b2");
 }

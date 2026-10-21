@@ -1,9 +1,9 @@
 import system.interop;
 import system.testing;
-// A named function and a lambda literal as C comparators: `const void*` arrives as `CPtr`, so each
-// target gets its own C wrapper.
 import system;
 
+// A named function and a lambda literal as C comparators: `const void*` arrives as `CPtr`, so each
+// target gets its own C wrapper.
 @c("c", "qsort")
 extern fun c60_qsort(base: int[], n: usize, size: usize, cmp: fun(CPtr, CPtr): int): void;
 
@@ -11,18 +11,20 @@ fun c60_ascending(a: CPtr, b: CPtr): int {
     return Ffi.read_int(a, 0) - Ffi.read_int(b, 0);
 }
 
-fun c60_show(xs: int[]): void {
+fun c60_show(xs: int[]): string {
     let line = "";
     for (let x in xs) {
         line = line + x + " ";
     }
-    c60_verify_observation((line).to_string());
+    return line;
 }
 
-fun c60_body(): void {
+@test
+@timeout(180000)
+fun c_qsort_callback(): void {
     let xs: int[] = [5, 3, 9, 1, 7];
     c60_qsort(xs, (usize)5, (usize)sizeof(int), c60_ascending);
-    c60_show(xs);
+    Assert.eq(c60_show(xs), "1 3 5 7 9 ");
     c60_qsort(
         xs,
         (usize)5,
@@ -31,25 +33,60 @@ fun c60_body(): void {
             return Ffi.read_int(b, 0) - Ffi.read_int(a, 0);
         }
     );
-    c60_show(xs);
+    Assert.eq(c60_show(xs), "9 7 5 3 1 ");
 }
 
-let c60_cursor: int = 0;
+// `stdcall` only changes the convention on 32-bit x86 Windows; everywhere else it is the C default.
+@c("c", "strlen")
+@c_call(CCallConv.Stdcall)
+extern fun c5b_strlen(s: string): usize;
 
-fun c60_verify_observation(borrow value: string): void {
-    let actual = value + "\n";
-    let wanted = "1 3 5 7 9 \n9 7 5 3 1 \n";
-    let end = c60_cursor + actual.length;
-    Assert.is_true(end <= wanted.length);
-    Assert.eq(actual, wanted.substring(c60_cursor, end));
-    c60_cursor = end;
+@test
+@timeout(180000)
+fun c_call_stdcall(): void {
+    Assert.eq(c5b_strlen("stdcall").to_string(), "7");
+}
+
+@c("m", "frexp")
+extern fun c61_frexp(x: double, ref e: int): double;
+
+fun c61_via(ref e: int): double {
+    return c61_frexp(8.0, ref e);
 }
 
 @test
 @timeout(180000)
+fun c_ref_out_param(): void {
+    let e: int = 0;
+    let m = c61_frexp(8.0, ref e);
+    Assert.eq(m.to_string() + " " + e.to_string(), "0.5 4");
+    let e2: int = 0;
+    let m2 = c61_via(ref e2);
+    Assert.eq(m2.to_string() + " " + e2.to_string(), "0.5 4");
+}
 
-fun c_qsort_callback(): void {
-    c60_cursor = 0;
-    c60_body();
-    Assert.eq(c60_cursor, ("1 3 5 7 9 \n9 7 5 3 1 \n").length);
+// Structs returned by value from libc: `div_t` (two ints) and `lldiv_t` (two long longs).
+struct c62_DivT {
+    public quot: int;
+    public rem: int;
+}
+
+struct c62_LlDivT {
+    public quot: long;
+    public rem: long;
+}
+
+@c("c", "div")
+extern fun c62_div(n: int, d: int): c62_DivT;
+
+@c("c", "lldiv")
+extern fun c62_lldiv(n: long, d: long): c62_LlDivT;
+
+@test
+@timeout(180000)
+fun c_struct_by_value(): void {
+    let d = c62_div(17, 5);
+    Assert.eq(d.quot.to_string() + " r " + d.rem.to_string(), "3 r 2");
+    let l = c62_lldiv(10000000007L, -3L);
+    Assert.eq(l.quot.to_string() + " r " + l.rem.to_string(), "-3333333335 r 2");
 }

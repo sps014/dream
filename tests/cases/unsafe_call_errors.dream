@@ -1,0 +1,33 @@
+module system.core;
+
+// `@unsafe` APIs may only be called from another `@unsafe` function or method.
+import system;
+
+fun arena_constructor(): void {
+    let arena = Arena(16);
+}
+
+fun arena_alloc(arena: Arena): RawPtr<int> {
+    return arena.alloc<int>(1);
+}
+
+fun raw_ptr_index(p: RawPtr<int>): int {
+    return p[0];
+}
+
+fun raw_ptr_cast(p: RawPtr<int>): RawPtr<byte> {
+    return p.cast<byte>();
+}
+
+fun buffer_realloc(): void {
+    let xs = Array.alloc<int>(3);
+    xs = Buffer.realloc<int>(xs, 5);
+    System.println(xs.length);
+}
+
+fun raw_ptr_alloc(): void {
+    let p = RawPtr<int>.alloc(3);
+    System.println(p.is_null());
+}
+
+fun main(): void {}

@@ -1,0 +1,20 @@
+// Raw-pointer element types and layout queries must name a known unmanaged type.
+@unsafe
+fun managed_element(): void {
+    let p = RawPtr<string>.alloc(1);
+}
+
+@unsafe
+fun unknown_element(): void {
+    let p = RawPtr<MissingType>.alloc(1);
+}
+
+fun unknown_alignof(): void {
+    let alignment = alignof(MissingType);
+}
+
+fun unknown_sizeof(): void {
+    let n = sizeof(Banana);
+}
+
+fun main(): void {}

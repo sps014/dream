@@ -1,0 +1,23 @@
+// Compile-time capabilities need a type they can describe: @json models, JSON-encodable values,
+// and resolvable declarations.
+import system;
+import system.validation;
+import system.codegen;
+import system.json;
+
+fun validation_non_model(): void {
+    Validation.decode<int>("1");
+}
+
+fun json_unsupported_value(): void {
+    // `object` has no compile-time JSON encoding, so no writer exists for this map.
+    let data: Map<string, object> = { "key": "value" };
+    System.println(Json.serialize(data));
+}
+
+fun declof_unresolved(): void {
+    let id = declof(Json.serialise);
+    System.println(id.to_string());
+}
+
+fun main(): void {}

@@ -1,0 +1,149 @@
+import system.testing;
+import system;
+import system.task;
+
+let c64_runs: int = 0;
+
+async fun c64_work(): void {
+    c64_runs = c64_runs + 1;
+}
+
+let c12c_runs: int = 0;
+
+async fun c12c_work(n: int): int {
+    c12c_runs = c12c_runs + 1;
+    return n * 2;
+}
+
+class c261_Log {
+    public text: string;
+
+    public constructor() {
+        this.text = "";
+    }
+}
+
+async fun c261_after(log: c261_Log, ms: int, name: string): void {
+    Time.delay(ms).await;
+    log.text = log.text + name + " ";
+}
+
+async fun c261_gated_loser(log: c261_Log, release: Receiver<bool>): void {
+    Time.delay(50).await;
+    Assert.is_true(release.receive().await.unwrap().is_some());
+    log.text = log.text + "loser ";
+}
+
+@test
+@timeout(180000)
+async fun cancel_unstarted_future(): void {
+    c64_runs = 0;
+    let f = c64_work();
+    Promise.cancel(f);
+    Time.sleep(5).await;
+    Assert.eq(c64_runs, 0);
+}
+
+// Calling an `async fun` builds a lazy `Future<T>`; the body runs only once it is awaited.
+@test
+@timeout(180000)
+async fun lazy_unstarted_never_runs(): void {
+    c12c_runs = 0;
+    let f = c12c_work(21);
+    Assert.eq(c12c_runs, 0);
+    let v = f.await;
+    Assert.eq(c12c_runs, 1);
+    Assert.eq(v, 42);
+}
+
+// `Time.delay` suspends on the scheduler's timer queue: tasks finish in delay order, not start
+// order, and racing `void` futures resolves with the first to finish.
+@test
+@timeout(180000)
+async fun time_delay_suspends(): void {
+    let log = c261_Log();
+    Promise.all(
+        [c261_after(log, 60, "slow"), c261_after(log, 5, "fast"), c261_after(log, 30, "mid")]
+    ).await;
+    Assert.eq(log.text, "fast mid slow ");
+
+    let t0 = Time.nano_time();
+    Time.delay(40).await;
+    // Node's timer clock is coarser than `nano_time`, so leave headroom: the bug was 0ms.
+    let waited = (Time.nano_time() - t0) / 1000000;
+    Assert.is_true(waited >= 30);
+
+    let race = c261_Log();
+    let gate = Channel.bounded<bool>(1).unwrap();
+    let sender = gate.sender;
+    let loser = c261_gated_loser(race, gate.receiver);
+    Promise.race([loser, c261_after(race, 5, "winner")]).await;
+    Assert.eq(race.text, "winner ");
+    // An explicit gate keeps scheduler load from letting both timers finish before the assertion.
+    sender.try_send(true).unwrap();
+    loser.await;
+    sender.close();
+    Assert.eq(race.text, "winner loser ");
+}
+
+@test
+@timeout(180000)
+async fun timer_pool_cancel_reuse(): void {
+    let total = 0;
+    for (let round = 0; round < 20; round = round + 1) {
+        let pending = Array.alloc<Future<Result<Unit, CancelledError>>>(128);
+        for (let i = 0; i < 128; i = i + 1) {
+            pending[i] = Time.sleep(0);
+        }
+        for (let i = 0; i < 128; i = i + 2) {
+            Promise.cancel(pending[i]);
+        }
+        for (let i = 1; i < 128; i = i + 2) {
+            pending[i].await;
+            total = total + 1;
+        }
+    }
+    Assert.eq(total, 1280);
+}
+
+@test
+@timeout(180000)
+async fun stopwatch_basic(): void {
+    let sw = Stopwatch();
+    Assert.is_true(sw.is_running);
+
+    sw.stop();
+    Assert.is_false(sw.is_running);
+
+    let e1 = sw.elapsed_nanos;
+    let _e2 = sw.elapsed_ms;
+    let e3 = sw.elapsed_nanos;
+    Assert.is_true(e1 == e3);
+
+    sw.reset();
+    Assert.is_false(sw.is_running);
+    Assert.eq(sw.elapsed_nanos, 0L);
+    Assert.eq(sw.elapsed_ms.to_string(), "0");
+
+    sw.restart();
+    Assert.is_true(sw.is_running);
+
+    sw.stop();
+    Assert.is_true(sw.elapsed_nanos >= 0L);
+
+    // Counted empty loops are DCE'd by optimizing backends; sleep is observable work.
+    sw.reset();
+    sw.start();
+    Time.sleep(1).await;
+    sw.stop();
+
+    let acc1 = sw.elapsed_nanos;
+    Assert.is_true(acc1 > 0L);
+
+    sw.start();
+    Time.sleep(1).await;
+    sw.stop();
+
+    let acc2 = sw.elapsed_nanos;
+    Assert.is_true(acc2 > acc1);
+}

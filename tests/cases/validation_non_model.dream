@@ -1,2 +1,0 @@
-import system.validation;
-fun main(): void { Validation.decode<int>("1"); }

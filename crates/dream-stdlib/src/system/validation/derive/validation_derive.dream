@@ -152,8 +152,21 @@ fun validation_nested(
         out.line("index" + suffix + "++; } }");
         return;
     }
+    if ty.kind == TypeRefKind.Tuple {
+        for (let i = 0; i < ty.args.length; i = i + 1) {
+            validation_nested(
+                ty.arg(i),
+                value + "." + i.to_string(),
+                "Validation.child(" + location + ", \"" + i.to_string() + "\")",
+                out,
+                ctx,
+                depth + 1
+            );
+        }
+        return;
+    }
     if kind == CollectionKind.Map || kind == CollectionKind.SortedMap {
-        out.line("for (let entry" + suffix + " in " + value + ".entries()) {");
+        out.line("for (let entry" + suffix + " in " + value + ") {");
         validation_nested(
             ty.arg(1),
             "entry" + suffix + ".value",

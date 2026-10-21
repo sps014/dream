@@ -65,3 +65,36 @@ fun collection_literals(): void {
     Assert.eq((nested[0].length).to_string(), "2");
     Assert.eq((nested[1].length).to_string(), "1");
 }
+
+@test
+@timeout(180000)
+fun collection_print(): void {
+    let row = List<int>();
+    row.push(32);
+    let c = List<List<int>>();
+    c.push(row);
+
+    Assert.eq(c.to_string(), "[[32]]");
+    Assert.eq(c[0][0], 32);
+    c[0][0] = 31;
+    Assert.eq(c[0][0], 31);
+    Assert.eq(row[0], 31);
+
+    let grid = Array.alloc<int[]>(2);
+    let r = 0;
+    while r < 2 {
+        grid[r] = Array.alloc<int>(3);
+        let col = 0;
+        while col < 3 {
+            grid[r][col] = r * 10 + col;
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+    Assert.eq(grid.to_string(), "[[0, 1, 2], [10, 11, 12]]");
+    Assert.eq(grid[1][2], 12);
+
+    let empty = List<int>();
+    Assert.eq(empty.to_string(), "[]");
+    Assert.eq((Array.alloc<int>(0)).to_string(), "[]");
+}

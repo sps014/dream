@@ -1,0 +1,276 @@
+import system.testing;
+import system;
+import system.json;
+import system.collections;
+
+fun f16a_half(x: float16): float16 {
+    return x / 2.0h;
+}
+
+fun f16a_widen(x: float): float {
+    return x;
+}
+
+// Every finite binary16 magnitude as an exact double: subnormals are m * 2^-24, normals
+// (1024 + m) * 2^(e - 25).
+fun f16f_value(e: int, m: int): double {
+    let scale = 5.9604644775390625e-08d;
+    let significand = (double)m;
+    if e > 0 {
+        significand = (double)(1024 + m);
+        let k = 1;
+        while k < e {
+            scale = scale * 2.0d;
+            k = k + 1;
+        }
+    }
+    return significand * scale;
+}
+
+@json
+class f16j_Sample {
+    public weight: float16;
+    public bias: float16;
+    public history: List<float16>;
+    public gain: Option<float16>;
+
+    public constructor(
+        weight: float16,
+        bias: float16,
+        history: List<float16>,
+        gain: Option<float16>
+    ) {
+        this.weight = weight;
+        this.bias = bias;
+        this.history = history;
+        this.gain = gain;
+    }
+}
+
+@test
+@timeout(180000)
+fun float16_arithmetic(): void {
+    let a: float16 = 1.5h;
+    let b = (float16)0.25;
+    let c = a * b + 2.0h;
+    Assert.eq(c, 2.375h);
+    Assert.eq(c.to_string(), "2.375");
+    Assert.eq((a - b).to_string(), "1.25");
+    Assert.eq((a / b).to_string(), "6");
+    Assert.eq((-a).to_string(), "-1.5");
+    Assert.eq(f16a_half(3.0h), 1.5h);
+
+    Assert.is_true(a > b);
+    Assert.is_true(b <= 0.25h);
+    Assert.is_true(a != b);
+    Assert.eq(a.compare(b), 1);
+    Assert.eq(b.compare(a), 0 - 1);
+    Assert.eq((-2.5h).abs(), 2.5h);
+    Assert.eq(a.min(b), b);
+    Assert.eq(a.max(b), a);
+
+    let sum = 0.0h;
+    let i = 0;
+    while i < 10 {
+        sum += 0.5h;
+        i = i + 1;
+    }
+    Assert.eq(sum, 5.0h);
+}
+
+@test
+@timeout(180000)
+fun float16_format(): void {
+    Assert.eq(0.1h.to_string(), "0.1");
+    Assert.eq(((float16)0.2d).to_string(), "0.2");
+    Assert.eq(((float16)(1.0d / 3.0d)).to_string(), "0.3333");
+    Assert.eq(((float16)3.14159d).to_string(), "3.14");
+    Assert.eq(1.0009765625h.to_string(), "1.001");
+    Assert.eq(32.0h.to_string(), "32");
+    Assert.eq(float16.max_value.to_string(), "65500");
+    Assert.eq(float16.min_value.to_string(), "-65500");
+    Assert.eq(0.5h.to_string(), "0.5");
+    Assert.eq((0.0h / 0.0h).to_string(), "nan");
+    Assert.eq((1.0h / 0.0h).to_string(), "inf");
+    Assert.eq((-1.0h / 0.0h).to_string(), "-inf");
+    Assert.eq((-0.0h).to_string(), "0");
+    Assert.eq("v=" + 1.5h, "v=1.5");
+    Assert.eq($"{2.25h}", "2.25");
+}
+
+@test
+@timeout(180000)
+fun float16_json(): void {
+    let history = List<float16>();
+    history.push(0.5h);
+    history.push(0.1h);
+    let sample = f16j_Sample(0.1h, -2.0h, history, Option.Some(1.5h));
+
+    let text = Json.serialize(sample);
+    Assert.is_true(text.contains("\"weight\":0.1"));
+    Assert.is_true(text.contains("\"bias\":-2"));
+
+    let back = Json.deserialize<f16j_Sample>(text)
+        .unwrap_or(f16j_Sample(0.0h, 0.0h, List<float16>(), Option.None));
+    Assert.eq(back.weight, 0.1h);
+    Assert.eq(back.bias, -2.0h);
+    Assert.eq(back.history.length, 2);
+    Assert.eq(back.history[1], 0.1h);
+    Assert.eq(back.gain.unwrap_or(0.0h), 1.5h);
+
+    let tree = sample.to_json();
+    let none = JsonValue.null();
+    Assert.eq(tree.get("weight").unwrap_or(none).as_double().unwrap_or(0.0d), 0.0999755859375d);
+
+    let parsed = Json.deserialize<f16j_Sample>(
+        "{\"weight\":0.33333,\"bias\":70000,\"history\":[2049],\"gain\":null}"
+    ).unwrap_or(f16j_Sample(0.0h, 0.0h, List<float16>(), Option.None));
+    Assert.eq(parsed.weight, 0.333251953125h);
+    Assert.is_true(parsed.bias.is_infinite());
+    Assert.eq(parsed.history[0], 2048.0h);
+    Assert.is_true(parsed.gain.is_none());
+}
+
+@test
+@timeout(180000)
+fun float16_parse(): void {
+    Assert.eq(float16.parse("0.125").unwrap_or(0.0h), 0.125h);
+    Assert.eq(float16.parse("-3").unwrap_or(0.0h), -3.0h);
+    Assert.eq(float16.parse("65500").unwrap_or(0.0h), float16.max_value);
+    Assert.is_true(float16.parse("70000").unwrap_or(0.0h).is_infinite());
+    Assert.is_true(float16.parse("nan").unwrap_or(0.0h).is_nan());
+    Assert.eq(float16.parse("inf").unwrap_or(0.0h), 1.0h / 0.0h);
+    Assert.eq(float16.parse("+inf").unwrap_or(0.0h), 1.0h / 0.0h);
+    Assert.eq(float16.parse("-inf").unwrap_or(0.0h), -1.0h / 0.0h);
+    Assert.is_true(float16.parse("").is_err());
+    Assert.is_true(float16.parse("abc").is_err());
+}
+
+@test
+@timeout(180000)
+fun float16_round_trip(): void {
+    let checked = 0;
+    let e = 0;
+    while e < 31 {
+        let m = 0;
+        while m < 1024 {
+            let x = (float16)f16f_value(e, m);
+            Assert.eq((double)x, f16f_value(e, m));
+            let text = x.to_string();
+            let back = float16.parse(text).unwrap_or(-1.0h);
+            if back != x {
+                Assert.fail("round trip of " + text + " gave " + back);
+            }
+            let negative = -x;
+            let negative_back = float16.parse(negative.to_string()).unwrap_or(1.0h);
+            if negative_back != negative {
+                Assert.fail("round trip of " + negative.to_string() + " gave " + negative_back);
+            }
+            checked = checked + 1;
+            m = m + 1;
+        }
+        e = e + 1;
+    }
+    Assert.eq(checked, 31744);
+}
+
+@test
+@timeout(180000)
+fun float16_rounding(): void {
+    // Narrowing rounds to nearest, ties to even.
+    Assert.eq((float16)2049.0d, 2048.0h);
+    Assert.eq((float16)2051.0d, 2052.0h);
+    Assert.eq((float16)2049.0001d, 2050.0h);
+    Assert.eq((float16)1.00048828125d, 1.0h);
+    Assert.eq((float16)1.00146484375d, 1.001953125h);
+    Assert.eq((float16)65519.0d, 65504.0h);
+    Assert.is_true(((float16)65520.0d).is_infinite());
+
+    let one = 1.0h;
+    let half_eps = float16.epsilon / 2.0h;
+    Assert.eq(one + half_eps, 1.0h);
+    Assert.eq(one + float16.epsilon, 1.0009765625h);
+    let big = 2048.0h;
+    Assert.eq(big + one, 2048.0h);
+    Assert.eq(big + one + one + one, 2048.0h);
+    Assert.eq(big + 3.0h, 2052.0h);
+    Assert.eq(1.0h / 3.0h, 0.333251953125h);
+    Assert.eq((double)(1.0h / 3.0h), 0.333251953125d);
+}
+
+@test
+@timeout(180000)
+fun float16_special_values(): void {
+    let zero = 0.0h;
+    let nan = zero / zero;
+    let inf = 1.0h / zero;
+    Assert.is_true(nan.is_nan());
+    Assert.is_false(nan.is_infinite());
+    Assert.is_true(nan != nan);
+    Assert.is_false(nan == nan);
+    Assert.is_true(inf.is_infinite());
+    Assert.is_true((-inf).is_infinite());
+    Assert.is_false(inf.is_nan());
+    Assert.is_true(inf > float16.max_value);
+    Assert.is_true(-inf < float16.min_value);
+    Assert.is_true((inf - inf).is_nan());
+    Assert.is_true((float16.max_value * 2.0h).is_infinite());
+    Assert.is_true(((float16)1.0e10d).is_infinite());
+    Assert.is_false(float16.max_value.is_infinite());
+
+    Assert.eq(float16.max_value, 65504.0h);
+    Assert.eq(float16.min_value, -65504.0h);
+    Assert.eq(float16.epsilon, 0.0009765625h);
+    Assert.eq((double)float16.max_value, 65504.0d);
+
+    let negative_zero = -0.0h;
+    Assert.is_true(negative_zero == zero);
+}
+
+@test
+@timeout(180000)
+fun float16_subnormals(): void {
+    let smallest = (float16)5.9604644775390625e-08d;
+    Assert.eq((double)smallest, 5.9604644775390625e-08d);
+    Assert.is_true(smallest > 0.0h);
+    Assert.eq(smallest / 2.0h, 0.0h);
+    Assert.eq((smallest * 3.0h) / 3.0h, smallest);
+    Assert.eq((float16)2.98023223876953125e-08d, 0.0h);
+    Assert.eq((float16)2.99e-08d, smallest);
+    Assert.eq((float16)8.940696716308594e-08d, (float16)1.1920928955078125e-07d);
+
+    let largest_subnormal = (float16)6.097555160522461e-05d;
+    let smallest_normal = (float16)6.103515625e-05d;
+    Assert.eq(smallest_normal - largest_subnormal, smallest);
+    Assert.eq(largest_subnormal + smallest, smallest_normal);
+    Assert.eq(float16.parse("6.1e-05").unwrap_or(0.0h), largest_subnormal);
+    Assert.eq(smallest.to_string(), "6e-08");
+    Assert.eq(largest_subnormal.to_string(), "6.1e-05");
+    Assert.eq(smallest_normal.to_string(), "6.104e-05");
+}
+
+@test
+@timeout(180000)
+fun float16_widening(): void {
+    let h = 0.1h;
+    let f: float = h;
+    let d: double = h;
+    Assert.eq(d, 0.0999755859375d);
+    Assert.eq((double)f, 0.0999755859375d);
+    Assert.eq(f16a_widen(h), (float)0.0999755859375d);
+    Assert.is_true(1.0f + h > 1.09f);
+    Assert.eq((2.0d * h).to_string(), "0.199951");
+
+    Assert.eq((int)2.75h, 2);
+    Assert.eq((int)(-2.75h), 0 - 2);
+    Assert.eq((long)1024.0h, 1024L);
+    Assert.eq((byte)200.0h, 200b);
+    Assert.eq((float16)3, 3.0h);
+    Assert.eq((float16)(0 - 7), -7.0h);
+    Assert.eq((float16)2049, 2048.0h);
+    Assert.eq((float16)2.5f, 2.5h);
+
+    let boxed: object = 1.25h;
+    Assert.eq((float16)boxed, 1.25h);
+    Assert.eq(boxed.to_string(), "1.25");
+}

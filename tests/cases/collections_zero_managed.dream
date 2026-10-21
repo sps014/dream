@@ -16,6 +16,28 @@ struct Entry {
 
 enum struct Slot { Empty, Value(string) }
 
+struct NoteEntry {
+    public note: Note;
+    public constructor(borrow note: Note) { this.note = note; }
+}
+
+enum struct NoteSlot { Empty, Value(Note) }
+
+class Quiet {
+    public n: int;
+    public constructor(n: int) { this.n = n; }
+}
+
+struct View {
+    public weak note: Option<Quiet>;
+    public constructor(borrow note: Quiet) { this.note = Option.Some(note); }
+}
+
+struct Borrowed {
+    public unowned note: Quiet;
+    public constructor(borrow note: Quiet) { this.note = note; }
+}
+
 fun exercise(): void {
     let xs = List<Note>();
     xs.push(Note(1));
@@ -35,8 +57,80 @@ fun exercise(): void {
     Buffer.clear(slots);
 }
 
+// `Buffer.clear` and `Buffer.truncate` eagerly release managed elements through normal ARC
+// store semantics.
+fun clear_truncate(): void {
+    let buf = Array.alloc<string>(16);
+    buf[0] = "alpha";
+    buf[1] = "beta";
+    buf[2] = "gamma";
+    Buffer.truncate(buf, 2);
+    let _before = Debug.live_objects;
+    Buffer.clear(buf);
+    System.println("cleared");
+}
+
+fun managed_overwrite(): void {
+    let entries = Array.alloc<NoteEntry>(2);
+    entries[0] = NoteEntry(Note(11));
+    entries[1] = NoteEntry(Note(12));
+    entries[0] = entries[0];
+    Buffer.truncate(entries, 1);
+    Buffer.clear(entries);
+    let slots = Array.alloc<NoteSlot>(2);
+    slots[0] = NoteSlot.Value(Note(21));
+    slots[1] = NoteSlot.Value(Note(22));
+    slots[0] = slots[0];
+    Buffer.truncate(slots, 1);
+    Buffer.clear(slots);
+}
+
+@noinline
+fun fill(borrow entries: View[]): void {
+    let note = Quiet(42);
+    let view = View(note);
+    entries[0] = view;
+    entries[1] = view;
+    entries[0] = entries[0];
+    System.println(entries[0].note.is_some());
+    System.println(note.n);
+}
+
+@noinline
+fun read(borrow value: Borrowed): int { return value.note.n; }
+
+fun observer_copies(): void {
+    let entries = Array.alloc<View>(2);
+    fill(entries);
+    System.println(entries[0].note.is_none());
+    System.println(entries[1].note.is_none());
+    let list = List<View>();
+    list.push_all(entries);
+    let alias = list.as_read_only_span();
+    list.reserve(32).unwrap();
+    let other = Quiet(7);
+    list[0] = View(other);
+    System.println(list[0].note.unwrap().n);
+    System.println(alias[0].note.is_none());
+    let value = Borrowed(other);
+    let copy = value;
+    System.println(read(copy));
+    System.println(other.n);
+    Buffer.clear(entries);
+    list.clear();
+}
+
 fun main(): void {
     let before = Debug.live_objects;
     exercise();
+    System.println(Debug.live_objects - before);
+    before = Debug.live_objects;
+    clear_truncate();
+    System.println(Debug.live_objects - before);
+    before = Debug.live_objects;
+    managed_overwrite();
+    System.println(Debug.live_objects - before);
+    before = Debug.live_objects;
+    observer_copies();
     System.println(Debug.live_objects - before);
 }

@@ -1,0 +1,78 @@
+// Attribute validation runs before semantic analysis; every misuse below must be reported.
+import system;
+import system.json;
+import system.interop;
+import system.gpu;
+import system.codegen;
+
+class DuplicateInline {
+    x: int;
+
+    @inline
+    @inline
+    public fun n(): int {
+        return this.x;
+    }
+}
+
+@json
+fun misapplied_json(): string {
+    return "hi";
+}
+
+class RuntimeConflict {
+    @runtime("fileRead")
+    @js("Dream", "fileRead")
+    static extern fun read(): string;
+}
+
+@bogus
+class UnknownAttribute {
+    public x: int;
+}
+
+class WrongJsArity {
+    @js("only_module")
+    static extern fun read(): string;
+}
+
+@attribute(AttributeTarget.Function)
+public struct route {
+    public path: string;
+}
+
+@route(42)
+public fun route_bad_argument(): void {
+}
+
+@route("/users")
+public class RouteOnClass {
+}
+
+@page("/users")
+public fun undeclared_user_attribute(): void {
+}
+
+@route("/a", "/b")
+public fun route_wrong_arity(): void {
+}
+
+@c("c", "puts") @c_call(CCallConv.Fastcall) extern fun puts(s: string): int;
+
+@gpu_targets(GpuTarget.Vulkan, GpuTarget.OpenGl)
+fun gpu_helper(): void {}
+
+@allow_cycle(true)
+class CycleWithArgument {}
+
+@allow_cycle
+struct CycleOnStruct {
+    public x: int;
+}
+
+// `@generator` takes no string name; the function name is the generator name.
+@generator("routes")
+public fun routes(): void {
+}
+
+fun main(): void {}

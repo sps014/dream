@@ -37,3 +37,108 @@ fun json_roundtrip(): void {
     );
     Assert.eq((parsed.get("tags").unwrap_or(none).length).to_string(), "2");
 }
+
+@test
+@timeout(180000)
+fun json_parse(): void {
+    let v = Json.deserialize<JsonValue>(
+        "{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}"
+    ).unwrap_or(JsonValue.null());
+    let none = JsonValue.null();
+    Assert.eq(
+        v.get("a")
+            .unwrap_or(none)["b"]
+            .at(2)
+            .unwrap_or(none)
+            .as_int()
+            .unwrap_or(0),
+        3
+    );
+    Assert.eq(v.get("a").unwrap_or(none)["b"].length, 3);
+    Assert.eq(v.get("n").unwrap_or(none).as_double().unwrap_or(0.0d).to_string(), "-2.5");
+    Assert.is_false(v.get("ok").unwrap_or(none).as_bool().unwrap_or(true));
+    Assert.is_true(v.get("missing").unwrap_or(none).is_null());
+    Assert.eq(Json.serialize(v.get("s").unwrap_or(none)), "\"hi\\nthere\"");
+}
+
+// Parse unseen JSON into a JsonValue tree and walk it with `kind()` / `get_*`.
+// Values stay JsonValue: this is the string-keyed mixed dict, not Map<string, object>.
+fun c125_describe(borrow v: JsonValue): string {
+    switch (v.kind()) {
+        case JsonKind.Null:
+            return "null";
+        case JsonKind.Object:
+            return "object";
+        case JsonKind.Array:
+            return "array";
+        case JsonKind.Bool:
+            return "bool:" + v.as_bool().unwrap_or(false).to_string();
+        case JsonKind.String:
+            return "string:" + v.as_string().unwrap_or("");
+        case JsonKind.Number:
+            return "number:" + v.as_int().unwrap_or(0).to_string();
+        default:
+            return "unknown";
+    }
+}
+
+fun c125_walk(out: List<string>, path: string, borrow v: JsonValue): void {
+    if path.length == 0 {
+        out.push(c125_describe(v));
+    } else {
+        out.push(path + "=" + c125_describe(v));
+    }
+    switch (v.kind()) {
+        case JsonKind.Object:
+            let i = 0;
+            while i < v.length {
+                let key = v.key_at(i).unwrap_or("");
+                let child = v.value_at(i).unwrap_or(JsonValue.null());
+                let next = key;
+                if path.length > 0 {
+                    next = path + "." + key;
+                }
+                c125_walk(out, next, child);
+                i = i + 1;
+            }
+        case JsonKind.Array:
+            switch (v.as_array()) {
+                Some(items) => {
+                    let i = 0;
+                    for (let item in items) {
+                        let idx = "[" + i.to_string() + "]";
+                        let next = idx;
+                        if path.length > 0 {
+                            next = path + idx;
+                        }
+                        c125_walk(out, next, item);
+                        i = i + 1;
+                    }
+                },
+                None => {}
+            }
+        default:
+    }
+}
+
+@test
+@timeout(180000)
+fun json_value_walk(): void {
+    let text = "{\"name\":\"ada\",\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9}}";
+    let v = Json.deserialize<JsonValue>(text).unwrap();
+    let walked = List<string>();
+    c125_walk(walked, "", v);
+    Assert.eq(
+        walked.join("\n"),
+        "object\nname=string:ada\ntags=array\ntags[0]=number:1\ntags[1]=number:2\non=bool:true\nmeta=object\nmeta.id=number:9"
+    );
+
+    Assert.is_true(!v.contains("missing"));
+    Assert.is_true(v["name"].as_int().is_none());
+    Assert.is_true(v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "ada");
+    let meta = v.get("meta").unwrap();
+    Assert.eq(meta.get("id").and_then((item: JsonValue) => item.as_int()).unwrap_or(0), 9);
+
+    let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
+    Assert.eq(Json.serialize(dict), "{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}");
+}

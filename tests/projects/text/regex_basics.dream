@@ -41,3 +41,226 @@ fun regex_basics(): void {
     let empty = Regex.compile("").unwrap();
     Assert.eq((empty.test("anything")).to_string(), "true");
 }
+
+@test
+@timeout(180000)
+fun regex_anchors_flags(): void {
+    let anchored = Regex.compile("^abc$").unwrap();
+    Assert.eq((anchored.test("abc")).to_string(), "true");
+    Assert.eq((anchored.test("xabc")).to_string(), "false");
+    Assert.eq((anchored.test("abcx")).to_string(), "false");
+
+    let multiline = Regex.compile("^b", RegexFlags.Multiline | RegexFlags.Global).unwrap();
+    Assert.eq((multiline.match("a\nb\nc").length).to_string(), "1");
+
+    let single_line = Regex.compile("^b", RegexFlags.Global).unwrap();
+    Assert.eq((single_line.match("a\nb\nc").length).to_string(), "0");
+
+    let word_boundary = Regex.compile("\\bcat\\b").unwrap();
+    Assert.eq((word_boundary.test("a cat sat")).to_string(), "true");
+    Assert.eq((word_boundary.test("category")).to_string(), "false");
+
+    let non_word_boundary = Regex.compile("\\Bcat").unwrap();
+    Assert.eq((non_word_boundary.test("concatenate")).to_string(), "true");
+    Assert.eq((non_word_boundary.test("a cat")).to_string(), "false");
+
+    let case_insensitive = Regex.compile("hello", RegexFlags.IgnoreCase).unwrap();
+    Assert.eq((case_insensitive.test("HELLO world")).to_string(), "true");
+    Assert.eq((case_insensitive.test("goodbye")).to_string(), "false");
+
+    let case_sensitive = Regex.compile("hello").unwrap();
+    Assert.eq((case_sensitive.test("HELLO world")).to_string(), "false");
+
+    let combined = Regex.compile("[a-z]+", RegexFlags.Global | RegexFlags.IgnoreCase).unwrap();
+    Assert.eq((combined.match("ABC def")[0]).to_string(), "ABC");
+    Assert.eq((combined.match("ABC def")[1]).to_string(), "def");
+}
+
+@test
+@timeout(180000)
+fun regex_classes(): void {
+    let vowels = Regex.compile("[aeiou]+", RegexFlags.Global).unwrap();
+    Assert.eq((vowels.replace("hello world", "_")).to_string(), "h_ll_ w_rld");
+
+    let range = Regex.compile("[a-f]+").unwrap();
+    Assert.eq((range.test("cafe")).to_string(), "true");
+    Assert.eq((range.test("xyz")).to_string(), "false");
+
+    let negated = Regex.compile("[^aeiou\\s]+", RegexFlags.Global).unwrap();
+    let m = negated.match("hi there");
+    Assert.eq((m.length).to_string(), "3");
+    Assert.eq((m[0]).to_string(), "h");
+    Assert.eq((m[1]).to_string(), "th");
+
+    let digit_class = Regex.compile("[\\d]+").unwrap();
+    Assert.eq((digit_class.test("42")).to_string(), "true");
+
+    let word_shorthand = Regex.compile("\\w+").unwrap();
+    Assert.eq((word_shorthand.match("hello_world!")[0]).to_string(), "hello_world");
+
+    let non_word = Regex.compile("\\W+").unwrap();
+    Assert.eq((non_word.match("a, b")[0]).to_string(), ", ");
+
+    let space_shorthand = Regex.compile("\\s+").unwrap();
+    Assert.eq((space_shorthand.test("a b")).to_string(), "true");
+    Assert.eq((space_shorthand.test("ab")).to_string(), "false");
+
+    let non_digit = Regex.compile("\\D+").unwrap();
+    Assert.eq((non_digit.match("abc123")[0]).to_string(), "abc");
+}
+
+@test
+@timeout(180000)
+fun regex_global_batch(): void {
+    let digits = Regex.compile("(?<digit>\\d)", RegexFlags.Global).unwrap();
+    let matches = digits.match("123456789012345678901");
+    Assert.eq((matches.length).to_string(), "21");
+    Assert.eq((matches[0]).to_string(), "1");
+    Assert.eq((matches[20]).to_string(), "1");
+    Assert.eq((digits.match("none").length).to_string(), "0");
+    Assert.eq(
+        (Regex.compile("(?:)", RegexFlags.Global).unwrap().match("😀a").length).to_string(),
+        "3"
+    );
+    Assert.eq(
+        (Regex.compile("(?:)", RegexFlags.Global).unwrap().match("").length).to_string(),
+        "1"
+    );
+    let groups = Regex.compile("(a)(b)").unwrap().match("ab");
+    Assert.eq((groups.length).to_string(), "3");
+    Assert.eq((groups[1]).to_string(), "a");
+    Assert.eq((groups[2]).to_string(), "b");
+}
+
+@test
+@timeout(180000)
+fun regex_groups_alternation(): void {
+    let date = Regex.compile("(\\d{4})-(\\d{2})-(\\d{2})").unwrap();
+    let caps = date.match("2026-08-04");
+    Assert.eq((caps.length).to_string(), "4");
+    Assert.eq((caps[0]).to_string(), "2026-08-04");
+    Assert.eq((caps[1]).to_string(), "2026");
+    Assert.eq((caps[2]).to_string(), "08");
+    Assert.eq((caps[3]).to_string(), "04");
+
+    let alt = Regex.compile("(?:cat|dog)s?").unwrap();
+    Assert.eq((alt.test("I have dogs")).to_string(), "true");
+    Assert.eq((alt.test("I have a cat")).to_string(), "true");
+    Assert.eq((alt.test("I have a fish")).to_string(), "false");
+
+    let nested = Regex.compile("((a)(b))c").unwrap();
+    let ncaps = nested.match("abc");
+    Assert.eq((ncaps.length).to_string(), "4");
+    Assert.eq((ncaps[0]).to_string(), "abc");
+    Assert.eq((ncaps[1]).to_string(), "ab");
+    Assert.eq((ncaps[2]).to_string(), "a");
+    Assert.eq((ncaps[3]).to_string(), "b");
+
+    // An alternative that isn't taken leaves its group unset ("").
+    let optional_branch = Regex.compile("(a)|(b)").unwrap();
+    let ob = optional_branch.match("b");
+    Assert.eq((ob.length).to_string(), "3");
+    Assert.eq((ob[0]).to_string(), "b");
+    Assert.eq((ob[1]).to_string(), "");
+    Assert.eq((ob[2]).to_string(), "b");
+
+    Assert.is_true(Regex.compile("(abc").is_err());
+    Assert.is_true(Regex.compile("[abc").is_err());
+}
+
+@test
+@timeout(180000)
+fun regex_lookaround(): void {
+    let ahead = Regex.compile("foo(?=bar)").unwrap();
+    Assert.eq((ahead.test("foobar")).to_string(), "true");
+    Assert.eq((ahead.test("foobaz")).to_string(), "false");
+    Assert.eq((ahead.match("foobar")[0]).to_string(), "foo");
+
+    let not_ahead = Regex.compile("foo(?!bar)").unwrap();
+    Assert.eq((not_ahead.test("foobar")).to_string(), "false");
+    Assert.eq((not_ahead.test("foobaz")).to_string(), "true");
+
+    let behind = Regex.compile("(?<=\\$)\\d+").unwrap();
+    let bm = behind.match("$100");
+    Assert.eq((bm[0]).to_string(), "100");
+    Assert.eq((behind.test("100")).to_string(), "false");
+
+    let not_behind = Regex.compile("(?<!\\$)\\d+", RegexFlags.Global).unwrap();
+    Assert.eq((not_behind.replace("$100 and 200", "#")).to_string(), "$1# and #");
+
+    let price = Regex.compile("(?<=USD )\\d+(?=\\.\\d{2})").unwrap();
+    Assert.eq((price.match("USD 42.50")[0]).to_string(), "42");
+}
+
+@test
+@timeout(180000)
+fun regex_replace(): void {
+    let swap = Regex.compile("(\\w+)\\s+(\\w+)").unwrap();
+    Assert.eq((swap.replace("hello world", "$2 $1")).to_string(), "world hello");
+    Assert.eq((swap.replace("hello world", "[$&]")).to_string(), "[hello world]");
+    Assert.eq((swap.replace("hello world", "$$1")).to_string(), "$1");
+
+    let digits = Regex.compile("\\d+", RegexFlags.Global).unwrap();
+    Assert.eq((digits.replace("a1b22c333", "#")).to_string(), "a#b#c#");
+
+    let first_only = Regex.compile("\\d+").unwrap();
+    Assert.eq((first_only.replace("a1b22c333", "#")).to_string(), "a#b22c333");
+
+    // Global replace of a pattern that can match the empty string must terminate and still make
+    // forward progress.
+    let maybe_a = Regex.compile("a*", RegexFlags.Global).unwrap();
+    Assert.eq((maybe_a.replace("bab", "-")).to_string(), "-b--b-");
+
+    let no_match = Regex.compile("zzz", RegexFlags.Global).unwrap();
+    Assert.eq((no_match.replace("hello", "#")).to_string(), "hello");
+}
+
+@test
+fun regex_boolean_test(): void {
+    let regex = Regex.compile("(foo|bar)+").unwrap();
+    Assert.is_true(regex.test("prefix foobar suffix"));
+    Assert.is_false(regex.test("neither"));
+    Assert.is_true(regex.test("bar"));
+    let unicode = Regex.compile("é+").unwrap();
+    Assert.is_true(unicode.test("déjà"));
+    Assert.is_false(unicode.test("plain"));
+}
+
+@test
+@timeout(180000)
+fun regex_backref_named_unicode(): void {
+    let dup = Regex.compile("(\\w+) \\1").unwrap();
+    Assert.is_true(dup.test("hello hello"));
+    Assert.is_false(dup.test("hello world"));
+    Assert.eq(dup.match("the the fox")[0], "the the");
+
+    let quoted = Regex.compile("(['\"]).*?\\1").unwrap();
+    Assert.eq(quoted.match("say 'hi' now")[0], "'hi'");
+    Assert.eq(quoted.match("say \"hi\" now")[0], "\"hi\"");
+
+    let named = Regex.compile("(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})").unwrap();
+    let info = named.match_info("2026-08-09").unwrap();
+    Assert.eq(info.full, "2026-08-09");
+    Assert.eq(info.named("year").unwrap_or("?"), "2026");
+    Assert.eq(info.named("month").unwrap_or("?"), "08");
+    Assert.eq(info.named("day").unwrap_or("?"), "09");
+    Assert.eq(info.named("nope").unwrap_or("none"), "none");
+
+    let repl = Regex.compile("(?<a>\\w+)@(?<b>\\w+)").unwrap();
+    Assert.eq(repl.replace("user@host", "${b}:${a}"), "host:user");
+
+    let letters = Regex.compile("\\p{L}+", RegexFlags.Global).unwrap();
+    Assert.eq(letters.match("héllo Wörld123")[0], "héllo");
+    Assert.eq(letters.match("héllo Wörld123")[1], "Wörld");
+
+    let numbers = Regex.compile("\\p{N}+").unwrap();
+    Assert.is_true(numbers.test("abc123"));
+    Assert.eq(numbers.match("abc123")[0], "123");
+
+    let not_letters = Regex.compile("\\P{L}+").unwrap();
+    Assert.eq(not_letters.match("abc123")[0], "123");
+
+    let combo = Regex.compile("(\\w+)-\\1(?=!)").unwrap();
+    Assert.is_true(combo.test("go-go!"));
+    Assert.is_false(combo.test("go-go?"));
+}

@@ -1,0 +1,52 @@
+import system;
+import system.testing;
+
+// --- object_protocol: generated default to_string/hash_code, public overrides, and runtime
+// dispatch through `object`. ---
+
+class iso_ProtocolPoint {
+    x: int;
+    y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class iso_ProtocolNamed {
+    id: int;
+    label: string;
+
+    public constructor(id: int, label: string) {
+        this.id = id;
+        this.label = label;
+    }
+
+    public override fun to_string(): string {
+        return "Named#" + this.id;
+    }
+
+    public override fun hash_code(): int {
+        return this.id;
+    }
+}
+
+@test
+fun iso_object_protocol(): void {
+    let p = iso_ProtocolPoint(3, 7);
+    Assert.eq(p.to_string(), "iso_ProtocolPoint { x: 3, y: 7 }");
+    Assert.eq(p.hash_code(), iso_ProtocolPoint(3, 7).hash_code());
+    Assert.ne(p.hash_code(), iso_ProtocolPoint(7, 3).hash_code());
+
+    let n = iso_ProtocolNamed(5, "hello");
+    Assert.eq(n.to_string(), "Named#5");
+    Assert.eq("" + n, "Named#5");
+    Assert.eq(n.hash_code(), 5);
+
+    let o: object = p;
+    Assert.eq(o.to_string(), "iso_ProtocolPoint { x: 3, y: 7 }");
+    let named: object = n;
+    Assert.eq(named.to_string(), "Named#5");
+    Assert.eq(named.hash_code(), 5);
+}

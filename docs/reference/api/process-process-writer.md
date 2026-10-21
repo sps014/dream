@@ -30,5 +30,5 @@ Confirms cancellation and ownership; the process pipe has no guest-side output b
 ```dream
 public async unique fun flush_async(
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```

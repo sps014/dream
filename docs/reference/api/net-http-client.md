@@ -48,5 +48,5 @@ public async fun send(
 Closes idempotently, cancelling pending sends. Previously received bodies remain usable.
 
 ```dream
-public fun close(): Result<bool, HttpError>
+public fun close(): Result<Unit, HttpError>
 ```

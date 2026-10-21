@@ -4,24 +4,25 @@ import system;
 import system.collections;
 import system.json;
 
-// A call of one of the generator's `@on_call` functions.
+/// A call of one of the generator's `@on_call` functions.
 public class GenCallSite {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    // Identity of the callee (compare with `declof(Json.serialize)`).
+    /// Identity of the callee (compare with `declof(Json.serialize)`).
     public callee: string;
 
     /// Concrete type arguments, in parameter order.
     public type_args: List<GenTypeRef>;
 
-    // Statically known argument types (`TypeRefKind.Unknown` when not inferable).
+    /// Statically known argument types (`TypeRefKind.Unknown` when not inferable).
     public arg_types: List<GenTypeRef>;
 
-    /// Source location associated with this entry.
+    /// Where the call is written in source.
     public location: GenLocation;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenCallSite` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(
         id: string,
         callee: string,

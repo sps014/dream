@@ -12,7 +12,7 @@ Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.Ig
 public enum RegexFlags
 ```
 
-## `None = 0`
+## `None`
 
 No optional matching flags are enabled.
 
@@ -20,7 +20,7 @@ No optional matching flags are enabled.
 None = 0
 ```
 
-## `Global = 1`
+## `Global`
 
 Match every occurrence rather than only the first.
 
@@ -28,7 +28,7 @@ Match every occurrence rather than only the first.
 Global = 1
 ```
 
-## `IgnoreCase = 2`
+## `IgnoreCase`
 
 Ignore case when matching.
 
@@ -36,7 +36,7 @@ Ignore case when matching.
 IgnoreCase = 2
 ```
 
-## `Multiline = 4`
+## `Multiline`
 
 Allow line anchors to match individual lines.
 
@@ -44,7 +44,7 @@ Allow line anchors to match individual lines.
 Multiline = 4
 ```
 
-## `DotAll = 8`
+## `DotAll`
 
 Allow a dot to match newline characters.
 

@@ -35,19 +35,3 @@ Returns the JSON Schema describing `T` and its validation constraints.
 ```dream
 public static extern fun schema<T>(): JsonValue
 ```
-
-## `child`
-
-Returns a new validation location with `key` appended.
-
-```dream
-public static fun child(location: List<string>, key: string): List<string>
-```
-
-## `check`
-
-Validates a JSON tree and applies declared defaults before model construction.
-
-```dream
-public static fun check(value: JsonValue, schema: JsonValue): ValidationErrors
-```

@@ -5,6 +5,7 @@
 
 use super::cx::Cx;
 use crate::MirFunction;
+use dream_abi::names::RESULT_ERR;
 use dream_types::{PrimTy, TyKind, TypeId};
 
 /// The `Err` line's prefix, matching Rust's `Error: {err:?}`. Interned like any other literal.
@@ -49,7 +50,7 @@ pub(crate) fn entry_reports_error(mir: &crate::Mir) -> bool {
 /// `(discriminant, payload type)` of the `Result`'s failure variant.
 pub(crate) fn err_variant(cx: &Cx<'_>, ty: TypeId) -> Option<(usize, TypeId)> {
     let u = cx.nunion(ty)?;
-    let v = u.variants.iter().find(|v| v.name == "Err")?;
+    let v = u.variants.iter().find(|v| v.name == RESULT_ERR)?;
     let field = v.fields.first()?;
     Some((v.discriminant as usize, field.ty))
 }

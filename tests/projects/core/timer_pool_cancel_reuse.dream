@@ -4,7 +4,7 @@ import system;
 async fun c262_body(): void {
     let total = 0;
     for (let round = 0; round < 20; round = round + 1) {
-        let pending = Array.alloc<Future<Result<bool, CancelledError>>>(128);
+        let pending = Array.alloc<Future<Result<Unit, CancelledError>>>(128);
         for (let i = 0; i < 128; i = i + 1) {
             pending[i] = Time.sleep(0);
         }

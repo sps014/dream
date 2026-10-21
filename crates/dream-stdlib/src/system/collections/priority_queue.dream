@@ -1,7 +1,7 @@
 module system.collections;
 
-// Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator
-// (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
+/// Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator
+/// (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
 @allow_cycle
 public class PriorityQueue<T>: Collection<T> {
     items: T[];
@@ -10,7 +10,7 @@ public class PriorityQueue<T>: Collection<T> {
     natural: bool;
     comparing: bool;
 
-    // Empty queue ordered by `T`'s natural `Comparable` order.
+    /// Empty queue ordered by `T`'s natural `Comparable` order.
     public constructor()where T: Comparable<T> {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
@@ -20,8 +20,8 @@ public class PriorityQueue<T>: Collection<T> {
         this.natural = true;
     }
 
-    // Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when
-    // `a` should come out first, positive when `b` should).
+    /// Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when
+    /// `a` should come out first, positive when `b` should).
     public constructor(cmp: fun(T, T): int) {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.count = 0;
@@ -30,18 +30,18 @@ public class PriorityQueue<T>: Collection<T> {
         this.comparing = false;
     }
 
-    // Number of elements currently stored.
+    /// Number of elements currently stored.
     public get length(): int {
         return this.count;
     }
 
-    // True when the queue has no elements.
+    /// True when the queue has no elements.
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes every element. Live slots are overwritten with a zero value so managed elements
-    // release immediately instead of staying retained until later pushes overwrite them.
+    /// Removes every element. Live slots are overwritten with a zero value so managed elements
+    /// release immediately instead of staying retained until later pushes overwrite them.
     public fun clear(): void {
         this.check_mutation();
         let z = CollectionStorage.zero<T>();
@@ -53,7 +53,7 @@ public class PriorityQueue<T>: Collection<T> {
         this.count = 0;
     }
 
-    // Unmanaged: no RC to release — rewind only.
+    /// Unmanaged: no RC to release — rewind only.
     public fun clear(): void where T: unmanaged {
         this.check_mutation();
         this.count = 0;
@@ -182,7 +182,7 @@ public class PriorityQueue<T>: Collection<T> {
         return Option.Some(top);
     }
 
-    // Returns the smallest element without removing it, or `None` when empty. O(1).
+    /// Returns the smallest element without removing it, or `None` when empty. O(1).
     public fun peek(): Option<T> {
         if this.count == 0 {
             return Option.None;
@@ -190,8 +190,8 @@ public class PriorityQueue<T>: Collection<T> {
         return Option.Some(this.items[0]);
     }
 
-    // Iterates elements in ascending order under the active comparator, over a snapshot taken
-    // now, so later pushes/pops do not affect the cursor.
+    /// Iterates elements in ascending order under the active comparator, over a snapshot taken
+    /// now, so later pushes/pops do not affect the cursor.
     public fun iterator(): PriorityQueueIterator<T> {
         let sorted = List<T>(this.count);
         let i = 0;

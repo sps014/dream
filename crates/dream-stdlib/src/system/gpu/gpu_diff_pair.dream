@@ -27,9 +27,10 @@ public struct GpuDiffPair<T> {
     /// A pair whose derivative is zero, for inputs that are held constant.
     public constructor(value: T) {}
 
-    /// The value.
+    /// The primal value the pair was created with.
     public extern fun value(): T;
 
-    /// The derivative.
+    /// The derivative: the input direction for `forward`, or the accumulated gradient after
+    /// `backward`.
     public extern fun derivative(): T;
 }

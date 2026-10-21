@@ -6,7 +6,7 @@ fun c1a9_body(): void {
     c1a9_verify_observation((Path.stem("a.tar.gz")).to_string());
     c1a9_verify_observation((Path.with_extension("a/b.txt", "md")).to_string());
     c1a9_verify_observation((Path.with_file_name("a/b.txt", "c.txt")).to_string());
-    c1a9_verify_observation((Path.is_relative("foo")).to_string());
+    c1a9_verify_observation((!Path.is_absolute("foo")).to_string());
     c1a9_verify_observation((Path.has_extension("a.txt", "txt")).to_string());
     let parts = Path.components("a/b\\c");
     c1a9_verify_observation((parts.join(",")).to_string());

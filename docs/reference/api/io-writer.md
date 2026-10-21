@@ -25,7 +25,7 @@ unique fun write(data: byte[]): Result<int, IoError>
 Delivers buffered output to the underlying destination and reports failures. Flushing does not imply durable storage or close the destination.
 
 ```dream
-unique fun flush(): Result<bool, IoError>
+unique fun flush(): Result<Unit, IoError>
 ```
 
 ## `write_all`
@@ -33,5 +33,5 @@ unique fun flush(): Result<bool, IoError>
 Retries partial writes until all bytes are accepted; rejects zero or invalid progress. A failure leaves any completed writes in effect; this does not flush.
 
 ```dream
-public fun write_all(data: byte[]): Result<bool, IoError>
+public fun write_all(data: byte[]): Result<Unit, IoError>
 ```

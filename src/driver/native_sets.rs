@@ -282,7 +282,7 @@ fn resolve_one(f: &mut FunctionNode<'_>, graph: &NativeGraph, diagnostics: &mut 
     let Some(attr) = f
         .attributes
         .iter_mut()
-        .find(|a| dream_abi::attributes::is_compiler_attribute(a, "c"))
+        .find(|a| dream_abi::attributes::is_compiler_attribute(a, dream_abi::attributes::C_ATTR))
     else {
         return;
     };

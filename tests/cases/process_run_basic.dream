@@ -15,7 +15,7 @@ async fun main(): void {
         return;
     }
     // A broken argv decoder must fail the child rather than recursively spawning this fixture.
-    Assert.is_false(System.has_env("DREAM_PROCESS_FIXTURE_CHILD"));
+    Assert.is_false(System.env("DREAM_PROCESS_FIXTURE_CHILD").is_some());
     System.set_env("DREAM_PROCESS_FIXTURE_CHILD", "1").unwrap();
     let child_args = ["echo", "hello", "world"];
     if System.platform == Platform.Node {

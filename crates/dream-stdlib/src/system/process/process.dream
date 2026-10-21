@@ -1,6 +1,6 @@
 module system.process;
 
-// Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.
+/// Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.
 public static class Process {
     static fun encode_args(args: string[]): byte[] {
         let bytes = List<byte>();
@@ -23,7 +23,7 @@ public static class Process {
         }
     }
 
-    // Runs a command, concurrently drains both outputs, and closes stdin after sending input.
+    /// Runs a command, concurrently drains both outputs, and closes stdin after sending input.
     public static fun run(
         cmd: string,
         args: string[],
@@ -32,7 +32,7 @@ public static class Process {
         return Process.run(cmd, args, ProcessOptions(), token);
     }
 
-    // Runs with explicit environment, input, output limits, and an optional deadline.
+    /// Runs with explicit environment, input, output limits, and an optional deadline.
     public static fun run(
         cmd: string,
         args: string[],
@@ -68,7 +68,7 @@ public static class Process {
         return Result.Ok(ProcessOutput(exit_code, stdout, stderr));
     }
 
-    // Runs a command in a specific working directory with otherwise default options.
+    /// Runs a command in a specific working directory with otherwise default options.
     public static fun run_in(
         cmd: string,
         args: string[],
@@ -80,7 +80,7 @@ public static class Process {
         return Process.run(cmd, args, options, token);
     }
 
-    // Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
+    /// Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
     public static fun spawn(
         cmd: string,
         args: string[],
@@ -89,7 +89,7 @@ public static class Process {
         return Process.spawn(cmd, args, ProcessOptions(), token);
     }
 
-    // Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
+    /// Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
     public static fun spawn(
         cmd: string,
         args: string[],
@@ -130,7 +130,7 @@ public static class Process {
         return Result.Ok(child);
     }
 
-    // Spawns a child in a specific directory with otherwise default options.
+    /// Spawns a child in a specific directory with otherwise default options.
     public static fun spawn_in(
         cmd: string,
         args: string[],
@@ -142,7 +142,7 @@ public static class Process {
         return Process.spawn(cmd, args, options, token);
     }
 
-    // Captures output and additionally treats nonzero exit statuses as EEXIT errors.
+    /// Captures output and additionally treats nonzero exit statuses as EEXIT errors.
     public static async fun run_checked(
         cmd: string,
         args: string[],
@@ -157,8 +157,8 @@ public static class Process {
         return Result.Ok(output);
     }
 
-    // Finds an existing nondirectory command path, directly or by searching `PATH`.
-    // This does not validate execute permissions or expand platform-specific extensions.
+    /// Finds an existing nondirectory command path, directly or by searching `PATH`.
+    /// This does not validate execute permissions or expand platform-specific extensions.
     @native
     @node
     public static fun which(cmd: string): Option<string> {
@@ -171,7 +171,7 @@ public static class Process {
             }
             return Option.None;
         }
-        let path_var = System.env("PATH").unwrap_or(string.empty);
+        let path_var = System.env("PATH").unwrap_or("");
         let sep = ':';
         if System.os_family == OsFamily.Windows {
             sep = ';';

@@ -63,7 +63,7 @@ When the key type is `string`, `get`, `get_or`, and `contains` also accept a `Re
 | `.length` | `int` | Number of entries. |
 | `.capacity` | `int` | Current table size. The map grows before the table is three-quarters full. |
 | `is_empty()` | `bool` | `true` when there are no entries. |
-| `reserve(additional)` | `Result<bool, CapacityError>` | Makes room for `additional` more entries; `Err` for a negative or unsupported count. |
+| `reserve(additional)` | `Result<Unit, CapacityError>` | Makes room for `additional` more entries; `Err` for a negative or unsupported count. |
 | `keys()` | `K[]` | Array of the keys. |
 | `values()` | `V[]` | Array of the values. |
 | `entries()` | `List<KeyValuePair<K, V>>` | List of key-value pairs. |

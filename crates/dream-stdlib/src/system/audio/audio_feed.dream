@@ -14,7 +14,7 @@ internal class AudioFeed {
     internal next: fun(int, CancellationToken): Future<Result<float[], AudioError>>;
 
     /// Repositions decoding at an absolute source frame; failure keeps the old position.
-    internal seek: fun(long, CancellationToken): Future<Result<bool, AudioError>>;
+    internal seek: fun(long, CancellationToken): Future<Result<Unit, AudioError>>;
 
     internal close: fun(): void;
 
@@ -23,7 +23,7 @@ internal class AudioFeed {
         channels: int,
         duration: Option<double>,
         next: fun(int, CancellationToken): Future<Result<float[], AudioError>>,
-        seek: fun(long, CancellationToken): Future<Result<bool, AudioError>>,
+        seek: fun(long, CancellationToken): Future<Result<Unit, AudioError>>,
         close: fun(): void
     ) {
         this.rate = rate;

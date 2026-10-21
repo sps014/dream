@@ -14,11 +14,11 @@ public static class GenAttributes {
     public static extern fun id<A>(): string;
 
     @intrinsic(Intrinsic.GenAttributeDecode)
-    // Decodes the first matching attribute value.
+    /// Decodes the first matching attribute value.
     public static extern fun decode<A>(borrow attrs: List<GenAttribute>): Option<A>;
 
     @intrinsic(Intrinsic.GenAttributeDecodeAll)
-    // Decodes every matching attribute value in source order.
+    /// Decodes every matching attribute value in source order.
     public static extern fun decode_all<A>(borrow attrs: List<GenAttribute>): List<A>;
 
     // Tests whether an attribute with the given compiler identity is present.

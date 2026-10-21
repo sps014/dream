@@ -36,10 +36,10 @@ Last element, or `None` when empty.
 public fun last(): Option<T>
 ```
 
-## `find_index_where`
+## `find_index`
 
 Index of the first element matching `pred`, or `None`.
 
 ```dream
-public fun find_index_where(borrow pred: fun(T): bool): Option<int>
+public fun find_index(borrow pred: fun(T): bool): Option<int>
 ```

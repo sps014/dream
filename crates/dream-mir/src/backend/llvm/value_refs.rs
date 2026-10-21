@@ -8,6 +8,7 @@ use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::place_policy::is_owned_temp_move;
 use crate::rc_store::rvalue_owns_result;
+use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_types::TypeId;
 
 #[derive(Clone)]
@@ -29,8 +30,8 @@ impl Fx<'_, '_> {
             let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
             (
                 0,
-                u.variant("None").expect("Option None").discriminant,
-                u.variant("Some").expect("Option Some").fields[0].offset,
+                u.variant(OPTION_NONE).expect("Option None").discriminant,
+                u.variant(OPTION_SOME).expect("Option Some").fields[0].offset,
             )
         };
         self.call(

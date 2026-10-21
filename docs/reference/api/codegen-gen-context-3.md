@@ -4,7 +4,7 @@
 
 ## `error`
 
-Reports an error at this model node or at the generator when no node is supplied.
+Reports an error at the field; generation fails after the generator exits.
 
 ```dream
 public fun error(borrow field: GenField, message: string): void
@@ -12,7 +12,7 @@ public fun error(borrow field: GenField, message: string): void
 
 ## `error`
 
-Reports an error at this model node or at the generator when no node is supplied.
+Reports an error at the call site; generation fails after the generator exits.
 
 ```dream
 public fun error(borrow call: GenCallSite, message: string): void
@@ -20,7 +20,7 @@ public fun error(borrow call: GenCallSite, message: string): void
 
 ## `warning`
 
-Reports a warning at this model node.
+Reports a warning at the declaration without failing generation.
 
 ```dream
 public fun warning(borrow decl: GenDecl, message: string): void
@@ -28,7 +28,7 @@ public fun warning(borrow decl: GenDecl, message: string): void
 
 ## `has_errors`
 
-Returns the requested model information.
+Whether this generator has reported any error so far.
 
 ```dream
 public fun has_errors(): bool

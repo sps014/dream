@@ -4,19 +4,20 @@ import system;
 import system.collections;
 import system.json;
 
-// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
-// `enum`; `value` is the unquoted string, literal text, or dotted enum path.
+/// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
+/// `enum`; `value` is the unquoted string, literal text, or dotted enum path.
 public class GenAttrArg {
-    /// Category of this entry.
+    /// Literal category of the argument as written (`string`, `int`, `enum`, ...).
     public kind: GenValueKind;
 
-    /// Value carried by this entry.
+    /// Unquoted string, literal text, or dotted enum path, depending on `kind`.
     public value: string;
 
     /// Resolved identifier of a declaration argument, or an empty string when unresolved.
     public symbol: string;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenAttrArg` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(kind: GenValueKind, value: string, symbol: string) {
         this.kind = kind;
         this.value = value;

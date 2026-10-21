@@ -6,7 +6,7 @@ import system.json;
 
 // Nodes retain their source ordering, including nested statements in lambdas and switch arms.
 internal fun gen_body(borrow v: JsonValue): Option<GenBody> {
-    switch (v["body"]) {
+    switch (v.get("body")) {
         Some(body) => {
             if !body.is_null() {
                 return Option.Some(GenBody(body));

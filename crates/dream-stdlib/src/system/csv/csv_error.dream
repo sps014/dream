@@ -1,28 +1,28 @@
 module system.csv;
 
-// CSV syntax, encoding, size-limit, or underlying I/O failure with byte-oriented provenance.
+/// CSV syntax, encoding, size-limit, or underlying I/O failure with byte-oriented provenance.
 public class CsvError: Error {
-    // One-based logical record number associated with the error.
+    /// One-based logical record number associated with the error.
     public record: long;
 
-    // Zero-based absolute byte offset reached before the failure.
+    /// Zero-based absolute byte offset reached before the failure.
     public offset: long;
 
     detail: string;
 
-    // Creates a CSV diagnostic; offsets count bytes rather than UTF-16 code units.
+    /// Creates a CSV diagnostic; offsets count bytes rather than UTF-16 code units.
     public constructor(record: long, offset: long, message: string) {
         this.record = record;
         this.offset = offset;
         this.detail = message;
     }
 
-    // Stable CSV failure code.
+    /// Stable CSV failure code.
     public fun code(): string {
         return "ECSV";
     }
 
-    // Human-readable syntax, limit, adapter, or I/O failure.
+    /// Human-readable syntax, limit, adapter, or I/O failure.
     public fun message(): string {
         return this.detail;
     }

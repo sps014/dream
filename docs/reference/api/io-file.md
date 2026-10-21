@@ -72,13 +72,13 @@ public static async fun write_bytes(
 
 ## `delete`
 
-Deletes `path`; resolves `Ok(true)` on success.
+Deletes `path`; resolves `Ok(Unit())` on success.
 
 ```dream
 public static async fun delete(
     borrow path: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `copy`
@@ -90,7 +90,7 @@ public static async fun copy(
     borrow from: string,
     borrow to: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `rename`
@@ -102,7 +102,7 @@ public static async fun rename(
     borrow from: string,
     borrow to: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `remove_dir`
@@ -113,7 +113,7 @@ Removes an empty directory at `path`.
 public static async fun remove_dir(
     borrow path: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `remove_dir_all`
@@ -124,29 +124,29 @@ Recursively deletes `path` (file or directory tree).
 public static async fun remove_dir_all(
     borrow path: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `create_dir`
 
-Creates a single directory at `path`; resolves `Ok(true)` on success.
+Creates a single directory at `path`; resolves `Ok(Unit())` on success.
 
 ```dream
 public static async fun create_dir(
     borrow path: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `create_dir_all`
 
-Creates `path` and any missing parents; resolves `Ok(true)` on success.
+Creates `path` and any missing parents; resolves `Ok(Unit())` on success.
 
 ```dream
 public static async fun create_dir_all(
     borrow path: string,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `list`
@@ -220,7 +220,7 @@ public static fun is_dir(borrow path: string): bool
 
 ## `is_file`
 
-True when `path` exists and is a regular file.
+Returns whether `path` exists and is a regular file. Returns false when the path is missing or cannot be inspected; call `stat` to see why.
 
 ```dream
 public static fun is_file(borrow path: string): bool

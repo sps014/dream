@@ -25,7 +25,7 @@ public constructor(destination: Writer, delimiter: char = ',', max_record_bytes:
 Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.
 
 ```dream
-public fun write_record(fields: string[]): Result<bool, CsvError>
+public fun write_record(fields: string[]): Result<Unit, CsvError>
 ```
 
 ## `flush`
@@ -33,5 +33,5 @@ public fun write_record(fields: string[]): Result<bool, CsvError>
 Flushes the borrowed destination and reports underlying failures.
 
 ```dream
-public fun flush(): Result<bool, CsvError>
+public fun flush(): Result<Unit, CsvError>
 ```

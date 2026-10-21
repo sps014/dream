@@ -56,5 +56,5 @@ public async fun accept(
 Closes this listener and cancels pending accepts, preserving accepted streams.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

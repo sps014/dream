@@ -12,7 +12,7 @@ public class GenToolResult
 
 ## `id`
 
-Stable identifier of this entry.
+Identifier of the tool run that produced this result.
 
 ```dream
 public id: string

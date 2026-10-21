@@ -36,7 +36,7 @@ public column: int
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenLocation` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(file: string, line: int, column: int)
@@ -44,7 +44,7 @@ public constructor(file: string, line: int, column: int)
 
 ## `to_string`
 
-Returns the requested model information.
+The location as `file:line:column`.
 
 ```dream
 public override fun to_string(): string

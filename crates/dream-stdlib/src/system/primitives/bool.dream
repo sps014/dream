@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `bool` primitive.
 extend bool {
-    // 1 for true, 0 for false.
+    /// 1 for true, 0 for false.
     public fun to_int(): int {
         if this == true {
             return 1;
@@ -10,7 +10,7 @@ extend bool {
         return 0;
     }
 
-    // Parses `true` or `false` (case-sensitive, matching language literals).
+    /// Parses `true` or `false` (case-sensitive, matching language literals).
     public static fun parse(borrow text: string): Result<bool, ParseError> {
         if text == "true" {
             return Result.Ok(true);

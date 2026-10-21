@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_headless_state(): void {
-    let window = Window.headless(WindowDesc.of("state", 320, 200).fullscreen(true).vsync(false));
+    let window = Window.headless(WindowDesc("state", 320, 200).fullscreen(true).vsync(false));
     Assert.is_true(window.is_open);
     Assert.is_true(window.is_fullscreen);
     Assert.eq(window.title, "state");

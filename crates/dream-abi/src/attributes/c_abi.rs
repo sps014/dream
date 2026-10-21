@@ -2,9 +2,11 @@
 
 use super::*;
 
+pub const C_ATTR: &str = "c";
+
 /// Extracts the `(lib, symbol)` pair from `@c("lib", "symbol")`, or `None` when absent.
 pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)> {
-    let c = attributes.iter().find(|a| is_compiler_attribute(a, "c"))?;
+    let c = attributes.iter().find(|a| is_compiler_attribute(a, C_ATTR))?;
     let lib = c.args.first()?.as_string()?.to_string();
     let symbol = c.args.get(1)?.as_string()?.to_string();
     Some((lib, symbol))
@@ -12,7 +14,7 @@ pub fn c_import_target(attributes: &[AttributeNode]) -> Option<(String, String)>
 
 /// True when the declaration carries `@c`.
 pub fn has_c_attr(attributes: &[AttributeNode]) -> bool {
-    attributes.iter().any(|a| is_compiler_attribute(a, "c"))
+    has_named_attr(attributes, C_ATTR)
 }
 
 /// True when a value struct carries `@packed`.
@@ -88,7 +90,11 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
     if extern_binding_conflict(attrs) {
         let pos = attrs
             .iter()
-            .find(|a| matches!(a.name.text.as_str(), "c" | "js" | "runtime" | "intrinsic"))
+            .find(|a| {
+                [C_ATTR, "js", "runtime", crate::intrinsics::INTRINSIC_ATTR]
+                    .iter()
+                    .any(|name| is_compiler_attribute(a, name))
+            })
             .map(|a| a.name.position);
         diagnostics.report_error(
             "an extern function cannot combine `@c`, `@js`, `@runtime`, or `@intrinsic`"

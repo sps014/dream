@@ -1,8 +1,8 @@
 module system.json;
 
-// Overrides the JSON property name of a field of a `@json` type.
+/// Overrides the JSON property name of a field of a `@json` type.
 @attribute(AttributeTarget.Field)
 public struct PropertyNameAttribute {
-    /// Name identifying this entry.
+    /// Property name used in JSON for this field.
     public name: string;
 }

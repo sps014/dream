@@ -4,24 +4,24 @@ import system;
 import system.collections;
 import system.json;
 
-// Signature views allow program-wide queries without including unrelated function bodies.
+/// Signature views allow program-wide queries without including unrelated function bodies.
 public class GenSymbol {
     /// Concrete uses of this generic symbol.
     public instances: List<GenSymbolInstance>;
 
-    /// Stable identifier of this entry.
+    /// `module::name` identity of the symbol.
     public id: string;
 
-    /// Category of this entry.
+    /// Whether the symbol is a type, function, or other kind of declaration.
     public kind: GenSymbolKind;
 
-    /// Declaration associated with this entry.
+    /// The type declaration this symbol names, when it names one.
     public declaration: Option<GenDecl>;
 
-    /// Function declaration associated with this entry, when available.
+    /// The function declaration this symbol names, when it names one.
     public function: Option<GenFunction>;
 
-    // Decodes a declaration or function symbol from the compilation snapshot.
+    /// Decodes a declaration or function symbol from the compilation snapshot.
     public constructor(borrow v: JsonValue) {
         this.instances = List<GenSymbolInstance>();
         for (let instance in gen_items(v, "instances")) {

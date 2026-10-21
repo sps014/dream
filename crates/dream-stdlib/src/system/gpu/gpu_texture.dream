@@ -50,14 +50,14 @@ public class GpuTexture {
 
     /// Replaces the texels of mip level `mip` with `data`, tightly packed rows from top to
     /// bottom in the texture's format.
-    public fun write(mip: int, data: byte[]): Result<bool, GpuError> {
+    public fun write(mip: int, data: byte[]): Result<Unit, GpuError> {
         if this.handle == 0 {
             return Result.Err(GpuError.InvalidResource("the texture was destroyed"));
         }
         if GpuHost.texture_write(this.handle, mip, 0, data) != 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Downloads mip level `mip` as tightly packed rows from top to bottom. It waits for

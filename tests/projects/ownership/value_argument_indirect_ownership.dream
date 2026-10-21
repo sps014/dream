@@ -39,7 +39,7 @@ fun c28c_identity(value: c28c_Payload): c28c_Payload {
 @test
 @timeout(180000)
 fun value_argument_indirect_ownership(): void {
-    let value = c28c_Payload("hello" + System.env_or("DREAM_VALUE_SUFFIX", " world"));
+    let value = c28c_Payload("hello" + System.env("DREAM_VALUE_SUFFIX").unwrap_or(" world"));
     let callback: fun(c28c_Payload): string = c28c_read;
     Assert.eq((callback(value)).to_string(), "hello world");
     Assert.eq((callback(value)).to_string(), "hello world");

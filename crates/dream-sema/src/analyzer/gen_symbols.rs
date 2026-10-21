@@ -1,5 +1,6 @@
 use super::Analyzer;
 use crate::gen_facts::{GenMethodView, GenTypeView};
+use dream_abi::names::THIS_NAME;
 use dream_syntax::nodes::Type;
 use dream_types::TyKind;
 
@@ -33,7 +34,9 @@ impl Analyzer<'_> {
                             .parameters
                             .iter()
                             .enumerate()
-                            .filter(|(i, _)| method.param_names.get(*i).is_none_or(|n| n != "this"))
+                            .filter(|(i, _)| {
+                                method.param_names.get(*i).is_none_or(|n| n != THIS_NAME)
+                            })
                             .map(|(i, p)| {
                                 (
                                     method
@@ -61,7 +64,7 @@ impl Analyzer<'_> {
                         params: method
                             .parameters
                             .iter()
-                            .filter(|p| p.name.text != "this")
+                            .filter(|p| p.name.text != THIS_NAME)
                             .map(|p| (p.name.text.clone(), p.type_.clone()))
                             .collect(),
                     });

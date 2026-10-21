@@ -63,22 +63,22 @@ async fun file_handle_stream(): void {
 async fun file_modes_preserve_truncate_and_append(): void {
     let path = "dream_file_modes.tmp";
     let file = FileHandle.open(path, FileMode.WriteRead).unwrap();
-    file.write_text("first").unwrap();
+    file.write(Encoding.utf8_encode("first")).unwrap();
     file.seek(0L).unwrap();
     Assert.eq(Streams.read_text(file).unwrap(), "first");
     file.close().unwrap();
     let append = FileHandle.open_async(path, FileMode.AppendRead).await.unwrap();
     append.seek(0L).unwrap();
-    append.write_text("second").unwrap();
+    append.write(Encoding.utf8_encode("second")).unwrap();
     append.seek(0L).unwrap();
     Assert.eq(Streams.read_text(append).unwrap(), "firstsecond");
     append.close().unwrap();
     let existing = FileHandle.open(path, FileMode.ReadWrite).unwrap();
-    Assert.eq(existing.length().unwrap(), 11L);
+    Assert.eq(existing.size().unwrap(), 11L);
     existing.close().unwrap();
     Assert.is_true(File.stat(path).unwrap().kind == FileKind.File);
     let truncated = FileHandle.open(path, FileMode.Write).unwrap();
-    Assert.eq(truncated.length().unwrap(), 0L);
+    Assert.eq(truncated.size().unwrap(), 0L);
     truncated.close().unwrap();
     File.delete(path).await.unwrap();
 }

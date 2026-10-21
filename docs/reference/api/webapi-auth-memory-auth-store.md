@@ -25,7 +25,7 @@ public constructor()
 Stores a new refresh session; returns an error if its token hash already exists.
 
 ```dream
-public async unique fun create(session: AuthSession): Result<bool, AuthError>
+public async unique fun create(session: AuthSession): Result<Unit, AuthError>
 ```
 
 ## `find`
@@ -53,7 +53,7 @@ public async unique fun rotate(
 Revokes all refresh sessions in `family`.
 
 ```dream
-public async unique fun revoke(family: string): Result<bool, AuthError>
+public async unique fun revoke(family: string): Result<Unit, AuthError>
 ```
 
 ## `active`
@@ -72,7 +72,7 @@ Stores a login transaction under `state`; duplicate state returns an error.
 public async unique fun put_transaction(
     state: string,
     transaction: OidcTransaction
-): Result<bool, AuthError>
+): Result<Unit, AuthError>
 ```
 
 ## `take_transaction`

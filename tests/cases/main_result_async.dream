@@ -9,7 +9,7 @@ async fun doubled(n: int): Result<int, string> {
     return Result.Ok(n * 2);
 }
 
-async fun main(): Result<bool, string> {
+async fun main(): Result<Unit, string> {
     let a = doubled(21).await?;
     System.println("doubled is " + a.to_string());
     let b = doubled(a).await?;

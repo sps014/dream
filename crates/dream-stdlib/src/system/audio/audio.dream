@@ -71,11 +71,11 @@ public class Audio {
     }
 
     /// Cancels prior loading and prepares the current source; returns an I/O or decoding error.
-    public async fun load(): Result<bool, AudioError> {
+    public async fun load(): Result<Unit, AudioError> {
         return this.prepare(false).await;
     }
 
-    async fun prepare(for_play: bool): Result<bool, AudioError> {
+    async fun prepare(for_play: bool): Result<Unit, AudioError> {
         let state = this.state;
         if state.writable("load") == false {
             return Result.Err(state.failure.unwrap());
@@ -108,7 +108,7 @@ public class Audio {
                 state.events.push(AudioEvent.DurationChange(AudioEvents.now()));
             }
             state.events.push(AudioEvent.CanPlay(AudioEvents.now()));
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
         let load_source = state.loader;
         let loaded = load_source(state.cancellation.token).await;
@@ -125,11 +125,11 @@ public class Audio {
         state.events.push(AudioEvent.LoadedMetadata(AudioEvents.now()));
         state.events.push(AudioEvent.DurationChange(AudioEvents.now()));
         state.events.push(AudioEvent.CanPlay(AudioEvents.now()));
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Loads if necessary and starts or resumes playback. Browser activation may be required.
-    public async fun play(): Result<bool, AudioError> {
+    public async fun play(): Result<Unit, AudioError> {
         let state = this.state;
         if state.writable("play") == false {
             return Result.Err(state.failure.unwrap());
@@ -226,7 +226,7 @@ public class Audio {
         }
         if state.paused == false {
             state.starting = false;
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
         state.paused = false;
         state.events.push(AudioEvent.Play(AudioEvents.now()));
@@ -290,11 +290,11 @@ public class Audio {
         state.paused = false;
         state.ended = false;
         state.events.push(AudioEvent.Playing(AudioEvents.now()));
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Pauses without changing position; repeating pause emits no duplicate event.
-    public fun pause(): Result<bool, AudioError> {
+    public fun pause(): Result<Unit, AudioError> {
         let state = this.state;
         if state.writable("pause") == false {
             return Result.Err(state.failure.unwrap());
@@ -306,7 +306,7 @@ public class Audio {
             state.paused = true;
             state.events.push(AudioEvent.Pause(AudioEvents.now()));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Cancels loading and releases output. Queued events remain available after closure.
@@ -539,7 +539,7 @@ public class Audio {
     }
 
     /// Selects this player's output asynchronously; failure preserves the previous output.
-    public async fun set_sink_id(id: string): Result<bool, AudioError> {
+    public async fun set_sink_id(id: string): Result<Unit, AudioError> {
         let state = this.state;
         if state.writable("set_sink_id") == false {
             return Result.Err(state.failure.unwrap());
@@ -598,7 +598,7 @@ public class Audio {
             state.sink = id;
             state.events.push(AudioEvent.SinkChange(AudioEvents.now(), state.sink));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Enables an output tap and copies up to 32768 recent rendered frames.

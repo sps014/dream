@@ -158,16 +158,16 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/string_abi.dream"),
         ),
         (
-            "<std>/system/core/span_text.dream",
-            include_str!("../system/core/span_text.dream"),
+            "<std>/system/core/read_only_span_text.dream",
+            include_str!("../system/core/read_only_span_text.dream"),
         ),
         (
-            "<std>/system/core/span_text_search.dream",
-            include_str!("../system/core/span_text_search.dream"),
+            "<std>/system/core/read_only_span_search.dream",
+            include_str!("../system/core/read_only_span_search.dream"),
         ),
         (
-            "<std>/system/core/span_text_iterators.dream",
-            include_str!("../system/core/span_text_iterators.dream"),
+            "<std>/system/core/string_span_iterators.dream",
+            include_str!("../system/core/string_span_iterators.dream"),
         ),
         (
             "<std>/system/core/string_split.dream",
@@ -204,6 +204,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/core/error.dream",
             include_str!("../system/core/error.dream"),
+        ),
+        (
+            "<std>/system/core/unit.dream",
+            include_str!("../system/core/unit.dream"),
         ),
         (
             "<std>/system/core/parse_error.dream",

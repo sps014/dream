@@ -18,7 +18,7 @@ fun c22c_body() {
                     .unwrap_or(-1)
                     .to_string()
                     + " " + m.contains(k)
-                    .to_string() + " " + m.get_or(k, 0)
+                    .to_string() + " " + m.get(k).unwrap_or(0)
                     .to_string()
             ).to_string()
         );

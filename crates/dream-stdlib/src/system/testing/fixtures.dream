@@ -1,22 +1,22 @@
 module system.testing;
 
-// Helpers for async test bodies that need deterministic temporary-resource ownership.
+/// Helpers for async test bodies that need deterministic temporary-resource ownership.
 public static class Fixtures {
-    // Creates an owned temporary file whose destructor cleans up after a failed or cancelled body.
+    /// Creates an owned temporary file whose destructor cleans up after a failed or cancelled body.
     public static fun temporary_file(): Result<TempFile, IoError> {
         return TempFile.create();
     }
 
-    // Creates an owned private directory for a test's temporary resources.
+    /// Creates an owned private directory for a test's temporary resources.
     public static fun temporary_directory(): Result<TempDirectory, IoError> {
         return TempDirectory.create();
     }
 
-    // Runs an async body and cleanup, preserving a body error and otherwise reporting cleanup errors.
+    /// Runs an async body and cleanup, preserving a body error and otherwise reporting cleanup errors.
     public static async fun run<T, E>(
         fixture: TestFixture<T, E>,
-        body: fun(T): Future<Result<bool, E>>
-    ): Result<bool, E> {
+        body: fun(T): Future<Result<Unit, E>>
+    ): Result<Unit, E> {
         let result = body(fixture.resource).await;
         let cleaned = fixture.close();
         if result.is_err() {

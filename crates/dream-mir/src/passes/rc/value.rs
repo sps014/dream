@@ -3,6 +3,7 @@
 use super::liveness::{self, live_after_stmt, stmt_reads_local};
 use super::tokens::{assigns_local, sink_call_args, source_line_end};
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use dream_abi::names::THIS_NAME;
 use dream_types::TypeInterner;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,7 +24,7 @@ pub(super) fn insert_value_struct_moves(
         let decl = &func.locals[local as usize];
         !decl.borrows_refs
             && !decl.is_ref
-            && decl.name.as_deref() != Some("this")
+            && decl.name.as_deref() != Some(THIS_NAME)
             && (!func.params.contains(&Local(local)) || decl.is_take)
     };
     let live_out = liveness::live_out(func);
@@ -265,7 +266,7 @@ fn is_owning_value_local(func: &MirFunction, interner: &TypeInterner, idx: usize
     if !interner.is_value_type(decl.ty) || decl.is_ref || decl.manual_drop {
         return false;
     }
-    if decl.name.as_deref() == Some("this") {
+    if decl.name.as_deref() == Some(THIS_NAME) {
         return false;
     }
     if idx < func.params.len() {

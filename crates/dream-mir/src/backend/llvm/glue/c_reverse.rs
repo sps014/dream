@@ -13,6 +13,7 @@ use crate::backend::shared::glue::release_sym;
 use crate::backend::shared::panic_msgs;
 use crate::{Global, MirFunction};
 use dream_abi::c_abi::shim::reverse_body_name;
+use dream_abi::names::OPTION_SOME;
 use dream_hir::CShape;
 use dream_types::{TyKind, TypeId};
 use indexmap::IndexMap;
@@ -79,7 +80,7 @@ pub(super) fn fun_parts(l: &Lcx<'_>, fun_ty: TypeId) -> (Vec<TypeId>, TypeId) {
 /// `Option<T>`'s `T`, or `ty` itself.
 fn unwrap_option(l: &Lcx<'_>, ty: TypeId) -> TypeId {
     l.cx.nunion(ty)
-        .and_then(|u| u.variant("Some"))
+        .and_then(|u| u.variant(OPTION_SOME))
         .and_then(|v| v.fields.first())
         .map(|f| f.ty)
         .unwrap_or(ty)

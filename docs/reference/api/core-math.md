@@ -12,14 +12,6 @@ Common mathematical operations on double-precision numbers. Trigonometric argume
 public static class Math
 ```
 
-## `abs`
-
-Returns the absolute value of `x`.
-
-```dream
-public static fun abs(x: double): double
-```
-
 ## `floor`
 
 Rounds `x` down to the nearest integer value.
@@ -162,28 +154,4 @@ Base of the natural logarithm.
 
 ```dream
 public static get E(): double
-```
-
-## `min`
-
-Returns the smaller of `a` and `b`.
-
-```dream
-public static fun min(a: double, b: double): double
-```
-
-## `max`
-
-Returns the larger of `a` and `b`.
-
-```dream
-public static fun max(a: double, b: double): double
-```
-
-## `clamp`
-
-Returns `x` limited to the inclusive range `lo` through `hi`.
-
-```dream
-public static fun clamp(x: double, lo: double, hi: double): double
 ```

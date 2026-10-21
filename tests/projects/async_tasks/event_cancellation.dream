@@ -23,7 +23,7 @@ async fun event_cancellation(): void {
     for (let i = 0; i < 100; i = i + 1) {
         Assert.eq(source.token.wait(event_value(0)).await.unwrap(), "completed 日本語");
     }
-    Assert.is_true(source.token.wait_void(event_void()).await.unwrap());
+    Assert.is_true(source.token.wait_void(event_void()).await.is_ok());
     source.cancel();
     Assert.is_true(source.token.wait_void(event_void()).await.is_err());
     Assert.is_true(source.token.wait(event_value(0)).await.is_err());

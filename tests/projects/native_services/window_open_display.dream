@@ -5,14 +5,14 @@ import system.window;
 @test
 @timeout(180000)
 fun window_open_display(): void {
-    let invalid = Window.open(WindowDesc.of("bad", 0, 100));
+    let invalid = Window.open(WindowDesc("bad", 0, 100));
     Assert.is_true(invalid.is_err());
     switch (invalid) {
         Err(error) => Assert.eq(error.code(), "EINVAL"),
         Ok(_) => Assert.fail("a zero-width window must be rejected"),
     }
     // A desktop session opens a real window; servers, CI without a display and Node report it.
-    switch (Window.open(WindowDesc.of("probe", 160, 120).resizable(false))) {
+    switch (Window.open(WindowDesc("probe", 160, 120).resizable(false))) {
         Ok(window) => {
             Assert.is_true(window.is_open);
             window.poll();

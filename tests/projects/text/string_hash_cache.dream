@@ -13,32 +13,32 @@ fun c219_body() {
     m[""] = 3;
 
     let a = "al" + "pha";
-    c219_verify_observation((m.get_or(a, -1)).to_string());
+    c219_verify_observation((m.get(a).unwrap_or(-1)).to_string());
 
     let text = "xx beta yy";
     let slice = text.substring(3, 7);
-    c219_verify_observation((m.get_or(slice, -1)).to_string());
+    c219_verify_observation((m.get(slice).unwrap_or(-1)).to_string());
     m[slice] = 20;
-    c219_verify_observation((m.get_or("beta", -1)).to_string());
+    c219_verify_observation((m.get("beta").unwrap_or(-1)).to_string());
 
     let parts = "alpha,beta,,gamma".split(',');
     for (let p in parts) {
-        m[p] = m.get_or(p, 0) + 100;
+        m[p] = m.get(p).unwrap_or(0) + 100;
     }
-    c219_verify_observation((m.get_or("alpha", -1)).to_string());
-    c219_verify_observation((m.get_or("beta", -1)).to_string());
-    c219_verify_observation((m.get_or("", -1)).to_string());
-    c219_verify_observation((m.get_or("gamma", -1)).to_string());
+    c219_verify_observation((m.get("alpha").unwrap_or(-1)).to_string());
+    c219_verify_observation((m.get("beta").unwrap_or(-1)).to_string());
+    c219_verify_observation((m.get("").unwrap_or(-1)).to_string());
+    c219_verify_observation((m.get("gamma").unwrap_or(-1)).to_string());
 
     let sb = StringBuilder();
     sb.append("gam");
     sb.append("ma");
-    c219_verify_observation((m.get_or(sb.to_string(), -1)).to_string());
+    c219_verify_observation((m.get(sb.to_string()).unwrap_or(-1)).to_string());
 
     let n = 7;
-    c219_verify_observation((m.get_or($"key{n}", -1)).to_string());
+    c219_verify_observation((m.get($"key{n}").unwrap_or(-1)).to_string());
     m[$"key{n}"] = 7;
-    c219_verify_observation((m.get_or("key" + n.to_string(), -1)).to_string());
+    c219_verify_observation((m.get("key" + n.to_string()).unwrap_or(-1)).to_string());
 
     let acc = "";
     let i = 0;
@@ -47,17 +47,17 @@ fun c219_body() {
         m[acc] = i;
         i = i + 1;
     }
-    c219_verify_observation((m.get_or("z", -1)).to_string());
-    c219_verify_observation((m.get_or("zz", -1)).to_string());
-    c219_verify_observation((m.get_or("zzz", -1)).to_string());
+    c219_verify_observation((m.get("z").unwrap_or(-1)).to_string());
+    c219_verify_observation((m.get("zz").unwrap_or(-1)).to_string());
+    c219_verify_observation((m.get("zzz").unwrap_or(-1)).to_string());
 
     m["zzc"] = 9;
     let s = "ab" + "c";
-    let before = m.get_or(s, -1);
+    let before = m.get(s).unwrap_or(-1);
     s[0] = 'z';
     s[1] = 'z';
     c219_verify_observation((before).to_string());
-    c219_verify_observation((m.get_or(s, -1)).to_string());
+    c219_verify_observation((m.get(s).unwrap_or(-1)).to_string());
     c219_verify_observation((m.length).to_string());
 }
 

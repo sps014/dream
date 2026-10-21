@@ -14,12 +14,12 @@ public class MemoryAuthStore: AuthSessionStore {
     }
 
     /// Stores a new refresh session; returns an error if its token hash already exists.
-    public async unique fun create(session: AuthSession): Result<bool, AuthError> {
+    public async unique fun create(session: AuthSession): Result<Unit, AuthError> {
         if this.sessions.contains(session.hash) {
             return Result.Err(AuthError("EDUPLICATE", "session already exists"));
         }
         this.sessions[session.hash] = session;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Finds an unexpired session at epoch-second time `now`; rejects revoked or missing
@@ -70,9 +70,9 @@ public class MemoryAuthStore: AuthSessionStore {
     }
 
     /// Revokes all refresh sessions in `family`.
-    public async unique fun revoke(family: string): Result<bool, AuthError> {
+    public async unique fun revoke(family: string): Result<Unit, AuthError> {
         this.revoked.add(family);
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Returns whether `family` has an unexpired, unconsumed session at epoch-second time
@@ -93,12 +93,12 @@ public class MemoryAuthStore: AuthSessionStore {
     public async unique fun put_transaction(
         state: string,
         transaction: OidcTransaction
-    ): Result<bool, AuthError> {
+    ): Result<Unit, AuthError> {
         if this.transactions.contains(state) {
             return Result.Err(AuthError("EDUPLICATE", "transaction already exists"));
         }
         this.transactions[state] = transaction;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Removes and returns the login transaction. Missing or expired state returns an error.

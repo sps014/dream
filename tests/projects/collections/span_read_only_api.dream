@@ -14,7 +14,7 @@ fun c203_body(): void {
     let arr = [1, 2, 3, 4, 5];
     let s = Span<int>.of(arr);
     c203_verify_observation((c203_sum(s.as_read_only())).to_string());
-    c203_verify_observation((c203_sum(s.slice(1, 3).as_read_only())).to_string());
+    c203_verify_observation((c203_sum(s.slice(1, 4).as_read_only())).to_string());
     c203_verify_observation((s.slice(2).length).to_string());
     c203_verify_observation((s.index_of(4).unwrap_or(-1)).to_string());
     c203_verify_observation((s.contains(9)).to_string());
@@ -25,7 +25,7 @@ fun c203_body(): void {
     );
     c203_verify_observation((s.sequence_equal(dst.slice(0, 5))).to_string());
     c203_verify_observation(
-        (s.as_read_only().sequence_equal(dst.slice(1, 5).as_read_only())).to_string()
+        (s.as_read_only().sequence_equal(dst.slice(1, 6).as_read_only())).to_string()
     );
     for (let x in s.slice(3)) {
         c203_verify_observation((x).to_string());
@@ -33,7 +33,7 @@ fun c203_body(): void {
     let words = ReadOnlySpan<string>.of(["a", "b" + "c", "d"]);
     c203_verify_observation((words.index_of("bc").unwrap_or(-1)).to_string());
     let buf = ["x", "y", "z", "w"];
-    Span<string>.of(buf).slice(0, 3).copy_to(Span<string>.of(buf).slice(1, 3));
+    Span<string>.of(buf).slice(0, 3).copy_to(Span<string>.of(buf).slice(1, 4));
     c203_verify_observation((buf[0] + buf[1] + buf[2] + buf[3]).to_string());
 }
 

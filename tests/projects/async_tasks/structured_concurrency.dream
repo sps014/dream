@@ -113,13 +113,13 @@ async fun structured_value(value: int): Result<int, string> {
     return Result.Ok(value);
 }
 
-async fun structured_cleanup(counter: StructuredCounter): Result<bool, string> {
+async fun structured_cleanup(counter: StructuredCounter): Result<Unit, string> {
     CancellationToken.current.unwrap().wait_cancelled().await;
     counter.count = counter.count + 1;
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
-async fun structured_fail(): Result<bool, string> {
+async fun structured_fail(): Result<Unit, string> {
     Time.delay(1).await;
     return Result.Err("first failure");
 }
@@ -128,7 +128,7 @@ async fun structured_wait(
     scope: TaskScope<string>,
     counter: StructuredCounter
 ): Result<int, TaskFailure<string>> {
-    let child = scope.spawn<bool>(async () => structured_cleanup(counter).await);
+    let child = scope.spawn<Unit>(async () => structured_cleanup(counter).await);
     child.join().await?;
     return Result.Ok(1);
 }
@@ -168,11 +168,11 @@ async fun structured_concurrency(): void {
     let observed_discarded = discarded;
     Task.scope<int, string>(
         async (scope) => {
-            scope.spawn<bool>(
+            scope.spawn<Unit>(
                 async () => {
                     Time.delay(1).await;
                     discarded.count = discarded.count + 1;
-                    return Result.Ok(true);
+                    return Result.Ok(Unit());
                 }
             );
             return Result.Ok(0);
@@ -184,8 +184,8 @@ async fun structured_concurrency(): void {
     let observed_cleaned = cleaned;
     let failure = Task.scope<int, string>(
         async (scope) => {
-            scope.spawn<bool>(async () => structured_cleanup(cleaned).await);
-            scope.spawn<bool>(structured_fail);
+            scope.spawn<Unit>(async () => structured_cleanup(cleaned).await);
+            scope.spawn<Unit>(structured_fail);
             return Result.Ok(0);
         }
     ).await;

@@ -28,8 +28,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/gpu/shaders/web_gpu_layout.dream"),
         ),
         (
-            "<std>/system/gpu/shaders/slang_constructors.dream",
-            include_str!("../system/gpu/shaders/slang_constructors.dream"),
+            "<std>/system/gpu/shaders/slang_emit_constructors.dream",
+            include_str!("../system/gpu/shaders/slang_emit_constructors.dream"),
         ),
         (
             "<std>/system/gpu/shaders/builtins.dream",
@@ -92,8 +92,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/gpu/shaders/slang_body.dream"),
         ),
         (
-            "<std>/system/gpu/shaders/slang_expr.dream",
-            include_str!("../system/gpu/shaders/slang_expr.dream"),
+            "<std>/system/gpu/shaders/slang_body_expr.dream",
+            include_str!("../system/gpu/shaders/slang_body_expr.dream"),
         ),
         (
             "<std>/system/gpu/shaders/slang_calls.dream",

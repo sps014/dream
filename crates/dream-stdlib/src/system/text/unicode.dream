@@ -1,6 +1,6 @@
 module system.text;
 
-// ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
+/// ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).
 public static class Unicode {
     @runtime("unicodeNormalize")
     static extern fun normalize_host(borrow text: string, form: int): string;
@@ -14,7 +14,7 @@ public static class Unicode {
     @runtime("unicodeGraphemes")
     static extern fun graphemes_host(borrow text: string): string[];
 
-    // Normalizes `text` to the requested Unicode form.
+    /// Normalizes `text` to the requested Unicode form.
     public static fun normalize(text: string, form: UnicodeNormForm): string {
         let code = 0;
         if form == UnicodeNormForm.Nfd {
@@ -27,17 +27,17 @@ public static class Unicode {
         return Unicode.normalize_host(text, code);
     }
 
-    // Full Unicode lowercase (not limited to ASCII).
+    /// Full Unicode lowercase (not limited to ASCII).
     public static fun to_lower_unicode(text: string): string {
         return Unicode.to_lower_host(text);
     }
 
-    // Full Unicode uppercase (not limited to ASCII).
+    /// Full Unicode uppercase (not limited to ASCII).
     public static fun to_upper_unicode(text: string): string {
         return Unicode.to_upper_host(text);
     }
 
-    // Splits `text` into user-perceived grapheme clusters.
+    /// Splits `text` into user-perceived grapheme clusters.
     public static fun graphemes(text: string): string[] {
         return Unicode.graphemes_host(text);
     }

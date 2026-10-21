@@ -22,6 +22,8 @@ Use the [standard-library guides](../../library/index.md) when learning a featur
 - `borrow` means the call uses a value without taking ownership. [Ownership](../../language/memory/ownership.md) explains when to use it.
 - `<T>` names a type parameter. A condition such as `T : Comparable<T>` limits the types accepted.
 
+[Error conventions](conventions.md) explains when an API returns `Option`, returns `Result`, or panics.
+
 These declaration snippets show the interface; they are not complete programs. The linked guides contain examples. Availability and integration requirements are explained in those guides; a declaration alone does not establish platform support.
 
 ## Packages

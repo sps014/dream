@@ -1,4 +1,5 @@
 use super::*;
+use dream_abi::names::RESULT_OK;
 
 impl<'a> Analyzer<'a> {
     /// `main`'s return value is the process exit status, so only the spellings the entry point can
@@ -39,6 +40,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn hir_emit_entry_tail_return(
         &mut self,
         function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) {
         let Some(tail) = entry_tail_return(function) else {
@@ -53,7 +55,7 @@ impl<'a> Analyzer<'a> {
                 let zero = HExpr::new(target, HExprKind::IntLit(0));
                 self.hir_return_value(Some(zero), Some(target));
             }
-            EntryTail::OkTrue => {
+            EntryTail::OkUnit => {
                 let Some((base, args)) = Self::resolve_struct_parts(&return_type) else {
                     return;
                 };
@@ -64,14 +66,26 @@ impl<'a> Analyzer<'a> {
                 };
                 let disc = self
                     .union_info(target)
-                    .and_then(|u| u.variant("Ok"))
+                    .and_then(|u| u.variant(RESULT_OK))
                     .map(|v| v.discriminant as usize);
                 let (Some(def), Some(disc)) = (def, disc) else {
                     self.hir_fail();
                     return;
                 };
-                let payload = HExpr::new(self.type_ctx.interner.bool(), HExprKind::BoolLit(true));
-                self.hir_set_union_new(def, disc, vec![Some(payload)], &return_type);
+                let unit = ExpressionNode::FunctionCall(
+                    synthetic_token(TokenKind::IdentifierToken, crate::entry::UNIT_TYPE),
+                    None,
+                    Vec::new(),
+                );
+                if self
+                    .analyze_expression(&unit, function, symbol_table, diagnostics)
+                    .is_err()
+                {
+                    self.hir_fail();
+                    return;
+                }
+                let payload = self.hir_take();
+                self.hir_set_union_new(def, disc, vec![payload], &return_type);
                 let value = self.hir_take();
                 self.hir_return_value(value, Some(target));
             }

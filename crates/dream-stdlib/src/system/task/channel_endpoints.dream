@@ -1,6 +1,6 @@
 module system.task;
 
-// A local async queue with independently owned sending and receiving endpoints.
+/// A local async queue with independently owned sending and receiving endpoints.
 public class ChannelEndpoints<T> {
     state: ChannelState<T>;
 
@@ -8,12 +8,12 @@ public class ChannelEndpoints<T> {
         this.state = ChannelState<T>(capacity);
     }
 
-    // Creates another sending endpoint; dropping the last sender closes sends.
+    /// Creates another sending endpoint; dropping the last sender closes sends.
     public get sender(): Sender<T> {
         return Sender<T>(this.state);
     }
 
-    // Creates another receiving endpoint; dropping the last receiver wakes blocked sends.
+    /// Creates another receiving endpoint; dropping the last receiver wakes blocked sends.
     public get receiver(): Receiver<T> {
         return Receiver<T>(this.state);
     }

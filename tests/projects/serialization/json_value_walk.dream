@@ -13,11 +13,11 @@ fun c125_describe(borrow v: JsonValue): string {
         case JsonKind.Array:
             return "array";
         case JsonKind.Bool:
-            return "bool:" + v.bool_or(false).to_string();
+            return "bool:" + v.as_bool().unwrap_or(false).to_string();
         case JsonKind.String:
-            return "string:" + v.str_or("");
+            return "string:" + v.as_string().unwrap_or("");
         case JsonKind.Number:
-            return "number:" + v.int_or(0).to_string();
+            return "number:" + v.as_int().unwrap_or(0).to_string();
         default:
             return "unknown";
     }
@@ -34,7 +34,7 @@ fun c125_walk(path: string, borrow v: JsonValue): void {
             let i = 0;
             while i < v.length {
             let key = v.key_at(i).unwrap_or("");
-            let child = v.value_at(i).unwrap_or(JsonValue.none());
+            let child = v.value_at(i).unwrap_or(JsonValue.null());
             let next = key;
             if path.length > 0 {
                 next = path + "." + key;
@@ -68,13 +68,13 @@ fun c125_body() {
         Ok(v) => {
             c125_walk("", v);
 
-            c125_verify_observation((v["missing"].is_none()).to_string());
-            c125_verify_observation((v.get_int("name").is_none()).to_string());
-            c125_verify_observation((v.get_str_or("name", "") == "ada").to_string());
+            c125_verify_observation((!v.contains("missing")).to_string());
+            c125_verify_observation((v["name"].as_int().is_none()).to_string());
+            c125_verify_observation((v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "ada").to_string());
 
-            switch (v["meta"]) {
+            switch (v.get("meta")) {
                 Some(meta) => {
-                    c125_verify_observation((meta.get_int_or("id", 0)).to_string());
+                    c125_verify_observation((meta.get("id").and_then((item: JsonValue) => item.as_int()).unwrap_or(0)).to_string());
                 },
                 None => {
                     c125_verify_observation((-1).to_string());

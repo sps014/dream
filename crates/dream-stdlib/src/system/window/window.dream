@@ -98,7 +98,7 @@ public class Window {
         if handle <= 0 {
             return Result.Err(Window.last_error());
         }
-        return Result.Ok(Window(handle, false, WindowDesc.of("", 1, 1)));
+        return Result.Ok(Window(handle, false, WindowDesc("", 1, 1)));
     }
 
     /// Creates a window that exists only in memory. It never appears on screen and
@@ -129,7 +129,7 @@ public class Window {
         return this.open;
     }
 
-    /// The title last set by `WindowDesc.of` or `set_title`. Canvas windows start with
+    /// The title last set by the `WindowDesc` constructor or `set_title`. Canvas windows start with
     /// an empty title.
     public get title(): string {
         return this.window_title;
@@ -151,7 +151,7 @@ public class Window {
         return this.tracker.focused;
     }
 
-    /// The content area's size in logical pixels, the units of `WindowDesc.of`,
+    /// The content area's size in logical pixels, the units of the `WindowDesc` constructor,
     /// `set_size` and mouse positions.
     public get size(): WindowSize {
         if this.handle > 0 {

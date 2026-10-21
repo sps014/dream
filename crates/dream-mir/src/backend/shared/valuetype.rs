@@ -1,6 +1,7 @@
 //! Classification of inline value(`struct`) locals, shared by the inliner.
 
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
+use dream_abi::names::THIS_NAME;
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 
@@ -34,7 +35,7 @@ impl ValueFrame {
                 continue;
             }
             let local = Local(i as u32);
-            let kind = if decl.is_ref || decl.name.as_deref() == Some("this") {
+            let kind = if decl.is_ref || decl.name.as_deref() == Some(THIS_NAME) {
                 ValueLocalKind::Borrow
             } else if i < param_count {
                 ValueLocalKind::Param

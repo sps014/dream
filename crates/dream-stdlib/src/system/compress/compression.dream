@@ -1,8 +1,8 @@
 module system.compress;
 
-// Streaming gzip/zlib factories; wrappers borrow their underlying stream.
+/// Streaming gzip/zlib factories; wrappers borrow their underlying stream.
 public static class Compression {
-    // Creates an encoder; max_output_bytes bounds compressed output across every write and finish.
+    /// Creates an encoder; max_output_bytes bounds compressed output across every write and finish.
     public static fun writer(
         destination: Writer,
         format: CompressionFormat = CompressionFormat.Gzip,
@@ -16,7 +16,7 @@ public static class Compression {
         );
     }
 
-    // Creates a strict single-stream decoder; the output limit prevents unbounded expansion.
+    /// Creates a strict single-stream decoder; the output limit prevents unbounded expansion.
     public static fun reader(
         source: Reader,
         format: CompressionFormat = CompressionFormat.Gzip,

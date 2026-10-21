@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_event_order(): void {
-    let window = Window.headless(WindowDesc.of("events", 320, 200));
+    let window = Window.headless(WindowDesc("events", 320, 200));
     window.simulate(WindowEvent.Text("hé"));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Q, "a", KeyModifiers.Shift, false)));
     window.simulate(WindowEvent.FileDropped("/tmp/level.map"));

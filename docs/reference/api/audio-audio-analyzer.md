@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioAnalyzer`
 
 Computes waveform levels and FFT data without opening an output device.
 
@@ -12,7 +12,7 @@ Computes waveform levels and FFT data without opening an output device.
 public class AudioAnalyzer
 ```
 
-## Declaration
+## `constructor`
 
 Creates a 2048-sample analyzer with a Hann window.
 
@@ -20,15 +20,15 @@ Creates a 2048-sample analyzer with a Hann window.
 public constructor()
 ```
 
-## Declaration
+## `set_fft_size`
 
 Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.
 
 ```dream
-public fun set_fft_size(size: int): Result<bool, AudioError>
+public fun set_fft_size(size: int): Result<Unit, AudioError>
 ```
 
-## Declaration
+## `set_window`
 
 Selects Hann tapering or a rectangular window.
 
@@ -36,7 +36,7 @@ Selects Hann tapering or a rectangular window.
 public fun set_window(window: AudioWindow): void
 ```
 
-## Declaration
+## `analyze`
 
 Analyzes the latest FFT-sized block of interleaved mono or stereo samples. Short input is padded at the end; input must be finite with complete frames.
 
@@ -47,4 +47,3 @@ public fun analyze(
     channels: int
 ): Result<AudioAnalysis, AudioError>
 ```
-

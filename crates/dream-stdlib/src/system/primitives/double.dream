@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `double` primitive as an extensible class.
 extend double: Comparable<double> {
-    // Orders this value against `other`.
+    /// Orders this value against `other`.
     public fun compare(other: double): int {
         if this < other {
             return 0 - 1;
@@ -13,15 +13,13 @@ extend double: Comparable<double> {
         return 0;
     }
 
-    // Absolute value of this double.
+    /// Returns the magnitude of this value with the sign cleared, so `-0.0` becomes `0.0`
+    /// and NaN stays NaN.
     public fun abs(): double {
-        if this < 0.0d {
-            return 0.0d - this;
-        }
-        return this;
+        return Math.abs_host(this);
     }
 
-    // The smaller of this and `other`.
+    /// Returns the smaller of this value and `other`. When either is NaN, returns `other`.
     public fun min(other: double): double {
         if this < other {
             return this;
@@ -29,7 +27,7 @@ extend double: Comparable<double> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// Returns the larger of this value and `other`. When either is NaN, returns `other`.
     public fun max(other: double): double {
         if this > other {
             return this;
@@ -37,7 +35,19 @@ extend double: Comparable<double> {
         return other;
     }
 
-    // Parses a decimal double from `text`.
+    /// Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned
+    /// unchanged; the result is unspecified when `lo` is greater than `hi`.
+    public fun clamp(lo: double, hi: double): double {
+        if this < lo {
+            return lo;
+        }
+        if this > hi {
+            return hi;
+        }
+        return this;
+    }
+
+    /// Parses a decimal double from `text`.
     public static fun parse(borrow text: string): Result<double, ParseError> {
         let n = text.length;
         if n == 0 {

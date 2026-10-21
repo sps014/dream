@@ -22,8 +22,8 @@ class StreamingShortWriter: Writer {
         return Result.Ok(1);
     }
 
-    public unique fun flush(): Result<bool, IoError> {
-        return Result.Ok(true);
+    public unique fun flush(): Result<Unit, IoError> {
+        return Result.Ok(Unit());
     }
 }
 

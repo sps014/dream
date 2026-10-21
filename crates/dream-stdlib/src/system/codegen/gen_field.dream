@@ -4,15 +4,15 @@ import system;
 import system.collections;
 import system.json;
 
-// A field of a class, struct or union variant.
+/// A field of a class, struct or union variant.
 public class GenField {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    /// Name identifying this entry.
+    /// Field name as declared.
     public name: string;
 
-    /// Type of this declaration or expression.
+    /// Declared type of the field.
     public ty: GenTypeRef;
 
     /// Declared access level of this symbol.
@@ -21,10 +21,11 @@ public class GenField {
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
 
-    /// Source location associated with this entry.
+    /// Where the field is written in source.
     public location: GenLocation;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenField` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(
         id: string,
         name: string,
@@ -41,17 +42,17 @@ public class GenField {
         this.location = location;
     }
 
-    // The first `@A` on this field, decoded into the attribute struct.
+    /// The first `@A` on this field, decoded into the attribute struct.
     public fun attribute<A>(): Option<A> {
         return GenAttributes.decode<A>(this.attributes);
     }
 
-    // Decodes every attached attribute of the requested type.
+    /// Decodes every attached attribute of the requested type.
     public fun attributes_of<A>(): List<A> {
         return GenAttributes.decode_all<A>(this.attributes);
     }
 
-    // Tests whether the requested attribute is attached to this model node.
+    /// Whether this field carries at least one `@A` attribute.
     public fun has<A>(): bool {
         return GenAttributes.has(this.attributes, GenAttributes.id<A>());
     }

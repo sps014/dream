@@ -84,13 +84,13 @@ child.close().await?;
 | --- | --- | --- |
 | `child.stdout` / `child.stderr` | `ProcessReader` | Borrows an output pipe. |
 | `child.stdin` | `ProcessWriter` | Borrows the input pipe. |
-| `child.close_stdin()` | `Future<Result<bool, ProcessError>>` | Closes stdin after pending writes, sending EOF to the child. |
+| `child.close_stdin()` | `Future<Result<Unit, ProcessError>>` | Closes stdin after pending writes, sending EOF to the child. |
 | `child.wait()` | `Future<Result<int, ProcessError>>` | Waits for exit and returns the exit status. |
-| `child.close()` | `Future<Result<bool, ProcessError>>` | Terminates if needed, reaps the child, and releases it. |
+| `child.close()` | `Future<Result<Unit, ProcessError>>` | Terminates if needed, reaps the child, and releases it. |
 | `reader.read_async(max_bytes)` | `Result<byte[], IoError>` (async) | Reads up to `max_bytes`; an empty result means EOF. |
 | `reader.read_line(max_bytes = 1048576)` | `Future<Result<Option<string>, IoError>>` | Reads one line without its LF or CRLF; `None` at EOF. |
 | `writer.write_async(data)` | `Result<int, IoError>` (async) | Writes some or all bytes and returns the count. |
-| `writer.flush_async()` | `Result<bool, IoError>` (async) | Checks the pipe is open; there is no buffer to flush. |
+| `writer.flush_async()` | `Result<Unit, IoError>` (async) | Checks the pipe is open; there is no buffer to flush. |
 
 `stdin` implements `AsyncWriter`; `stdout` and `stderr` implement `AsyncReader`. Reads and writes return partial progress and propagate failures. `Streams.copy_async` connects process pipes to files, HTTP bodies, and other async streams. Writes are not guaranteed to consume the entire buffer; retry the remaining bytes or use the copy helper.
 

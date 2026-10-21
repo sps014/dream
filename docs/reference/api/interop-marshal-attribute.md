@@ -14,7 +14,7 @@ public struct MarshalAttribute
 
 ## `kind`
 
-Category of this entry.
+Marshaling rule applied to the extern or parameter.
 
 ```dream
 public kind: MarshalKind

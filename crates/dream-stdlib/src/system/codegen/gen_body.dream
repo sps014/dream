@@ -9,7 +9,7 @@ public class GenBody {
     /// Statements in source order.
     public statements: List<GenStmt>;
 
-    // Creates this model from snapshot JSON.
+    /// Decodes a `GenBody` from its object in the generation snapshot.
     public constructor(borrow v: JsonValue) {
         this.statements = List<GenStmt>();
         for (let s in gen_items(v, "statements")) {

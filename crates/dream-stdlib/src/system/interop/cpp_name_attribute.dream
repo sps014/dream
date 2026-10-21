@@ -3,6 +3,6 @@ module system.interop;
 /// The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name("get_as<int>")`.
 @attribute(AttributeTarget.ExternFunction)
 public struct CppNameAttribute {
-    /// Name identifying this entry.
+    /// C++ member name or expression the extern calls.
     public name: string;
 }

@@ -1,6 +1,6 @@
 module system.net;
 
-// Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).
+/// Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).
 public class UrlQuery {
     keys: List<string>;
     values: List<string>;
@@ -18,19 +18,19 @@ public class UrlQuery {
         }
     }
 
-    // Number of key/value pairs, including repeated keys and empty values.
+    /// Number of key/value pairs, including repeated keys and empty values.
     public get length(): int {
         return this.keys.length;
     }
 
-    // Appends a decoded key/value pair after existing parameters.
+    /// Appends a decoded key/value pair after existing parameters.
     public fun append(key: string, value: string): void {
         this.keys.push(key);
         this.values.push(value);
         this.dirty = true;
     }
 
-    // Returns the first decoded value for `key`, or `None` if the key is absent.
+    /// Returns the first decoded value for `key`, or `None` if the key is absent.
     public fun get(key: string): Option<string> {
         for (let i = 0; i < this.keys.length; i = i + 1) {
             if this.keys[i] == key {
@@ -40,7 +40,7 @@ public class UrlQuery {
         return Option.None;
     }
 
-    // Copies all decoded values for `key` in their original order.
+    /// Copies all decoded values for `key` in their original order.
     public fun get_all(key: string): string[] {
         let matches = List<string>();
         for (let i = 0; i < this.keys.length; i = i + 1) {
@@ -51,7 +51,7 @@ public class UrlQuery {
         return matches.take_array();
     }
 
-    // Replaces the first occurrence in place and removes later duplicates; appends if absent.
+    /// Replaces the first occurrence in place and removes later duplicates; appends if absent.
     public fun set(key: string, value: string): void {
         let found = false;
         let i = 0;
@@ -73,7 +73,7 @@ public class UrlQuery {
         this.dirty = true;
     }
 
-    // Removes every occurrence of `key`, preserving the order of remaining pairs.
+    /// Removes every occurrence of `key`, preserving the order of remaining pairs.
     public fun remove(key: string): void {
         let i = 0;
         while i < this.keys.length {
@@ -87,7 +87,7 @@ public class UrlQuery {
         this.dirty = true;
     }
 
-    // Removes all parameters and the query delimiter from the URL.
+    /// Removes all parameters and the query delimiter from the URL.
     public fun clear(): void {
         this.keys.clear();
         this.values.clear();

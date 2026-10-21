@@ -12,7 +12,7 @@ public class GenVariant
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `name`
 
-Name identifying this entry.
+Variant name as declared.
 
 ```dream
 public name: string
@@ -36,7 +36,7 @@ public fields: List<GenField>
 
 ## `location`
 
-Source location associated with this entry.
+Where the variant is written in source.
 
 ```dream
 public location: GenLocation
@@ -44,7 +44,7 @@ public location: GenLocation
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenVariant` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation)

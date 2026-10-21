@@ -1,15 +1,15 @@
 module system.collections;
 
-// An ordered map backed by parallel sorted arrays (binary search + shift on insert/remove).
-// O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order
-// doesn't matter — it has O(1) average insert/lookup.
+/// An ordered map backed by parallel sorted arrays (binary search + shift on insert/remove).
+/// O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order
+/// doesn't matter — it has O(1) average insert/lookup.
 @allow_cycle
 public class SortedMap<K: Comparable<K>, V> {
     keys_arr: K[];
     values_arr: V[];
     count: int;
 
-    // Allocates an empty sorted map with an initial capacity (defaults to 8).
+    /// Allocates an empty sorted map with an initial capacity (defaults to 8).
     public constructor(capacity: int = 8) {
         let c = capacity;
         if c < sequence_min_capacity() {
@@ -20,18 +20,18 @@ public class SortedMap<K: Comparable<K>, V> {
         this.count = 0;
     }
 
-    // Number of key/value pairs currently stored.
+    /// Number of key/value pairs currently stored.
     public get length(): int {
         return this.count;
     }
 
-    // True when the map is empty.
+    /// True when the map is empty.
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes every entry, keeping capacity. Live slots are overwritten with a zero value so
-    // reference keys/values release immediately.
+    /// Removes every entry, keeping capacity. Live slots are overwritten with a zero value so
+    /// reference keys/values release immediately.
     public fun clear(): void {
         if this.count > 0 {
             let i = 0;
@@ -72,7 +72,7 @@ public class SortedMap<K: Comparable<K>, V> {
         return 0 - lo - 1;
     }
 
-    // Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.
+    /// Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.
     public fun this[key: K] = value: V {
         let idx = this.locate(key);
         if idx >= 0 {
@@ -94,7 +94,7 @@ public class SortedMap<K: Comparable<K>, V> {
         }
     }
 
-    // Value for `key`, or `None` when the key is absent.
+    /// Value for `key`, or `None` when the key is absent.
     public fun get(borrow key: K): Option<V> {
         let idx = this.locate(key);
         if idx >= 0 {
@@ -103,8 +103,8 @@ public class SortedMap<K: Comparable<K>, V> {
         return Option.None;
     }
 
-    // Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use
-    // `get(k)` for absence-tolerant reads.
+    /// Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use
+    /// `get(k)` for absence-tolerant reads.
     public fun this[borrow key: K]: V {
         let idx = this.locate(key);
         if idx < 0 {
@@ -113,12 +113,12 @@ public class SortedMap<K: Comparable<K>, V> {
         return this.values_arr[idx];
     }
 
-    // True if the map contains the key.
+    /// True if the map contains the key.
     public fun contains(borrow key: K): bool {
         return this.locate(key) >= 0;
     }
 
-    // Removes a key and returns true if it was present.
+    /// Removes a key and returns true if it was present.
     public fun remove(borrow key: K): bool {
         let idx = this.locate(key);
         if idx < 0 {
@@ -136,7 +136,7 @@ public class SortedMap<K: Comparable<K>, V> {
         return true;
     }
 
-    // The smallest key, or `None` when empty.
+    /// The smallest key, or `None` when empty.
     public fun first_key(): Option<K> {
         if this.count == 0 {
             return Option.None;
@@ -144,7 +144,7 @@ public class SortedMap<K: Comparable<K>, V> {
         return Option.Some(this.keys_arr[0]);
     }
 
-    // The largest key, or `None` when empty.
+    /// The largest key, or `None` when empty.
     public fun last_key(): Option<K> {
         if this.count == 0 {
             return Option.None;
@@ -152,7 +152,7 @@ public class SortedMap<K: Comparable<K>, V> {
         return Option.Some(this.keys_arr[this.count - 1]);
     }
 
-    // The smallest key `>= key`, or `None` if every key is smaller.
+    /// The smallest key `>= key`, or `None` if every key is smaller.
     public fun ceiling_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
         if idx >= 0 {
@@ -165,7 +165,7 @@ public class SortedMap<K: Comparable<K>, V> {
         return Option.Some(this.keys_arr[insert_at]);
     }
 
-    // The largest key `<= key`, or `None` if every key is larger.
+    /// The largest key `<= key`, or `None` if every key is larger.
     public fun floor_key(borrow key: K): Option<K> {
         let idx = this.locate(key);
         if idx >= 0 {
@@ -178,29 +178,29 @@ public class SortedMap<K: Comparable<K>, V> {
         return Option.Some(this.keys_arr[insert_at - 1]);
     }
 
-    // All keys in ascending order.
-    public fun keys(): K[] {
-        let result = Buffer.alloc<K>(this.count);
+    /// Returns a new list of the keys in ascending order.
+    public fun keys(): List<K> {
+        let result = List<K>(this.count);
         let i = 0;
         while i < this.count {
-            result[i] = this.keys_arr[i];
+            result.push(this.keys_arr[i]);
             i = i + 1;
         }
         return result;
     }
 
-    // All values, ordered by ascending key.
-    public fun values(): V[] {
-        let result = Buffer.alloc<V>(this.count);
+    /// Returns a new list of the values, ordered by ascending key.
+    public fun values(): List<V> {
+        let result = List<V>(this.count);
         let i = 0;
         while i < this.count {
-            result[i] = this.values_arr[i];
+            result.push(this.values_arr[i]);
             i = i + 1;
         }
         return result;
     }
 
-    // Gets an iterator over entries in ascending key order.
+    /// Gets an iterator over entries in ascending key order.
     public fun iterator(): SortedMapIterator<K, V> {
         return SortedMapIterator<K, V>(this);
     }

@@ -31,6 +31,6 @@ async fun io_safety(): void {
     Assert.eq(stream.tell().unwrap(), 0L);
     stream.close().unwrap();
     Assert.is_true(stream.read(1).is_err());
-    Assert.is_true(stream.length().is_err());
+    Assert.is_true(stream.size().is_err());
     File.delete(path).await.unwrap();
 }

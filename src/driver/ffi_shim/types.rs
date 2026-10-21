@@ -56,7 +56,12 @@ pub(super) enum Ret {
     Value(Bridge),
     /// `Result<T, string>`: a thrown exception becomes `Err(e.what())`.
     Result(Bridge),
+    /// `Result<Unit, string>`: a `void` member that may throw.
+    Fallible,
 }
+
+/// The C-side value of a [`Ret::Fallible`] call; the shim returns `true` once the member returns.
+pub(super) const FALLIBLE_BRIDGE: Bridge = Bridge::Scalar(CScalar::Bool);
 
 #[derive(Debug, Clone)]
 pub(super) struct Param {
@@ -108,6 +113,9 @@ impl Known {
                     "a `@cpp` result must be `Result<T, string>`, not '{}'",
                     ty.display_name()
                 ));
+            }
+            if matches!(ok, Type::Struct(name, None) if name.text == "Unit") {
+                return Ok(Ret::Fallible);
             }
             return Ok(Ret::Result(self.returned(ok)?));
         }

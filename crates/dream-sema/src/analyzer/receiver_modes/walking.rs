@@ -1,8 +1,9 @@
 use super::*;
+use dream_abi::names::THIS_NAME;
 
 pub(super) fn is_self_expr(expr: &ExpressionNode, aliases: &[String]) -> bool {
     match expr {
-        ExpressionNode::Identifier(t) => t.text == "this" || aliases.contains(&t.text),
+        ExpressionNode::Identifier(t) => t.text == THIS_NAME || aliases.contains(&t.text),
         _ => false,
     }
 }
@@ -11,7 +12,7 @@ pub(super) fn is_self_expr(expr: &ExpressionNode, aliases: &[String]) -> bool {
 pub(super) fn classify_receiver(expr: &ExpressionNode, aliases: &[String]) -> Option<RecvKind> {
     match expr {
         ExpressionNode::Identifier(t) => {
-            if t.text == "this" || aliases.contains(&t.text) {
+            if t.text == THIS_NAME || aliases.contains(&t.text) {
                 Some(RecvKind::This)
             } else {
                 None
@@ -19,7 +20,7 @@ pub(super) fn classify_receiver(expr: &ExpressionNode, aliases: &[String]) -> Op
         }
         ExpressionNode::MemberAccess(base, member) => {
             let base_is_self = match &**base {
-                ExpressionNode::Identifier(t) => t.text == "this" || aliases.contains(&t.text),
+                ExpressionNode::Identifier(t) => t.text == THIS_NAME || aliases.contains(&t.text),
                 _ => false,
             };
             base_is_self.then_some(RecvKind::Field(member.text.clone()))
@@ -441,7 +442,7 @@ pub(super) fn note_chain_write(
             match e {
                 ExpressionNode::Identifier(t) => return Some(t.position),
                 ExpressionNode::MemberAccess(base, m) => {
-                    if matches!(&**base, ExpressionNode::Identifier(t) if t.text == "this") {
+                    if matches!(&**base, ExpressionNode::Identifier(t) if t.text == THIS_NAME) {
                         return Some(m.position);
                     }
                     e = base;
@@ -464,7 +465,7 @@ pub(super) fn note_chain_write(
 pub(super) fn roots_in_self(mut e: &ExpressionNode) -> bool {
     loop {
         match e {
-            ExpressionNode::Identifier(t) => return t.text == "this",
+            ExpressionNode::Identifier(t) => return t.text == THIS_NAME,
             ExpressionNode::MemberAccess(base, _) => e = base,
             ExpressionNode::IndexAccess(base, _) => e = base,
             ExpressionNode::Parenthesized(_, inner) => e = inner,

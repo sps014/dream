@@ -1,11 +1,11 @@
 module system.crypto;
 
-// HMAC-SHA256 keyed digest (32-byte output). Host-backed via `Dream.cryptoHmacSha256`.
+/// HMAC-SHA256 keyed digest (32-byte output). Host-backed via `Dream.cryptoHmacSha256`.
 public static class HmacSha256 {
     @runtime("cryptoHmacSha256")
     static extern fun sign_host(borrow key: byte[], borrow data: byte[]): byte[];
 
-    // Computes HMAC-SHA256 of `data` under `key`.
+    /// Computes HMAC-SHA256 of `data` under `key`.
     public static fun sign(key: byte[], data: byte[]): byte[] {
         return HmacSha256.sign_host(key, data);
     }

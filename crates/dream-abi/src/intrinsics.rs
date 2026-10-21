@@ -208,11 +208,11 @@ pub const ATTR_FORCE_FREE: &str = "force_free";
 pub const ATTR_ARRAY_GET_UNCHECKED: &str = "array_get_unchecked";
 /// `Buffer.set_unchecked<T>(arr, i, v)` — element store with no bounds check.
 pub const ATTR_ARRAY_SET_UNCHECKED: &str = "array_set_unchecked";
-/// `Bytes.toWire<T>(v)` — encode a `Task`-safe value as a `string` for the (string-typed)
+/// `Bytes.to_wire<T>(v)` — encode a `Task`-safe value as a `string` for the (string-typed)
 /// worker wire: identity for `string`, otherwise a byte-blit of an unmanaged `T` re-encoded as a
-/// codepoint-per-byte `string` (see `Bytes.toWireString`).
+/// codepoint-per-byte `string` (see `Bytes.to_wire_string`).
 pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
-/// `Bytes.fromWire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
+/// `Bytes.from_wire<T>(s)` — the inverse of [`ATTR_WIRE_ENCODE`].
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
 /// `System.panic(message)` — abort with `message`, reporting the call site's `file:line`.
 pub const ATTR_PANIC: &str = "dream_panic";
@@ -358,10 +358,10 @@ pub enum IntrinsicOp {
     ArrayGetUnchecked,
     /// `Buffer.set_unchecked<T>(arr, i, v)` (`@unsafe`) — `arr[i] = v` without the bounds check.
     ArraySetUnchecked,
-    /// `Bytes.toWire<T>(v)` — encode a `Task`-safe `T` (a `string`, or an `unmanaged` value)
+    /// `Bytes.to_wire<T>(v)` — encode a `Task`-safe `T` (a `string`, or an `unmanaged` value)
     /// as the `string` the worker wire actually carries.
     WireEncode,
-    /// `Bytes.fromWire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
+    /// `Bytes.from_wire<T>(s)` — the inverse of [`IntrinsicOp::WireEncode`].
     WireDecode,
     /// `System.panic(message)` — the backend appends the call site's source location.
     Panic,

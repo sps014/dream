@@ -12,7 +12,7 @@ public class List<T>: IndexedCollection<T> {
     items: T[];
     count: int;
 
-    // Allocates an empty list with an initial backing buffer capacity (defaults to 8).
+    /// Allocates an empty list with an initial backing buffer capacity (defaults to 8).
     @inline
     public constructor(capacity: int = 8) {
         let c = capacity;
@@ -23,26 +23,26 @@ public class List<T>: IndexedCollection<T> {
         this.count = 0;
     }
 
-    // Number of elements currently stored.
+    /// Number of elements currently stored.
     @inline
     public get length(): int {
         return this.count;
     }
 
-    // True when the list has no elements.
+    /// True when the list has no elements.
     @inline
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Current capacity of the backing buffer.
+    /// Current capacity of the backing buffer.
     @inline
     public get capacity(): int {
         return this.items.length;
     }
 
-    // Reserves room for additional elements without changing length or existing values.
-    public fun reserve(additional: int): Result<bool, CapacityError> {
+    /// Reserves room for additional elements without changing length or existing values.
+    public fun reserve(additional: int): Result<Unit, CapacityError> {
         let need = (long)this.count + (long)additional;
         if additional < 0 || need > 2147483647L {
             return Result.Err(CapacityError());
@@ -50,7 +50,7 @@ public class List<T>: IndexedCollection<T> {
         if need >(long)this.items.length {
             this.items = Buffer.realloc<T>(this.items, (int)need);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     // Doubles the backing buffer, resizing in place via `Buffer.realloc` when possible.
@@ -60,7 +60,7 @@ public class List<T>: IndexedCollection<T> {
         this.items = Buffer.realloc<T>(this.items, grow_capacity(old_cap, old_cap + 1));
     }
 
-    // Appends a value to the end, growing if necessary.
+    /// Appends a value to the end, growing if necessary.
     @inline
     public fun push(value: T): void {
         if this.count == this.items.length {
@@ -131,7 +131,7 @@ public class List<T>: IndexedCollection<T> {
         return Buffer.get_unchecked<T>(this.items, index);
     }
 
-    // Overwrites the element at `index`. Panics if `index` is out of range.
+    /// Overwrites the element at `index`. Panics if `index` is out of range.
     public fun this[index: int] = value: T {
         if (index < 0) || (index >= this.count) {
             System.panic("List index out of range");
@@ -139,7 +139,7 @@ public class List<T>: IndexedCollection<T> {
         Buffer.set_unchecked<T>(this.items, index, value);
     }
 
-    // Removes and returns the last element, or `None` if the list is empty.
+    /// Removes and returns the last element, or `None` if the list is empty.
     public fun pop(): Option<T> {
         if this.count == 0 {
             return Option.None;
@@ -150,7 +150,7 @@ public class List<T>: IndexedCollection<T> {
         return Option.Some(last);
     }
 
-    // True if `value` is present (uses value equality, including string contents).
+    /// True if `value` is present (uses value equality, including string contents).
     public fun contains(borrow value: T): bool {
         let i = 0;
         while i < this.count {
@@ -162,7 +162,7 @@ public class List<T>: IndexedCollection<T> {
         return false;
     }
 
-    // Index of the first matching element (by value equality), or `None` if absent.
+    /// Index of the first matching element (by value equality), or `None` if absent.
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while i < this.count {
@@ -174,7 +174,7 @@ public class List<T>: IndexedCollection<T> {
         return Option.None;
     }
 
-    // Index of the last matching element (by value equality), or `None` if absent.
+    /// Index of the last matching element (by value equality), or `None` if absent.
     public fun last_index_of(borrow value: T): Option<int> {
         let i = this.count - 1;
         while i >= 0 {
@@ -186,7 +186,7 @@ public class List<T>: IndexedCollection<T> {
         return Option.None;
     }
 
-    // Reverses the live prefix in place.
+    /// Reverses the live prefix in place.
     public fun reverse(): void {
         let lo = 0;
         let hi = this.count - 1;
@@ -197,29 +197,22 @@ public class List<T>: IndexedCollection<T> {
         }
     }
 
-    // A new list of `this[start .. end)` (clamped; empty when the span is inverted).
+    /// Returns a new list holding the elements from `start` (inclusive) to `end` (exclusive).
+    /// Panics unless `0 <= start <= end <= length`.
     public fun slice(start: int, end: int): List<T> {
-        let lo = start;
-        let hi = end;
-        if lo < 0 {
-            lo = 0;
+        if (start < 0) || (end < start) || (end > this.count) {
+            System.panic("List slice out of range");
         }
-        if hi > this.count {
-            hi = this.count;
-        }
-        if lo > hi {
-            lo = hi;
-        }
-        let result = List<T>(hi - lo);
-        let i = lo;
-        while i < hi {
+        let result = List<T>(end - start);
+        let i = start;
+        while i < end {
             result.push(Buffer.get_unchecked<T>(this.items, i));
             i = i + 1;
         }
         return result;
     }
 
-    // A new list with this list's elements followed by `other`.
+    /// A new list with this list's elements followed by `other`.
     public fun concat(borrow other: List<T>): List<T> {
         let result = List<T>(this.count + other.length);
         let i = 0;
@@ -235,13 +228,13 @@ public class List<T>: IndexedCollection<T> {
         return result;
     }
 
-    // A shallow copy of the live elements.
+    /// A shallow copy of the live elements.
     public fun clone(): List<T> {
         return this.slice(0, this.count);
     }
 
-    // Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass
-    // into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.
+    /// Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass
+    /// into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.
     public fun join(sep: string): string {
         let sb = StringBuilder();
         let i = 0;
@@ -279,10 +272,8 @@ public class List<T>: IndexedCollection<T> {
         this.count = 0;
     }
 
-    // Inserts `value` at `index`, shifting later elements right. Returns false if `index` is out
-    // of range (index may equal `size()` to append).
-    /// Inserts `value` at `index`, shifting later elements right. Returns false if the index is
-    /// outside 0 through length.
+    /// Inserts `value` at `index`, shifting later elements right. `index == length` appends.
+    /// Returns false and leaves the list unchanged when `index` is outside `0` through `length`.
     public fun insert(index: int, value: T): bool {
         if (index < 0) || (index > this.count) {
             return false;
@@ -319,8 +310,8 @@ public class List<T>: IndexedCollection<T> {
         return true;
     }
 
-    // Removes the element at `index`, shifting later elements left. Returns true on success, or
-    // false if `index` is out of range (the list is left unchanged in that case).
+    /// Removes the element at `index`, shifting later elements left. Returns true on success, or
+    /// false if `index` is out of range (the list is left unchanged in that case).
     public fun remove_at(index: int): bool {
         if (index < 0) || (index >= this.count) {
             return false;
@@ -336,7 +327,7 @@ public class List<T>: IndexedCollection<T> {
         return true;
     }
 
-    // Removes the first occurrence of `value` (by equality). Returns true when something was removed.
+    /// Removes the first occurrence of `value` (by equality). Returns true when something was removed.
     public fun remove(borrow value: T): bool {
         return switch (this.index_of(value)) {
             Some(i) => this.remove_at(i),
@@ -344,19 +335,19 @@ public class List<T>: IndexedCollection<T> {
         };
     }
 
-    // Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.
+    /// Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.
     public fun iterator(): ListIterator<T> {
         return ListIterator<T>(this);
     }
 
-    // A view of the current elements, writable in place. The span holds the backing array it was
-    // taken from: after the list grows (or shrinks and regrows) it keeps showing that old array,
-    // so take a fresh span after structural changes.
+    /// A view of the current elements, writable in place. The span holds the backing array it was
+    /// taken from: after the list grows (or shrinks and regrows) it keeps showing that old array,
+    /// so take a fresh span after structural changes.
     public fun as_span(): Span<T> {
         return Span<T>(this.items, 0, this.count);
     }
 
-    // A read-only view of the current elements, with the same staleness rule as `as_span`.
+    /// A read-only view of the current elements, with the same staleness rule as `as_span`.
     public fun as_read_only_span(): ReadOnlySpan<T> {
         return ReadOnlySpan<T>(this.items, 0, this.count);
     }
@@ -369,7 +360,7 @@ public class List<T>: IndexedCollection<T> {
         return Buffer.get_unchecked<T>(this.items, index);
     }
 
-    // Sorts the list in place with the supplied comparator.
+    /// Sorts the list in place with the supplied comparator.
     public fun sort_by(borrow cmp: fun(T, T): int): void {
         let n = this.count;
         if n < 2 {
@@ -422,16 +413,16 @@ public class List<T>: IndexedCollection<T> {
         }
     }
 
-    // Sorts the list in place into ascending order using each element's `compare` method.
-    // Only attached when `T : Comparable<T>` (via `where`).
+    /// Sorts the list in place into ascending order using each element's `compare` method.
+    /// Only attached when `T : Comparable<T>` (via `where`).
     public fun sort(): void where T: Comparable<T> {
         let cmp: fun(T, T): int = compare_ascending;
         this.sort_by(cmp);
     }
 
-    // Binary search over a list that is already sorted ascending (by `compare`). Returns the index
-    // of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
-    // Only attached when `T : Comparable<T>` (via `where`).
+    /// Binary search over a list that is already sorted ascending (by `compare`). Returns the index
+    /// of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n).
+    /// Only attached when `T : Comparable<T>` (via `where`).
     public fun binary_search(borrow value: T): Option<int> where T: Comparable<T> {
         let lo = 0;
         let hi = this.count - 1;

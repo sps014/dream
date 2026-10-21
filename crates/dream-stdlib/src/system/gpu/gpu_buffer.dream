@@ -32,7 +32,7 @@ public class GpuBuffer<T: unmanaged> {
     }
 
     /// Replaces the whole contents with `data`, which must have exactly `length` elements.
-    public fun write(data: T[]): Result<bool, GpuError> {
+    public fun write(data: T[]): Result<Unit, GpuError> {
         if data.length != this.count {
             return Result.Err(
                 GpuError.InvalidResource(
@@ -47,7 +47,7 @@ public class GpuBuffer<T: unmanaged> {
     /// Replaces the elements starting at `offset` with `data`. The range must lie inside
     /// the buffer. On `GpuBackend.WebGpu` it must also start at a multiple of 4 bytes and end
     /// at one or at the end of the buffer, which matters for `float16` and `byte` elements.
-    public fun write_at(offset: int, data: T[]): Result<bool, GpuError> {
+    public fun write_at(offset: int, data: T[]): Result<Unit, GpuError> {
         if this.handle == 0 {
             return Result.Err(GpuError.InvalidResource("the buffer was destroyed"));
         }
@@ -61,7 +61,7 @@ public class GpuBuffer<T: unmanaged> {
         ) != 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Downloads every element. It waits for submitted GPU work that writes the buffer.

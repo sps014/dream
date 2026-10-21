@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_mouse_state(): void {
-    let window = Window.headless(WindowDesc.of("mouse", 320, 200));
+    let window = Window.headless(WindowDesc("mouse", 320, 200));
     window.simulate(WindowEvent.MouseMove(WindowVector(100.0f, 50.0f)));
     window.simulate(WindowEvent.MouseDown(MouseButton.Left));
     window.simulate(WindowEvent.Scroll(WindowVector(0.0f, 1.0f)));

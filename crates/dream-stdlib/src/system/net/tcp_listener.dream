@@ -1,6 +1,6 @@
 module system.net;
 
-// An owned TCP listener; accepted connections retain independent ownership.
+/// An owned TCP listener; accepted connections retain independent ownership.
 public class TcpListener {
     state: SocketState;
 
@@ -8,7 +8,7 @@ public class TcpListener {
         this.state = state;
     }
 
-    // Binds a listener; port zero selects an ephemeral port reported by local_port.
+    /// Binds a listener; port zero selects an ephemeral port reported by local_port.
     public static async fun bind(
         host: string,
         port: int,
@@ -17,17 +17,17 @@ public class TcpListener {
         return Result.Ok(TcpListener(SocketState.open("listen", host, port, 0, token).await?));
     }
 
-    // Numeric interface address selected by the host.
+    /// Numeric interface address selected by the host.
     public get local_host(): string {
-        return this.state.metadata.at("local_host").as_string().unwrap_or("");
+        return this.state.metadata["local_host"].as_string().unwrap_or("");
     }
 
-    // Actual bound port, including an automatically selected ephemeral port.
+    /// Actual bound port, including an automatically selected ephemeral port.
     public get local_port(): int {
-        return this.state.metadata.at("local_port").as_int().unwrap_or(0);
+        return this.state.metadata["local_port"].as_int().unwrap_or(0);
     }
 
-    // Accepts a connection with optional deadline and inherited cancellation.
+    /// Accepts a connection with optional deadline and inherited cancellation.
     public async fun accept(
         timeout_ms: int = 0,
         token: Option<CancellationToken> = Option.None
@@ -49,9 +49,9 @@ public class TcpListener {
         return Result.Ok(TcpStream(state));
     }
 
-    // Closes this listener and cancels pending accepts, preserving accepted streams.
-    public fun close(): Result<bool, IoError> {
+    /// Closes this listener and cancels pending accepts, preserving accepted streams.
+    public fun close(): Result<Unit, IoError> {
         this.state.close();
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

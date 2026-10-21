@@ -13,7 +13,7 @@ public class Messages {
     @operation("Create a message", "Returns the validated message", "messages", 201)
     @post("/")
     public static fun create(
-        @dep(CurrentUser) user: AuthPrincipal,
+        @dep(AuthService.current_user) user: AuthPrincipal,
         @dep(request_label) label: string,
         @body message: CreateMessage
     ): HttpOutgoing {

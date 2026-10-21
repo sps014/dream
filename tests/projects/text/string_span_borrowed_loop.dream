@@ -25,7 +25,7 @@ fun c225_scan(borrow suffix: string): int {
 }
 
 fun c225_body(): void {
-    c225_verify_observation((c225_scan(System.env_or("DREAM_SPAN_SUFFIX", "!"))).to_string());
+    c225_verify_observation((c225_scan(System.env("DREAM_SPAN_SUFFIX").unwrap_or("!"))).to_string());
 }
 
 let c225_cursor: int = 0;

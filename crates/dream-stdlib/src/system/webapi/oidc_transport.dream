@@ -9,7 +9,7 @@ internal static class OidcTransport {
         request: JsonValue,
         token: Option<CancellationToken> = Option.None
     ): Result<JsonValue, IoError> {
-        let action = request.get_str_or("action", "");
+        let action = request.get("action").and_then((item: JsonValue) => item.as_string()).unwrap_or("");
         if action != "oidc_begin" && action != "oidc_complete" {
             return Result.Err(IoError.other("", "invalid OIDC operation"));
         }

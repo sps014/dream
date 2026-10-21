@@ -1,6 +1,6 @@
 module system.webapi;
 
-// One `multipart/form-data` file part (`@file`).
+/// One `multipart/form-data` file part (`@file`).
 public class UploadedFile {
     /// Original filename reported with the upload.
     public filename: string;

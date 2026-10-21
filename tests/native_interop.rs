@@ -112,7 +112,7 @@ fn cpp_package_runs_through_the_generated_shim() {
          sum = 10\n\
          norm = 5\n\
          origin = 1.5,-2\n\
-         compact ok true\n\
+         compact ok\n\
          snapshot failed\n\
          snapshot ab=22\n\
          store out of scope\n\

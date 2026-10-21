@@ -298,7 +298,7 @@ internal static class Wrappers {
         b.line("/// until the GPU finished.");
         b.line("public async fun dispatch(");
         Wrappers.parameters(b, List<string>(["device: GpuDevice", "dispatch: GpuDispatch"]), e);
-        b.line("): Result<bool, GpuError> {");
+        b.line("): Result<Unit, GpuError> {");
         b.indent();
         b.line("return this.shader.dispatch(device, dispatch, " + Wrappers.args(e) + ").await;");
         b.dedent();
@@ -373,7 +373,7 @@ internal static class Wrappers {
                 ),
                 e
             );
-            b.line("): Result<bool, GpuError> {");
+            b.line("): Result<Unit, GpuError> {");
             b.indent();
             b.line(
                 "return pipeline.trace(device, width, height, 1, " + Wrappers.args(e) + ").await;"

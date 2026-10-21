@@ -12,7 +12,7 @@ public class GenExpr
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `kind`
 
-Category of this entry.
+Syntactic shape of the expression (call, literal, binary operation, ...).
 
 ```dream
 public kind: ExprKind
@@ -52,7 +52,7 @@ public constant: Option<GenConstant>
 
 ## `text`
 
-Source text represented by this entry.
+Source text of the expression as written.
 
 ```dream
 public text: string
@@ -132,7 +132,7 @@ public types: List<GenTypeRef>
 
 ## `constructor`
 
-Creates this model from snapshot JSON.
+Decodes a `GenExpr` from its object in the generation snapshot.
 
 ```dream
 public constructor(borrow v: JsonValue)

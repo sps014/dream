@@ -68,7 +68,7 @@ internal class FileOperation {
         return FileOperation.bytes_host(this.id);
     }
 
-    internal async fun wait(token: Option<CancellationToken>): Result<bool, IoError> {
+    internal async fun wait(token: Option<CancellationToken>): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         // A started child can outlive its awaiting parent; pin its receiver across suspension.
         let lifetime = [this];
@@ -81,6 +81,6 @@ internal class FileOperation {
         } else {
             pending.await;
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

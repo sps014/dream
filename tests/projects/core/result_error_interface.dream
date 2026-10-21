@@ -19,25 +19,25 @@ class c1e8_MyError: Error {
     }
 }
 
-fun c1e8_fail(): Result<bool, c1e8_MyError> {
+fun c1e8_fail(): Result<Unit, c1e8_MyError> {
     return Result.Err(c1e8_MyError("boom"));
 }
 
-fun c1e8_ok(): Result<bool, c1e8_MyError> {
-    return Result.Ok(true);
+fun c1e8_ok(): Result<Unit, c1e8_MyError> {
+    return Result.Ok(Unit());
 }
 
-fun c1e8_via_try(): Result<bool, Error> {
+fun c1e8_via_try(): Result<Unit, Error> {
     let v = c1e8_fail()?;
     return Result.Ok(v);
 }
 
-fun c1e8_via_return(): Result<bool, Error> {
+fun c1e8_via_return(): Result<Unit, Error> {
     return c1e8_fail();
 }
 
 fun c1e8_body() {
-    let r: Result<bool, Error> = c1e8_via_return();
+    let r: Result<Unit, Error> = c1e8_via_return();
     switch (r) {
         Ok(_) => {
             c1e8_verify_observation(("unexpected ok").to_string());
@@ -58,10 +58,10 @@ fun c1e8_body() {
         }
     }
 
-    let lifted: Result<bool, Error> = c1e8_ok();
+    let lifted: Result<Unit, Error> = c1e8_ok();
     switch (lifted) {
-        Ok(v) => {
-            c1e8_verify_observation((v).to_string());
+        Ok(_) => {
+            c1e8_verify_observation(("ok").to_string());
         }
         Err(_) => {
             c1e8_verify_observation(("unexpected err").to_string());
@@ -73,7 +73,7 @@ let c1e8_cursor: int = 0;
 
 fun c1e8_verify_observation(borrow value: string): void {
     let actual = value + "\n";
-    let wanted = "EMINE\nboom\nEMINE\ntrue\n";
+    let wanted = "EMINE\nboom\nEMINE\nok\n";
     let end = c1e8_cursor + actual.length;
     Assert.is_true(end <= wanted.length);
     Assert.eq(actual, wanted.substring(c1e8_cursor, end));
@@ -86,5 +86,5 @@ fun c1e8_verify_observation(borrow value: string): void {
 fun result_error_interface(): void {
     c1e8_cursor = 0;
     c1e8_body();
-    Assert.eq(c1e8_cursor, ("EMINE\nboom\nEMINE\ntrue\n").length);
+    Assert.eq(c1e8_cursor, ("EMINE\nboom\nEMINE\nok\n").length);
 }

@@ -14,6 +14,7 @@ pub mod intrinsics;
 pub mod iterators;
 pub mod js_abi;
 pub mod library;
+pub mod names;
 pub mod profile;
 pub mod runtime_hosts;
 pub mod target;

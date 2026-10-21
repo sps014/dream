@@ -21,7 +21,7 @@ import system.json;
     DepAttribute,
     DependencyOverrideAttribute
 )
-public fun webapi_derive(ctx: GenContext): void {
+internal fun webapi_derive(ctx: GenContext): void {
     let gen = WebGenerator(ctx);
     gen.collect();
     gen.collect_overrides();

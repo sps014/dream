@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioAnalysis`
 
 A mono waveform and its single-sided frequency spectrum.
 
@@ -12,7 +12,7 @@ A mono waveform and its single-sided frequency spectrum.
 public class AudioAnalysis
 ```
 
-## Declaration
+## `waveform`
 
 Mono samples before window weighting; short input is padded with silence.
 
@@ -20,7 +20,7 @@ Mono samples before window weighting; short input is padded with silence.
 public waveform: float[]
 ```
 
-## Declaration
+## `real`
 
 Unnormalized real FFT components, including DC and Nyquist.
 
@@ -28,7 +28,7 @@ Unnormalized real FFT components, including DC and Nyquist.
 public real: float[]
 ```
 
-## Declaration
+## `imaginary`
 
 Unnormalized imaginary FFT components, including DC and Nyquist.
 
@@ -36,7 +36,7 @@ Unnormalized imaginary FFT components, including DC and Nyquist.
 public imaginary: float[]
 ```
 
-## Declaration
+## `magnitudes`
 
 Window-compensated single-sided amplitudes; a unit sine has amplitude one.
 
@@ -44,7 +44,7 @@ Window-compensated single-sided amplitudes; a unit sine has amplitude one.
 public magnitudes: float[]
 ```
 
-## Declaration
+## `magnitudes_db`
 
 Amplitudes in dBFS, floored at -120 dBFS.
 
@@ -52,7 +52,7 @@ Amplitudes in dBFS, floored at -120 dBFS.
 public magnitudes_db: float[]
 ```
 
-## Declaration
+## `peak`
 
 Largest absolute sample in the unweighted waveform.
 
@@ -60,7 +60,7 @@ Largest absolute sample in the unweighted waveform.
 public peak: float
 ```
 
-## Declaration
+## `rms`
 
 Root mean square of the unweighted waveform, including zero padding.
 
@@ -68,11 +68,10 @@ Root mean square of the unweighted waveform, including zero padding.
 public rms: float
 ```
 
-## Declaration
+## `frequency_hz`
 
 Returns the frequency in Hz for a valid bin; invalid indices return EINVAL.
 
 ```dream
 public fun frequency_hz(bin: int): Result<double, AudioError>
 ```
-

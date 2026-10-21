@@ -14,7 +14,7 @@ public struct UsesToolAttribute
 
 ## `name`
 
-Name identifying this entry.
+Name of the pinned tool, as listed in the project's tool configuration.
 
 ```dream
 public name: string

@@ -1,7 +1,7 @@
 module system.core;
 
-// An address carries no owning token or length. Reads require initialized storage of T;
-// copies remain valid only as long as the underlying allocation does.
+/// An address carries no owning token or length. Reads require initialized storage of T;
+/// copies remain valid only as long as the underlying allocation does.
 public struct RawPtr<T: unmanaged> {
     raw: usize;
 

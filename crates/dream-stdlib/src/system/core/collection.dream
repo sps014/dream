@@ -1,19 +1,19 @@
 module system.core;
 
-// Sized collection — the type users pass into APIs that need a count.
-// `for (let x in xs)` works for concrete `@iterator` types and for interface-typed
-// `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
-// Query chains start with `seq()` in system.collections, keeping bootstrap independent of List.
+/// Sized collection — the type users pass into APIs that need a count.
+/// `for (let x in xs)` works for concrete `@iterator` types and for interface-typed
+/// `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch).
+/// Query chains start with `seq()` in system.collections, keeping bootstrap independent of List.
 public interface Collection<T>: Iterable<T> {
     /// Number of elements currently stored.
     get length(): int;
 
-    // True when the collection has no elements.
+    /// True when the collection has no elements.
     public fun is_empty(): bool {
         return this.length == 0;
     }
 
-    // True when every element satisfies `pred`.
+    /// True when every element satisfies `pred`.
     public fun all(borrow pred: fun(T): bool): bool {
         for (let x in this) {
             if !pred(x) {
@@ -23,7 +23,7 @@ public interface Collection<T>: Iterable<T> {
         return true;
     }
 
-    // True when at least one element satisfies `pred`.
+    /// True when at least one element satisfies `pred`.
     public fun any(borrow pred: fun(T): bool): bool {
         for (let x in this) {
             if pred(x) {
@@ -33,13 +33,13 @@ public interface Collection<T>: Iterable<T> {
         return false;
     }
 
-    // True when no element satisfies `pred`.
+    /// True when no element satisfies `pred`.
     public fun none(borrow pred: fun(T): bool): bool {
         return !this.any(pred);
     }
 
-    // Counts elements for which `pred` is true.
-    public fun count_where(borrow pred: fun(T): bool): int {
+    /// Counts elements for which `pred` is true.
+    public fun count(borrow pred: fun(T): bool): int {
         let n = 0;
         for (let x in this) {
             if pred(x) {
@@ -49,8 +49,8 @@ public interface Collection<T>: Iterable<T> {
         return n;
     }
 
-    // First element for which `pred` is true, or `None`.
-    public fun find_where(borrow pred: fun(T): bool): Option<T> {
+    /// First element for which `pred` is true, or `None`.
+    public fun find(borrow pred: fun(T): bool): Option<T> {
         for (let x in this) {
             if pred(x) {
                 return Option.Some(x);
@@ -59,7 +59,7 @@ public interface Collection<T>: Iterable<T> {
         return Option.None;
     }
 
-    // Invokes `action` for each element in iteration order.
+    /// Invokes `action` for each element in iteration order.
     public fun for_each(borrow action: fun(T): void): void {
         for (let x in this) {
             action(x);

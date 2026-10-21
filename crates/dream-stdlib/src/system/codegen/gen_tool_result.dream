@@ -6,7 +6,7 @@ import system.json;
 
 /// Result of a tool requested during generation, including output and files.
 public class GenToolResult {
-    /// Stable identifier of this entry.
+    /// Identifier of the tool run that produced this result.
     public id: string;
 
     /// Process exit code.

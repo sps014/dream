@@ -43,8 +43,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/web_router.dream"),
         ),
         (
-            "<std>/system/webapi/auth.dream",
-            include_str!("../system/webapi/auth.dream"),
+            "<std>/system/webapi/http_auth.dream",
+            include_str!("../system/webapi/http_auth.dream"),
         ),
         (
             "<std>/system/webapi/cors_options.dream",

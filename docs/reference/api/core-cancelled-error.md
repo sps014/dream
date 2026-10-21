@@ -22,7 +22,7 @@ public constructor(message: string)
 
 ## `message`
 
-Human-readable description.
+Human-readable explanation of the cancellation, suitable for logs and error output.
 
 ```dream
 public fun message(): string

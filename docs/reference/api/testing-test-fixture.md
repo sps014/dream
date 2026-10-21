@@ -17,7 +17,7 @@ public class TestFixture<T, E>
 Registers deterministic cleanup before the fixture is exposed to test code.
 
 ```dream
-public constructor(value: T, cleanup: fun(T): Result<bool, E>)
+public constructor(value: T, cleanup: fun(T): Result<Unit, E>)
 ```
 
 ## `resource`
@@ -33,5 +33,5 @@ public get resource(): T
 Executes cleanup once and returns the same outcome to repeated callers.
 
 ```dream
-public fun close(): Result<bool, E>
+public fun close(): Result<Unit, E>
 ```

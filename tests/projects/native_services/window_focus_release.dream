@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_focus_release(): void {
-    let window = Window.headless(WindowDesc.of("focus", 320, 200));
+    let window = Window.headless(WindowDesc("focus", 320, 200));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.ShiftLeft, "", KeyModifiers.None, false)));
     window.simulate(WindowEvent.MouseDown(MouseButton.Right));
     window.poll();

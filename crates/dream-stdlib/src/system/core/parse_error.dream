@@ -1,27 +1,27 @@
 module system.core;
 
-// Parse / format failure implementing `Error` (JSON, numbers, URLs, ISO-8601, …).
+/// Parse / format failure implementing `Error` (JSON, numbers, URLs, ISO-8601, …).
 public class ParseError: Error {
     _code: string;
     _message: string;
 
-    // Creates an error with machine code and message.
+    /// Creates an error with machine code and message.
     public constructor(code: string, message: string) {
         this._code = code;
         this._message = message;
     }
 
-    // Human-readable description.
+    /// Human-readable explanation of the parse failure, suitable for logs and error output.
     public fun message(): string {
         return this._message;
     }
 
-    // Stable machine code (typically `EPARSE`).
+    /// Stable machine code (typically `EPARSE`).
     public fun code(): string {
         return this._code;
     }
 
-    // Generic invalid-input parse failure.
+    /// Generic invalid-input parse failure.
     public static fun invalid(message: string): ParseError {
         return ParseError("EPARSE", message);
     }

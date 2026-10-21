@@ -1,6 +1,6 @@
 module system.csv;
 
-// Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.
+/// Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.
 @allow_cycle
 public class CsvReader {
     source: Reader;
@@ -13,7 +13,7 @@ public class CsvReader {
     skip_lf: bool;
     failed: bool;
 
-    // Borrows source; record limits count encoded bytes including embedded newlines.
+    /// Borrows source; record limits count encoded bytes including embedded newlines.
     public constructor(source: Reader, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.source = source;
         this.delimiter = delimiter;
@@ -55,7 +55,7 @@ public class CsvReader {
         return CsvError(this.record, this.offset, message);
     }
 
-    // Returns a record or None at EOF; malformed input permanently fails this reader.
+    /// Returns a record or None at EOF; malformed input permanently fails this reader.
     public fun read_record(): Result<Option<string[]>, CsvError> {
         if this.failed {
             return Result.Err(CsvError(this.record, this.offset, "CSV reader is failed"));
@@ -142,13 +142,13 @@ public class CsvReader {
         }
         let request = JsonValue.dict();
         request["action"] = JsonValue.from_string("csv_read");
-        request["delimiter"] = JsonValue.number((double)(int)this.delimiter);
+        request["delimiter"] = JsonValue.from_double((double)(int)this.delimiter);
         request["input"] = JsonValue.from_string(text);
         let parsed = CsvCodec.request(request);
         if parsed.is_err() {
             return Result.Err(this.invalid(parsed.unwrap_err().message()));
         }
-        let values = parsed.unwrap().at("fields");
+        let values = parsed.unwrap()["fields"];
         let fields = Buffer.alloc<string>(values.length);
         for (let i = 0; i < values.length; i = i + 1) {
             fields[i] = values.at(i).unwrap().as_string().unwrap();

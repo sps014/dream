@@ -6,10 +6,10 @@ import system.json;
 
 /// A statement that a source generator can inspect.
 public class GenStmt {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    /// Category of this entry.
+    /// Syntactic shape of the statement (`let`, `return`, `if`, ...).
     public kind: StmtKind;
 
     /// Source range occupied by this node.
@@ -18,10 +18,10 @@ public class GenStmt {
     /// Constant value of the expression, when known.
     public constant: Option<GenConstant>;
 
-    /// Source text represented by this entry.
+    /// Source text of the statement as written.
     public text: string;
 
-    /// Type of this declaration or expression.
+    /// Type of the value the statement produces, or Unknown when it has none.
     public ty: GenTypeRef;
 
     /// Identifier of the referenced symbol.
@@ -38,7 +38,7 @@ public class GenStmt {
 
     nodes: List<GenExpr>;
 
-    // Creates this model from snapshot JSON.
+    /// Decodes a `GenStmt` from its object in the generation snapshot.
     public constructor(borrow v: JsonValue) {
         this.id = gen_str(v, "id");
         this.ty = gen_type_ref(gen_obj(v, "ty"));
@@ -60,12 +60,12 @@ public class GenStmt {
         }
     }
 
-    // Returns child nodes in source order.
+    /// Returns child nodes in source order.
     public fun children(): List<GenExpr> {
         return this.nodes;
     }
 
-    // Tests the node kind.
+    /// Tests the node kind.
     public fun is_kind(kind: StmtKind): bool {
         return this.kind == kind;
     }

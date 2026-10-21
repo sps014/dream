@@ -1,7 +1,7 @@
 module system.crypto;
 
-// A 256-bit `AesGcm` key. Wraps raw bytes so callers can't accidentally pass the wrong-sized
-// buffer where a key is expected.
+/// A 256-bit `AesGcm` key. Wraps raw bytes so callers can't accidentally pass the wrong-sized
+/// buffer where a key is expected.
 public class AesGcmKey {
     _bytes: byte[];
 
@@ -9,12 +9,12 @@ public class AesGcmKey {
         this._bytes = bytes;
     }
 
-    // Generates a fresh random 256-bit key from the OS CSPRNG.
+    /// Generates a fresh random 256-bit key from the OS CSPRNG.
     public static fun generate(): Result<AesGcmKey, CryptoError> {
         return Result.Ok(AesGcmKey(SecureRandom.bytes(32)?));
     }
 
-    // Wraps exactly 32 raw key bytes, or an error when the length is wrong.
+    /// Wraps exactly 32 raw key bytes, or an error when the length is wrong.
     public static fun from_bytes(bytes: byte[]): Result<AesGcmKey, CryptoError> {
         if bytes.length != 32 {
             return Result.Err(
@@ -24,7 +24,7 @@ public class AesGcmKey {
         return Result.Ok(AesGcmKey(bytes));
     }
 
-    // The raw 32 key bytes.
+    /// The raw 32 key bytes.
     public fun to_bytes(): byte[] {
         return this._bytes;
     }

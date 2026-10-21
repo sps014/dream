@@ -14,7 +14,7 @@ fun main(): void {
     System.print(m.contains("nope"));
     System.print("\n");
     System.println(m.get("missing").unwrap_or(0));
-    System.println(m.get_or("missing", -1));
+    System.println(m.get("missing").unwrap_or(-1));
     m["two"] = 22;
     System.println(m.get("two").unwrap_or(0));
     System.println(m.length);
@@ -36,5 +36,5 @@ fun main(): void {
     System.println(counts.get(39).unwrap_or(0));
     System.print(counts.contains(40));
     System.print("\n");
-    System.println(counts.get_or(40, -7));
+    System.println(counts.get(40).unwrap_or(-7));
 }

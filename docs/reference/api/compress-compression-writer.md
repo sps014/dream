@@ -25,7 +25,7 @@ public fun write(bytes: byte[]): Result<int, IoError>
 Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
 
 ```dream
-public fun flush(): Result<bool, IoError>
+public fun flush(): Result<Unit, IoError>
 ```
 
 ## `finish`
@@ -33,7 +33,7 @@ public fun flush(): Result<bool, IoError>
 Finishes the trailer, releases encoder state, and flushes the borrowed destination.
 
 ```dream
-public fun finish(): Result<bool, IoError>
+public fun finish(): Result<Unit, IoError>
 ```
 
 ## `close`

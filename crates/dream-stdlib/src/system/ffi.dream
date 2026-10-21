@@ -1,7 +1,7 @@
 module system;
 import system.interop;
 
-// Reads through C pointers from `@c` callbacks (`char**`, `char*`).
+/// Reads through C pointers from `@c` callbacks (`char**`, `char*`).
 public static class Ffi {
     /// Reads the pointer at `index` from a valid foreign pointer array.
     @intrinsic(Intrinsic.DreamFfiReadPtr)
@@ -23,27 +23,27 @@ public static class Ffi {
     @intrinsic(Intrinsic.DreamFfiReadF64)
     public static extern fun host_read_f64(base: usize, index: int): double;
 
-    // `((int32_t*)base)[index]`.
+    /// `((int32_t*)base)[index]`.
     public static fun read_int(base: CPtr, index: int): int {
         return Ffi.host_read_i32(base.address(), index);
     }
 
-    // `((int64_t*)base)[index]`.
+    /// `((int64_t*)base)[index]`.
     public static fun read_long(base: CPtr, index: int): long {
         return Ffi.host_read_i64(base.address(), index);
     }
 
-    // `((double*)base)[index]`.
+    /// `((double*)base)[index]`.
     public static fun read_double(base: CPtr, index: int): double {
         return Ffi.host_read_f64(base.address(), index);
     }
 
-    // `((void**)base)[index]`. A `NULL` base reads `NULL`.
+    /// `((void**)base)[index]`. A `NULL` base reads `NULL`.
     public static fun read_ptr(base: CPtr, index: int): CPtr {
         return CPtr(Ffi.host_read_ptr(base.address(), index));
     }
 
-    // Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.
+    /// Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.
     public static fun read_cstring(ptr: CPtr): Option<string> {
         if ptr.is_null() {
             return Option.None;

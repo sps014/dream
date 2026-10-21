@@ -7,7 +7,7 @@ fun parse_port(borrow text: string): Result<int, ParseError> {
     return Result.Ok(port);
 }
 
-fun main(): Result<bool, ParseError> {
+fun main(): Result<Unit, ParseError> {
     let good = parse_port("8080")?;
     System.println("port " + good.to_string());
     let bad = parse_port("not-a-number")?;

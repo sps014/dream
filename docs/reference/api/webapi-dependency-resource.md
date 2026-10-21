@@ -14,7 +14,7 @@ public class DependencyResource<T>
 
 ## `value`
 
-Value carried by this entry.
+The dependency value passed to the handler.
 
 ```dream
 public value: T

@@ -1,6 +1,6 @@
 module system.webapi;
 
-// Per-request bag shared by middleware and `@dep` functions.
+/// Per-request bag shared by middleware and `@dep` functions.
 @allow_cycle
 public class RequestContext {
     internal cleanups: List<fun(CancellationToken): Future<void>>;

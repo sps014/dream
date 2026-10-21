@@ -14,7 +14,7 @@ public struct PropertyNameAttribute
 
 ## `name`
 
-Name identifying this entry.
+Property name used in JSON for this field.
 
 ```dream
 public name: string

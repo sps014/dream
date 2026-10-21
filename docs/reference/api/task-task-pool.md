@@ -79,5 +79,5 @@ public fun map_async<T: shared, U: shared>(
 Stops accepting work, waits for submitted jobs, then closes workers idempotently.
 
 ```dream
-public fun close(): Future<Result<bool, TaskPoolError>>
+public fun close(): Future<Result<Unit, TaskPoolError>>
 ```

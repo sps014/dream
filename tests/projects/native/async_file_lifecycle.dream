@@ -2,7 +2,7 @@ import system;
 import system.io;
 import system.testing;
 
-async fun copy_one(path: string): Result<bool, IoError> {
+async fun copy_one(path: string): Result<Unit, IoError> {
     let file = FileHandle.open_async(path, FileMode.WriteRead).await?;
     let bytes = Encoding.utf8_encode("hello 日本語");
     let count = file.write_async(bytes).await?;
@@ -14,7 +14,7 @@ async fun copy_one(path: string): Result<bool, IoError> {
     file.flush_async().await?;
     file.close()?;
     Assert.is_true(file.read_async(1).await.is_err());
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 @test

@@ -23,7 +23,6 @@ General compile-time source generation. See the [generator guide](../../language
 - [GenIndexEntry](codegen-gen-index-entry.md)
 - [GenLocation](codegen-gen-location.md)
 - [GenModule](codegen-gen-module.md)
-- [Primitive, CollectionKind, TypeRefKind, DeclKind](codegen-gen-model.md)
 - [GenParam](codegen-gen-param.md)
 - [GenSnapshot](codegen-gen-snapshot.md)
 - [GenSourceMap](codegen-gen-source-map.md)

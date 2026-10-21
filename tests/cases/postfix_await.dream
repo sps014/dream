@@ -15,7 +15,7 @@ async fun name(n: int): string {
     return "item" + n.to_string();
 }
 
-async fun main(): Result<bool, string> {
+async fun main(): Result<Unit, string> {
     let a = doubled(21).await?;
     System.println("doubled is " + a.to_string());
 

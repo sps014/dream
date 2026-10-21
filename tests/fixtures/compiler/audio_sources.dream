@@ -42,7 +42,7 @@ async fun audio_streaming_sources(base: string): void {
     options.max_compressed_bytes = 262144;
     let track = Audio(base + "/long.wav", options);
     track.load().await.unwrap();
-    Assert.is_true(Math.abs(track.duration.unwrap() - 10.0d) < 0.000001d);
+    Assert.is_true((track.duration.unwrap() - 10.0d).abs() < 0.000001d);
     Assert.eq(track.ready_state, AudioReadyState.Metadata);
     track.close();
 
@@ -137,12 +137,12 @@ async fun main(): void {
     let base = arguments[0];
     let local = Audio(arguments[1]);
     local.load().await.unwrap();
-    Assert.is_true(Math.abs(local.duration.unwrap() - 4.0d / 48000.0d) < 0.000001d);
+    Assert.is_true((local.duration.unwrap() - 4.0d / 48000.0d).abs() < 0.000001d);
     local.close();
 
     let remote = Audio(base + "/tone.mp3");
     remote.load().await.unwrap();
-    Assert.is_true(Math.abs(remote.duration.unwrap() - 4.0d / 48000.0d) < 0.000001d);
+    Assert.is_true((remote.duration.unwrap() - 4.0d / 48000.0d).abs() < 0.000001d);
     remote.src = base + "/malformed";
     Assert.eq(remote.load().await.unwrap_err().code(), "EFORMAT");
     remote.src = base + "/status";

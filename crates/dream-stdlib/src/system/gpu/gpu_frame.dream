@@ -65,18 +65,18 @@ public class GpuFrame {
 
     /// Draws `vertex_count` vertices with `pipeline` into `target`, for shaders that need no
     /// vertex buffers or bound resources.
-    public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<bool, GpuError> {
+    public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<Unit, GpuError> {
         if pipeline.device_id != this.device.id {
             return Result.Err(GpuError.WrongDevice("pipeline"));
         }
         let pass = this.pass;
         pass.set_pipeline(pipeline);
         pass.draw(vertex_count);
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Submits everything recorded for the frame and shows `target` in the window.
-    public async fun present(): Result<bool, GpuError> {
+    public async fun present(): Result<Unit, GpuError> {
         if !this.cleared {
             this.pass;
         }

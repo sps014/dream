@@ -4,7 +4,7 @@
 
 Call `range.iterator()` to create an independent cursor. Call `next()` until it returns `Option.None`; subsequent calls also return `None`.
 
-## `RangeIterator: Iterator<int>`
+## `RangeIterator`
 
 A cursor over an exclusive integer range, moving toward its end.
 

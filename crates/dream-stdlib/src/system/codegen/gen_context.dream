@@ -18,13 +18,13 @@ fun gen_snapshot_version(): int {
 /// Input and output of a source generator. Inspect selected declarations, request tools, report
 /// diagnostics, and add or replace generated source through this context.
 public class GenContext {
-    // The running generator's name and `module::name` identity.
+    /// The running generator's name and `module::name` identity.
     public generator_name: string;
 
     /// Stable identifier of the generator being executed.
     public generator_id: string;
 
-    // Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
+    /// Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).
     public target: string;
 
     snapshot: GenSnapshot;
@@ -48,7 +48,7 @@ public class GenContext {
         this.error_count = 0;
     }
 
-    // Reads `--snapshot` / `--result` from the program arguments.
+    /// Reads `--snapshot` / `--result` from the program arguments.
     public static async fun load(args: string[]): Result<GenContext, string> {
         let snapshot_path = "";
         let result_path = "";
@@ -94,7 +94,7 @@ public class GenContext {
         }
     }
 
-    // Declarations carrying `@A` (on the declaration or on one of its members).
+    /// Declarations carrying `@A` (on the declaration or on one of its members).
     public fun types_with<A>(): List<GenDecl> {
         let id = GenAttributes.id<A>();
         let out = List<GenDecl>();
@@ -106,7 +106,7 @@ public class GenContext {
         return out;
     }
 
-    // Top-level functions carrying `@A` (on the function or a parameter).
+    /// Top-level functions carrying `@A` (on the function or a parameter).
     public fun functions_with<A>(): List<GenFunction> {
         let id = GenAttributes.id<A>();
         let out = List<GenFunction>();
@@ -158,7 +158,7 @@ public class GenContext {
         return Option.None;
     }
 
-    // Every declaration selected by this generator's `@on_attribute` triggers.
+    /// Every declaration selected by this generator's `@on_attribute` triggers.
     public fun decls(): List<GenDecl> {
         return this.snapshot.decls;
     }
@@ -169,12 +169,12 @@ public class GenContext {
         return this.snapshot.phase;
     }
 
-    // Transitive dependencies of the declarations selected by this generator.
+    /// Transitive dependencies of the declarations selected by this generator.
     public fun referenced_decls(): List<GenDecl> {
         return this.snapshot.referenced;
     }
 
-    // Top-level functions referenced by selected declarations or their dependencies.
+    /// Top-level functions referenced by selected declarations or their dependencies.
     public fun referenced_functions(): List<GenFunction> {
         return this.snapshot.referenced_functions;
     }
@@ -195,7 +195,7 @@ public class GenContext {
         return Option.None;
     }
 
-    // Looks up a selected or referenced function, including methods.
+    /// Looks up a selected or referenced function, including methods.
     public fun find_function(borrow id: string): Option<GenFunction> {
         for (let f in this.snapshot.functions) {
             if f.id == id || f.overload == id {
@@ -224,22 +224,22 @@ public class GenContext {
         return Option.None;
     }
 
-    // The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
+    /// The inferred type, or an explicit Unknown when pre-analysis could not resolve it.
     public fun type_of(borrow expr: GenExpr): GenTypeRef {
         return expr.ty;
     }
 
-    // The inferred type attached to a statement, or Unknown when it has no value type.
+    /// The inferred type attached to a statement, or Unknown when it has no value type.
     public fun type_of(borrow stmt: GenStmt): GenTypeRef {
         return stmt.ty;
     }
 
-    // The resolved symbol identity, or an empty string for an unresolved expression.
+    /// The resolved symbol identity, or an empty string for an unresolved expression.
     public fun symbol_of(borrow expr: GenExpr): string {
         return expr.symbol;
     }
 
-    // Looks up a signature view anywhere in the pre-generation compilation.
+    /// Looks up a signature view anywhere in the pre-generation compilation.
     public fun find_symbol(borrow id: string): Option<GenSymbol> {
         for (let s in this.snapshot.symbols) {
             if s.id == id {
@@ -257,12 +257,12 @@ public class GenContext {
         return Option.None;
     }
 
-    // Errors found before generation within declarations selected by this generator's triggers.
+    /// Errors found before generation within declarations selected by this generator's triggers.
     public fun compilation_errors(): List<GenCompilationError> {
         return this.snapshot.compilation_errors;
     }
 
-    // Classes and structs implementing an interface, including inherited interface relations.
+    /// Classes and structs implementing an interface, including inherited interface relations.
     public fun implementations_of(borrow id: string): List<GenSymbol> {
         let out = List<GenSymbol>();
         for (let s in this.subtypes_of(id)) {
@@ -273,7 +273,7 @@ public class GenContext {
         return out;
     }
 
-    // Signature views whose declared interface ancestry includes the given identity.
+    /// Signature views whose declared interface ancestry includes the given identity.
     public fun subtypes_of(borrow id: string): List<GenSymbol> {
         let out = List<GenSymbol>();
         let known = List<string>();
@@ -302,12 +302,12 @@ public class GenContext {
         return out;
     }
 
-    // Every type in the program, by name and kind.
+    /// Every type in the program, by name and kind.
     public fun type_index(): List<GenIndexEntry> {
         return this.snapshot.index;
     }
 
-    // The index entry named `name`, if the program declares such a type.
+    /// The index entry named `name`, if the program declares such a type.
     public fun find_type(borrow name: string): Option<GenIndexEntry> {
         for (let e in this.snapshot.index) {
             if e.name == name {
@@ -317,24 +317,24 @@ public class GenContext {
         return Option.None;
     }
 
-    // `name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
+    /// `name { ... }` sites introduced by this generator's name (`@syntax_block` generators).
     public fun syntax_blocks(): List<GenSyntaxBlock> {
         return this.snapshot.blocks;
     }
 
-    // Calls of the functions named in this generator's `@on_call(...)`.
+    /// Calls of the functions named in this generator's `@on_call(...)`.
     public fun call_sites(): List<GenCallSite> {
         return this.snapshot.calls;
     }
 
-    // `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
+    /// `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
     public fun options<T>(): Result<T, ParseError> {
         return Json.deserialize<T>(Json.stringify(this.snapshot.options));
     }
 
-    // One option as text (`fallback` when unset).
+    /// One option as text (`fallback` when unset).
     public fun option_or(borrow key: string, fallback: string): string {
-        switch (this.snapshot.options[key]) {
+        switch (this.snapshot.options.get(key)) {
             Some(v) => {
                 switch (v.as_string()) {
                     Some(s) => {
@@ -357,7 +357,7 @@ public class GenContext {
         return this.snapshot.files;
     }
 
-    // Rewrites `block`'s site to the Dream expression `source`.
+    /// Rewrites `block`'s site to the Dream expression `source`.
     public fun replace(borrow block: GenSyntaxBlock, source: string): void {
         let out = JsonValue.dict();
         out["kind"] = JsonValue.from_string("replace");
@@ -376,7 +376,7 @@ public class GenContext {
         this.outputs.push(out);
     }
 
-    // Declared tools with the versions and fingerprints used in this compilation.
+    /// Declared tools with the versions and fingerprints used in this compilation.
     public fun tools(): List<GenToolInfo> {
         return this.snapshot.tools;
     }
@@ -431,7 +431,7 @@ public class GenContext {
         this.emit_asset(name, source, List<string>());
     }
 
-    // Embeds an artifact or tool output for the selected target triples or families.
+    /// Embeds an artifact or tool output for the selected target triples or families.
     public fun emit_asset(name: string, source: string, targets: List<string>): void {
         let out = JsonValue.dict();
         out["kind"] = JsonValue.from_string("asset");
@@ -452,7 +452,7 @@ public class GenContext {
         this.outputs.push(out);
     }
 
-    // Emits a non-Dream file with source mappings under this generator's directory.
+    /// Emits a non-Dream file with source mappings under this generator's directory.
     public fun emit_artifact(
         path: string,
         contents: string,
@@ -464,7 +464,7 @@ public class GenContext {
         out["path"] = JsonValue.from_string(path);
         out["contents"] = JsonValue.from_string(contents);
         out["mappings"] = map.mappings;
-        out["publish"] = JsonValue.boolean(publish);
+        out["publish"] = JsonValue.from_bool(publish);
         this.outputs.push(out);
     }
 
@@ -478,12 +478,12 @@ public class GenContext {
         out["path"] = JsonValue.from_string(path);
         out["contents"] = JsonValue.from_string(Encoding.base64_encode(contents));
         out["mappings"] = JsonValue.array();
-        out["publish"] = JsonValue.boolean(publish);
-        out["binary"] = JsonValue.boolean(true);
+        out["publish"] = JsonValue.from_bool(publish);
+        out["binary"] = JsonValue.from_bool(true);
         this.outputs.push(out);
     }
 
-    // Reports an artifact location through its source map to the originating Dream node.
+    /// Reports an artifact location through its source map to the originating Dream node.
     public fun error_in_artifact(path: string, line: int, column: int, message: string): void {
         let d = JsonValue.dict();
         d["severity"] = JsonValue.from_string("error");
@@ -495,7 +495,7 @@ public class GenContext {
         this.error_count = this.error_count + 1;
     }
 
-    // Extensions keep their declaring module, including its internal visibility and name scope.
+    /// Extensions keep their declaring module, including its internal visibility and name scope.
     public fun emit_extend(borrow decl: GenDecl, body: string): void {
         if !this.extends.contains(decl.module_name) {
             this.extends[decl.module_name] = StringBuilder();
@@ -520,53 +520,54 @@ public class GenContext {
         }
     }
 
-    // An error at the node with identity `target` (any model node's `id`), or at the generator
-    // itself for an empty `target`.
+    /// An error at the node with identity `target` (any model node's `id`), or at the generator
+    /// itself for an empty `target`.
     public fun error_at(borrow target: string, message: string): void {
         this.report("error", target, message);
     }
 
-    // Reports a warning at this model node.
+    /// A warning at the node with identity `target` (any model node's `id`), or at the generator
+    /// itself for an empty `target`.
     public fun warning_at(borrow target: string, message: string): void {
         this.report("warning", target, message);
     }
 
-    // Reports an error at this model node or at the generator when no node is supplied.
+    /// Reports an error at the generator itself; generation fails after the generator exits.
     public fun error(message: string): void {
         this.report("error", "", message);
     }
 
-    // Reports an error at this model node or at the generator when no node is supplied.
+    /// Reports an error at the syntax block's site; generation fails after the generator exits.
     public fun error(borrow block: GenSyntaxBlock, message: string): void {
         this.report("error", block.id, message);
     }
 
-    // Reports an error at this model node or at the generator when no node is supplied.
+    /// Reports an error at the declaration; generation fails after the generator exits.
     public fun error(borrow decl: GenDecl, message: string): void {
         this.report("error", decl.id, message);
     }
 
-    // Reports an error at this model node or at the generator when no node is supplied.
+    /// Reports an error at the field; generation fails after the generator exits.
     public fun error(borrow field: GenField, message: string): void {
         this.report("error", field.id, message);
     }
 
-    // Reports an error at this model node or at the generator when no node is supplied.
+    /// Reports an error at the call site; generation fails after the generator exits.
     public fun error(borrow call: GenCallSite, message: string): void {
         this.report("error", call.id, message);
     }
 
-    // Reports a warning at this model node.
+    /// Reports a warning at the declaration without failing generation.
     public fun warning(borrow decl: GenDecl, message: string): void {
         this.report("warning", decl.id, message);
     }
 
-    // Returns the requested model information.
+    /// Whether this generator has reported any error so far.
     public fun has_errors(): bool {
         return this.error_count > 0;
     }
 
-    // A line shown with `dream -v` / `dream generate --explain`.
+    /// A line shown with `dream -v` / `dream generate --explain`.
     public fun log(message: string): void {
         this.logs.push(JsonValue.from_string(message));
     }

@@ -49,7 +49,7 @@ Async methods below also accept an optional trailing `token: Option<Cancellation
 | `TcpListener.bind(host, port)` | `Result<TcpListener, IoError>` (async) | Listens on `host`; port `0` picks a free port. |
 | `local_host` / `local_port` | `string` / `int` | The bound address and actual port. |
 | `accept(timeout_ms = 0)` | `Result<TcpStream, IoError>` (async) | Waits for the next connection. |
-| `close()` | `Result<bool, IoError>` | Stops listening and cancels pending accepts. |
+| `close()` | `Result<Unit, IoError>` | Stops listening and cancels pending accepts. |
 
 | `TcpStream` member | Returns | Effect |
 | --- | --- | --- |
@@ -59,11 +59,11 @@ Async methods below also accept an optional trailing `token: Option<Cancellation
 | `read_async(max_bytes)` | `Result<byte[], IoError>` (async) | Reads up to `max_bytes`; empty means the peer closed. |
 | `read_with_timeout(max_bytes, timeout_ms)` | `Future<Result<byte[], IoError>>` | Same as `read_async` with a deadline. |
 | `write_async(bytes)` | `Result<int, IoError>` (async) | Writes some bytes and returns the count. |
-| `write_all_async(bytes)` | `Result<bool, IoError>` (async) | Retries until every byte is written. |
-| `flush_async()` | `Result<bool, IoError>` (async) | Checks the socket is open; writes are not buffered. |
-| `shutdown_write()` | `Result<bool, IoError>` | Ends the sending direction and keeps reading open. |
-| `set_nodelay(enabled)` | `Result<bool, IoError>` | Turns `TCP_NODELAY` on or off. |
-| `close()` | `Result<bool, IoError>` | Closes the socket and wakes pending operations. |
+| `write_all_async(bytes)` | `Result<Unit, IoError>` (async) | Retries until every byte is written. |
+| `flush_async()` | `Result<Unit, IoError>` (async) | Checks the socket is open; writes are not buffered. |
+| `shutdown_write()` | `Result<Unit, IoError>` | Ends the sending direction and keeps reading open. |
+| `set_nodelay(enabled)` | `Result<Unit, IoError>` | Turns `TCP_NODELAY` on or off. |
+| `close()` | `Result<Unit, IoError>` | Closes the socket and wakes pending operations. |
 
 UDP `send(host, port, data)` sends one message, including an empty message. `receive(max_bytes)` returns `UdpDatagram` with `data`, sender `host` and `port`, and an explicit `truncated` flag. Empty messages are valid and never denote EOF. The portable send limit is 65507 bytes; receive buffers support up to 65535 bytes. One receive can be pending per socket. `set_broadcast` and `set_ttl` expose supported options. Node retains up to 64 queued datagrams and drops excess arrivals, consistent with UDP's lossy transport contract. Deadlines, cancellation, and closure wake pending receives.
 
@@ -73,9 +73,9 @@ UDP `send(host, port, data)` sends one message, including an empty message. `rec
 | `local_host` / `local_port` | `string` / `int` | The bound address and actual port. |
 | `send(host, port, data, timeout_ms = 0)` | `Result<int, IoError>` (async) | Sends one datagram of at most 65507 bytes. |
 | `receive(max_bytes = 65535, timeout_ms = 0)` | `Result<UdpDatagram, IoError>` (async) | Waits for one datagram. |
-| `set_broadcast(enabled)` | `Result<bool, IoError>` | Allows or forbids sending to broadcast addresses. |
-| `set_ttl(ttl)` | `Result<bool, IoError>` | Sets the outgoing time-to-live, from 1 to 255. |
-| `close()` | `Result<bool, IoError>` | Closes the socket and wakes pending receives. |
+| `set_broadcast(enabled)` | `Result<Unit, IoError>` | Allows or forbids sending to broadcast addresses. |
+| `set_ttl(ttl)` | `Result<Unit, IoError>` | Sets the outgoing time-to-live, from 1 to 255. |
+| `close()` | `Result<Unit, IoError>` | Closes the socket and wakes pending receives. |
 
 | `UdpDatagram` field | Type | Meaning |
 | --- | --- | --- |
@@ -113,8 +113,8 @@ fun main(): void {
 | `Compression.writer(destination, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionWriter, IoError>` | Creates an encoder writing to `destination`. |
 | `Compression.reader(source, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionReader, IoError>` | Creates a decoder reading from `source`. |
 | `writer.write(bytes)` | `Result<int, IoError>` | Compresses up to 64 KiB and returns how many bytes it consumed. |
-| `writer.flush()` | `Result<bool, IoError>` | Writes pending data without ending the stream. |
-| `writer.finish()` | `Result<bool, IoError>` | Writes the trailer and flushes. |
+| `writer.flush()` | `Result<Unit, IoError>` | Writes pending data without ending the stream. |
+| `writer.finish()` | `Result<Unit, IoError>` | Writes the trailer and flushes. |
 | `reader.read(max_bytes)` | `Result<byte[], IoError>` | Returns decoded bytes; empty at the end of the stream. |
 | `close()` | `void` | Discards codec state without closing the borrowed stream. |
 

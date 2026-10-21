@@ -15,14 +15,14 @@ public class AudioAnalyzer {
     static extern fun fft_host(borrow samples: float[], size: int): float[];
 
     /// Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.
-    public fun set_fft_size(size: int): Result<bool, AudioError> {
+    public fun set_fft_size(size: int): Result<Unit, AudioError> {
         if size < 32 || size > 32768 || (size & (size - 1)) != 0 {
             return Result.Err(
                 AudioError("EINVAL", "FFT size must be a power of two from 32 to 32768")
             );
         }
         this.size = size;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Selects Hann tapering or a rectangular window.
@@ -46,7 +46,7 @@ public class AudioAnalyzer {
             return Result.Err(AudioError("EINVAL", "PCM contains an incomplete frame"));
         }
         for (let sample in samples) {
-            if sample != sample || Math.abs((double)sample) > 3.4028234663852886e38d {
+            if sample != sample || ((double)sample).abs() > 3.4028234663852886e38d {
                 return Result.Err(AudioError("EINVAL", "PCM samples must be finite"));
             }
         }
@@ -70,8 +70,8 @@ public class AudioAnalyzer {
             }
             waveform[i] = (float)value;
             squares = squares + value * value;
-            if Math.abs(value) > peak {
-                peak = Math.abs(value);
+            if value.abs() > peak {
+                peak = value.abs();
             }
             let weight = 1.0d;
             if this.window == AudioWindow.Hann {

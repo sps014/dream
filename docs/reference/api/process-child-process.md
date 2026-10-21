@@ -43,7 +43,7 @@ Closes stdin after pending writes, allowing commands waiting for input EOF to fi
 ```dream
 public fun close_stdin(
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, ProcessError>>
+): Future<Result<Unit, ProcessError>>
 ```
 
 ## `wait`
@@ -59,5 +59,5 @@ public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<i
 Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
 
 ```dream
-public fun close(): Future<Result<bool, ProcessError>>
+public fun close(): Future<Result<Unit, ProcessError>>
 ```

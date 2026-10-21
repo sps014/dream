@@ -1,6 +1,6 @@
 module system.net;
 
-// An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
+/// An HTTP response byte stream. One read may be pending; cancellation can consume bytes.
 public class HttpBody: AsyncReader {
     id: int;
 
@@ -18,8 +18,8 @@ public class HttpBody: AsyncReader {
     @runtime("netBodyClose")
     static extern fun close_host(id: int): void;
 
-    // Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
-    // Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
+    /// Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.
+    /// Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.
     public async unique fun read_async(
         max_bytes: int,
         token: Option<CancellationToken> = Option.None
@@ -49,12 +49,12 @@ public class HttpBody: AsyncReader {
         return Result.Ok(result.unwrap());
     }
 
-    // Releases the response transport and cancels a pending read; safe to call repeatedly.
-    public fun close(): Result<bool, HttpError> {
+    /// Releases the response transport and cancels a pending read; safe to call repeatedly.
+    public fun close(): Result<Unit, HttpError> {
         if this.id > 0 {
             HttpBody.close_host(this.id);
             this.id = 0;
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

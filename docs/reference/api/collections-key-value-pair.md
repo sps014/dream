@@ -14,7 +14,7 @@ public struct KeyValuePair<K, V>
 
 ## `key`
 
-Key associated with this entry.
+The key under which `value` is stored.
 
 ```dream
 public key: K
@@ -22,7 +22,7 @@ public key: K
 
 ## `value`
 
-Value carried by this entry.
+The value stored under `key`.
 
 ```dream
 public value: V

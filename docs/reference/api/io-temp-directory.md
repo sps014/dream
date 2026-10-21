@@ -41,5 +41,5 @@ public static fun create_in(directory: string): Result<TempDirectory, IoError>
 Removes the directory and its contents; repeated successful cleanup is a no-op.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

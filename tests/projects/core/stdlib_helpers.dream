@@ -24,27 +24,27 @@ fun c20a_body(): void {
         "a": 1
     };
     m.get_or_insert("b", () => 2);
-    c20a_verify_observation((m.get_or("b", 0)).to_string());
+    c20a_verify_observation((m.get("b").unwrap_or(0)).to_string());
     c20a_verify_observation((Math.log(Math.E) > 0.9d && Math.log(Math.E) < 1.1d).to_string());
-    c20a_verify_observation(((int)Math.clamp(5.0d, 0.0d, 3.0d)).to_string());
+    c20a_verify_observation(((int)(5.0d).clamp(0.0d, 3.0d)).to_string());
     let rng = Random(1u);
     let bytes = rng.next_bytes(4);
     c20a_verify_observation((bytes.length).to_string());
     let j = Json.deserialize<JsonValue>("{\"k\":[1]}").unwrap();
     c20a_verify_observation((j.as_map().is_some()).to_string());
-    switch (j["k"]) {
+    switch (j.get("k")) {
         Some(arr) => c20a_verify_observation((arr.as_array().unwrap().length).to_string()),
         None => c20a_verify_observation((0).to_string()),
     }
     j.remove("k");
-    c20a_verify_observation((j.has("k")).to_string());
+    c20a_verify_observation((j.contains("k")).to_string());
     c20a_verify_observation((Encoding.utf8_encode("é").length).to_string());
     let d = Duration.from_seconds(2L);
-    c20a_verify_observation((d.as_millis()).to_string());
+    c20a_verify_observation((d.millis).to_string());
     let dt = DateTime.from_epoch_millis(0L);
     c20a_verify_observation((dt.epoch_seconds).to_string());
     c20a_verify_observation(
-        (System.has_env("PATH") || System.temp_dir.is_empty() == false).to_string()
+        (System.env("PATH").is_some() || System.temp_dir.is_empty() == false).to_string()
     );
 }
 

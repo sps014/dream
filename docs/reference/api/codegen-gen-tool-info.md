@@ -12,7 +12,7 @@ public class GenToolInfo
 
 ## `name`
 
-Name identifying this entry.
+Tool name as declared with `@uses_tool`.
 
 ```dream
 public name: string

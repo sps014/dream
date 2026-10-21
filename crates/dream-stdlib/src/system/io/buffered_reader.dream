@@ -1,7 +1,7 @@
 module system.io;
 
-// Reads ahead from a borrowed reader without closing it; use this wrapper for positioning
-// while buffered bytes remain, or recover them before accessing the source directly.
+/// Reads ahead from a borrowed reader without closing it; use this wrapper for positioning
+/// while buffered bytes remain, or recover them before accessing the source directly.
 @allow_cycle
 public class BufferedReader: Reader {
     source: Reader;
@@ -9,7 +9,7 @@ public class BufferedReader: Reader {
     buffer: byte[];
     offset: int;
 
-    // Wraps `source` with an 8 KiB default buffer; nonpositive sizes fail on reads.
+    /// Wraps `source` with an 8 KiB default buffer; nonpositive sizes fail on reads.
     public constructor(source: Reader, buffer_size: int = 8192) {
         this.source = source;
         this.capacity = buffer_size;
@@ -31,8 +31,8 @@ public class BufferedReader: Reader {
         return Result.Ok(this.offset < this.buffer.length);
     }
 
-    // Returns up to `max_bytes` from buffered input, refilling as needed; may return fewer.
-    // Zero is a no-op, negative sizes are invalid, and empty success for positive sizes is EOF.
+    /// Returns up to `max_bytes` from buffered input, refilling as needed; may return fewer.
+    /// Zero is a no-op, negative sizes are invalid, and empty success for positive sizes is EOF.
     public fun read(max_bytes: int): Result<byte[], IoError> {
         if this.capacity <= 0 || max_bytes < 0 {
             return Result.Err(IoError.invalid("", "invalid buffer or read size"));
@@ -50,9 +50,9 @@ public class BufferedReader: Reader {
         return Result.Ok(bytes);
     }
 
-    // Returns a line without LF or CRLF, preserving standalone CR and final unterminated lines.
-    // Returns `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte when the pre-LF
-    // byte count exceeds `max_bytes` (default 1 MiB, including any CR).
+    /// Returns a line without LF or CRLF, preserving standalone CR and final unterminated lines.
+    /// Returns `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte when the pre-LF
+    /// byte count exceeds `max_bytes` (default 1 MiB, including any CR).
     public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError> {
         if max_bytes < 0 {
             return Result.Err(IoError.invalid("", "negative line limit"));
@@ -81,22 +81,22 @@ public class BufferedReader: Reader {
         }
     }
 
-    // Seeks the source and discards buffered input only after success.
-    // Unsupported or failed seeks preserve unread buffered bytes.
-    public fun seek(position: long): Result<bool, IoError> {
+    /// Seeks the source and discards buffered input only after success.
+    /// Unsupported or failed seeks preserve unread buffered bytes.
+    public fun seek(position: long): Result<Unit, IoError> {
         this.source.seek(position)?;
         this.buffer = [];
         this.offset = 0;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Returns the source position minus unread buffered bytes; propagates positioning errors.
+    /// Returns the source position minus unread buffered bytes; propagates positioning errors.
     public fun tell(): Result<long, IoError> {
         return Result.Ok(this.source.tell()? -(long)(this.buffer.length - this.offset));
     }
 
-    // Copies and removes unread buffered bytes without repositioning the source.
-    // Recover these bytes before bypassing this wrapper to access the source directly.
+    /// Copies and removes unread buffered bytes without repositioning the source.
+    /// Recover these bytes before bypassing this wrapper to access the source directly.
     public fun take_buffered(): byte[] {
         let bytes = Streams.slice(this.buffer, this.offset, this.buffer.length - this.offset);
         this.buffer = [];

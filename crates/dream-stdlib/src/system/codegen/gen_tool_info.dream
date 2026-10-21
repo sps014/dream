@@ -6,7 +6,7 @@ import system.json;
 
 /// Identity and configuration of an available generation tool.
 public class GenToolInfo {
-    /// Name identifying this entry.
+    /// Tool name as declared with `@uses_tool`.
     public name: string;
 
     /// Version identifying this API or snapshot format.

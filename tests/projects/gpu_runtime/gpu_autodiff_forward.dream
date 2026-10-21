@@ -47,8 +47,8 @@ fun forward_ok<T>(result: Result<T, GpuError>, what: string): T {
 
 // GPU results are single precision; the references are double-precision central differences.
 fun forward_close(actual: float, expected: double, what: string): void {
-    let tolerance = 2e-3d * Math.max(1.0d, Math.abs(expected));
-    if Math.abs((double)actual - expected) > tolerance {
+    let tolerance = 2e-3d * (1.0d).max(expected.abs());
+    if ((double)actual - expected).abs() > tolerance {
         Assert.fail(what + ": got " + actual.to_string() + ", expected " + expected.to_string());
     }
 }

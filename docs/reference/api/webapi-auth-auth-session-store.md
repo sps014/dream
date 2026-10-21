@@ -17,7 +17,7 @@ public interface AuthSessionStore
 Stores a new refresh session; returns an error if its token hash already exists.
 
 ```dream
-async unique fun create(session: AuthSession): Result<bool, AuthError>
+async unique fun create(session: AuthSession): Result<Unit, AuthError>
 ```
 
 ## `find`
@@ -45,7 +45,7 @@ async unique fun rotate(
 Revokes all refresh sessions in `family`.
 
 ```dream
-async unique fun revoke(family: string): Result<bool, AuthError>
+async unique fun revoke(family: string): Result<Unit, AuthError>
 ```
 
 ## `active`
@@ -64,7 +64,7 @@ Stores a login transaction under `state`; duplicate state returns an error.
 async unique fun put_transaction(
     state: string,
     transaction: OidcTransaction
-): Result<bool, AuthError>
+): Result<Unit, AuthError>
 ```
 
 ## `take_transaction`

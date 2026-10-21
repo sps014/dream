@@ -10,7 +10,7 @@ import system.text;
 // Output lines follow tests/bench/microbenches.dream: `bench <name> ns_total=… iters=… checksum=…`.
 // Inputs come from fixed LCG streams (plus `DREAM_BENCH_SEED & 1`).
 let measuring: bool = true;
-let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let counters_on: bool = System.env("DREAM_BENCH_COUNTERS").unwrap_or("") == "1";
 let last_allocations: long = 0;
 let last_retains: long = 0;
 let last_releases: long = 0;
@@ -63,7 +63,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 }
 
 fun seed_bit(): int {
-    return int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
+    return int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
 }
 
 class Lcg {
@@ -226,7 +226,7 @@ fun bench_log_processor(iters: int): void {
             if line.length > 0 {
                 let parts = line.split(' ');
                 let key = parts[1] + " " + parts[2];
-                by_path[key] = by_path.get_or(key, 0) + 1;
+                by_path[key] = by_path.get(key).unwrap_or(0) + 1;
                 if status_re.test(line) {
                     errors = errors + 1;
                 }
@@ -517,7 +517,7 @@ async fun bench_task_parallel(iters: int): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-let selected_benches = System.env_or("DREAM_BENCH_ONLY", "");
+let selected_benches = System.env("DREAM_BENCH_ONLY").unwrap_or("");
 
 fun selected(borrow name: string): bool {
     return selected_benches.length == 0 || ("," + selected_benches + ",").contains(
@@ -547,7 +547,7 @@ async fun run_suite(scale: int): void {
 }
 
 fun bench_passes(): int {
-    let n = int.parse(System.env_or("DREAM_BENCH_PASSES", "1")).unwrap_or(1);
+    let n = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("1")).unwrap_or(1);
     if n < 1 {
         return 1;
     }

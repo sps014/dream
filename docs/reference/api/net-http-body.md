@@ -28,5 +28,5 @@ public async unique fun read_async(
 Releases the response transport and cancels a pending read; safe to call repeatedly.
 
 ```dream
-public fun close(): Result<bool, HttpError>
+public fun close(): Result<Unit, HttpError>
 ```

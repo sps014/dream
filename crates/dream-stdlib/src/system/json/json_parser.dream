@@ -287,7 +287,7 @@ internal class JsonParser {
             }
         }
 
-        return JsonValue.number(sign * value);
+        return JsonValue.from_double(sign * value);
     }
 
     /// Reads a JSON array and advances the cursor; malformed input marks parsing as failed.
@@ -363,7 +363,7 @@ internal class JsonParser {
     public fun parse_value(): JsonValue {
         this.skip_ws();
         if this.pos >= this.len() {
-            return JsonValue.none();
+            return JsonValue.null();
         }
         let c = this.b();
         if c == 123 {
@@ -376,13 +376,13 @@ internal class JsonParser {
             return JsonValue.from_string(this.parse_string());
         }
         if c == 116 {
-            return this.keyword(4, JsonValue.boolean(true));
+            return this.keyword(4, JsonValue.from_bool(true));
         }
         if c == 102 {
-            return this.keyword(5, JsonValue.boolean(false));
+            return this.keyword(5, JsonValue.from_bool(false));
         }
         if c == 110 {
-            return this.keyword(4, JsonValue.none());
+            return this.keyword(4, JsonValue.null());
         }
         return this.parse_number();
     }

@@ -61,10 +61,10 @@ impl<'a> Analyzer<'a> {
             return Ok(target);
         }
 
-        // `Bytes.toWire<T>(v)` / `Bytes.fromWire<T>(s)`: the `Task` wire marshal. `T = string`
+        // `Bytes.to_wire<T>(v)` / `Bytes.from_wire<T>(s)`: the `Task` wire marshal. `T = string`
         // is an identity passthrough (the wire already is a `string`); any other `T` must be
         // `unmanaged` and goes through a raw byte-blit (`Bytes.of`/`to`) re-encoded as a
-        // codepoint-per-byte `string` (`Bytes.toWireString`/`fromWireString`).
+        // codepoint-per-byte `string` (`Bytes.to_wire_string`/`from_wire_string`).
         if byte_op == Some(intrinsics::IntrinsicOp::WireEncode) {
             let named = |name: &str| -> Type {
                 let mut t = method.clone();
@@ -101,7 +101,7 @@ impl<'a> Analyzer<'a> {
             } else {
                 self.require_unmanaged_or_array(
                     &payload,
-                    "Bytes.toWire",
+                    "Bytes.to_wire",
                     &method.position,
                     diagnostics,
                 );
@@ -110,7 +110,7 @@ impl<'a> Analyzer<'a> {
                 let bytes_ty = self.bytes_type();
                 self.hir_set_type_method_call(
                     bytes_ty,
-                    "toWireString",
+                    "to_wire_string",
                     vec![bytes],
                     &named("string"),
                 );
@@ -122,7 +122,7 @@ impl<'a> Analyzer<'a> {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => {
                     diagnostics.report_error(
-                        "'Bytes.fromWire' requires a type argument, e.g. Bytes.fromWire<T>(text)"
+                        "'Bytes.from_wire' requires a type argument, e.g. Bytes.from_wire<T>(text)"
                             .to_string(),
                         Some(method.position),
                     );
@@ -141,7 +141,7 @@ impl<'a> Analyzer<'a> {
             } else {
                 self.require_unmanaged_or_array(
                     &target,
-                    "Bytes.fromWire",
+                    "Bytes.from_wire",
                     &method.position,
                     diagnostics,
                 );
@@ -153,7 +153,7 @@ impl<'a> Analyzer<'a> {
                 let bytes_ty = self.bytes_type();
                 self.hir_set_type_method_call(
                     bytes_ty,
-                    "fromWireString",
+                    "from_wire_string",
                     vec![text],
                     &Type::Array(Box::new(named("byte"))),
                 );

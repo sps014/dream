@@ -1,4 +1,5 @@
 use super::*;
+use dream_abi::names::THIS_NAME;
 use dream_syntax::nodes::{LambdaBody, LambdaNode, ParameterNode, StatementNode};
 
 pub(super) const CHANNEL: &str = "$yield_channel";
@@ -67,7 +68,7 @@ impl<'a> Analyzer<'a> {
             let original = param.name.clone();
             let mut captured = original.clone();
             captured.text = format!("$yield_capture_{}", original.text);
-            if original.text == "this" {
+            if original.text == THIS_NAME {
                 factory_body.push(StatementNode::Declaration(
                     captured.clone(),
                     Some(param.type_.clone()),

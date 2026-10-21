@@ -1,6 +1,6 @@
 module system.core;
 
-// Reentrant mutual-exclusion lock for `@shared` critical sections.
+/// Reentrant mutual-exclusion lock for `@shared` critical sections.
 shared public class Lock {
     /// Waits until the synchronization object can be acquired.
     @intrinsic(Intrinsic.SharedLockAcquire)
@@ -18,26 +18,26 @@ shared public class Lock {
     @intrinsic(Intrinsic.SharedLockTryAcquireFor)
     public static extern fun host_try_acquire_for(borrow target: Lock, timeout_ms: int): bool;
 
-    // Reentrant: the same thread may
-    // call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and
-    // must call `release` the same number of times to fully release it.
+    /// Reentrant: the same thread may
+    /// call `acquire` again before releasing (matching `lock (obj) { ... }`'s own semantics), and
+    /// must call `release` the same number of times to fully release it.
     public fun acquire(): void {
         Lock.host_acquire(this);
     }
 
-    // One-shot acquire: returns `true` on success (including a reentrant bump), `false` if another
-    // thread currently holds the lock.
+    /// One-shot acquire: returns `true` on success (including a reentrant bump), `false` if another
+    /// thread currently holds the lock.
     public fun try_acquire(): bool {
         return Lock.host_try_acquire(this);
     }
 
-    // Waits up to `timeout_ms` milliseconds to acquire. `timeout_ms <= 0` is a single try.
-    // Best-effort under contention: spurious wakes do not shrink the remaining wait budget.
+    /// Waits up to `timeout_ms` milliseconds to acquire. `timeout_ms <= 0` is a single try.
+    /// Best-effort under contention: spurious wakes do not shrink the remaining wait budget.
     public fun try_acquire_for(timeout_ms: int): bool {
         return Lock.host_try_acquire_for(this, timeout_ms);
     }
 
-    // Releasing without ownership is a runtime panic, including release of an unheld lock.
+    /// Releasing without ownership is a runtime panic, including release of an unheld lock.
     public fun release(): void {
         Lock.host_release(this);
     }

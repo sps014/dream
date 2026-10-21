@@ -1,31 +1,38 @@
 module system;
 
-// A signed span of time stored as milliseconds.
+/// A signed span of time with millisecond precision. Add one to a `DateTime` with
+/// `DateTime.add`, or combine durations with `add` and `sub`.
 public struct Duration {
-    /// Duration in milliseconds.
+    /// Length of the span in milliseconds; negative values point backward in time.
     public millis: long;
 
-    /// Creates a `Duration` with `millis`.
+    /// Creates a duration of `millis` milliseconds.
     public constructor(millis: long) {
         this.millis = millis;
     }
 
-    /// Creates a duration from milliseconds.
-    public static fun from_millis(ms: long): Duration {
-        return Duration(ms);
-    }
-
-    /// Creates a duration from seconds.
+    /// Creates a duration of `seconds` whole seconds.
     public static fun from_seconds(seconds: long): Duration {
         return Duration(seconds * 1000L);
     }
 
-    /// Returns the duration in milliseconds.
-    public fun as_millis(): long {
-        return this.millis;
+    /// Creates a duration of `minutes` whole minutes.
+    public static fun from_minutes(minutes: long): Duration {
+        return Duration(minutes * 60000L);
     }
 
-    /// Returns the duration in whole seconds.
+    /// Creates a duration of `hours` whole hours.
+    public static fun from_hours(hours: long): Duration {
+        return Duration(hours * 3600000L);
+    }
+
+    /// Creates a duration of `days` 24-hour days. Calendar days that cross a daylight-saving
+    /// change are not adjusted.
+    public static fun from_days(days: long): Duration {
+        return Duration(days * 86400000L);
+    }
+
+    /// Returns the duration in whole seconds, truncated toward zero.
     public fun as_seconds(): long {
         return this.millis / 1000L;
     }

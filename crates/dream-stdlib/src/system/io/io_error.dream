@@ -1,61 +1,61 @@
 module system.io;
 
-// Filesystem / path failure implementing `Error`.
+/// Filesystem / path failure implementing `Error`.
 public class IoError: Error {
-    // Path involved in the failure (may be empty for non-path errors).
+    /// Path involved in the failure (may be empty for non-path errors).
     public path: string;
 
     _code: string;
     _message: string;
 
-    // Creates an error with path, machine code, and message.
+    /// Creates an error with path, machine code, and message.
     public constructor(path: string, code: string, message: string) {
         this.path = path;
         this._code = code;
         this._message = message;
     }
 
-    // Human-readable description.
+    /// Human-readable explanation of the I/O failure, suitable for logs and error output.
     public fun message(): string {
         return this._message;
     }
 
-    // Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
+    /// Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).
     public fun code(): string {
         return this._code;
     }
 
-    // File or directory does not exist.
+    /// File or directory does not exist.
     public static fun not_found(path: string): IoError {
         return IoError(path, "ENOENT", "file not found: " + path);
     }
 
-    // Permission was denied for the operation.
+    /// Permission was denied for the operation.
     public static fun permission_denied(path: string): IoError {
         return IoError(path, "EACCES", "permission denied: " + path);
     }
 
-    // Generic I/O failure with a custom message.
+    /// Generic I/O failure with a custom message.
     public static fun other(path: string, message: string): IoError {
         return IoError(path, "EIO", message);
     }
 
-    // Path already exists when exclusive create was requested.
+    /// Path already exists when exclusive create was requested.
     public static fun exists(path: string): IoError {
         return IoError(path, "EEXIST", "already exists: " + path);
     }
 
-    // Creates an `ECLOSED` error for an operation on a closed resource.
+    /// Creates an `ECLOSED` error for an operation on a closed resource.
     public static fun closed(path: string): IoError {
         return IoError(path, "ECLOSED", "resource is closed");
     }
 
-    // Creates an `EINVAL` error for an invalid argument or operation.
+    /// Creates an `EINVAL` error for an invalid argument or operation.
     public static fun invalid(path: string, message: string): IoError {
         return IoError(path, "EINVAL", message);
     }
 
-    // Cooperative cancellation (`CancellationToken`).
+    /// Cooperative cancellation (`CancellationToken`).
     public static fun cancelled(): IoError {
         return IoError("", "ECANCELLED", "operation cancelled");
     }

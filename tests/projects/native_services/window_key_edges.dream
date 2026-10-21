@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_key_edges(): void {
-    let window = Window.headless(WindowDesc.of("keys", 320, 200));
+    let window = Window.headless(WindowDesc("keys", 320, 200));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.A, "", KeyModifiers.None, false)));
     let first = window.poll();
     Assert.is_true(first.keyboard.is_down(KeyCode.A));
@@ -30,7 +30,7 @@ fun window_key_edges(): void {
     Assert.is_true(first.keyboard.pressed(KeyCode.A));
 
     // A tap between two polls reports both edges; a repeat never counts as a press.
-    let tapped = Window.headless(WindowDesc.of("tap", 320, 200));
+    let tapped = Window.headless(WindowDesc("tap", 320, 200));
     tapped.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
     tapped.simulate(WindowEvent.KeyUp(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
     let tap = tapped.poll();

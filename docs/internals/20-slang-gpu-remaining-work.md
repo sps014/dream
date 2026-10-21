@@ -115,7 +115,7 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 - Cooperative types: cooperative matrices are 8x8 only on Metal and unavailable on D3D12 (Slang lowers `CoopMat` only for SPIR-V, Metal and CUDA); cooperative vectors have no Metal or WebGPU lowering. Shaders that use them cannot also target D3D12 or CUDA in a portable test, because those targets need `dxc` and NVRTC on the build machine.
 - Ray-tracing stages cannot target Metal; non-raygen stages cannot take resource parameters; `workgroup_count()` is rejected on Metal and WebGPU.
 - Target errors point at the module or function declaration because attribute nodes have no ids.
-- **Done.** Expression emission lives in `slang_expr.dream`; statement emission and shared body state remain in `slang_body.dream`.
+- **Done.** Expression emission lives in `slang_body_expr.dream`; statement emission and shared body state remain in `slang_body.dream`.
 
 ### Native host
 

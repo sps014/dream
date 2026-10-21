@@ -58,9 +58,9 @@ public class GpuSurface {
 
     /// Resizes later frames to `width` by `height` physical pixels, the size carried by
     /// `WindowEvent.Resized`. Non-positive sizes, such as a minimized window's, are ignored.
-    public fun resize(width: int, height: int): Result<bool, GpuError> {
+    public fun resize(width: int, height: int): Result<Unit, GpuError> {
         if width <= 0 || height <= 0 {
-            return Result.Ok(false);
+            return Result.Ok(Unit());
         }
         if this.handle == 0 {
             return Result.Err(GpuError.SurfaceLost("the surface was released"));
@@ -70,7 +70,7 @@ public class GpuSurface {
         }
         this.surface_width = width;
         this.surface_height = height;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Waits for the next frame target and starts a frame that clears it to `clear`. With
@@ -94,11 +94,11 @@ public class GpuSurface {
         return Result.Ok(GpuFrame(this.device, this, texture, clear));
     }
 
-    internal async fun present(): Result<bool, GpuError> {
+    internal async fun present(): Result<Unit, GpuError> {
         if GpuHost.surface_present(this.handle).await != 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     del() {

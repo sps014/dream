@@ -12,16 +12,20 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(signatures, ["public class Visible", "public fun answer(): int"])
 
     def test_shared_owner_visibility(self):
-        source = "shared internal class Hidden {\n    public fun helper(): int { return 0; }\n}\n// A shared endpoint.\nshared public class Sender<T> {\n    // Sends a value.\n    public fun send(value: T): bool { return true; }\n}"
+        source = "shared internal class Hidden {\n    public fun helper(): int { return 0; }\n}\n/// A shared endpoint.\nshared public class Sender<T> {\n    /// Sends a value.\n    public fun send(value: T): bool { return true; }\n}"
         entries = declarations(source)
         self.assertEqual([entry["signature"] for entry in entries], ["shared public class Sender<T>", "public fun send(value: T): bool"])
         self.assertEqual(entries[0]["description"], "A shared endpoint.")
 
     def test_interface_requirements_and_comments(self):
-        source = "public interface Reader {\n    // Reads one value.\n    fun read(): int;\n}"
+        source = "public interface Reader {\n    /// Reads one value.\n    // Implementation note.\n    fun read(): int;\n}"
         entries = declarations(source)
         self.assertEqual(entries[-1]["signature"], "fun read(): int")
         self.assertEqual(entries[-1]["description"], "Reads one value.")
+
+    def test_plain_comment_is_not_documentation(self):
+        source = "// Implementation note.\npublic fun helper(): int { return 0; }"
+        self.assertEqual(declarations(source)[0]["description"], "")
 
     def test_interface_receiver_and_async_qualifiers(self):
         source = "public interface Streams {\n    unique fun read(): int;\n    async unique fun write(): int;\n    borrow fun tell(): int;\n}"

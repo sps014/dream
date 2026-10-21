@@ -20,7 +20,7 @@ public id: string
 
 ## `name`
 
-Name identifying this entry.
+Unqualified attribute name as written, without the `@` (`json`).
 
 ```dream
 public name: string
@@ -36,7 +36,7 @@ public args: List<GenAttrArg>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenAttribute` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(id: string, name: string, args: List<GenAttrArg>)
@@ -44,7 +44,7 @@ public constructor(id: string, name: string, args: List<GenAttrArg>)
 
 ## `string_arg`
 
-Returns the requested model information.
+Argument `i` as unquoted text, or an empty string when there is no such argument.
 
 ```dream
 public fun string_arg(i: int): string
@@ -52,7 +52,7 @@ public fun string_arg(i: int): string
 
 ## `int_arg`
 
-Returns the requested model information.
+Argument `i` parsed as an `int`, or `0` when it is missing or not an integer.
 
 ```dream
 public fun int_arg(i: int): int
@@ -60,7 +60,7 @@ public fun int_arg(i: int): int
 
 ## `long_arg`
 
-Returns the requested model information.
+Argument `i` parsed as a `long`, or `0` when it is missing or not an integer.
 
 ```dream
 public fun long_arg(i: int): long
@@ -68,7 +68,7 @@ public fun long_arg(i: int): long
 
 ## `double_arg`
 
-Returns the requested model information.
+Argument `i` parsed as a `double`, or `0.0` when it is missing or not a number.
 
 ```dream
 public fun double_arg(i: int): double
@@ -76,7 +76,7 @@ public fun double_arg(i: int): double
 
 ## `float_arg`
 
-Returns the requested model information.
+Argument `i` parsed as a `float`, or `0.0` when it is missing or not a number.
 
 ```dream
 public fun float_arg(i: int): float
@@ -84,7 +84,7 @@ public fun float_arg(i: int): float
 
 ## `bool_arg`
 
-Returns the requested model information.
+Whether argument `i` is the literal `true`; missing arguments read as `false`.
 
 ```dream
 public fun bool_arg(i: int): bool

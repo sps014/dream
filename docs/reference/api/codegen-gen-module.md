@@ -52,7 +52,7 @@ public attributes: List<GenAttribute>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenModule` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(

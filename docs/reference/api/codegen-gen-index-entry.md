@@ -12,7 +12,7 @@ public class GenIndexEntry
 
 ## `id`
 
-Stable identifier of this entry.
+`module::name` identity of the type (`system.collections::List`).
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `name`
 
-Name identifying this entry.
+Unqualified type name.
 
 ```dream
 public name: string
@@ -28,7 +28,7 @@ public name: string
 
 ## `kind`
 
-Category of this entry.
+Whether the type is a class, struct, union, enum, or interface.
 
 ```dream
 public kind: DeclKind
@@ -36,7 +36,7 @@ public kind: DeclKind
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenIndexEntry` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(id: string, name: string, kind: DeclKind)

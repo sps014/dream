@@ -44,6 +44,7 @@ jobs:
         run: |
           python -m unittest discover -s tooling/docs -p 'test_*.py'
           python tooling/docs/api_inventory.py
+          python tooling/docs/api_pages.py --check
           mkdocs build --strict
           cp scripts/install.sh scripts/install.ps1 site/
           chmod +x site/install.sh

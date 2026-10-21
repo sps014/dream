@@ -1,9 +1,9 @@
 module system.collections;
 
-// FIFO queue backed by a ring buffer (`T[]` + head/count).
-//
-// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
-// `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
+/// FIFO queue backed by a ring buffer (`T[]` + head/count).
+///
+/// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
+/// `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
 @allow_cycle
 @slot_walk("length", "at_offset", "")
 public class Queue<T>: Collection<T> {
@@ -11,25 +11,25 @@ public class Queue<T>: Collection<T> {
     head: int;
     count: int;
 
-    // Creates an empty queue.
+    /// Creates an empty queue.
     public constructor() {
         this.items = Buffer.alloc<T>(sequence_min_capacity());
         this.head = 0;
         this.count = 0;
     }
 
-    // Number of elements currently stored.
+    /// Number of elements currently stored.
     public get length(): int {
         return this.count;
     }
 
-    // Current element capacity of the ring buffer.
+    /// Current element capacity of the ring buffer.
     public get capacity(): int {
         return this.items.length;
     }
 
-    // Reserves room for additional elements while preserving FIFO order and length.
-    public fun reserve(additional: int): Result<bool, CapacityError> {
+    /// Reserves room for additional elements while preserving FIFO order and length.
+    public fun reserve(additional: int): Result<Unit, CapacityError> {
         let need = (long)this.count + (long)additional;
         if additional < 0 || need > 2147483647L {
             return Result.Err(CapacityError());
@@ -37,7 +37,7 @@ public class Queue<T>: Collection<T> {
         if need >(long)this.items.length {
             this.reallocate((int)need);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     fun grow(): void {
@@ -63,7 +63,7 @@ public class Queue<T>: Collection<T> {
         this.head = 0;
     }
 
-    // Appends `value` at the back of the queue.
+    /// Appends `value` at the back of the queue.
     public fun enqueue(value: T): void {
         if this.count == this.items.length {
             this.grow();
@@ -73,8 +73,8 @@ public class Queue<T>: Collection<T> {
         this.count = this.count + 1;
     }
 
-    // Removes and returns the front element, or `None` when empty. The vacated slot is zeroed
-    // so managed elements release immediately instead of staying retained until overwritten.
+    /// Removes and returns the front element, or `None` when empty. The vacated slot is zeroed
+    /// so managed elements release immediately instead of staying retained until overwritten.
     public fun dequeue(): Option<T> {
         if this.count == 0 {
             return Option.None;
@@ -85,7 +85,7 @@ public class Queue<T>: Collection<T> {
         return Option.Some(v);
     }
 
-    // Returns the front element without removing it, or `None` when empty.
+    /// Returns the front element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
         if this.count == 0 {
             return Option.None;
@@ -93,9 +93,9 @@ public class Queue<T>: Collection<T> {
         return Option.Some(Buffer.get_unchecked<T>(this.items, this.head));
     }
 
-    // Removes every element. Live ring slots are overwritten with a zero value so managed
-    // elements release immediately instead of staying retained until later enqueues overwrite
-    // them; the ring is reset to front-aligned empty.
+    /// Removes every element. Live ring slots are overwritten with a zero value so managed
+    /// elements release immediately instead of staying retained until later enqueues overwrite
+    /// them; the ring is reset to front-aligned empty.
     public fun clear(): void {
         let cap = this.items.length;
         let z = CollectionStorage.zero<T>();
@@ -108,13 +108,13 @@ public class Queue<T>: Collection<T> {
         this.count = 0;
     }
 
-    // Unmanaged: no RC to release — rewind only.
+    /// Unmanaged: no RC to release — rewind only.
     public fun clear(): void where T: unmanaged {
         this.head = 0;
         this.count = 0;
     }
 
-    // Iterates elements from front to back.
+    /// Iterates elements from front to back.
     public fun iterator(): QueueIterator<T> {
         return QueueIterator<T>(this);
     }

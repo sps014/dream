@@ -47,7 +47,7 @@ public class AuthService {
     }
 
     /// Registers an identity provider, returning an error if its configuration is invalid.
-    public fun add_provider(options: OidcOptions): Result<bool, AuthError> {
+    public fun add_provider(options: OidcOptions): Result<Unit, AuthError> {
         if this.frozen
             || this.providers.contains(options.name)
             || options.name.is_empty() || options.name.contains("/") {
@@ -60,7 +60,7 @@ public class AuthService {
             options.redirect_uri,
             options.client_secret
         );
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Verifies local credentials and creates access and refresh tokens. Invalid credentials
@@ -122,8 +122,8 @@ public class AuthService {
         claims["sub"] = JsonValue.from_string(session.subject);
         claims["scope"] = JsonValue.from_string(session.scopes);
         claims["sid"] = JsonValue.from_string(session.family);
-        claims["iat"] = JsonValue.number((double)AuthCrypto.now());
-        claims["exp"] = JsonValue.number((double)(AuthCrypto.now() + (long)service.access_seconds));
+        claims["iat"] = JsonValue.from_double((double)AuthCrypto.now());
+        claims["exp"] = JsonValue.from_double((double)(AuthCrypto.now() + (long)service.access_seconds));
         let signed = AuthCrypto.jwt(service.jwt, "sign", claims)?;
         return Result.Ok(
             AuthTokens(
@@ -172,12 +172,12 @@ public class AuthService {
     /// Revokes the session family associated with the refresh token. Invalid tokens return
     /// `AuthError`.
     @native
-    public fun logout(token: string): Future<Result<bool, AuthError>> {
+    public fun logout(token: string): Future<Result<Unit, AuthError>> {
         return AuthService.logout_owned(this, token);
     }
 
     @native
-    static async fun logout_owned(service: AuthService, token: string): Result<bool, AuthError> {
+    static async fun logout_owned(service: AuthService, token: string): Result<Unit, AuthError> {
         let session = service.store.find(AuthCrypto.digest(token), AuthCrypto.now()).await?;
         return service.store.revoke(session.family).await;
     }
@@ -195,14 +195,14 @@ public class AuthService {
         token: string
     ): Result<AuthPrincipal, AuthError> {
         let claims = AuthCrypto.jwt(service.jwt, "verify", JsonValue.from_string(token))?;
-        let family = claims.get_or("sid", JsonValue.none()).as_string().unwrap_or("");
+        let family = claims.get("sid").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         if family.is_empty() || !service.store.active(family, AuthCrypto.now()).await {
             return Result.Err(AuthError("EAUTH", "revoked session"));
         }
         return Result.Ok(
             AuthPrincipal(
-                claims.get_or("sub", JsonValue.none()).as_string().unwrap_or(""),
-                claims.get_or("scope", JsonValue.none()).as_string().unwrap_or("")
+                claims.get("sub").unwrap_or(JsonValue.null()).as_string().unwrap_or(""),
+                claims.get("scope").unwrap_or(JsonValue.null()).as_string().unwrap_or("")
             )
         );
     }
@@ -260,20 +260,22 @@ public class AuthService {
             }
         );
     }
-}
 
-/// Injects identity previously verified by AuthService.middleware().
-@security_scheme("BearerAuth", "http", "bearer")
-public fun CurrentUser(ctx: RequestContext): Result<AuthPrincipal, HttpStatus> {
-    let subject = ctx.get("auth.subject");
-    if subject.is_none() {
-        return Result.Err(HttpStatus.unauthorized());
-    }
-    let principal = AuthPrincipal(subject.unwrap(), ctx.get("auth.scopes").unwrap_or(""));
-    for (let scope in ctx.get("auth.required_scopes").unwrap_or("").split(' ')) {
-        if !scope.is_empty() && !principal.has_scope(scope) {
-            return Result.Err(HttpStatus.forbidden());
+    /// Returns the identity that `AuthService.middleware()` verified for this request. Use it as a
+    /// dependency, `@dep(AuthService.current_user)`. Fails with 401 when the request is not
+    /// authenticated and 403 when it lacks a scope required by `@requires_scopes`.
+    @security_scheme("BearerAuth", "http", "bearer")
+    public static fun current_user(ctx: RequestContext): Result<AuthPrincipal, HttpStatus> {
+        let subject = ctx.get("auth.subject");
+        if subject.is_none() {
+            return Result.Err(HttpStatus.unauthorized());
         }
+        let principal = AuthPrincipal(subject.unwrap(), ctx.get("auth.scopes").unwrap_or(""));
+        for (let scope in ctx.get("auth.required_scopes").unwrap_or("").split(' ')) {
+            if !scope.is_empty() && !principal.has_scope(scope) {
+                return Result.Err(HttpStatus.forbidden());
+            }
+        }
+        return Result.Ok(principal);
     }
-    return Result.Ok(principal);
 }

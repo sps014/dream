@@ -90,12 +90,12 @@ fun range_expressions(): void {
     Assert.eq(stored.start, 2);
     Assert.eq(stored.end, 5);
     Assert.eq(stored.length, 3);
-    Assert.is_false(stored.is_empty);
+    Assert.is_false(stored.is_empty());
     Assert.is_true(stored.contains(2));
     Assert.is_true(stored.contains(4));
     Assert.is_false(stored.contains(5));
     Assert.is_false(stored.contains(1));
-    Assert.is_true((5..5).is_empty);
+    Assert.is_true((5..5).is_empty());
     Assert.is_false((5..5).contains(5));
     sum = 0;
     for let value in stored {

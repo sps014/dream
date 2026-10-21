@@ -218,7 +218,7 @@ fun spin_fragment(input: SpinVarying): GpuVec4 {
     return input.color;
 }
 
-async fun run(window: Window): Result<bool, GpuError> {
+async fun run(window: Window): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     let surface = device.create_surface(window)?;
     let pipeline = device.render_pipeline(
@@ -255,13 +255,11 @@ async fun run(window: Window): Result<bool, GpuError> {
         pass.draw(3);
         frame.present().await?;
     }
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {
-    let opened = Window.open(
-        WindowDesc.of("Spinning triangle", 800, 600).resizable(true).vsync(true)
-    );
+    let opened = Window.open(WindowDesc("Spinning triangle", 800, 600).resizable(true).vsync(true));
     if opened.is_err() {
         System.println("no window: " + opened.unwrap_err().message());
         return;

@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioEvent`
 
 Ordered player notifications. Timestamps are monotonic nanoseconds.
 
@@ -12,7 +12,7 @@ Ordered player notifications. Timestamps are monotonic nanoseconds.
 public enum AudioEvent
 ```
 
-## Declaration
+## `LoadStart`
 
 Loading began.
 
@@ -20,7 +20,7 @@ Loading began.
 LoadStart(timestamp: long)
 ```
 
-## Declaration
+## `LoadedMetadata`
 
 Source metadata became available.
 
@@ -28,7 +28,7 @@ Source metadata became available.
 LoadedMetadata(timestamp: long)
 ```
 
-## Declaration
+## `CanPlay`
 
 Samples are available for playback.
 
@@ -36,7 +36,7 @@ Samples are available for playback.
 CanPlay(timestamp: long)
 ```
 
-## Declaration
+## `Play`
 
 Playback was requested and pause state cleared.
 
@@ -44,7 +44,7 @@ Playback was requested and pause state cleared.
 Play(timestamp: long)
 ```
 
-## Declaration
+## `Playing`
 
 Output started or recovered from buffering.
 
@@ -52,7 +52,7 @@ Output started or recovered from buffering.
 Playing(timestamp: long)
 ```
 
-## Declaration
+## `Pause`
 
 Playback paused without changing position.
 
@@ -60,7 +60,7 @@ Playback paused without changing position.
 Pause(timestamp: long)
 ```
 
-## Declaration
+## `Seeking`
 
 A seek was accepted; position is the requested time in seconds.
 
@@ -68,7 +68,7 @@ A seek was accepted; position is the requested time in seconds.
 Seeking(timestamp: long, position: double)
 ```
 
-## Declaration
+## `Seeked`
 
 A seek completed; position is the actual time in seconds.
 
@@ -76,7 +76,7 @@ A seek completed; position is the actual time in seconds.
 Seeked(timestamp: long, position: double)
 ```
 
-## Declaration
+## `TimeUpdate`
 
 Playback position changed; emitted at most four times per second.
 
@@ -84,7 +84,7 @@ Playback position changed; emitted at most four times per second.
 TimeUpdate(timestamp: long, position: double)
 ```
 
-## Declaration
+## `Waiting`
 
 Playback is waiting for source data.
 
@@ -92,7 +92,7 @@ Playback is waiting for source data.
 Waiting(timestamp: long)
 ```
 
-## Declaration
+## `Ended`
 
 The source reached its natural end without looping.
 
@@ -100,7 +100,7 @@ The source reached its natural end without looping.
 Ended(timestamp: long)
 ```
 
-## Declaration
+## `VolumeChange`
 
 Volume or mute changed.
 
@@ -108,7 +108,7 @@ Volume or mute changed.
 VolumeChange(timestamp: long)
 ```
 
-## Declaration
+## `DurationChange`
 
 The known duration changed.
 
@@ -116,7 +116,7 @@ The known duration changed.
 DurationChange(timestamp: long)
 ```
 
-## Declaration
+## `Emptied`
 
 Previous source state was reset.
 
@@ -124,7 +124,7 @@ Previous source state was reset.
 Emptied(timestamp: long)
 ```
 
-## Declaration
+## `Abort`
 
 Pending loading was cancelled.
 
@@ -132,7 +132,7 @@ Pending loading was cancelled.
 Abort(timestamp: long)
 ```
 
-## Declaration
+## `Error`
 
 An operation failed; terminal marks a failure that stopped playback.
 
@@ -140,7 +140,7 @@ An operation failed; terminal marks a failure that stopped playback.
 Error(timestamp: long, error: AudioError, operation: string, terminal: bool)
 ```
 
-## Declaration
+## `SinkChange`
 
 The selected output changed.
 
@@ -148,7 +148,7 @@ The selected output changed.
 SinkChange(timestamp: long, sink_id: string)
 ```
 
-## Declaration
+## `DeviceLost`
 
 Output disappeared and playback paused.
 
@@ -156,7 +156,7 @@ Output disappeared and playback paused.
 DeviceLost(timestamp: long, error: AudioError)
 ```
 
-## Declaration
+## `Closed`
 
 Playback resources were released.
 
@@ -164,11 +164,10 @@ Playback resources were released.
 Closed(timestamp: long)
 ```
 
-## Declaration
+## `EventsLost`
 
 Queue overflow discarded count older events.
 
 ```dream
 EventsLost(timestamp: long, count: int)
 ```
-

@@ -2,7 +2,7 @@ module system.codegen;
 import system;
 import system.collections;
 
-// What a `GenDecl` declares.
+/// What a `GenDecl` declares.
 public enum DeclKind {
     /// Identifies class declarations.
     Class,

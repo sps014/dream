@@ -13,7 +13,7 @@ import system.json;
 @incremental
 @on_attribute(JsonAttribute)
 @on_call(Json.serialize, Json.deserialize, Json.from_value)
-public fun json_derive(ctx: GenContext): void {
+internal fun json_derive(ctx: GenContext): void {
     let jsonable = List<string>();
     for (let e in ctx.type_index()) {
         if e.kind == DeclKind.Class || e.kind == DeclKind.Struct || e.kind == DeclKind.Union {

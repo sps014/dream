@@ -626,7 +626,7 @@ class DreamInstance {
 
   /**
    * Reads a Dream string at `ptr` (a data pointer). Layout:
-   * `[unit_len: i32][pad: i32][utf16le...]`. Uses code-unit copy so `Bytes.toWire`
+   * `[unit_len: i32][pad: i32][utf16le...]`. Uses code-unit copy so `Bytes.to_wire`
    * payloads that contain U+0000 survive the JS boundary (TextDecoder is not required).
    */
   readString(ptr) {

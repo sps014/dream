@@ -44,7 +44,7 @@ internal class ProcessOperation {
     internal static fun request(action: string, handle: int): JsonValue {
         let request = JsonValue.dict();
         request["action"] = JsonValue.from_string(action);
-        request["handle"] = JsonValue.number((double)handle);
+        request["handle"] = JsonValue.from_double((double)handle);
         return request;
     }
 
@@ -82,8 +82,8 @@ internal class ProcessOperation {
         let error = parsed.unwrap();
         return Result.Err(
             ProcessError(
-                error.at("code").as_string().unwrap_or("EIO"),
-                error.at("message").as_string().unwrap_or("process operation failed")
+                error["code"].as_string().unwrap_or("EIO"),
+                error["message"].as_string().unwrap_or("process operation failed")
             )
         );
     }

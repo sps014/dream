@@ -70,15 +70,15 @@ public fun this[index: int] = value: T
 
 ## `slice`
 
-A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested range doesn't fit within this span.
+Returns a view of elements from `start` (inclusive) to `end` (exclusive) that shares this span's storage. Panics unless `0 <= start <= end <= length`.
 
 ```dream
-public fun slice(start: int, count: int): Span<T>
+public fun slice(start: int, end: int): Span<T>
 ```
 
 ## `slice`
 
-The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+Returns a view from `start` to the end of this span. Panics unless `0 <= start <= length`.
 
 ```dream
 public fun slice(start: int): Span<T>

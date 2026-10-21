@@ -143,6 +143,12 @@ impl<'a> Analyzer<'a> {
             && self.internal_access_allowed(decl_file.as_ref(), caller_file)
     }
 
+    /// Desugared syntax (`yield`, `for`, `[value; len]`) names `internal` stdlib plumbing through
+    /// synthetic tokens; only source-written references are subject to visibility.
+    pub(in crate::analyzer) fn is_desugared(position: TextSpan) -> bool {
+        position == empty_span()
+    }
+
     /// Reports a cross-file visibility violation for a top-level declaration referenced from
     /// another file without being `public`.
     pub(in crate::analyzer) fn report_not_public(
@@ -153,6 +159,9 @@ impl<'a> Analyzer<'a> {
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if Self::is_desugared(position) {
+            return;
+        }
         let where_ = decl_file
             .as_ref()
             .map(|f| format!(" (declared in '{}')", f))

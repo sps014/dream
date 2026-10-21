@@ -30,7 +30,7 @@ size means EOF; a read failure returns `IoError`.
 ```dream
 import system.io;
 
-fun main(): Result<bool, IoError> {
+fun main(): Result<Unit, IoError> {
     let file = FileHandle.open("input.txt", FileMode.Read)?;
     while true {
         let line = file.read_line()?;
@@ -46,17 +46,15 @@ fun main(): Result<bool, IoError> {
 |---|---|---|
 | `read(n)` | `Result<byte[], IoError>` | Reads up to `n` bytes. |
 | `read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
-| `write(data)` | `Result<int, IoError>` | Writes bytes; returns the count written. |
-| `write_text(text)` | `Result<int, IoError>` | Writes UTF-8 bytes of `text`. |
-| `write_all(data)` | `Result<bool, IoError>` | Retries until every byte is written. |
+| `write(data)` | `Result<int, IoError>` | Writes bytes; returns the count written. Pass `Encoding.utf8_encode(text)` to write text. |
+| `write_all(data)` | `Result<Unit, IoError>` | Retries until every byte is written. |
 | `read_exact(count)` | `Result<byte[], IoError>` | Reads exactly `count` bytes or fails with `EEOF`. |
-| `seek(pos)` | `Result<bool, IoError>` | Moves to an absolute byte offset. |
-| `seek_from_end(offset)` | `Result<bool, IoError>` | Moves relative to the end; negative moves backward. |
-| `seek_end()` | `Result<bool, IoError>` | Moves to the end. |
+| `seek(pos)` | `Result<Unit, IoError>` | Moves to an absolute byte offset. |
+| `seek_from_end(offset)` | `Result<Unit, IoError>` | Moves relative to the end; negative moves backward. |
 | `tell()` | `Result<long, IoError>` | Current byte offset. |
-| `length()` | `Result<long, IoError>` | Current file length in bytes. |
-| `flush()` | `Result<bool, IoError>` | Checks the handle is open; writes are unbuffered. |
-| `close()` | `Result<bool, IoError>` | Closes the handle. |
+| `size()` | `Result<long, IoError>` | Current file size in bytes. |
+| `flush()` | `Result<Unit, IoError>` | Checks the handle is open; writes are unbuffered. |
+| `close()` | `Result<Unit, IoError>` | Closes the handle. |
 | `is_closed` | `bool` | Whether the handle is closed. |
 | `path` | `string` | Path used to open the file. |
 
@@ -73,9 +71,9 @@ last reference also closes the handle, but only explicit closure can report an
 error. A failed close retires the handle: retrying an OS descriptor could close a
 different file after the descriptor has been reused.
 
-File positions and lengths use `long`. `tell()` includes buffered read-ahead, so
+File positions and sizes use `long`. `tell()` includes buffered read-ahead, so
 mixing line and byte reads preserves the logical position. Failed seeks preserve
-the position and any unread bytes. `FileHandle.tell()` and `.length()` return
+the position and any unread bytes. `FileHandle.tell()` and `.size()` return
 `Result<long, IoError>`; use `seek()` to change position.
 
 Async opens, reads, writes, and seeks use a bounded native executor or Node's
@@ -99,7 +97,7 @@ cancelled seek from leaving the logical cursor inconsistent.
 ```dream
 import system.io;
 
-fun main(): Result<bool, IoError> {
+fun main(): Result<Unit, IoError> {
     let source = FileHandle.open("input.bin", FileMode.Read)?;
     let destination = FileHandle.open("output.bin", FileMode.Write)?;
     Streams.copy(source, destination, buffer_size: 65536)?;
@@ -140,7 +138,7 @@ Interface implementations must return no more bytes than requested.
 import system.io;
 import system.encoding;
 
-fun main(): Result<bool, IoError> {
+fun main(): Result<Unit, IoError> {
     let source = MemoryStream(Encoding.utf8_encode("first\r\nsecond\n"));
     let reader = BufferedReader(source, buffer_size: 8192);
     let first = reader.read_line()?;
@@ -158,12 +156,12 @@ fun main(): Result<bool, IoError> {
 | `BufferedReader(source, buffer_size)` | `BufferedReader` | Wraps a `Reader`; `buffer_size` defaults to 8192. |
 | `BufferedReader.read(max_bytes)` | `Result<byte[], IoError>` | Reads from the buffer, refilling as needed. |
 | `BufferedReader.read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
-| `BufferedReader.seek(position)` / `tell()` | `Result<bool, IoError>` / `Result<long, IoError>` | Repositions the source / reports the logical position. |
+| `BufferedReader.seek(position)` / `tell()` | `Result<Unit, IoError>` / `Result<long, IoError>` | Repositions the source / reports the logical position. |
 | `BufferedReader.take_buffered()` | `byte[]` | Removes and returns unread buffered bytes. |
 | `BufferedWriter(destination, buffer_size)` | `BufferedWriter` | Wraps a `Writer`; `buffer_size` defaults to 8192. |
 | `BufferedWriter.write(data)` | `Result<int, IoError>` | Buffers bytes; may accept only part. |
-| `BufferedWriter.flush()` | `Result<bool, IoError>` | Writes pending bytes and flushes the destination. |
-| `BufferedWriter.finish()` | `Result<bool, IoError>` | Flushes and rejects later writes with `ECLOSED`. |
+| `BufferedWriter.flush()` | `Result<Unit, IoError>` | Writes pending bytes and flushes the destination. |
+| `BufferedWriter.finish()` | `Result<Unit, IoError>` | Flushes and rejects later writes with `ECLOSED`. |
 
 Buffer wrappers retain their underlying streams without closing them. Finish a
 buffered writer explicitly so failures are visible; dropping it does not flush.
@@ -190,12 +188,12 @@ immediately ready and do not block on host I/O.
 | `MemoryStream(bytes)` | `MemoryStream` | Copies `bytes` and starts at byte zero. |
 | `read(max_bytes)` | `Result<byte[], IoError>` | Reads and advances the cursor. |
 | `write(bytes)` | `Result<int, IoError>` | Overwrites or appends at the cursor. |
-| `seek(position)` | `Result<bool, IoError>` | Moves the cursor, including past the end. |
+| `seek(position)` | `Result<Unit, IoError>` | Moves the cursor, including past the end. |
 | `tell()` | `Result<long, IoError>` | Current position; fails after closure. |
 | `position` / `length` | `long` | Cursor and stored size; readable after closure. |
 | `to_bytes()` | `Result<byte[], IoError>` | Copy of all stored bytes. |
-| `flush()` | `Result<bool, IoError>` | Checks the stream is open. |
-| `close()` | `Result<bool, IoError>` | Closes idempotently; data is retained. |
+| `flush()` | `Result<Unit, IoError>` | Checks the stream is open. |
+| `close()` | `Result<Unit, IoError>` | Closes idempotently; data is retained. |
 
 `MemoryStream` also implements `read_async`, `write_async`, and `flush_async`.
 Positions are limited to the `int` range.
@@ -225,7 +223,7 @@ Stream operations fail with `IoError`, which has `code()`, `message()`, and a
 import system.io;
 import system.encoding;
 
-async fun main(): Result<bool, IoError> {
+async fun main(): Result<Unit, IoError> {
     let source = MemoryStream(Encoding.utf8_encode("hello"));
     let destination = FileHandle.open_async("async-copy.txt", FileMode.WriteRead).await?;
     Streams.copy_async(source, destination).await?;

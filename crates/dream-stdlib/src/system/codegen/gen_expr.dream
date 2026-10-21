@@ -7,10 +7,10 @@ import system.json;
 /// An expression that a source generator can inspect.
 @allow_cycle
 public class GenExpr {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    /// Category of this entry.
+    /// Syntactic shape of the expression (call, literal, binary operation, ...).
     public kind: ExprKind;
 
     /// Category of the containing statement.
@@ -22,7 +22,7 @@ public class GenExpr {
     /// Constant value of the expression, when known.
     public constant: Option<GenConstant>;
 
-    /// Source text represented by this entry.
+    /// Source text of the expression as written.
     public text: string;
 
     /// Operator spelling used by the expression.
@@ -54,7 +54,7 @@ public class GenExpr {
 
     nodes: List<GenExpr>;
 
-    // Creates this model from snapshot JSON.
+    /// Decodes a `GenExpr` from its object in the generation snapshot.
     public constructor(borrow v: JsonValue) {
         this.id = gen_str(v, "id");
         this.constant = Option.None;
@@ -86,12 +86,12 @@ public class GenExpr {
         }
     }
 
-    // Returns child nodes in source order.
+    /// Returns child nodes in source order.
     public fun children(): List<GenExpr> {
         return this.nodes;
     }
 
-    // Tests the node kind.
+    /// Tests the node kind.
     public fun is_kind(kind: ExprKind): bool {
         return this.kind == kind;
     }

@@ -1,6 +1,6 @@
 module system.process;
 
-// A borrowed child input pipe implementing partial async writes.
+/// A borrowed child input pipe implementing partial async writes.
 public class ProcessWriter: AsyncWriter {
     owner: ChildProcess;
 
@@ -8,7 +8,7 @@ public class ProcessWriter: AsyncWriter {
         this.owner = owner;
     }
 
-    // Writes bytes with partial progress; closing stdin delivers EOF to the child.
+    /// Writes bytes with partial progress; closing stdin delivers EOF to the child.
     public async unique fun write_async(
         data: byte[],
         token: Option<CancellationToken> = Option.None
@@ -42,10 +42,10 @@ public class ProcessWriter: AsyncWriter {
         return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(0));
     }
 
-    // Confirms cancellation and ownership; the process pipe has no guest-side output buffer.
+    /// Confirms cancellation and ownership; the process pipe has no guest-side output buffer.
     public async unique fun flush_async(
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         if this.owner.handle <= 0 {
             return Result.Err(IoError.closed(""));

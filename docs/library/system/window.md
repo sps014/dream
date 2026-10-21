@@ -27,7 +27,7 @@ import system;
 import system.window;
 
 fun main(): void {
-    let opened = Window.open(WindowDesc.of("Dream game", 1280, 720).resizable(true).vsync(true));
+    let opened = Window.open(WindowDesc("Dream game", 1280, 720).resizable(true).vsync(true));
     if opened.is_err() {
         System.println("no window: " + opened.unwrap_err().message());
         return;
@@ -127,7 +127,7 @@ import system;
 import system.window;
 
 fun main(): void {
-    let window = Window.headless(WindowDesc.of("test", 320, 200));
+    let window = Window.headless(WindowDesc("test", 320, 200));
     let space = KeyEvent(KeyCode.Space, " ", KeyModifiers.None, false);
 
     window.simulate(WindowEvent.KeyDown(space));

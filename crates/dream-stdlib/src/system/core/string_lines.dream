@@ -1,6 +1,6 @@
 module system.core;
 
-// Cursor over the lines of a `ReadOnlySpan<char>`.
+/// Cursor over the lines of a `ReadOnlySpan<char>`.
 public ref struct StringLines {
     rest: ReadOnlySpan<char>;
     _current: ReadOnlySpan<char>;

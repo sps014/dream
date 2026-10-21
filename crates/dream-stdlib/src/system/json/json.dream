@@ -1,6 +1,6 @@
 module system.json;
 
-// The public JSON API: one pair of names for text <-> value.
+/// The public JSON API: one pair of names for text <-> value.
 public static class Json {
     /// Encodes `value` as JSON text. User-defined types need `@json`.
     @intrinsic(Intrinsic.JsonSerialize)
@@ -11,12 +11,12 @@ public static class Json {
     @intrinsic(Intrinsic.JsonDeserialize)
     public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
 
-    // Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
+    /// Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).
     @intrinsic(Intrinsic.JsonFromValue)
     public static extern fun from_value<T>(borrow value: JsonValue): T;
 
-    // Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.
-    // Pass 0 to produce compact JSON text.
+    /// Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level.
+    /// Pass 0 to produce compact JSON text.
     public static fun serialize_pretty(borrow value: JsonValue, indent: int): string {
         if indent <= 0 {
             return Json.stringify(value);
@@ -195,7 +195,7 @@ public static class Json {
                 if i > 0 {
                     sb.append_char(',');
                 }
-                Json._json_stringify_into(sb, v.at(i).unwrap_or(JsonValue.none()));
+                Json._json_stringify_into(sb, v.at(i).unwrap_or(JsonValue.null()));
                 i = i + 1;
             }
             sb.append_char(']');
@@ -209,10 +209,10 @@ public static class Json {
                 if i > 0 {
                     sb.append_char(',');
                 }
-                let key = v.key_at(i).unwrap_or(string.empty);
+                let key = v.key_at(i).unwrap_or("");
                 Json._json_escape_into(sb, key);
                 sb.append_char(':');
-                Json._json_stringify_into(sb, v.value_at(i).unwrap_or(JsonValue.none()));
+                Json._json_stringify_into(sb, v.value_at(i).unwrap_or(JsonValue.null()));
                 i = i + 1;
             }
             sb.append_char('}');
@@ -253,7 +253,7 @@ public static class Json {
                 Json._json_spaces_into(sb, indent * (depth + 1));
                 Json._json_stringify_pretty_into(
                     sb,
-                    v.at(i).unwrap_or(JsonValue.none()),
+                    v.at(i).unwrap_or(JsonValue.null()),
                     indent,
                     depth + 1
                 );
@@ -277,12 +277,12 @@ public static class Json {
                     sb.append(",\n");
                 }
                 Json._json_spaces_into(sb, indent * (depth + 1));
-                let key = v.key_at(i).unwrap_or(string.empty);
+                let key = v.key_at(i).unwrap_or("");
                 Json._json_escape_into(sb, key);
                 sb.append(": ");
                 Json._json_stringify_pretty_into(
                     sb,
-                    v.value_at(i).unwrap_or(JsonValue.none()),
+                    v.value_at(i).unwrap_or(JsonValue.null()),
                     indent,
                     depth + 1
                 );

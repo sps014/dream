@@ -58,7 +58,7 @@ internal class JsonTypeSpec {
     // `<T, U>` clause for emit, or empty when non-generic.
     public fun params_clause(): string {
         if this.generic_params.is_empty() {
-            return string.empty;
+            return "";
         }
         let s = "<";
         let i = 0;

@@ -76,12 +76,9 @@ Binds `sampler` to the shader parameter `slot`.
 public fun bind(slot: GpuBindingSlot, sampler: GpuSampler): void
 ```
 
-## `bind` (acceleration structure)
+## `bind`
 
-Binds `scene` for inline ray queries in a native render shader. The device must
-support `GpuFeature.RayQuery`; WebGPU does not support acceleration structures.
-Build a top-level structure with `GpuDevice.build_top_level`, check the feature
-before creating the pipeline, and bind the scene before drawing.
+Binds `scene` for inline ray queries in a native render shader. The device must support `GpuFeature.RayQuery`; WebGPU does not support acceleration structures.
 
 ```dream
 public fun bind(slot: GpuBindingSlot, scene: GpuAccelerationStructure): void

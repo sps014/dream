@@ -104,7 +104,7 @@ async fun webapi_basic(): void {
     app.include_router(WebapiGroup.router()).unwrap();
     app.use(Middleware(webapi_global)).unwrap();
     app.use(Middleware(webapi_later)).unwrap();
-    app.use(CORS(CorsOptions())).unwrap();
+    app.use(Cors.middleware(CorsOptions())).unwrap();
     let port = app.listen("127.0.0.1", 0).await.unwrap();
     let base = "http://127.0.0.1:" + port.to_string();
     let client = HttpClient();
@@ -251,7 +251,7 @@ class WebapiRoutes {
     }
 
     @get("/auth")
-    public static fun webapi_auth(@dep(BearerToken) token: string): string {
+    public static fun webapi_auth(@dep(HttpAuth.bearer_token) token: string): string {
         return token;
     }
 

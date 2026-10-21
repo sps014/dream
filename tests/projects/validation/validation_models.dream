@@ -68,6 +68,6 @@ fun validation_models(): void {
     Assert.eq(nested.issues[0].location[0], "tags");
     Assert.eq(nested.issues[0].location[1], "0");
     Assert.is_true(
-        Validation.schema<ValidatedUser>().at("properties").at("age")["minimum"].is_some()
+        Validation.schema<ValidatedUser>()["properties"]["age"].contains("minimum")
     );
 }

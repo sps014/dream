@@ -102,12 +102,14 @@ impl<'a> Analyzer<'a> {
                     .find_map(|((owner, _), def)| (*def == key.0).then_some(*owner))
             })
             .unwrap_or_else(|| self.type_ctx.lower(&Self::type_from_name(type_name)));
-        if !self.member_accessible(
-            template.visibility,
-            &template.file_path,
-            ctx.parent_function.file_path.as_ref(),
-            self.in_methods_of(ctx.parent_function, owner),
-        ) {
+        if !Self::is_desugared(method.position)
+            && !self.member_accessible(
+                template.visibility,
+                &template.file_path,
+                ctx.parent_function.file_path.as_ref(),
+                self.in_methods_of(ctx.parent_function, owner),
+            )
+        {
             let message = if template.visibility.is_at_least_internal() {
                 format!("'{}' is not accessible from this scope", method.text)
             } else {

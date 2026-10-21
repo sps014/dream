@@ -12,7 +12,7 @@ public class GenTypeRef
 
 ## `kind`
 
-Category of this entry.
+Shape of the type: primitive, named, array, tuple, function, type parameter, or unknown.
 
 ```dream
 public kind: TypeRefKind
@@ -60,7 +60,7 @@ public args: List<GenTypeRef>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenTypeRef` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(
@@ -75,7 +75,7 @@ public constructor(
 
 ## `unknown`
 
-Returns the requested model information.
+A type of kind Unknown with no name or arguments, used where a type could not be inferred.
 
 ```dream
 public static fun unknown(): GenTypeRef
@@ -91,7 +91,7 @@ public fun primitive(): Primitive
 
 ## `is_primitive`
 
-Returns the requested model information.
+Whether this type is the primitive scalar `p`.
 
 ```dream
 public fun is_primitive(p: Primitive): bool
@@ -107,7 +107,7 @@ public fun collection(): CollectionKind
 
 ## `is_option`
 
-Returns the requested model information.
+Whether this type is `Option<T>` for some `T`.
 
 ```dream
 public fun is_option(): bool
@@ -115,7 +115,7 @@ public fun is_option(): bool
 
 ## `is_param`
 
-Returns the requested model information.
+Whether this type is a generic type parameter such as `T`.
 
 ```dream
 public fun is_param(): bool
@@ -147,7 +147,7 @@ public fun source_name(): string
 
 ## `to_string`
 
-Returns the requested model information.
+The `display` spelling of the type.
 
 ```dream
 public override fun to_string(): string

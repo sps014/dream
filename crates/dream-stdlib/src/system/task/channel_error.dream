@@ -1,15 +1,49 @@
 module system.task;
 
-// Distinguishes backpressure, exhausted inputs, closed endpoints, and cancellation.
+/// Distinguishes backpressure, exhausted inputs, closed endpoints, and cancellation.
 public enum ChannelError {
-    // The queue has reached its configured capacity.
+    /// The queue has reached its configured capacity.
     Full,
-    // No item is available yet.
+    /// No item is available yet.
     Empty,
-    // The relevant endpoint has closed.
+    /// The relevant endpoint has closed.
     Closed,
-    // The pending operation was cancelled.
+    /// The pending operation was cancelled.
     Cancelled,
-    // A bounded channel requires a positive capacity.
+    /// A bounded channel was created with a capacity of zero or less.
     InvalidCapacity,
+
+    /// Returns `EFULL`, `EEMPTY`, `ECLOSED`, `ECANCELED`, or `EINVAL` for the variant.
+    public fun code(): string {
+        if this == ChannelError.Full {
+            return "EFULL";
+        }
+        if this == ChannelError.Empty {
+            return "EEMPTY";
+        }
+        if this == ChannelError.Closed {
+            return "ECLOSED";
+        }
+        if this == ChannelError.Cancelled {
+            return "ECANCELED";
+        }
+        return "EINVAL";
+    }
+
+    /// Returns a readable description of the failure.
+    public fun message(): string {
+        if this == ChannelError.Full {
+            return "channel is full";
+        }
+        if this == ChannelError.Empty {
+            return "channel is empty";
+        }
+        if this == ChannelError.Closed {
+            return "channel is closed";
+        }
+        if this == ChannelError.Cancelled {
+            return "channel operation was cancelled";
+        }
+        return "channel capacity must be positive";
+    }
 }

@@ -49,7 +49,7 @@ reads UTF-16 units from strings or full 32-bit values from arrays. `ReadOnlySpan
 and `s.span()` create string views; `Span<char>.of(chars).as_read_only()` creates an array view. Both views are stored inline. Release can hoist the string payload address
 out of read-only loops when the source lifetime and view fields are proven stable.
 
-`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. Once a view exists, `view.slice(start, count)` uses a checked start and element count, just like every other span. String-backed views have no setters; writes fail at compile time. It supports the read-only `string` surface:
+`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. Once a view exists, `view.slice(start, end)` takes a checked start and exclusive end, like every other `slice`; out-of-range bounds panic. String-backed views have no setters; writes fail at compile time. It supports the read-only `string` surface:
 
 | Call | Meaning |
 | --- | --- |
@@ -58,7 +58,7 @@ out of read-only loops when the source lifetime and view fields are proven stabl
 | `==` / `equals(s)` / `compare` | equality with a `ReadOnlySpan<char>` or `string` / named string equality / ordering against either |
 | `starts_with` / `ends_with` / `contains` | tests |
 | `index_of` / `last_index_of` | `Option<int>`, by `char` or `string` |
-| `slice(start, count)` / `slice(start)` | a narrower view, checked |
+| `slice(start, end)` / `slice(start)` | a narrower view; out-of-range bounds panic |
 | `trim` / `trim_start` / `trim_end` | a view without surrounding whitespace |
 | `parse_int()` / `parse_double()` | `Result` like the `string` versions |
 | `split_iter(sep)` / `lines()` | allocation-free iterators of `ReadOnlySpan<char>` pieces |
@@ -73,10 +73,10 @@ String-backed spans and arrays of matching UTF-16 elements hash like the equal `
 let ages = Map<string, int>();
 ages["ada"] = 36;
 let text = "ada,grace";
-System.println(ages.get_or(text.span(0, 3), 0)); // 36
+System.println(ages.get(text.span(0, 3)).unwrap_or(0)); // 36
 ```
 
-`Map.get`, `Map.get_or`, `Map.contains` and `Set.contains` accept a `ReadOnlySpan<char>` when the key type is `string`.
+`Map.get`, `Map.contains`, and `Set.contains` accept a `ReadOnlySpan<char>` when the key type is `string`.
 
 Split and line iterators are cursors: call `move_next()`, then read `current`.
 
@@ -98,7 +98,7 @@ Both view `array[offset .. offset + length)`. Creating one with a range outside 
 | `length` / `is_empty()` | yes | yes |
 | `sp[i]` | yes | yes |
 | `sp[i] = v` / `set(i, v)` / `fill(v)` / `copy_from(src)` | yes | no |
-| `slice(start, count)` / `slice(start)` | yes | yes |
+| `slice(start, end)` / `slice(start)` | yes | yes |
 | `index_of(v)` / `contains(v)` / `sequence_equal(other)` | yes | yes |
 | `copy_to(dst)` / `to_array()` | yes | yes |
 | `as_read_only()` | yes | — |

@@ -1,6 +1,6 @@
 module system.text;
 
-// Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).
+/// Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).
 public enum RegexFlags {
     /// No optional matching flags are enabled.
     None = 0,

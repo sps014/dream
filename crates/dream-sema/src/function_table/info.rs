@@ -1,4 +1,5 @@
 use super::FunctionIdentity;
+use dream_abi::names::THIS_NAME;
 use dream_syntax::nodes::{FunctionNode, Type, Visibility};
 use dream_types::{TypeCtx, TypeId};
 
@@ -132,7 +133,7 @@ impl FunctionTableInfo {
             parameters.push(type_ctx.lower(&j.type_));
             defaults.push(j.default);
             is_ref.push(j.is_ref);
-            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != "this" && !host_borrows);
+            is_take.push(!j.is_ref && !j.is_borrow && j.name.text != THIS_NAME && !host_borrows);
             param_names.push(j.name.text);
         }
         let intrinsic_name = dream_abi::intrinsics::intrinsic_key(&func.attributes);
@@ -169,10 +170,7 @@ impl FunctionTableInfo {
         info.is_async = func.is_async
             && dream_abi::iterators::element(type_ctx, resolved_return, true).is_none();
         info.is_static = func.is_static;
-        info.is_unsafe = func
-            .attributes
-            .iter()
-            .any(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"));
+        info.is_unsafe = dream_abi::attributes::has_unsafe_attr(&func.attributes);
         info.runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
         info.intrinsic_name = intrinsic_name;

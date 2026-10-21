@@ -2,7 +2,7 @@ module system.codegen;
 import system;
 import system.collections;
 
-// What a `GenTypeRef` refers to.
+/// What a `GenTypeRef` refers to.
 public enum TypeRefKind {
     /// Identifies primitive types.
     Primitive,

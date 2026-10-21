@@ -69,5 +69,5 @@ public static async fun for_each<T, U, E>(
     body: fun(T): Future<Result<U, E>>,
     concurrency: int,
     token: Option<CancellationToken> = Option.None
-): Result<bool, TaskFailure<E>>
+): Result<Unit, TaskFailure<E>>
 ```

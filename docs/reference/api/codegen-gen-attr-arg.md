@@ -12,7 +12,7 @@ public class GenAttrArg
 
 ## `kind`
 
-Category of this entry.
+Literal category of the argument as written (`string`, `int`, `enum`, ...).
 
 ```dream
 public kind: GenValueKind
@@ -20,7 +20,7 @@ public kind: GenValueKind
 
 ## `value`
 
-Value carried by this entry.
+Unquoted string, literal text, or dotted enum path, depending on `kind`.
 
 ```dream
 public value: string
@@ -36,7 +36,7 @@ public symbol: string
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenAttrArg` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(kind: GenValueKind, value: string, symbol: string)

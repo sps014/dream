@@ -176,7 +176,7 @@ public fun error_at(borrow target: string, message: string): void
 
 ## `warning_at`
 
-Reports a warning at this model node.
+A warning at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.
 
 ```dream
 public fun warning_at(borrow target: string, message: string): void
@@ -184,7 +184,7 @@ public fun warning_at(borrow target: string, message: string): void
 
 ## `error`
 
-Reports an error at this model node or at the generator when no node is supplied.
+Reports an error at the generator itself; generation fails after the generator exits.
 
 ```dream
 public fun error(message: string): void
@@ -192,7 +192,7 @@ public fun error(message: string): void
 
 ## `error`
 
-Reports an error at this model node or at the generator when no node is supplied.
+Reports an error at the syntax block's site; generation fails after the generator exits.
 
 ```dream
 public fun error(borrow block: GenSyntaxBlock, message: string): void
@@ -200,7 +200,7 @@ public fun error(borrow block: GenSyntaxBlock, message: string): void
 
 ## `error`
 
-Reports an error at this model node or at the generator when no node is supplied.
+Reports an error at the declaration; generation fails after the generator exits.
 
 ```dream
 public fun error(borrow decl: GenDecl, message: string): void

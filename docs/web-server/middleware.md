@@ -31,7 +31,7 @@ async fun main(): void {
     app.include_router(Routes.router()).unwrap();
     app.use(Middleware(request_id)).unwrap();
     app.use(
-        CORS(
+        Cors.middleware(
             CorsOptions(
                 allow_origins: "https://example.com",
                 allow_methods: "GET,POST",
@@ -55,7 +55,7 @@ A layer may return early, for example to reject a request or answer a preflight,
 | `next.call()` | Runs the rest of the pipeline and returns its `Future<HttpOutgoing>`. |
 | `@use(handler)` | Applies a middleware function to one router class or one route. Repeatable. |
 | `app.use(middleware)` | Applies middleware to every request the app handles, including documentation pages and 404s. |
-| `CORS(options)` | Built-in middleware for cross-origin requests. |
+| `Cors.middleware(options)` | Built-in middleware for cross-origin requests. |
 
 ## CORS options
 

@@ -20,8 +20,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/io/file_mode.dream"),
         ),
         (
-            "<std>/system/io/system.dream",
-            include_str!("../system/io/system.dream"),
+            "<std>/system/io/system_io.dream",
+            include_str!("../system/io/system_io.dream"),
         ),
         (
             "<std>/system/io/stdin.dream",

@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioReadyState`
 
 How much of an audio source is available for playback.
 
@@ -12,7 +12,7 @@ How much of an audio source is available for playback.
 public enum AudioReadyState
 ```
 
-## Declaration
+## `Nothing`
 
 No source metadata has been loaded.
 
@@ -20,7 +20,7 @@ No source metadata has been loaded.
 Nothing
 ```
 
-## Declaration
+## `Metadata`
 
 Source metadata is available but no playable samples are buffered.
 
@@ -28,7 +28,7 @@ Source metadata is available but no playable samples are buffered.
 Metadata
 ```
 
-## Declaration
+## `CurrentData`
 
 Samples at the current position are available.
 
@@ -36,11 +36,10 @@ Samples at the current position are available.
 CurrentData
 ```
 
-## Declaration
+## `FutureData`
 
 Samples at and beyond the current position are available.
 
 ```dream
 FutureData
 ```
-

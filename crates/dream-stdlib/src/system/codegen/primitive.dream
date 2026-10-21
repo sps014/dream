@@ -7,7 +7,7 @@ import system.collections;
 // stable `id` (`module::Name`, `module::Name.member`, `site:file:line:col`, `call:...`) that
 // diagnostics are anchored to.
 
-// Built-in scalar types.
+/// Built-in scalar types.
 public enum Primitive {
     /// Identifies not primitive types.
     NotPrimitive,

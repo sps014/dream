@@ -17,7 +17,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Stdin](io-stdin.md)
 - [Stdout](io-stdout.md)
 - [Streams](io-streams.md)
-- [System](io-system.md)
+- [System streams](io-system-io.md)
 - [TempCapabilities](io-temp-capabilities.md)
 - [TempDirectory](io-temp-directory.md)
 - [TempFile](io-temp-file.md)

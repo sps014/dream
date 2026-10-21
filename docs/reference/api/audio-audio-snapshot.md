@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioSnapshot`
 
 A copied view of a player's recent output PCM.
 
@@ -12,7 +12,7 @@ A copied view of a player's recent output PCM.
 public class AudioSnapshot
 ```
 
-## Declaration
+## `samples`
 
 Interleaved PCM after the player's volume and mute settings.
 
@@ -20,7 +20,7 @@ Interleaved PCM after the player's volume and mute settings.
 public samples: float[]
 ```
 
-## Declaration
+## `sample_rate`
 
 Samples per second per channel.
 
@@ -28,7 +28,7 @@ Samples per second per channel.
 public sample_rate: int
 ```
 
-## Declaration
+## `channels`
 
 One for mono or two for stereo.
 
@@ -36,7 +36,7 @@ One for mono or two for stereo.
 public channels: int
 ```
 
-## Declaration
+## `frame_position`
 
 Rendered frame index since capture was enabled, at the beginning of this snapshot.
 
@@ -44,11 +44,10 @@ Rendered frame index since capture was enabled, at the beginning of this snapsho
 public frame_position: long
 ```
 
-## Declaration
+## `overrun`
 
 Whether output frames were lost to queue overflow or a concurrent capture update.
 
 ```dream
 public overrun: bool
 ```
-

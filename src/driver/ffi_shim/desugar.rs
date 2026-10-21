@@ -198,6 +198,7 @@ fn member_source(
         Ret::Void => (None, false),
         Ret::Value(b) => (Some(b), false),
         Ret::Result(b) => (Some(b), true),
+        Ret::Fallible => (Some(&super::types::FALLIBLE_BRIDGE), true),
     };
     let returns_class = matches!(value, Some(Bridge::Class { .. }));
     if returns_class {
@@ -281,6 +282,7 @@ fn member_source(
                     wrap_object(out, &b, name, *optional, m.kind == MemberKind::Instance);
                     "__cpp_v"
                 }
+                _ if m.ret == Ret::Fallible => "Unit()",
                 _ => "__cpp_r",
             };
             if is_result {

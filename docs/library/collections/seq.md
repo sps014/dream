@@ -34,17 +34,17 @@ The common `Collection<T>` interface provides the helpers in the first table. Th
 | `all(pred)` | `bool` | Whether `pred` is `true` for every item; `true` when empty. |
 | `any(pred)` | `bool` | Whether `pred` is `true` for at least one item. |
 | `none(pred)` | `bool` | Whether `pred` is `false` for every item. |
-| `count_where(pred)` | `int` | Number of items where `pred` is `true`. |
-| `find_where(pred)` | `Option<T>` | First item where `pred` is `true`. |
+| `count(pred)` | `int` | Number of items where `pred` is `true`. |
+| `find(pred)` | `Option<T>` | First item where `pred` is `true`. |
 | `for_each(action)` | `void` | Calls `action` on each item in loop order. |
 
-Lists also provide `first()`, `last()`, and `find_index_where(pred)`; see [List](list.md).
+Lists also provide `first()`, `last()`, and `find_index(pred)`; see [List](list.md).
 
 ## Sequence chains
 
 `collection.seq()` starts from a copy of the collection's elements. On the sequence, `filter`, `map`, `flat_map`, `distinct`, `take`, and `skip` build steps that run when a result is requested. `to_list()` copies the selected elements into a list, and `count()` counts them.
 
-Each traversal runs these steps again, without intermediate lists, and `take` stops upstream work once it has enough elements. `order_by` immediately collects and sorts all elements. Shared objects inside the copied elements remain shared.
+Each traversal runs these steps again, without intermediate lists, and `take` stops upstream work once it has enough elements. `sort_by` immediately collects and sorts all elements. Shared objects inside the copied elements remain shared.
 
 | Method | Returns | When it runs |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Each traversal runs these steps again, without intermediate lists, and `take` st
 | `map(f)` | `Seq<U>` | Delayed: transforms each item as it is requested. |
 | `flat_map(f)` | `Seq<U>` | Delayed: visits the elements of each list `f` returns. |
 | `distinct()` | `Seq<T>` | Delayed: removes duplicates, keeping first-seen order. |
-| `order_by(compare)` | `Seq<T>` | Immediately: runs the chain and sorts the result. |
+| `sort_by(compare)` | `Seq<T>` | Immediately: runs the chain and sorts the result. |
 | `to_list()` | `List<T>` | Runs the chain and returns the remaining items. |
 | `count()` | `int` | Runs the chain and returns how many items remain. |
 

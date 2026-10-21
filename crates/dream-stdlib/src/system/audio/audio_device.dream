@@ -22,12 +22,12 @@ public class AudioDevice {
         if parsed.is_err() {
             return Result.Err(AudioError("EIO", "invalid output device response"));
         }
-        let failure = parsed.unwrap().at("error");
-        if failure.at("code").as_string().is_some() {
+        let failure = parsed.unwrap()["error"];
+        if failure["code"].as_string().is_some() {
             return Result.Err(
                 AudioError(
-                    failure.at("code").as_string().unwrap(),
-                    failure.at("message").as_string().unwrap_or("audio device operation failed")
+                    failure["code"].as_string().unwrap(),
+                    failure["message"].as_string().unwrap_or("audio device operation failed")
                 )
             );
         }
@@ -39,9 +39,9 @@ public class AudioDevice {
         for (let item in items.unwrap()) {
             result.push(
                 AudioDevice(
-                    item.at("id").as_string().unwrap_or(""),
-                    item.at("name").as_string().unwrap_or(""),
-                    item.at("is_default").as_bool().unwrap_or(false)
+                    item["id"].as_string().unwrap_or(""),
+                    item["name"].as_string().unwrap_or(""),
+                    item["is_default"].as_bool().unwrap_or(false)
                 )
             );
         }

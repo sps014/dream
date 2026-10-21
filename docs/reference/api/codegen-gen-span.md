@@ -44,7 +44,7 @@ public length: int
 
 ## `constructor`
 
-Creates this model from snapshot JSON.
+Decodes a `GenSpan` from its object in the generation snapshot.
 
 ```dream
 public constructor(borrow v: JsonValue)

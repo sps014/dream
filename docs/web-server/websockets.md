@@ -47,10 +47,10 @@ Every method takes an optional trailing `CancellationToken`.
 | --- | --- | --- |
 | `messages()` | `AsyncIterable<WebSocketMessage>` | Yields each message through the final `Close`. A transport failure ends iteration. |
 | `receive()` | `Future<Result<WebSocketMessage, IoError>>` | Waits for one complete message. |
-| `send_text(text)` | `Future<Result<bool, IoError>>` | Sends a text message. |
-| `send_binary(bytes)` | `Future<Result<bool, IoError>>` | Sends a binary message. |
-| `close()` | `Future<Result<bool, IoError>>` | Sends a normal closing handshake. |
-| `close_with(code, reason)` | `Future<Result<bool, IoError>>` | Sends a closing handshake with a status code and reason. |
+| `send_text(text)` | `Future<Result<Unit, IoError>>` | Sends a text message. |
+| `send_binary(bytes)` | `Future<Result<Unit, IoError>>` | Sends a binary message. |
+| `close()` | `Future<Result<Unit, IoError>>` | Sends a normal closing handshake. |
+| `close_with(code, reason)` | `Future<Result<Unit, IoError>>` | Sends a closing handshake with a status code and reason. |
 
 | `WebSocketMessage` variant | Payload |
 | --- | --- |

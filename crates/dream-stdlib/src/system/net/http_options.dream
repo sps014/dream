@@ -1,18 +1,18 @@
 module system.net;
 
-// Request deadline and connection/redirect controls; unsupported host controls return `ENOTSUP`.
+/// Request deadline and connection/redirect controls; unsupported host controls return `ENOTSUP`.
 public class HttpOptions {
-    // Total request deadline including response-body consumption; zero disables the deadline.
+    /// Total request deadline including response-body consumption; zero disables the deadline.
     public timeout_ms: int;
 
-    // Native connection establishment timeout; zero uses the host default. Fetch requires zero.
+    /// Native connection establishment timeout; zero uses the host default. Fetch requires zero.
     public connect_timeout_ms: int;
 
-    // Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node.
-    // Browsers require -1 because redirect counts and responses are not reliably observable.
+    /// Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node.
+    /// Browsers require -1 because redirect counts and responses are not reliably observable.
     public max_redirects: int;
 
-    // Creates options; negative deadlines or redirect limits below -1 are invalid at send time.
+    /// Creates options; negative deadlines or redirect limits below -1 are invalid at send time.
     public constructor(
         timeout_ms: int = 30000,
         max_redirects: int = -1,

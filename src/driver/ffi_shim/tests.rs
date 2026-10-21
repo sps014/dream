@@ -66,7 +66,7 @@ fn shim_covers_each_member_shape() {
              extern constructor(path: string);\n\
              extern fun put(key: string, value: string): void;\n\
              extern fun get(key: string): Option<string>;\n\
-             extern fun compact(): Result<bool, string>;\n\
+             extern fun compact(): Result<Unit, string>;\n\
              extern fun find(key: string): Option<Store>;\n\
              extern fun on_change(f: fun(string): void): void;\n\
              @cpp_name(\"get_as<int>\") extern fun get_int(key: string): int;\n\

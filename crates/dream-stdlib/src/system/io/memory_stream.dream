@@ -1,19 +1,19 @@
 module system.io;
 
-// Seekable in-memory byte storage; closing rejects operations while retaining its data.
+/// Seekable in-memory byte storage; closing rejects operations while retaining its data.
 public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
     data: List<byte>;
     cursor: int;
     closed: bool;
 
-    // Creates an empty stream positioned at byte zero.
+    /// Creates an empty stream positioned at byte zero.
     public constructor() {
         this.data = List<byte>();
         this.cursor = 0;
         this.closed = false;
     }
 
-    // Copies `bytes` into independent storage and starts at byte zero.
+    /// Copies `bytes` into independent storage and starts at byte zero.
     public constructor(bytes: byte[]) {
         this.data = List<byte>();
         for (let i = 0; i < bytes.length; i = i + 1) {
@@ -23,24 +23,19 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         this.closed = false;
     }
 
-    // Last cursor position in bytes; remains readable after closure.
-    public get position(): long {
-        return (long)this.cursor;
-    }
-
-    // Returns the current byte position, or a closed-resource error.
+    /// Returns the current byte position, or a closed-resource error.
     public fun tell(): Result<long, IoError> {
         this.check_open()?;
         return Result.Ok((long)this.cursor);
     }
 
-    // Stored byte count; remains readable after closure.
+    /// Stored byte count; remains readable after closure.
     public get length(): long {
         return (long)this.data.length;
     }
 
-    // Reads up to the requested size and advances the cursor; empty success indicates EOF.
-    // Negative sizes and reads after closure return errors.
+    /// Reads up to the requested size and advances the cursor; empty success indicates EOF.
+    /// Negative sizes and reads after closure return errors.
     public fun read(max_bytes: int): Result<byte[], IoError> {
         this.check_open()?;
         if max_bytes < 0 {
@@ -61,8 +56,8 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(bytes);
     }
 
-    // Overwrites or appends bytes at the cursor and returns their count.
-    // A nonempty write beyond EOF fills the gap with zeros; size is limited to `int` range.
+    /// Overwrites or appends bytes at the cursor and returns their count.
+    /// A nonempty write beyond EOF fills the gap with zeros; size is limited to `int` range.
     public fun write(bytes: byte[]): Result<int, IoError> {
         this.check_open()?;
         if bytes.length > 2147483647 - this.cursor {
@@ -85,18 +80,18 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(bytes.length);
     }
 
-    // Sets a byte position from zero through the maximum `int`, including beyond EOF.
-    // Invalid positions or closure return errors without changing the cursor.
-    public fun seek(position: long): Result<bool, IoError> {
+    /// Sets a byte position from zero through the maximum `int`, including beyond EOF.
+    /// Invalid positions or closure return errors without changing the cursor.
+    public fun seek(position: long): Result<Unit, IoError> {
         this.check_open()?;
         if position < 0L || position > 2147483647L {
             return Result.Err(IoError.invalid("", "invalid memory stream position"));
         }
         this.cursor = (int)position;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Copies all stored bytes independently of the cursor; returns an error after closure.
+    /// Copies all stored bytes independently of the cursor; returns an error after closure.
     public fun to_bytes(): Result<byte[], IoError> {
         this.check_open()?;
         let bytes = Buffer.alloc<byte>(this.data.length);
@@ -106,25 +101,25 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(bytes);
     }
 
-    fun check_open(): Result<bool, IoError> {
+    fun check_open(): Result<Unit, IoError> {
         if this.closed {
             return Result.Err(IoError.closed(""));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Validates that the stream is open; memory storage has no pending output.
-    public unique fun flush(): Result<bool, IoError> {
+    /// Validates that the stream is open; memory storage has no pending output.
+    public unique fun flush(): Result<Unit, IoError> {
         return this.check_open();
     }
 
-    // Closes the stream idempotently; subsequent I/O returns a closed-resource error.
-    public fun close(): Result<bool, IoError> {
+    /// Closes the stream idempotently; subsequent I/O returns a closed-resource error.
+    public fun close(): Result<Unit, IoError> {
         this.closed = true;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Checks cancellation, then performs an immediately ready in-memory read.
+    /// Checks cancellation, then performs an immediately ready in-memory read.
     public async fun read_async(
         max_bytes: int,
         token: Option<CancellationToken> = Option.None
@@ -134,7 +129,7 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         return this.read(max_bytes);
     }
 
-    // Checks cancellation, then performs an immediately ready in-memory write.
+    /// Checks cancellation, then performs an immediately ready in-memory write.
     public async fun write_async(
         data: byte[],
         token: Option<CancellationToken> = Option.None
@@ -144,10 +139,10 @@ public class MemoryStream: Reader, Writer, AsyncReader, AsyncWriter {
         return this.write(data);
     }
 
-    // Checks cancellation and validates that the stream is open.
+    /// Checks cancellation and validates that the stream is open.
     public async unique fun flush_async(
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.flush();

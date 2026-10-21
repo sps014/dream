@@ -164,7 +164,7 @@ public calls: List<GenCallSite>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Decodes a complete generation snapshot from its root JSON object.
 
 ```dream
 public constructor(root: JsonValue)

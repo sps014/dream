@@ -46,7 +46,7 @@ fun spotlight_fragment(pixel: Pixel, center: GpuVec2, radius: float, color: GpuV
     return color * inside;
 }
 
-async fun run(window: Window): Result<bool, GpuError> {
+async fun run(window: Window): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     let surface = device.create_surface(window)?;
     let pipeline = device.render_pipeline(
@@ -94,11 +94,11 @@ async fun run(window: Window): Result<bool, GpuError> {
         pass.draw(3);
         frame.present().await?;
     }
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {
-    let opened = Window.open(WindowDesc.of("Spotlight", 800, 600).resizable(true).vsync(true));
+    let opened = Window.open(WindowDesc("Spotlight", 800, 600).resizable(true).vsync(true));
     if opened.is_err() {
         System.println("no window: " + opened.unwrap_err().message());
         return;

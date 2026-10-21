@@ -43,7 +43,7 @@ Output: `2`, then `true` on a new line. Adding an existing value does not add a 
 | `.length` | `int` | Number of values. |
 | `.capacity` | `int` | Current table size. The set grows before the table is three-quarters full. |
 | `is_empty()` | `bool` | `true` when the set has no values. |
-| `reserve(additional)` | `Result<bool, CapacityError>` | Makes room for `additional` more values; `Err` for a negative or unsupported count. |
+| `reserve(additional)` | `Result<Unit, CapacityError>` | Makes room for `additional` more values; `Err` for a negative or unsupported count. |
 | `to_array()` | `T[]` | New array of the values. |
 | `to_string()` | `string` | Values as text in the form `{a, b}`. |
 

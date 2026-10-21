@@ -20,7 +20,7 @@ public instances: List<GenSymbolInstance>
 
 ## `id`
 
-Stable identifier of this entry.
+`module::name` identity of the symbol.
 
 ```dream
 public id: string
@@ -28,7 +28,7 @@ public id: string
 
 ## `kind`
 
-Category of this entry.
+Whether the symbol is a type, function, or other kind of declaration.
 
 ```dream
 public kind: GenSymbolKind
@@ -36,7 +36,7 @@ public kind: GenSymbolKind
 
 ## `declaration`
 
-Declaration associated with this entry.
+The type declaration this symbol names, when it names one.
 
 ```dream
 public declaration: Option<GenDecl>
@@ -44,7 +44,7 @@ public declaration: Option<GenDecl>
 
 ## `function`
 
-Function declaration associated with this entry, when available.
+The function declaration this symbol names, when it names one.
 
 ```dream
 public function: Option<GenFunction>

@@ -1,6 +1,6 @@
 module system.net;
 
-// An owned TCP byte stream supporting one simultaneous read and one simultaneous write.
+/// An owned TCP byte stream supporting one simultaneous read and one simultaneous write.
 @allow_cycle
 public class TcpStream: AsyncReader, AsyncWriter {
     state: SocketState;
@@ -9,7 +9,7 @@ public class TcpStream: AsyncReader, AsyncWriter {
         this.state = state;
     }
 
-    // Connects with a deadline in milliseconds; zero disables the deadline.
+    /// Connects with a deadline in milliseconds; zero disables the deadline.
     public static async fun connect(
         host: string,
         port: int,
@@ -21,27 +21,27 @@ public class TcpStream: AsyncReader, AsyncWriter {
         );
     }
 
-    // Numeric local interface address selected for this connection.
+    /// Numeric local interface address selected for this connection.
     public get local_host(): string {
-        return this.state.metadata.at("local_host").as_string().unwrap_or("");
+        return this.state.metadata["local_host"].as_string().unwrap_or("");
     }
 
-    // Actual bound local port.
+    /// Actual bound local port.
     public get local_port(): int {
-        return this.state.metadata.at("local_port").as_int().unwrap_or(0);
+        return this.state.metadata["local_port"].as_int().unwrap_or(0);
     }
 
-    // Numeric remote address of the peer.
+    /// Numeric remote address of the peer.
     public get peer_host(): string {
-        return this.state.metadata.at("peer_host").as_string().unwrap_or("");
+        return this.state.metadata["peer_host"].as_string().unwrap_or("");
     }
 
-    // Remote TCP port of the peer.
+    /// Remote TCP port of the peer.
     public get peer_port(): int {
-        return this.state.metadata.at("peer_port").as_int().unwrap_or(0);
+        return this.state.metadata["peer_port"].as_int().unwrap_or(0);
     }
 
-    // Reads up to 16 MiB; positive-size empty success denotes peer EOF.
+    /// Reads up to 16 MiB; positive-size empty success denotes peer EOF.
     public async unique fun read_async(
         max_bytes: int,
         token: Option<CancellationToken> = Option.None
@@ -49,7 +49,7 @@ public class TcpStream: AsyncReader, AsyncWriter {
         return this.read_with_timeout(max_bytes, 0, token).await;
     }
 
-    // Reads with a per-operation deadline; a concurrent read returns EBUSY.
+    /// Reads with a per-operation deadline; a concurrent read returns EBUSY.
     public fun read_with_timeout(
         max_bytes: int,
         timeout_ms: int,
@@ -60,7 +60,7 @@ public class TcpStream: AsyncReader, AsyncWriter {
         return this.state.submit(request, [], token);
     }
 
-    // Writes a partial byte count; cancellation preserves completed side effects.
+    /// Writes a partial byte count; cancellation preserves completed side effects.
     public async unique fun write_async(
         bytes: byte[],
         token: Option<CancellationToken> = Option.None
@@ -74,11 +74,11 @@ public class TcpStream: AsyncReader, AsyncWriter {
         return Result.Ok(count.unwrap());
     }
 
-    // Retries partial writes until every byte has been accepted; does not roll back failures.
+    /// Retries partial writes until every byte has been accepted; does not roll back failures.
     public async fun write_all_async(
         bytes: byte[],
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         let lifetime = [this];
         let offset = 0;
@@ -98,30 +98,30 @@ public class TcpStream: AsyncReader, AsyncWriter {
         return lifetime[0].flush_async(effective_token).await;
     }
 
-    // TCP writes are unbuffered by this wrapper; validates openness and cancellation.
+    /// TCP writes are unbuffered by this wrapper; validates openness and cancellation.
     public async unique fun flush_async(
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         CancellationToken.rejected(CancellationToken.resolve(token), IoError.cancelled())?;
         if this.state.id <= 0 {
             return Result.Err(IoError.closed("socket"));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.
-    public fun shutdown_write(): Result<bool, IoError> {
-        return this.state.control("shutdown_write", JsonValue.none());
+    /// Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.
+    public fun shutdown_write(): Result<Unit, IoError> {
+        return this.state.control("shutdown_write", JsonValue.null());
     }
 
-    // Enables or disables TCP_NODELAY; pending native reads may return EBUSY.
-    public fun set_nodelay(enabled: bool): Result<bool, IoError> {
-        return this.state.control("nodelay", JsonValue.boolean(enabled));
+    /// Enables or disables TCP_NODELAY; pending native reads may return EBUSY.
+    public fun set_nodelay(enabled: bool): Result<Unit, IoError> {
+        return this.state.control("nodelay", JsonValue.from_bool(enabled));
     }
 
-    // Closes the owned socket and wakes pending operations; repeated closure succeeds.
-    public fun close(): Result<bool, IoError> {
+    /// Closes the owned socket and wakes pending operations; repeated closure succeeds.
+    public fun close(): Result<Unit, IoError> {
         this.state.close();
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

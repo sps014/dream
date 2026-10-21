@@ -78,11 +78,18 @@ mod tests {
     fn check_only_switch_labels_keep_constant_validation() {
         for (labels, expected) in [
             ("case -1: return; case 0, 1: return;", None),
-            ("case 1: return; case 1: return;", Some("duplicate case label '1'")),
-            ("case input: return;", Some("switch case labels must be constant")),
+            (
+                "case 1: return; case 1: return;",
+                Some("duplicate case label '1'"),
+            ),
+            (
+                "case input: return;",
+                Some("switch case labels must be constant"),
+            ),
         ] {
             let arena = Bump::new();
-            let source = format!("fun choose(input: int): void {{ switch (input) {{ {labels} }} }}");
+            let source =
+                format!("fun choose(input: int): void {{ switch (input) {{ {labels} }} }}");
             let mut diagnostics = DiagnosticBag::new(None);
             let mut parser = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics);
             let program = parser.parse().unwrap().get_root().clone();
@@ -92,9 +99,16 @@ mod tests {
                 &IndexMap::new(),
             );
             let facts = crate::analyzer::Analyzer::new(&graph, &arena).analyze_for_generators();
-            let messages: Vec<_> = facts.diagnostics.iter().map(|d| d.message.as_str()).collect();
+            let messages: Vec<_> = facts
+                .diagnostics
+                .iter()
+                .map(|d| d.message.as_str())
+                .collect();
             if let Some(expected) = expected {
-                assert!(messages.iter().any(|m| m.contains(expected)), "{messages:?}");
+                assert!(
+                    messages.iter().any(|m| m.contains(expected)),
+                    "{messages:?}"
+                );
             } else {
                 assert!(messages.is_empty(), "{messages:?}");
             }

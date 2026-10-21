@@ -17,7 +17,7 @@ public class Sender<T>
 Attempts a send without suspension; Full and Closed are distinct errors.
 
 ```dream
-public fun try_send(value: T): Result<bool, ChannelError>
+public fun try_send(value: T): Result<Unit, ChannelError>
 ```
 
 ## `send`
@@ -28,7 +28,7 @@ Suspends for capacity and observes the inherited scope token unless explicitly o
 public fun send(
     value: T,
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, ChannelError>>
+): Future<Result<Unit, ChannelError>>
 ```
 
 ## `close`

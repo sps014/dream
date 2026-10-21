@@ -1,6 +1,6 @@
 module system.net;
 
-// Response metadata and a streamed body. Explicit closure releases unfinished bodies.
+/// Response metadata and a streamed body. Explicit closure releases unfinished bodies.
 public class HttpResponse {
     status_value: int;
     url_value: Url;
@@ -15,44 +15,44 @@ public class HttpResponse {
     }
 
     internal static fun from_wire(value: JsonValue): Result<HttpResponse, HttpError> {
-        let url = Url.parse(value.at("url").as_string().unwrap_or(""));
-        let body = HttpBody(value.at("body").as_int().unwrap_or(0));
+        let url = Url.parse(value["url"].as_string().unwrap_or(""));
+        let body = HttpBody(value["body"].as_int().unwrap_or(0));
         if url.is_err() {
             body.close()?;
             return Result.Err(HttpError("EIO", "invalid response URL"));
         }
         return Result.Ok(
             HttpResponse(
-                value.at("status").as_int().unwrap_or(0),
+                value["status"].as_int().unwrap_or(0),
                 url.unwrap(),
-                HttpHeaders.from_wire(value.at("headers")),
+                HttpHeaders.from_wire(value["headers"]),
                 body
             )
         );
     }
 
-    // Numeric HTTP status; non-2xx responses are successful transport results.
+    /// Numeric HTTP status; non-2xx responses are successful transport results.
     public get status(): int {
         return this.status_value;
     }
 
-    // Final URL after any redirects visible to the host.
+    /// Final URL after any redirects visible to the host.
     public get url(): Url {
         return this.url_value;
     }
 
-    // Response headers visible to the host; browser CORS rules can hide some headers.
+    /// Response headers visible to the host; browser CORS rules can hide some headers.
     public get headers(): HttpHeaders {
         return this.header_values;
     }
 
-    // Byte stream owned by this response; a retained body can be read independently.
+    /// Byte stream owned by this response; a retained body can be read independently.
     public get body(): HttpBody {
         return this.body_value;
     }
 
-    // Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding.
-    // Limit or decoding failures consume input already read; close the response after any failure.
+    /// Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding.
+    /// Limit or decoding failures consume input already read; close the response after any failure.
     public async fun read_text(
         max_bytes: int = 1048576,
         token: Option<CancellationToken> = Option.None
@@ -98,8 +98,8 @@ public class HttpResponse {
         return Result.Ok(text.to_string());
     }
 
-    // Closes the body idempotently; subsequent reads return `ECLOSED`.
-    public fun close(): Result<bool, HttpError> {
+    /// Closes the body idempotently; subsequent reads return `ECLOSED`.
+    public fun close(): Result<Unit, HttpError> {
         return this.body_value.close();
     }
 }

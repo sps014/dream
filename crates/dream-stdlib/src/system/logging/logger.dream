@@ -16,7 +16,7 @@ public class Logger {
         this.handlers = List<LogHandler>();
     }
 
-    // Returns the named logger, creating it on first use.
+    /// Returns the named logger, creating it on first use.
     public static fun get(name: string): Logger {
         let existing = loggers_map.get(name);
         if existing.is_some() {
@@ -37,7 +37,7 @@ public class Logger {
         this._level = level;
     }
 
-    // Registers an additional handler.
+    /// Registers an additional handler.
     public fun add_handler(h: LogHandler): void {
         this.handlers.push(h);
     }
@@ -55,27 +55,27 @@ public class Logger {
         }
     }
 
-    // Logs at Trace.
+    /// Logs at Trace.
     public fun trace(msg: string): void {
         this.emit(LogLevel.Trace, msg);
     }
 
-    // Logs at Debug.
+    /// Logs at Debug.
     public fun debug(msg: string): void {
         this.emit(LogLevel.Debug, msg);
     }
 
-    // Logs at Info.
+    /// Logs at Info.
     public fun info(msg: string): void {
         this.emit(LogLevel.Info, msg);
     }
 
-    // Logs at Warn.
+    /// Logs at Warn.
     public fun warn(msg: string): void {
         this.emit(LogLevel.Warn, msg);
     }
 
-    // Logs at Error.
+    /// Logs at Error.
     public fun error(msg: string): void {
         this.emit(LogLevel.Error, msg);
     }

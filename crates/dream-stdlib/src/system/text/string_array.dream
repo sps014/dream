@@ -1,0 +1,17 @@
+module system.text;
+
+extend string[] {
+    /// Joins the strings in order with `sep` between neighbours. An empty array gives `""`.
+    public fun join(sep: string): string {
+        let sb = StringBuilder();
+        let i = 0;
+        while i < this.length {
+            if i > 0 {
+                sb.append(sep);
+            }
+            sb.append(this[i]);
+            i = i + 1;
+        }
+        return sb.build();
+    }
+}

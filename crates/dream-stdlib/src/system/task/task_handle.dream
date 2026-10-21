@@ -1,6 +1,6 @@
 module system.task;
 
-// A child result whose execution is owned by a scope, independent of this handle's lifetime.
+/// A child result whose execution is owned by a scope, independent of this handle's lifetime.
 @allow_cycle
 public class TaskHandle<T, E> {
     internal value: Option<Result<T, TaskFailure<E>>>;
@@ -11,7 +11,7 @@ public class TaskHandle<T, E> {
         this.completed = Option.None;
     }
 
-    // Waits for completion without cancelling or transferring ownership of the child.
+    /// Waits for completion without cancelling or transferring ownership of the child.
     public fun join(): Future<Result<T, TaskFailure<E>>> {
         return TaskHandle<T, E>.join_owned(this);
     }
@@ -42,7 +42,7 @@ public class TaskHandle<T, E> {
         // The scope owns this wait: cancellation must settle the worker before exposing results.
         let session = Task.start<T>(body);
         let wire = session.receive().await;
-        let value = Bytes.fromWire<T>(wire);
+        let value = Bytes.from_wire<T>(wire);
         session.hold();
         let outcome: Result<T, TaskFailure<E>> = Result.Ok(value);
         if scope.token.is_cancelled {

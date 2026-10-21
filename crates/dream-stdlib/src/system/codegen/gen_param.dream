@@ -6,10 +6,10 @@ import system.json;
 
 /// A function parameter and its type and attributes.
 public class GenParam {
-    /// Name identifying this entry.
+    /// Parameter name as declared.
     public name: string;
 
-    /// Type of this declaration or expression.
+    /// Declared type of the parameter.
     public ty: GenTypeRef;
 
     /// Whether this is a `ref` parameter, so assignments to it in the body are visible to the
@@ -19,7 +19,8 @@ public class GenParam {
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenParam` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(name: string, ty: GenTypeRef, is_ref: bool, attributes: List<GenAttribute>) {
         this.name = name;
         this.ty = ty;
@@ -27,12 +28,12 @@ public class GenParam {
         this.attributes = attributes;
     }
 
-    // Returns the requested model information.
+    /// The first `@A` attached to this parameter, decoded into `A`, or `None` when absent.
     public fun attribute<A>(): Option<A> {
         return GenAttributes.decode<A>(this.attributes);
     }
 
-    // Tests whether the requested attribute is attached to this model node.
+    /// Whether this parameter carries at least one `@A` attribute.
     public fun has<A>(): bool {
         return GenAttributes.has(this.attributes, GenAttributes.id<A>());
     }

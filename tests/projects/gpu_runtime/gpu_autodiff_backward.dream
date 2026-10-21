@@ -47,8 +47,8 @@ fun backward_ok<T>(result: Result<T, GpuError>, what: string): T {
 
 // GPU results are single precision; the references are double-precision central differences.
 fun backward_close(actual: float, expected: double, what: string): void {
-    let tolerance = 2e-3d * Math.max(1.0d, Math.abs(expected));
-    if Math.abs((double)actual - expected) > tolerance {
+    let tolerance = 2e-3d * (1.0d).max(expected.abs());
+    if ((double)actual - expected).abs() > tolerance {
         Assert.fail(what + ": got " + actual.to_string() + ", expected " + expected.to_string());
     }
 }
@@ -195,7 +195,7 @@ async fun backward_train(device: GpuDevice, label: string): void {
         Assert.is_true(current < previous);
         previous = current;
     }
-    Assert.is_true(Math.abs((double)w - 2.0d) < 0.5d);
+    Assert.is_true(((double)w - 2.0d).abs() < 0.5d);
 }
 
 async fun backward_vector(device: GpuDevice, label: string): void {

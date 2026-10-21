@@ -1,27 +1,27 @@
 module system.csv;
 
-// CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.
+/// CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.
 @allow_cycle
 public class CsvWriter {
     destination: Writer;
     delimiter: char;
     limit: int;
 
-    // Borrows destination; callers retain responsibility for closure and explicit flushing.
+    /// Borrows destination; callers retain responsibility for closure and explicit flushing.
     public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.destination = destination;
         this.delimiter = delimiter;
         this.limit = max_record_bytes;
     }
 
-    // Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.
-    public fun write_record(fields: string[]): Result<bool, CsvError> {
+    /// Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.
+    public fun write_record(fields: string[]): Result<Unit, CsvError> {
         if !CsvCodec.valid(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
             return Result.Err(CsvError(0L, 0L, "invalid delimiter or record limit"));
         }
         let request = JsonValue.dict();
         request["action"] = JsonValue.from_string("csv_write");
-        request["delimiter"] = JsonValue.number((double)(int)this.delimiter);
+        request["delimiter"] = JsonValue.from_double((double)(int)this.delimiter);
         let values = JsonValue.array();
         let size = 0;
         for (let field in fields) {
@@ -34,7 +34,7 @@ public class CsvWriter {
         }
         request["fields"] = values;
         let encoded = CsvCodec.request(request)?;
-        let bytes = Encoding.utf8_encode(encoded.at("text").as_string().unwrap());
+        let bytes = Encoding.utf8_encode(encoded["text"].as_string().unwrap());
         if bytes.length > this.limit {
             return Result.Err(CsvError(0L, 0L, "encoded record exceeds configured byte limit"));
         }
@@ -42,15 +42,15 @@ public class CsvWriter {
         if written.is_err() {
             return Result.Err(CsvError(0L, 0L, written.unwrap_err().message()));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Flushes the borrowed destination and reports underlying failures.
-    public fun flush(): Result<bool, CsvError> {
+    /// Flushes the borrowed destination and reports underlying failures.
+    public fun flush(): Result<Unit, CsvError> {
         let result = this.destination.flush();
         if result.is_err() {
             return Result.Err(CsvError(0L, 0L, result.unwrap_err().message()));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

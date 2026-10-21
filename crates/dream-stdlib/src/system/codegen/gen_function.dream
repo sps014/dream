@@ -4,15 +4,15 @@ import system;
 import system.collections;
 import system.json;
 
-// A method, or a top-level function.
+/// A method, or a top-level function.
 public class GenFunction {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
     /// Identifier distinguishing this function's overload.
     public overload: string;
 
-    /// Name identifying this entry.
+    /// Function or method name as declared.
     public name: string;
 
     /// Whether the member belongs to the type rather than an instance.
@@ -36,13 +36,14 @@ public class GenFunction {
     /// Attributes attached to this declaration.
     public attributes: List<GenAttribute>;
 
-    /// Source location associated with this entry.
+    /// Where the function is written in source.
     public location: GenLocation;
 
     /// Function body, when source is available.
     public body: Option<GenBody>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenFunction` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(
         id: string,
         name: string,
@@ -71,12 +72,12 @@ public class GenFunction {
         this.body = body;
     }
 
-    // Returns the requested model information.
+    /// The first `@A` attached to this function, decoded into `A`, or `None` when absent.
     public fun attribute<A>(): Option<A> {
         return GenAttributes.decode<A>(this.attributes);
     }
 
-    // Tests whether the requested attribute is attached to this model node.
+    /// Whether this function carries at least one `@A` attribute.
     public fun has<A>(): bool {
         return GenAttributes.has(this.attributes, GenAttributes.id<A>());
     }

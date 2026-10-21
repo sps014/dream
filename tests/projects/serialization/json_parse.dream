@@ -7,13 +7,12 @@ import system.json;
 fun json_parse(): void {
     let v = Json.deserialize<JsonValue>(
         "{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}"
-    ).unwrap_or(JsonValue.none());
-    let none = JsonValue.none();
+    ).unwrap_or(JsonValue.null());
+    let none = JsonValue.null();
     Assert.eq(
         (
-            v["a"]
+            v.get("a")
                 .unwrap_or(none)["b"]
-                .unwrap_or(none)
                 .at(2)
                 .unwrap_or(none)
                 .as_int()
@@ -21,9 +20,9 @@ fun json_parse(): void {
         ).to_string(),
         "3"
     );
-    Assert.eq((v["a"].unwrap_or(none)["b"].unwrap_or(none).length).to_string(), "3");
-    Assert.eq((v["n"].unwrap_or(none).as_double().unwrap_or(0.0d)).to_string(), "-2.5");
-    Assert.eq((v["ok"].unwrap_or(none).as_bool().unwrap_or(false)).to_string(), "false");
-    Assert.eq((v["missing"].unwrap_or(none).is_null()).to_string(), "true");
-    Assert.eq((Json.serialize(v["s"].unwrap_or(none))).to_string(), "\"hi\\nthere\"");
+    Assert.eq((v.get("a").unwrap_or(none)["b"].length).to_string(), "3");
+    Assert.eq((v.get("n").unwrap_or(none).as_double().unwrap_or(0.0d)).to_string(), "-2.5");
+    Assert.eq((v.get("ok").unwrap_or(none).as_bool().unwrap_or(false)).to_string(), "false");
+    Assert.eq((v.get("missing").unwrap_or(none).is_null()).to_string(), "true");
+    Assert.eq((Json.serialize(v.get("s").unwrap_or(none))).to_string(), "\"hi\\nthere\"");
 }

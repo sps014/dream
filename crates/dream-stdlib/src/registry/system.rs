@@ -11,8 +11,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/arg_error.dream",
-            include_str!("../system/arg_error.dream"),
+            "<std>/system/argument_error.dream",
+            include_str!("../system/argument_error.dream"),
         ),
         (
             "<std>/system/platform.dream",
@@ -23,8 +23,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/os_family.dream"),
         ),
         (
-            "<std>/system/system.dream",
-            include_str!("../system/system.dream"),
+            "<std>/system/host_system.dream",
+            include_str!("../system/host_system.dream"),
         ),
         (
             "<std>/system/random.dream",
@@ -55,8 +55,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/time_zone.dream"),
         ),
         (
-            "<std>/system/datetime.dream",
-            include_str!("../system/datetime.dream"),
+            "<std>/system/file_stats_time.dream",
+            include_str!("../system/file_stats_time.dream"),
         ),
         (
             "<std>/system/duration.dream",

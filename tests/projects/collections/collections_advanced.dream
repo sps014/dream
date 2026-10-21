@@ -37,10 +37,10 @@ fun collections_advanced(): void {
     m[c8c_Color.Green] = c8c_Point(30, 40);
 
     Assert.eq(("Map size: " + m.length).to_string(), "Map size: 2");
-    let p1 = m.get_or(c8c_Color.Red, c8c_Point(0, 0));
+    let p1 = m.get(c8c_Color.Red).unwrap_or(c8c_Point(0, 0));
     Assert.eq(("Red x: " + p1.x + ", y: " + p1.y).to_string(), "Red x: 10, y: 20");
 
-    let p2 = m.get_or(c8c_Color.Green, c8c_Point(0, 0));
+    let p2 = m.get(c8c_Color.Green).unwrap_or(c8c_Point(0, 0));
     Assert.eq(("Green x: " + p2.x + ", y: " + p2.y).to_string(), "Green x: 30, y: 40");
 
     // Test Set with class references
@@ -71,10 +71,10 @@ fun collections_advanced(): void {
     class_map[u1] = "Admin";
     class_map[u2] = "Editor";
 
-    Assert.eq(("u1 role: " + class_map.get_or(u1, "None")).to_string(), "u1 role: Admin");
-    Assert.eq(("u2 role: " + class_map.get_or(u2, "None")).to_string(), "u2 role: Editor");
+    Assert.eq(("u1 role: " + class_map.get(u1).unwrap_or("None")).to_string(), "u1 role: Admin");
+    Assert.eq(("u2 role: " + class_map.get(u2).unwrap_or("None")).to_string(), "u2 role: Editor");
     // u3 has the same name "Alice" but is a different instance, so it shouldn't match u1's key
-    Assert.eq(("u3 role: " + class_map.get_or(u3, "None")).to_string(), "u3 role: None");
+    Assert.eq(("u3 role: " + class_map.get(u3).unwrap_or("None")).to_string(), "u3 role: None");
 
     // Struct as key in set
     let pointSet = Set<c8c_Point>();

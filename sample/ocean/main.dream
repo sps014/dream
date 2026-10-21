@@ -226,7 +226,7 @@ fun ocean_fragment(
     return GpuVec4(color.x, color.y, color.z, 1.0f);
 }
 
-async fun run_ocean(window: Window): Result<bool, GpuError> {
+async fun run_ocean(window: Window): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     let surface = device.create_surface(window)?;
     let pipeline = device.render_pipeline(
@@ -272,21 +272,21 @@ async fun run_ocean(window: Window): Result<bool, GpuError> {
         if input.keyboard.pressed(KeyCode.Q) {
             antialias = 1 - antialias;
         }
-        let dt = (float)Math.min(input.delta_seconds, 0.05f);
+        let dt = (float)input.delta_seconds.min(0.05f);
         if !paused {
             time = time + dt;
         }
         if input.keyboard.is_down(KeyCode.ArrowUp) {
-            strength = (float)Math.min(strength + dt * 0.3f, 1.5f);
+            strength = (float)(strength + dt * 0.3f).min(1.5f);
         }
         if input.keyboard.is_down(KeyCode.ArrowDown) {
-            strength = (float)Math.max(strength - dt * 0.3f, 0.3f);
+            strength = (float)(strength - dt * 0.3f).max(0.3f);
         }
         if input.keyboard.is_down(KeyCode.ArrowRight) {
-            daylight = (float)Math.min(daylight + dt * 0.4f, 1.0f);
+            daylight = (float)(daylight + dt * 0.4f).min(1.0f);
         }
         if input.keyboard.is_down(KeyCode.ArrowLeft) {
-            daylight = (float)Math.max(daylight - dt * 0.4f, 0.0f);
+            daylight = (float)(daylight - dt * 0.4f).max(0.0f);
         }
         if input.keyboard.pressed(KeyCode.R) {
             strength = 1.0f;
@@ -313,12 +313,12 @@ async fun run_ocean(window: Window): Result<bool, GpuError> {
         pass.draw(3);
         frame.present().await?;
     }
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {
     let opened = Window.open(
-        WindowDesc.of("Pelagic | Dream Seascape", 1280, 800).resizable(true).vsync(true)
+        WindowDesc("Pelagic | Dream Seascape", 1280, 800).resizable(true).vsync(true)
     );
     if opened.is_err() {
         System.println("Window error: " + opened.unwrap_err().message());

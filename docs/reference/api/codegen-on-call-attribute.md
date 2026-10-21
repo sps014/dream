@@ -14,7 +14,7 @@ public struct OnCallAttribute
 
 ## `declaration`
 
-Declaration associated with this entry.
+Function or method whose call sites the generator receives.
 
 ```dream
 public declaration: DeclarationPath

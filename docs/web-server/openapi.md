@@ -59,9 +59,9 @@ These providers in `system.webapi` already carry `@security_scheme`, so injectin
 
 | Provider | Reads | Returns | Scheme |
 | --- | --- | --- | --- |
-| `BearerToken` | `Authorization: Bearer <token>` | The token | `BearerAuth` (`http`, `bearer`) |
-| `BasicAuth` | `Authorization: Basic <value>` | The encoded value after `Basic ` | `BasicAuth` (`http`, `basic`) |
-| `ApiKeyHeader` | `X-Api-Key` header | The key | `ApiKeyAuth` (`apiKey` in a header) |
+| `HttpAuth.bearer_token` | `Authorization: Bearer <token>` | The token | `BearerAuth` (`http`, `bearer`) |
+| `HttpAuth.basic_auth` | `Authorization: Basic <value>` | The encoded value after `Basic ` | `BasicAuth` (`http`, `basic`) |
+| `HttpAuth.api_key_header` | `X-Api-Key` header | The key | `ApiKeyAuth` (`apiKey` in a header) |
 
 Each returns 401 when the header is missing or malformed. They only extract credentials; your own dependency must check them. Metadata describes a check; include the actual provider or authentication middleware to enforce it.
 

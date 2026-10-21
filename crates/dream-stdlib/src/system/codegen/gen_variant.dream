@@ -6,19 +6,20 @@ import system.json;
 
 /// A choice declared by an enum or discriminated union.
 public class GenVariant {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    /// Name identifying this entry.
+    /// Variant name as declared.
     public name: string;
 
     /// Fields of this type, in declaration order.
     public fields: List<GenField>;
 
-    /// Source location associated with this entry.
+    /// Where the variant is written in source.
     public location: GenLocation;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenVariant` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(id: string, name: string, fields: List<GenField>, location: GenLocation) {
         this.id = id;
         this.name = name;

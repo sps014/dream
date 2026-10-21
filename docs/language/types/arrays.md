@@ -57,12 +57,12 @@ Every `T[]` has these members without an import:
 | `.first()` / `.last()` | `Option<T>` | First / last element, or `None` when empty |
 | `.contains(v)` | `bool` | Whether any element equals `v` |
 | `.index_of(v)` | `Option<int>` | Index of the first element equal to `v` |
-| `.find_where(pred)` | `Option<T>` | First element for which `pred` returns `true` |
-| `.find_index_where(pred)` | `Option<int>` | Index of the first element for which `pred` returns `true` |
+| `.find(pred)` | `Option<T>` | First element for which `pred` returns `true` |
+| `.find_index(pred)` | `Option<int>` | Index of the first element for which `pred` returns `true` |
 | `.all(pred)` / `.any(pred)` / `.none(pred)` | `bool` | Whether every / some / no element matches `pred` |
-| `.count_where(pred)` | `int` | Number of elements matching `pred` |
+| `.count(pred)` | `int` | Number of elements matching `pred` |
 | `.for_each(action)` | — | Calls `action` on each element in order |
-| `.slice(start, end)` | `T[]` | A new array copied from `start` (inclusive) to `end` (exclusive); bounds outside the array are clamped to it |
+| `.slice(start, end)` | `T[]` | A new array copied from `start` (inclusive) to `end` (exclusive); bounds outside the array panic |
 | `.reverse()` | — | Reverses the elements in place |
 | `.concat(other)` | `T[]` | A new array with this array's elements followed by `other`'s |
 | `.iterator()` | `Iterator<T>` | An iterator over the elements |
@@ -128,8 +128,6 @@ A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 | `[a, b, c]` | An array holding the listed values |
 | `[value; len]` | `len` slots, all holding `value` (re-evaluated per slot only when `value` builds an array) |
 | `Array.alloc<T>(len)` | `len` zero-initialized slots |
-| `Array.repeat<T>(len, value)` | `len` slots sharing one `value`, evaluated once |
-| `Array.repeat_with<T>(len, fill)` | `len` slots, calling `fill()` once per slot |
 
 ## Fixed-size buffers
 
@@ -164,7 +162,7 @@ grid[0][0] = 32;
 ```dream
 let xs = [1, 2, 3, 4, 5];
 let whole = Span.of(xs); // inferred Span<int> — a span over all of xs
-let mid = whole.slice(1, 3); // [2, 3, 4] — still a view, no copy
+let mid = whole.slice(1, 4); // [2, 3, 4] — still a view, no copy
 
 System.println(mid[0]); // 2
 mid[0] = 20; // writes through to xs[1]

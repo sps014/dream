@@ -13,12 +13,12 @@ fun channel_failure(error: ChannelError): TaskFailure<string> {
     return TaskFailure.Failed(channel_message(error));
 }
 
-async fun produce(sender: Sender<int>): Result<bool, string> {
+async fun produce(sender: Sender<int>): Result<Unit, string> {
     for (let value = 1; value <= 100; value = value + 1) {
         sender.send(value).await.map_err<string>(channel_message)?;
     }
     sender.close();
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): int {
@@ -27,7 +27,7 @@ async fun main(): int {
             let queue = Channel.bounded<int>(capacity: 16).unwrap();
             let sender = queue.sender;
             let receiver = queue.receiver;
-            scope.spawn<bool>(async () => produce(sender).await);
+            scope.spawn<Unit>(async () => produce(sender).await);
             let total = 0;
             while true {
                 let value = receiver.receive().await.map_err<TaskFailure<string>>(channel_failure)?;

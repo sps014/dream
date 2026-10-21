@@ -34,7 +34,7 @@ public constructor(
 Registers an identity provider, returning an error if its configuration is invalid.
 
 ```dream
-public fun add_provider(options: OidcOptions): Result<bool, AuthError>
+public fun add_provider(options: OidcOptions): Result<Unit, AuthError>
 ```
 
 ## `login`
@@ -58,7 +58,7 @@ public fun refresh(token: string): Future<Result<AuthTokens, AuthError>>
 Revokes the session family associated with the refresh token. Invalid tokens return `AuthError`.
 
 ```dream
-public fun logout(token: string): Future<Result<bool, AuthError>>
+public fun logout(token: string): Future<Result<Unit, AuthError>>
 ```
 
 ## `verify`
@@ -77,10 +77,10 @@ Installs verified identity into request state. Invalid credentials always short-
 public fun middleware(): Middleware
 ```
 
-## `CurrentUser`
+## `current_user`
 
-Injects identity previously verified by AuthService.middleware().
+Returns the identity that `AuthService.middleware()` verified for this request. Use it as a dependency, `@dep(AuthService.current_user)`. Fails with 401 when the request is not authenticated and 403 when it lacks a scope required by `@requires_scopes`.
 
 ```dream
-public fun CurrentUser(ctx: RequestContext): Result<AuthPrincipal, HttpStatus>
+public static fun current_user(ctx: RequestContext): Result<AuthPrincipal, HttpStatus>
 ```

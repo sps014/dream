@@ -12,33 +12,33 @@ A JSON value: null, boolean, number, string, array, or object. Arrays and object
 public class JsonValue
 ```
 
-## `none`
+## `null`
 
-A new null JSON value.
+Creates a JSON `null`.
 
 ```dream
-public static fun none(): JsonValue
+public static fun null(): JsonValue
 ```
 
-## `boolean`
+## `from_bool`
 
-A new boolean JSON value.
+Creates a JSON boolean holding `b`.
 
 ```dream
-public static fun boolean(b: bool): JsonValue
+public static fun from_bool(b: bool): JsonValue
 ```
 
-## `number`
+## `from_double`
 
-A new number JSON value.
+Creates a JSON number holding `n`. Integral values serialize without a decimal point.
 
 ```dream
-public static fun number(n: double): JsonValue
+public static fun from_double(n: double): JsonValue
 ```
 
 ## `from_int`
 
-A new number JSON value from int.
+Creates a JSON number holding `n`; every `int` is represented exactly.
 
 ```dream
 public static fun from_int(n: int): JsonValue
@@ -46,7 +46,7 @@ public static fun from_int(n: int): JsonValue
 
 ## `from_string`
 
-A new string JSON value.
+Creates a JSON string holding `s`.
 
 ```dream
 public static fun from_string(s: string): JsonValue
@@ -54,7 +54,7 @@ public static fun from_string(s: string): JsonValue
 
 ## `array`
 
-A new empty JSON array (allocates only the items list).
+Creates an empty JSON array; add elements with `push`.
 
 ```dream
 public static fun array(): JsonValue
@@ -62,7 +62,7 @@ public static fun array(): JsonValue
 
 ## `dict`
 
-A new empty JSON object (allocates keys, parallel values, and map).
+Creates an empty JSON object; add properties with `value[key] = item`. Properties serialize in insertion order.
 
 ```dream
 public static fun dict(): JsonValue
@@ -148,50 +148,50 @@ Returns the entries when this is an object, otherwise `None`.
 public fun as_map(): Option<Map<string, JsonValue>>
 ```
 
-## `str_or`
+## `remove`
 
-Returns the string value, or `fallback` for a different JSON kind.
+Removes the named object property; returns whether it existed.
 
 ```dream
-public fun str_or(fallback: string): string
+public fun remove(borrow key: string): bool
 ```
 
-## `int_or`
+## `contains`
 
-Returns the integer value, or `fallback` for a different JSON kind.
+Returns whether this is an object with a property named `key`. Always `false` for arrays and scalars.
 
 ```dream
-public fun int_or(fallback: int): int
+public fun contains(borrow key: string): bool
 ```
 
-## `bool_or`
+## `get`
 
-Returns the boolean value, or `fallback` for a different JSON kind.
+Returns the property named `key`, or `None` when this is not an object or the property is absent. Chain `as_string`, `as_int`, and similar readers through `and_then` to read a typed property.
 
 ```dream
-public fun bool_or(fallback: bool): bool
+public fun get(borrow key: string): Option<JsonValue>
 ```
 
-## `double_or`
+## `this`
 
-Returns the numeric value, or `fallback` for a different JSON kind.
+Returns the property named `key`. Panics when this is not an object or the property is absent; use `get` when absence is expected.
 
 ```dream
-public fun double_or(fallback: double): double
+public fun this[borrow key: string]: JsonValue
 ```
 
-## `get_str`
+## `this`
 
-Returns the named string property, or `None` if missing or not a string.
+Sets the value for `key` (objects only).
 
 ```dream
-public fun get_str(borrow key: string): Option<string>
+public fun this[key: string] = value: JsonValue
 ```
 
-## `get_int`
+## `key_at`
 
-Returns the named integer property, or `None` if missing or not numeric.
+The object key at `index`, or `None`.
 
 ```dream
-public fun get_int(borrow key: string): Option<int>
+public fun key_at(index: int): Option<string>
 ```

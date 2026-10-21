@@ -28,7 +28,7 @@ public contents: string
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a file to emit at `path` with the given `contents`.
 
 ```dream
 public constructor(path: string, contents: string)

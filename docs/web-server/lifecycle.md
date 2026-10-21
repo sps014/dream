@@ -26,7 +26,7 @@ async fun main(): void {
     app.lifespan(
         async (app: WebApp) => {
             app.state["service"] = "ready";
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         },
         async (app: WebApp) => {
             app.state.clear();
@@ -38,7 +38,7 @@ async fun main(): void {
 
 | `WebApp` member | Effect |
 | --- | --- |
-| `lifespan(start, stop)` | Registers a pair: `start(app)` returns `Result<bool, IoError>` and runs at startup; `stop(app)` runs at shutdown only if `start` succeeded. |
+| `lifespan(start, stop)` | Registers a pair: `start(app)` returns `Result<Unit, IoError>` and runs at startup; `stop(app)` runs at shutdown only if `start` succeeded. |
 | `state` | A `Map<string, string>` shared by every request; handlers see it as `ctx.app_state`. |
 | `shutdown()` | Stops accepting connections and cancels pending transport work. |
 | `wait(token?)` | Waits for active requests and their cleanup, then runs the `stop` hooks. |

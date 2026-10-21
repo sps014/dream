@@ -1,9 +1,9 @@
 import system;
 import system.task;
 
-async fun idle_child(release: CancellationSource): Result<bool, string> {
+async fun idle_child(release: CancellationSource): Result<Unit, string> {
     release.token.wait_cancelled().await;
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun run_suite(): long {
@@ -26,7 +26,7 @@ async fun run_suite(): long {
         async (scope) => {
             let release = CancellationSource();
             for (let i = 0; i < count; i = i + 1) {
-                scope.spawn<bool>(async () => idle_child(release).await);
+                scope.spawn<Unit>(async () => idle_child(release).await);
             }
             Time.delay(1).await;
             peak_live = Debug.live_objects - before_live;
@@ -89,7 +89,7 @@ async fun run_suite(): long {
 }
 
 fun counter_delta(allocations: long, retains: long, releases: long): string {
-    if System.env_or("DREAM_BENCH_COUNTERS", "") != "1" {
+    if System.env("DREAM_BENCH_COUNTERS").unwrap_or("") != "1" {
         return "";
     }
     let a = Debug.total_allocations - allocations;
@@ -100,7 +100,7 @@ fun counter_delta(allocations: long, retains: long, releases: long): string {
 }
 
 async fun main(): void {
-    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    let passes = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("5")).unwrap_or(5);
     let sink = 0L;
     for (let pass = 0; pass < passes; pass++) {
         sink = sink + run_suite().await;

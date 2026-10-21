@@ -12,11 +12,11 @@ async fun main(): void {
         let channel = Channel.bounded<int>(2).unwrap();
         let sender = channel.sender;
         let receiver = channel.receiver;
-        scope.spawn<bool>(async () => {
+        scope.spawn<Unit>(async () => {
             sender.send(20).await.unwrap();
             sender.send(22).await.unwrap();
             sender.close();
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         });
         let sum = 0;
         while true {

@@ -11,7 +11,7 @@ fun map_indexer_missing(): void {
     m["a"] = 1;
     Assert.eq((m["a"]).to_string(), "1");
     Assert.eq((m.get("missing").unwrap_or(-7)).to_string(), "-7");
-    Assert.eq((m.get_or("missing", -9)).to_string(), "-9");
+    Assert.eq((m.get("missing").unwrap_or(-9)).to_string(), "-9");
     let sm = SortedMap<int, string>();
     sm[1] = "one";
     Assert.eq((sm[1]).to_string(), "one");

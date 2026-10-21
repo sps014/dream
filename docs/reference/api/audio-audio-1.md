@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `Audio`
 
 A web-style audio player. Constructors configure sources; load and play perform I/O.
 
@@ -12,7 +12,7 @@ A web-style audio player. Constructors configure sources; load and play perform 
 public class Audio
 ```
 
-## Declaration
+## `constructor`
 
 Creates an empty player. Assign src before calling play.
 
@@ -20,7 +20,7 @@ Creates an empty player. Assign src before calling play.
 public constructor()
 ```
 
-## Declaration
+## `constructor`
 
 Creates a streaming player for a path or HTTP URL without starting I/O.
 
@@ -28,7 +28,7 @@ Creates a streaming player for a path or HTTP URL without starting I/O.
 public constructor(src: string)
 ```
 
-## Declaration
+## `constructor`
 
 Creates a streaming player for a path or URL with snapshotted buffering limits.
 
@@ -36,7 +36,7 @@ Creates a streaming player for a path or URL with snapshotted buffering limits.
 public constructor(src: string, options: AudioOptions)
 ```
 
-## Declaration
+## `constructor`
 
 Snapshots encoded bytes; detection and decoding begin when loading starts.
 
@@ -44,7 +44,7 @@ Snapshots encoded bytes; detection and decoding begin when loading starts.
 public constructor(bytes: byte[])
 ```
 
-## Declaration
+## `constructor`
 
 Snapshots encoded bytes with a configurable decoded-data limit.
 
@@ -52,7 +52,7 @@ Snapshots encoded bytes with a configurable decoded-data limit.
 public constructor(bytes: byte[], options: AudioOptions)
 ```
 
-## Declaration
+## `constructor`
 
 Creates a player from already decoded PCM without including encoded-format decoders.
 
@@ -60,31 +60,31 @@ Creates a player from already decoded PCM without including encoded-format decod
 public constructor(buffer: AudioBuffer)
 ```
 
-## Declaration
+## `load`
 
 Cancels prior loading and prepares the current source; returns an I/O or decoding error.
 
 ```dream
-public async fun load(): Result<bool, AudioError>
+public async fun load(): Result<Unit, AudioError>
 ```
 
-## Declaration
+## `play`
 
 Loads if necessary and starts or resumes playback. Browser activation may be required.
 
 ```dream
-public async fun play(): Result<bool, AudioError>
+public async fun play(): Result<Unit, AudioError>
 ```
 
-## Declaration
+## `pause`
 
 Pauses without changing position; repeating pause emits no duplicate event.
 
 ```dream
-public fun pause(): Result<bool, AudioError>
+public fun pause(): Result<Unit, AudioError>
 ```
 
-## Declaration
+## `close`
 
 Cancels loading and releases output. Queued events remain available after closure.
 
@@ -92,7 +92,7 @@ Cancels loading and releases output. Queued events remain available after closur
 public fun close(): void
 ```
 
-## Declaration
+## `poll_events`
 
 Drains ordered typed notifications, including after close.
 
@@ -100,7 +100,7 @@ Drains ordered typed notifications, including after close.
 public fun poll_events(): AudioEvent[]
 ```
 
-## Declaration
+## `src`
 
 Current string source; empty for PCM and encoded-byte constructors.
 
@@ -108,7 +108,7 @@ Current string source; empty for PCM and encoded-byte constructors.
 public get src(): string
 ```
 
-## Declaration
+## `src`
 
 Replaces the source, cancelling prior playback and pending loads.
 
@@ -116,7 +116,7 @@ Replaces the source, cancelling prior playback and pending loads.
 public set src(value: string)
 ```
 
-## Declaration
+## `current_time`
 
 Current position in seconds.
 
@@ -124,7 +124,7 @@ Current position in seconds.
 public get current_time(): double
 ```
 
-## Declaration
+## `current_time`
 
 Requests an absolute seek in seconds; invalid requests preserve the current position.
 
@@ -132,7 +132,7 @@ Requests an absolute seek in seconds; invalid requests preserve the current posi
 public set current_time(value: double)
 ```
 
-## Declaration
+## `duration`
 
 Source duration in seconds, absent until metadata is loaded and for streams that do not declare one, such as streamed MP3.
 
@@ -140,7 +140,7 @@ Source duration in seconds, absent until metadata is loaded and for streams that
 public get duration(): Option<double>
 ```
 
-## Declaration
+## `volume`
 
 Linear gain from zero to one; mute does not change this value.
 
@@ -148,7 +148,7 @@ Linear gain from zero to one; mute does not change this value.
 public get volume(): float
 ```
 
-## Declaration
+## `volume`
 
 Sets finite gain from zero to one, preserving the previous value on error.
 
@@ -156,7 +156,7 @@ Sets finite gain from zero to one, preserving the previous value on error.
 public set volume(value: float)
 ```
 
-## Declaration
+## `muted`
 
 Whether this player is muted.
 
@@ -164,7 +164,7 @@ Whether this player is muted.
 public get muted(): bool
 ```
 
-## Declaration
+## `muted`
 
 Toggles mute without changing the stored volume.
 
@@ -172,7 +172,7 @@ Toggles mute without changing the stored volume.
 public set muted(value: bool)
 ```
 
-## Declaration
+## `loop`
 
 Whether natural completion restarts playback.
 
@@ -180,7 +180,7 @@ Whether natural completion restarts playback.
 public get loop(): bool
 ```
 
-## Declaration
+## `loop`
 
 Enables repetition of a seekable source.
 
@@ -188,11 +188,10 @@ Enables repetition of a seekable source.
 public set loop(value: bool)
 ```
 
-## Declaration
+## `paused`
 
 Whether playback is paused, including before the first play call.
 
 ```dream
 public get paused(): bool
 ```
-

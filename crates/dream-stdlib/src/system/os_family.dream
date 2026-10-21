@@ -1,6 +1,6 @@
 module system;
 
-// Operating-system family (native hosts).
+/// Operating-system family (native hosts).
 public enum OsFamily {
     /// A Unix-like operating system.
     Unix,

@@ -12,7 +12,7 @@ public class GenParam
 
 ## `name`
 
-Name identifying this entry.
+Parameter name as declared.
 
 ```dream
 public name: string
@@ -20,7 +20,7 @@ public name: string
 
 ## `ty`
 
-Type of this declaration or expression.
+Declared type of the parameter.
 
 ```dream
 public ty: GenTypeRef
@@ -44,7 +44,7 @@ public attributes: List<GenAttribute>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenParam` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(name: string, ty: GenTypeRef, is_ref: bool, attributes: List<GenAttribute>)
@@ -52,7 +52,7 @@ public constructor(name: string, ty: GenTypeRef, is_ref: bool, attributes: List<
 
 ## `attribute`
 
-Returns the requested model information.
+The first `@A` attached to this parameter, decoded into `A`, or `None` when absent.
 
 ```dream
 public fun attribute<A>(): Option<A>
@@ -60,7 +60,7 @@ public fun attribute<A>(): Option<A>
 
 ## `has`
 
-Tests whether the requested attribute is attached to this model node.
+Whether this parameter carries at least one `@A` attribute.
 
 ```dream
 public fun has<A>(): bool

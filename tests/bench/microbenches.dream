@@ -33,7 +33,7 @@ let bench_sink = BenchSink();
 
 // Ownership-runtime event deltas since the previous row (`DREAM_BENCH_COUNTERS=1`). A row's
 // counts include the setup that ran between the two reports. Names follow `dream_counter`.
-let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let counters_on: bool = System.env("DREAM_BENCH_COUNTERS").unwrap_or("") == "1";
 let counter_names = "weak_register,weak_invalidate,region_objects,retain,release,enqueue,ready_alloc".split(
     ','
 );
@@ -210,7 +210,7 @@ fun bench_substring(iters: int): void {
 // One op = one span view whose bounds and first unit depend on the iteration. A constant
 // span over a literal folds to `acc = 35 * iters`, which measures nothing.
 fun bench_substring_span(iters: int): void {
-    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
+    let seed = int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
     let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed.to_string();
     let sw = Stopwatch();
     let acc = 0;
@@ -257,7 +257,7 @@ fun bench_map_get_span(iters: int): void {
     let i = 0;
     while i < iters {
         let k = (i & 7) * 2;
-        acc = acc + map.get_or(text.span(k, k + 2), 0);
+        acc = acc + map.get(text.span(k, k + 2)).unwrap_or(0);
         i = i + 1;
     }
     sw.stop();
@@ -312,7 +312,7 @@ fun bench_map_get_set(iters: int): void {
     let acc = 0;
     i = 0;
     while i < iters {
-        acc = acc + map.get_or(i, 0);
+        acc = acc + map.get(i).unwrap_or(0);
         i = i + 1;
     }
     sw.stop();
@@ -713,7 +713,7 @@ fun bench_nbody(iters: int): void {
 // One op = one full 48x64 frame, up to 30 iterations per pixel.
 fun bench_mandelbrot(iters: int): void {
     // A shared runtime seed makes the historical and current workloads identical.
-    let jitter = (double)(int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1);
+    let jitter = (double)(int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1);
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -1153,21 +1153,21 @@ fun bench_wordcount(iters: int): void {
     while i < iters {
         let k = 0;
         while k < count {
-            map[words[k]] = map.get_or(words[k], 0) + 1;
+            map[words[k]] = map.get(words[k]).unwrap_or(0) + 1;
             k = k + 1;
         }
         i = i + 1;
     }
     sw.stop();
-    report("wordcount", sw.elapsed_nanos, iters * count, map.get_or("the", 0));
-    sink_int(map.get_or("the", 0));
+    report("wordcount", sw.elapsed_nanos, iters * count, map.get("the").unwrap_or(0));
+    sink_int(map.get("the").unwrap_or(0));
 }
 
 // One op = parse one 10-digit string via char_at digit loop (no int.parse host call).
 // One op = parse one 10-digit decimal chosen per iteration from eight strings built at
 // runtime. A single literal source lets LICM hoist the whole digit loop out of the timed loop.
 fun bench_parse_ints(iters: int): void {
-    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
+    let seed = int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
     let srcs = List<string>(8);
     let k = 0;
     while k < 8 {
@@ -1197,7 +1197,7 @@ fun bench_parse_ints(iters: int): void {
 // One op = two discriminated-union matches over options loaded from a runtime-built array, so
 // neither the discriminant nor the payload is known to the optimizer.
 fun bench_sum_options(iters: int): void {
-    let seed = int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1) & 1;
+    let seed = int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
     let opts = List<Option<int>>(8);
     let k = 0;
     while k < 8 {
@@ -1241,7 +1241,7 @@ fun closure_offset(offset: int): fun(int): int {
 }
 
 fun bench_closure_dispatch(iters: int): void {
-    let callback = closure_offset(int.parse(System.env_or("DREAM_BENCH_SEED", "1")).unwrap_or(1));
+    let callback = closure_offset(int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1));
     let total = 0;
     let sw = Stopwatch();
     sw.start();
@@ -1341,7 +1341,7 @@ fun run_suite(scale: int): void {
 fun bench_passes(): int {
     // Several measured passes in one process. The median of those passes is what a
     // single process start is worth; one 10µs sample is a timer tick.
-    let n = int.parse(System.env_or("DREAM_BENCH_PASSES", "1")).unwrap_or(1);
+    let n = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("1")).unwrap_or(1);
     if n < 1 {
         return 1;
     }

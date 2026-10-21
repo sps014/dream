@@ -3,6 +3,7 @@
 
 use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
+use dream_abi::names::THIS_NAME;
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
 use std::collections::BTreeSet;
@@ -21,7 +22,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             f.params.iter().any(|p| {
                 let d = &f.locals[p.0 as usize];
                 d.is_ref
-                    && d.name.as_deref() != Some("this")
+                    && d.name.as_deref() != Some(THIS_NAME)
                     && (interner.is_rc_tracked(d.ty) || interner.is_value_type(d.ty))
             })
         })

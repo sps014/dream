@@ -52,20 +52,20 @@ True when no element satisfies `pred`.
 public fun none(borrow pred: fun(T): bool): bool
 ```
 
-## `count_where`
+## `count`
 
 Counts elements for which `pred` is true.
 
 ```dream
-public fun count_where(borrow pred: fun(T): bool): int
+public fun count(borrow pred: fun(T): bool): int
 ```
 
-## `find_where`
+## `find`
 
 First element for which `pred` is true, or `None`.
 
 ```dream
-public fun find_where(borrow pred: fun(T): bool): Option<T>
+public fun find(borrow pred: fun(T): bool): Option<T>
 ```
 
 ## `for_each`

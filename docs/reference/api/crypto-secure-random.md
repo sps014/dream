@@ -23,5 +23,5 @@ public static fun bytes(n: int): Result<byte[], CryptoError>
 Fills the destination only after obtaining all requested entropy; failure preserves it.
 
 ```dream
-public static fun fill(dest: byte[]): Result<bool, CryptoError>
+public static fun fill(dest: byte[]): Result<Unit, CryptoError>
 ```

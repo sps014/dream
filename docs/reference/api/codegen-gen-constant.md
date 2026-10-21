@@ -12,7 +12,7 @@ public class GenConstant
 
 ## `kind`
 
-Category of this entry.
+Scalar category of the constant (`int`, `string`, `bool`, ...).
 
 ```dream
 public kind: GenValueKind
@@ -20,7 +20,7 @@ public kind: GenValueKind
 
 ## `value`
 
-Value carried by this entry.
+The constant's value as literal text; strings are unquoted.
 
 ```dream
 public value: string

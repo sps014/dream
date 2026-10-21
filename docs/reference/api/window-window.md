@@ -46,7 +46,7 @@ public get is_open(): bool
 
 ## `title`
 
-The title last set by `WindowDesc.of` or `set_title`. Canvas windows start with an empty title.
+The title last set by the `WindowDesc` constructor or `set_title`. Canvas windows start with an empty title.
 
 ```dream
 public get title(): string
@@ -70,7 +70,7 @@ public get is_focused(): bool
 
 ## `size`
 
-The content area's size in logical pixels, the units of `WindowDesc.of`, `set_size` and mouse positions.
+The content area's size in logical pixels, the units of the `WindowDesc` constructor, `set_size` and mouse positions.
 
 ```dream
 public get size(): WindowSize

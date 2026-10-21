@@ -1,6 +1,6 @@
 module system.collections;
 
-// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
+/// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 @allow_cycle
 @slot_walk("capacity", "slot_entry", "slot_occupied")
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
@@ -20,8 +20,8 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         this.epoch = hash_epoch_initial();
     }
 
-    // Reserves additional live entries, accounting for load factor and reclaiming tombstones.
-    public fun reserve(additional: int): Result<bool, CapacityError> {
+    /// Reserves additional live entries, accounting for load factor and reclaiming tombstones.
+    public fun reserve(additional: int): Result<Unit, CapacityError> {
         let need = (long)this.count + (long)additional;
         let required = (
             (need + 1L) * (long)hash_load_factor_denom() + (long)hash_load_factor_num() - 1L
@@ -38,7 +38,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
             * (long)hash_load_factor_denom() >= (long)this.cap * (long)hash_load_factor_num() {
             this.rehash(capacity);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     fun bump_epoch(): void {
@@ -65,7 +65,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         return this.cap;
     }
 
-    fun find(borrow key: K): int {
+    fun slot_of(borrow key: K): int {
         return this.find_hashed(key, key.hash_code());
     }
 
@@ -191,8 +191,8 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
     }
 
-    // The first probe hits an empty or matching slot on the usual insert. That case stays in the
-    // caller; collisions fall through to the full probe.
+    /// The first probe hits an empty or matching slot on the usual insert. That case stays in the
+    /// caller; collisions fall through to the full probe.
     @inline
     public fun this[key: K] = value: V {
         let hash = key.hash_code();
@@ -219,7 +219,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
 
     /// Returns whether `key` is present.
     public fun contains(borrow key: K): bool {
-        return this.find(key) >= 0;
+        return this.slot_of(key) >= 0;
     }
 
     /// Inserts corresponding entries from `keys` and `values`; the arrays must have equal
@@ -247,18 +247,18 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         this.set_all(keys, values);
     }
 
-    // Value for `key`, or `None` when absent.
+    /// Value for `key`, or `None` when absent.
     @inline
     @borrowed_result
     public fun get(borrow key: K): Option<V> {
-        let i = this.find(key);
+        let i = this.slot_of(key);
         if i >= 0 {
             return Option.Some(this.slots[i].value);
         }
         return Option.None;
     }
 
-    // Value for the `string` key equal to `key`, without building a `string`.
+    /// Value for the `string` key equal to `key`, without building a `string`.
     @borrowed_result
     public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey {
         let i = this.find_span(key);
@@ -268,44 +268,25 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         return Option.None;
     }
 
-    /// Returns the value for `key`, or `fallback` when absent.
-    public fun get_or(borrow key: ReadOnlySpan<char>, fallback: V): V where K: StringKey {
-        let i = this.find_span(key);
-        if i >= 0 {
-            return this.slots[i].value;
-        }
-        return fallback;
-    }
-
     /// Returns whether `key` is present.
     public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey {
         return this.find_span(key) >= 0;
     }
 
-    // Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use
-    // `get(k)` for absence-tolerant reads.
+    /// Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use
+    /// `get(k)` for absence-tolerant reads.
     public fun this[borrow key: K]: V {
-        let i = this.find(key);
+        let i = this.slot_of(key);
         if i < 0 {
             System.panic("Map key not found");
         }
         return this.slots[i].value;
     }
 
-    /// Returns the value for `key`, or `fallback` when absent.
-    @inline
-    public fun get_or(borrow key: K, fallback: V): V {
-        let i = this.find(key);
-        if i >= 0 {
-            return this.slots[i].value;
-        }
-        return fallback;
-    }
-
     /// Returns the existing value, or inserts and returns the result of `factory` when absent.
     /// The key is borrowed for the lookup and copied only on a miss.
     public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V {
-        let i = this.find(key);
+        let i = this.slot_of(key);
         if i >= 0 {
             return this.slots[i].value;
         }
@@ -336,7 +317,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
 
     /// Removes `key` and its value; returns whether the key was present.
     public fun remove(borrow key: K): bool {
-        let i = this.find(key);
+        let i = this.slot_of(key);
         if i >= 0 {
             this.slots[i].state = 0 - this.epoch;
             // Zero both halves of the tombstoned slot so managed keys release immediately,
@@ -383,30 +364,26 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         this.bump_epoch();
     }
 
-    /// Returns a new array containing the keys.
-    public fun keys(): K[] {
-        let result = Buffer.alloc<K>(this.count);
+    /// Returns a new list of the keys, in the map's iteration order.
+    public fun keys(): List<K> {
+        let result = List<K>(this.count);
         let i = 0;
-        let j = 0;
         while i < this.cap {
             if this.slots[i].state == this.epoch {
-                result[j] = this.slots[i].key;
-                j = j + 1;
+                result.push(this.slots[i].key);
             }
             i = i + 1;
         }
         return result;
     }
 
-    /// Returns a new array containing the values.
-    public fun values(): V[] {
-        let result = Buffer.alloc<V>(this.count);
+    /// Returns a new list of the values, in the map's iteration order.
+    public fun values(): List<V> {
+        let result = List<V>(this.count);
         let i = 0;
-        let j = 0;
         while i < this.cap {
             if this.slots[i].state == this.epoch {
-                result[j] = this.slots[i].value;
-                j = j + 1;
+                result.push(this.slots[i].value);
             }
             i = i + 1;
         }

@@ -80,21 +80,21 @@ fun parse_port(borrow text: string): Result<int, ParseError> {
     return Result.Ok(port);
 }
 
-fun main(): Result<bool, ParseError> {
+fun main(): Result<Unit, ParseError> {
     let port = parse_port("8080")?;
     System.println("listening on " + port.to_string());
 
     let bad = parse_port("not-a-number")?; // Err: returns from main right here
     System.println("never reached " + bad.to_string());
-} // falling off the end of main is an implicit Result.Ok(true)
+} // falling off the end of main is an implicit Result.Ok(Unit())
 ```
 
-Dream has no unit type, so the success slot is spelled `bool`. `main` alone may fall off the end when it returns `Result<bool, E>`, which the compiler treats as `return Result.Ok(true);` — an explicit one stays legal, and any other `Result<T, E>` still requires a return on every path.
+An operation with nothing to return uses `Unit` as its success value, so it returns `Result<Unit, E>` and succeeds with `Result.Ok(Unit())`. `main` alone may fall off the end when it returns `Result<Unit, E>`, which the compiler treats as `return Result.Ok(Unit());` — an explicit one stays legal, and any other `Result<T, E>` still requires a return on every path.
 
 `async fun main(): Result<T, E>` works the same way, and `?` binds to the awaited value, so no parentheses are needed:
 
 ```dream
-async fun main(): Result<bool, IoError> {
+async fun main(): Result<Unit, IoError> {
     let text = File.read("config.json").await?;
     System.println(text);
 }
@@ -104,7 +104,7 @@ An `Option` main is rejected — bridge it with `ok_or` as above. `main(): int` 
 
 ## Errors
 
-Types that implement `Error` have `.message()` and `.code()`. Common ones: `ParseError` (bootstrap), `ArgError` (`import system;`), `IoError` (`system.io`).
+Types that implement `Error` have `.message()` and `.code()`. Common ones: `ParseError` (bootstrap), `ArgumentError` (`import system;`), `IoError` (`system.io`).
 
 ## Flatten nested optional values
 

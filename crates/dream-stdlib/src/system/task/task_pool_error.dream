@@ -1,11 +1,33 @@
 module system.task;
 
-// Failures scheduling or closing a reusable worker pool.
+/// Failures scheduling or closing a reusable worker pool.
 public enum TaskPoolError {
-    // Pool sizes must be positive.
+    /// The requested worker count was zero or negative.
     InvalidSize,
-    // The pool no longer accepts work.
+    /// The pool was closed and no longer accepts work.
     Closed,
-    // Cancellation was requested; any submitted work has settled before this is returned.
+    /// Cancellation was requested; any submitted work has settled before this is returned.
     Cancelled,
+
+    /// Returns `EINVAL`, `ECLOSED`, or `ECANCELED` for the variant.
+    public fun code(): string {
+        if this == TaskPoolError.InvalidSize {
+            return "EINVAL";
+        }
+        if this == TaskPoolError.Closed {
+            return "ECLOSED";
+        }
+        return "ECANCELED";
+    }
+
+    /// Returns a readable description of the failure.
+    public fun message(): string {
+        if this == TaskPoolError.InvalidSize {
+            return "task pool size must be positive";
+        }
+        if this == TaskPoolError.Closed {
+            return "task pool is closed";
+        }
+        return "task pool work was cancelled";
+    }
 }

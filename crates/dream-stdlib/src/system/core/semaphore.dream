@@ -1,10 +1,10 @@
 module system.core;
 
-// Counting semaphore for limiting concurrent access to a shared resource.
+/// Counting semaphore for limiting concurrent access to a shared resource.
 shared public class Semaphore {
     permits: int;
 
-    // Creates a semaphore with `initial` available permits.
+    /// Creates a semaphore with `initial` available permits.
     public constructor(initial: int) {
         this.permits = initial;
     }
@@ -25,22 +25,22 @@ shared public class Semaphore {
     @intrinsic(Intrinsic.SharedSemaphoreTryAcquireFor)
     public static extern fun host_try_acquire_for(borrow target: Semaphore, timeout_ms: int): bool;
 
-    // Blocks (busy-waiting) until a permit is available, then takes one.
+    /// Blocks (busy-waiting) until a permit is available, then takes one.
     public fun acquire(): void {
         Semaphore.host_acquire(this);
     }
 
-    // One-shot acquire: returns `true` if a permit was taken, `false` if none were available.
+    /// One-shot acquire: returns `true` if a permit was taken, `false` if none were available.
     public fun try_acquire(): bool {
         return Semaphore.host_try_acquire(this);
     }
 
-    // Waits up to `timeout_ms` milliseconds for a permit. `timeout_ms <= 0` is a single try.
+    /// Waits up to `timeout_ms` milliseconds for a permit. `timeout_ms <= 0` is a single try.
     public fun try_acquire_for(timeout_ms: int): bool {
         return Semaphore.host_try_acquire_for(this, timeout_ms);
     }
 
-    // Returns one permit.
+    /// Returns one permit.
     public fun release(): void {
         Semaphore.host_release(this);
     }

@@ -1,6 +1,6 @@
 module system;
 
-// Host runtime kind.
+/// Host runtime kind.
 public enum Platform {
     /// A native executable.
     Native,

@@ -20,7 +20,7 @@ public statements: List<GenStmt>
 
 ## `constructor`
 
-Creates this model from snapshot JSON.
+Decodes a `GenBody` from its object in the generation snapshot.
 
 ```dream
 public constructor(borrow v: JsonValue)

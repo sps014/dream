@@ -7,29 +7,29 @@ import system.json;
 // Snapshot JSON → model, written by hand: `@json` cannot derive inside the package the `@json`
 // generator itself is built from.
 internal fun gen_str(borrow v: JsonValue, borrow key: string): string {
-    return v.get_str_or(key, "");
+    return v.get(key).and_then((item: JsonValue) => item.as_string()).unwrap_or("");
 }
 
 internal fun gen_int(borrow v: JsonValue, borrow key: string): int {
-    return v.get_int_or(key, 0);
+    return v.get(key).and_then((item: JsonValue) => item.as_int()).unwrap_or(0);
 }
 
 internal fun gen_bool(borrow v: JsonValue, borrow key: string): bool {
-    return v.get_bool(key).unwrap_or(false);
+    return v.get(key).and_then((item: JsonValue) => item.as_bool()).unwrap_or(false);
 }
 
 internal fun gen_items(borrow v: JsonValue, borrow key: string): List<JsonValue> {
-    return v.get_or(key, JsonValue.array()).as_array().unwrap_or(List<JsonValue>());
+    return v.get(key).unwrap_or(JsonValue.array()).as_array().unwrap_or(List<JsonValue>());
 }
 
 internal fun gen_obj(borrow v: JsonValue, borrow key: string): JsonValue {
-    return v.get_or(key, JsonValue.dict());
+    return v.get(key).unwrap_or(JsonValue.dict());
 }
 
 internal fun gen_strings(borrow v: JsonValue, borrow key: string): List<string> {
     let out = List<string>();
     for (let item in gen_items(v, key)) {
-        out.push(item.str_or(""));
+        out.push(item.as_string().unwrap_or(""));
     }
     return out;
 }

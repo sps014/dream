@@ -12,14 +12,6 @@ Middleware applying cross-origin access rules to requests and preflight response
 public class Cors
 ```
 
-## `constructor`
-
-Creates a `Cors` with `opts`.
-
-```dream
-public constructor(opts: CorsOptions)
-```
-
 ## `invoke`
 
 Runs this middleware for `ctx`, using `next` to continue the request pipeline.
@@ -28,10 +20,10 @@ Runs this middleware for `ctx`, using `next` to continue the request pipeline.
 public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>
 ```
 
-## `CORS`
+## `middleware`
 
-`app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
+Returns middleware that applies `opts` to every request: it answers preflight `OPTIONS` requests and adds the allowed-origin headers to responses. Register it with `app.use(Cors.middleware(CorsOptions()))`.
 
 ```dream
-public fun CORS(opts: CorsOptions): Middleware
+public static fun middleware(opts: CorsOptions): Middleware
 ```

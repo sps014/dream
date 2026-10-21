@@ -26,14 +26,6 @@ Copies `bytes` into independent storage and starts at byte zero.
 public constructor(bytes: byte[])
 ```
 
-## `position`
-
-Last cursor position in bytes; remains readable after closure.
-
-```dream
-public get position(): long
-```
-
 ## `tell`
 
 Returns the current byte position, or a closed-resource error.
@@ -71,7 +63,7 @@ public fun write(bytes: byte[]): Result<int, IoError>
 Sets a byte position from zero through the maximum `int`, including beyond EOF. Invalid positions or closure return errors without changing the cursor.
 
 ```dream
-public fun seek(position: long): Result<bool, IoError>
+public fun seek(position: long): Result<Unit, IoError>
 ```
 
 ## `to_bytes`
@@ -87,7 +79,7 @@ public fun to_bytes(): Result<byte[], IoError>
 Validates that the stream is open; memory storage has no pending output.
 
 ```dream
-public unique fun flush(): Result<bool, IoError>
+public unique fun flush(): Result<Unit, IoError>
 ```
 
 ## `close`
@@ -95,7 +87,7 @@ public unique fun flush(): Result<bool, IoError>
 Closes the stream idempotently; subsequent I/O returns a closed-resource error.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```
 
 ## `read_async`
@@ -127,5 +119,5 @@ Checks cancellation and validates that the stream is open.
 ```dream
 public async unique fun flush_async(
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```

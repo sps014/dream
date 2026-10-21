@@ -111,7 +111,7 @@ async fun application_utilities(): void {
         counter,
         (resource) => {
             resource.count = resource.count + 1;
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
     );
     let failed = Fixtures.run<FixtureCounter, string>(

@@ -22,8 +22,8 @@ public class Store {
     // By-value `Entry`: owned; a thrown exception becomes `Err(e.what())`.
     extern fun snapshot(key: string): Result<Entry, string>;
 
-    // `void` in C++; `Ok(true)` unless it throws.
-    extern fun compact(): Result<bool, string>;
+    // `void` in C++; `Ok(Unit())` unless it throws.
+    extern fun compact(): Result<Unit, string>;
 
     // `std::function`: capturing closures are fine.
     extern fun on_change(f: fun(string): void): void;

@@ -18,7 +18,7 @@ public class GenSpan {
     /// Number of elements in this range.
     public length: int;
 
-    // Creates this model from snapshot JSON.
+    /// Decodes a `GenSpan` from its object in the generation snapshot.
     public constructor(borrow v: JsonValue) {
         this.file = gen_str(v, "file");
         this.line = gen_int(v, "line");

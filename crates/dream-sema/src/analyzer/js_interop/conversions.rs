@@ -1,4 +1,5 @@
 use super::*;
+use dream_abi::js_abi::JsBridgeClass;
 
 impl<'a> Analyzer<'a> {
     /// Wraps `e` in an implicit cast to primitive `prim` (for widening a boxing argument to the
@@ -27,25 +28,15 @@ impl<'a> Analyzer<'a> {
         match kind {
             TyKind::Js => Some(e),
             TyKind::Enum(_) => self.js_bridge_call("box_int", vec![e], js),
-            TyKind::Prim(p) => match p {
-                PrimTy::String => self.js_bridge_call("box_string", vec![e], js),
-                PrimTy::Bool => self.js_bridge_call("box_bool", vec![e], js),
-                PrimTy::Double => self.js_bridge_call("box_double", vec![e], js),
-                PrimTy::Float | PrimTy::Float16 => {
-                    let d = self.cast_prim(e, PrimTy::Double);
-                    self.js_bridge_call("box_double", vec![d], js)
-                }
-                PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
-                    let wide =
-                        HExpr::new(self.type_ctx.interner.long(), HExprKind::Cast(Box::new(e)));
-                    self.js_bridge_call("box_long", vec![wide], js)
-                }
-                PrimTy::Int => self.js_bridge_call("box_int", vec![e], js),
-                PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
-                    let i = self.cast_prim(e, PrimTy::Int);
-                    self.js_bridge_call("box_int", vec![i], js)
-                }
-            },
+            TyKind::Prim(p) => {
+                let class = JsBridgeClass::of(p);
+                let carried = if p == class.carrier() {
+                    e
+                } else {
+                    self.cast_prim(e, class.carrier())
+                };
+                self.js_bridge_call(class.box_bridge(), vec![carried], js)
+            }
             TyKind::Func(params, _ret) => {
                 // A Dream function handed to a JS API as a persistent handle. `e` is a boxed
                 // `fun(...)` value (see `hir_set_func_value`); the host has no env-restoring
@@ -98,42 +89,14 @@ impl<'a> Analyzer<'a> {
         let TyKind::Prim(p) = self.type_ctx.interner.kind(target_stripped).clone() else {
             return e;
         };
-        let Some(suffix) = Self::js_as_suffix(p) else {
-            return e;
-        };
-        let bridge_ret = self.js_as_bridge_ret(p);
-        if let Some(fused) = self.try_fuse_unbox(e.clone(), suffix, bridge_ret) {
+        let class = JsBridgeClass::of(p);
+        let bridge_ret = self.type_ctx.interner.prim(class.carrier());
+        if let Some(fused) = self.try_fuse_unbox(e.clone(), class.suffix(), bridge_ret) {
             return self.js_widen_as_result(fused, p, target_stripped);
         }
-        let call = self.js_bridge_call(&format!("as_{}", suffix), vec![e], bridge_ret);
+        let call = self.js_bridge_call(class.as_bridge(), vec![e], bridge_ret);
         let raw = call.unwrap_or_else(|| HExpr::new(bridge_ret, HExprKind::IntLit(0)));
         self.js_widen_as_result(raw, p, target_stripped)
-    }
-
-    /// Suffix of the `as_*` / `get_as_*` / `call_as_*` bridge for `p` (`"int"`, `"string"`, …).
-    pub(in crate::analyzer) fn js_as_suffix(p: PrimTy) -> Option<&'static str> {
-        match p {
-            PrimTy::String => Some("string"),
-            PrimTy::Bool => Some("bool"),
-            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => Some("double"),
-            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Some("long"),
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Some("int"),
-        }
-    }
-
-    /// Return type of the matching `as_*` bridge (before any widening cast to the Dream target).
-    pub(in crate::analyzer) fn js_as_bridge_ret(&self, p: PrimTy) -> TypeId {
-        match p {
-            PrimTy::String => self.type_ctx.interner.string(),
-            PrimTy::Bool => self.type_ctx.interner.bool(),
-            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => self.type_ctx.interner.double(),
-            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => {
-                self.type_ctx.interner.long()
-            }
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => {
-                self.type_ctx.interner.int()
-            }
-        }
     }
 
     /// Casts a fused/`as_*` bridge result to `target` when the Dream binding type is narrower or a
@@ -151,9 +114,7 @@ impl<'a> Analyzer<'a> {
             | PrimTy::UInt
             | PrimTy::Byte
             | PrimTy::Char
-            | PrimTy::ULong => {
-                HExpr::new(target, HExprKind::Cast(Box::new(raw)))
-            }
+            | PrimTy::ULong => HExpr::new(target, HExprKind::Cast(Box::new(raw))),
             _ => {
                 if raw.ty == target {
                     raw

@@ -21,6 +21,7 @@
 use super::synthetic_token;
 use crate::analyzer::Analyzer;
 use crate::errors::SemanticError;
+use dream_abi::names::OPTION_NONE;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::{Binding, Callee, HExpr, HExprKind};
 use dream_syntax::nodes::{ExpressionNode, Type};
@@ -321,7 +322,7 @@ impl<'a> Analyzer<'a> {
         let TyKind::Union(def, _) = *self.type_ctx.interner.kind(ty) else {
             return None;
         };
-        let variant = self.union_info(ty)?.variant("None")?.discriminant as usize;
+        let variant = self.union_info(ty)?.variant(OPTION_NONE)?.discriminant as usize;
         Some(HExpr::new(
             ty,
             HExprKind::UnionNew {

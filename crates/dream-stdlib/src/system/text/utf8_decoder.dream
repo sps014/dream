@@ -1,7 +1,7 @@
 module system.text;
 
-// Incremental UTF-8 decoding that retains incomplete sequences between chunks
-// and preserves a leading byte-order mark as text.
+/// Incremental UTF-8 decoding that retains incomplete sequences between chunks
+/// and preserves a leading byte-order mark as text.
 public class Utf8Decoder {
     policy: InvalidEncoding;
     remaining: int;
@@ -11,7 +11,7 @@ public class Utf8Decoder {
     ended: bool;
     failed: bool;
 
-    // Creates an active decoder with strict validation by default.
+    /// Creates an active decoder with strict validation by default.
     public constructor(policy: InvalidEncoding = InvalidEncoding.Strict) {
         this.policy = policy;
         this.remaining = 0;
@@ -22,7 +22,7 @@ public class Utf8Decoder {
         this.failed = false;
     }
 
-    fun invalid(): Result<bool, ParseError> {
+    fun invalid(): Result<Unit, ParseError> {
         this.remaining = 0;
         this.scalar = 0;
         this.lower = 128;
@@ -31,11 +31,11 @@ public class Utf8Decoder {
             this.failed = true;
             return Result.Err(ParseError.invalid("invalid UTF-8 sequence"));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Decodes complete scalars and retains a trailing incomplete sequence for the next chunk.
-    // Malformed input follows the selected policy; calls after failure or finish return errors.
+    /// Decodes complete scalars and retains a trailing incomplete sequence for the next chunk.
+    /// Malformed input follows the selected policy; calls after failure or finish return errors.
     public fun decode_chunk(bytes: byte[]): Result<string, ParseError> {
         if this.ended || this.failed {
             return Result.Err(ParseError.invalid("UTF-8 decoder is no longer active"));
@@ -95,8 +95,8 @@ public class Utf8Decoder {
         return Result.Ok(output.to_string());
     }
 
-    // Ends input, rejecting a truncated sequence in strict mode or replacing it with U+FFFD.
-    // Returns any trailing text; all subsequent calls return an inactive-decoder error.
+    /// Ends input, rejecting a truncated sequence in strict mode or replacing it with U+FFFD.
+    /// Returns any trailing text; all subsequent calls return an inactive-decoder error.
     public fun finish(): Result<string, ParseError> {
         if this.ended || this.failed {
             return Result.Err(ParseError.invalid("UTF-8 decoder is no longer active"));
@@ -106,6 +106,6 @@ public class Utf8Decoder {
             this.invalid()?;
             return Result.Ok("�");
         }
-        return Result.Ok(string.empty);
+        return Result.Ok("");
     }
 }

@@ -1,6 +1,6 @@
 module system.webapi;
 
-// HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).
+/// HTTP status used as a handler/dependency short-circuit (`Result<T, HttpStatus>`).
 public class HttpStatus {
     /// HTTP status code.
     public code: int;

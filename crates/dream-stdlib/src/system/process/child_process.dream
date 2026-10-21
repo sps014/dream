@@ -1,10 +1,10 @@
 module system.process;
 
-// Owns a child and its pipes; explicit close terminates and reaps unfinished work.
+/// Owns a child and its pipes; explicit close terminates and reaps unfinished work.
 public class ChildProcess {
     id: int;
     closing: bool;
-    closed: Option<Result<bool, ProcessError>>;
+    closed: Option<Result<Unit, ProcessError>>;
     completed: CancellationSource;
 
     internal constructor(id: int) {
@@ -18,32 +18,32 @@ public class ChildProcess {
         return this.id;
     }
 
-    // Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
+    /// Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
     public get stdout(): ProcessReader {
         return ProcessReader(this, 0);
     }
 
-    // Borrows stderr through an AsyncReader; drain it concurrently with stdout.
+    /// Borrows stderr through an AsyncReader; drain it concurrently with stdout.
     public get stderr(): ProcessReader {
         return ProcessReader(this, 1);
     }
 
-    // Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
+    /// Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
     public get stdin(): ProcessWriter {
         return ProcessWriter(this);
     }
 
-    // Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
+    /// Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
     public fun close_stdin(
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, ProcessError>> {
+    ): Future<Result<Unit, ProcessError>> {
         return ChildProcess.close_stdin_owned(this, CancellationToken.resolve(token));
     }
 
     static async fun close_stdin_owned(
         child: ChildProcess,
         token: Option<CancellationToken>
-    ): Result<bool, ProcessError> {
+    ): Result<Unit, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
         let operation = ProcessOperation(
             ProcessOperation.request("close_stdin", child.id),
@@ -54,10 +54,10 @@ public class ChildProcess {
         if result.is_err() {
             return Result.Err(result.unwrap_err());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Waits for process exit without discarding unread output or closing the child handle.
+    /// Waits for process exit without discarding unread output or closing the child handle.
     public fun wait(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<int, ProcessError>> {
@@ -81,12 +81,12 @@ public class ChildProcess {
         return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(-2));
     }
 
-    // Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
-    public fun close(): Future<Result<bool, ProcessError>> {
+    /// Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
+    public fun close(): Future<Result<Unit, ProcessError>> {
         return ChildProcess.close_owned(this);
     }
 
-    static async fun close_owned(child: ChildProcess): Result<bool, ProcessError> {
+    static async fun close_owned(child: ChildProcess): Result<Unit, ProcessError> {
         if child.closed.is_some() {
             return child.closed.unwrap();
         }
@@ -103,7 +103,7 @@ public class ChildProcess {
         );
         let result = operation.wait(Option.Some(shield.token)).await;
         operation.close();
-        let outcome: Result<bool, ProcessError> = Result.Ok(true);
+        let outcome: Result<Unit, ProcessError> = Result.Ok(Unit());
         if result.is_err() {
             outcome = Result.Err(result.unwrap_err());
         }

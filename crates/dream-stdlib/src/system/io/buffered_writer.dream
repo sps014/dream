@@ -1,7 +1,7 @@
 module system.io;
 
-// Buffers output to a borrowed writer without closing it. Call `finish()` explicitly
-// to report flush failures; destruction does not flush pending bytes.
+/// Buffers output to a borrowed writer without closing it. Call `finish()` explicitly
+/// to report flush failures; destruction does not flush pending bytes.
 @allow_cycle
 public class BufferedWriter: Writer {
     destination: Writer;
@@ -10,7 +10,7 @@ public class BufferedWriter: Writer {
     count: int;
     finished: bool;
 
-    // Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
+    /// Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
     public constructor(destination: Writer, buffer_size: int = 8192) {
         this.destination = destination;
         this.capacity = buffer_size;
@@ -23,8 +23,8 @@ public class BufferedWriter: Writer {
         this.finished = false;
     }
 
-    // Accepts as many bytes as fit, flushing a previously full buffer first.
-    // May return partial progress; operations after successful finish return `ECLOSED`.
+    /// Accepts as many bytes as fit, flushing a previously full buffer first.
+    /// May return partial progress; operations after successful finish return `ECLOSED`.
     public fun write(data: byte[]): Result<int, IoError> {
         if this.finished {
             return Result.Err(IoError.closed(""));
@@ -46,9 +46,9 @@ public class BufferedWriter: Writer {
         return Result.Ok(count);
     }
 
-    // Writes pending bytes and flushes the destination; retains any unwritten suffix on failure.
-    // Already completed writes persist, and a finished writer returns `ECLOSED`.
-    public fun flush(): Result<bool, IoError> {
+    /// Writes pending bytes and flushes the destination; retains any unwritten suffix on failure.
+    /// Already completed writes persist, and a finished writer returns `ECLOSED`.
+    public fun flush(): Result<Unit, IoError> {
         if this.capacity <= 0 {
             return Result.Err(IoError.invalid("", "buffer size must be positive"));
         }
@@ -69,14 +69,14 @@ public class BufferedWriter: Writer {
         return this.destination.flush();
     }
 
-    // Flushes and marks the wrapper finished only on success; repeated success is idempotent.
-    // Leaves the underlying writer open and permits retry after a flush failure.
-    public fun finish(): Result<bool, IoError> {
+    /// Flushes and marks the wrapper finished only on success; repeated success is idempotent.
+    /// Leaves the underlying writer open and permits retry after a flush failure.
+    public fun finish(): Result<Unit, IoError> {
         if this.finished {
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
         this.flush()?;
         this.finished = true;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

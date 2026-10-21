@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioBuffer`
 
 Immutable decoded interleaved PCM, independent of any output device.
 
@@ -12,7 +12,7 @@ Immutable decoded interleaved PCM, independent of any output device.
 public class AudioBuffer
 ```
 
-## Declaration
+## `decode`
 
 Detects and decodes encoded bytes, limiting decoded PCM to max_bytes.
 
@@ -23,7 +23,7 @@ public static fun decode(
 ): Result<AudioBuffer, AudioError>
 ```
 
-## Declaration
+## `from_pcm`
 
 Copies finite interleaved mono/stereo PCM with complete frames and a positive sample rate.
 
@@ -35,7 +35,7 @@ public static fun from_pcm(
 ): Result<AudioBuffer, AudioError>
 ```
 
-## Declaration
+## `sample_rate`
 
 Samples per second per channel.
 
@@ -43,7 +43,7 @@ Samples per second per channel.
 public get sample_rate(): int
 ```
 
-## Declaration
+## `channels`
 
 One for mono or two for stereo.
 
@@ -51,7 +51,7 @@ One for mono or two for stereo.
 public get channels(): int
 ```
 
-## Declaration
+## `frame_count`
 
 Number of complete frames in this buffer.
 
@@ -59,7 +59,7 @@ Number of complete frames in this buffer.
 public get frame_count(): int
 ```
 
-## Declaration
+## `duration`
 
 Total duration in seconds.
 
@@ -67,11 +67,10 @@ Total duration in seconds.
 public get duration(): double
 ```
 
-## Declaration
+## `read_pcm`
 
 Copies a frame range; invalid or overflowing ranges return EINVAL.
 
 ```dream
 public fun read_pcm(start_frame: int, frame_count: int): Result<float[], AudioError>
 ```
-

@@ -9,29 +9,29 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 Authentication failures carry stable codes without credential values.
 
 ```dream
-public class AuthError
-```
-
-## `code`
-
-Error code identifying the failure.
-
-```dream
-public code: string
-```
-
-## `message`
-
-Human-readable explanation of the result or failure.
-
-```dream
-public message: string
+public class AuthError: Error
 ```
 
 ## `constructor`
 
-Creates a `AuthError` with `code`, `message`.
+Creates an error with a stable `code` such as `EAUTH` and a readable `message`. Neither should contain passwords, tokens, or other credentials.
 
 ```dream
 public constructor(code: string, message: string)
+```
+
+## `code`
+
+Returns the stable machine code, such as `EAUTH` or `EINVAL`.
+
+```dream
+public fun code(): string
+```
+
+## `message`
+
+Returns the readable explanation of the failure.
+
+```dream
+public fun message(): string
 ```

@@ -5,7 +5,7 @@ internal class SocketState {
     internal metadata: JsonValue;
 
     internal constructor(metadata: JsonValue) {
-        this.id = metadata.at("id").as_int().unwrap_or(0);
+        this.id = metadata["id"].as_int().unwrap_or(0);
         this.metadata = metadata;
     }
 
@@ -59,7 +59,7 @@ internal class SocketState {
         request["port"] = JsonValue.from_int(port);
         let operation = SocketOperation.start(request, []);
         let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
-        if metadata.at("id").as_int().unwrap_or(0) <= 0 {
+        if metadata["id"].as_int().unwrap_or(0) <= 0 {
             return Result.Err(IoError.other("", "invalid socket handle"));
         }
         let state = SocketState(metadata);
@@ -93,7 +93,7 @@ internal class SocketState {
         return result;
     }
 
-    internal fun control(action: string, value: JsonValue): Result<bool, IoError> {
+    internal fun control(action: string, value: JsonValue): Result<Unit, IoError> {
         if this.id <= 0 {
             return Result.Err(IoError.closed("socket"));
         }
@@ -107,15 +107,15 @@ internal class SocketState {
             return Result.Err(IoError.other("", "invalid socket control response"));
         }
         let result = parsed.unwrap();
-        if result["code"].is_some() {
+        if result.contains("code") {
             return Result.Err(
                 IoError(
                     "",
-                    result.at("code").as_string().unwrap_or("EIO"),
-                    result.at("message").as_string().unwrap_or("socket option failed")
+                    result["code"].as_string().unwrap_or("EIO"),
+                    result["message"].as_string().unwrap_or("socket option failed")
                 )
             );
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

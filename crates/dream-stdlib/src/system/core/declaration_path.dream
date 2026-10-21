@@ -2,7 +2,7 @@ module system.core;
 
 /// A declaration reference supplied as an attribute argument.
 public struct DeclarationPath {
-    /// Source text represented by this entry.
+    /// Dotted declaration path as written (`Json.serialize`).
     public text: string;
 
     /// Resolved declaration identifier, or an empty string when unresolved.

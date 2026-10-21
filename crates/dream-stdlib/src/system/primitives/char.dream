@@ -3,7 +3,7 @@ module system.primitives;
 // The `char` primitive as an extensible class. A `char` is a code point stored as an `i32`;
 // these methods classify and transform it. Auto-imported into every program.
 extend char: Comparable<char> {
-    // Orders this character against `other` by code point, implementing `Comparable<char>`.
+    /// Orders this character against `other` by code point, implementing `Comparable<char>`.
     public fun compare(other: char): int {
         if this < other {
             return 0 - 1;
@@ -14,12 +14,12 @@ extend char: Comparable<char> {
         return 0;
     }
 
-    // True if this character is an ASCII decimal digit ('0'-'9').
+    /// True if this character is an ASCII decimal digit ('0'-'9').
     public fun is_digit(): bool {
         return (this >= '0') && (this <= '9');
     }
 
-    // True if this character is an ASCII letter ('a'-'z' or 'A'-'Z').
+    /// True if this character is an ASCII letter ('a'-'z' or 'A'-'Z').
     public fun is_alpha(): bool {
         if (this >= 'a') && (this <= 'z') {
             return true;
@@ -27,7 +27,7 @@ extend char: Comparable<char> {
         return (this >= 'A') && (this <= 'Z');
     }
 
-    // True if this character is ASCII whitespace (space, tab, newline, or carriage return).
+    /// True if this character is ASCII whitespace (space, tab, newline, or carriage return).
     public fun is_whitespace(): bool {
         if this == ' ' {
             return true;
@@ -41,7 +41,7 @@ extend char: Comparable<char> {
         return this == '\r';
     }
 
-    // The lowercase form of an ASCII uppercase letter; other characters are returned unchanged.
+    /// The lowercase form of an ASCII uppercase letter; other characters are returned unchanged.
     public fun to_lower(): char {
         if (this >= 'A') && (this <= 'Z') {
             return (char)((int)this + 32);
@@ -49,7 +49,7 @@ extend char: Comparable<char> {
         return this;
     }
 
-    // The uppercase form of an ASCII lowercase letter; other characters are returned unchanged.
+    /// The uppercase form of an ASCII lowercase letter; other characters are returned unchanged.
     public fun to_upper(): char {
         if (this >= 'a') && (this <= 'z') {
             return (char)((int)this - 32);
@@ -57,14 +57,14 @@ extend char: Comparable<char> {
         return this;
     }
 
-    // A new single-character string containing this character.
+    /// A new single-character string containing this character.
     public fun as_string(): string {
         let result = string.alloc(1);
         string.set(result, 0, this);
         return result;
     }
 
-    // Parses exactly one Unicode scalar from `text`.
+    /// Parses exactly one Unicode scalar from `text`.
     public static fun parse(borrow text: string): Result<char, ParseError> {
         if text.length != 1 {
             return Result.Err(ParseError.invalid("char.parse requires exactly one Unicode scalar"));

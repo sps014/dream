@@ -29,7 +29,7 @@ fun main() {
 | Call | Meaning |
 | --- | --- |
 | `DateTime.now()` | current local time |
-| `DateTime.utc_now()` | current UTC |
+| `DateTime.utc_now()` | current UTC; needs no timezone data |
 | `DateTime.of(year, month, day, …)` | build from calendar fields |
 | `now_in(tz)` | current time in a [`TimeZone`](#timezone) |
 | `of_zoned(..., tz)` / `of_local(...)` | build in a named zone or the machine local zone |
@@ -43,24 +43,23 @@ fun main() {
 | `.hour` / `.minute` / `.second` / `.millisecond` | time of day |
 | `.day_of_week` | weekday (`0` = Sunday) |
 | `.day_of_year` | day of year (1-based) |
-| `decompose()` | year/month/day as `DateTimeYmd` |
 
 ## Change
 
 | Call | Meaning |
 | --- | --- |
 | `to_utc()` / `to_local()` / `to_zone(zone)` | convert zone |
-| `add_millis` / `add_seconds` / `add_minutes` / `add_hours` / `add_days` | arithmetic |
-| `add(d)` / `until(other)` | with a `Duration` |
+| `add(Duration.from_days(1L))` | shift by any `Duration`, including a negative one |
+| `until(other)` | the `Duration` between two instants |
 | `start_of_day()` | midnight of that calendar day |
-| `is_before` / `is_after` / `equals` / `compare_to` | compare |
+| `is_before` / `is_after` / `equals` / `compare` | compare |
 | `==`, `<`, and friends | operators |
 
 ## Format and parse
 
 `to_string()` for a default rendering; `to_iso8601()` for ISO text. `parse` (ISO-8601) returns `Result`.
 
-`Duration` is a millisecond span (`from_seconds`, `from_millis`, `as_millis`, `as_seconds`, `add` / `sub`); `DateTime.add(d)` and `until(other)` use it.
+`Duration` is a millisecond span. Create one with `Duration(millis)`, `from_seconds`, `from_minutes`, `from_hours`, or `from_days`; read it with the `millis` field or `as_seconds()`; and combine spans with `add` / `sub`. `DateTime.add(d)` and `until(other)` use it.
 
 ## `TimeZone`
 

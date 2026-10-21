@@ -162,7 +162,7 @@ internal class AudioStreamCursor {
     }
 
     /// Positions the next read at an absolute source frame.
-    internal async fun seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
+    internal async fun seek(frame: long, token: CancellationToken): Result<Unit, AudioError> {
         if this.remote {
             return this.range_seek(frame, token).await;
         }
@@ -186,10 +186,10 @@ internal class AudioStreamCursor {
         this.input_done = other.input_done;
         this.released = false;
         other.released = true;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    async fun range_seek(frame: long, token: CancellationToken): Result<bool, AudioError> {
+    async fun range_seek(frame: long, token: CancellationToken): Result<Unit, AudioError> {
         let offset = this.decoder.seek_offset(frame);
         if this.ranges == false || offset < 0 || this.validator == "" || this.length == "" {
             return Result.Err(
@@ -252,7 +252,7 @@ internal class AudioStreamCursor {
         this.delivered = frame;
         this.ended = false;
         this.input_done = false;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Releases the source and decoder; repeated calls do nothing.
@@ -287,7 +287,7 @@ internal class AudioStreamCursor {
         return Result.Ok(samples);
     }
 
-    async fun skip(frame: long, token: CancellationToken): Result<bool, AudioError> {
+    async fun skip(frame: long, token: CancellationToken): Result<Unit, AudioError> {
         while this.delivered < frame {
             let next = this.take(4096, token).await;
             if next.is_err() {
@@ -310,7 +310,7 @@ internal class AudioStreamCursor {
                 this.delivered = frame;
             }
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     async fun pull(frame_count: int, token: CancellationToken): Result<float[], AudioError> {

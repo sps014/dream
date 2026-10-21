@@ -1,6 +1,6 @@
 module system.compress;
 
-// Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
+/// Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
 @allow_cycle
 public class CompressionWriter: Writer {
     destination: Writer;
@@ -13,7 +13,7 @@ public class CompressionWriter: Writer {
         this.closed = false;
     }
 
-    // Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.
+    /// Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.
     public fun write(bytes: byte[]): Result<int, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
@@ -48,8 +48,8 @@ public class CompressionWriter: Writer {
         }
     }
 
-    // Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
-    public fun flush(): Result<bool, IoError> {
+    /// Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
+    public fun flush(): Result<Unit, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
         }
@@ -71,8 +71,8 @@ public class CompressionWriter: Writer {
         return this.destination.flush();
     }
 
-    // Finishes the trailer, releases encoder state, and flushes the borrowed destination.
-    public fun finish(): Result<bool, IoError> {
+    /// Finishes the trailer, releases encoder state, and flushes the borrowed destination.
+    public fun finish(): Result<Unit, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
         }
@@ -99,7 +99,7 @@ public class CompressionWriter: Writer {
         return this.destination.flush();
     }
 
-    // Abandons codec state without finishing or closing the borrowed destination.
+    /// Abandons codec state without finishing or closing the borrowed destination.
     public fun close(): void {
         this.codec.close();
         this.closed = true;

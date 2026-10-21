@@ -1,6 +1,6 @@
 module system.text;
 
-// Cursor produced by `string.iterator()`.
+/// Cursor produced by `string.iterator()`.
 public class StringIterator: Iterator<char> {
     text: string;
     idx: int;
@@ -10,12 +10,12 @@ public class StringIterator: Iterator<char> {
         this.idx = 0;
     }
 
-    // So `for (let c in s.chars())` uses the enumerator protocol on the cursor itself.
+    /// So `for (let c in s.chars())` uses the enumerator protocol on the cursor itself.
     public fun iterator(): StringIterator {
         return this;
     }
 
-    // Yields the next UTF-16 code unit or None.
+    /// Yields the next UTF-16 code unit or None.
     public fun next(): Option<char> {
         if this.idx >= this.text.length {
             return Option.None;

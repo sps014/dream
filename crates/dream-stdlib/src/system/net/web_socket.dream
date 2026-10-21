@@ -35,7 +35,7 @@ public class WebSocket {
         request["url"] = JsonValue.from_string(url);
         let operation = SocketOperation(WebSocket.start_host(Json.serialize(request), []));
         let metadata = SocketState.parse(operation.wait(effective).await?)?;
-        let id = metadata.at("id").as_int().unwrap_or(0);
+        let id = metadata["id"].as_int().unwrap_or(0);
         if id <= 0 {
             return Result.Err(IoError.other("", "invalid WebSocket handle"));
         }
@@ -49,7 +49,7 @@ public class WebSocket {
     public fun send_text(
         text: string,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
             "send_text",
@@ -64,7 +64,7 @@ public class WebSocket {
     public fun send_binary(
         bytes: byte[],
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
             "send_binary",
@@ -78,7 +78,7 @@ public class WebSocket {
     /// Sends a normal closing handshake.
     public fun close(
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return this.close_with(1000, "", token);
     }
 
@@ -87,7 +87,7 @@ public class WebSocket {
         code: int,
         reason: string,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
             "close",
@@ -105,12 +105,12 @@ public class WebSocket {
         code: int,
         reason: string,
         token: Option<CancellationToken>
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let request = SocketState.request(action, socket.id, 0);
         request["code"] = JsonValue.from_int(code);
         request["reason"] = JsonValue.from_string(reason);
         WebSocket.submit(socket, request, bytes, token).await?;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     static async fun submit(
@@ -153,12 +153,12 @@ public class WebSocket {
             token
         ).await?;
         let message = SocketState.parse(bytes)?;
-        let kind = message.at("kind").as_string().unwrap_or("");
+        let kind = message["kind"].as_string().unwrap_or("");
         if kind == "text" {
-            return Result.Ok(WebSocketMessage.Text(message.at("text").as_string().unwrap_or("")));
+            return Result.Ok(WebSocketMessage.Text(message["text"].as_string().unwrap_or("")));
         }
         if kind == "binary" {
-            let items = message.at("bytes").as_array().unwrap_or(List<JsonValue>());
+            let items = message["bytes"].as_array().unwrap_or(List<JsonValue>());
             let output = Buffer.alloc<byte>(items.length);
             for (let i = 0; i < output.length; i = i + 1) {
                 output[i] = (byte)items[i].as_int().unwrap_or(0);
@@ -168,8 +168,8 @@ public class WebSocket {
         if kind == "close" {
             return Result.Ok(
                 WebSocketMessage.Close(
-                    message.at("code").as_int().unwrap_or(1006),
-                    message.at("reason").as_string().unwrap_or("")
+                    message["code"].as_int().unwrap_or(1006),
+                    message["reason"].as_string().unwrap_or("")
                 )
             );
         }

@@ -8,7 +8,7 @@ use dream_diagnostics::DiagnosticBag;
 use dream_hir::HExpr;
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
-use dream_types::{TyKind, TypeId};
+use dream_types::{PrimTy, TyKind, TypeId};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -73,15 +73,20 @@ impl<'a> Analyzer<'a> {
         // disallowed one is reported below); record its HIR before the validation branches.
         self.hir_set_cast(inner_hir, target_type);
         let target_id = self.type_ctx.lower(target_type);
-        let numeric = |ty: &Type| {
-            ty.is_integer() || matches!(ty, Type::Float16(_) | Type::Float(_) | Type::Double(_))
+        let prim = |id: TypeId| match self.type_ctx.interner.kind(id) {
+            TyKind::Prim(p) => Some(*p),
+            _ => None,
         };
+        let (target_prim, expr_prim) = (prim(target_id), prim(expr_id));
+        let numeric = |p: Option<PrimTy>| p.is_some_and(PrimTy::is_numeric);
+        let code_unit = |p: Option<PrimTy>| matches!(p, Some(PrimTy::Int | PrimTy::Byte));
+        let is_char = |p: Option<PrimTy>| p == Some(PrimTy::Char);
 
-        if target_id == expr_id ||
-           (numeric(target_type) && numeric(&expr_type)) ||
-           // `char` is a code point: allow lossless conversion to/from `int`/`byte`.
-           (matches!(target_type, Type::Char(_)) && matches!(expr_type, Type::Integer(_) | Type::Byte(_))) ||
-           (matches!(target_type, Type::Integer(_) | Type::Byte(_)) && matches!(expr_type, Type::Char(_)))
+        if target_id == expr_id
+            || (numeric(target_prim) && numeric(expr_prim))
+            // `char` is a code point: allow lossless conversion to/from `int`/`byte`.
+            || (is_char(target_prim) && code_unit(expr_prim))
+            || (code_unit(target_prim) && is_char(expr_prim))
         {
             Ok(target_type.clone())
         } else if target_type.is_object() || expr_type.is_object() {

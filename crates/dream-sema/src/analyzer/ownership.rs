@@ -7,6 +7,7 @@
 //! `this.items = items`).
 
 use crate::symbol_table::SymbolTable;
+use dream_abi::names::THIS_NAME;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{ExpressionNode, Type};
 use dream_text::text_span::TextSpan;
@@ -47,7 +48,7 @@ impl<'a> super::Analyzer<'a> {
         let ExpressionNode::Identifier(id) = rhs else {
             return;
         };
-        if id.text == "this" || id.text == "_" {
+        if id.text == THIS_NAME || id.text == "_" {
             return;
         }
         if rhs_ty.is_unknown() || !self.type_is_rc_tracked(rhs_ty) {

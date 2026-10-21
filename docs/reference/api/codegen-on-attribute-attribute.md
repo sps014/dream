@@ -14,7 +14,7 @@ public struct OnAttributeAttribute
 
 ## `declaration`
 
-Declaration associated with this entry.
+Attribute type whose uses select declarations for the generator.
 
 ```dream
 public declaration: DeclarationPath

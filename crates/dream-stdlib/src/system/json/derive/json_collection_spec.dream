@@ -32,16 +32,4 @@ internal class JsonCollectionSpec {
         this.self_ty = self_ty;
         this.fn_suffix = fn_suffix;
     }
-
-    /// Creates a collection description from its kind, element/value types, and generated-name
-    /// suffix.
-    public static fun make(
-        kind: CollectionKind,
-        elem_type: string,
-        value_type: string,
-        self_ty: string,
-        fn_suffix: string
-    ): JsonCollectionSpec {
-        return JsonCollectionSpec(kind, elem_type, value_type, self_ty, fn_suffix);
-    }
 }

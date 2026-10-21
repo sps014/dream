@@ -65,13 +65,13 @@ public class GpuDevice {
         return (this.features & (1 << bit)) != 0;
     }
 
-    /// `Ok(true)` while the device works, or `GpuError.DeviceLost` once the driver or
+    /// `Ok(Unit())` while the device works, or `GpuError.DeviceLost` once the driver or
     /// browser took it away. Calls that touch a lost device also fail with `DeviceLost`.
-    public fun check(): Result<bool, GpuError> {
+    public fun check(): Result<Unit, GpuError> {
         if GpuHost.device_check(this.handle) != 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     fun make_buffer<T: unmanaged>(length: int, usage: int): Result<GpuBuffer<T>, GpuError> {
@@ -429,7 +429,7 @@ public class GpuDevice {
 
     /// Runs recorded commands and waits until the GPU finished them. Recording errors,
     /// such as a resource from another device, are reported here.
-    public async fun submit(commands: GpuCommandBuffer): Result<bool, GpuError> {
+    public async fun submit(commands: GpuCommandBuffer): Result<Unit, GpuError> {
         switch (commands.error) {
             Some(e) => {
                 return Result.Err(e);
@@ -442,7 +442,7 @@ public class GpuDevice {
         if GpuHost.submit(this.handle, commands.words, commands.data).await != 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     // The device-local handle of a generated shader bundle, loaded on first use.

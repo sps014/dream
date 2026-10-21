@@ -1,22 +1,22 @@
 module system.cli;
 
-// Invalid invocation, command definition, or typed lookup; help and version are successful outcomes.
+/// Invalid invocation, command definition, or typed lookup; help and version are successful outcomes.
 public class CliError: Error {
     error_code: string;
     error_message: string;
 
-    // Creates an error with a stable machine code and diagnostic text.
+    /// Creates an error with a stable machine code and diagnostic text.
     public constructor(code: string, message: string) {
         this.error_code = code;
         this.error_message = message;
     }
 
-    // EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
+    /// EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
     public fun code(): string {
         return this.error_code;
     }
 
-    // Human-readable diagnostic; invocation failures include usage guidance.
+    /// Human-readable diagnostic; invocation failures include usage guidance.
     public fun message(): string {
         return this.error_message;
     }

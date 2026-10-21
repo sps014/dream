@@ -4,19 +4,20 @@ import system;
 import system.collections;
 import system.json;
 
-// One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
-// node); the positional readers below are what decoders are built from.
+/// One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
+/// node); the positional readers below are what decoders are built from.
 public class GenAttribute {
-    // `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
+    /// `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
     public id: string;
 
-    /// Name identifying this entry.
+    /// Unqualified attribute name as written, without the `@` (`json`).
     public name: string;
 
     /// Arguments supplied to the attribute, in declaration order.
     public args: List<GenAttrArg>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenAttribute` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(id: string, name: string, args: List<GenAttrArg>) {
         this.id = id;
         this.name = name;
@@ -30,37 +31,37 @@ public class GenAttribute {
         return this.args[i].value;
     }
 
-    // Returns the requested model information.
+    /// Argument `i` as unquoted text, or an empty string when there is no such argument.
     public fun string_arg(i: int): string {
         return this.raw(i);
     }
 
-    // Returns the requested model information.
+    /// Argument `i` parsed as an `int`, or `0` when it is missing or not an integer.
     public fun int_arg(i: int): int {
         return int.parse(this.raw(i)).unwrap_or(0);
     }
 
-    // Returns the requested model information.
+    /// Argument `i` parsed as a `long`, or `0` when it is missing or not an integer.
     public fun long_arg(i: int): long {
         return long.parse(this.raw(i)).unwrap_or((long)0);
     }
 
-    // Returns the requested model information.
+    /// Argument `i` parsed as a `double`, or `0.0` when it is missing or not a number.
     public fun double_arg(i: int): double {
         return double.parse(this.raw(i)).unwrap_or(0.0);
     }
 
-    // Returns the requested model information.
+    /// Argument `i` parsed as a `float`, or `0.0` when it is missing or not a number.
     public fun float_arg(i: int): float {
         return float.parse(this.raw(i)).unwrap_or((float)0.0);
     }
 
-    // Returns the requested model information.
+    /// Whether argument `i` is the literal `true`; missing arguments read as `false`.
     public fun bool_arg(i: int): bool {
         return this.raw(i) == "true";
     }
 
-    // The member name of an enum argument (`Get` for `HttpMethod.Get`).
+    /// The member name of an enum argument (`Get` for `HttpMethod.Get`).
     public fun enum_member(i: int): string {
         let path = this.raw(i);
         switch (path.last_index_of('.')) {

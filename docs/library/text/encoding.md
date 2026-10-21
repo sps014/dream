@@ -48,7 +48,7 @@ out-of-range encodings. Call `finish()` to detect a truncated final sequence.
 ```dream
 import system.text;
 
-fun main(): Result<bool, ParseError> {
+fun main(): Result<Unit, ParseError> {
     let decoder = Utf8Decoder();
     let first = decoder.decode_chunk([(byte)195])?;
     let second = decoder.decode_chunk([(byte)169])?;

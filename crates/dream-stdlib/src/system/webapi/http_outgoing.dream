@@ -1,6 +1,6 @@
 module system.webapi;
 
-// Outbound HTTP response built by handlers and middleware.
+/// Outbound HTTP response built by handlers and middleware.
 public class HttpOutgoing {
     /// HTTP response status code.
     public status: int;
@@ -55,7 +55,7 @@ public class HttpOutgoing {
         return res;
     }
 
-    // FastAPI-style `{"detail": "..."}` JSON error.
+    /// FastAPI-style `{"detail": "..."}` JSON error.
     public static fun detail(message: string, status: int = 500): HttpOutgoing {
         return HttpOutgoing.json_text("{\"detail\":" + WebApp.json_escape(message) + "}", status);
     }

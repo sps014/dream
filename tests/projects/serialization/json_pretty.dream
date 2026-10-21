@@ -34,7 +34,7 @@ fun c11d_body(): void {
     c11d_verify_observation((Json.serialize_pretty(u.to_json(), 2)).to_string());
 
     let v = Json.deserialize<JsonValue>("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}")
-        .unwrap_or(JsonValue.none());
+        .unwrap_or(JsonValue.null());
     c11d_verify_observation((Json.serialize_pretty(v, 4)).to_string());
 
     // indent 0 falls back to compact output.

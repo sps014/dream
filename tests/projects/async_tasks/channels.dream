@@ -81,3 +81,12 @@ async fun channels(): void {
         Assert.eq(workers[i].await, 50);
     }
 }
+
+@test
+fun channel_and_pool_error_codes(): void {
+    Assert.eq(ChannelError.Full.code(), "EFULL");
+    Assert.eq(ChannelError.InvalidCapacity.code(), "EINVAL");
+    Assert.eq(ChannelError.Closed.message(), "channel is closed");
+    Assert.eq(TaskPoolError.Cancelled.code(), "ECANCELED");
+    Assert.eq(TaskPoolError.InvalidSize.message(), "task pool size must be positive");
+}

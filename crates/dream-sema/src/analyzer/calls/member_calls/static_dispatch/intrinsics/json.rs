@@ -1,4 +1,5 @@
 use super::*;
+use dream_abi::names::{RESULT_ERR, RESULT_OK};
 
 impl<'a> Analyzer<'a> {
     pub(super) fn analyze_json_intrinsic(
@@ -257,9 +258,10 @@ impl<'a> Analyzer<'a> {
                 self.hir_none();
                 return Ok(result_ty);
             };
-            let (Some(ok_variant), Some(err_variant)) =
-                (parse_info.variant("Ok"), parse_info.variant("Err"))
-            else {
+            let (Some(ok_variant), Some(err_variant)) = (
+                parse_info.variant(RESULT_OK),
+                parse_info.variant(RESULT_ERR),
+            ) else {
                 self.hir_fail();
                 self.hir_none();
                 return Ok(result_ty);

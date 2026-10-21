@@ -33,7 +33,7 @@ fun query(s: Store): void {
 
 fun results(s: Store): void {
     switch (s.compact()) {
-        Ok(v) => System.println("compact ok " + v.to_string()),
+        Ok(_) => System.println("compact ok"),
         Err(e) => System.println("compact failed: " + e),
     }
     switch (s.snapshot("nope")) {
@@ -66,7 +66,7 @@ fun main(): void {
     System.println(greet("dream"));
     let empty = Store("empty");
     switch (empty.compact()) {
-        Ok(v) => System.println("compact ok"),
+        Ok(_) => System.println("compact ok"),
         Err(m) => System.println("compact failed: " + m),
     }
 }

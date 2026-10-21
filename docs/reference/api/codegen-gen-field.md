@@ -12,7 +12,7 @@ public class GenField
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `name`
 
-Name identifying this entry.
+Field name as declared.
 
 ```dream
 public name: string
@@ -28,7 +28,7 @@ public name: string
 
 ## `ty`
 
-Type of this declaration or expression.
+Declared type of the field.
 
 ```dream
 public ty: GenTypeRef
@@ -52,7 +52,7 @@ public attributes: List<GenAttribute>
 
 ## `location`
 
-Source location associated with this entry.
+Where the field is written in source.
 
 ```dream
 public location: GenLocation
@@ -60,7 +60,7 @@ public location: GenLocation
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenField` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(
@@ -91,7 +91,7 @@ public fun attributes_of<A>(): List<A>
 
 ## `has`
 
-Tests whether the requested attribute is attached to this model node.
+Whether this field carries at least one `@A` attribute.
 
 ```dream
 public fun has<A>(): bool

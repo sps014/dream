@@ -44,8 +44,8 @@ fun float16_json(): void {
     Assert.eq(back.gain.unwrap_or(0.0h), 1.5h);
 
     let tree = sample.to_json();
-    let none = JsonValue.none();
-    Assert.eq(tree["weight"].unwrap_or(none).as_double().unwrap_or(0.0d), 0.0999755859375d);
+    let none = JsonValue.null();
+    Assert.eq(tree.get("weight").unwrap_or(none).as_double().unwrap_or(0.0d), 0.0999755859375d);
 
     let parsed = Json.deserialize<f16j_Sample>(
         "{\"weight\":0.33333,\"bias\":70000,\"history\":[2049],\"gain\":null}"

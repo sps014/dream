@@ -2,7 +2,7 @@ module system.core;
 
 /// Closes an asynchronous cursor when its iteration scope ends.
 @allow_cycle
-public class AsyncIteratorLease<T> {
+internal class AsyncIteratorLease<T> {
     cursor: AsyncIterator<T>;
 
     /// Creates a `AsyncIteratorLease` with `cursor`.

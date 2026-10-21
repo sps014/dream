@@ -2,7 +2,7 @@ module system.codegen;
 import system;
 import system.collections;
 
-// Standard collection shapes a generator usually special-cases.
+/// Standard collection shapes a generator usually special-cases.
 public enum CollectionKind {
     /// Identifies not collection types.
     NotCollection,

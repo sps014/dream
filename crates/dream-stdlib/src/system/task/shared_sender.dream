@@ -1,6 +1,6 @@
 module system.task;
 
-// A shared producer; clone creates an independent endpoint and ordinary aliases share closure.
+/// A shared producer; clone creates an independent endpoint and ordinary aliases share closure.
 shared public class SharedSender<T: shared> {
     owner: SharedChannelState;
     endpoint: usize;
@@ -10,13 +10,13 @@ shared public class SharedSender<T: shared> {
         this.endpoint = SharedChannelHost.endpoint(this.owner.handle, 1);
     }
 
-    // Creates another producer; the queue closes after the last producer closes or drops.
+    /// Creates another producer; the queue closes after the last producer closes or drops.
     public fun clone(): SharedSender<T> {
         return SharedSender<T>(this.owner);
     }
 
-    // Attempts one send atomically without blocking the scheduler.
-    public fun try_send(value: T): Result<bool, ChannelError> {
+    /// Attempts one send atomically without blocking the scheduler.
+    public fun try_send(value: T): Result<Unit, ChannelError> {
         let carrier = [value];
         let status = SharedChannelHost.send<T>(this.endpoint, carrier);
         if status == 1 {
@@ -25,14 +25,14 @@ shared public class SharedSender<T: shared> {
         if status == 2 {
             return Result.Err(ChannelError.Closed);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Waits for capacity using cross-worker notifications and inherited cancellation.
+    /// Waits for capacity using cross-worker notifications and inherited cancellation.
     public fun send(
         value: T,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, ChannelError>> {
+    ): Future<Result<Unit, ChannelError>> {
         return SharedSender<T>.send_owned(this, value, CancellationToken.resolve(token));
     }
 
@@ -40,7 +40,7 @@ shared public class SharedSender<T: shared> {
         sender: SharedSender<T>,
         value: T,
         token: Option<CancellationToken>
-    ): Result<bool, ChannelError> {
+    ): Result<Unit, ChannelError> {
         while true {
             if CancellationToken.is_cancelled_opt(token) {
                 return Result.Err(ChannelError.Cancelled);
@@ -63,7 +63,7 @@ shared public class SharedSender<T: shared> {
         }
     }
 
-    // Closes this endpoint atomically and wakes affected producers and consumers.
+    /// Closes this endpoint atomically and wakes affected producers and consumers.
     public fun close(): void {
         SharedChannelHost.close(this.endpoint);
     }

@@ -4,7 +4,7 @@ import system;
 import system.collections;
 import system.json;
 
-// Decoded snapshot behind a `GenContext`.
+/// Decoded snapshot behind a `GenContext`.
 public class GenSnapshot {
     /// Version identifying this API or snapshot format.
     public version: int;
@@ -63,7 +63,7 @@ public class GenSnapshot {
     /// Function call sites available to the generator.
     public calls: List<GenCallSite>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Decodes a complete generation snapshot from its root JSON object.
     public constructor(root: JsonValue) {
         this.version = gen_int(root, "version");
         this.phase = gen_int(root, "phase");

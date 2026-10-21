@@ -1,11 +1,11 @@
 module system.crypto;
 
-// SHA-256 digest (32-byte output). Host-backed via `Dream.cryptoSha256`.
+/// SHA-256 digest (32-byte output). Host-backed via `Dream.cryptoSha256`.
 public static class Sha256 {
     @runtime("cryptoSha256")
     static extern fun hash_host(borrow data: byte[]): byte[];
 
-    // Digests `data` and returns the 32-byte hash.
+    /// Digests `data` and returns the 32-byte hash.
     public static fun hash(data: byte[]): byte[] {
         return Sha256.hash_host(data);
     }

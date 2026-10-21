@@ -13,6 +13,7 @@ use super::{glue, register};
 use crate::backend::shared::abi_types::{c_ident, elem_size, import_call_name};
 use crate::backend::shared::panic_msgs;
 use dream_abi::c_abi::shim;
+use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_hir::{CShape, HImport};
 use dream_types::TypeId;
 
@@ -275,11 +276,11 @@ impl<'l, 'a> Fx<'l, 'a> {
             .nunion(ty)
             .unwrap_or_else(|| crate::internal_error!("Option<CPtr> without a union layout"));
         let none = u
-            .variant("None")
+            .variant(OPTION_NONE)
             .unwrap_or_else(|| crate::internal_error!("Option without None"))
             .discriminant;
         let off = u
-            .variant("Some")
+            .variant(OPTION_SOME)
             .and_then(|v| v.fields.first())
             .unwrap_or_else(|| crate::internal_error!("Option without a Some payload"))
             .offset;
@@ -295,7 +296,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             .unwrap_or_else(|| crate::internal_error!("Option<CPtr> without a union layout"));
         let size = u.size as i64;
         let some = u
-            .variant("Some")
+            .variant(OPTION_SOME)
             .unwrap_or_else(|| crate::internal_error!("Option without Some"))
             .discriminant;
         let (none, off) = self.option_layout(ty);

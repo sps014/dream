@@ -1,7 +1,7 @@
 module system.net;
 
-// A normalized absolute URL parsed using the host URL Standard implementation.
-// Query parameters preserve their original encoding until modified.
+/// A normalized absolute URL parsed using the host URL Standard implementation.
+/// Query parameters preserve their original encoding until modified.
 public class Url {
     parts: string[];
     parameters: UrlQuery;
@@ -14,7 +14,7 @@ public class Url {
     @runtime("netUrlParse")
     static extern fun parse_host(borrow input: string, borrow base: string): string[];
 
-    // Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.
+    /// Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.
     public static fun parse(input: string): Result<Url, ParseError> {
         return Url.from_parts(Url.parse_host(input, ""));
     }
@@ -26,33 +26,33 @@ public class Url {
         return Result.Ok(Url(parts));
     }
 
-    // Resolves a relative reference against this URL; an absolute reference replaces the base.
-    // A trailing slash in the base determines whether its last path component is a directory.
+    /// Resolves a relative reference against this URL; an absolute reference replaces the base.
+    /// A trailing slash in the base determines whether its last path component is a directory.
     public fun resolve(reference: string): Result<Url, ParseError> {
         return Url.from_parts(Url.parse_host(reference, this.to_string()));
     }
 
-    // Lowercase scheme without the colon delimiter.
+    /// Lowercase scheme without the colon delimiter.
     public get scheme(): string {
         return this.parts[1];
     }
 
-    // Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.
+    /// Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.
     public get host(): string {
         return this.parts[2];
     }
 
-    // Encoded path component; percent escapes remain encoded.
+    /// Encoded path component; percent escapes remain encoded.
     public get path(): string {
         return this.parts[3];
     }
 
-    // Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.
+    /// Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.
     public get query(): UrlQuery {
         return this.parameters;
     }
 
-    // Serializes the normalized URL, including query edits and any fragment delimiter.
+    /// Serializes the normalized URL, including query edits and any fragment delimiter.
     public override fun to_string(): string {
         return this.parts[0] + this.parameters.render() + this.parts[4];
     }

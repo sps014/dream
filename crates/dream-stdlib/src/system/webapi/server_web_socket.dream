@@ -37,7 +37,7 @@ public class ServerWebSocket {
         let operation = WebOperation.start(WebOperation.request("upgrade", incoming.req_id), []);
         let metadata = WebOperation.parse(operation.wait(token).await?)?;
         let socket = ServerWebSocket(
-            metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0),
+            metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0),
             token
         );
         operation.claim();
@@ -71,12 +71,12 @@ public class ServerWebSocket {
         code: int,
         reason: string,
         token: Option<CancellationToken>
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let request = WebOperation.request(action, socket.id);
         request["code"] = JsonValue.from_int(code);
         request["reason"] = JsonValue.from_string(reason);
         ServerWebSocket.submit(socket, request, bytes, token).await?;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Sends one text message.
@@ -84,7 +84,7 @@ public class ServerWebSocket {
     public fun send_text(
         text: string,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return ServerWebSocket.send_owned(
             this,
             "send_text",
@@ -100,7 +100,7 @@ public class ServerWebSocket {
     public fun send_binary(
         bytes: byte[],
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return ServerWebSocket.send_owned(
             this,
             "send_binary",
@@ -130,16 +130,16 @@ public class ServerWebSocket {
             token
         ).await?;
         let message = WebOperation.parse(bytes)?;
-        let kind = message.get_or("kind", JsonValue.none()).as_string().unwrap_or("");
+        let kind = message.get("kind").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         if kind == "text" {
             return Result.Ok(
                 WebSocketMessage.Text(
-                    message.get_or("text", JsonValue.none()).as_string().unwrap_or("")
+                    message.get("text").unwrap_or(JsonValue.null()).as_string().unwrap_or("")
                 )
             );
         }
         if kind == "binary" {
-            let items = message.get_or("bytes", JsonValue.none())
+            let items = message.get("bytes").unwrap_or(JsonValue.null())
                 .as_array()
                 .unwrap_or(List<JsonValue>());
             let bytes = Buffer.alloc<byte>(items.length);
@@ -151,8 +151,8 @@ public class ServerWebSocket {
         if kind == "close" {
             return Result.Ok(
                 WebSocketMessage.Close(
-                    message.get_or("code", JsonValue.none()).as_int().unwrap_or(1006),
-                    message.get_or("reason", JsonValue.none()).as_string().unwrap_or("")
+                    message.get("code").unwrap_or(JsonValue.null()).as_int().unwrap_or(1006),
+                    message.get("reason").unwrap_or(JsonValue.null()).as_string().unwrap_or("")
                 )
             );
         }
@@ -190,7 +190,7 @@ public class ServerWebSocket {
     @native
     public fun close(
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return this.close_with(1000, "", token);
     }
 
@@ -200,7 +200,7 @@ public class ServerWebSocket {
         code: int,
         reason: string,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return ServerWebSocket.send_owned(
             this,
             "close",

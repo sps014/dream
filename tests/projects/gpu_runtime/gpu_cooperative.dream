@@ -43,7 +43,7 @@ fun coop_ok<T>(result: Result<T, GpuError>, what: string): T {
 
 // A dispatch on a device without `feature` must fail with UnsupportedCapability(feature).
 fun coop_expect_unsupported(
-    result: Result<bool, GpuError>,
+    result: Result<Unit, GpuError>,
     feature: GpuFeature,
     what: string
 ): void {
@@ -134,8 +134,8 @@ fun coop_layer(
 }
 
 fun coop_close(actual: float16, expected: double, what: string): void {
-    let tolerance = 2e-2d * Math.max(1.0d, Math.abs(expected));
-    if Math.abs((double)actual - expected) > tolerance {
+    let tolerance = 2e-2d * (1.0d).max(expected.abs());
+    if ((double)actual - expected).abs() > tolerance {
         Assert.fail(what + ": got " + actual.to_string() + ", expected " + expected.to_string());
     }
 }
@@ -231,7 +231,7 @@ async fun coop_tiles(device: GpuDevice, label: string): void {
     let left = coop_ok(device.buffer_from(a), "tile a");
     let right = coop_ok(device.buffer_from(b), "tile b");
     let c = coop_ok(device.buffer_alloc<float16>(count), "tile out");
-    let run: Result<bool, GpuError> = Result.Ok(true);
+    let run: Result<Unit, GpuError> = Result.Ok(Unit());
     if size != 8 {
         // The 8x8 shader is built for Metal only, so other devices have no code for it.
         let foreign = GpuShaders.tile_multiply_8.dispatch(

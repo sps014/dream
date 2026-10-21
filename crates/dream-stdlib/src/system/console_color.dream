@@ -1,6 +1,6 @@
 module system;
 
-// Standard console colors.
+/// Standard console colors.
 public enum ConsoleColor {
     /// The black terminal color.
     Black,

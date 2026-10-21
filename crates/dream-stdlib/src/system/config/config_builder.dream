@@ -1,6 +1,6 @@
 module system.config;
 
-// Merges defaults, JSON files, environment variables, and explicit CLI values in that order.
+/// Merges defaults, JSON files, environment variables, and explicit CLI values in that order.
 @allow_cycle
 public class ConfigBuilder {
     defaults: Map<string, string>;
@@ -10,7 +10,7 @@ public class ConfigBuilder {
     required: List<string>;
     validators: Map<string, fun(string): bool>;
 
-    // Creates an empty builder; source precedence is independent of method call order.
+    /// Creates an empty builder; source precedence is independent of method call order.
     public constructor() {
         this.defaults = Map<string, string>();
         this.files = List<string>();
@@ -20,43 +20,43 @@ public class ConfigBuilder {
         this.validators = Map<string, fun(string): bool>();
     }
 
-    // Registers a known setting and its lowest-precedence default.
+    /// Registers a known setting and its lowest-precedence default.
     public fun default_value(key: string, value: string): ConfigBuilder {
         this.defaults[key] = value;
         return this;
     }
 
-    // Adds a required known setting with no default.
+    /// Adds a required known setting with no default.
     public fun require(key: string): ConfigBuilder {
         this.required.push(key);
         return this;
     }
 
-    // Adds a JSON object file; later files override earlier files.
+    /// Adds a JSON object file; later files override earlier files.
     public fun json_file(path: string): ConfigBuilder {
         this.files.push(path);
         return this;
     }
 
-    // Reads known settings from prefix plus the uppercase key, with hyphens replaced by underscores.
+    /// Reads known settings from prefix plus the uppercase key, with hyphens replaced by underscores.
     public fun environment(prefix: string = ""): ConfigBuilder {
         this.prefix = Option.Some(prefix);
         return this;
     }
 
-    // Uses explicitly supplied command-line arguments, excluding parser defaults.
+    /// Uses explicitly supplied command-line arguments, excluding parser defaults.
     public fun cli(arguments: ParsedArguments): ConfigBuilder {
         this.arguments = Option.Some(arguments);
         return this;
     }
 
-    // Adds a value predicate; false returns a provenance-aware validation error.
+    /// Adds a value predicate; false returns a provenance-aware validation error.
     public fun validate(key: string, predicate: fun(string): bool): ConfigBuilder {
         this.validators[key] = predicate;
         return this;
     }
 
-    // Loads and validates a snapshot; failures never change a previously built configuration.
+    /// Loads and validates a snapshot; failures never change a previously built configuration.
     public fun build(): Result<Config, ConfigError> {
         let config = Config();
         let keys = Set<string>();
@@ -116,7 +116,7 @@ public class ConfigBuilder {
                 return Result.Err(ConfigError("", path, "expected a JSON object"));
             }
             for (let key in document.keys()) {
-                let value = document[key].unwrap();
+                let value = document[key];
                 let text = value.as_string();
                 if text.is_some() {
                     config.put(key, text.unwrap(), path);

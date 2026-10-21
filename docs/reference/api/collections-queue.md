@@ -39,7 +39,7 @@ public get capacity(): int
 Reserves room for additional elements while preserving FIFO order and length.
 
 ```dream
-public fun reserve(additional: int): Result<bool, CapacityError>
+public fun reserve(additional: int): Result<Unit, CapacityError>
 ```
 
 ## `enqueue`

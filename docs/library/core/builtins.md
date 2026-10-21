@@ -17,7 +17,7 @@ import system;
 
 fun main() {
     System.println("hello");
-    System.println(Math.abs(-3.0));
+    System.println((-3.0).abs());
 }
 ```
 
@@ -27,12 +27,10 @@ fun main() {
 | --- | --- |
 | `System.print(x)` | write without a newline |
 | `System.println(x)` | write, then newline |
-| `System.print_colored(text, ConsoleColor.Yellow)` | one colored string, no newline |
 | `System.set_foreground` / `set_background` / `reset_color()` | color until reset |
 | `System.clear()` | clear the terminal |
-| `System.read_line()` | one line of input |
+| `System.read_line()` | one line of input; parse it with `int.parse(line)`, `double.parse(line)`, or `bool.parse(line)` |
 | `System.read_key()` | one character |
-| `System.read_int()` / `read_double()` / `read_bool()` | parse a line → `Result` |
 | `System.exit(code)` | stop the process |
 | `System.panic(message)` | print and halt — see [Panics](../../language/rules/panics.md) |
 | `System.stdin` / `stdout` / `stderr` | byte streams implementing `Reader` / `Writer` (import `system.io`) |
@@ -41,11 +39,10 @@ fun main() {
 
 | Call | What it does |
 | --- | --- |
-| `System.platform` / `System.os_family` | which host you are on |
-| `System.is_browser` | running in a page? |
+| `System.platform` / `System.os_family` | which host you are on; compare `System.platform == Platform.Browser` to detect a page |
 | `System.args` | command-line arguments |
 | `System.exe_path` | path of this executable, if any |
-| `System.env(name)` / `env_or(name, fallback)` / `has_env` / `env_keys` | environment variables |
+| `System.env(name)` / `env_keys` | environment variables; `env` returns `Option<string>`, so use `unwrap_or(fallback)` for a default and `is_some()` to test presence |
 | `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var |
 | `System.cwd` / `set_cwd(path)` | working directory |
 | `System.temp_dir` / `home_dir` | temp and home paths |
@@ -75,7 +72,7 @@ observing cancellation. Waits use scheduler notifications rather than periodic c
 `wait` returns `Err(CancelledError)` and cancels the supplied future when cancellation
 wins; completed side effects remain observable. A wait detaches its subscription on completion or when its cancelled future is
 released. Tokens retain their existing cross-worker sharing behavior.
-Use `wait_void` for a `Future<void>`; it returns `Ok(true)` when the operation completes.
+Use `wait_void` for a `Future<void>`; it returns `Ok(Unit())` when the operation completes.
 
 ```dream
 import system;

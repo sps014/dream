@@ -1,6 +1,6 @@
 module system.collections;
 
-// Cursor produced by `List.iterator()`.
+/// Cursor produced by `List.iterator()`.
 @allow_cycle
 public class ListIterator<T>: Iterator<T> {
     list: List<T>;
@@ -12,7 +12,7 @@ public class ListIterator<T>: Iterator<T> {
         this.idx = 0;
     }
 
-    // Returns the next element, or `None` if exhausted.
+    /// Returns the next element, or `None` if exhausted.
     public fun next(): Option<T> {
         if this.idx >= this.list.length {
             return Option.None;

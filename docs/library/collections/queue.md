@@ -35,7 +35,7 @@ This prints `first`. `enqueue` adds an item. `dequeue` removes the oldest item a
 | `.length` | `int` | Number of items. |
 | `.capacity` | `int` | Items that fit before the queue must grow. |
 | `is_empty()` | `bool` | `true` when the queue has no items. |
-| `reserve(additional)` | `Result<bool, CapacityError>` | Makes room for `additional` more items; `Err` for a negative or unsupported count. |
+| `reserve(additional)` | `Result<Unit, CapacityError>` | Makes room for `additional` more items; `Err` for a negative or unsupported count. |
 
 A `for` loop visits items from front to back without removing them. Queues also have the [query helpers](seq.md) such as `filter` and `any`.
 

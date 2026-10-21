@@ -4,7 +4,7 @@ import system;
 import system.collections;
 import system.json;
 
-// Concrete semantic members, including inherited defaults and substituted generic arguments.
+/// Concrete semantic members, including inherited defaults and substituted generic arguments.
 public class GenSymbolInstance {
     /// Type of this declaration or expression.
     public ty: GenTypeRef;
@@ -21,7 +21,7 @@ public class GenSymbolInstance {
     /// Choices declared by this union or enum, in declaration order.
     public variants: List<GenVariant>;
 
-    // Decodes an instantiated type view exported by semantic analysis.
+    /// Decodes an instantiated type view exported by semantic analysis.
     public constructor(borrow v: JsonValue) {
         this.ty = gen_type_ref(gen_obj(v, "ty"));
         this.bases = gen_type_refs(v, "bases");

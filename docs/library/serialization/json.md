@@ -66,13 +66,13 @@ switch (r.json()) {
 
 ### Read one field
 
-`get_str` / `get_int` / `get_bool` look up a key and decode it. Missing keys and wrong types are `None`. `get_str_or` / `get_int_or` supply a fallback. Prefer these over `get` + `unwrap_or(JsonValue.none())` + `as_*` — that path allocates a dummy node on every miss. `at(key)` panics if the key is absent.
+`v.get(key)` returns the property as `Option<JsonValue>`: `None` when the key is missing or `v` is not an object. Chain a typed reader through `and_then` to decode it, and `unwrap_or` to supply a fallback; a wrong JSON type is also `None`. `v[key]` returns the property directly and panics when it is missing, so use it only when the shape is already known. `v.contains(key)` tests presence.
 
 ```dream
-let name = v.get_str_or("name", "");
-let n = v.get_int_or("count", 0);
-if v.has("error") {
-    System.println(v.get_str_or("error", ""));
+let name = v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("");
+let n = v.get("count").and_then((item: JsonValue) => item.as_int()).unwrap_or(0);
+if v.contains("error") {
+    System.println(v.get("error").and_then((item: JsonValue) => item.as_string()).unwrap_or(""));
 }
 ```
 
@@ -86,7 +86,7 @@ switch (v.kind()) {
         let i = 0;
         while i < v.length { // insertion order
         let key = v.key_at(i).unwrap_or("");
-        let child = v.value_at(i).unwrap_or(JsonValue.none());
+        let child = v.value_at(i).unwrap_or(JsonValue.null());
         System.println(key + " = " + Json.serialize(child));
         i = i + 1;
     }
@@ -110,9 +110,9 @@ let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>()
 ### Nested values
 
 ```dream
-switch (v["meta"]) {
+switch (v.get("meta")) {
     Some(meta) => {
-        System.println(meta.get_int_or("id", 0));
+        System.println(meta.get("id").and_then((item: JsonValue) => item.as_int()).unwrap_or(0));
     },
     None => {}
 }

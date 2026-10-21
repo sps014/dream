@@ -1,6 +1,6 @@
 module system.io;
 
-// `File` - a small cross-runtime filesystem API.
+/// `File` - a small cross-runtime filesystem API.
 public static class File {
     // --- host bridge: `@runtime` WASM imports + matching native C symbols -------------------
     @runtime("fileRead")
@@ -62,7 +62,7 @@ public static class File {
     @runtime("dirCreateAll")
     static extern fun dir_create_all(borrow path: string): bool;
 
-    // Reads the whole file at `path` as UTF-8 text.
+    /// Reads the whole file at `path` as UTF-8 text.
     public static async fun read(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
@@ -75,7 +75,7 @@ public static class File {
         return Result.Ok(File.file_read(path));
     }
 
-    // Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
+    /// Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
     public static async fun write(
         borrow path: string,
         borrow content: string,
@@ -90,7 +90,7 @@ public static class File {
         return Result.Ok(n);
     }
 
-    // Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
+    /// Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
     public static async fun append(
         borrow path: string,
         borrow content: string,
@@ -105,7 +105,7 @@ public static class File {
         return Result.Ok(n);
     }
 
-    // Reads the whole file at `path` as raw bytes.
+    /// Reads the whole file at `path` as raw bytes.
     public static async fun read_bytes(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
@@ -118,7 +118,7 @@ public static class File {
         return Result.Ok(File.file_read_bytes(path));
     }
 
-    // Writes raw bytes to `path`, replacing any existing contents.
+    /// Writes raw bytes to `path`, replacing any existing contents.
     public static async fun write_bytes(
         borrow path: string,
         borrow data: byte[],
@@ -133,11 +133,11 @@ public static class File {
         return Result.Ok(n);
     }
 
-    // Deletes `path`; resolves `Ok(true)` on success.
+    /// Deletes `path`; resolves `Ok(Unit())` on success.
     public static async fun delete(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.file_delete(path) == false {
@@ -146,15 +146,15 @@ public static class File {
             }
             return Result.Err(IoError.other(path, "failed to delete: " + path));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Copies a file from `from` to `to`, overwriting `to` when it already exists.
+    /// Copies a file from `from` to `to`, overwriting `to` when it already exists.
     public static async fun copy(
         borrow from: string,
         borrow to: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(from) == false {
@@ -166,15 +166,15 @@ public static class File {
         if File.file_copy(from, to) == false {
             return Result.Err(IoError.other(to, "failed to copy to: " + to));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Renames or moves `from` to `to` (same-volume when the OS requires it).
+    /// Renames or moves `from` to `to` (same-volume when the OS requires it).
     public static async fun rename(
         borrow from: string,
         borrow to: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(from) == false {
@@ -183,14 +183,14 @@ public static class File {
         if File.file_rename(from, to) == false {
             return Result.Err(IoError.other(to, "failed to rename to: " + to));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Removes an empty directory at `path`.
+    /// Removes an empty directory at `path`.
     public static async fun remove_dir(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -202,14 +202,14 @@ public static class File {
         if File.dir_remove(path) == false {
             return Result.Err(IoError.other(path, "failed to remove directory: " + path));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Recursively deletes `path` (file or directory tree).
+    /// Recursively deletes `path` (file or directory tree).
     public static async fun remove_dir_all(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.exists(path) == false {
@@ -218,14 +218,14 @@ public static class File {
         if File.dir_remove_all(path) == false {
             return Result.Err(IoError.other(path, "failed to remove: " + path));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Creates a single directory at `path`; resolves `Ok(true)` on success.
+    /// Creates a single directory at `path`; resolves `Ok(Unit())` on success.
     public static async fun create_dir(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.dir_create(path) == false {
@@ -234,24 +234,24 @@ public static class File {
             }
             return Result.Err(IoError.other(path, "failed to create directory: " + path));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Creates `path` and any missing parents; resolves `Ok(true)` on success.
+    /// Creates `path` and any missing parents; resolves `Ok(Unit())` on success.
     public static async fun create_dir_all(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         if File.dir_create_all(path) == false {
             return Result.Err(IoError.other(path, "failed to create directories: " + path));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a
-    // directory (an existing empty directory yields `Ok([])`).
+    /// Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a
+    /// directory (an existing empty directory yields `Ok([])`).
     public static async fun list(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
@@ -268,7 +268,7 @@ public static class File {
         return Result.Ok(joined.split('\n'));
     }
 
-    // Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
+    /// Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.
     public static async fun list_paths(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
@@ -288,7 +288,7 @@ public static class File {
         return Result.Ok(out);
     }
 
-    // Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
+    /// Reads the whole file and splits on `\n`, dropping a trailing empty part from a final newline.
     public static async fun read_lines(
         borrow path: string,
         token: Option<CancellationToken> = Option.None
@@ -298,7 +298,7 @@ public static class File {
         if got.is_err() {
             return Result.Err(got.unwrap_err());
         }
-        let text = got.unwrap_or(string.empty);
+        let text = got.unwrap_or("");
         if text.is_empty() {
             return Result.Ok(Buffer.alloc<string>(0));
         }
@@ -316,7 +316,7 @@ public static class File {
         return Result.Ok(parts);
     }
 
-    // Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.
+    /// Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.
     public static async fun write_lines(
         borrow path: string,
         borrow lines: string[],
@@ -333,12 +333,12 @@ public static class File {
         return File.write(path, sb.build(), effective_token).await;
     }
 
-    // Cheap synchronous predicates (no async overhead).
+    /// Cheap synchronous predicates (no async overhead).
     public static fun exists(borrow path: string): bool {
         return File.file_exists(path);
     }
 
-    // Size of `path` in bytes, or `None` if it does not exist.
+    /// Size of `path` in bytes, or `None` if it does not exist.
     public static fun size(borrow path: string): Option<long> {
         let s = File.file_size(path);
         if s < 0L {
@@ -352,7 +352,8 @@ public static class File {
         return File.file_is_dir(path);
     }
 
-    // True when `path` exists and is a regular file.
+    /// Returns whether `path` exists and is a regular file. Returns false when the path is
+    /// missing or cannot be inspected; call `stat` to see why.
     public static fun is_file(borrow path: string): bool {
         return switch (File.stat(path)) {
             Ok(st) => st.is_file,
@@ -360,7 +361,7 @@ public static class File {
         };
     }
 
-    // One `stat` of `path`. Follows symlinks. Missing paths are `Err`.
+    /// One `stat` of `path`. Follows symlinks. Missing paths are `Err`.
     public static fun stat(borrow path: string): Result<FileStats, IoError> {
         let wire = File.file_stat(path);
         if wire.is_empty() {

@@ -1,6 +1,6 @@
 module system.io;
 
-// Owns a securely created private directory; destruction performs best-effort recursive cleanup.
+/// Owns a securely created private directory; destruction performs best-effort recursive cleanup.
 public class TempDirectory {
     location: string;
     closed: bool;
@@ -10,7 +10,7 @@ public class TempDirectory {
         this.closed = false;
     }
 
-    // Host path of this resource; remains available after cleanup.
+    /// Host path of this resource; remains available after cleanup.
     public get path(): string {
         return this.location;
     }
@@ -21,12 +21,12 @@ public class TempDirectory {
     @runtime("dirRemoveAll")
     static extern fun remove_host(path: string): bool;
 
-    // Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.
+    /// Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.
     public static fun create(): Result<TempDirectory, IoError> {
         return TempDirectory.create_in("");
     }
 
-    // Creates a private directory on the parent's filesystem for safe same-filesystem replacement.
+    /// Creates a private directory on the parent's filesystem for safe same-filesystem replacement.
     public static fun create_in(directory: string): Result<TempDirectory, IoError> {
         if !TempCapabilities.supported {
             return Result.Err(
@@ -46,16 +46,16 @@ public class TempDirectory {
         return Result.Ok(TempDirectory(path));
     }
 
-    // Removes the directory and its contents; repeated successful cleanup is a no-op.
-    public fun close(): Result<bool, IoError> {
+    /// Removes the directory and its contents; repeated successful cleanup is a no-op.
+    public fun close(): Result<Unit, IoError> {
         if this.closed {
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
         if !TempDirectory.remove_host(this.location) {
             return Result.Err(IoError.other(this.location, "temporary directory cleanup failed"));
         }
         this.closed = true;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     del() {

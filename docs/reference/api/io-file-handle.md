@@ -89,7 +89,7 @@ public async unique fun write_async(
 Seeks to absolute byte offset `pos` from the start of the file.
 
 ```dream
-public fun seek(pos: long): Result<bool, IoError>
+public fun seek(pos: long): Result<Unit, IoError>
 ```
 
 ## `seek_async`
@@ -100,7 +100,7 @@ Seeks on the filesystem executor; successful completion discards read-ahead. Onc
 public async unique fun seek_async(
     pos: long,
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `tell`
@@ -116,15 +116,7 @@ public fun tell(): Result<long, IoError>
 Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
 
 ```dream
-public fun seek_from_end(offset: long): Result<bool, IoError>
-```
-
-## `seek_end`
-
-Moves the cursor to the end of the file.
-
-```dream
-public fun seek_end(): Result<bool, IoError>
+public fun seek_from_end(offset: long): Result<Unit, IoError>
 ```
 
 ## `read_line`
@@ -135,20 +127,12 @@ Reads a line using buffered read-ahead, stripping LF or CRLF and preserving stan
 public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>
 ```
 
-## `write_text`
+## `size`
 
-Writes UTF-8 bytes of `text` at the current position.
-
-```dream
-public fun write_text(text: string): Result<int, IoError>
-```
-
-## `length`
-
-Returns the current byte length from the open handle; propagates metadata failures.
+Returns the file's current size in bytes, read from the open handle. Fails with an `IoError` when the handle is closed or the metadata query fails.
 
 ```dream
-public fun length(): Result<long, IoError>
+public fun size(): Result<long, IoError>
 ```
 
 ## `flush`
@@ -156,7 +140,7 @@ public fun length(): Result<long, IoError>
 Validates that the handle is open; writes are unbuffered at this layer. This does not synchronize data to durable storage.
 
 ```dream
-public unique fun flush(): Result<bool, IoError>
+public unique fun flush(): Result<Unit, IoError>
 ```
 
 ## `flush_async`
@@ -166,7 +150,7 @@ Checks cancellation and validates the handle; this layer has no buffered output 
 ```dream
 public async unique fun flush_async(
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `close`
@@ -174,5 +158,5 @@ public async unique fun flush_async(
 Closes idempotently and reports host failures. The handle stays closed even on failure to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

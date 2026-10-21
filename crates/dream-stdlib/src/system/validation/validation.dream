@@ -15,7 +15,7 @@ public static class Validation {
     public static extern fun schema<T>(): JsonValue;
 
     /// Returns a new validation location with `key` appended.
-    public static fun child(location: List<string>, key: string): List<string> {
+    internal static fun child(location: List<string>, key: string): List<string> {
         let path = List<string>();
         for (let item in location) {
             path.push(item);
@@ -25,12 +25,12 @@ public static class Validation {
     }
 
     /// Validates a JSON tree and applies declared defaults before model construction.
-    public static fun check(value: JsonValue, schema: JsonValue): ValidationErrors {
+    internal static fun check(value: JsonValue, schema: JsonValue): ValidationErrors {
         let errors = ValidationErrors();
         Validation.walk(
             value,
             schema,
-            schema.get_or("definitions", JsonValue.none()),
+            schema.get("definitions").unwrap_or(JsonValue.null()),
             List<string>(),
             errors
         );
@@ -44,23 +44,23 @@ public static class Validation {
         location: List<string>,
         errors: ValidationErrors
     ): void {
-        if value.is_null() && schema.get_or("nullable", JsonValue.none()).as_bool().unwrap_or(
+        if value.is_null() && schema.get("nullable").unwrap_or(JsonValue.null()).as_bool().unwrap_or(
             false
         ) {
             return;
         }
-        if schema["$ref"].is_some() {
-            let key = schema.get_or("$ref", JsonValue.none()).as_string().unwrap_or("");
+        if schema.contains("$ref") {
+            let key = schema.get("$ref").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
             Validation.walk(
                 value,
-                definitions.get_or(key, JsonValue.none()),
+                definitions.get(key).unwrap_or(JsonValue.null()),
                 definitions,
                 location,
                 errors
             );
             return;
         }
-        let kind = schema.get_or("type", JsonValue.none()).as_string().unwrap_or("");
+        let kind = schema.get("type").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         let valid = true;
         if kind == "object" {
             valid = value.is_object();
@@ -82,18 +82,18 @@ public static class Validation {
             return;
         }
         if kind == "object" {
-            let properties = schema.get_or("properties", JsonValue.none());
-            let required = schema.get_or("required", JsonValue.none())
+            let properties = schema.get("properties").unwrap_or(JsonValue.null());
+            let required = schema.get("required").unwrap_or(JsonValue.null())
                 .as_array()
                 .unwrap_or(List<JsonValue>());
             for (let key in properties.keys()) {
-                let rule = properties.get_or(key, JsonValue.none());
-                let item = value[key];
-                if item.is_none() && rule["default"].is_some() {
+                let rule = properties.get(key).unwrap_or(JsonValue.null());
+                let item = value.get(key);
+                if item.is_none() && rule.contains("default") {
                     value[key] = Json.deserialize<JsonValue>(
-                        Json.serialize(rule.get_or("default", JsonValue.none()))
+                        Json.serialize(rule.get("default").unwrap_or(JsonValue.null()))
                     ).unwrap();
-                    item = value[key];
+                    item = value.get(key);
                 }
                 if item.is_some() {
                     Validation.walk(
@@ -115,12 +115,12 @@ public static class Validation {
                     }
                 }
             }
-            let extra = schema.get_or("additionalProperties", JsonValue.none());
+            let extra = schema.get("additionalProperties").unwrap_or(JsonValue.null());
             if extra.is_object() {
                 for (let key in value.keys()) {
-                    if properties[key].is_none() {
+                    if !properties.contains(key) {
                         Validation.walk(
-                            value.get_or(key, JsonValue.none()),
+                            value.get(key).unwrap_or(JsonValue.null()),
                             extra,
                             definitions,
                             Validation.child(location, key),
@@ -130,7 +130,7 @@ public static class Validation {
                 }
             } else if !extra.as_bool().unwrap_or(false) {
                 for (let key in value.keys()) {
-                    if properties[key].is_none() {
+                    if !properties.contains(key) {
                         errors.add(Validation.child(location, key), "extra", "unknown field");
                     }
                 }
@@ -142,7 +142,7 @@ public static class Validation {
             for (let item in items) {
                 Validation.walk(
                     item,
-                    schema.get_or("items", JsonValue.none()),
+                    schema.get("items").unwrap_or(JsonValue.null()),
                     definitions,
                     Validation.child(location, i.to_string()),
                     errors
@@ -165,15 +165,15 @@ public static class Validation {
                 min_key = "minProperties";
                 max_key = "maxProperties";
             }
-            let min = schema.get_or(min_key, JsonValue.none()).as_int();
-            let max = schema.get_or(max_key, JsonValue.none()).as_int();
+            let min = schema.get(min_key).unwrap_or(JsonValue.null()).as_int();
+            let max = schema.get(max_key).unwrap_or(JsonValue.null()).as_int();
             if min.is_some() && length < min.unwrap() {
                 errors.add(location, "min_length", "value is too short");
             }
             if max.is_some() && length > max.unwrap() {
                 errors.add(location, "max_length", "value is too long");
             }
-            let pattern = schema.get_or("pattern", JsonValue.none()).as_string();
+            let pattern = schema.get("pattern").unwrap_or(JsonValue.null()).as_string();
             if kind == "string" && pattern.is_some() {
                 switch (Regex.compile(pattern.unwrap())) {
                     Ok(regex) => {
@@ -187,8 +187,8 @@ public static class Validation {
         }
         if kind == "number" || kind == "integer" {
             let number = value.as_double().unwrap();
-            let min = schema.get_or("minimum", JsonValue.none()).as_double();
-            let max = schema.get_or("maximum", JsonValue.none()).as_double();
+            let min = schema.get("minimum").unwrap_or(JsonValue.null()).as_double();
+            let max = schema.get("maximum").unwrap_or(JsonValue.null()).as_double();
             if min.is_some() && number < min.unwrap() {
                 errors.add(location, "minimum", "value is below minimum");
             }

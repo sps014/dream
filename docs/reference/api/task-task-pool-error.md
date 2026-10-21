@@ -14,7 +14,7 @@ public enum TaskPoolError
 
 ## `InvalidSize`
 
-Pool sizes must be positive.
+The requested worker count was zero or negative.
 
 ```dream
 InvalidSize
@@ -22,7 +22,7 @@ InvalidSize
 
 ## `Closed`
 
-The pool no longer accepts work.
+The pool was closed and no longer accepts work.
 
 ```dream
 Closed
@@ -34,4 +34,20 @@ Cancellation was requested; any submitted work has settled before this is return
 
 ```dream
 Cancelled
+```
+
+## `code`
+
+Returns `EINVAL`, `ECLOSED`, or `ECANCELED` for the variant.
+
+```dream
+public fun code(): string
+```
+
+## `message`
+
+Returns a readable description of the failure.
+
+```dream
+public fun message(): string
 ```

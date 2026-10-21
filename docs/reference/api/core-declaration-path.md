@@ -14,7 +14,7 @@ public struct DeclarationPath
 
 ## `text`
 
-Source text represented by this entry.
+Dotted declaration path as written (`Json.serialize`).
 
 ```dream
 public text: string

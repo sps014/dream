@@ -1,6 +1,6 @@
 module system.logging;
 
-// Severity levels ordered from most to least verbose.
+/// Severity levels ordered from most to least verbose.
 public enum LogLevel {
     /// Very detailed diagnostic messages.
     Trace,
@@ -14,7 +14,7 @@ public enum LogLevel {
     Error,
 }
 
-// Uppercase label for a severity level (`TRACE` … `ERROR`).
+/// Uppercase label for a severity level (`TRACE` … `ERROR`).
 public fun level_name(level: LogLevel): string {
     if level == LogLevel.Trace {
         return "TRACE";

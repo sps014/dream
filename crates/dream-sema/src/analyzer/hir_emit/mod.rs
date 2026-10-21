@@ -9,6 +9,7 @@
 //! no backend output). The HIR is the only input the backend consumes.
 
 use super::Analyzer;
+use dream_abi::names::THIS_NAME;
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::{
     BinOp, Binding, Callee, GlobalId, HArm, HExpr, HExprKind, HFunction, HGlobal, HImport, HLocal,
@@ -285,7 +286,7 @@ impl<'a> Analyzer<'a> {
                 local,
                 name: param.name.text.clone(),
                 ty,
-                mode: if param.is_borrow || param.name.text == "this" {
+                mode: if param.is_borrow || param.name.text == THIS_NAME {
                     dream_hir::ParamMode::Borrow
                 } else if self.type_ctx.interner.is_shared_type(ty) {
                     dream_hir::ParamMode::Share

@@ -1,15 +1,15 @@
 module system.task;
 
-// Preserves application errors while distinguishing structured cancellation and deadlines.
+/// Preserves application errors while distinguishing structured cancellation and deadlines.
 public enum TaskFailure<E> {
-    // A child or the scope body returned an application error.
+    /// A child or the scope body returned an application error.
     Failed(E),
-    // The parent or caller requested cancellation.
+    /// The parent or caller requested cancellation.
     Cancelled,
-    // The scope deadline expired before all work completed.
+    /// The scope deadline expired before all work completed.
     TimedOut,
-    // A worker pool rejected a submitted job.
+    /// A worker pool rejected a submitted job.
     WorkerFailed(TaskPoolError),
-    // A concurrency limit or scope operation was invalid.
+    /// A concurrency limit or scope operation was invalid.
     InvalidOperation,
 }

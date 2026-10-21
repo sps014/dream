@@ -34,6 +34,74 @@ pub fn bridge_sym(method: &str) -> String {
     format!("${}", method_fn(JS_TYPE, method))
 }
 
+/// The bridge family a primitive crosses the JS boundary through. Each family has one
+/// `box_<suffix>` / `as_<suffix>` bridge pair over a single carrier primitive; other members of
+/// the family convert to and from that carrier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsBridgeClass {
+    Int,
+    Long,
+    Double,
+    Bool,
+    String,
+}
+
+impl JsBridgeClass {
+    pub fn of(p: PrimTy) -> Self {
+        match p {
+            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Self::Int,
+            PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Self::Long,
+            PrimTy::Float16 | PrimTy::Float | PrimTy::Double => Self::Double,
+            PrimTy::Bool => Self::Bool,
+            PrimTy::String => Self::String,
+        }
+    }
+
+    /// Suffix of the `box_*`, `as_*`, `get_as_*`, and `call_as_*` bridges.
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Int => "int",
+            Self::Long => "long",
+            Self::Double => "double",
+            Self::Bool => "bool",
+            Self::String => "string",
+        }
+    }
+
+    /// The `js.box_*` bridge method that wraps a carrier value into a `js` handle.
+    pub fn box_bridge(self) -> &'static str {
+        match self {
+            Self::Int => "box_int",
+            Self::Long => "box_long",
+            Self::Double => "box_double",
+            Self::Bool => "box_bool",
+            Self::String => "box_string",
+        }
+    }
+
+    /// The `js.as_*` bridge method that reads a `js` handle as a carrier value.
+    pub fn as_bridge(self) -> &'static str {
+        match self {
+            Self::Int => "as_int",
+            Self::Long => "as_long",
+            Self::Double => "as_double",
+            Self::Bool => "as_bool",
+            Self::String => "as_string",
+        }
+    }
+
+    /// The primitive the bridges take and return.
+    pub fn carrier(self) -> PrimTy {
+        match self {
+            Self::Int => PrimTy::Int,
+            Self::Long => PrimTy::Long,
+            Self::Double => PrimTy::Double,
+            Self::Bool => PrimTy::Bool,
+            Self::String => PrimTy::String,
+        }
+    }
+}
+
 // -- Generated-marshaler symbol names ------------------------------------------------------------
 
 /// `$<Name>_to_js`: the marshaler that deep-copies a struct/class into a plain JS object.

@@ -5,24 +5,24 @@ import system.codegen;
 import system.validation;
 
 /// Schema generation shared by standalone validation and the web API generator.
-public static class ValidationGenerator {
+internal static class ValidationGenerator {
     /// Adds the constraints described by `attributes` to the JSON schema.
     public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void {
         let minimum = GenAttributes.decode<MinimumAttribute>(attributes);
         if minimum.is_some() {
-            schema["minimum"] = JsonValue.number(minimum.unwrap().value);
+            schema["minimum"] = JsonValue.from_double(minimum.unwrap().value);
         }
         let maximum = GenAttributes.decode<MaximumAttribute>(attributes);
         if maximum.is_some() {
-            schema["maximum"] = JsonValue.number(maximum.unwrap().value);
+            schema["maximum"] = JsonValue.from_double(maximum.unwrap().value);
         }
         let min_key = "minLength";
         let max_key = "maxLength";
-        if schema.get_str_or("type", "") == "array" {
+        if schema.get("type").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "array" {
             min_key = "minItems";
             max_key = "maxItems";
         }
-        if schema.get_str_or("type", "") == "object" {
+        if schema.get("type").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "object" {
             min_key = "minProperties";
             max_key = "maxProperties";
         }
@@ -74,7 +74,7 @@ public static class ValidationGenerator {
         }
         schema["properties"] = properties;
         schema["required"] = required;
-        schema["additionalProperties"] = JsonValue.boolean(d.has<AllowExtraAttribute>());
+        schema["additionalProperties"] = JsonValue.from_bool(d.has<AllowExtraAttribute>());
         return schema;
     }
 
@@ -86,7 +86,7 @@ public static class ValidationGenerator {
     ): JsonValue {
         if ty.is_option() {
             let schema = ValidationGenerator.type_schema(ty.arg(0), ctx, definitions);
-            schema["nullable"] = JsonValue.boolean(true);
+            schema["nullable"] = JsonValue.from_bool(true);
             return schema;
         }
         let schema = JsonValue.dict();
@@ -125,16 +125,16 @@ public static class ValidationGenerator {
                 schema["maxLength"] = JsonValue.from_int(1);
             }
             if ty.is_primitive(Primitive.Int) {
-                schema["minimum"] = JsonValue.number(-2147483648.0);
-                schema["maximum"] = JsonValue.number(2147483647.0);
+                schema["minimum"] = JsonValue.from_double(-2147483648.0);
+                schema["maximum"] = JsonValue.from_double(2147483647.0);
             }
             if ty.is_primitive(Primitive.UInt) {
-                schema["minimum"] = JsonValue.number(0.0);
-                schema["maximum"] = JsonValue.number(4294967295.0);
+                schema["minimum"] = JsonValue.from_double(0.0);
+                schema["maximum"] = JsonValue.from_double(4294967295.0);
             }
             if ty.is_primitive(Primitive.Byte) {
-                schema["minimum"] = JsonValue.number(0.0);
-                schema["maximum"] = JsonValue.number(255.0);
+                schema["minimum"] = JsonValue.from_double(0.0);
+                schema["maximum"] = JsonValue.from_double(255.0);
             }
             return schema;
         }
@@ -151,7 +151,7 @@ public static class ValidationGenerator {
             ctx.error_at(d.id, "validated models must be @json");
             return schema;
         }
-        if !definitions[d.id].is_some() {
+        if !definitions.contains(d.id) {
             definitions[d.id] = JsonValue.dict();
             definitions[d.id] = ValidationGenerator.model(d, ctx, definitions);
         }

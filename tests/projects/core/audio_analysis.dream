@@ -12,9 +12,9 @@ fun audio_fft_sine_and_levels(): void {
     }
     let result = analyzer.analyze(samples, 48000, 1).unwrap();
     Assert.eq(result.magnitudes.length, 17);
-    Assert.is_true(Math.abs((double)result.magnitudes[4] - 1.0d) < 0.00001d);
-    Assert.is_true(Math.abs((double)result.rms - Math.sqrt(0.5d)) < 0.00001d);
-    Assert.is_true(Math.abs(result.frequency_hz(4).unwrap() - 6000.0d) < 0.00001d);
+    Assert.is_true(((double)result.magnitudes[4] - 1.0d).abs() < 0.00001d);
+    Assert.is_true(((double)result.rms - Math.sqrt(0.5d)).abs() < 0.00001d);
+    Assert.is_true((result.frequency_hz(4).unwrap() - 6000.0d).abs() < 0.00001d);
     Assert.is_true(result.frequency_hz(17).is_err());
     Assert.is_true(analyzer.set_fft_size(31).is_err());
     Assert.eq(analyzer.analyze(samples, 48000, 1).unwrap().magnitudes.length, 17);
@@ -34,8 +34,8 @@ fun audio_fft_silence_dc_and_stereo(): void {
         stereo[i * 2 + 1] = -1.0f;
     }
     Assert.eq(analyzer.analyze(stereo, 48000, 2).unwrap().peak, 0.0f);
-    let dc = analyzer.analyze(Array.repeat<float>(32, 0.5f), 48000, 1).unwrap();
-    Assert.is_true(Math.abs((double)dc.magnitudes[0] - 0.5d) < 0.00001d);
+    let dc = analyzer.analyze([0.5f; 32], 48000, 1).unwrap();
+    Assert.is_true(((double)dc.magnitudes[0] - 0.5d).abs() < 0.00001d);
     Assert.is_true(analyzer.analyze([1.0f], 48000, 2).is_err());
     Assert.is_true(analyzer.analyze([], 0, 1).is_err());
 }
@@ -65,7 +65,7 @@ async fun audio_controls_and_events_without_device(): void {
     Assert.eq(audio.volume, 0.5f);
     Assert.eq(audio.error.unwrap().code(), "EINVAL");
     audio.current_time = 1.0d / 48000.0d;
-    Assert.is_true(Math.abs(audio.current_time - 1.0d / 48000.0d) < 0.0000001d);
+    Assert.is_true((audio.current_time - 1.0d / 48000.0d).abs() < 0.0000001d);
     Assert.eq(audio.capture(1).unwrap().samples.length, 0);
     audio.muted = true;
     Assert.eq(audio.capture(1).unwrap().samples.length, 0);
@@ -221,7 +221,7 @@ fun audio_content_detection_and_webm_opus(): void {
     Assert.eq(wav.sample_rate, 48000);
     Assert.eq(wav.channels, 1);
     Assert.eq(wav.frame_count, 4);
-    Assert.is_true(Math.abs((double)wav.read_pcm(1, 1).unwrap()[0] - 0.25d) < 0.00001d);
+    Assert.is_true(((double)wav.read_pcm(1, 1).unwrap()[0] - 0.25d).abs() < 0.00001d);
     let mp3 = AudioBuffer.decode(audio_fixture_mp3()).unwrap();
     Assert.eq(mp3.sample_rate, 44100);
     Assert.is_true(mp3.frame_count > 1000);

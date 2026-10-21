@@ -13,6 +13,7 @@
 
 use crate::{Mir, MirFunction};
 use crate::{Operand, Rvalue, Statement};
+use dream_abi::names::RESULT_ERR;
 use dream_types::TypeInterner;
 use dream_types::{TyKind, TypeId};
 use std::collections::BTreeSet;
@@ -230,6 +231,6 @@ fn entry_error_type(mir: &Mir) -> Option<TypeId> {
         .iter()
         .find(|f| f.name == crate::abi::ENTRY_FN)?;
     let layout = mir.layouts.unions.get(&main.ret)?;
-    let variant = layout.variants.iter().find(|v| v.name == "Err")?;
+    let variant = layout.variants.iter().find(|v| v.name == RESULT_ERR)?;
     variant.fields.first().map(|f| f.ty)
 }

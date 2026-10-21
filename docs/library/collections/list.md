@@ -38,7 +38,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 | `.length` | `int` | Number of items. |
 | `.capacity` | `int` | Items that fit before the list must grow. |
 | `is_empty()` | `bool` | `true` when the list has no items. |
-| `reserve(additional)` | `Result<bool, CapacityError>` | Makes room for `additional` more items. |
+| `reserve(additional)` | `Result<Unit, CapacityError>` | Makes room for `additional` more items. |
 | `push(value)` | `void` | Adds an item at the end. |
 | `push_all(items)` | `void` | Appends every item of an array, in order. |
 | `insert(index, value)` | `bool` | Inserts at `index`; `false` when `index` is outside 0 through `.length`. |
@@ -58,7 +58,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 | `contains(value)` | `bool` | Whether an equal item is present. |
 | `index_of(value)` | `Option<int>` | Position of the first equal item. |
 | `last_index_of(value)` | `Option<int>` | Position of the last equal item. |
-| `find_index_where(pred)` | `Option<int>` | Position of the first item where `pred` returns `true`. |
+| `find_index(pred)` | `Option<int>` | Position of the first item where `pred` returns `true`. |
 | `pop()` | `Option<T>` | Removes and returns the last item. |
 | `remove_at(index)` | `bool` | Removes the item at `index`; `false` and no change for an invalid index. |
 | `remove(value)` | `bool` | Removes the first equal item; `false` when none matched. |
@@ -66,7 +66,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 ## Copy, join, and sort
 
-`clone()` makes a new list holding the same elements. Objects inside it are still shared; it does not copy each object. `slice(start, end)` makes a list from a range, excluding `end`. Out-of-range bounds are clamped, and an inverted range gives an empty list. `concat(other)` makes a combined list. `reverse()` changes the current list.
+`clone()` makes a new list holding the same elements. Objects inside it are still shared; it does not copy each object. `slice(start, end)` makes a list from a range, excluding `end`. It panics unless `0 <= start <= end <= length`, the same rule as array and span `slice`. `concat(other)` makes a combined list. `reverse()` changes the current list.
 
 `join(separator)` converts items to text and joins them. `sort()` uses the elements' comparison order. `sort_by(compare)` takes your comparison function: return a negative number when the first item should come first, zero when equal, or a positive number when the second should come first. Sorting is stable, so equal items keep their relative order. `binary_search` requires a list already sorted in the matching order.
 

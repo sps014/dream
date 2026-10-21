@@ -20,6 +20,7 @@
 
 use super::*;
 use crate::function_table::{FunctionIdentity, FunctionTable};
+use dream_abi::names::THIS_NAME;
 use dream_syntax::nodes::function::ReceiverMode;
 use dream_syntax::nodes::statement::StatementNode;
 use dream_text::text_span::TextSpan;
@@ -59,7 +60,7 @@ enum Ev {
 /// Returns `None` for receivers we cannot key (literals, complex chains, unknown locals).
 fn is_self_expr(expr: &ExpressionNode, aliases: &[String]) -> bool {
     match expr {
-        ExpressionNode::Identifier(t) => t.text == "this" || aliases.contains(&t.text),
+        ExpressionNode::Identifier(t) => t.text == THIS_NAME || aliases.contains(&t.text),
         _ => false,
     }
 }
@@ -224,7 +225,7 @@ fn view_summary(function: &FunctionNode, is_method: bool) -> Option<ViewSummary>
     let parameters: Vec<_> = function
         .parameters
         .iter()
-        .filter(|parameter| !is_method || parameter.name.text != "this")
+        .filter(|parameter| !is_method || parameter.name.text != THIS_NAME)
         .map(|parameter| parameter.name.text.as_str())
         .collect();
     for statement in function.body {
@@ -237,7 +238,7 @@ fn view_summary(function: &FunctionNode, is_method: bool) -> Option<ViewSummary>
         let ExpressionNode::Identifier(name) = receiver else {
             continue;
         };
-        let source = if is_method && name.text == "this" {
+        let source = if is_method && name.text == THIS_NAME {
             Some(ViewSource::Receiver)
         } else {
             parameters
@@ -260,7 +261,7 @@ fn chain_type(
 ) -> Option<TypeId> {
     let mut parts = chain.split('.');
     let root = parts.next()?;
-    let mut ty = if root == "this" {
+    let mut ty = if root == THIS_NAME {
         owner?
     } else {
         *locals.get(root)?
@@ -436,7 +437,7 @@ impl<'a> Analyzer<'a> {
                     function
                         .parameters
                         .first()
-                        .is_some_and(|parameter| parameter.name.text == "this"),
+                        .is_some_and(|parameter| parameter.name.text == THIS_NAME),
                 )
             }))
             .collect();

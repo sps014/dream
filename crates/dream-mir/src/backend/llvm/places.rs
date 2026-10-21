@@ -14,6 +14,7 @@ use crate::backend::shared::place_policy::{
 };
 use crate::rc_store::rvalue_owns_result;
 use crate::{Const, Global, Local, Operand, Place, Rvalue};
+use dream_abi::names::{OPTION_NONE, OPTION_SOME, THIS_NAME};
 use dream_types::{TyKind, TypeId};
 
 /// Array payload elements sit at `data + 4 + i * es`, so nothing wider than 4 is guaranteed.
@@ -203,8 +204,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 .cx
                 .nunion(fld.ty)
                 .unwrap_or_else(|| crate::internal_error!("weak field requires Option"));
-            let none = u.variant("None").unwrap().discriminant;
-            let offset = u.variant("Some").unwrap().fields[0].offset;
+            let none = u.variant(OPTION_NONE).unwrap().discriminant;
+            let offset = u.variant(OPTION_SOME).unwrap().fields[0].offset;
             (
                 0,
                 none,
@@ -399,7 +400,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let decl = &self.f.locals[l.0 as usize];
                 let owns = !decl.is_ref
                     && !decl.borrows_refs
-                    && decl.name.as_deref() != Some("this")
+                    && decl.name.as_deref() != Some(THIS_NAME)
                     && (!self.f.params.contains(l) || decl.is_take);
                 // Producer results already own their references and are evaluated in separate
                 // storage, so rebinding can release the previous value before adopting them.
@@ -678,10 +679,10 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.store_ty(&self.h(), slot, rhs, align);
             return;
         };
-        let some = u.variant("Some").map(|v| v.discriminant).unwrap_or(0);
-        let none = u.variant("None").map(|v| v.discriminant).unwrap_or(1);
+        let some = u.variant(OPTION_SOME).map(|v| v.discriminant).unwrap_or(0);
+        let none = u.variant(OPTION_NONE).map(|v| v.discriminant).unwrap_or(1);
         let poff = u
-            .variant("Some")
+            .variant(OPTION_SOME)
             .and_then(|v| v.fields.first())
             .map(|f| f.offset)
             .unwrap_or(8) as i64;

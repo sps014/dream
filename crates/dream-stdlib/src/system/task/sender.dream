@@ -1,6 +1,6 @@
 module system.task;
 
-// An independently closable producer endpoint for a local async channel.
+/// An independently closable producer endpoint for a local async channel.
 @allow_cycle
 public class Sender<T> {
     state: ChannelState<T>;
@@ -12,8 +12,8 @@ public class Sender<T> {
         this.state.senders = this.state.senders + 1;
     }
 
-    // Attempts a send without suspension; Full and Closed are distinct errors.
-    public fun try_send(value: T): Result<bool, ChannelError> {
+    /// Attempts a send without suspension; Full and Closed are distinct errors.
+    public fun try_send(value: T): Result<Unit, ChannelError> {
         if this.closed || this.state.send_closed || this.state.receive_closed {
             return Result.Err(ChannelError.Closed);
         }
@@ -22,14 +22,14 @@ public class Sender<T> {
         }
         this.state.queue.enqueue(value);
         this.state.wake_one(this.state.readable);
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Suspends for capacity and observes the inherited scope token unless explicitly overridden.
+    /// Suspends for capacity and observes the inherited scope token unless explicitly overridden.
     public fun send(
         value: T,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, ChannelError>> {
+    ): Future<Result<Unit, ChannelError>> {
         let effective_token = CancellationToken.resolve(token);
         return Sender<T>.send_owned(this, value, effective_token);
     }
@@ -38,7 +38,7 @@ public class Sender<T> {
         sender: Sender<T>,
         value: T,
         token: Option<CancellationToken>
-    ): Result<bool, ChannelError> {
+    ): Result<Unit, ChannelError> {
         let effective_token = CancellationToken.resolve(token);
         while true {
             if CancellationToken.is_cancelled_opt(effective_token) {
@@ -64,7 +64,7 @@ public class Sender<T> {
         }
     }
 
-    // Closes this endpoint idempotently; the last sender lets receivers drain then finish.
+    /// Closes this endpoint idempotently; the last sender lets receivers drain then finish.
     public fun close(): void {
         if this.closed {
             return;

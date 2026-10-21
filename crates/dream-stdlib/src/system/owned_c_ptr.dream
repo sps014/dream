@@ -1,8 +1,8 @@
 module system;
 import system.interop;
 
-// A C pointer returned by an `@owned("free_fn")` `@c` extern: Dream owns it, and the destructor
-// calls `free_fn(ptr)` unless `take()` handed ownership back first.
+/// A C pointer returned by an `@owned("free_fn")` `@c` extern: Dream owns it, and the destructor
+/// calls `free_fn(ptr)` unless `take()` handed ownership back first.
 public class OwnedCPtr {
     ptr: CPtr;
     free: usize;
@@ -11,12 +11,12 @@ public class OwnedCPtr {
     @intrinsic(Intrinsic.DreamFfiFreeWith)
     public static extern fun free_with(free: usize, ptr: usize): void;
 
-    // The pointer, still owned (and later freed) by this object.
+    /// The pointer, still owned (and later freed) by this object.
     public fun get(): CPtr {
         return this.ptr;
     }
 
-    // Gives up ownership: the caller now frees the returned pointer, and this object holds `NULL`.
+    /// Gives up ownership: the caller now frees the returned pointer, and this object holds `NULL`.
     public fun take(): CPtr {
         let p = this.ptr;
         this.ptr = CPtr.null();

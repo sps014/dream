@@ -1,8 +1,8 @@
 module system.collections;
 
-// Cursor produced by `PriorityQueue.iterator()`. Yields elements in ascending order under the
-// active comparator). Iteration is destructive-free: it drains into a snapshot first, so the
-// queue can be mutated while the cursor is alive.
+/// Cursor produced by `PriorityQueue.iterator()`. Yields elements in ascending order under the
+/// active comparator). Iteration is destructive-free: it drains into a snapshot first, so the
+/// queue can be mutated while the cursor is alive.
 @allow_cycle
 public class PriorityQueueIterator<T>: Iterator<T> {
     items: T[];
@@ -13,7 +13,7 @@ public class PriorityQueueIterator<T>: Iterator<T> {
         this.offset = 0;
     }
 
-    // Returns the next element, or `None` if exhausted.
+    /// Returns the next element, or `None` if exhausted.
     public fun next(): Option<T> {
         if this.offset >= this.items.length {
             return Option.None;

@@ -92,7 +92,7 @@ public class Messages {
     @operation("Create a message", "Returns the validated message", "messages", 201)
     @post("/")
     public static fun create(
-        @dep(CurrentUser) user: AuthPrincipal,
+        @dep(AuthService.current_user) user: AuthPrincipal,
         @dep(request_label) label: string,
         @body message: CreateMessage
     ): HttpOutgoing {
@@ -132,7 +132,9 @@ public fun create_app(key: string, password: string): Result<WebApp, AuthError> 
     app.include_router(Messages.router()).unwrap();
     app.use(auth.middleware()).unwrap();
     app.use(
-        CORS(CorsOptions(allow_origins: "https://example.com", expose_headers: "X-Request-ID"))
+        Cors.middleware(
+            CorsOptions(allow_origins: "https://example.com", expose_headers: "X-Request-ID")
+        )
     ).unwrap();
     return Result.Ok(app);
 }

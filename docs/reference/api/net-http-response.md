@@ -60,5 +60,5 @@ public async fun read_text(
 Closes the body idempotently; subsequent reads return `ECLOSED`.
 
 ```dream
-public fun close(): Result<bool, HttpError>
+public fun close(): Result<Unit, HttpError>
 ```

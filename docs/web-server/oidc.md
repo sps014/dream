@@ -52,7 +52,7 @@ async fun main(): void {
             System.env("OIDC_ISSUER").unwrap(),
             System.env("OIDC_CLIENT_ID").unwrap(),
             "https://api.example.com/auth/oidc/company/callback",
-            System.env_or("OIDC_CLIENT_SECRET", "")
+            System.env("OIDC_CLIENT_SECRET").unwrap_or("")
         )
     ).unwrap();
     let app = WebApp();

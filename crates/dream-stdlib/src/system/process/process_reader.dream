@@ -1,6 +1,6 @@
 module system.process;
 
-// A borrowed child output pipe; cancellation preserves bytes already consumed by the host.
+/// A borrowed child output pipe; cancellation preserves bytes already consumed by the host.
 public class ProcessReader: AsyncReader {
     owner: ChildProcess;
     stream: int;
@@ -14,7 +14,7 @@ public class ProcessReader: AsyncReader {
         this.position = 0;
     }
 
-    // Reads at most max_bytes; a successful empty read for a positive size means EOF.
+    /// Reads at most max_bytes; a successful empty read for a positive size means EOF.
     public async unique fun read_async(
         max_bytes: int,
         token: Option<CancellationToken> = Option.None
@@ -63,8 +63,8 @@ public class ProcessReader: AsyncReader {
     ): Result<byte[], IoError> {
         CancellationToken.rejected(token, IoError.cancelled())?;
         let request = ProcessOperation.request("read", reader.owner.handle);
-        request["stream"] = JsonValue.number((double)reader.stream);
-        request["max_bytes"] = JsonValue.number((double)count);
+        request["stream"] = JsonValue.from_double((double)reader.stream);
+        request["max_bytes"] = JsonValue.from_double((double)count);
         let operation = ProcessOperation(request, Buffer.alloc<byte>(0));
         let result = operation.wait(token).await;
         operation.close();
@@ -75,7 +75,7 @@ public class ProcessReader: AsyncReader {
         return Result.Ok(result.unwrap());
     }
 
-    // Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.
+    /// Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.
     public unique fun read_line(
         max_bytes: int = 1048576,
         token: Option<CancellationToken> = Option.None

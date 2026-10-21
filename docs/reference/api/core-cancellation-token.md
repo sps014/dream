@@ -55,7 +55,7 @@ public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>>
 Awaits a void future or cancellation, returning true when the operation completes.
 
 ```dream
-public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>>
+public fun wait_void(future: Future<void>): Future<Result<Unit, CancelledError>>
 ```
 
 ## `throw_if_cancelled`
@@ -68,10 +68,10 @@ public fun throw_if_cancelled(): void
 
 ## `check`
 
-`Ok(true)` when still running; `Err(CancelledError)` when cancelled.
+`Ok(Unit())` when still running; `Err(CancelledError)` when cancelled.
 
 ```dream
-public fun check(): Result<bool, CancelledError>
+public fun check(): Result<Unit, CancelledError>
 ```
 
 ## `is_cancelled_opt`
@@ -92,8 +92,8 @@ public static fun throw_if_opt(token: Option<CancellationToken>): void
 
 ## `rejected`
 
-Returns err when the explicit or inherited token is cancelled; otherwise Ok(true).
+Returns err when the explicit or inherited token is cancelled; otherwise Ok(Unit()).
 
 ```dream
-public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E>
+public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<Unit, E>
 ```

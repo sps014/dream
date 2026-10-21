@@ -49,7 +49,7 @@ public static fun create_in(directory: string): Result<TempFile, IoError>
 Flushes and closes the file, then atomically replaces a destination on the same filesystem. Failed replacement leaves the destination and temporary file intact; durability is not implied.
 
 ```dream
-public fun persist_replace(destination: string): Result<bool, IoError>
+public fun persist_replace(destination: string): Result<Unit, IoError>
 ```
 
 ## `close`
@@ -57,5 +57,5 @@ public fun persist_replace(destination: string): Result<bool, IoError>
 Closes the file and removes its private directory, reporting either cleanup failure.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

@@ -24,7 +24,7 @@ public fun create_app(key: string, password: string): Result<WebApp, AuthError> 
     app.include_router(Messages.router()).unwrap();
     app.use(auth.middleware()).unwrap();
     app.use(
-        CORS(CorsOptions(allow_origins: "https://example.com", expose_headers: "X-Request-ID"))
+        Cors.middleware(CorsOptions(allow_origins: "https://example.com", expose_headers: "X-Request-ID"))
     ).unwrap();
     return Result.Ok(app);
 }

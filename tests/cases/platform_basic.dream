@@ -2,7 +2,7 @@ import system;
 fun main(): void {
     let p = System.platform;
     System.println(p == Platform.Native);
-    System.println(System.is_browser);
+    System.println(p == Platform.Browser);
     switch (System.cwd) {
         Ok(cwd) => System.println(cwd.is_empty() == false),
         Err(e) => System.println(e.message()),
@@ -11,5 +11,5 @@ fun main(): void {
         Ok(v) => { },
         Err(e) => System.println(e.message()),
     }
-    System.println(System.env_or("DREAM_PLATFORM_TEST", "missing"));
+    System.println(System.env("DREAM_PLATFORM_TEST").unwrap_or("missing"));
 }

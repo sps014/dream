@@ -13,7 +13,7 @@ public class ArtifactBuilder {
     /// Locations mapping generated text back to source declarations.
     public source_map: GenSourceMap;
 
-    // Creates an empty builder.
+    /// Creates an empty builder.
     public constructor() {
         this.buf = StringBuilder();
         this.current_line = 1;
@@ -21,7 +21,7 @@ public class ArtifactBuilder {
         this.source_map = GenSourceMap();
     }
 
-    // Appends text and advances the source-map position.
+    /// Appends text and advances the source-map position.
     public fun append(text: string): void {
         this.buf.append(text);
         for (let c in text) {
@@ -35,7 +35,7 @@ public class ArtifactBuilder {
         }
     }
 
-    // Appends text mapped to the given snapshot node identity.
+    /// Appends text mapped to the given snapshot node identity.
     public fun mapped(text: string, target: string): void {
         if text.is_empty() {
             return;
@@ -46,12 +46,12 @@ public class ArtifactBuilder {
         this.source_map.add(line, column, this.current_line, this.current_column, target);
     }
 
-    // Appends a complete line of artifact text.
+    /// Appends a complete line of artifact text.
     public fun line(text: string): void {
         this.append(text + "\n");
     }
 
-    // Returns the accumulated artifact text.
+    /// Returns the accumulated artifact text.
     public override fun to_string(): string {
         return this.buf.to_string();
     }

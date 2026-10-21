@@ -15,10 +15,12 @@ pub(crate) const ENTRY_NAME: &str = "main";
 pub(crate) enum EntryTail {
     /// `main(): int` — falling off the end means success, as in C99.
     Zero,
-    /// `main(): Result<bool, E>` — Dream has no unit type, so `bool` is the "no useful value"
-    /// payload and reaching the end is `Result.Ok(true)`.
-    OkTrue,
+    /// `main(): Result<Unit, E>` — reaching the end is `Result.Ok(Unit())`.
+    OkUnit,
 }
+
+/// The stdlib's no-value success payload (`system.core::Unit`).
+pub(crate) const UNIT_TYPE: &str = "Unit";
 
 /// The implicit tail return for `function`, or `None` when it must return on every path.
 ///
@@ -32,9 +34,11 @@ pub(crate) fn entry_tail_return(function: &FunctionNode<'_>) -> Option<EntryTail
     match function.return_type.as_ref()? {
         Type::Integer(_) => Some(EntryTail::Zero),
         Type::Struct(name, Some(args))
-            if name.text == "Result" && args.len() == 2 && matches!(args[0], Type::Boolean(_)) =>
+            if name.text == "Result"
+                && args.len() == 2
+                && matches!(&args[0], Type::Struct(unit, None) if unit.text == UNIT_TYPE) =>
         {
-            Some(EntryTail::OkTrue)
+            Some(EntryTail::OkUnit)
         }
         _ => None,
     }

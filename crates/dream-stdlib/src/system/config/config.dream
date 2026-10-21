@@ -1,6 +1,6 @@
 module system.config;
 
-// Validated snapshot with typed lookups and per-setting provenance.
+/// Validated snapshot with typed lookups and per-setting provenance.
 public class Config {
     internal values: Map<string, string>;
     internal sources: Map<string, string>;
@@ -15,12 +15,12 @@ public class Config {
         this.sources[key] = source;
     }
 
-    // Returns the source that supplied the setting, or None if absent.
+    /// Returns the source that supplied the setting, or None if absent.
     public fun source(key: string): Option<string> {
         return this.sources.get(key);
     }
 
-    // Returns a setting or a source-aware missing-setting error.
+    /// Returns a setting or a source-aware missing-setting error.
     public fun get_string(key: string): Result<string, ConfigError> {
         let value = this.values.get(key);
         if value.is_none() {
@@ -29,7 +29,7 @@ public class Config {
         return Result.Ok(value.unwrap());
     }
 
-    // Parses a signed 32-bit decimal integer, rejecting invalid or overflowing values.
+    /// Parses a signed 32-bit decimal integer, rejecting invalid or overflowing values.
     public fun get_int(key: string): Result<int, ConfigError> {
         let value = int.parse(this.get_string(key)?);
         if value.is_err() {
@@ -44,7 +44,7 @@ public class Config {
         return Result.Ok(value.unwrap());
     }
 
-    // Accepts the exact boolean spellings true and false.
+    /// Accepts the exact boolean spellings true and false.
     public fun get_bool(key: string): Result<bool, ConfigError> {
         let value = this.get_string(key)?;
         if value == "true" {

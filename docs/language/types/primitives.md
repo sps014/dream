@@ -190,7 +190,7 @@ System.println(((float16)1.0e10).is_infinite()); // true
 `bool` is `true` or `false`.
 
 - `.to_int()` — `1` for `true`, `0` for `false`.
-- `bool.parse(str)` — static; accepts exactly `"true"` or `"false"` (case-sensitive), returning `Result<bool, ParseError>`.
+- `bool.parse(str)` — static; accepts exactly `"true"` or `"false"` (case-sensitive), returning `Result<Unit, ParseError>`.
 
 ```dream
 System.println(true.to_int()); // 1

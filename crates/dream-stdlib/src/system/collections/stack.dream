@@ -1,31 +1,31 @@
 module system.collections;
 
-// LIFO stack backed by `List<T>`.
+/// LIFO stack backed by `List<T>`.
 @allow_cycle
 public class Stack<T>: Collection<T> {
     items: List<T>;
 
-    // Creates an empty stack.
+    /// Creates an empty stack.
     public constructor() {
         this.items = List<T>();
     }
 
-    // Number of elements currently stored.
+    /// Number of elements currently stored.
     public get length(): int {
         return this.items.length;
     }
 
-    // Pushes `value` onto the top of the stack.
+    /// Pushes `value` onto the top of the stack.
     public fun push(value: T): void {
         this.items.push(value);
     }
 
-    // Removes and returns the top element, or `None` when empty.
+    /// Removes and returns the top element, or `None` when empty.
     public fun pop(): Option<T> {
         return this.items.pop();
     }
 
-    // Returns the top element without removing it, or `None` when empty.
+    /// Returns the top element without removing it, or `None` when empty.
     public fun peek(): Option<T> {
         if this.items.length == 0 {
             return Option.None;
@@ -33,12 +33,12 @@ public class Stack<T>: Collection<T> {
         return Option.Some(this.items[this.items.length - 1]);
     }
 
-    // Removes every element.
+    /// Removes every element.
     public fun clear(): void {
         this.items.clear();
     }
 
-    // Iterates elements from bottom to top.
+    /// Iterates elements from bottom to top.
     public fun iterator(): ListIterator<T> {
         return this.items.iterator();
     }

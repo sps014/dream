@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `ended`
 
 Whether the source reached natural completion without looping.
 
@@ -12,7 +12,7 @@ Whether the source reached natural completion without looping.
 public get ended(): bool
 ```
 
-## Declaration
+## `seeking`
 
 Whether a seek is pending.
 
@@ -20,7 +20,7 @@ Whether a seek is pending.
 public get seeking(): bool
 ```
 
-## Declaration
+## `ready_state`
 
 How much source data has been prepared for playback.
 
@@ -28,7 +28,7 @@ How much source data has been prepared for playback.
 public get ready_state(): AudioReadyState
 ```
 
-## Declaration
+## `error`
 
 Most recent operation failure, cleared when the source is reset.
 
@@ -36,7 +36,7 @@ Most recent operation failure, cleared when the source is reset.
 public get error(): Option<AudioError>
 ```
 
-## Declaration
+## `sink_id`
 
 Opaque selected output ID; empty selects the system default.
 
@@ -44,7 +44,7 @@ Opaque selected output ID; empty selects the system default.
 public get sink_id(): string
 ```
 
-## Declaration
+## `devices`
 
 Enumerates output devices visible to the application.
 
@@ -52,7 +52,7 @@ Enumerates output devices visible to the application.
 public static async fun devices(): Result<AudioDevice[], AudioError>
 ```
 
-## Declaration
+## `request_device`
 
 Prompts for browser output permission; native applications use devices instead.
 
@@ -60,19 +60,18 @@ Prompts for browser output permission; native applications use devices instead.
 public static async fun request_device(): Result<AudioDevice, AudioError>
 ```
 
-## Declaration
+## `set_sink_id`
 
 Selects this player's output asynchronously; failure preserves the previous output.
 
 ```dream
-public async fun set_sink_id(id: string): Result<bool, AudioError>
+public async fun set_sink_id(id: string): Result<Unit, AudioError>
 ```
 
-## Declaration
+## `capture`
 
 Enables an output tap and copies up to 32768 recent rendered frames. Initial calls may return no samples while capture starts. Output is stereo at the device rate.
 
 ```dream
 public fun capture(frame_count: int): Result<AudioSnapshot, AudioError>
 ```
-

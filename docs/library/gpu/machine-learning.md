@@ -53,7 +53,7 @@ fun gradient(
     GpuAtomic.add_float(sums, 0, w.derivative());
 }
 
-async fun run(): Result<bool, GpuError> {
+async fun run(): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
 
     let n = 256;
@@ -84,7 +84,7 @@ async fun run(): Result<bool, GpuError> {
     }
 
     System.println("learned weight: " + Math.round((double)weight * 100.0d) / 100.0d);
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {

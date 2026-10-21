@@ -5,12 +5,12 @@ import system;
 @test
 @timeout(180000)
 fun string_empty(): void {
-    let a = string.empty;
+    let a = "";
     let blank = "";
     let b = blank.substring(0, 0);
     let c = Encoding.utf8_decode(Array.alloc<byte>(0));
-    let d = "hello" + string.empty;
-    let e = string.empty + "world";
+    let d = "hello" + "";
+    let e = "" + "world";
     let x = "x";
     Assert.eq((a.length).to_string(), "0");
     Assert.eq((a.is_empty()).to_string(), "true");
@@ -18,5 +18,5 @@ fun string_empty(): void {
     Assert.eq((c == a).to_string(), "true");
     Assert.eq((d).to_string(), "hello");
     Assert.eq((e).to_string(), "world");
-    Assert.eq((x.repeat(0) == string.empty).to_string(), "true");
+    Assert.eq((x.repeat(0) == "").to_string(), "true");
 }

@@ -52,7 +52,7 @@ internal static class AudioMedia {
                     }
                     return Result.Err(AudioError(code, "browser could not seek this audio source"));
                 }
-                return Result.Ok(true);
+                return Result.Ok(Unit());
             },
             () => {
                 AudioOutput.close(handle);

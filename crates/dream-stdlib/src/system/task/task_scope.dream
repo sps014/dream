@@ -1,6 +1,6 @@
 module system.task;
 
-// Owns async and parallel children; its enclosing Task.scope joins every child before returning.
+/// Owns async and parallel children; its enclosing Task.scope joins every child before returning.
 @allow_cycle
 public class TaskScope<E> {
     source: CancellationSource;
@@ -21,17 +21,17 @@ public class TaskScope<E> {
         this.timed_out = false;
     }
 
-    // The inherited cancellation token for this scope and its children.
+    /// The inherited cancellation token for this scope and its children.
     public get token(): CancellationToken {
         return this.context;
     }
 
-    // Requests cooperative cancellation; completion still waits for child cleanup.
+    /// Requests cooperative cancellation; completion still waits for child cleanup.
     public fun cancel(): void {
         this.source.cancel();
     }
 
-    // Schedules a child immediately and retains it even if its result handle is discarded.
+    /// Schedules a child immediately and retains it even if its result handle is discarded.
     public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
@@ -46,7 +46,7 @@ public class TaskScope<E> {
         return handle;
     }
 
-    // Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
+    /// Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
     public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
@@ -61,7 +61,7 @@ public class TaskScope<E> {
         return handle;
     }
 
-    // Schedules CPU work on an explicit reusable pool while retaining structured ownership.
+    /// Schedules CPU work on an explicit reusable pool while retaining structured ownership.
     public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
@@ -117,7 +117,7 @@ public class TaskScope<E> {
 
     internal async fun deadline(milliseconds: int): bool {
         let pending = Time.delay(milliseconds);
-        let guard = TaskWaitGuard<Result<bool, CancelledError>>(pending);
+        let guard = TaskWaitGuard<Result<Unit, CancelledError>>(pending);
         let elapsed = pending.await;
         guard.close();
         if elapsed.is_ok() && !this.source.is_cancelled {

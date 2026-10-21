@@ -1,8 +1,8 @@
 module system.testing;
 
-// The runner `dream test` synthesizes calls one of these per `@test` function. Each case prints
-// `RUN <name>` before its body and `PASS <name>` after it. An `Assert.*` failure, a panic or a
-// trap ends the process, so the last `RUN` line names the case that was running.
+/// The runner `dream test` synthesizes calls one of these per `@test` function. Each case prints
+/// `RUN <name>` before its body and `PASS <name>` after it. An `Assert.*` failure, a panic or a
+/// trap ends the process, so the last `RUN` line names the case that was running.
 public static class Test {
     /// Runs a named test body and records its success or failure.
     public static fun run(name: string, body: fun(): void): void {
@@ -10,7 +10,7 @@ public static class Test {
         Test.measure(name, body);
     }
 
-    // The driver reads the limit back from the `RUN` line and stops a case that exceeds it.
+    /// The driver reads the limit back from the `RUN` line and stops a case that exceeds it.
     public static fun run_with_timeout(name: string, timeout_ms: int, body: fun(): void): void {
         System.println("RUN " + name + " timeout=" + timeout_ms);
         Test.measure(name, body);

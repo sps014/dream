@@ -64,7 +64,12 @@ impl<'a> Analyzer<'a> {
             };
             if literal == Some(false) {
                 self.check_dead_branch(
-                    Some(cond_expr), &bindings, body, ctx, has_parent_while, diagnostics,
+                    Some(cond_expr),
+                    &bindings,
+                    body,
+                    ctx,
+                    has_parent_while,
+                    diagnostics,
                 )?;
                 continue;
             }
@@ -95,7 +100,12 @@ impl<'a> Analyzer<'a> {
                     } else {
                         if check_type_test_dead {
                             self.check_dead_branch(
-                                None, &bindings, body, ctx, has_parent_while, diagnostics,
+                                None,
+                                &bindings,
+                                body,
+                                ctx,
+                                has_parent_while,
+                                diagnostics,
                             )?;
                         }
                         continue;
@@ -157,7 +167,8 @@ impl<'a> Analyzer<'a> {
                 )?;
             }
             if let Some(body) = else_body
-                && (taken_literal || check_type_test_dead) {
+                && (taken_literal || check_type_test_dead)
+            {
                 self.check_dead_branch(None, &[], body, ctx, has_parent_while, diagnostics)?;
             }
         } else {

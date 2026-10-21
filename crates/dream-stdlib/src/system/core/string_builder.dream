@@ -1,7 +1,7 @@
 module system.core;
 
-// `StringBuilder` — growable UTF-16 string construction. Lives in the bootstrap core so every
-// package (collections included) can build strings in O(n); always available without imports.
+/// `StringBuilder` — growable UTF-16 string construction. Lives in the bootstrap core so every
+/// package (collections included) can build strings in O(n); always available without imports.
 public class StringBuilder {
     bytes: byte[];
 
@@ -16,7 +16,7 @@ public class StringBuilder {
     // are never overwritten.
     viewed: bool;
 
-    // Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
+    /// Allocates an empty builder with an initial backing buffer capacity in payload bytes (defaults to 16).
     @inline
     public constructor(capacity: int = 16) {
         let c = capacity;
@@ -28,12 +28,12 @@ public class StringBuilder {
         this.cap = c + 4;
     }
 
-    // Number of UTF-16 code units appended so far (`count` is always even).
+    /// Number of UTF-16 code units appended so far (`count` is always even).
     public get length(): int {
         return this.count / 2;
     }
 
-    // True when nothing has been appended yet.
+    /// True when nothing has been appended yet.
     @inline
     public fun is_empty(): bool {
         return this.count == 0;
@@ -62,7 +62,7 @@ public class StringBuilder {
         this.count = this.count + 2;
     }
 
-    // Appends a Unicode scalar as one or two UTF-16 units.
+    /// Appends a Unicode scalar as one or two UTF-16 units.
     public fun append_char(c: char): void {
         let cp = ((int)c);
         if (cp < 0) || (cp > 1114111) {
@@ -93,13 +93,13 @@ public class StringBuilder {
     @intrinsic(Intrinsic.StringBuilderPushLong)
     internal static extern fun push_long(borrow sb: StringBuilder, n: long): void;
 
-    // Appends every UTF-16 unit of `text`, growing at most once.
+    /// Appends every UTF-16 unit of `text`, growing at most once.
     @inline
     public fun append(borrow text: string): void {
         StringBuilder.push_raw(this, text);
     }
 
-    // Appends the units a `ReadOnlySpan<char>` views, with no intermediate string.
+    /// Appends the units a `ReadOnlySpan<char>` views, with no intermediate string.
     public fun append(span: ReadOnlySpan<char>): void {
         if span._text {
             this.append_utf8_slice(span.src, span.offset * 2, span._length * 2);
@@ -112,7 +112,7 @@ public class StringBuilder {
         }
     }
 
-    // Appends `byte_len` payload bytes starting at byte index `start` of `text`.
+    /// Appends `byte_len` payload bytes starting at byte index `start` of `text`.
     public fun append_utf8_slice(borrow text: string, start: int, byte_len: int): void {
         if byte_len <= 0 {
             return;
@@ -126,12 +126,12 @@ public class StringBuilder {
         this.count = this.count + byte_len;
     }
 
-    // Appends a decimal integer without allocating an intermediate string.
+    /// Appends a decimal integer without allocating an intermediate string.
     public fun append_int(n: int): void {
         StringBuilder.push_int(this, n);
     }
 
-    // Appends `"true"` or `"false"` without allocating an intermediate string.
+    /// Appends `"true"` or `"false"` without allocating an intermediate string.
     public fun append_bool(v: bool): void {
         if v {
             this.append("true");
@@ -140,7 +140,7 @@ public class StringBuilder {
         }
     }
 
-    // Appends a decimal long without allocating an intermediate string.
+    /// Appends a decimal long without allocating an intermediate string.
     public fun append_long(n: long): void {
         StringBuilder.push_long(this, n);
     }
@@ -153,13 +153,13 @@ public class StringBuilder {
         StringBuilder.push_double(this, n);
     }
 
-    // Appends `text` followed by a newline character.
+    /// Appends `text` followed by a newline character.
     public fun append_line(borrow text: string): void {
         this.append(text);
         this.append_char('\n');
     }
 
-    // Removes every appended character, keeping the backing buffer for reuse.
+    /// Removes every appended character, keeping the backing buffer for reuse.
     @inline
     public fun clear(): void {
         this.count = 0;
@@ -174,23 +174,23 @@ public class StringBuilder {
     @intrinsic(Intrinsic.StringBuilderView)
     internal static extern fun view_raw(borrow bytes: byte[], len: int): string;
 
-    // A view of everything appended so far, without copying the units. Later appends and
-    // `clear` leave the view unchanged: it is a snapshot.
+    /// A view of everything appended so far, without copying the units. Later appends and
+    /// `clear` leave the view unchanged: it is a snapshot.
     public fun as_span(): ReadOnlySpan<char> {
         if this.count <= 0 {
-            return string.empty.span();
+            return "".span();
         }
         this.viewed = true;
         let s = StringBuilder.view_raw(this.bytes, this.count);
         return ReadOnlySpan<char>.from_text(s, 0, this.count / 2);
     }
 
-    // Snapshot into a new string. `from_builder` copies once; do not stage through a
-    // second `byte[]` (that doubled the finish memcpy).
+    /// Snapshot into a new string. `from_builder` copies once; do not stage through a
+    /// second `byte[]` (that doubled the finish memcpy).
     public fun build(): string {
         let n = this.count;
         if n <= 0 {
-            return string.empty;
+            return "";
         }
         // `scalars < 0` tells the runtime to derive the unit count from `len`.
         return string.from_builder(this.bytes, n, -1);

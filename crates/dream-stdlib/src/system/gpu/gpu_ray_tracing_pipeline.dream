@@ -24,7 +24,7 @@ public class GpuRayTracingPipeline {
         height: int,
         depth: int,
         args: GpuArgs
-    ): Result<bool, GpuError> {
+    ): Result<Unit, GpuError> {
         if this.device_id != device.id {
             return Result.Err(GpuError.WrongDevice("ray tracing pipeline"));
         }

@@ -2,7 +2,7 @@ module system.core;
 
 /// A repeatable asynchronous sequence backed by a producer factory.
 @allow_cycle
-public class YieldAsyncIterable<T>: AsyncIterable<T> {
+internal class YieldAsyncIterable<T>: AsyncIterable<T> {
     factory: fun(YieldChannel<T>): Future<void>;
 
     /// Creates a `YieldAsyncIterable` with `factory`.

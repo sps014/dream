@@ -41,7 +41,7 @@ public constructor(options: WebAppOptions)
 Appends an outer-to-inner middleware layer before startup.
 
 ```dream
-public fun use(middleware: Middleware): Result<bool, IoError>
+public fun use(middleware: Middleware): Result<Unit, IoError>
 ```
 
 ## `include_router`
@@ -49,7 +49,7 @@ public fun use(middleware: Middleware): Result<bool, IoError>
 Mounts a router with an optional additional path prefix.
 
 ```dream
-public fun include_router(router: WebRouter, prefix: string = ""): Result<bool, IoError>
+public fun include_router(router: WebRouter, prefix: string = ""): Result<Unit, IoError>
 ```
 
 ## `override_dependencies`
@@ -57,7 +57,7 @@ public fun include_router(router: WebRouter, prefix: string = ""): Result<bool, 
 Installs generated dependency replacements before startup.
 
 ```dream
-public fun override_dependencies(overrides: DependencyOverrides): Result<bool, IoError>
+public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError>
 ```
 
 ## `lifespan`
@@ -66,9 +66,9 @@ Pairs one startup acquisition with its shutdown release; completed pairs unwind 
 
 ```dream
 public fun lifespan(
-    start: fun(WebApp): Future<Result<bool, IoError>>,
+    start: fun(WebApp): Future<Result<Unit, IoError>>,
     stop: fun(WebApp): Future<void>
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `shutdown`
@@ -108,7 +108,7 @@ public fun run(
     host: string,
     port: int,
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, IoError>>
+): Future<Result<Unit, IoError>>
 ```
 
 ## `openapi`

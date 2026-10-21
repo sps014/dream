@@ -1,8 +1,8 @@
 module system.task;
 
-// Factories for channels with explicit bounded capacity or explicitly unbounded buffering.
+/// Factories for channels with explicit bounded capacity or explicitly unbounded buffering.
 public static class Channel {
-    // Creates a bounded cross-worker queue, enforcing the shared transfer constraint.
+    /// Creates a bounded cross-worker queue, enforcing the shared transfer constraint.
     public static fun shared_bounded<T: shared>(
         capacity: int
     ): Result<SharedChannelEndpoints<T>, ChannelError> {
@@ -12,12 +12,12 @@ public static class Channel {
         return Result.Ok(SharedChannelEndpoints<T>(capacity));
     }
 
-    // Creates an explicitly unbounded cross-worker queue of shared values.
+    /// Creates an explicitly unbounded cross-worker queue of shared values.
     public static fun shared_unbounded<T: shared>(): SharedChannelEndpoints<T> {
         return SharedChannelEndpoints<T>(0);
     }
 
-    // Creates a bounded queue; producers suspend when its explicit capacity is reached.
+    /// Creates a bounded queue; producers suspend when its explicit capacity is reached.
     public static fun bounded<T>(capacity: int): Result<ChannelEndpoints<T>, ChannelError> {
         if capacity <= 0 {
             return Result.Err(ChannelError.InvalidCapacity);
@@ -25,7 +25,7 @@ public static class Channel {
         return Result.Ok(ChannelEndpoints<T>(capacity));
     }
 
-    // Creates a queue without backpressure; callers must independently bound production.
+    /// Creates a queue without backpressure; callers must independently bound production.
     public static fun unbounded<T>(): ChannelEndpoints<T> {
         return ChannelEndpoints<T>(0);
     }

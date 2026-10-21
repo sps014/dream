@@ -1,6 +1,6 @@
 module system.cli;
 
-// Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
+/// Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
 public class ParsedArguments {
     wire: JsonValue;
 
@@ -8,32 +8,32 @@ public class ParsedArguments {
         this.wire = wire;
     }
 
-    // True when --help or -h was requested, including for a subcommand.
+    /// True when --help or -h was requested, including for a subcommand.
     public get is_help(): bool {
         return this.kind() == "help";
     }
 
-    // True when --version or -V was requested.
+    /// True when --version or -V was requested.
     public get is_version(): bool {
         return this.kind() == "version";
     }
 
-    // Deterministic generated help when is_help is true; otherwise empty.
+    /// Deterministic generated help when is_help is true; otherwise empty.
     public get help_text(): string {
         return this.field("help_text").as_string().unwrap_or("");
     }
 
-    // Generated version text when is_version is true; otherwise empty.
+    /// Generated version text when is_version is true; otherwise empty.
     public get version_text(): string {
         return this.field("version_text").as_string().unwrap_or("");
     }
 
-    // Command name for successful value outcomes; empty for help/version outcomes.
+    /// Command name for successful value outcomes; empty for help/version outcomes.
     public get command_name(): string {
         return this.field("name").as_string().unwrap_or("");
     }
 
-    // Selected child scope, or None when no subcommand was invoked.
+    /// Selected child scope, or None when no subcommand was invoked.
     public get subcommand(): Option<ParsedArguments> {
         let child = this.field("subcommand");
         if child.is_null() {
@@ -42,16 +42,16 @@ public class ParsedArguments {
         return Option.Some(ParsedArguments(child));
     }
 
-    // True only for arguments explicitly supplied on the command line, excluding defaults.
+    /// True only for arguments explicitly supplied on the command line, excluding defaults.
     public fun is_present(name: string): bool {
-        return this.field("values")[name]
-            .unwrap_or(JsonValue.none())["provided"]
-            .unwrap_or(JsonValue.none())
-            .as_bool()
+        return this.field("values")
+            .get(name)
+            .and_then((entry: JsonValue) => entry.get("provided"))
+            .and_then((flag: JsonValue) => flag.as_bool())
             .unwrap_or(false);
     }
 
-    // Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.
+    /// Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.
     public fun get_string(name: string): Result<string, CliError> {
         let values = this.get_strings(name)?;
         if values.length == 0 {
@@ -60,12 +60,12 @@ public class ParsedArguments {
         return Result.Ok(values[values.length - 1]);
     }
 
-    // Copies all string values in order, including an optional default when no value was supplied.
+    /// Copies all string values in order, including an optional default when no value was supplied.
     public fun get_strings(name: string): Result<string[], CliError> {
         return this.values(name, "string");
     }
 
-    // Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.
+    /// Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.
     public fun get_int(name: string): Result<int, CliError> {
         let values = this.values(name, "int")?;
         if values.length == 0 {
@@ -78,7 +78,7 @@ public class ParsedArguments {
         return Result.Ok(parsed.unwrap());
     }
 
-    // Copies every parsed integer occurrence in order.
+    /// Copies every parsed integer occurrence in order.
     public fun get_ints(name: string): Result<int[], CliError> {
         let values = this.values(name, "int")?;
         let result = Buffer.alloc<int>(values.length);
@@ -92,7 +92,7 @@ public class ParsedArguments {
         return Result.Ok(result);
     }
 
-    // Returns the declared boolean flag, false when omitted; wrong getter types return errors.
+    /// Returns the declared boolean flag, false when omitted; wrong getter types return errors.
     public fun get_bool(name: string): Result<bool, CliError> {
         let values = this.values(name, "flag")?;
         if values.length == 0 {
@@ -101,18 +101,18 @@ public class ParsedArguments {
         return Result.Ok(values[values.length - 1] == "true");
     }
 
-    // Copies declared names for typed configuration merging; is_present distinguishes explicit values.
+    /// Copies declared names for typed configuration merging; is_present distinguishes explicit values.
     public fun config_keys(): string[] {
         return this.field("values").keys().take_array();
     }
 
-    // Returns the final explicit scalar value for configuration merging, including typed options.
+    /// Returns the final explicit scalar value for configuration merging, including typed options.
     public fun config_value(name: string): Result<string, CliError> {
-        let entry = this.field("values")[name];
+        let entry = this.field("values").get(name);
         if entry.is_none() {
             return Result.Err(CliError("ENOENT", "unknown argument: " + name));
         }
-        let values = entry.unwrap().at("values");
+        let values = entry.unwrap()["values"];
         if values.length == 0 {
             return Result.Err(CliError("ENOENT", "argument has no value: " + name));
         }
@@ -120,7 +120,7 @@ public class ParsedArguments {
     }
 
     fun field(name: string): JsonValue {
-        return this.wire[name].unwrap_or(JsonValue.none());
+        return this.wire.get(name).unwrap_or(JsonValue.null());
     }
 
     fun kind(): string {
@@ -128,18 +128,18 @@ public class ParsedArguments {
     }
 
     fun values(name: string, expected: string): Result<string[], CliError> {
-        let entry = this.field("values")[name];
+        let entry = this.field("values").get(name);
         if entry.is_none() {
             return Result.Err(CliError("ENOENT", "unknown argument: " + name));
         }
-        let kind = entry.unwrap().at("kind").as_string().unwrap_or("");
+        let kind = entry.unwrap()["kind"].as_string().unwrap_or("");
         if kind != expected && !(expected == "string" && kind == "positional") {
             return Result.Err(CliError("ETYPE", "incorrect getter for argument: " + name));
         }
-        let values = entry.unwrap().at("values");
+        let values = entry.unwrap()["values"];
         let result = Buffer.alloc<string>(values.length);
         for (let i = 0; i < values.length; i = i + 1) {
-            result[i] = values.at(i).unwrap_or(JsonValue.none()).as_string().unwrap_or("");
+            result[i] = values.at(i).unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         }
         return Result.Ok(result);
     }

@@ -4,6 +4,7 @@
 use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_abi::names::OPTION_SOME;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -181,7 +182,7 @@ impl<'a> Analyzer<'a> {
         let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
             .union_info(opt_key)
-            .and_then(|u| u.variant("Some"))
+            .and_then(|u| u.variant(OPTION_SOME))
             .filter(|v| v.fields.len() == 1)
             .cloned()
         {
@@ -437,7 +438,7 @@ impl<'a> Analyzer<'a> {
         let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
             .union_info(opt_key)
-            .and_then(|u| u.variant("Some"))
+            .and_then(|u| u.variant(OPTION_SOME))
             .filter(|v| v.fields.len() == 1)
             .cloned()
         {

@@ -1,7 +1,7 @@
 module system.core;
 
-// Read-only view of a `CancellationSource` for cooperative checks at await boundaries.
-// `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.
+/// Read-only view of a `CancellationSource` for cooperative checks at await boundaries.
+/// `@shared` (closed-graph over `@shared` `CancellationSource`) so tokens can cross into workers.
 shared public class CancellationToken {
     _source: CancellationSource;
 
@@ -18,7 +18,7 @@ shared public class CancellationToken {
     @intrinsic(Intrinsic.DreamTaskContext)
     static extern fun context_host(): CancellationToken;
 
-    // Returns the cancellation token inherited from the current structured task.
+    /// Returns the cancellation token inherited from the current structured task.
     public static get current(): Option<CancellationToken> {
         if !CancellationToken.has_context_host() {
             return Option.None;
@@ -26,7 +26,7 @@ shared public class CancellationToken {
         return Option.Some(CancellationToken.context_host());
     }
 
-    // Explicit tokens override the current structured task; None inherits its token.
+    /// Explicit tokens override the current structured task; None inherits its token.
     public static fun resolve(token: Option<CancellationToken>): Option<CancellationToken> {
         if token.is_some() {
             return token;
@@ -34,12 +34,12 @@ shared public class CancellationToken {
         return CancellationToken.current;
     }
 
-    // True when the owning source has been cancelled.
+    /// True when the owning source has been cancelled.
     public get is_cancelled(): bool {
         return this._source.is_cancelled;
     }
 
-    // Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.
+    /// Suspends until cancellation and returns true. Completion or releasing a cancelled future detaches its subscription.
     public fun wait_cancelled(): Future<bool> {
         return CancellationToken.wait_cancelled_owned(this);
     }
@@ -51,15 +51,15 @@ shared public class CancellationToken {
         return true;
     }
 
-    // Awaits a future or cancellation using scheduler notifications. Cancellation cancels
-    // the supplied future; already performed side effects are preserved.
+    /// Awaits a future or cancellation using scheduler notifications. Cancellation cancels
+    /// the supplied future; already performed side effects are preserved.
     public fun wait<T>(future: Future<T>): Future<Result<T, CancelledError>> {
         // A lazy async receiver borrows `this`; an owned argument survives the creating scope.
         return CancellationToken.wait_owned(this, future);
     }
 
-    // Awaits a void future or cancellation, returning true when the operation completes.
-    public fun wait_void(future: Future<void>): Future<Result<bool, CancelledError>> {
+    /// Awaits a void future or cancellation, returning true when the operation completes.
+    public fun wait_void(future: Future<void>): Future<Result<Unit, CancelledError>> {
         return CancellationToken.wait_void_owned(this, future);
     }
 
@@ -76,11 +76,11 @@ shared public class CancellationToken {
     static async fun wait_void_owned(
         token: CancellationToken,
         future: Future<void>
-    ): Result<bool, CancelledError> {
+    ): Result<Unit, CancelledError> {
         if !CancellationToken.wait_completion(token, future).await {
             return Result.Err(CancelledError.cancelled());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     static async fun wait_completion<T>(token: CancellationToken, future: Future<T>): bool {
@@ -118,22 +118,22 @@ shared public class CancellationToken {
         return 1;
     }
 
-    // Panics with `CancelledError` when already cancelled.
+    /// Panics with `CancelledError` when already cancelled.
     public fun throw_if_cancelled(): void {
         if this.is_cancelled {
             System.panic(CancelledError.cancelled().message());
         }
     }
 
-    // `Ok(true)` when still running; `Err(CancelledError)` when cancelled.
-    public fun check(): Result<bool, CancelledError> {
+    /// `Ok(Unit())` when still running; `Err(CancelledError)` when cancelled.
+    public fun check(): Result<Unit, CancelledError> {
         if this.is_cancelled {
             return Result.Err(CancelledError.cancelled());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // True when `token` is `Some` and already cancelled.
+    /// True when `token` is `Some` and already cancelled.
     public static fun is_cancelled_opt(token: Option<CancellationToken>): bool {
         let effective_token = CancellationToken.resolve(token);
         return switch (effective_token) {
@@ -142,7 +142,7 @@ shared public class CancellationToken {
         };
     }
 
-    // Panics when `token` is `Some` and already cancelled.
+    /// Panics when `token` is `Some` and already cancelled.
     public static fun throw_if_opt(token: Option<CancellationToken>): void {
         switch (token) {
             Some(t) => {
@@ -152,12 +152,12 @@ shared public class CancellationToken {
         }
     }
 
-    // Returns err when the explicit or inherited token is cancelled; otherwise Ok(true).
-    public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<bool, E> {
+    /// Returns err when the explicit or inherited token is cancelled; otherwise Ok(Unit()).
+    public static fun rejected<E>(token: Option<CancellationToken>, err: E): Result<Unit, E> {
         let effective_token = CancellationToken.resolve(token);
         if CancellationToken.is_cancelled_opt(effective_token) {
             return Result.Err(err);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

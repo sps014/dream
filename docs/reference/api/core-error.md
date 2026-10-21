@@ -14,7 +14,7 @@ public interface Error
 
 ## `message`
 
-Human-readable description.
+Human-readable explanation of the failure, suitable for logs and error output.
 
 ```dream
 fun message(): string

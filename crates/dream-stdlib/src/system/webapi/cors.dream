@@ -4,8 +4,7 @@ module system.webapi;
 public class Cors {
     opts: CorsOptions;
 
-    /// Creates a `Cors` with `opts`.
-    public constructor(opts: CorsOptions) {
+    internal constructor(opts: CorsOptions) {
         this.opts = opts;
     }
 
@@ -103,13 +102,15 @@ public class Cors {
         res.set_header("Access-Control-Max-Age", this.opts.max_age.to_string());
         return res;
     }
-}
 
-// `app.use(CORS(CorsOptions())).unwrap()` — same role as FastAPI `add_middleware(CORSMiddleware, ...)`.
-public fun CORS(opts: CorsOptions): Middleware {
-    return Middleware(
-        async (borrow ctx: RequestContext, borrow next: Next) => {
-            return Cors(opts).invoke(ctx, next).await;
-        }
-    );
+    /// Returns middleware that applies `opts` to every request: it answers preflight `OPTIONS`
+    /// requests and adds the allowed-origin headers to responses. Register it with
+    /// `app.use(Cors.middleware(CorsOptions()))`.
+    public static fun middleware(opts: CorsOptions): Middleware {
+        return Middleware(
+            async (borrow ctx: RequestContext, borrow next: Next) => {
+                return Cors(opts).invoke(ctx, next).await;
+            }
+        );
+    }
 }

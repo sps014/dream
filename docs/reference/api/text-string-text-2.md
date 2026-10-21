@@ -1,0 +1,115 @@
+# String Text
+
+**Import:** `import system.text;`
+
+## `last_index_of`
+
+The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.
+
+```dream
+public fun last_index_of(borrow sub: string): Option<int>
+```
+
+## `replace_first`
+
+Replaces the first occurrence of `old` with `replacement`.
+
+```dream
+public fun replace_first(borrow old: string, borrow replacement: string): string
+```
+
+## `split_once`
+
+Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur, returns `[this]` (consistent with `split`), never an empty array.
+
+```dream
+public fun split_once(sep: char): string[]
+```
+
+## `split_once`
+
+Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.
+
+```dream
+public fun split_once(borrow sep: string): string[]
+```
+
+## `strip_prefix`
+
+`Some` remainder when this starts with `prefix`.
+
+```dream
+public fun strip_prefix(borrow prefix: string): Option<string>
+```
+
+## `strip_suffix`
+
+`Some` remainder when this ends with `suffix`.
+
+```dream
+public fun strip_suffix(borrow suffix: string): Option<string>
+```
+
+## `lines`
+
+Iterates over the lines without copying them. Lines end at `\n`; a trailing `\r` is dropped from each line, and a final line terminator does not produce an empty line. Call `to_string()` on a line to keep an owned copy.
+
+```dream
+public fun lines(): StringLines
+```
+
+## `repeat`
+
+A new string repeated `times` times.
+
+```dream
+public fun repeat(times: int): string
+```
+
+## `equals`
+
+Value equality (`Equatable<string>`); identical to `this == other`.
+
+```dream
+public fun equals(borrow other: string): bool
+```
+
+## `split`
+
+Splits this string on the single character `sep`.
+
+```dream
+public fun split(sep: char): string[]
+```
+
+## `split`
+
+Splits this string on every occurrence of substring `sep`.
+
+```dream
+public fun split(borrow sep: string): string[]
+```
+
+## `split`
+
+Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+
+```dream
+public fun split(sep: char, limit: int): string[]
+```
+
+## `split`
+
+Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+
+```dream
+public fun split(borrow sep: string, limit: int): string[]
+```
+
+## `replace`
+
+A new string with every occurrence of `old` replaced by `replacement`.
+
+```dream
+public fun replace(borrow old: string, borrow replacement: string): string
+```

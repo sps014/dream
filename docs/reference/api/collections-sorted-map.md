@@ -118,18 +118,18 @@ public fun floor_key(borrow key: K): Option<K>
 
 ## `keys`
 
-All keys in ascending order.
+Returns a new list of the keys in ascending order.
 
 ```dream
-public fun keys(): K[]
+public fun keys(): List<K>
 ```
 
 ## `values`
 
-All values, ordered by ascending key.
+Returns a new list of the values, ordered by ascending key.
 
 ```dream
-public fun values(): V[]
+public fun values(): List<V>
 ```
 
 ## `iterator`

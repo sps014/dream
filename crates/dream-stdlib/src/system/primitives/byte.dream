@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `byte` primitive.
 extend byte: Comparable<byte> {
-    // Orders this value against `other`.
+    /// Orders this value against `other`.
     public fun compare(other: byte): int {
         if this < other {
             return 0 - 1;
@@ -13,7 +13,7 @@ extend byte: Comparable<byte> {
         return 0;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: byte): byte {
         if this < other {
             return this;
@@ -21,7 +21,7 @@ extend byte: Comparable<byte> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: byte): byte {
         if this > other {
             return this;
@@ -29,7 +29,7 @@ extend byte: Comparable<byte> {
         return other;
     }
 
-    // This value constrained to the inclusive range [lo, hi].
+    /// This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: byte, hi: byte): byte {
         if this < lo {
             return lo;
@@ -40,7 +40,7 @@ extend byte: Comparable<byte> {
         return this;
     }
 
-    // Parses an unsigned decimal byte from `text`.
+    /// Parses an unsigned decimal byte from `text`.
     public static fun parse(borrow text: string): Result<byte, ParseError> {
         let n = text.length;
         if n == 0 {

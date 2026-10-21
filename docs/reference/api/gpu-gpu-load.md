@@ -12,7 +12,7 @@ What a render pass does with a target's existing contents when it starts.  For c
 public enum GpuLoad<T>
 ```
 
-## `Clear(value`
+## `Clear`
 
 Fills the target with `value` first.
 

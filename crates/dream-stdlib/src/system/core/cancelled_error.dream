@@ -1,6 +1,6 @@
 module system.core;
 
-// Error raised when a cooperative cancellation token is already cancelled.
+/// Error raised when a cooperative cancellation token is already cancelled.
 public class CancelledError: Error {
     _message: string;
 
@@ -9,17 +9,17 @@ public class CancelledError: Error {
         this._message = message;
     }
 
-    // Human-readable description.
+    /// Human-readable explanation of the cancellation, suitable for logs and error output.
     public fun message(): string {
         return this._message;
     }
 
-    // Stable machine code.
+    /// Stable machine code.
     public fun code(): string {
         return "ECANCELLED";
     }
 
-    // Factory for a standard cancelled error.
+    /// Factory for a standard cancelled error.
     public static fun cancelled(): CancelledError {
         return CancelledError("operation cancelled");
     }

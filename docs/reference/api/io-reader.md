@@ -25,7 +25,7 @@ unique fun read(max_bytes: int): Result<byte[], IoError>
 Moves to an absolute byte position; unsupported readers return `ENOTSUP`. A failed seek preserves the previous logical position.
 
 ```dream
-public unique fun seek(position: long): Result<bool, IoError>
+public unique fun seek(position: long): Result<Unit, IoError>
 ```
 
 ## `tell`

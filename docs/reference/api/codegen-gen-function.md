@@ -12,7 +12,7 @@ public class GenFunction
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -28,7 +28,7 @@ public overload: string
 
 ## `name`
 
-Name identifying this entry.
+Function or method name as declared.
 
 ```dream
 public name: string
@@ -92,7 +92,7 @@ public attributes: List<GenAttribute>
 
 ## `location`
 
-Source location associated with this entry.
+Where the function is written in source.
 
 ```dream
 public location: GenLocation
@@ -108,7 +108,7 @@ public body: Option<GenBody>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenFunction` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(
@@ -129,7 +129,7 @@ public constructor(
 
 ## `attribute`
 
-Returns the requested model information.
+The first `@A` attached to this function, decoded into `A`, or `None` when absent.
 
 ```dream
 public fun attribute<A>(): Option<A>
@@ -137,7 +137,7 @@ public fun attribute<A>(): Option<A>
 
 ## `has`
 
-Tests whether the requested attribute is attached to this model node.
+Whether this function carries at least one `@A` attribute.
 
 ```dream
 public fun has<A>(): bool

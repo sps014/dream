@@ -33,7 +33,6 @@ def comment_before(source, offset):
     lines = source[:offset].splitlines()
     if lines and not lines[-1].strip():
         lines.pop()
-    comments = []
     docs = []
     attribute_depth = 0
     for line in reversed(lines):
@@ -42,13 +41,11 @@ def comment_before(source, offset):
             lexical = mask(line)
             attribute_depth += lexical.count(")") - lexical.count("(")
             continue
-        if line.startswith("//"):
-            comments.append(line.lstrip("/").strip())
-            if line.startswith("///"):
-                docs.append(line[3:].strip())
-        else:
+        if line.startswith("///"):
+            docs.append(line[3:].strip())
+        elif not line.startswith("//"):
             break
-    return " ".join(reversed(docs or comments))
+    return " ".join(reversed(docs))
 
 
 def signature_key(source):

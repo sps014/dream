@@ -22,7 +22,7 @@ public header: string
 
 ## `name`
 
-Name identifying this entry.
+Qualified C++ name to bind, when it differs from the Dream name.
 
 ```dream
 public name: Option<string>

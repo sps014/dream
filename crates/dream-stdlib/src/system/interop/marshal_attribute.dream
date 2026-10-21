@@ -3,6 +3,6 @@ module system.interop;
 /// `@c` marshaling: on the extern, string encoding (`@marshal(MarshalKind.LpStr)` / `@marshal(MarshalKind.LpWStr)`); on a `NativeCallback` parameter, `@marshal(MarshalKind.UserDataLast)` passes `user_data` after the callback's own arguments.
 @attribute(AttributeTarget.ExternFunction, AttributeTarget.Parameter)
 public struct MarshalAttribute {
-    /// Category of this entry.
+    /// Marshaling rule applied to the extern or parameter.
     public kind: MarshalKind;
 }

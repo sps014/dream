@@ -8,6 +8,7 @@ use super::ir::MdRef;
 use super::lcx::Lcx;
 use super::types::is_unsigned;
 use crate::backend::shared::abi_types::native_scalar_size;
+use dream_abi::names::OPTION_SOME;
 use dream_types::{PrimTy, TyKind, TypeId};
 
 /// A view member: byte offset within its composite, type, name.
@@ -157,7 +158,7 @@ impl<'a> Lcx<'a> {
             self.cx
                 .nunion(ty)
                 .expect("weak Option layout")
-                .variant("Some")
+                .variant(OPTION_SOME)
                 .expect("Option Some")
                 .fields[0]
                 .ty

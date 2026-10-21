@@ -3,7 +3,7 @@ import system.collections;
 
 let sink: int = 0;
 let measuring: bool = true;
-let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let counters_on: bool = System.env("DREAM_BENCH_COUNTERS").unwrap_or("") == "1";
 let last_allocations: long = 0;
 let last_retains: long = 0;
 let last_releases: long = 0;
@@ -57,7 +57,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 async fun timer_burst(n: int, iters: int): int {
     let total = 0;
     for (let round = 0; round < iters; round = round + 1) {
-        let pending = Array.alloc<Future<Result<bool, CancelledError>>>(n);
+        let pending = Array.alloc<Future<Result<Unit, CancelledError>>>(n);
         for (let i = 0; i < n; i = i + 1) {
             pending[i] = Time.sleep(0);
             Promise.start(pending[i]);
@@ -97,7 +97,7 @@ async fun main(): void {
     measuring = false;
     run_suite().await;
     measuring = true;
-    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    let passes = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("5")).unwrap_or(5);
     for (let p = 0; p < passes; p = p + 1) {
         run_suite().await;
     }

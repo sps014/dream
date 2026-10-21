@@ -1,6 +1,6 @@
 module system.webapi;
 
-// One onion layer: `invoke` may short-circuit or `next.call().await`.
+/// One onion layer: `invoke` may short-circuit or `next.call().await`.
 @allow_cycle
 public class Middleware {
     handler: fun(RequestContext, Next): Future<HttpOutgoing>;

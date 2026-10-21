@@ -4,8 +4,8 @@ module system.primitives;
 // `i32`); these are ordinary methods dispatched on the receiver via `this`, plus a `static`
 // factory that parses text. Auto-imported into every program.
 extend int: Comparable<int> {
-    // Orders this value against `other`: negative when less, zero when equal, positive when greater.
-    // Implementing `Comparable<int>` lets `List<int>.sort()` / `binary_search` work out of the box.
+    /// Orders this value against `other`: negative when less, zero when equal, positive when greater.
+    /// Implementing `Comparable<int>` lets `List<int>.sort()` / `binary_search` work out of the box.
     public fun compare(other: int): int {
         if this < other {
             return 0 - 1;
@@ -16,7 +16,7 @@ extend int: Comparable<int> {
         return 0;
     }
 
-    // Absolute value of this integer.
+    /// Absolute value of this integer.
     public fun abs(): int {
         if this < 0 {
             return 0 - this;
@@ -24,7 +24,7 @@ extend int: Comparable<int> {
         return this;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: int): int {
         if this < other {
             return this;
@@ -32,7 +32,7 @@ extend int: Comparable<int> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: int): int {
         if this > other {
             return this;
@@ -40,7 +40,7 @@ extend int: Comparable<int> {
         return other;
     }
 
-    // This value constrained to the inclusive range [lo, hi].
+    /// This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: int, hi: int): int {
         if this < lo {
             return lo;
@@ -51,7 +51,7 @@ extend int: Comparable<int> {
         return this;
     }
 
-    // This value raised to a non-negative integer power (exponents <= 0 yield 1).
+    /// This value raised to a non-negative integer power (exponents <= 0 yield 1).
     public fun pow(exp: int): int {
         let result = 1;
         let i = 0;
@@ -62,7 +62,7 @@ extend int: Comparable<int> {
         return result;
     }
 
-    // The sign of this value: -1, 0, or 1.
+    /// The sign of this value: -1, 0, or 1.
     public fun signum(): int {
         if this > 0 {
             return 1;
@@ -73,7 +73,7 @@ extend int: Comparable<int> {
         return 0;
     }
 
-    // Parses a (possibly signed) decimal integer from `text`.
+    /// Parses a (possibly signed) decimal integer from `text`.
     public static fun parse(borrow text: string): Result<int, ParseError> {
         let n = text.length;
         if n == 0 {

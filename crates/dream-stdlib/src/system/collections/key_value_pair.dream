@@ -1,14 +1,14 @@
 module system.collections;
 
-// One key/value entry (value type — no heap allocation of the pair itself).
+/// One key/value entry (value type — no heap allocation of the pair itself).
 public struct KeyValuePair<K, V> {
-    /// Key associated with this entry.
+    /// The key under which `value` is stored.
     public key: K;
 
-    /// Value carried by this entry.
+    /// The value stored under `key`.
     public value: V;
 
-    // Builds a pair from `key` and `value`.
+    /// Builds a pair from `key` and `value`.
     public constructor(key: K, value: V) {
         this.key = key;
         this.value = value;

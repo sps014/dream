@@ -4,7 +4,7 @@ module system.codegen;
 @repeatable
 @attribute(AttributeTarget.Function)
 public struct OnCallAttribute {
-    /// Declaration associated with this entry.
+    /// Function or method whose call sites the generator receives.
     public declaration: DeclarationPath;
 
     /// Additional declarations made available to the generator.

@@ -22,7 +22,7 @@ public constructor(code: string, message: string)
 
 ## `message`
 
-Human-readable description.
+Human-readable explanation of the parse failure, suitable for logs and error output.
 
 ```dream
 public fun message(): string

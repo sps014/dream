@@ -9,7 +9,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 Deterministically ordered input errors without echoing sensitive submitted values.
 
 ```dream
-public class ValidationErrors
+public class ValidationErrors: Error
 ```
 
 ## `issues`
@@ -42,6 +42,22 @@ Returns whether there are no elements.
 
 ```dream
 public fun is_empty(): bool
+```
+
+## `code`
+
+Returns `EVALIDATION`, the code shared by every input validation failure.
+
+```dream
+public fun code(): string
+```
+
+## `message`
+
+Returns each issue as `location: message`, joined with `; `, with location parts joined by `.`. An empty collection returns `validation failed`.
+
+```dream
+public fun message(): string
 ```
 
 ## `to_json`

@@ -433,11 +433,11 @@ pub enum CrateType {
 
 mod access;
 mod assets;
-mod generator_scope;
 mod contexts;
 mod gen_constants;
 mod gen_facts;
 mod gen_symbols;
+mod generator_scope;
 mod pipeline;
 mod type_queries;
 impl<'a> Analyzer<'a> {

@@ -25,7 +25,7 @@ public get length(): int
 Replaces the whole contents with `data`, which must have exactly `length` elements.
 
 ```dream
-public fun write(data: T[]): Result<bool, GpuError>
+public fun write(data: T[]): Result<Unit, GpuError>
 ```
 
 ## `write_at`
@@ -33,7 +33,7 @@ public fun write(data: T[]): Result<bool, GpuError>
 Replaces the elements starting at `offset` with `data`. The range must lie inside the buffer. On `GpuBackend.WebGpu` it must also start at a multiple of 4 bytes and end at one or at the end of the buffer, which matters for `float16` and `byte` elements.
 
 ```dream
-public fun write_at(offset: int, data: T[]): Result<bool, GpuError>
+public fun write_at(offset: int, data: T[]): Result<Unit, GpuError>
 ```
 
 ## `read`

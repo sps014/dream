@@ -3,7 +3,7 @@ module system.webapi.auth;
 /// Persistence operations must be atomic, including refresh replay detection and transaction consumption.
 public interface AuthSessionStore {
     /// Stores a new refresh session; returns an error if its token hash already exists.
-    async unique fun create(session: AuthSession): Result<bool, AuthError>;
+    async unique fun create(session: AuthSession): Result<Unit, AuthError>;
 
     /// Finds an unexpired session at epoch-second time `now`; rejects revoked or missing
     /// sessions.
@@ -18,7 +18,7 @@ public interface AuthSessionStore {
     ): Result<AuthSession, AuthError>;
 
     /// Revokes all refresh sessions in `family`.
-    async unique fun revoke(family: string): Result<bool, AuthError>;
+    async unique fun revoke(family: string): Result<Unit, AuthError>;
 
     /// Returns whether `family` has an unexpired, unconsumed session at epoch-second time
     /// `now`.
@@ -28,7 +28,7 @@ public interface AuthSessionStore {
     async unique fun put_transaction(
         state: string,
         transaction: OidcTransaction
-    ): Result<bool, AuthError>;
+    ): Result<Unit, AuthError>;
 
     /// Removes and returns the login transaction. Missing or expired state returns an error.
     async unique fun take_transaction(state: string, now: long): Result<OidcTransaction, AuthError>;

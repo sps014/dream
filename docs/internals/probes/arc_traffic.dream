@@ -3,12 +3,12 @@ import system.collections;
 
 @export
 fun audit_map_span(borrow map: Map<string, int>, borrow text: string, start: int): int {
-    return map.get_or(text.span(start, start + 2), 0);
+    return map.get(text.span(start, start + 2)).unwrap_or(0);
 }
 
 @export
 fun audit_map_owned(borrow map: Map<string, int>, borrow key: string): int {
-    return map.get_or(key, 0);
+    return map.get(key).unwrap_or(0);
 }
 
 @export

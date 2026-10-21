@@ -4,12 +4,12 @@ module system.core;
 // for each concrete element type (`int[]`, `Point[]`, …).
 // `this.length` resolves to the builtin `ArrayLen` (checked before instance dispatch).
 extend T[]: IndexedCollection<T> {
-    // Builtin array length (resolved as `ArrayLen` before instance dispatch).
+    /// Builtin array length (resolved as `ArrayLen` before instance dispatch).
     public get length(): int {
         return this.length;
     }
 
-    // Element at `index`. Panics if `index` is out of range.
+    /// Element at `index`. Panics if `index` is out of range.
     public fun this[index: int]: T {
         if index < 0 || index >= this.length {
             System.panic("array index out of range");
@@ -17,7 +17,7 @@ extend T[]: IndexedCollection<T> {
         return this[index];
     }
 
-    // Enumerator for treating an array as a `Collection`.
+    /// Enumerator for treating an array as a `Collection`.
     public fun iterator(): Iterator<T> {
         return ArrayIterator<T>(this);
     }
@@ -46,20 +46,14 @@ extend T[]: IndexedCollection<T> {
         return Option.None;
     }
 
-    /// Copies the range from `start` (inclusive) to `end` (exclusive); invalid bounds panic.
+    /// Returns a new array copied from `start` (inclusive) to `end` (exclusive). Panics unless
+    /// `0 <= start <= end <= length`.
     public fun slice(start: int, end: int): T[] {
+        if (start < 0) || (end < start) || (end > this.length) {
+            System.panic("Array slice out of range");
+        }
         let lo = start;
-        let hi = end;
-        if lo < 0 {
-            lo = 0;
-        }
-        if hi > this.length {
-            hi = this.length;
-        }
-        if lo > hi {
-            lo = hi;
-        }
-        let n = hi - lo;
+        let n = end - start;
         let out = Buffer.alloc<T>(n);
         let i = 0;
         while i < n {

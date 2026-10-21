@@ -1,6 +1,6 @@
 module system.collections;
 
-// A generic open-addressing hash set.
+/// A generic open-addressing hash set.
 @allow_cycle
 @slot_walk("capacity", "slot_key", "slot_occupied")
 public class Set<T>: Collection<T> {
@@ -11,7 +11,7 @@ public class Set<T>: Collection<T> {
     cap: int;
     epoch: int;
 
-    // Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
+    /// Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).
     public constructor(capacity: int = 8) {
         let c = hash_capacity_for(capacity);
         this.cap = c;
@@ -22,8 +22,8 @@ public class Set<T>: Collection<T> {
         this.epoch = hash_epoch_initial();
     }
 
-    // Reserves additional live entries, accounting for load factor and reclaiming tombstones.
-    public fun reserve(additional: int): Result<bool, CapacityError> {
+    /// Reserves additional live entries, accounting for load factor and reclaiming tombstones.
+    public fun reserve(additional: int): Result<Unit, CapacityError> {
         let need = (long)this.count + (long)additional;
         let required = (
             (need + 1L) * (long)hash_load_factor_denom() + (long)hash_load_factor_num() - 1L
@@ -40,7 +40,7 @@ public class Set<T>: Collection<T> {
             * (long)hash_load_factor_denom() >= (long)this.cap * (long)hash_load_factor_num() {
             this.rehash(capacity);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     fun bump_epoch(): void {
@@ -52,18 +52,18 @@ public class Set<T>: Collection<T> {
         this.epoch = e;
     }
 
-    // Number of elements currently stored.
+    /// Number of elements currently stored.
     public get length(): int {
         return this.count;
     }
 
-    // Current capacity of the backing buffer.
+    /// Current capacity of the backing buffer.
     public get capacity(): int {
         return this.cap;
     }
 
     // Index of an occupied slot holding a value, or -1.
-    fun find(borrow value: T): int {
+    fun slot_of(borrow value: T): int {
         return this.find_hashed(value, value.hash_code());
     }
 
@@ -179,7 +179,7 @@ public class Set<T>: Collection<T> {
         }
     }
 
-    // Inserts a value into the set. Returns true if it was newly added, false if already present.
+    /// Inserts a value into the set. Returns true if it was newly added, false if already present.
     public fun add(value: T): bool {
         let hash = value.hash_code();
         if (this.used + 1) * hash_load_factor_denom() >= this.cap * hash_load_factor_num() {
@@ -191,12 +191,12 @@ public class Set<T>: Collection<T> {
         return this.insert_no_grow(value, hash);
     }
 
-    // True if the set contains the value.
+    /// True if the set contains the value.
     public fun contains(borrow value: T): bool {
-        return this.find(value) >= 0;
+        return this.slot_of(value) >= 0;
     }
 
-    // True when the set holds the `string` equal to `value`, without building a `string`.
+    /// True when the set holds the `string` equal to `value`, without building a `string`.
     @inline
     public fun contains(borrow value: ReadOnlySpan<char>): bool where T: StringKey {
         let keys = this.keys;
@@ -247,9 +247,9 @@ public class Set<T>: Collection<T> {
         this.add_all(items);
     }
 
-    // Removes a value and returns true if it was removed.
+    /// Removes a value and returns true if it was removed.
     public fun remove(borrow value: T): bool {
-        let i = this.find(value);
+        let i = this.slot_of(value);
         if i >= 0 {
             this.states[i] = 0 - this.epoch;
             // A tombstoned slot must not keep a managed key alive until it is reused.
@@ -262,7 +262,7 @@ public class Set<T>: Collection<T> {
 
     /// Removes `value`; returns whether it was present.
     public fun remove(borrow value: T): bool where T: unmanaged {
-        let i = this.find(value);
+        let i = this.slot_of(value);
         if i >= 0 {
             this.states[i] = 0 - this.epoch;
             this.count = this.count - 1;
@@ -271,13 +271,13 @@ public class Set<T>: Collection<T> {
         return false;
     }
 
-    // True if the set is empty.
+    /// True if the set is empty.
     public fun is_empty(): bool {
         return this.count == 0;
     }
 
-    // Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed
-    // entries release; probe `states` are reset in place (no capacity realloc).
+    /// Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed
+    /// entries release; probe `states` are reset in place (no capacity realloc).
     public fun clear(): void {
         let c = this.cap;
         let e = this.epoch;
@@ -301,7 +301,7 @@ public class Set<T>: Collection<T> {
         this.bump_epoch();
     }
 
-    // Gets all elements as an array.
+    /// Gets all elements as an array.
     public fun to_array(): T[] {
         let result = Buffer.alloc<T>(this.count);
         let i = 0;
@@ -316,7 +316,7 @@ public class Set<T>: Collection<T> {
         return result;
     }
 
-    // Elements present in this set or `other`.
+    /// Elements present in this set or `other`.
     public fun union(borrow other: Set<T>): Set<T> {
         let result = Set<T>(this.count + other.length);
         let i = 0;
@@ -332,7 +332,7 @@ public class Set<T>: Collection<T> {
         return result;
     }
 
-    // Elements present in both sets.
+    /// Elements present in both sets.
     public fun intersection(borrow other: Set<T>): Set<T> {
         let result = Set<T>();
         let i = 0;
@@ -347,7 +347,7 @@ public class Set<T>: Collection<T> {
         return result;
     }
 
-    // Elements in this set but not in `other`.
+    /// Elements in this set but not in `other`.
     public fun difference(borrow other: Set<T>): Set<T> {
         let result = Set<T>();
         let i = 0;
@@ -362,7 +362,7 @@ public class Set<T>: Collection<T> {
         return result;
     }
 
-    // True when every element of this set is in `other`.
+    /// True when every element of this set is in `other`.
     public fun is_subset(borrow other: Set<T>): bool {
         let i = 0;
         while i < this.cap {
@@ -376,7 +376,7 @@ public class Set<T>: Collection<T> {
         return true;
     }
 
-    // True when the sets share no elements.
+    /// True when the sets share no elements.
     public fun is_disjoint(borrow other: Set<T>): bool {
         let i = 0;
         while i < this.cap {
@@ -390,7 +390,7 @@ public class Set<T>: Collection<T> {
         return true;
     }
 
-    // Gets an iterator for the set.
+    /// Gets an iterator for the set.
     public fun iterator(): SetIterator<T> {
         return SetIterator<T>(this);
     }

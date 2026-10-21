@@ -70,23 +70,23 @@ public fun this[index: int]: char where T: SpanCharacter
 
 ## `slice`
 
-A sub-span covering `[start, start + count)`. Traps if the range doesn't fit.
+Returns a view of elements from `start` (inclusive) to `end` (exclusive) that shares this span's storage. Panics unless `0 <= start <= end <= length`.
 
 ```dream
-public fun slice(start: int, count: int): ReadOnlySpan<T>
+public fun slice(start: int, end: int): ReadOnlySpan<T>
 ```
 
 ## `slice`
 
-Returns a view of `count` elements starting at `start`; invalid bounds panic.
+Returns a view of UTF-16 units from `start` (inclusive) to `end` (exclusive), including views over a `string`. Panics unless `0 <= start <= end <= length`.
 
 ```dream
-public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter
+public fun slice(start: int, end: int): ReadOnlySpan<T> where T: SpanCharacter
 ```
 
 ## `slice`
 
-The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+Returns a view from `start` to the end of this span. Panics unless `0 <= start <= length`.
 
 ```dream
 public fun slice(start: int): ReadOnlySpan<T>

@@ -20,7 +20,7 @@ Sends one text message.
 public fun send_text(
     text: string,
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, IoError>>
+): Future<Result<Unit, IoError>>
 ```
 
 ## `send_binary`
@@ -31,7 +31,7 @@ Sends one binary message.
 public fun send_binary(
     bytes: byte[],
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, IoError>>
+): Future<Result<Unit, IoError>>
 ```
 
 ## `receive`
@@ -59,7 +59,7 @@ public fun messages(
 Sends a normal closing handshake.
 
 ```dream
-public fun close(token: Option<CancellationToken> = Option.None): Future<Result<bool, IoError>>
+public fun close(token: Option<CancellationToken> = Option.None): Future<Result<Unit, IoError>>
 ```
 
 ## `close_with`
@@ -71,5 +71,5 @@ public fun close_with(
     code: int,
     reason: string,
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, IoError>>
+): Future<Result<Unit, IoError>>
 ```

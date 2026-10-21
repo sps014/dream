@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `RequiresScopesAttribute`
 
-Requires space-separated permission scopes from a verified CurrentUser dependency.
+Requires space-separated permission scopes from a verified `AuthService.current_user` dependency.
 
 ```dream
 public struct RequiresScopesAttribute

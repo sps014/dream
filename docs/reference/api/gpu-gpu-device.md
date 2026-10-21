@@ -30,9 +30,7 @@ public get backend(): GpuBackend
 
 ## `adapter_name`
 
-The driver's name for this device's graphics adapter, or an empty string when
-unavailable. Browsers may hide identifying information for privacy. This is a
-display label; use `supports` to decide which GPU features can run.
+The driver's name for this device's graphics adapter, or an empty string when unavailable. Browsers may hide identifying information for privacy. This is a display label; use `supports` to decide which GPU features can run.
 
 ```dream
 public get adapter_name(): string
@@ -48,10 +46,10 @@ public fun supports(feature: GpuFeature): bool
 
 ## `check`
 
-`Ok(true)` while the device works, or `GpuError.DeviceLost` once the driver or browser took it away. Calls that touch a lost device also fail with `DeviceLost`.
+`Ok(Unit())` while the device works, or `GpuError.DeviceLost` once the driver or browser took it away. Calls that touch a lost device also fail with `DeviceLost`.
 
 ```dream
-public fun check(): Result<bool, GpuError>
+public fun check(): Result<Unit, GpuError>
 ```
 
 ## `buffer_from`
@@ -216,5 +214,5 @@ public fun command_encoder(): GpuCommandEncoder
 Runs recorded commands and waits until the GPU finished them. Recording errors, such as a resource from another device, are reported here.
 
 ```dream
-public async fun submit(commands: GpuCommandBuffer): Result<bool, GpuError>
+public async fun submit(commands: GpuCommandBuffer): Result<Unit, GpuError>
 ```

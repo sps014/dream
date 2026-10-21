@@ -68,8 +68,8 @@ Records default to a 1 MiB limit and accept a configured limit up to 4 MiB. Read
 | `CsvReader(source, delimiter = ',', max_record_bytes = 1048576)` | `CsvReader` | Reads records from a borrowed `Reader`. |
 | `reader.read_record()` | `Result<Option<string[]>, CsvError>` | Returns the next record's fields, or `None` at end of input. |
 | `CsvWriter(destination, delimiter = ',', max_record_bytes = 1048576)` | `CsvWriter` | Writes records to a borrowed `Writer`. |
-| `writer.write_record(fields)` | `Result<bool, CsvError>` | Writes one quoted-as-needed record ending in CRLF. |
-| `writer.flush()` | `Result<bool, CsvError>` | Flushes the borrowed destination. |
+| `writer.write_record(fields)` | `Result<Unit, CsvError>` | Writes one quoted-as-needed record ending in CRLF. |
+| `writer.flush()` | `Result<Unit, CsvError>` | Flushes the borrowed destination. |
 
 `CsvError.code()` is `ECSV`. Its `record` field is the one-based record number and
 `offset` is the zero-based byte offset where reading or writing failed.
@@ -101,13 +101,13 @@ Destructors cannot unwind through process termination, traps, or an OS kill. Exp
 | `TempDirectory.create()` | `Result<TempDirectory, IoError>` | Creates a private directory under the OS temporary directory. |
 | `TempDirectory.create_in(directory)` | `Result<TempDirectory, IoError>` | Creates it inside `directory` instead. |
 | `TempDirectory.path` | `string` | Location of the directory; still readable after cleanup. |
-| `TempDirectory.close()` | `Result<bool, IoError>` | Removes the directory and its contents. |
+| `TempDirectory.close()` | `Result<Unit, IoError>` | Removes the directory and its contents. |
 | `TempFile.create()` | `Result<TempFile, IoError>` | Creates a read/write file in a new private directory. |
 | `TempFile.create_in(directory)` | `Result<TempFile, IoError>` | Creates the private directory inside `directory`. |
 | `TempFile.file` | `FileHandle` | The open file. |
 | `TempFile.path` | `string` | Location of the temporary file. |
-| `TempFile.persist_replace(destination)` | `Result<bool, IoError>` | Flushes, closes, and atomically renames the file onto `destination`. |
-| `TempFile.close()` | `Result<bool, IoError>` | Closes the file and removes its private directory. |
+| `TempFile.persist_replace(destination)` | `Result<Unit, IoError>` | Flushes, closes, and atomically renames the file onto `destination`. |
+| `TempFile.close()` | `Result<Unit, IoError>` | Closes the file and removes its private directory. |
 
 Creation returns `EUNSUPPORTED` when temporary resources are unavailable and `ETEMP`
 when the operating system refuses to create them.
@@ -169,8 +169,8 @@ Existing `@test async fun` tests can use `Assert.eq_async(future, expected)` and
 | `Assert.ok_async(future)` | `T` (async) | Awaits a `Result` future, asserts `Ok`, and returns the value. |
 | `TestFixture(value, cleanup)` | `TestFixture<T, E>` | Owns `value` and runs `cleanup` once. |
 | `fixture.resource` | `T` | The owned value. |
-| `fixture.close()` | `Result<bool, E>` | Runs cleanup, or returns the earlier outcome. |
-| `Fixtures.run(fixture, body)` | `Result<bool, E>` (async) | Runs `body` with the resource, then cleanup. |
+| `fixture.close()` | `Result<Unit, E>` | Runs cleanup, or returns the earlier outcome. |
+| `Fixtures.run(fixture, body)` | `Result<Unit, E>` (async) | Runs `body` with the resource, then cleanup. |
 | `Fixtures.temporary_file()` | `Result<TempFile, IoError>` | Creates an owned temporary file. |
 | `Fixtures.temporary_directory()` | `Result<TempDirectory, IoError>` | Creates an owned private directory. |
 

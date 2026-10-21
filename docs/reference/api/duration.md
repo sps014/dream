@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Duration`
 
-A signed span of time stored as milliseconds.
+A signed span of time with millisecond precision. Add one to a `DateTime` with `DateTime.add`, or combine durations with `add` and `sub`.
 
 ```dream
 public struct Duration
@@ -14,7 +14,7 @@ public struct Duration
 
 ## `millis`
 
-Duration in milliseconds.
+Length of the span in milliseconds; negative values point backward in time.
 
 ```dream
 public millis: long
@@ -22,39 +22,47 @@ public millis: long
 
 ## `constructor`
 
-Creates a `Duration` with `millis`.
+Creates a duration of `millis` milliseconds.
 
 ```dream
 public constructor(millis: long)
 ```
 
-## `from_millis`
-
-Creates a duration from milliseconds.
-
-```dream
-public static fun from_millis(ms: long): Duration
-```
-
 ## `from_seconds`
 
-Creates a duration from seconds.
+Creates a duration of `seconds` whole seconds.
 
 ```dream
 public static fun from_seconds(seconds: long): Duration
 ```
 
-## `as_millis`
+## `from_minutes`
 
-Returns the duration in milliseconds.
+Creates a duration of `minutes` whole minutes.
 
 ```dream
-public fun as_millis(): long
+public static fun from_minutes(minutes: long): Duration
+```
+
+## `from_hours`
+
+Creates a duration of `hours` whole hours.
+
+```dream
+public static fun from_hours(hours: long): Duration
+```
+
+## `from_days`
+
+Creates a duration of `days` 24-hour days. Calendar days that cross a daylight-saving change are not adjusted.
+
+```dream
+public static fun from_days(days: long): Duration
 ```
 
 ## `as_seconds`
 
-Returns the duration in whole seconds.
+Returns the duration in whole seconds, truncated toward zero.
 
 ```dream
 public fun as_seconds(): long

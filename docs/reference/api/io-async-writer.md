@@ -30,5 +30,5 @@ Flushes pending output with cancellation; does not close the destination or guar
 ```dream
 async unique fun flush_async(
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```

@@ -6,7 +6,7 @@ Read the [Web APIs guide](../../web-server/index.md) for behavior and complete e
 - [AuthAccounts](webapi-auth-auth-accounts.md)
 - [AuthError](webapi-auth-auth-error.md)
 - [AuthPrincipal](webapi-auth-auth-principal.md)
-- [Webapi Auth Auth Routes](webapi-auth-auth-routes.md)
+- [AuthService routes](webapi-auth-auth-service-routes.md)
 - [AuthService](webapi-auth-auth-service.md)
 - [AuthSession](webapi-auth-auth-session.md)
 - [AuthSessionStore](webapi-auth-auth-session-store.md)

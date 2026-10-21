@@ -6,7 +6,7 @@ icon: material/shield-account-outline
 
 # Authorization and scopes
 
-Authentication establishes identity. A protected handler injects `CurrentUser` and can require permission scopes.
+Authentication establishes identity. A protected handler injects `AuthService.current_user` and can require permission scopes.
 
 ```dream
 import system;
@@ -17,7 +17,7 @@ import system.webapi.auth;
 class Routes {
     @requires_scopes("read")
     @get("/")
-    public static fun reports(@dep(CurrentUser) user: AuthPrincipal): string {
+    public static fun reports(@dep(AuthService.current_user) user: AuthPrincipal): string {
         return "Reports for " + user.subject;
     }
 }
@@ -65,7 +65,7 @@ async fun main(): void {
 
 | Name | Kind | Effect |
 | --- | --- | --- |
-| `@dep(CurrentUser)` | Dependency | Injects the `AuthPrincipal` that `AuthService.middleware()` verified. Returns 401 when there is none. |
+| `@dep(AuthService.current_user)` | Dependency | Injects the `AuthPrincipal` that `AuthService.middleware()` verified. Returns 401 when there is none. |
 | `@requires_scopes("read write")` | Route attribute | Requires every listed scope. Returns 403 if any is missing. Also listed in OpenAPI. |
 | `AuthPrincipal.subject` | Field | The account's stable identifier. |
 | `AuthPrincipal.scopes` | Field | The granted scopes, space-separated. |
@@ -73,8 +73,8 @@ async fun main(): void {
 
 Scope strings are assigned by the account repository (`AuthAccount.scopes`) and included in issued tokens.
 
-Keep authorization requirements on the route that injects `CurrentUser`. Merely adding a metadata attribute does not authenticate a request. The generated security scheme adds Swagger Authorize support; actual enforcement occurs in the middleware and dependency.
+Keep authorization requirements on the route that injects `AuthService.current_user`. Merely adding a metadata attribute does not authenticate a request. The generated security scheme adds Swagger Authorize support; actual enforcement occurs in the middleware and dependency.
 
-`AuthPrincipal.has_scope` checks an individual permission. For resource-specific policy, define another dependency that injects `CurrentUser`, loads the resource, checks ownership, and returns `Result<Resource, HttpStatus>`. Avoid accepting an identity or permission set from request headers without verification.
+`AuthPrincipal.has_scope` checks an individual permission. For resource-specific policy, define another dependency that injects `AuthService.current_user`, loads the resource, checks ownership, and returns `Result<Resource, HttpStatus>`. Avoid accepting an identity or permission set from request headers without verification.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

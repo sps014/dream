@@ -14,7 +14,7 @@ class Greeting {
 async fun main(): void {
     let app = WebApp();
     app.include_router(Routes.router()).unwrap();
-    app.use(CORS(CorsOptions())).unwrap();
+    app.use(Cors.middleware(CorsOptions())).unwrap();
     let port = app.listen("127.0.0.1", 8000).await.unwrap();
     System.println("Listening on http://127.0.0.1:" + port.to_string() + "/docs");
     app.wait().await;

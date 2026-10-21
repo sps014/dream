@@ -1,6 +1,6 @@
 module system.compress;
 
-// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
+/// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
 @allow_cycle
 public class CompressionReader: Reader {
     source: Reader;
@@ -21,7 +21,7 @@ public class CompressionReader: Reader {
         this.closed = false;
     }
 
-    // Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.
+    /// Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.
     public fun read(max_bytes: int): Result<byte[], IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
@@ -93,7 +93,7 @@ public class CompressionReader: Reader {
         }
     }
 
-    // Releases codec state without closing the borrowed source.
+    /// Releases codec state without closing the borrowed source.
     public fun close(): void {
         this.codec.close();
         this.closed = true;

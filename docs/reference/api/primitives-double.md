@@ -14,7 +14,7 @@ public fun compare(other: double): int
 
 ## `abs`
 
-Absolute value of this double.
+Returns the magnitude of this value with the sign cleared, so `-0.0` becomes `0.0` and NaN stays NaN.
 
 ```dream
 public fun abs(): double
@@ -22,7 +22,7 @@ public fun abs(): double
 
 ## `min`
 
-The smaller of this and `other`.
+Returns the smaller of this value and `other`. When either is NaN, returns `other`.
 
 ```dream
 public fun min(other: double): double
@@ -30,10 +30,18 @@ public fun min(other: double): double
 
 ## `max`
 
-The larger of this and `other`.
+Returns the larger of this value and `other`. When either is NaN, returns `other`.
 
 ```dream
 public fun max(other: double): double
+```
+
+## `clamp`
+
+Returns this value limited to the inclusive range `lo` through `hi`. NaN is returned unchanged; the result is unspecified when `lo` is greater than `hi`.
+
+```dream
+public fun clamp(lo: double, hi: double): double
 ```
 
 ## `parse`

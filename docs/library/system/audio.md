@@ -140,7 +140,7 @@ position, volume, mute, and looping. A failed switch leaves the old output activ
 ```dream
 import system.audio;
 
-async fun select_output(audio: Audio): Result<bool, AudioError> {
+async fun select_output(audio: Audio): Result<Unit, AudioError> {
     let devices = Audio.devices().await?;
     if devices.length == 0 {
         return Result.Err(AudioError("ENODEVICE", "no output device is visible"));

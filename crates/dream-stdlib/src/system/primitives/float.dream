@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `float` primitive as an extensible class.
 extend float: Comparable<float> {
-    // Orders this value against `other` (negative/zero/positive).
+    /// Orders this value against `other` (negative/zero/positive).
     public fun compare(other: float): int {
         if this < other {
             return 0 - 1;
@@ -13,7 +13,7 @@ extend float: Comparable<float> {
         return 0;
     }
 
-    // Absolute value of this float.
+    /// Absolute value of this float.
     public fun abs(): float {
         if this < 0.0 {
             return 0.0 - this;
@@ -21,7 +21,7 @@ extend float: Comparable<float> {
         return this;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: float): float {
         if this < other {
             return this;
@@ -29,7 +29,7 @@ extend float: Comparable<float> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: float): float {
         if this > other {
             return this;
@@ -37,7 +37,7 @@ extend float: Comparable<float> {
         return other;
     }
 
-    // Parses a decimal float from `text`.
+    /// Parses a decimal float from `text`.
     public static fun parse(borrow text: string): Result<float, ParseError> {
         return switch (double.parse(text)) {
             Ok(d) => Result.Ok((float)d),

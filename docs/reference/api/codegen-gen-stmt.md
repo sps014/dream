@@ -12,7 +12,7 @@ public class GenStmt
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `kind`
 
-Category of this entry.
+Syntactic shape of the statement (`let`, `return`, `if`, ...).
 
 ```dream
 public kind: StmtKind
@@ -44,7 +44,7 @@ public constant: Option<GenConstant>
 
 ## `text`
 
-Source text represented by this entry.
+Source text of the statement as written.
 
 ```dream
 public text: string
@@ -52,7 +52,7 @@ public text: string
 
 ## `ty`
 
-Type of this declaration or expression.
+Type of the value the statement produces, or Unknown when it has none.
 
 ```dream
 public ty: GenTypeRef
@@ -92,7 +92,7 @@ public types: List<GenTypeRef>
 
 ## `constructor`
 
-Creates this model from snapshot JSON.
+Decodes a `GenStmt` from its object in the generation snapshot.
 
 ```dream
 public constructor(borrow v: JsonValue)

@@ -1,5 +1,5 @@
 import system;
 fun main(): void {
     let view = "abc".span();
-    System.println(view.slice(2, 2).to_string());
+    System.println(view.slice(2, 4).to_string());
 }

@@ -4,7 +4,8 @@
 
 use super::abi_types::{c_ident, import_call_name};
 use super::cx::Cx;
-use dream_abi::js_abi;
+use dream_abi::js_abi::{self, JsBridgeClass};
+use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_types::{PrimTy, TyKind, TypeId, method_fn};
 
 /// Whether this module gets marshalers at all (wasm32 modules that call a `js.*` bridge).
@@ -91,11 +92,11 @@ pub(crate) fn is_option_union(layout: &dream_hir::UnionLayout) -> bool {
     let some = layout
         .variants
         .iter()
-        .any(|v| v.name == "Some" && v.fields.len() == 1);
+        .any(|v| v.name == OPTION_SOME && v.fields.len() == 1);
     let none = layout
         .variants
         .iter()
-        .any(|v| v.name == "None" && v.fields.is_empty());
+        .any(|v| v.name == OPTION_NONE && v.fields.is_empty());
     some && none
 }
 
@@ -125,26 +126,17 @@ pub(crate) fn array_elems(cx: &Cx<'_>) -> Vec<TypeId> {
 
 /// The `js.box_*` bridge for a primitive, and whether a `float`/`float16` widens to `double` first.
 pub(crate) fn box_prim(p: PrimTy) -> (&'static str, bool) {
-    match p {
-        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("box_int", false),
-        PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("box_long", false),
-        PrimTy::Float | PrimTy::Float16 | PrimTy::Double => {
-            ("box_double", !matches!(p, PrimTy::Double))
-        }
-        PrimTy::Bool => ("box_bool", false),
-        PrimTy::String => ("box_string", false),
-    }
+    (
+        JsBridgeClass::of(p).box_bridge(),
+        p.is_float() && p != PrimTy::Double,
+    )
 }
 
 /// The `js.as_*` bridge for a primitive, and whether the `double` result narrows to `float` or
 /// `float16`.
 pub(crate) fn unbox_prim(p: PrimTy) -> (&'static str, bool) {
-    match p {
-        PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => ("as_int", false),
-        PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => ("as_long", false),
-        PrimTy::Float | PrimTy::Float16 => ("as_double", true),
-        PrimTy::Double => ("as_double", false),
-        PrimTy::Bool => ("as_bool", false),
-        PrimTy::String => ("as_string", false),
-    }
+    (
+        JsBridgeClass::of(p).as_bridge(),
+        p.is_float() && p != PrimTy::Double,
+    )
 }

@@ -26,7 +26,8 @@ public class GenModule {
     /// same module, their attributes are combined.
     public attributes: List<GenAttribute>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenModule` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(
         id: string,
         name: string,

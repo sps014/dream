@@ -74,8 +74,8 @@ internal class HttpOperation {
             }
             return Result.Err(
                 HttpError(
-                    error.unwrap().at("code").as_string().unwrap_or("EIO"),
-                    error.unwrap().at("message").as_string().unwrap_or("HTTP failed")
+                    error.unwrap()["code"].as_string().unwrap_or("EIO"),
+                    error.unwrap()["message"].as_string().unwrap_or("HTTP failed")
                 )
             );
         }

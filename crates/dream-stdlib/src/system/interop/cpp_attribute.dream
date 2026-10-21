@@ -7,6 +7,6 @@ public struct CppAttribute {
     /// Header file declaring the foreign symbol.
     public header: string;
 
-    /// Name identifying this entry.
+    /// Qualified C++ name to bind, when it differs from the Dream name.
     public name: Option<string>;
 }

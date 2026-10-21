@@ -1,6 +1,6 @@
 module system;
 
-// Allocator introspection for tests and diagnostics.
+/// Allocator introspection for tests and diagnostics.
 public static class Debug {
     /// Returns the allocator's free-list address for debugging.
     @intrinsic(Intrinsic.DebugGetFreeListHead)
@@ -22,8 +22,8 @@ public static class Debug {
     @intrinsic(Intrinsic.DebugGetRefCount)
     public static extern fun ref_count(borrow o: object): int;
 
-    // Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`.
-    // Ordinary builds and unknown ids read as 0.
+    /// Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`.
+    /// Ordinary builds and unknown ids read as 0.
     @intrinsic(Intrinsic.DebugGetRuntimeCounter)
     public static extern fun runtime_counter(id: int): long;
 

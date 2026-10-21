@@ -38,10 +38,10 @@ public fun to_bytes(): byte[]
 
 ## `parse`
 
-Accepts exactly 36 ASCII hexadecimal characters with canonical hyphen positions.
+Parses the canonical 36-character form, such as `123e4567-e89b-12d3-a456-426614174000`. Hexadecimal digits may be upper- or lowercase. Fails with `ParseError` (code `EPARSE`) for any other length, separator, or digit.
 
 ```dream
-public static fun parse(text: string): Result<Uuid, UuidError>
+public static fun parse(text: string): Result<Uuid, ParseError>
 ```
 
 ## `is_valid`

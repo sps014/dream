@@ -26,7 +26,7 @@ async fun main(): void {
     System.println("capture: " + (peak > 0.08f && peak < 0.15f).to_string());
     let before_switch = audio.current_time;
     audio.set_sink_id("").await.unwrap();
-    System.println("sink: " + (Math.abs(audio.current_time - before_switch) < 0.05d).to_string());
+    System.println("sink: " + ((audio.current_time - before_switch).abs() < 0.05d).to_string());
     audio.muted = true;
     Time.delay(150).await;
     let silent = audio.capture(2048).unwrap();
@@ -40,7 +40,7 @@ async fun main(): void {
     audio.pause().unwrap();
     let position = audio.current_time;
     Time.delay(50).await;
-    System.println("pause: " + (Math.abs(audio.current_time - position) < 0.001d).to_string());
+    System.println("pause: " + ((audio.current_time - position).abs() < 0.001d).to_string());
     audio.play().await.unwrap();
     Time.delay(750).await;
     audio.play().await.unwrap();

@@ -1,7 +1,7 @@
 module system;
 
-// A calendar date and time of day.
-public struct DateTime: Equatable<DateTime> {
+/// A calendar date and time of day.
+public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
     @runtime("dateNowMillis")
     static extern fun now_millis(): long;
 
@@ -30,26 +30,28 @@ public struct DateTime: Equatable<DateTime> {
         return this._offset_minutes;
     }
 
-    // The current instant in UTC.
+    /// Returns the current instant with a UTC offset of zero. Unlike `now`, it reads only the
+    /// clock and does not consult the timezone database, so it works where timezone support
+    /// is not linked.
     public static fun utc_now(): DateTime {
         return DateTime(DateTime.now_millis(), 0);
     }
 
-    // The current instant in the local system timezone.
+    /// Returns the current instant in the machine's local timezone.
     public static fun now(): DateTime {
         let millis = DateTime.now_millis();
         let offset = DateTime.local_offset_minutes(millis);
         return DateTime(millis, offset);
     }
 
-    // The current instant in `zone` (an IANA timezone, see `TimeZone`).
+    /// The current instant in `zone` (an IANA timezone, see `TimeZone`).
     public static fun now_in(zone: TimeZone): DateTime {
         let millis = DateTime.now_millis();
         let offset = zone.offset_minutes_at(millis);
         return DateTime(millis, offset);
     }
 
-    // Wraps a raw UTC epoch millisecond instant.
+    /// Wraps a raw UTC epoch millisecond instant.
     public static fun from_epoch_millis(millis: long): DateTime {
         return DateTime(millis, 0);
     }
@@ -64,7 +66,7 @@ public struct DateTime: Equatable<DateTime> {
         return DateTime.from_epoch_millis(seconds * 1000L);
     }
 
-    // Builds a UTC instant from calendar fields.
+    /// Builds a UTC instant from calendar fields.
     public static fun of(
         year: int,
         month: int,
@@ -82,7 +84,7 @@ public struct DateTime: Equatable<DateTime> {
         return DateTime(millis, 0);
     }
 
-    // Builds an instant from calendar fields interpreted as local wall-clock time.
+    /// Builds an instant from calendar fields interpreted as local wall-clock time.
     public static fun of_local(
         year: int,
         month: int,
@@ -97,7 +99,7 @@ public struct DateTime: Equatable<DateTime> {
         return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
     }
 
-    // Builds an instant from calendar fields interpreted as wall-clock time in `zone`.
+    /// Builds an instant from calendar fields interpreted as wall-clock time in `zone`.
     public static fun of_zoned(
         year: int,
         month: int,
@@ -113,18 +115,18 @@ public struct DateTime: Equatable<DateTime> {
         return DateTime(tentative.epoch_millis - (long)offset * 60000L, offset);
     }
 
-    // The same instant in UTC.
+    /// The same instant in UTC.
     public fun to_utc(): DateTime {
         return DateTime(this._epoch_millis, 0);
     }
 
-    // The same instant in the local system timezone.
+    /// The same instant in the local system timezone.
     public fun to_local(): DateTime {
         let offset = DateTime.local_offset_minutes(this._epoch_millis);
         return DateTime(this._epoch_millis, offset);
     }
 
-    // The same instant in `zone` (an IANA timezone, see `TimeZone`).
+    /// The same instant in `zone` (an IANA timezone, see `TimeZone`).
     public fun to_zone(zone: TimeZone): DateTime {
         let offset = zone.offset_minutes_at(this._epoch_millis);
         return DateTime(this._epoch_millis, offset);
@@ -140,86 +142,61 @@ public struct DateTime: Equatable<DateTime> {
         return DateTime._floor_mod(total, 86400000L);
     }
 
-    // The year.
+    /// The calendar year in this value's UTC offset (proleptic Gregorian; `0` is 1 BC).
     public get year(): int {
         return this.decompose().year;
     }
 
-    // The month.
+    /// The month in this value's UTC offset, from `1` (January) to `12` (December).
     public get month(): int {
         return this.decompose().month;
     }
 
-    // The day.
+    /// The day of the month in this value's UTC offset, from `1` to `31`.
     public get day(): int {
         return this.decompose().day;
     }
 
     // Calendar date fields (year/month/day) computed once.
-    public fun decompose(): DateTimeYmd {
+    internal fun decompose(): DateTimeYmd {
         return DateTime._civil_from_days(this._local_days());
     }
 
-    // The hour.
+    /// The hour of the day in this value's UTC offset, from `0` to `23`.
     public get hour(): int {
         return (int)(this._millis_of_day() / 3600000L);
     }
 
-    // The minute.
+    /// The minute of the hour, from `0` to `59`.
     public get minute(): int {
         return (int)((this._millis_of_day() / 60000L) % 60L);
     }
 
-    // The second.
+    /// The second of the minute, from `0` to `59`; leap seconds are not represented.
     public get second(): int {
         return (int)((this._millis_of_day() / 1000L) % 60L);
     }
 
-    // The millisecond.
+    /// The millisecond of the second, from `0` to `999`.
     public get millisecond(): int {
         return (int)(this._millis_of_day() % 1000L);
     }
 
-    // The day of the week (0 = Sunday).
+    /// The day of the week (0 = Sunday).
     public get day_of_week(): int {
         return (int)DateTime._floor_mod((long)this._local_days() + 4L, 7L);
     }
 
-    // The day of the year (1-based).
+    /// The day of the year (1-based).
     public get day_of_year(): int {
         let ymd = DateTime._civil_from_days(this._local_days());
         let jan1 = DateTime._days_from_civil(ymd.year, 1, 1);
         return this._local_days() - jan1 + 1;
     }
 
-    // Adds milliseconds.
-    public fun add_millis(amount: long): DateTime {
-        return DateTime(this._epoch_millis + amount, this._offset_minutes);
-    }
-
-    // Adds seconds.
-    public fun add_seconds(amount: long): DateTime {
-        return this.add_millis(amount * 1000L);
-    }
-
-    // Adds minutes.
-    public fun add_minutes(amount: long): DateTime {
-        return this.add_millis(amount * 60000L);
-    }
-
-    // Adds hours.
-    public fun add_hours(amount: long): DateTime {
-        return this.add_millis(amount * 3600000L);
-    }
-
-    // Adds days.
-    public fun add_days(amount: long): DateTime {
-        return this.add_millis(amount * 86400000L);
-    }
-
     /// Returns the instant `d` after this date/time, keeping its UTC offset.
     public fun add(d: Duration): DateTime {
-        return this.add_millis(d.millis);
+        return DateTime(this._epoch_millis + d.millis, this._offset_minutes);
     }
 
     /// Returns the duration from this instant to `other`.
@@ -229,11 +206,12 @@ public struct DateTime: Equatable<DateTime> {
 
     /// Returns midnight on the same calendar date, keeping this UTC offset.
     public fun start_of_day(): DateTime {
-        return this.add_millis(0L - this._millis_of_day());
+        return this.add(Duration(0L - this._millis_of_day()));
     }
 
-    // Compares to another DateTime.
-    public fun compare_to(other: DateTime): int {
+    /// Orders two instants by their UTC epoch milliseconds, ignoring the display offset.
+    /// Returns -1 when this is earlier, 0 when equal, and 1 when later.
+    public fun compare(borrow other: DateTime): int {
         if this._epoch_millis < other.epoch_millis {
             return 0 - 1;
         }
@@ -243,22 +221,22 @@ public struct DateTime: Equatable<DateTime> {
         return 0;
     }
 
-    // True if this is before `other`.
+    /// True if this is before `other`.
     public fun is_before(other: DateTime): bool {
         return this._epoch_millis < other.epoch_millis;
     }
 
-    // True if this is after `other`.
+    /// True if this is after `other`.
     public fun is_after(other: DateTime): bool {
         return this._epoch_millis > other.epoch_millis;
     }
 
-    // True if this equals `other`.
+    /// True if this equals `other`.
     public fun equals(other: DateTime): bool {
         return this._epoch_millis == other.epoch_millis;
     }
 
-    // Formats as ISO-8601.
+    /// Formats as ISO-8601.
     public fun to_iso8601(): string {
         let ymd = this.decompose();
         let sb = StringBuilder(32);
@@ -283,7 +261,7 @@ public struct DateTime: Equatable<DateTime> {
         return sb.build();
     }
 
-    // A human-readable formatting.
+    /// A human-readable formatting.
     public override fun to_string(): string {
         let ymd = this.decompose();
         let sb = StringBuilder(32);
@@ -307,7 +285,7 @@ public struct DateTime: Equatable<DateTime> {
         return sb.build();
     }
 
-    // Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
+    /// Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
     public static fun parse(text: string): Result<DateTime, ParseError> {
         let n = text.length;
         if n < 19 {

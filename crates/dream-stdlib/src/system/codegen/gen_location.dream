@@ -6,7 +6,7 @@ import system.json;
 
 /// A file, line, and column identifying a source location.
 public class GenLocation {
-    // Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
+    /// Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
     public file: string;
 
     /// One-based line number in the source file.
@@ -15,14 +15,15 @@ public class GenLocation {
     /// One-based column number in the source file.
     public column: int;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenLocation` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(file: string, line: int, column: int) {
         this.file = file;
         this.line = line;
         this.column = column;
     }
 
-    // Returns the requested model information.
+    /// The location as `file:line:column`.
     public override fun to_string(): string {
         return this.file + ":" + this.line.to_string() + ":" + this.column.to_string();
     }

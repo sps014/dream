@@ -54,7 +54,7 @@ fun c28_body(): void {
     xs.push(2);
     xs.push(1);
     c28_verify_observation((xs.seq().distinct().to_list().length).to_string());
-    c28_verify_observation((xs.seq().order_by(c28_asc).to_list()[0]).to_string());
+    c28_verify_observation((xs.seq().sort_by(c28_asc).to_list()[0]).to_string());
 }
 
 let c28_cursor: int = 0;

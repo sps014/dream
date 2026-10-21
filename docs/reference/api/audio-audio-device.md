@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioDevice`
 
 An output device visible to the current application.
 
@@ -12,7 +12,7 @@ An output device visible to the current application.
 public class AudioDevice
 ```
 
-## Declaration
+## `id`
 
 Opaque host-specific ID; the empty ID selects the system default.
 
@@ -20,7 +20,7 @@ Opaque host-specific ID; the empty ID selects the system default.
 public id: string
 ```
 
-## Declaration
+## `name`
 
 User-visible device label, possibly empty before browser permission.
 
@@ -28,11 +28,10 @@ User-visible device label, possibly empty before browser permission.
 public name: string
 ```
 
-## Declaration
+## `is_default`
 
 Whether this is currently the system default output.
 
 ```dream
 public is_default: bool
 ```
-

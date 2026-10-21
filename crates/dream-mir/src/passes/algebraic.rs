@@ -68,10 +68,7 @@ fn is_unsigned(interner: &TypeInterner, ty: TypeId) -> bool {
 /// True for the floating-point primitives, whose arithmetic must never be strength-reduced to
 /// integer shifts/masks (see the guard in [`Algebraic::run`]).
 fn is_float(interner: &TypeInterner, ty: TypeId) -> bool {
-    matches!(
-        interner.kind(ty),
-        TyKind::Prim(PrimTy::Float16 | PrimTy::Float | PrimTy::Double)
-    )
+    matches!(interner.kind(ty), TyKind::Prim(p) if p.is_float())
 }
 
 /// The bool value of a constant operand, if any.

@@ -401,7 +401,7 @@ extend js {
 
     // --- ergonomic instance API (resolved before dynamic dispatch, so these names are safe) --
 
-    // Explicit conversions back to Dream values.
+    /// Explicit conversions back to Dream values.
     @node
     @web
     public fun to_int(): int {
@@ -429,7 +429,7 @@ extend js {
         return js.as_string(this);
     }
 
-    // True if the referenced value is `null` or `undefined`.
+    /// True if the referenced value is `null` or `undefined`.
     @node
     @web
     public fun is_null(): bool {

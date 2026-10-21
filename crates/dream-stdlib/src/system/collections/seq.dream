@@ -97,7 +97,7 @@ public class Seq<T>: Iterable<T> {
     }
 
     /// Immediately collects and sorts the sequence with `cmp`.
-    public fun order_by(borrow cmp: fun(T, T): int): Seq<T> {
+    public fun sort_by(borrow cmp: fun(T, T): int): Seq<T> {
         let result = this.to_list();
         result.sort_by(cmp);
         return Seq<T>(result);

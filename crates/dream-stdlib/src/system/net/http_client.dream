@@ -1,11 +1,11 @@
 module system.net;
 
-// Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools.
-// Received responses own their bodies independently and must also be closed.
+/// Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools.
+/// Received responses own their bodies independently and must also be closed.
 public class HttpClient {
     id: int;
 
-    // Creates a client; allocation failures are reported by `send`.
+    /// Creates a client; allocation failures are reported by `send`.
     public constructor() {
         this.id = HttpClient.create_host();
     }
@@ -23,7 +23,7 @@ public class HttpClient {
     @runtime("netHttpStart")
     static extern fun send_host(id: int, borrow request: string, borrow bytes: byte[]): int;
 
-    // Sends with default options: a 30-second total deadline and the host redirect policy.
+    /// Sends with default options: a 30-second total deadline and the host redirect policy.
     public async fun send(
         request: HttpRequest,
         token: Option<CancellationToken> = Option.None
@@ -33,8 +33,8 @@ public class HttpClient {
         return lifetime[0].send(request, HttpOptions(), effective_token).await;
     }
 
-    // Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`.
-    // Cancellation aborts pending transport work; response ownership transfers to the caller on success.
+    /// Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`.
+    /// Cancellation aborts pending transport work; response ownership transfers to the caller on success.
     public async fun send(
         request: HttpRequest,
         options: HttpOptions,
@@ -77,12 +77,12 @@ public class HttpClient {
         return response;
     }
 
-    // Closes idempotently, cancelling pending sends. Previously received bodies remain usable.
-    public fun close(): Result<bool, HttpError> {
+    /// Closes idempotently, cancelling pending sends. Previously received bodies remain usable.
+    public fun close(): Result<Unit, HttpError> {
         if this.id > 0 {
             HttpClient.close_host(this.id);
             this.id = 0;
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

@@ -11,7 +11,7 @@ async fun webapi_lifespan(): void {
     app.lifespan(
         async (app: WebApp) => {
             order.push("first");
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         },
         async (app: WebApp) => {
             order.push("stop-first");

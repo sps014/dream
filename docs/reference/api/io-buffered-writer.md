@@ -31,7 +31,7 @@ public fun write(data: byte[]): Result<int, IoError>
 Writes pending bytes and flushes the destination; retains any unwritten suffix on failure. Already completed writes persist, and a finished writer returns `ECLOSED`.
 
 ```dream
-public fun flush(): Result<bool, IoError>
+public fun flush(): Result<Unit, IoError>
 ```
 
 ## `finish`
@@ -39,5 +39,5 @@ public fun flush(): Result<bool, IoError>
 Flushes and marks the wrapper finished only on success; repeated success is idempotent. Leaves the underlying writer open and permits retry after a flush failure.
 
 ```dream
-public fun finish(): Result<bool, IoError>
+public fun finish(): Result<Unit, IoError>
 ```

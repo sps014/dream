@@ -1,6 +1,6 @@
 module system.task;
 
-// An independently closable consumer endpoint for a local async channel.
+/// An independently closable consumer endpoint for a local async channel.
 @allow_cycle
 public class Receiver<T> {
     state: ChannelState<T>;
@@ -12,7 +12,7 @@ public class Receiver<T> {
         this.state.receivers = this.state.receivers + 1;
     }
 
-    // Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.
+    /// Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.
     public fun try_receive(): Result<Option<T>, ChannelError> {
         if this.closed || this.state.receive_closed {
             return Result.Err(ChannelError.Closed);
@@ -29,7 +29,7 @@ public class Receiver<T> {
         return Result.Err(ChannelError.Empty);
     }
 
-    // Waits for an item; None means that all senders closed and the queue has drained.
+    /// Waits for an item; None means that all senders closed and the queue has drained.
     public fun receive(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Option<T>, ChannelError>> {
@@ -66,7 +66,7 @@ public class Receiver<T> {
         }
     }
 
-    // Closes this endpoint; dropping the last receiver rejects and wakes pending sends.
+    /// Closes this endpoint; dropping the last receiver rejects and wakes pending sends.
     public fun close(): void {
         if this.closed {
             return;

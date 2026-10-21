@@ -9,6 +9,7 @@
 use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
+use dream_abi::names::{OPTION_NONE, OPTION_SOME, RESULT_ERR, RESULT_OK};
 use dream_diagnostics::DiagnosticBag;
 use dream_hir::{Binding, HExpr, HExprKind, LocalId};
 use dream_syntax::nodes::{ExpressionNode, FunctionNode, Type};
@@ -90,9 +91,9 @@ impl<'a> Analyzer<'a> {
         self.ensure_union_instantiated(&op_base, &ret_args, &span, diagnostics);
 
         let (ok_name, err_name) = if op_base == "Result" {
-            ("Ok", "Err")
+            (RESULT_OK, RESULT_ERR)
         } else {
-            ("Some", "None")
+            (OPTION_SOME, OPTION_NONE)
         };
 
         let op_id = self.type_ctx.lower(&operand_type);

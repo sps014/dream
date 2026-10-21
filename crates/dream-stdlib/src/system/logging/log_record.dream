@@ -1,17 +1,17 @@
 module system.logging;
 
-// One log event ready for handlers.
+/// One log event ready for handlers.
 public class LogRecord {
-    // Severity of this record.
+    /// Severity of this record.
     public level: LogLevel;
 
-    // Logger name that produced this record.
+    /// Logger name that produced this record.
     public name: string;
 
-    // Message text.
+    /// Message text.
     public message: string;
 
-    // UTC epoch milliseconds when the record was created.
+    /// UTC epoch milliseconds when the record was created.
     public timestamp_ms: long;
 
     // Builds a record from its fields.

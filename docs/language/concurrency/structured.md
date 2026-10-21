@@ -67,7 +67,7 @@ let result = Task.scope<int, string>(
 
 Children inherit the scope's token, available as `scope.token` or `CancellationToken.current`. Async file, HTTP, timer, process, channel, scoped task, and pool operations resolve an omitted token, or `Option.None`, to that context. An explicit token overrides it. To finish cleanup despite parent cancellation, pass a token from a separate, uncancelled source.
 
-`Time.sleep` and `Time.delay` return `Result<bool, CancelledError>` and wake on cancellation. Check or propagate that result when subsequent work depends on the timer finishing. Cancelling an already running scope future requests cancellation and leaves the scope schedulable until its children settle.
+`Time.sleep` and `Time.delay` return `Result<Unit, CancelledError>` and wake on cancellation. Check or propagate that result when subsequent work depends on the timer finishing. Cancelling an already running scope future requests cancellation and leaves the scope schedulable until its children settle.
 
 Local scheduling is cooperative. A CPU loop must yield or check cancellation; a blocking foreign call can block its scheduler. A deadline requests cancellation rather than promising a strict upper bound on cleanup time.
 

@@ -1,24 +1,24 @@
 module system;
 
-// A high-resolution timer for measuring elapsed time, useful for benchmarking.
+/// A high-resolution timer for measuring elapsed time, useful for benchmarking.
 public class Stopwatch {
     _is_running: bool;
     _start_time: long;
     _elapsed: long;
 
-    // Creates a new Stopwatch and starts measuring time immediately.
+    /// Creates a new Stopwatch and starts measuring time immediately.
     public constructor() {
         this._is_running = true;
         this._elapsed = 0L;
         this._start_time = Time.nano_time();
     }
 
-    // True while the stopwatch is currently accumulating time.
+    /// True while the stopwatch is currently accumulating time.
     public get is_running(): bool {
         return this._is_running;
     }
 
-    // Starts or resumes measuring elapsed time.
+    /// Starts or resumes measuring elapsed time.
     public fun start(): void {
         if !this._is_running {
             this._start_time = Time.nano_time();
@@ -26,7 +26,7 @@ public class Stopwatch {
         }
     }
 
-    // Stops measuring elapsed time.
+    /// Stops measuring elapsed time.
     public fun stop(): void {
         if this._is_running {
             let now = Time.nano_time();
@@ -35,21 +35,21 @@ public class Stopwatch {
         }
     }
 
-    // Stops measuring elapsed time and resets the elapsed time to zero.
+    /// Stops measuring elapsed time and resets the elapsed time to zero.
     public fun reset(): void {
         this._elapsed = 0L;
         this._is_running = false;
         this._start_time = 0L;
     }
 
-    // Stops measuring, resets the elapsed time to zero, and starts measuring again.
+    /// Stops measuring, resets the elapsed time to zero, and starts measuring again.
     public fun restart(): void {
         this._elapsed = 0L;
         this._start_time = Time.nano_time();
         this._is_running = true;
     }
 
-    // The total elapsed time measured by the current instance, in nanoseconds.
+    /// The total elapsed time measured by the current instance, in nanoseconds.
     public get elapsed_nanos(): long {
         if this._is_running {
             let now = Time.nano_time();
@@ -58,7 +58,7 @@ public class Stopwatch {
         return this._elapsed;
     }
 
-    // The total elapsed time measured by the current instance, in milliseconds.
+    /// The total elapsed time measured by the current instance, in milliseconds.
     public get elapsed_ms(): long {
         return this.elapsed_nanos / 1000000L;
     }

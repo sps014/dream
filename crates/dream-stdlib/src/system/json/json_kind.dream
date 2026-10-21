@@ -1,6 +1,6 @@
 module system.json;
 
-// Discriminant for `JsonValue.kind()`.
+/// Discriminant for `JsonValue.kind()`.
 public enum JsonKind {
     /// A JSON null value.
     Null,

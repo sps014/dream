@@ -28,7 +28,7 @@ public constructor(path: string, code: string, message: string)
 
 ## `message`
 
-Human-readable description.
+Human-readable explanation of the I/O failure, suitable for logs and error output.
 
 ```dream
 public fun message(): string

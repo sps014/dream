@@ -18,8 +18,12 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/text/utf8_decoder.dream"),
         ),
         (
-            "<std>/system/text/string.dream",
-            include_str!("../system/text/string.dream"),
+            "<std>/system/text/string_text.dream",
+            include_str!("../system/text/string_text.dream"),
+        ),
+        (
+            "<std>/system/text/string_array.dream",
+            include_str!("../system/text/string_array.dream"),
         ),
         (
             "<std>/system/text/unicode_norm_form.dream",

@@ -25,5 +25,5 @@ public unique fun write(data: byte[]): Result<int, IoError>
 Delivers buffered output; returns an I/O error when flushing fails.
 
 ```dream
-public unique fun flush(): Result<bool, IoError>
+public unique fun flush(): Result<Unit, IoError>
 ```

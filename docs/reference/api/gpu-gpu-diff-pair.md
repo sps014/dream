@@ -30,7 +30,7 @@ public constructor(value: T)
 
 ## `value`
 
-The value.
+The primal value the pair was created with.
 
 ```dream
 public extern fun value(): T
@@ -38,7 +38,7 @@ public extern fun value(): T
 
 ## `derivative`
 
-The derivative.
+The derivative: the input direction for `forward`, or the accumulated gradient after `backward`.
 
 ```dream
 public extern fun derivative(): T

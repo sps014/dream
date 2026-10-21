@@ -1,6 +1,6 @@
 module system.uuid;
 
-// A 16-byte UUID value; assignment copies bits without allocation or reference counting.
+/// A 16-byte UUID value; assignment copies bits without allocation or reference counting.
 public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
     high: ulong;
     low: ulong;
@@ -10,7 +10,7 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
         this.low = low;
     }
 
-    // Generates a version-4 UUID from the secure random source, preserving entropy failures.
+    /// Generates a version-4 UUID from the secure random source, preserving entropy failures.
     public static fun v4(): Result<Uuid, UuidError> {
         let random = SecureRandom.bytes(16);
         if random.is_err() {
@@ -22,7 +22,7 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
         return Uuid.from_bytes(bytes);
     }
 
-    // Copies exactly 16 bytes in network order into a UUID value.
+    /// Copies exactly 16 bytes in network order into a UUID value.
     public static fun from_bytes(bytes: byte[]): Result<Uuid, UuidError> {
         if bytes.length != 16 {
             return Result.Err(UuidError("UUID requires exactly 16 bytes"));
@@ -36,7 +36,7 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
         return Result.Ok(Uuid(high, low));
     }
 
-    // Returns an independent 16-byte array in network order.
+    /// Returns an independent 16-byte array in network order.
     public fun to_bytes(): byte[] {
         let bytes = Buffer.alloc<byte>(16);
         for (let i = 0; i < 8; i = i + 1) {
@@ -46,17 +46,19 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
         return bytes;
     }
 
-    // Accepts exactly 36 ASCII hexadecimal characters with canonical hyphen positions.
-    public static fun parse(text: string): Result<Uuid, UuidError> {
+    /// Parses the canonical 36-character form, such as `123e4567-e89b-12d3-a456-426614174000`.
+    /// Hexadecimal digits may be upper- or lowercase. Fails with `ParseError` (code `EPARSE`)
+    /// for any other length, separator, or digit.
+    public static fun parse(text: string): Result<Uuid, ParseError> {
         if text.length != 36 {
-            return Result.Err(UuidError("expected a canonical UUID"));
+            return Result.Err(ParseError.invalid("expected a canonical UUID"));
         }
         let hex = "";
         for (let i = 0; i < text.length; i = i + 1) {
             let ch = text.char_at(i);
             if i == 8 || i == 13 || i == 18 || i == 23 {
                 if ch != '-' {
-                    return Result.Err(UuidError("invalid UUID separator"));
+                    return Result.Err(ParseError.invalid("invalid UUID separator"));
                 }
             } else {
                 if !(
@@ -64,25 +66,25 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
                         ch >= 'A' && ch <= 'F'
                     )
                 ) {
-                    return Result.Err(UuidError("invalid UUID hexadecimal digit"));
+                    return Result.Err(ParseError.invalid("invalid UUID hexadecimal digit"));
                 }
                 hex = hex + ch.to_string();
             }
         }
-        return Uuid.from_bytes(Encoding.hex_decode(hex).unwrap());
+        return Result.Ok(Uuid.from_bytes(Encoding.hex_decode(hex).unwrap()).unwrap());
     }
 
-    // Tests canonical UUID syntax without generating entropy.
+    /// Tests canonical UUID syntax without generating entropy.
     public static fun is_valid(text: string): bool {
         return Uuid.parse(text).is_ok();
     }
 
-    // Compares all 128 bits, independent of storage identity.
+    /// Compares all 128 bits, independent of storage identity.
     public fun equals(borrow other: Uuid): bool {
         return this.high == other.high && this.low == other.low;
     }
 
-    // Orders UUIDs lexicographically by their unsigned network-order bytes.
+    /// Orders UUIDs lexicographically by their unsigned network-order bytes.
     public fun compare(other: Uuid): int {
         if this.high < other.high {
             return 0 - 1;
@@ -99,12 +101,12 @@ public struct Uuid: Equatable<Uuid>, Comparable<Uuid> {
         return 0;
     }
 
-    // Folds all bits into a stable hash for maps and sets without formatting text.
+    /// Folds all bits into a stable hash for maps and sets without formatting text.
     public override fun hash_code(): int {
         return (int)(this.high ^ (this.high >> 32) ^ this.low ^ (this.low >> 32));
     }
 
-    // Returns canonical lowercase text; formatting is the only string allocation.
+    /// Returns canonical lowercase text; formatting is the only string allocation.
     public override fun to_string(): string {
         let hex = Encoding.hex_encode(this.to_bytes());
         return hex.substring(0, 8)

@@ -1,6 +1,7 @@
 append_unmatched: false
 nav:
   - index.md
+  - conventions.md
   - glob: "system-*.md"
     ignore: "system-[0-9]*.md"
   - package-system.md

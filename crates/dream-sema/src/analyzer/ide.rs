@@ -14,6 +14,7 @@
 use super::Analyzer;
 use crate::function_table::{FunctionIdentity, FunctionTableInfo};
 use crate::union_table::UnionFieldInfo;
+use dream_abi::names::THIS_NAME;
 use dream_syntax::nodes::{Type, Visibility};
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
@@ -551,7 +552,7 @@ impl<'a> Analyzer<'a> {
     fn render_fn_sig(&mut self, info: &FunctionTableInfo) -> FnSigOut {
         let scope = self.type_ctx.scope();
         self.type_ctx.set_scope(info.identity.0.module);
-        let is_method = info.param_names.first().is_some_and(|n| n == "this");
+        let is_method = info.param_names.first().is_some_and(|n| n == THIS_NAME);
         let mut params = Vec::with_capacity(info.parameters.len());
         for (i, p) in info
             .parameters

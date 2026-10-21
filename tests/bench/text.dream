@@ -5,7 +5,7 @@ import system.csv;
 
 let sink: int = 0;
 let measuring: bool = true;
-let counters_on: bool = System.env_or("DREAM_BENCH_COUNTERS", "") == "1";
+let counters_on: bool = System.env("DREAM_BENCH_COUNTERS").unwrap_or("") == "1";
 let last_allocations: long = 0;
 let last_retains: long = 0;
 let last_releases: long = 0;
@@ -128,7 +128,7 @@ fun json_skip_unknown(iters: int): int {
 fun json_numbers(iters: int): int {
     let total = 0;
     for (let i = 0; i < iters; i++) {
-        total = total + Json.serialize(JsonValue.number((double)(i & 1023) / 10.0d)).length;
+        total = total + Json.serialize(JsonValue.from_double((double)(i & 1023) / 10.0d)).length;
     }
     return total;
 }
@@ -204,7 +204,7 @@ fun main(): void {
     measuring = false;
     run_suite();
     measuring = true;
-    let passes = int.parse(System.env_or("DREAM_BENCH_PASSES", "5")).unwrap_or(5);
+    let passes = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("5")).unwrap_or(5);
     for (let p = 0; p < passes; p = p + 1) {
         run_suite();
     }

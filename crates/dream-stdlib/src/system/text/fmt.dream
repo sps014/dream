@@ -1,10 +1,10 @@
 module system.text;
 
-// `.NET`/Python-style positional string formatting: `{0}`, `{1}`, ... substitute `args[i]` (via
-// `to_string`), and `{i:.N}` additionally renders a `double`/`float` argument with exactly `N`
-// fixed decimal digits. `{{` / `}}` escape literal braces.
+/// `.NET`/Python-style positional string formatting: `{0}`, `{1}`, ... substitute `args[i]` (via
+/// `to_string`), and `{i:.N}` additionally renders a `double`/`float` argument with exactly `N`
+/// fixed decimal digits. `{{` / `}}` escape literal braces.
 public static class Fmt {
-    // Substitutes every `{i}`/`{i:spec}` placeholder in `pattern` with `args[i]`.
+    /// Substitutes every `{i}`/`{i:spec}` placeholder in `pattern` with `args[i]`.
     public static fun format(pattern: string, args: object[]): string {
         let sb = StringBuilder(pattern.length);
         let n = pattern.length;
@@ -59,7 +59,7 @@ public static class Fmt {
     static fun _render(inner: string, args: object[]): string {
         let colon = inner.index_of(':');
         let index_text = inner;
-        let spec = string.empty;
+        let spec = "";
         if colon.is_some() {
             let at = colon.unwrap_or(0);
             index_text = inner.substring(0, at);

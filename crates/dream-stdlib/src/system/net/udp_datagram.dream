@@ -1,17 +1,17 @@
 module system.net;
 
-// One UDP datagram; empty data is a valid message and never denotes EOF.
+/// One UDP datagram; empty data is a valid message and never denotes EOF.
 public class UdpDatagram {
-    // Received bytes, limited to the requested receive size.
+    /// Received bytes, limited to the requested receive size.
     public data: byte[];
 
-    // Numeric address of the sender.
+    /// Numeric address of the sender.
     public host: string;
 
-    // UDP port of the sender.
+    /// UDP port of the sender.
     public port: int;
 
-    // True when the message contained more bytes than the receive buffer could retain.
+    /// True when the message contained more bytes than the receive buffer could retain.
     public truncated: bool;
 
     internal constructor(data: byte[], host: string, port: int, truncated: bool) {

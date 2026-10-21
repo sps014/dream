@@ -1,8 +1,8 @@
 module system.task;
 
-// Structured local async scopes and bounded maps, with explicit low-level worker spawning.
+/// Structured local async scopes and bounded maps, with explicit low-level worker spawning.
 public class Task {
-    // Runs a structured async region and joins all children on success, failure, or cancellation.
+    /// Runs a structured async region and joins all children on success, failure, or cancellation.
     public static async fun scope<T, E>(
         body: fun(TaskScope<E>): Future<Result<T, TaskFailure<E>>>,
         timeout_ms: int = 0,
@@ -97,7 +97,7 @@ public class Task {
     @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
-    // Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
+    /// Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
     public static async fun spawn<TOut: shared>(
         body: fun(): TOut,
         token: Option<CancellationToken> = Option.None
@@ -106,37 +106,37 @@ public class Task {
         let session = Task.start<TOut>(body);
         let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
-        let result = Bytes.fromWire<TOut>(wire);
+        let result = Bytes.from_wire<TOut>(wire);
         session.hold();
         return result;
     }
 
     internal static fun start<TOut: shared>(body: fun(): TOut): TaskSession {
-        let wrapped: fun(string): string = (_raw: string) => Bytes.toWire<TOut>(body());
+        let wrapped: fun(string): string = (_raw: string) => Bytes.to_wire<TOut>(body());
         let id = Task.spawn_host(true);
         let session = TaskSession(id, wrapped);
         return session;
     }
 
-    // Runs an async function on a separate worker; local async scope children need no worker.
+    /// Runs an async function on a separate worker; local async scope children need no worker.
     public static async fun spawn_async<TOut: shared>(
         body: fun(): Future<TOut>,
         token: Option<CancellationToken> = Option.None
     ): TOut {
         CancellationToken.throw_if_opt(token);
         let wrapped: fun(string): Future<string> = async (_raw: string) => {
-            return Bytes.toWire<TOut>(body().await);
+            return Bytes.to_wire<TOut>(body().await);
         };
         let id = Task.spawn_host(true);
         let session = TaskSession(id, wrapped);
         let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
-        let result = Bytes.fromWire<TOut>(wire);
+        let result = Bytes.from_wire<TOut>(wire);
         session.hold();
         return result;
     }
 
-    // Maps with bounded local async concurrency and returns values in input order.
+    /// Maps with bounded local async concurrency and returns values in input order.
     public static async fun map<T, U, E>(
         items: T[],
         body: fun(T): Future<Result<U, E>>,
@@ -156,13 +156,13 @@ public class Task {
         ).await;
     }
 
-    // Applies an async operation with bounded concurrency; successful child values are discarded.
+    /// Applies an async operation with bounded concurrency; successful child values are discarded.
     public static async fun for_each<T, U, E>(
         items: T[],
         body: fun(T): Future<Result<U, E>>,
         concurrency: int,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, TaskFailure<E>> {
+    ): Result<Unit, TaskFailure<E>> {
         if concurrency <= 0 {
             let error: TaskFailure<E> = TaskFailure.InvalidOperation;
             return Result.Err(error);
@@ -176,6 +176,6 @@ public class Task {
         if results.is_err() {
             return Result.Err(results.unwrap_err());
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

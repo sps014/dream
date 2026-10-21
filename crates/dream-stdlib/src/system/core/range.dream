@@ -27,7 +27,7 @@ public struct Range {
     }
 
     /// True when the start and end are equal.
-    public get is_empty(): bool {
+    public fun is_empty(): bool {
         return this.start == this.end;
     }
 

@@ -97,8 +97,8 @@ internal class WebOperation {
         return Result.Err(
             IoError(
                 "",
-                error.get_or("code", JsonValue.none()).as_string().unwrap_or("EIO"),
-                error.get_or("message", JsonValue.none())
+                error.get("code").unwrap_or(JsonValue.null()).as_string().unwrap_or("EIO"),
+                error.get("message").unwrap_or(JsonValue.null())
                     .as_string()
                     .unwrap_or("HTTP server operation failed")
             )

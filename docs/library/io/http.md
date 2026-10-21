@@ -14,7 +14,7 @@ files. Native clients use reqwest on Tokio; Node and browsers use Fetch.
 import system;
 import system.net;
 
-async fun main(): Result<bool, HttpError> {
+async fun main(): Result<Unit, HttpError> {
     let parsed = Url.parse("https://example.com/");
     if parsed.is_err() {
         return Result.Err(HttpError("EINVAL", "invalid URL"));
@@ -41,7 +41,7 @@ transport responses; inspect `status` yourself.
 | `HttpClient()` | `HttpClient` | Creates a client; allocation failures surface from `send`. |
 | `send(request, token)` | `async Result<HttpResponse, HttpError>` | Sends with default `HttpOptions()`. |
 | `send(request, options, token)` | `async Result<HttpResponse, HttpError>` | Sends with explicit options; completes when headers arrive. |
-| `close()` | `Result<bool, HttpError>` | Cancels pending sends and releases pools; idempotent. |
+| `close()` | `Result<Unit, HttpError>` | Cancels pending sends and releases pools; idempotent. |
 
 `token` is an optional `Option<CancellationToken>` and defaults to `None`.
 
@@ -92,7 +92,7 @@ separate `Set-Cookie` values where its Fetch API exposes them.
 | `headers` | `HttpHeaders` | Response headers visible to the host. |
 | `body` | `HttpBody` | Streamed body; implements `AsyncReader`. |
 | `read_text(max_bytes, token)` | `async Result<string, HttpError>` | Reads the rest of the body as UTF-8; `max_bytes` defaults to 1048576. |
-| `close()` | `Result<bool, HttpError>` | Closes the body; idempotent. |
+| `close()` | `Result<Unit, HttpError>` | Closes the body; idempotent. |
 
 `HttpBody` has `read_async(max_bytes, token)`, returning
 `Result<byte[], IoError>`, and an idempotent `close()`.
@@ -194,7 +194,7 @@ This example runs without network access:
 import system;
 import system.net;
 
-async fun main(): Result<bool, HttpError> {
+async fun main(): Result<Unit, HttpError> {
     let client = HttpClient();
     let cancellation = CancellationSource();
     cancellation.cancel();

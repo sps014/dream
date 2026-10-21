@@ -12,10 +12,10 @@ async fun tcr_later(): int {
 // freeing it drops the token's last reference.
 @noinline
 async fun tcr_scope_with_parked_child(): void {
-    Task.scope<bool, string>(
+    Task.scope<Unit, string>(
         async (scope: TaskScope<string>) => {
             tcr_parked = Option.Some(tcr_later());
-            let result: Result<bool, TaskFailure<string>> = Result.Ok(true);
+            let result: Result<Unit, TaskFailure<string>> = Result.Ok(Unit());
             return result;
         }
     ).await;

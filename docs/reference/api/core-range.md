@@ -12,7 +12,7 @@ An exclusive integer range that counts toward its end, ascending or descending.
 public struct Range
 ```
 
-## `start: int`
+## `start`
 
 The first value, included unless the range is empty.
 
@@ -20,7 +20,7 @@ The first value, included unless the range is empty.
 public start: int
 ```
 
-## `end: int`
+## `end`
 
 The stopping value, always excluded.
 
@@ -49,7 +49,7 @@ public get length(): int
 True when the start and end are equal.
 
 ```dream
-public get is_empty(): bool
+public fun is_empty(): bool
 ```
 
 ## `contains`

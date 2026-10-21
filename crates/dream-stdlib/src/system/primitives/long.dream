@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `long` primitive.
 extend long: Comparable<long> {
-    // Orders this value against `other`.
+    /// Orders this value against `other`.
     public fun compare(other: long): int {
         if this < other {
             return 0 - 1;
@@ -13,7 +13,7 @@ extend long: Comparable<long> {
         return 0;
     }
 
-    // Absolute value of this long.
+    /// Absolute value of this long.
     public fun abs(): long {
         if this < 0L {
             return 0L - this;
@@ -21,7 +21,7 @@ extend long: Comparable<long> {
         return this;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: long): long {
         if this < other {
             return this;
@@ -29,7 +29,7 @@ extend long: Comparable<long> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: long): long {
         if this > other {
             return this;
@@ -37,7 +37,7 @@ extend long: Comparable<long> {
         return other;
     }
 
-    // This value constrained to the inclusive range [lo, hi].
+    /// This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: long, hi: long): long {
         if this < lo {
             return lo;
@@ -48,7 +48,7 @@ extend long: Comparable<long> {
         return this;
     }
 
-    // The sign of this value: -1, 0, or 1.
+    /// The sign of this value: -1, 0, or 1.
     public fun signum(): long {
         if this > 0L {
             return 1L;
@@ -59,7 +59,7 @@ extend long: Comparable<long> {
         return 0L;
     }
 
-    // Parses a decimal integer from `text`.
+    /// Parses a decimal integer from `text`.
     public static fun parse(borrow text: string): Result<long, ParseError> {
         let n = text.length;
         if n == 0 {

@@ -68,12 +68,12 @@ Lazily removes duplicates while preserving first-seen order.
 public fun distinct(): Seq<T>
 ```
 
-## `order_by`
+## `sort_by`
 
 Immediately collects and sorts the sequence with `cmp`.
 
 ```dream
-public fun order_by(borrow cmp: fun(T, T): int): Seq<T>
+public fun sort_by(borrow cmp: fun(T, T): int): Seq<T>
 ```
 
 ## `flat_map`

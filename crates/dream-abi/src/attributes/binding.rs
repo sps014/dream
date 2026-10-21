@@ -141,11 +141,7 @@ pub fn extern_binding_conflict(attributes: &[AttributeNode]) -> bool {
     let n = u8::from(has_c_attr(attributes))
         + u8::from(js_import_target(attributes).is_some())
         + u8::from(has_runtime_attr(attributes))
-        + u8::from(
-            attributes
-                .iter()
-                .any(|a| is_compiler_attribute(a, "intrinsic")),
-        );
+        + u8::from(crate::intrinsics::has_intrinsic_attr(attributes));
     n > 1
 }
 

@@ -5,6 +5,8 @@ use heck::ToSnakeCase;
 
 #[test]
 fn embedded_sources_declare_one_type_named_after_the_file() {
+    let mut stems = std::collections::BTreeSet::new();
+    let mut violations = Vec::new();
     for package in crate::STD_PACKAGES {
         for &(path, source) in package.files {
             let arena = Bump::new();
@@ -18,6 +20,15 @@ fn embedded_sources_declare_one_type_named_after_the_file() {
                 diagnostics.diagnostics
             );
             let root = tree.get_root();
+            let stem = std::path::Path::new(path)
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            if !stems.insert(stem.clone()) {
+                violations.push(format!("{path}: file name `{stem}` is not unique"));
+            }
             let names: Vec<_> = root
                 .structs
                 .iter()
@@ -30,18 +41,36 @@ fn embedded_sources_declare_one_type_named_after_the_file() {
                 for extension in &root.extends {
                     assert_eq!(&extension.target.text, *name, "{path} extends another type");
                 }
-                assert_eq!(
-                    std::path::Path::new(path)
-                        .file_stem()
-                        .unwrap()
-                        .to_str()
-                        .unwrap(),
-                    name.to_snake_case(),
-                    "{path}: {name}"
-                );
+                assert_eq!(stem, name.to_snake_case(), "{path}: {name}");
+            } else {
+                // A type-less file extends at most one type and is named after it, optionally
+                // qualified (`io/system_io.dream`, `host_system.dream`). Files with neither types
+                // nor extensions hold free functions only.
+                let mut targets: Vec<_> = root.extends.iter().map(|e| &e.target.text).collect();
+                targets.dedup();
+                if targets.len() > 1 {
+                    violations.push(format!("{path} extends {targets:?}"));
+                }
+                if let Some(target) = targets.first() {
+                    let base = match target.strip_suffix("[]") {
+                        Some(element) if element.len() == 1 => "array".to_string(),
+                        Some(element) => format!("{}_array", element.to_snake_case()),
+                        None => target.to_snake_case(),
+                    };
+                    if stem != base
+                        && !stem.starts_with(&format!("{base}_"))
+                        && !stem.ends_with(&format!("_{base}"))
+                    {
+                        violations.push(format!(
+                            "{path}: extension of {target} must be named `{base}`, \
+                             `{base}_<qualifier>`, or `<qualifier>_{base}`"
+                        ));
+                    }
+                }
             }
         }
     }
+    assert!(violations.is_empty(), "{}", violations.join("\n"));
     for package in crate::BOOTSTRAP_PACKAGES {
         assert!(crate::STD_PACKAGES.iter().any(|p| p.name == *package));
     }

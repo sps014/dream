@@ -1,7 +1,7 @@
 module system.core;
 
 /// Signals coordinating a yielding producer and its consumer.
-public static class YieldSignals {
+internal static class YieldSignals {
     /// Creates a signal that stays pending until explicitly completed.
     @intrinsic(Intrinsic.DreamYieldSignal)
     public static extern fun pending(): Future<void>;

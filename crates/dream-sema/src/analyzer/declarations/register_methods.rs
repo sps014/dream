@@ -6,6 +6,7 @@
 use super::*;
 use crate::function_table::FunctionTableInfo;
 use crate::module_graph::ProgramView;
+use dream_abi::names::THIS_NAME;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::types::PRIMITIVE_TYPE_NAMES;
@@ -132,7 +133,7 @@ impl<'a> Analyzer<'a> {
                 new_method.parameters.insert(
                     0,
                     dream_syntax::nodes::ParameterNode::new(
-                        synthetic_token(TokenKind::IdentifierToken, "this"),
+                        synthetic_token(TokenKind::IdentifierToken, THIS_NAME),
                         self.type_ctx.syntax_type(target_type),
                     ),
                 );

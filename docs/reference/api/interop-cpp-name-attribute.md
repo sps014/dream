@@ -14,7 +14,7 @@ public struct CppNameAttribute
 
 ## `name`
 
-Name identifying this entry.
+C++ member name or expression the extern calls.
 
 ```dream
 public name: string

@@ -49,7 +49,7 @@ For CPU parallelism, `scope.spawn_parallel(body)` uses the shared runtime worker
 |----------|---------|------|
 | `Task.scope(body, timeout_ms, token)` | `Result<T, TaskFailure<E>>` | `body` with a new `TaskScope`, then joins every child; `timeout_ms` of `0` means no deadline |
 | `Task.map(items, body, concurrency, token)` | `Result<U[], TaskFailure<E>>` | An async `body` per item, at most `concurrency` at once, with results in input order |
-| `Task.for_each(items, body, concurrency, token)` | `Result<bool, TaskFailure<E>>` | Like `map`, but discards the successful values |
+| `Task.for_each(items, body, concurrency, token)` | `Result<Unit, TaskFailure<E>>` | Like `map`, but discards the successful values |
 | `Task.spawn(body, token)` | `T` | A synchronous `body` on its own worker, as a lazy future |
 | `Task.spawn_async(body, token)` | `T` | An async `body` on its own worker, as a lazy future |
 

@@ -1,6 +1,6 @@
 module system.text;
 
-// Unicode normalization forms for `Unicode.normalize`.
+/// Unicode normalization forms for `Unicode.normalize`.
 public enum UnicodeNormForm {
     /// Canonical composition normalization.
     Nfc,

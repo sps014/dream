@@ -1,6 +1,6 @@
 module system.simd;
 
-// Portable 16-byte SIMD vector (`v128`). `T` must be `byte`, `int`, `long`, `float`, or `double`.
+/// Portable 16-byte SIMD vector (`v128`). `T` must be `byte`, `int`, `long`, `float`, or `double`.
 public struct Vector<T: unmanaged> {
     // Raw 16-byte payload (four i32 words). An implementation detail of the WASM `v128` layout.
     w0: int;
@@ -13,7 +13,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdLaneCount)
     public static extern fun lane_count(): int;
 
-    // Splats `value` into every lane.
+    /// Splats `value` into every lane.
     public constructor(value: T) {
         let s = Vector<T>.splat_raw(value);
         this.w0 = s.w0;
@@ -26,7 +26,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Splat)
     internal static extern fun splat_raw(value: T): Vector<T>;
 
-    // Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.
+    /// Loads `Vector<T>.count` consecutive elements from `src` starting at `offset`.
     @inline
     public static fun load(borrow src: T[], offset: int): Vector<T> {
         return Vector<T>.load_raw(src, offset);
@@ -36,7 +36,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Load)
     internal static extern fun load_raw(borrow src: T[], offset: int): Vector<T>;
 
-    // Writes this vector's lanes into `dest` starting at `offset`.
+    /// Writes this vector's lanes into `dest` starting at `offset`.
     @inline
     public fun store(borrow dest: T[], offset: int): void {
         Vector<T>.store_raw(this, dest, offset);
@@ -47,7 +47,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Store)
     internal static extern fun store_raw(v: Vector<T>, borrow dest: T[], offset: int): void;
 
-    // Returns lane `i` (`0 .. count`).
+    /// Returns lane `i` (`0 .. count`).
     public fun lane(i: int): T {
         let n = Vector<T>.lane_count();
         let tmp = Buffer.alloc<T>(n);
@@ -55,7 +55,7 @@ public struct Vector<T: unmanaged> {
         return tmp[i];
     }
 
-    // Returns a copy with lane `i` replaced by `value`.
+    /// Returns a copy with lane `i` replaced by `value`.
     public fun with_lane(i: int, value: T): Vector<T> {
         let n = Vector<T>.lane_count();
         let tmp = Buffer.alloc<T>(n);
@@ -92,7 +92,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Mul)
     internal static extern fun bin_mul(a: Vector<T>, b: Vector<T>): Vector<T>;
 
-    // Lane-wise minimum of `a` and `b`.
+    /// Lane-wise minimum of `a` and `b`.
     public static fun min(a: Vector<T>, b: Vector<T>): Vector<T> {
         return Vector<T>.bin_min(a, b);
     }
@@ -101,7 +101,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Min)
     internal static extern fun bin_min(a: Vector<T>, b: Vector<T>): Vector<T>;
 
-    // Lane-wise maximum of `a` and `b`.
+    /// Lane-wise maximum of `a` and `b`.
     public static fun max(a: Vector<T>, b: Vector<T>): Vector<T> {
         return Vector<T>.bin_max(a, b);
     }
@@ -110,7 +110,7 @@ public struct Vector<T: unmanaged> {
     @intrinsic(Intrinsic.SimdV128Max)
     internal static extern fun bin_max(a: Vector<T>, b: Vector<T>): Vector<T>;
 
-    // Horizontal sum of every lane.
+    /// Horizontal sum of every lane.
     public fun sum(): T {
         return Vector<T>.reduce_sum(this);
     }

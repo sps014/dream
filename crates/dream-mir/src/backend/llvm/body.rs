@@ -9,6 +9,7 @@ use crate::backend::shared::abi_types::native_scalar_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::place_policy::has_frame_buffer;
 use crate::{Local, MirFunction, Operand, Place, Statement, Terminator};
+use dream_abi::names::THIS_NAME;
 use dream_types::{PrimTy, TyKind};
 
 // A discarded await must clear its non-owning child link before local tokens are released.
@@ -76,7 +77,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             };
             self.store_ty(&slot.ty.clone(), &slot.ptr.clone(), &arg, 8);
             self.slots[p.0 as usize] = Some(slot);
-            if !self.is_value(ty) || decl.is_ref || decl.name.as_deref() == Some("this") {
+            if !self.is_value(ty) || decl.is_ref || decl.name.as_deref() == Some(THIS_NAME) {
                 continue;
             }
             let size = native_scalar_size(&self.l.cx, ty).0.max(1);

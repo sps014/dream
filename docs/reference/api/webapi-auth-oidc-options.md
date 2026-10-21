@@ -14,7 +14,7 @@ public class OidcOptions
 
 ## `name`
 
-Name identifying this entry.
+Provider name used in login routes and to label linked identities.
 
 ```dream
 public name: string

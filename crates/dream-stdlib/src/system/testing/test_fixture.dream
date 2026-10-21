@@ -1,30 +1,30 @@
 module system.testing;
 
-// Owns one fixture and runs its cleanup on explicit close, scope exit, or async-frame cancellation.
+/// Owns one fixture and runs its cleanup on explicit close, scope exit, or async-frame cancellation.
 @allow_cycle
 public class TestFixture<T, E> {
     value: T;
-    cleanup: fun(T): Result<bool, E>;
-    outcome: Option<Result<bool, E>>;
+    cleanup: fun(T): Result<Unit, E>;
+    outcome: Option<Result<Unit, E>>;
 
-    // Registers deterministic cleanup before the fixture is exposed to test code.
-    public constructor(value: T, cleanup: fun(T): Result<bool, E>) {
+    /// Registers deterministic cleanup before the fixture is exposed to test code.
+    public constructor(value: T, cleanup: fun(T): Result<Unit, E>) {
         this.value = value;
         this.cleanup = cleanup;
         this.outcome = Option.None;
     }
 
-    // Borrows the fixture value while this owner remains alive.
+    /// Borrows the fixture value while this owner remains alive.
     public get resource(): T {
         return this.value;
     }
 
-    // Executes cleanup once and returns the same outcome to repeated callers.
-    public fun close(): Result<bool, E> {
+    /// Executes cleanup once and returns the same outcome to repeated callers.
+    public fun close(): Result<Unit, E> {
         if this.outcome.is_some() {
             return this.outcome.unwrap();
         }
-        let pending: Result<bool, E> = Result.Ok(false);
+        let pending: Result<Unit, E> = Result.Ok(Unit());
         this.outcome = Option.Some(pending);
         let cleanup = this.cleanup;
         this.outcome = Option.Some(cleanup(this.value));

@@ -1,6 +1,6 @@
 module system.task;
 
-// Endpoint factories for a queue that can transfer shared values across workers.
+/// Endpoint factories for a queue that can transfer shared values across workers.
 public class SharedChannelEndpoints<T: shared> {
     state: SharedChannelState;
 
@@ -8,12 +8,12 @@ public class SharedChannelEndpoints<T: shared> {
         this.state = SharedChannelState(capacity);
     }
 
-    // Creates an independently closable shared producer endpoint.
+    /// Creates an independently closable shared producer endpoint.
     public get sender(): SharedSender<T> {
         return SharedSender<T>(this.state);
     }
 
-    // Creates an independently closable shared consumer endpoint.
+    /// Creates an independently closable shared consumer endpoint.
     public get receiver(): SharedReceiver<T> {
         return SharedReceiver<T>(this.state);
     }

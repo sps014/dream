@@ -62,50 +62,11 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
 
 /// The scalar primitive type names that own runtime metadata (boxing, array helpers, tags).
 /// `string` is included here because it is a first-class value type even though it is a heap
-/// reference; it is excluded from [`is_boxable_primitive`]. Single source of truth for the
-/// repeated `"int" | "float" | ...` lists that were previously copied across codegen modules.
+/// reference.
 pub const PRIMITIVE_TYPE_NAMES: [&str; 13] = [
     "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte", "isize",
     "usize", "float16",
 ];
-
-/// True for the scalar primitives that are boxed into a small tagged heap block when widened to
-/// `object` (everything except `string`, which is already a heap reference).
-pub fn is_boxable_primitive(name: &str) -> bool {
-    matches!(
-        name,
-        "int"
-            | "float"
-            | "float16"
-            | "double"
-            | "bool"
-            | "char"
-            | "long"
-            | "uint"
-            | "ulong"
-            | "byte"
-            | "isize"
-            | "usize"
-    )
-}
-
-/// True for the numeric primitives that participate in implicit widening. The single predicate
-/// behind overload viability and assignment/cast compatibility.
-pub fn is_numeric_primitive(name: &str) -> bool {
-    matches!(
-        name,
-        "int"
-            | "float"
-            | "float16"
-            | "double"
-            | "long"
-            | "uint"
-            | "ulong"
-            | "byte"
-            | "isize"
-            | "usize"
-    )
-}
 
 /// Returns the given type name with a single trailing array (`[]`) suffix removed.
 pub fn strip_array(type_name: &str) -> &str {

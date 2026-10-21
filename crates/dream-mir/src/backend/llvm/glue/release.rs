@@ -13,6 +13,7 @@ use crate::backend::shared::glue::{
     FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems,
     inline_release_sym, release_sym, self_tail_field, struct_field_drops,
 };
+use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_hir::TypeLayout;
 use dream_types::TypeId;
 use std::collections::BTreeSet;
@@ -173,8 +174,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                     (2, 0, 0)
                 } else {
                     let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
-                    let none = u.variant("None").expect("Option None").discriminant;
-                    let payload = u.variant("Some").expect("Option Some").fields[0].offset;
+                    let none = u.variant(OPTION_NONE).expect("Option None").discriminant;
+                    let payload = u.variant(OPTION_SOME).expect("Option Some").fields[0].offset;
                     (0, none, payload)
                 };
                 self.call(

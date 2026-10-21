@@ -2,8 +2,8 @@ module system.window;
 
 /// The settings a new window is created with.
 ///
-/// Start from `WindowDesc.of` and chain the settings you want to change:
-/// `WindowDesc.of("Game", 1280, 720).resizable(false).fullscreen(true)`.
+/// Construct one with a title and content size, then chain the settings you want to change:
+/// `WindowDesc("Game", 1280, 720).resizable(false).fullscreen(true)`.
 public class WindowDesc {
     desc_title: string;
     desc_width: int;
@@ -12,19 +12,15 @@ public class WindowDesc {
     desc_fullscreen: bool;
     desc_vsync: bool;
 
-    constructor(title: string, width: int, height: int) {
+    /// Describes a resizable, windowed window with `title` and a content area of
+    /// `width` by `height` logical pixels. `Window.open` rejects non-positive sizes.
+    public constructor(title: string, width: int, height: int) {
         this.desc_title = title;
         this.desc_width = width;
         this.desc_height = height;
         this.desc_resizable = true;
         this.desc_fullscreen = false;
         this.desc_vsync = true;
-    }
-
-    /// Describes a resizable, windowed window with `title` and a content area of
-    /// `width` by `height` logical pixels. `Window.open` rejects non-positive sizes.
-    public static fun of(title: string, width: int, height: int): WindowDesc {
-        return WindowDesc(title, width, height);
     }
 
     /// Title shown in the title bar, or as the page title in a browser.

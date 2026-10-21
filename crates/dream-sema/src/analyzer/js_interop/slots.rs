@@ -19,7 +19,9 @@ impl<'a> Analyzer<'a> {
         let kind = self.type_ctx.interner.kind(stripped).clone();
         match kind {
             TyKind::Js | TyKind::Enum(_) => Some(e),
-            TyKind::Prim(PrimTy::Float | PrimTy::Float16) => Some(self.cast_prim(e, PrimTy::Double)),
+            TyKind::Prim(PrimTy::Float | PrimTy::Float16) => {
+                Some(self.cast_prim(e, PrimTy::Double))
+            }
             TyKind::Prim(_) => Some(e),
             // A callback slot carries its arity in the slot `aux` word (see `js_abi::slot_desc`), so
             // the host wraps the funcref as `fun(js, …): void` with the right number of `js`

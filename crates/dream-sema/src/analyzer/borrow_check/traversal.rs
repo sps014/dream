@@ -1,4 +1,5 @@
 use super::*;
+use dream_abi::names::THIS_NAME;
 
 impl<'s> Extractor<'s> {
     pub(super) fn walk_block(&mut self, stmts: &[StatementNode], class_fields: &[String]) {
@@ -98,7 +99,7 @@ impl<'s> Extractor<'s> {
                     && let Some(span) = Some(name_tok.position)
                 {
                     self.events.push(Ev::UniqueCandidate {
-                        recv: "this".to_string(),
+                        recv: THIS_NAME.to_string(),
                         name: format!("set {}", name_tok.text),
                         span,
                     });
@@ -115,7 +116,7 @@ impl<'s> Extractor<'s> {
                         });
                         if key.starts_with("this.") {
                             self.events.push(Ev::UniqueCandidate {
-                                recv: "this".to_string(),
+                                recv: THIS_NAME.to_string(),
                                 name: format!("set {}", name.text),
                                 span,
                             });
@@ -136,7 +137,7 @@ impl<'s> Extractor<'s> {
                         });
                         if key.starts_with("this.") {
                             self.events.push(Ev::UniqueCandidate {
-                                recv: "this".to_string(),
+                                recv: THIS_NAME.to_string(),
                                 name: "set_index".to_string(),
                                 span,
                             });

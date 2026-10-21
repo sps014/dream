@@ -1,17 +1,17 @@
 module system.io;
 
-// Awaitable byte output with explicit flushing and cooperative cancellation.
+/// Awaitable byte output with explicit flushing and cooperative cancellation.
 public interface AsyncWriter {
-    // Returns the number of bytes accepted, which may be less than the input length.
-    // Cancellation or failure does not roll back completed writes.
+    /// Returns the number of bytes accepted, which may be less than the input length.
+    /// Cancellation or failure does not roll back completed writes.
     async unique fun write_async(
         data: byte[],
         token: Option<CancellationToken> = Option.None
     ): Result<int, IoError>;
 
-    // Flushes pending output with cancellation; does not close the destination
-    // or guarantee durable storage.
+    /// Flushes pending output with cancellation; does not close the destination
+    /// or guarantee durable storage.
     async unique fun flush_async(
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError>;
+    ): Result<Unit, IoError>;
 }

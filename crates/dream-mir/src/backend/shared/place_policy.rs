@@ -4,6 +4,7 @@
 
 use crate::rc_store::{boxes_into_object, rvalue_owns_result};
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement};
+use dream_abi::names::THIS_NAME;
 use dream_types::TypeInterner;
 
 fn eq_operand(a: &Operand, b: &Operand) -> bool {
@@ -238,7 +239,7 @@ pub(crate) fn teardown_value_locals(
         {
             continue;
         }
-        if f.params.contains(&local) && (!decl.is_take || decl.name.as_deref() == Some("this")) {
+        if f.params.contains(&local) && (!decl.is_take || decl.name.as_deref() == Some(THIS_NAME)) {
             continue;
         }
         out.push(local);

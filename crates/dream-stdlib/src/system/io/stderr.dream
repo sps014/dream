@@ -21,10 +21,10 @@ public class Stderr: Writer {
     }
 
     /// Delivers buffered output; returns an I/O error when flushing fails.
-    public unique fun flush(): Result<bool, IoError> {
+    public unique fun flush(): Result<Unit, IoError> {
         if Stderr.host_flush(2) < 0 {
             return Result.Err(IoError.other("stderr", "flush failed"));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

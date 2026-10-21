@@ -12,7 +12,7 @@ public class GenDecl
 
 ## `id`
 
-Stable identifier of this entry.
+Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
 
 ```dream
 public id: string
@@ -20,7 +20,7 @@ public id: string
 
 ## `name`
 
-Name identifying this entry.
+Unqualified declaration name (`User`).
 
 ```dream
 public name: string
@@ -28,7 +28,7 @@ public name: string
 
 ## `kind`
 
-Category of this entry.
+Whether this declares a class, struct, union, enum, or interface.
 
 ```dream
 public kind: DeclKind
@@ -52,7 +52,7 @@ public visibility: string
 
 ## `location`
 
-Source location associated with this entry.
+Where the declaration is written in source.
 
 ```dream
 public location: GenLocation
@@ -108,7 +108,7 @@ public variants: List<GenVariant>
 
 ## `constructor`
 
-Creates the snapshot model from the supplied values.
+Creates a `GenDecl` from its parts. Generators normally receive these from `GenContext` rather than constructing them.
 
 ```dream
 public constructor(
@@ -129,7 +129,7 @@ public constructor(
 
 ## `attribute`
 
-Returns the requested model information.
+The first `@A` attached to this declaration, decoded into `A`, or `None` when absent.
 
 ```dream
 public fun attribute<A>(): Option<A>
@@ -137,7 +137,7 @@ public fun attribute<A>(): Option<A>
 
 ## `has`
 
-Tests whether the requested attribute is attached to this model node.
+Whether this declaration carries at least one `@A` attribute.
 
 ```dream
 public fun has<A>(): bool

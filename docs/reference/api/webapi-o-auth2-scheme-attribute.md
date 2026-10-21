@@ -14,7 +14,7 @@ public struct OAuth2SchemeAttribute
 
 ## `id`
 
-Stable identifier of this entry.
+Security scheme name published in the OpenAPI document.
 
 ```dream
 public id: string

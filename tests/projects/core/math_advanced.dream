@@ -16,7 +16,7 @@ fun math_advanced(): void {
     let r = Math.round(3.5d);
     Assert.eq((r).to_string(), "4");
 
-    let a = Math.abs(-42.5d);
+    let a = (-42.5d).abs();
     Assert.eq((a).to_string(), "42.5");
 
     let s = Math.sqrt(16.0d);

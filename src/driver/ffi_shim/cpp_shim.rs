@@ -202,6 +202,7 @@ fn member(out: &mut String, file: &str, class: Option<&Class>, m: &Member, known
         Ret::Void => (None, false),
         Ret::Value(b) => (Some(b), false),
         Ret::Result(b) => (Some(b), true),
+        Ret::Fallible => (Some(&super::types::FALLIBLE_BRIDGE), true),
     };
     if matches!(value, Some(Bridge::Class { .. })) {
         params.push("int32_t* __cpp_owned".into());

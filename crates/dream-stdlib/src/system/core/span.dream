@@ -21,8 +21,8 @@ public ref struct Span<T> {
 
     internal _length: int;
 
-    // A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`;
-    // every later access relies on it.
+    /// A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`;
+    /// every later access relies on it.
     public constructor(borrow array: T[], offset: int, length: int) {
         if (offset < 0) || (length < 0) || (length > array.length - offset) {
             System.panic("Span range out of bounds");
@@ -32,29 +32,29 @@ public ref struct Span<T> {
         this._length = length;
     }
 
-    // A span over the whole of `array`.
+    /// A span over the whole of `array`.
     public static fun of(borrow array: T[]): Span<T> {
         return Span<T>(array, 0, array.length);
     }
 
-    // Number of elements this span covers.
+    /// Number of elements this span covers.
     public get length(): int {
         return this._length;
     }
 
-    // True when this span covers no elements.
+    /// True when this span covers no elements.
     @inline
     public fun is_empty(): bool {
         return this._length == 0;
     }
 
-    // The same elements, viewed read-only.
+    /// The same elements, viewed read-only.
     @inline
     public fun as_read_only(): ReadOnlySpan<T> {
         return ReadOnlySpan<T>(this.array, this.offset, this._length);
     }
 
-    // The element at `index` (relative to this span, not the backing array). Traps if out of range.
+    /// The element at `index` (relative to this span, not the backing array). Traps if out of range.
     public fun this[index: int]: T {
         if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
@@ -69,7 +69,7 @@ public ref struct Span<T> {
         return Buffer.get_unchecked<T>(this.array, this.offset + index);
     }
 
-    // Overwrites the element at `index` (relative to this span). Traps if out of range.
+    /// Overwrites the element at `index` (relative to this span). Traps if out of range.
     public fun this[index: int] = value: T {
         if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
@@ -77,31 +77,32 @@ public ref struct Span<T> {
         this.array[this.offset + index] = value;
     }
 
-    // A sub-span covering `[start, start + count)` of this span's own range. Traps if the requested
-    // range doesn't fit within this span.
-    public fun slice(start: int, count: int): Span<T> {
-        if (start < 0) || (count < 0) || (count > this._length - start) {
+    /// Returns a view of elements from `start` (inclusive) to `end` (exclusive) that shares
+    /// this span's storage. Panics unless `0 <= start <= end <= length`.
+    public fun slice(start: int, end: int): Span<T> {
+        if (start < 0) || (end < start) || (end > this._length) {
             System.panic("Span slice out of range");
         }
-        return Span<T>(this.array, this.offset + start, count);
+        return Span<T>(this.array, this.offset + start, end - start);
     }
 
-    // The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+    /// Returns a view from `start` to the end of this span. Panics unless
+    /// `0 <= start <= length`.
     public fun slice(start: int): Span<T> {
-        return this.slice(start, this._length - start);
+        return this.slice(start, this._length);
     }
 
-    // Index of the first element equal to `value`, or `None`.
+    /// Index of the first element equal to `value`, or `None`.
     public fun index_of(borrow value: T): Option<int> {
         return this.as_read_only().index_of(value);
     }
 
-    // True when some element equals `value`.
+    /// True when some element equals `value`.
     public fun contains(borrow value: T): bool {
         return this.as_read_only().index_of(value).is_some();
     }
 
-    // True when `other` has the same length and pairwise-equal elements.
+    /// True when `other` has the same length and pairwise-equal elements.
     public fun sequence_equal(other: ReadOnlySpan<T>): bool {
         return this.as_read_only().sequence_equal(other);
     }
@@ -162,7 +163,7 @@ public ref struct Span<T> {
         Buffer.elems_copy<T>(dst.array, dst.offset, this.array, this.offset, this._length);
     }
 
-    // Fills every element of this span with `value`.
+    /// Fills every element of this span with `value`.
     public fun fill(value: T): void {
         let i = 0;
         while i < this._length {
@@ -171,7 +172,7 @@ public ref struct Span<T> {
         }
     }
 
-    // Copies every element of this span into a fresh, independently-owned array.
+    /// Copies every element of this span into a fresh, independently-owned array.
     public fun to_array(): T[] {
         return this.as_read_only().to_array();
     }

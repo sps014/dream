@@ -46,8 +46,24 @@ Cancelled
 
 ## `InvalidCapacity`
 
-A bounded channel requires a positive capacity.
+A bounded channel was created with a capacity of zero or less.
 
 ```dream
 InvalidCapacity
+```
+
+## `code`
+
+Returns `EFULL`, `EEMPTY`, `ECLOSED`, `ECANCELED`, or `EINVAL` for the variant.
+
+```dream
+public fun code(): string
+```
+
+## `message`
+
+Returns a readable description of the failure.
+
+```dream
+public fun message(): string
 ```

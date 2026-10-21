@@ -99,7 +99,7 @@ Retries partial writes until every byte has been accepted; does not roll back fa
 public async fun write_all_async(
     bytes: byte[],
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `flush_async`
@@ -109,7 +109,7 @@ TCP writes are unbuffered by this wrapper; validates openness and cancellation.
 ```dream
 public async unique fun flush_async(
     token: Option<CancellationToken> = Option.None
-): Result<bool, IoError>
+): Result<Unit, IoError>
 ```
 
 ## `shutdown_write`
@@ -117,7 +117,7 @@ public async unique fun flush_async(
 Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.
 
 ```dream
-public fun shutdown_write(): Result<bool, IoError>
+public fun shutdown_write(): Result<Unit, IoError>
 ```
 
 ## `set_nodelay`
@@ -125,7 +125,7 @@ public fun shutdown_write(): Result<bool, IoError>
 Enables or disables TCP_NODELAY; pending native reads may return EBUSY.
 
 ```dream
-public fun set_nodelay(enabled: bool): Result<bool, IoError>
+public fun set_nodelay(enabled: bool): Result<Unit, IoError>
 ```
 
 ## `close`
@@ -133,5 +133,5 @@ public fun set_nodelay(enabled: bool): Result<bool, IoError>
 Closes the owned socket and wakes pending operations; repeated closure succeeds.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

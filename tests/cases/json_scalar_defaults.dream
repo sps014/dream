@@ -46,11 +46,11 @@ fun check_defaults(value: ScalarDefaults): void {
 }
 
 fun main(): void {
-    check_defaults(ScalarDefaults.from_json(JsonValue.none()));
+    check_defaults(ScalarDefaults.from_json(JsonValue.null()));
     check_defaults(ScalarDefaults.from_json(JsonValue.dict()));
     let wrong = Json.deserialize<JsonValue>(
         "{\"text\":1,\"number\":true,\"enabled\":\"x\",\"precise\":{}}"
-    ).unwrap_or(JsonValue.none());
+    ).unwrap_or(JsonValue.null());
     check_defaults(ScalarDefaults.from_json(wrong));
     System.println(Json.deserialize<ScalarDefaults>("{").is_err());
     System.println(Json.deserialize<NumberArray>("{\"values\":[").is_err());

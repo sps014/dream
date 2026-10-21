@@ -82,6 +82,11 @@ impl PrimTy {
         )
     }
 
+    /// True for the IEEE 754 primitives (`float16`, `float`, `double`).
+    pub fn is_float(self) -> bool {
+        matches!(self, PrimTy::Float16 | PrimTy::Float | PrimTy::Double)
+    }
+
     /// True for the unsigned integer primitives, which select unsigned WASM ops.
     pub fn is_unsigned_integer(self) -> bool {
         matches!(

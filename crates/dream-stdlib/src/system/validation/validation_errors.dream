@@ -1,7 +1,7 @@
 module system.validation;
 
 /// Deterministically ordered input errors without echoing sensitive submitted values.
-public class ValidationErrors {
+public class ValidationErrors: Error {
     /// Validation failures, in discovery order.
     public issues: List<ValidationIssue>;
 
@@ -18,6 +18,24 @@ public class ValidationErrors {
     /// Returns whether there are no elements.
     public fun is_empty(): bool {
         return this.issues.is_empty();
+    }
+
+    /// Returns `EVALIDATION`, the code shared by every input validation failure.
+    public fun code(): string {
+        return "EVALIDATION";
+    }
+
+    /// Returns each issue as `location: message`, joined with `; `, with location parts joined
+    /// by `.`. An empty collection returns `validation failed`.
+    public fun message(): string {
+        if this.issues.is_empty() {
+            return "validation failed";
+        }
+        let parts = List<string>();
+        for (let issue in this.issues) {
+            parts.push(issue.location.join(".") + ": " + issue.message);
+        }
+        return parts.join("; ");
     }
 
     /// Returns validation issues as JSON, including their location, code, and message.

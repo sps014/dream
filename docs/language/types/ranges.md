@@ -23,7 +23,7 @@ fun main(): void {
     System.println(bounds.length); // 3
     System.println(bounds.contains(4)); // true
     System.println(bounds.contains(5)); // false
-    System.println(bounds.is_empty); // false
+    System.println(bounds.is_empty()); // false
 }
 ```
 

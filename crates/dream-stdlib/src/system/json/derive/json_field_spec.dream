@@ -60,33 +60,6 @@ internal class JsonFieldSpec {
         this.seq_kind = seq_kind;
     }
 
-    // Convenience factory matching the constructor arguments.
-    public static fun make(
-        name: string,
-        type_name: string,
-        json_ignore: bool,
-        property_name: string,
-        option_inner: string,
-        is_type_param: bool,
-        map_value_inner: string,
-        map_ctor: string,
-        seq_elem_inner: string,
-        seq_kind: CollectionKind
-    ): JsonFieldSpec {
-        return JsonFieldSpec(
-            name,
-            type_name,
-            json_ignore,
-            property_name,
-            option_inner,
-            is_type_param,
-            map_value_inner,
-            map_ctor,
-            seq_elem_inner,
-            seq_kind
-        );
-    }
-
     // JSON object key: `@json_property` override, else the Dream field name.
     public fun json_key(): string {
         if this.property_name.length > 0 {

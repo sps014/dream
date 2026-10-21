@@ -1,16 +1,24 @@
 module system.webapi.auth;
 
 /// Authentication failures carry stable codes without credential values.
-public class AuthError {
-    /// Error code identifying the failure.
-    public code: string;
+public class AuthError: Error {
+    _code: string;
+    _message: string;
 
-    /// Human-readable explanation of the result or failure.
-    public message: string;
-
-    /// Creates a `AuthError` with `code`, `message`.
+    /// Creates an error with a stable `code` such as `EAUTH` and a readable `message`. Neither
+    /// should contain passwords, tokens, or other credentials.
     public constructor(code: string, message: string) {
-        this.code = code;
-        this.message = message;
+        this._code = code;
+        this._message = message;
+    }
+
+    /// Returns the stable machine code, such as `EAUTH` or `EINVAL`.
+    public fun code(): string {
+        return this._code;
+    }
+
+    /// Returns the readable explanation of the failure.
+    public fun message(): string {
+        return this._message;
     }
 }

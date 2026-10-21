@@ -35,6 +35,6 @@ Runs an async body and cleanup, preserving a body error and otherwise reporting 
 ```dream
 public static async fun run<T, E>(
     fixture: TestFixture<T, E>,
-    body: fun(T): Future<Result<bool, E>>
-): Result<bool, E>
+    body: fun(T): Future<Result<Unit, E>>
+): Result<Unit, E>
 ```

@@ -4,7 +4,7 @@ import system;
 import system.collections;
 import system.json;
 
-// A `dream.toml` `additional_files` entry.
+/// A `dream.toml` `additional_files` entry.
 public class GenFile {
     /// Request or resource path.
     public path: string;
@@ -12,7 +12,7 @@ public class GenFile {
     /// Text contents of the file.
     public contents: string;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a file to emit at `path` with the given `contents`.
     public constructor(path: string, contents: string) {
         this.path = path;
         this.contents = contents;

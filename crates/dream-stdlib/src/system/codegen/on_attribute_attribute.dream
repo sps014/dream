@@ -4,7 +4,7 @@ module system.codegen;
 @repeatable
 @attribute(AttributeTarget.Function)
 public struct OnAttributeAttribute {
-    /// Declaration associated with this entry.
+    /// Attribute type whose uses select declarations for the generator.
     public declaration: DeclarationPath;
 
     /// Additional declarations made available to the generator.

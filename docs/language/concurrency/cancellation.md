@@ -71,11 +71,11 @@ A task that has already finished its body is joined and its env is released (`De
 | Member | Returns | Effect |
 |--------|---------|--------|
 | `.is_cancelled` | `bool` | `true` once the source is cancelled |
-| `.check()` | `Result<bool, CancelledError>` | `Ok(true)` while running; `Err(CancelledError)` once cancelled |
+| `.check()` | `Result<Unit, CancelledError>` | `Ok(Unit())` while running; `Err(CancelledError)` once cancelled |
 | `.throw_if_cancelled()` | — | Panics with a cancellation message if cancelled |
 | `.wait_cancelled()` | `Future<bool>` | Completes with `true` when cancellation happens |
 | `.wait(future)` | `Future<Result<T, CancelledError>>` | Awaits `future`, or returns `Err` and cancels `future` if the token is cancelled first |
-| `.wait_void(future)` | `Future<Result<bool, CancelledError>>` | Same as `wait`, for a `Future<void>` |
+| `.wait_void(future)` | `Future<Result<Unit, CancelledError>>` | Same as `wait`, for a `Future<void>` |
 | `CancellationToken.current` | `Option<CancellationToken>` | Static; the token inherited from the enclosing task scope, if any |
 
 `Task.scope`, `Task.spawn`, `Task.spawn_async`, `Task.map`, `Task.for_each`, and the `TaskPool` dispatch and map methods all take an optional `token:` argument. When you leave it out, scopes, maps, and pool methods use the token inherited from the enclosing scope.

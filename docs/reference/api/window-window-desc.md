@@ -6,18 +6,18 @@ Read the [usage guide](../../library/system/window.md) for examples and common t
 
 ## `WindowDesc`
 
-The settings a new window is created with.  Start from `WindowDesc.of` and chain the settings you want to change: `WindowDesc.of("Game", 1280, 720).resizable(false).fullscreen(true)`.
+The settings a new window is created with.  Construct one with a title and content size, then chain the settings you want to change: `WindowDesc("Game", 1280, 720).resizable(false).fullscreen(true)`.
 
 ```dream
 public class WindowDesc
 ```
 
-## `of`
+## `constructor`
 
 Describes a resizable, windowed window with `title` and a content area of `width` by `height` logical pixels. `Window.open` rejects non-positive sizes.
 
 ```dream
-public static fun of(title: string, width: int, height: int): WindowDesc
+public constructor(title: string, width: int, height: int)
 ```
 
 ## `title`

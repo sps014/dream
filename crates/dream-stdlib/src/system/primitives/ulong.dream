@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `ulong` primitive.
 extend ulong: Comparable<ulong> {
-    // Orders this value against `other`.
+    /// Orders this value against `other`.
     public fun compare(other: ulong): int {
         if this < other {
             return 0 - 1;
@@ -13,7 +13,7 @@ extend ulong: Comparable<ulong> {
         return 0;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: ulong): ulong {
         if this < other {
             return this;
@@ -21,7 +21,7 @@ extend ulong: Comparable<ulong> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: ulong): ulong {
         if this > other {
             return this;
@@ -29,7 +29,7 @@ extend ulong: Comparable<ulong> {
         return other;
     }
 
-    // This value constrained to the inclusive range [lo, hi].
+    /// This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: ulong, hi: ulong): ulong {
         if this < lo {
             return lo;
@@ -40,7 +40,7 @@ extend ulong: Comparable<ulong> {
         return this;
     }
 
-    // Parses an unsigned decimal integer from `text`.
+    /// Parses an unsigned decimal integer from `text`.
     public static fun parse(borrow text: string): Result<ulong, ParseError> {
         let n = text.length;
         if n == 0 {

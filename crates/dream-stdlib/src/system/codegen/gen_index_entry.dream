@@ -4,18 +4,19 @@ import system;
 import system.collections;
 import system.json;
 
-// Every type in the program (user and stdlib), names and kinds only.
+/// Every type in the program (user and stdlib), names and kinds only.
 public class GenIndexEntry {
-    /// Stable identifier of this entry.
+    /// `module::name` identity of the type (`system.collections::List`).
     public id: string;
 
-    /// Name identifying this entry.
+    /// Unqualified type name.
     public name: string;
 
-    /// Category of this entry.
+    /// Whether the type is a class, struct, union, enum, or interface.
     public kind: DeclKind;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenIndexEntry` from its parts. Generators normally receive these from
+    /// `GenContext` rather than constructing them.
     public constructor(id: string, name: string, kind: DeclKind) {
         this.id = id;
         this.name = name;

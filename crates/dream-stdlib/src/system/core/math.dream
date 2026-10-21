@@ -6,12 +6,7 @@ module system.core;
 /// results use radians.
 public static class Math {
     @js("env", "abs")
-    static extern fun abs_host(x: double): double;
-
-    /// Returns the absolute value of `x`.
-    public static fun abs(x: double): double {
-        return Math.abs_host(x);
-    }
+    internal static extern fun abs_host(x: double): double;
 
     @js("env", "floor")
     static extern fun floor_host(x: double): double;
@@ -40,7 +35,7 @@ public static class Math {
     @js("env", "sqrt")
     static extern fun sqrt_host(x: double): double;
 
-    // Square root. A negative input is NaN, same as `log` / `asin` and as libm.
+    /// Square root. A negative input is NaN, same as `log` / `asin` and as libm.
     public static fun sqrt(x: double): double {
         return Math.sqrt_host(x);
     }
@@ -150,32 +145,5 @@ public static class Math {
     /// Base of the natural logarithm.
     public static get E(): double {
         return 2.718281828459045d;
-    }
-
-    /// Returns the smaller of `a` and `b`.
-    public static fun min(a: double, b: double): double {
-        if a < b {
-            return a;
-        }
-        return b;
-    }
-
-    /// Returns the larger of `a` and `b`.
-    public static fun max(a: double, b: double): double {
-        if a > b {
-            return a;
-        }
-        return b;
-    }
-
-    /// Returns `x` limited to the inclusive range `lo` through `hi`.
-    public static fun clamp(x: double, lo: double, hi: double): double {
-        if x < lo {
-            return lo;
-        }
-        if x > hi {
-            return hi;
-        }
-        return x;
     }
 }

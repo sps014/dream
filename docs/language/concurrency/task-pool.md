@@ -52,7 +52,7 @@ Use `scope.spawn_on(pool, body)` when a region should own a CPU job alongside lo
 | `.dispatch_async(body, token)` | `Future<Result<T, TaskPoolError>>` | Runs an async `body` on a worker |
 | `.map(items, body, token)` | `Future<Result<U[], TaskFailure<TaskPoolError>>>` | Runs a synchronous `body` per item, at most `size` at once, in input order |
 | `.map_async(items, body, token)` | `Future<Result<U[], TaskFailure<TaskPoolError>>>` | Same as `map`, with an async `body` |
-| `.close()` | `Future<Result<bool, TaskPoolError>>` | Stops accepting work, waits for active jobs, and shuts the workers down |
+| `.close()` | `Future<Result<Unit, TaskPoolError>>` | Stops accepting work, waits for active jobs, and shuts the workers down |
 
 The `token` argument is optional; without it, the pool uses the token inherited from the enclosing task scope.
 

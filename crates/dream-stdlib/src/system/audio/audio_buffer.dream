@@ -62,7 +62,7 @@ public class AudioBuffer {
         let copied = Array.alloc<float>(samples.length);
         for (let i = 0; i < samples.length; i = i + 1) {
             let value = (double)samples[i];
-            if value != value || Math.abs(value) > 3.4028234663852886e38d {
+            if value != value || value.abs() > 3.4028234663852886e38d {
                 return Result.Err(AudioError("EINVAL", "PCM samples must be finite"));
             }
             copied[i] = samples[i];

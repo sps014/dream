@@ -10,19 +10,19 @@ module system.core;
 /// Copies unmanaged values to and from byte arrays. Only types with no reference fields can be
 /// copied this way.
 public static class Bytes {
-    // Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).
+    /// Copy the raw bytes of blittable `value` into a fresh `byte[]` (one element per byte).
     @intrinsic(Intrinsic.ToBytes)
     public static extern fun of<T: unmanaged>(value: T): byte[];
 
-    // Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
+    /// Reconstruct a blittable `T` from a `byte[]` buffer produced by `Bytes.of<T>`.
     @intrinsic(Intrinsic.FromBytes)
     public static extern fun to<T: unmanaged>(borrow bytes: byte[]): T;
 
     // Encodes `bytes` as a `string` with one codepoint (0-255) per byte - lossless, since every
-    // byte value is a valid standalone Unicode codepoint, and the inverse of `fromWireString`.
+    // byte value is a valid standalone Unicode codepoint, and the inverse of `from_wire_string`.
     // Used to carry an arbitrary byte buffer over a channel that only understands `string`s (the
     // `Task` wire), without needing a second, binary-native transport.
-    public static fun toWireString(borrow bytes: byte[]): string {
+    internal static fun to_wire_string(borrow bytes: byte[]): string {
         let n = bytes.length;
         let s = string.alloc(n);
         let i = 0;
@@ -33,8 +33,8 @@ public static class Bytes {
         return s;
     }
 
-    // The inverse of `toWireString`.
-    public static fun fromWireString(borrow s: string): byte[] {
+    // The inverse of `to_wire_string`.
+    internal static fun from_wire_string(borrow s: string): byte[] {
         let n = s.length;
         let out = Buffer.alloc<byte>(n);
         let i = 0;
@@ -47,14 +47,14 @@ public static class Bytes {
 
     // Encodes a `Task`-safe value of type `T` as the `string` the worker wire carries:
     // identity when `T` is `string` itself, otherwise a raw byte-blit (`T` must be `unmanaged`)
-    // re-encoded via `toWireString`. Used by `Task.spawn`/`TaskPool.map`/
+    // re-encoded via `to_wire_string`. Used by `Task.spawn`/`TaskPool.map`/
     // `TaskPool.dispatch` to marshal an arbitrary wire value without a second wire format.
     /// Encodes a value for transport to a task. Strings are passed as text; other values must
     /// be unmanaged.
     @intrinsic(Intrinsic.WireEncode)
-    public static extern fun toWire<T>(borrow value: T): string;
+    internal static extern fun to_wire<T>(borrow value: T): string;
 
-    // The inverse of `toWire`.
+    // The inverse of `to_wire`.
     @intrinsic(Intrinsic.WireDecode)
-    public static extern fun fromWire<T>(borrow text: string): T;
+    internal static extern fun from_wire<T>(borrow text: string): T;
 }

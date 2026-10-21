@@ -1,16 +1,16 @@
 module system.collections;
 
-// Invalid reserve request; existing contents and capacity are preserved.
+/// Invalid reserve request; existing contents and capacity are preserved.
 public class CapacityError: Error {
-    // Creates a capacity diagnostic without performing an allocation.
+    /// Creates a capacity diagnostic without performing an allocation.
     public constructor() {}
 
-    // Stable code for negative or unsupported capacity requests.
+    /// Stable code for negative or unsupported capacity requests.
     public fun code(): string {
         return "ECAPACITY";
     }
 
-    // Describes the accepted reserve domain.
+    /// Describes the accepted reserve domain.
     public fun message(): string {
         return "reserve requires a nonnegative supported element count";
     }

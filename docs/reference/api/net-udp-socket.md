@@ -71,7 +71,7 @@ public async fun receive(
 Enables or disables sending to broadcast endpoints.
 
 ```dream
-public fun set_broadcast(enabled: bool): Result<bool, IoError>
+public fun set_broadcast(enabled: bool): Result<Unit, IoError>
 ```
 
 ## `set_ttl`
@@ -79,7 +79,7 @@ public fun set_broadcast(enabled: bool): Result<bool, IoError>
 Sets outgoing IP time-to-live to a value between 1 and 255.
 
 ```dream
-public fun set_ttl(ttl: int): Result<bool, IoError>
+public fun set_ttl(ttl: int): Result<Unit, IoError>
 ```
 
 ## `close`
@@ -87,5 +87,5 @@ public fun set_ttl(ttl: int): Result<bool, IoError>
 Closes the owned socket and wakes pending receives; repeated closure succeeds.
 
 ```dream
-public fun close(): Result<bool, IoError>
+public fun close(): Result<Unit, IoError>
 ```

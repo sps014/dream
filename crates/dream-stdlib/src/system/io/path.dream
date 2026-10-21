@@ -1,6 +1,6 @@
 module system.io;
 
-// Path helpers for joining and inspecting filesystem paths.
+/// Path helpers for joining and inspecting filesystem paths.
 public static class Path {
     // Joins path segments left-to-right with the platform separator, avoiding double separators
     // and skipping empty segments. Two-argument calls compile exactly as before; three or more
@@ -34,7 +34,7 @@ public static class Path {
         return (seg.ends_with("/") == false) && (seg.ends_with("\\") == false);
     }
 
-    // Final path component after the last `/` or `\`, or `None` for a trailing separator.
+    /// Final path component after the last `/` or `\`, or `None` for a trailing separator.
     public static fun file_name(path: string): Option<string> {
         let n = path.length;
         if n == 0 {
@@ -54,9 +54,9 @@ public static class Path {
         return Option.Some(path);
     }
 
-    // Substring after the last `.` in the file name, or `None` when missing.
+    /// Substring after the last `.` in the file name, or `None` when missing.
     public static fun extension(path: string): Option<string> {
-        let name = Path.file_name(path).unwrap_or(string.empty);
+        let name = Path.file_name(path).unwrap_or("");
         let n = name.length;
         let i = n - 1;
         while i >= 0 {
@@ -71,7 +71,7 @@ public static class Path {
         return Option.None;
     }
 
-    // Directory portion of `path`, or `None` when there is no separator.
+    /// Directory portion of `path`, or `None` when there is no separator.
     public static fun parent(path: string): Option<string> {
         let n = path.length;
         if n == 0 {
@@ -91,7 +91,7 @@ public static class Path {
         return Option.None;
     }
 
-    // True for POSIX absolute paths (`/`…), Windows drive paths (`C:`…), or `\`-rooted paths.
+    /// True for POSIX absolute paths (`/`…), Windows drive paths (`C:`…), or `\`-rooted paths.
     public static fun is_absolute(path: string): bool {
         if path.is_empty() {
             return false;
@@ -106,7 +106,7 @@ public static class Path {
         return false;
     }
 
-    // Resolves `.` and `..` segments where possible. Does not consult the filesystem.
+    /// Resolves `.` and `..` segments where possible. Does not consult the filesystem.
     public static fun normalize(path: string): string {
         if path.is_empty() {
             return path;
@@ -169,8 +169,8 @@ public static class Path {
         return out;
     }
 
-    // Host path separator. Always `/` in the WASM stdlib surface (native hosts accept `/`
-    // even on Windows); use `OsFamily` at call sites when Windows-style paths are required.
+    /// Host path separator. Always `/` in the WASM stdlib surface (native hosts accept `/`
+    /// even on Windows); use `OsFamily` at call sites when Windows-style paths are required.
     public static get separator(): string {
         return "/";
     }
@@ -178,14 +178,14 @@ public static class Path {
     @runtime("processCwd")
     static extern fun host_cwd(): string;
 
-    // File name without the last extension (`"a.tar.gz"` → `"a.tar"`).
+    /// File name without the last extension (`"a.tar.gz"` → `"a.tar"`).
     public static fun stem(path: string): string {
-        let name = Path.file_name(path).unwrap_or(string.empty);
+        let name = Path.file_name(path).unwrap_or("");
         let ext = Path.extension(path);
         if ext.is_none() {
             return name;
         }
-        let e = ext.unwrap_or(string.empty);
+        let e = ext.unwrap_or("");
         let cut = name.length - e.length - 1;
         if cut < 0 {
             return name;
@@ -193,7 +193,7 @@ public static class Path {
         return name.substring(0, cut);
     }
 
-    // Replaces the last extension, or appends `ext` when the path has none. `ext` may include a leading `.`.
+    /// Replaces the last extension, or appends `ext` when the path has none. `ext` may include a leading `.`.
     public static fun with_extension(path: string, ext: string): string {
         let suffix = ext;
         if (ext.is_empty() == false) && (ext.char_at(0) != '.') {
@@ -208,7 +208,7 @@ public static class Path {
         };
     }
 
-    // Replaces the final path component with `name`.
+    /// Replaces the final path component with `name`.
     public static fun with_file_name(path: string, name: string): string {
         return switch (Path.parent(path)) {
             Some(dir) => Path.join(dir, name),
@@ -216,12 +216,7 @@ public static class Path {
         };
     }
 
-    // Inverse of `is_absolute`.
-    public static fun is_relative(path: string): bool {
-        return Path.is_absolute(path) == false;
-    }
-
-    // True when the last extension equals `ext` (with or without a leading `.`).
+    /// True when the last extension equals `ext` (with or without a leading `.`).
     public static fun has_extension(path: string, ext: string): bool {
         let want = ext;
         if (ext.is_empty() == false) && (ext.char_at(0) == '.') {
@@ -233,7 +228,7 @@ public static class Path {
         };
     }
 
-    // Splits `path` on `/` and `\`, skipping empty segments.
+    /// Splits `path` on `/` and `\`, skipping empty segments.
     public static fun components(path: string): string[] {
         let parts = List<string>();
         let start = 0;
@@ -251,7 +246,7 @@ public static class Path {
         return parts.take_array();
     }
 
-    // Joins `path` onto the process cwd when it is relative, then `normalize`s. Does not consult `realpath`.
+    /// Joins `path` onto the process cwd when it is relative, then `normalize`s. Does not consult `realpath`.
     public static fun absolute(path: string): string {
         if Path.is_absolute(path) {
             return Path.normalize(path);
@@ -263,7 +258,7 @@ public static class Path {
         return Path.normalize(Path.join(cwd, path));
     }
 
-    // String-prefix relative path after normalize (not `realpath`). `None` when `path` is not under `base`.
+    /// String-prefix relative path after normalize (not `realpath`). `None` when `path` is not under `base`.
     public static fun relative_to(path: string, base: string): Option<string> {
         let p = Path.normalize(path);
         let b = Path.normalize(base);

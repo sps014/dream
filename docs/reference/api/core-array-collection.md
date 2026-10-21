@@ -46,7 +46,7 @@ public fun index_of(borrow value: T): Option<int>
 
 ## `slice`
 
-Copies the range from `start` (inclusive) to `end` (exclusive); invalid bounds panic.
+Returns a new array copied from `start` (inclusive) to `end` (exclusive). Panics unless `0 <= start <= end <= length`.
 
 ```dream
 public fun slice(start: int, end: int): T[]

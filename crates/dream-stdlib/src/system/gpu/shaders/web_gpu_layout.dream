@@ -10,7 +10,7 @@ internal static class WebGpuLayout {
             return WebGpuBindingLayout.Uniform;
         }
         if p.kind == ParamKinds.buffer() {
-            if ty.get_str_or("access", "read") == "readWrite" {
+            if ty.get("access").and_then((item: JsonValue) => item.as_string()).unwrap_or("read") == "readWrite" {
                 return WebGpuBindingLayout.Storage;
             }
             return WebGpuBindingLayout.ReadOnlyStorage;
@@ -20,20 +20,20 @@ internal static class WebGpuLayout {
         }
         // The current shader API exposes 2D textures only. A new shape needs an explicit ABI
         // descriptor instead of silently acquiring a default 2D layout.
-        if ty.get_str_or("baseShape", "") != "texture2D" {
+        if ty.get("baseShape").and_then((item: JsonValue) => item.as_string()).unwrap_or("") != "texture2D" {
             return WebGpuBindingLayout.None;
         }
-        let result = ty.get_or("resultType", JsonValue.dict());
+        let result = ty.get("resultType").unwrap_or(JsonValue.dict());
         let scalar = result;
-        if result.get_str_or("kind", "") == "vector" {
-            scalar = result.get_or("elementType", JsonValue.dict());
+        if result.get("kind").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "vector" {
+            scalar = result.get("elementType").unwrap_or(JsonValue.dict());
         }
-        let scalar_type = scalar.get_str_or("scalarType", "");
-        let channels = result.get_int_or("elementCount", 1);
+        let scalar_type = scalar.get("scalarType").and_then((item: JsonValue) => item.as_string()).unwrap_or("");
+        let channels = result.get("elementCount").and_then((item: JsonValue) => item.as_int()).unwrap_or(1);
         if p.kind == ParamKinds.texture() && scalar_type == "float32" {
             return WebGpuBindingLayout.Texture2DFloat;
         }
-        if p.kind != ParamKinds.storage_texture() || ty.get_str_or("access", "") != "readWrite" {
+        if p.kind != ParamKinds.storage_texture() || ty.get("access").and_then((item: JsonValue) => item.as_string()).unwrap_or("") != "readWrite" {
             return WebGpuBindingLayout.None;
         }
         if scalar_type == "float32" {

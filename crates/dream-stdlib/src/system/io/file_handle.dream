@@ -1,8 +1,8 @@
 module system.io;
 
-// FileHandle - an OS-backed read/write/seek stream over an open file.
-// Async operations use bounded native workers or Node callbacks, keeping host buffers alive
-// through cancellation. Concurrent I/O on one handle returns `EBUSY`; closure is synchronous.
+/// FileHandle - an OS-backed read/write/seek stream over an open file.
+/// Async operations use bounded native workers or Node callbacks, keeping host buffers alive
+/// through cancellation. Concurrent I/O on one handle returns `EBUSY`; closure is synchronous.
 public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
     _id: int;
     _path: string;
@@ -24,29 +24,29 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         }
     }
 
-    // Whether this handle has been closed, including after an explicit close failure.
+    /// Whether this handle has been closed, including after an explicit close failure.
     public get is_closed(): bool {
         return this._id < 0;
     }
 
-    fun check_open(): Result<bool, IoError> {
+    fun check_open(): Result<Unit, IoError> {
         if this.is_closed {
             return Result.Err(IoError.closed(this.path));
         }
         this.check_pending()?;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    fun check_pending(): Result<bool, IoError> {
+    fun check_pending(): Result<Unit, IoError> {
         if this._pending.is_some() {
             if !this._pending.unwrap().done {
                 return Result.Err(IoError(this.path, "EBUSY", "file operation is still pending"));
             }
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Path supplied when opening the file; remains available after closure.
+    /// Path supplied when opening the file; remains available after closure.
     public get path(): string {
         return this._path;
     }
@@ -100,8 +100,8 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return FileHandle.open_result(path, mode.wire());
     }
 
-    // Opens using host async facilities or the bounded filesystem executor.
-    // Cancellation abandons the result safely; a late open result is closed automatically.
+    /// Opens using host async facilities or the bounded filesystem executor.
+    /// Cancellation abandons the result safely; a late open result is closed automatically.
     public static async fun open_async(
         path: string,
         mode: FileMode,
@@ -114,7 +114,7 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return FileHandle.from_id((int)operation.result(), path, mode.wire());
     }
 
-    // Reads up to `n` bytes from the current position, advancing the cursor.
+    /// Reads up to `n` bytes from the current position, advancing the cursor.
     public fun read(n: int): Result<byte[], IoError> {
         this.check_open()?;
         if n < 0 || n == 2147483647 {
@@ -140,8 +140,8 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(bytes);
     }
 
-    // Reads without blocking the scheduler, preserving partial reads and EOF.
-    // Cancellation may consume input; further I/O returns `EBUSY` until host work ends.
+    /// Reads without blocking the scheduler, preserving partial reads and EOF.
+    /// Cancellation may consume input; further I/O returns `EBUSY` until host work ends.
     public async unique fun read_async(
         n: int,
         token: Option<CancellationToken> = Option.None
@@ -169,7 +169,7 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(Streams.slice(raw, 1, raw.length - 1));
     }
 
-    // Writes `data` at the current position, advancing the cursor; returns bytes written.
+    /// Writes `data` at the current position, advancing the cursor; returns bytes written.
     public fun write(data: byte[]): Result<int, IoError> {
         this.check_open()?;
         if this._offset < this._buffer.length {
@@ -183,8 +183,8 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok((int)n);
     }
 
-    // Writes a host-owned copy without blocking the scheduler and returns partial progress.
-    // Cancellation does not roll back writes; further I/O is busy until host work ends.
+    /// Writes a host-owned copy without blocking the scheduler and returns partial progress.
+    /// Cancellation does not roll back writes; further I/O is busy until host work ends.
     public async unique fun write_async(
         data: byte[],
         token: Option<CancellationToken> = Option.None
@@ -213,23 +213,23 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok((int)count);
     }
 
-    // Seeks to absolute byte offset `pos` from the start of the file.
-    public fun seek(pos: long): Result<bool, IoError> {
+    /// Seeks to absolute byte offset `pos` from the start of the file.
+    public fun seek(pos: long): Result<Unit, IoError> {
         this.check_open()?;
         if FileHandle.file_handle_seek(this._id, pos) < 0 {
             return Result.Err(IoError.other(this.path, "seek failed"));
         }
         this._buffer = [];
         this._offset = 0;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Seeks on the filesystem executor; successful completion discards read-ahead.
-    // Once submitted, cancellation is observed after completion so buffer state stays coherent.
+    /// Seeks on the filesystem executor; successful completion discards read-ahead.
+    /// Once submitted, cancellation is observed after completion so buffer state stays coherent.
     public async unique fun seek_async(
         pos: long,
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         this.check_open()?;
@@ -246,10 +246,10 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         lifetime[0]._buffer = [];
         lifetime[0]._offset = 0;
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Current cursor offset from the start of the file.
+    /// Current cursor offset from the start of the file.
     public fun tell(): Result<long, IoError> {
         this.check_open()?;
         let pos = FileHandle.file_handle_tell(this._id);
@@ -259,25 +259,20 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(pos - (long)(this._buffer.length - this._offset));
     }
 
-    // Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
-    public fun seek_from_end(offset: long): Result<bool, IoError> {
+    /// Seeks to `offset` bytes from the end (`0` is the end; negative moves backward).
+    public fun seek_from_end(offset: long): Result<Unit, IoError> {
         this.check_open()?;
         if FileHandle.file_handle_seek_end(this._id, offset) < 0 {
             return Result.Err(IoError.other(this.path, "seek failed"));
         }
         this._buffer = [];
         this._offset = 0;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Moves the cursor to the end of the file.
-    public fun seek_end(): Result<bool, IoError> {
-        return this.seek_from_end(0L);
-    }
-
-    // Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR.
-    // Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix
-    // and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).
+    /// Reads a line using buffered read-ahead, stripping LF or CRLF and preserving standalone CR.
+    /// Returns the final unterminated line or `None` at EOF; `ELIMIT` consumes the prefix
+    /// and exceeding byte beyond the pre-LF byte limit (default 1 MiB, including any CR).
     public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError> {
         this.check_open()?;
         if max_bytes < 0 {
@@ -313,13 +308,9 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         }
     }
 
-    // Writes UTF-8 bytes of `text` at the current position.
-    public fun write_text(text: string): Result<int, IoError> {
-        return this.write(Encoding.utf8_encode(text));
-    }
-
-    // Returns the current byte length from the open handle; propagates metadata failures.
-    public fun length(): Result<long, IoError> {
+    /// Returns the file's current size in bytes, read from the open handle. Fails with an
+    /// `IoError` when the handle is closed or the metadata query fails.
+    public fun size(): Result<long, IoError> {
         this.check_open()?;
         let size = FileHandle.file_handle_length(this._id);
         if size < 0L {
@@ -328,26 +319,26 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return Result.Ok(size);
     }
 
-    // Validates that the handle is open; writes are unbuffered at this layer.
-    // This does not synchronize data to durable storage.
-    public unique fun flush(): Result<bool, IoError> {
+    /// Validates that the handle is open; writes are unbuffered at this layer.
+    /// This does not synchronize data to durable storage.
+    public unique fun flush(): Result<Unit, IoError> {
         return this.check_open();
     }
 
-    // Checks cancellation and validates the handle; this layer has no buffered output to flush.
+    /// Checks cancellation and validates the handle; this layer has no buffered output to flush.
     public async unique fun flush_async(
         token: Option<CancellationToken> = Option.None
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
         return this.check_open();
     }
 
-    // Closes idempotently and reports host failures. The handle stays closed even on failure
-    // to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
-    public fun close(): Result<bool, IoError> {
+    /// Closes idempotently and reports host failures. The handle stays closed even on failure
+    /// to prevent closing a reused descriptor; destruction performs nonthrowing cleanup.
+    public fun close(): Result<Unit, IoError> {
         if this.is_closed {
-            return Result.Ok(true);
+            return Result.Ok(Unit());
         }
         this.check_pending()?;
         this._pending = Option.None;
@@ -356,6 +347,6 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         if FileHandle.file_handle_close(id) < 0 {
             return Result.Err(IoError.other(this.path, "close failed"));
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 }

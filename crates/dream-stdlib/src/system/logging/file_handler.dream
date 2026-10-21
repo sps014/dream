@@ -1,18 +1,18 @@
 module system.logging;
 
-// Appends formatted lines to a file (synchronous host write).
+/// Appends formatted lines to a file (synchronous host write).
 public class FileHandler: LogHandler {
     path: string;
 
     @runtime("fileAppend")
     static extern fun file_append(borrow path: string, borrow content: string): long;
 
-    // Creates a handler that appends to `path`.
+    /// Creates a handler that appends to `path`.
     public constructor(path: string) {
         this.path = path;
     }
 
-    // Appends one formatted line to the file.
+    /// Appends one formatted line to the file.
     public fun emit(record: LogRecord): void {
         let line = "["
             + level_name(record.level) + "] " + record.name + ": " + record.message + "\n";

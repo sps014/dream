@@ -433,7 +433,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Like [`Self::require_unmanaged`], but also accepts `T[]` when its element type is itself
-    /// unmanaged: the wire/byte-blit intrinsics (`Bytes.of`/`to`, `Bytes.toWire`/`fromWire`) copy
+    /// unmanaged: the wire/byte-blit intrinsics (`Bytes.of`/`to`, `Bytes.to_wire`/`from_wire`) copy
     /// such an array's raw element bytes (a dynamic-length `memory.copy`, never the array pointer
     /// itself), which is exactly as safe as blitting a single blittable value — no reference,
     /// aliasing, or refcounting is involved. Only one level of array is allowed: an array of arrays

@@ -21,11 +21,11 @@ internal class TaskMapState<T, U, E> {
         this.next = 0;
     }
 
-    internal fun run(): Future<Result<bool, E>> {
+    internal fun run(): Future<Result<Unit, E>> {
         return TaskMapState<T, U, E>.run_owned(this);
     }
 
-    static async fun run_owned(state: TaskMapState<T, U, E>): Result<bool, E> {
+    static async fun run_owned(state: TaskMapState<T, U, E>): Result<Unit, E> {
         while state.next < state.items.length {
             if CancellationToken.is_cancelled_opt(CancellationToken.current) {
                 break;
@@ -38,7 +38,7 @@ internal class TaskMapState<T, U, E> {
                 state.results[index] = result;
             }
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     internal static async fun scoped(
@@ -51,7 +51,7 @@ internal class TaskMapState<T, U, E> {
             count = state.items.length;
         }
         for (let i = 0; i < count; i = i + 1) {
-            scope.spawn<bool>(async () => state.run().await);
+            scope.spawn<Unit>(async () => state.run().await);
         }
         // The scope joins these children before exposing the shared output array.
         return Result.Ok(state.results);

@@ -12,28 +12,28 @@ fun json_roundtrip(): void {
     tags.push(JsonValue.from_string("dev"));
     tags.push(JsonValue.from_string("math"));
     user["tags"] = tags;
-    user["active"] = JsonValue.boolean(true);
+    user["active"] = JsonValue.from_bool(true);
 
     Assert.eq(
         (Json.serialize(user)).to_string(),
         "{\"name\":\"Ada\",\"age\":36,\"tags\":[\"dev\",\"math\"],\"active\":true}"
     );
 
-    let parsed = Json.deserialize<JsonValue>(Json.serialize(user)).unwrap_or(JsonValue.none());
-    let none = JsonValue.none();
+    let parsed = Json.deserialize<JsonValue>(Json.serialize(user)).unwrap_or(JsonValue.null());
+    let none = JsonValue.null();
     Assert.eq(
-        (parsed["name"].unwrap_or(none).as_string().unwrap_or("")).to_string(),
+        (parsed.get("name").unwrap_or(none).as_string().unwrap_or("")).to_string(),
         "Ada"
     );
-    Assert.eq((parsed["age"].unwrap_or(none).as_int().unwrap_or(0)).to_string(), "36");
+    Assert.eq((parsed.get("age").unwrap_or(none).as_int().unwrap_or(0)).to_string(), "36");
     Assert.eq(
-        (parsed["tags"].unwrap_or(none).at(1).unwrap_or(none).as_string().unwrap_or(""))
+        (parsed.get("tags").unwrap_or(none).at(1).unwrap_or(none).as_string().unwrap_or(""))
             .to_string(),
         "math"
     );
     Assert.eq(
-        (parsed["active"].unwrap_or(none).as_bool().unwrap_or(false)).to_string(),
+        (parsed.get("active").unwrap_or(none).as_bool().unwrap_or(false)).to_string(),
         "true"
     );
-    Assert.eq((parsed["tags"].unwrap_or(none).length).to_string(), "2");
+    Assert.eq((parsed.get("tags").unwrap_or(none).length).to_string(), "2");
 }

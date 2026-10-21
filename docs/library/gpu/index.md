@@ -63,7 +63,7 @@ fun scale_add(
     }
 }
 
-async fun run(): Result<bool, GpuError> {
+async fun run(): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
 
     let n = 1000;
@@ -82,7 +82,7 @@ async fun run(): Result<bool, GpuError> {
 
     let values = out.read().await?;
     System.println(values[999]);
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {
@@ -224,7 +224,7 @@ fun add_one(values: GpuBuffer<int>, n: int): void {
     }
 }
 
-async fun run(device: GpuDevice, values: GpuBuffer<int>, n: int): Result<bool, GpuError> {
+async fun run(device: GpuDevice, values: GpuBuffer<int>, n: int): Result<Unit, GpuError> {
     let encoder = device.command_encoder();
     let pass = encoder.begin_compute_pass();
     for (let round = 0; round < 10; round = round + 1) {

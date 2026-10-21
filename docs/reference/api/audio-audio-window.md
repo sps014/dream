@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioWindow`
 
 The weighting applied before computing an audio spectrum.
 
@@ -12,7 +12,7 @@ The weighting applied before computing an audio spectrum.
 public enum AudioWindow
 ```
 
-## Declaration
+## `Hann`
 
 Tapers both ends to reduce leakage between frequency bins.
 
@@ -20,11 +20,10 @@ Tapers both ends to reduce leakage between frequency bins.
 Hann
 ```
 
-## Declaration
+## `Rectangular`
 
 Leaves the input unchanged; useful for integer-period test signals.
 
 ```dream
 Rectangular
 ```
-

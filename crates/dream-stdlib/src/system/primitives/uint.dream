@@ -2,7 +2,7 @@ module system.primitives;
 
 // The `uint` primitive.
 extend uint: Comparable<uint> {
-    // Orders this value against `other`.
+    /// Orders this value against `other`.
     public fun compare(other: uint): int {
         if this < other {
             return 0 - 1;
@@ -13,7 +13,7 @@ extend uint: Comparable<uint> {
         return 0;
     }
 
-    // The smaller of this and `other`.
+    /// The smaller of this and `other`.
     public fun min(other: uint): uint {
         if this < other {
             return this;
@@ -21,7 +21,7 @@ extend uint: Comparable<uint> {
         return other;
     }
 
-    // The larger of this and `other`.
+    /// The larger of this and `other`.
     public fun max(other: uint): uint {
         if this > other {
             return this;
@@ -29,7 +29,7 @@ extend uint: Comparable<uint> {
         return other;
     }
 
-    // This value constrained to the inclusive range [lo, hi].
+    /// This value constrained to the inclusive range [lo, hi].
     public fun clamp(lo: uint, hi: uint): uint {
         if this < lo {
             return lo;
@@ -40,7 +40,7 @@ extend uint: Comparable<uint> {
         return this;
     }
 
-    // Parses an unsigned decimal integer from `text`.
+    /// Parses an unsigned decimal integer from `text`.
     public static fun parse(borrow text: string): Result<uint, ParseError> {
         let n = text.length;
         if n == 0 {

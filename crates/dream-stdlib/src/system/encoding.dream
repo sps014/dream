@@ -45,9 +45,9 @@ fun b64_value(c: char): int {
     return 0 - 1;
 }
 
-// UTF-8 / hex / Base64 encode and decode helpers.
+/// UTF-8 / hex / Base64 encode and decode helpers.
 public static class Encoding {
-    // Copies the UTF-8 encoding of `text` into a new `byte[]`.
+    /// Copies the UTF-8 encoding of `text` into a new `byte[]`.
     public static fun utf8_encode(text: string): byte[] {
         let n = text.length;
         let out = Buffer.alloc<byte>(n * 4);
@@ -92,12 +92,12 @@ public static class Encoding {
         return exact;
     }
 
-    // Interprets `bytes` as UTF-8 and builds a Dream string.
+    /// Interprets `bytes` as UTF-8 and builds a Dream string.
     public static fun utf8_decode(bytes: byte[]): string {
         return string.from_utf8(bytes);
     }
 
-    // Encodes `bytes` as lowercase hexadecimal text.
+    /// Encodes `bytes` as lowercase hexadecimal text.
     public static fun hex_encode(bytes: byte[]): string {
         let n = bytes.length;
         let out = string.alloc(n * 2);
@@ -111,7 +111,7 @@ public static class Encoding {
         return out;
     }
 
-    // Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
+    /// Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
     public static fun hex_decode(text: string): Result<byte[], ParseError> {
         let n = text.length;
         if (n % 2) != 0 {
@@ -132,7 +132,7 @@ public static class Encoding {
         return Result.Ok(out);
     }
 
-    // Encodes `bytes` as standard Base64 (with `=` padding).
+    /// Encodes `bytes` as standard Base64 (with `=` padding).
     public static fun base64_encode(bytes: byte[]): string {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let n = bytes.length;
@@ -170,7 +170,7 @@ public static class Encoding {
         return out;
     }
 
-    // Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
+    /// Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
     public static fun base64_decode(text: string): Result<byte[], ParseError> {
         let n = text.length;
         let cleaned_len = 0;
@@ -261,7 +261,7 @@ public static class Encoding {
         return b64_value(c);
     }
 
-    // Encodes `bytes` as Base64url without padding.
+    /// Encodes `bytes` as Base64url without padding.
     public static fun base64url_encode(bytes: byte[]): string {
         let padded = Encoding.base64_encode(bytes);
         let n = padded.length;
@@ -283,7 +283,7 @@ public static class Encoding {
         return out;
     }
 
-    // Decodes Base64url text (`-`/`_`, padding optional).
+    /// Decodes Base64url text (`-`/`_`, padding optional).
     public static fun base64url_decode(text: string): Result<byte[], ParseError> {
         let n = text.length;
         let pad = 0;
@@ -328,7 +328,7 @@ public static class Encoding {
         return (c == '-') || (c == '_') || (c == '.') || (c == '~');
     }
 
-    // Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).
+    /// Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).
     public static fun uri_encode_component(text: string): string {
         return Encoding.encode_percent(text, false);
     }
@@ -354,20 +354,20 @@ public static class Encoding {
         return sb.build();
     }
 
-    // Decodes percent escapes as strict UTF-8, preserving literal `+`.
-    // Malformed escapes or invalid UTF-8 return a parse error.
+    /// Decodes percent escapes as strict UTF-8, preserving literal `+`.
+    /// Malformed escapes or invalid UTF-8 return a parse error.
     public static fun uri_decode_component(text: string): Result<string, ParseError> {
         return Encoding.decode_percent(text, false);
     }
 
-    // Encodes a form component as UTF-8, using `+` for spaces and percent escapes
-    // except for ASCII letters, digits, `*`, `-`, `.`, and `_`.
+    /// Encodes a form component as UTF-8, using `+` for spaces and percent escapes
+    /// except for ASCII letters, digits, `*`, `-`, `.`, and `_`.
     public static fun form_encode_component(text: string): string {
         return Encoding.encode_percent(text, true);
     }
 
-    // Decodes a form component, interpreting `+` as space and validating escaped UTF-8.
-    // Malformed escapes or invalid UTF-8 return a parse error.
+    /// Decodes a form component, interpreting `+` as space and validating escaped UTF-8.
+    /// Malformed escapes or invalid UTF-8 return a parse error.
     public static fun form_decode_component(text: string): Result<string, ParseError> {
         return Encoding.decode_percent(text, true);
     }

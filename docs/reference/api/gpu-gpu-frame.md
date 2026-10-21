@@ -41,7 +41,7 @@ public get encoder(): GpuCommandEncoder
 Draws `vertex_count` vertices with `pipeline` into `target`, for shaders that need no vertex buffers or bound resources.
 
 ```dream
-public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<bool, GpuError>
+public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<Unit, GpuError>
 ```
 
 ## `present`
@@ -49,5 +49,5 @@ public fun draw(pipeline: GpuRenderPipeline, vertex_count: int): Result<bool, Gp
 Submits everything recorded for the frame and shows `target` in the window.
 
 ```dream
-public async fun present(): Result<bool, GpuError>
+public async fun present(): Result<Unit, GpuError>
 ```

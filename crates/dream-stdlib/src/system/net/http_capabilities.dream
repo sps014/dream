@@ -1,21 +1,21 @@
 module system.net;
 
-// Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.
+/// Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.
 public static class HttpCapabilities {
     @runtime("netCapabilities")
     static extern fun flags_host(): int;
 
-    // Whether a separate connection-establishment timeout can be configured (native hosts).
+    /// Whether a separate connection-establishment timeout can be configured (native hosts).
     public static get connection_timeouts(): bool {
         return (HttpCapabilities.flags_host() & 1) != 0;
     }
 
-    // Whether explicit redirect limits and redirect responses are observable (native and Node).
+    /// Whether explicit redirect limits and redirect responses are observable (native and Node).
     public static get redirect_limits(): bool {
         return (HttpCapabilities.flags_host() & 2) != 0;
     }
 
-    // Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.
+    /// Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.
     public static get unrestricted_headers(): bool {
         return (HttpCapabilities.flags_host() & 4) != 0;
     }

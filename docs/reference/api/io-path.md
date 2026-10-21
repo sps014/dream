@@ -92,14 +92,6 @@ Replaces the final path component with `name`.
 public static fun with_file_name(path: string, name: string): string
 ```
 
-## `is_relative`
-
-Inverse of `is_absolute`.
-
-```dream
-public static fun is_relative(path: string): bool
-```
-
 ## `has_extension`
 
 True when the last extension equals `ext` (with or without a leading `.`).

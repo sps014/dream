@@ -1,7 +1,7 @@
 module system.core;
 
-// Cursor over the pieces of a `ReadOnlySpan<char>` between separators. Every piece is a view of the
-// same source; nothing is allocated.
+/// Cursor over the pieces of a `ReadOnlySpan<char>` between separators. Every piece is a view of the
+/// same source; nothing is allocated.
 public ref struct StringSplit {
     rest: ReadOnlySpan<char>;
     sep: string;
@@ -20,7 +20,7 @@ public ref struct StringSplit {
         }
     }
 
-    // Advances to the next piece; `false` once every piece has been produced.
+    /// Advances to the next piece; `false` once every piece has been produced.
     public fun move_next(): bool {
         if this.done {
             return false;
@@ -45,7 +45,7 @@ public ref struct StringSplit {
         return true;
     }
 
-    // The piece produced by the last `move_next()`.
+    /// The piece produced by the last `move_next()`.
     public get current(): ReadOnlySpan<char> {
         return this._current;
     }

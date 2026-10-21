@@ -1,0 +1,18 @@
+module system.io;
+
+extend System {
+    /// Standard input as a byte stream; reading does not close the process descriptor.
+    public static get stdin(): Stdin {
+        return Stdin();
+    }
+
+    /// Standard output as a byte stream; flushing does not close it.
+    public static get stdout(): Stdout {
+        return Stdout();
+    }
+
+    /// Standard error as a byte stream; flushing does not close it.
+    public static get stderr(): Stderr {
+        return Stderr();
+    }
+}

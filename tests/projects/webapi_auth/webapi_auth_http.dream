@@ -10,13 +10,13 @@ import webapi_auth_tokens;
 class PrivateRoutes {
     @get("/")
     @requires_scopes("read")
-    public static fun read(@dep(CurrentUser) user: AuthPrincipal): string {
+    public static fun read(@dep(AuthService.current_user) user: AuthPrincipal): string {
         return user.subject;
     }
 
     @post("/")
     @requires_scopes("read")
-    public static fun write(@dep(CurrentUser) user: AuthPrincipal): string {
+    public static fun write(@dep(AuthService.current_user) user: AuthPrincipal): string {
         return user.subject;
     }
 }
@@ -61,8 +61,8 @@ async fun webapi_auth_http(): void {
     Assert.is_true(cookies.contains("Secure; HttpOnly; SameSite=Lax"));
     let tokens = Json.deserialize<JsonValue>(response.read_text().await.unwrap()).unwrap();
     response.close();
-    let secret = tokens.get_str("refresh_token").unwrap();
-    let csrf = tokens.get_str("csrf_token").unwrap();
+    let secret = tokens["refresh_token"].as_string().unwrap();
+    let csrf = tokens["csrf_token"].as_string().unwrap();
     let request = HttpRequest(HttpMethod.Post, Url.parse(base + "/private").unwrap());
     request.headers.set("Cookie", "__Host-dream_session=" + secret);
     let blocked = client.send(request).await.unwrap();
@@ -74,7 +74,7 @@ async fun webapi_auth_http(): void {
     Assert.eq(allowed.read_text().await.unwrap(), "1");
     allowed.close();
     let bearer = HttpRequest(HttpMethod.Get, Url.parse(base + "/private").unwrap());
-    bearer.headers.set("Authorization", "Bearer " + tokens.get_str("access_token").unwrap());
+    bearer.headers.set("Authorization", "Bearer " + tokens["access_token"].as_string().unwrap());
     let authorized = client.send(bearer).await.unwrap();
     Assert.eq(authorized.status, 200);
     authorized.close();

@@ -7,7 +7,7 @@
 A diagnostic associated with a declaration in the generator's input.
 
 ```dream
-public class GenCompilationError
+public class GenCompilationError: Error
 ```
 
 ## `target`
@@ -18,18 +18,18 @@ Target declaration or build target associated with this result.
 public target: string
 ```
 
-## `message`
+## `code`
 
-Human-readable explanation of the result or failure.
+Returns `EGENERATE`, the code shared by every generator input diagnostic.
 
 ```dream
-public message: string
+public fun code(): string
 ```
 
-## `constructor`
+## `message`
 
-Decodes a pre-generation error restricted to this generator's triggered declarations.
+Returns the compiler's explanation of the failure in `target`.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public fun message(): string
 ```

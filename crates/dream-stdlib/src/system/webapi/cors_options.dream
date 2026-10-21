@@ -1,8 +1,8 @@
 module system.webapi;
 
-// FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are comma-separated
-// (`"*"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is
-// echoed instead, matching Starlette).
+/// FastAPI / Starlette `CORSMiddleware` options. Origins, methods, and headers are comma-separated
+/// (`"*"` means any). `allow_credentials` cannot be combined with origin `*` (the request Origin is
+/// echoed instead, matching Starlette).
 public class CorsOptions {
     /// Allowed request origins, or `*` for any origin.
     public allow_origins: string;

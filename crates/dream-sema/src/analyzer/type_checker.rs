@@ -2,6 +2,7 @@ use super::*;
 use crate::errors::SemanticError;
 use crate::function_control_flow::FunctionControlGraph;
 use crate::symbol_table::SymbolTable;
+use dream_abi::names::THIS_NAME;
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{FunctionNode, StatementNode, Type};
 use std::cell::RefCell;
@@ -25,10 +26,7 @@ impl<'a> Analyzer<'a> {
         let errors_before = diagnostics.errors().count();
         let outer_context = self.enter_generator_context(function);
         self.hir_begin_function(function);
-        let is_unsafe = function
-            .attributes
-            .iter()
-            .any(|a| dream_abi::attributes::is_compiler_attribute(a, "unsafe"));
+        let is_unsafe = dream_abi::attributes::has_unsafe_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         let saved_overflow = std::mem::replace(&mut self.overflow, dream_hir::Overflow::Wrapping);
@@ -52,7 +50,7 @@ impl<'a> Analyzer<'a> {
         self.overflow = saved_overflow;
         self.leave_generator_context(outer_context);
         body?;
-        self.hir_emit_entry_tail_return(function, diagnostics);
+        self.hir_emit_entry_tail_return(function, &param_table, diagnostics);
         self.hir_finish_function(diagnostics, errors_before);
         // Unused `let`/`const` bindings (warnings only — do not fail the compile).
         param_table
@@ -75,7 +73,7 @@ impl<'a> Analyzer<'a> {
         let mut param_table = SymbolTable::new(Some(self.global_symbol_table.clone()));
         for param in function.parameters.iter() {
             self.check_reserved_name(&param.name, "parameter", diagnostics);
-            let sink = !param.is_ref && !param.is_borrow && param.name.text != "this";
+            let sink = !param.is_ref && !param.is_borrow && param.name.text != THIS_NAME;
             if let Err(e) =
                 param_table.add_parameter(param.name.text.clone(), param.type_.clone(), sink)
             {

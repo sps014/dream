@@ -65,13 +65,13 @@ fun audio_fragment(pixel: AudioPixel, @readonly values: GpuBuffer<float>): GpuVe
     return GpuVec4(color.x, color.y, color.z, 1.0f);
 }
 
-fun visualizer_error(result: Result<bool, AudioError>): void {
+fun visualizer_error(result: Result<Unit, AudioError>): void {
     if result.is_err() {
         System.println(result.unwrap_err().code() + ": " + result.unwrap_err().message());
     }
 }
 
-async fun visualize(window: Window): Result<bool, GpuError> {
+async fun visualize(window: Window): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     let surface = device.create_surface(window)?;
     let pipeline = device.render_pipeline(
@@ -119,18 +119,18 @@ async fun visualize(window: Window): Result<bool, GpuError> {
             visualizer_audio.muted = !visualizer_audio.muted;
         }
         if input.keyboard.pressed(KeyCode.ArrowUp) {
-            visualizer_audio.volume = (float)Math.min((double)visualizer_audio.volume + 0.1d, 1.0d);
+            visualizer_audio.volume = (float)((double)visualizer_audio.volume + 0.1d).min(1.0d);
         }
         if input.keyboard.pressed(KeyCode.ArrowDown) {
-            visualizer_audio.volume = (float)Math.max((double)visualizer_audio.volume - 0.1d, 0.0d);
+            visualizer_audio.volume = (float)((double)visualizer_audio.volume - 0.1d).max(0.0d);
         }
         if input.keyboard.pressed(KeyCode.ArrowRight) {
             let target = visualizer_audio.current_time + 5.0d;
             let duration = visualizer_audio.duration.unwrap_or(0.0d);
-            visualizer_audio.current_time = Math.min(target, duration);
+            visualizer_audio.current_time = target.min(duration);
         }
         if input.keyboard.pressed(KeyCode.ArrowLeft) {
-            visualizer_audio.current_time = Math.max(visualizer_audio.current_time - 5.0d, 0.0d);
+            visualizer_audio.current_time = (visualizer_audio.current_time - 5.0d).max(0.0d);
         }
         if input.keyboard.pressed(KeyCode.D) {
             let devices = Audio.devices().await;
@@ -196,7 +196,7 @@ async fun visualize(window: Window): Result<bool, GpuError> {
         frame.pass.draw(3);
         frame.present().await?;
     }
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {
@@ -214,7 +214,7 @@ async fun main(): void {
         visualizer_audio = Audio(AudioBuffer.from_pcm(samples, 48000, 1).unwrap());
         visualizer_audio.loop = true;
     }
-    let opened = Window.open(WindowDesc.of("Dream audio | Space: play", 1100, 680));
+    let opened = Window.open(WindowDesc("Dream audio | Space: play", 1100, 680));
     if opened.is_err() {
         System.println(opened.unwrap_err().message());
         return;

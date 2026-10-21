@@ -11,11 +11,3 @@ Returns a fresh copy of `s` that can be changed independently.
 ```dream
 public static extern fun clone(borrow s: string): string
 ```
-
-## `empty`
-
-An empty string, useful for initializing or clearing text values.
-
-```dream
-public static get empty(): string
-```

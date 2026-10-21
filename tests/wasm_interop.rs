@@ -244,7 +244,7 @@ fn cpp_package_ownership_callbacks_layout_and_exceptions_at_all_levels() {
         compile(&repo("sample/native_cpp/src/main.dream"), &out, level).unwrap();
         assert_eq!(
             run(&out).trim(),
-            "changed: a,ab,b\nab = 22\nzz = (none)\nb as int = 333\ncount = 3\ncount(a) = 2\nscaled = 30\nsum = 10\nnorm = 5\norigin = 1.5,-2\ncompact ok true\nsnapshot failed\nsnapshot ab=22\nstore out of scope\nborrowed entry ab\n[c++] ~Store(main.db)\nkv 1.0\nhello, dream\n[c++] ~Store(default)\ncompact failed: nothing to compact\n[c++] ~Store(empty)"
+            "changed: a,ab,b\nab = 22\nzz = (none)\nb as int = 333\ncount = 3\ncount(a) = 2\nscaled = 30\nsum = 10\nnorm = 5\norigin = 1.5,-2\ncompact ok\nsnapshot failed\nsnapshot ab=22\nstore out of scope\nborrowed entry ab\n[c++] ~Store(main.db)\nkv 1.0\nhello, dream\n[c++] ~Store(default)\ncompact failed: nothing to compact\n[c++] ~Store(empty)"
         );
     }
 }

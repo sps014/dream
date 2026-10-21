@@ -25,7 +25,7 @@ public fun clone(): SharedSender<T>
 Attempts one send atomically without blocking the scheduler.
 
 ```dream
-public fun try_send(value: T): Result<bool, ChannelError>
+public fun try_send(value: T): Result<Unit, ChannelError>
 ```
 
 ## `send`
@@ -36,7 +36,7 @@ Waits for capacity using cross-worker notifications and inherited cancellation.
 public fun send(
     value: T,
     token: Option<CancellationToken> = Option.None
-): Future<Result<bool, ChannelError>>
+): Future<Result<Unit, ChannelError>>
 ```
 
 ## `close`

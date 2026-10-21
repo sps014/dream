@@ -1,5 +1,5 @@
 module system.json;
 
-// Leaves a field of a `@json` type out of JSON serialization and deserialization.
+/// Leaves a field of a `@json` type out of JSON serialization and deserialization.
 @attribute(AttributeTarget.Field)
 public struct JsonIgnoreAttribute {}

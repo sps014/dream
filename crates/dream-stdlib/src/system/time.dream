@@ -1,6 +1,6 @@
 module system;
 
-// Timing utilities.
+/// Timing utilities.
 public static class Time {
     /// Suspends for at least `ms` milliseconds.
     @intrinsic(Intrinsic.Sleep)
@@ -10,19 +10,25 @@ public static class Time {
     @runtime("delayMs")
     static extern async fun delay_host(ms: int): void;
 
-    // Suspends on the scheduler timer and returns cancellation instead of panicking.
+    /// Suspends the calling task for at least `ms` milliseconds on Dream's scheduler timer.
+    /// In a browser or Node module the timer runs on a virtual clock that jumps forward when
+    /// every task is waiting, so it never yields to the JavaScript event loop; use `delay` to
+    /// let host callbacks run. Returns `Err(CancelledError)` when `token` is cancelled first.
     public static fun sleep(
         ms: int,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, CancelledError>> {
+    ): Future<Result<Unit, CancelledError>> {
         return Time.wait_ms(ms, CancellationToken.resolve(token), true);
     }
 
-    // Suspends until the wall-clock timer expires or inherited cancellation is requested.
+    /// Suspends the calling task for at least `ms` milliseconds of real time. In a browser or
+    /// Node module this waits on a JavaScript timer, so the host event loop (I/O callbacks,
+    /// rendering) runs meanwhile; natively it behaves like `sleep`. Returns
+    /// `Err(CancelledError)` when `token` is cancelled first.
     public static fun delay(
         ms: int,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, CancelledError>> {
+    ): Future<Result<Unit, CancelledError>> {
         return Time.wait_ms(ms, CancellationToken.resolve(token), false);
     }
 
@@ -30,7 +36,7 @@ public static class Time {
         ms: int,
         token: Option<CancellationToken>,
         virtual_clock: bool
-    ): Result<bool, CancelledError> {
+    ): Result<Unit, CancelledError> {
         if CancellationToken.is_cancelled_opt(token) {
             return Result.Err(CancelledError.cancelled());
         }
@@ -46,11 +52,12 @@ public static class Time {
         }
         pending.await;
         guard.close();
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
-    // Returns a high-resolution, monotonically increasing timestamp in nanoseconds.
-    // Useful for benchmarking and measuring elapsed time.
+    /// Returns a monotonically increasing timestamp in nanoseconds from an unspecified
+    /// origin. Subtract two readings to measure elapsed time; it is unrelated to wall-clock
+    /// dates.
     @runtime("timeNowNanos")
     static extern fun nano_time(): long;
 }

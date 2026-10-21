@@ -23,7 +23,7 @@ public constructor(capacity: int = 8)
 Reserves additional live entries, accounting for load factor and reclaiming tombstones.
 
 ```dream
-public fun reserve(additional: int): Result<bool, CapacityError>
+public fun reserve(additional: int): Result<Unit, CapacityError>
 ```
 
 ## `length`

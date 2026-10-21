@@ -1,21 +1,21 @@
 module system.core;
 
-// Cooperative cancellation flag shared with tokens from a `CancellationSource`.
-// `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.
+/// Cooperative cancellation flag shared with tokens from a `CancellationSource`.
+/// `@shared` so a token/source can be captured into a `Task.spawn` body and polled cross-thread.
 shared public class CancellationSource {
     _state: usize;
 
-    // Creates a source that is not yet cancelled.
+    /// Creates a source that is not yet cancelled.
     public constructor() {
         this._state = CancellationSource.create_host();
     }
 
-    // True after `cancel` has been called.
+    /// True after `cancel` has been called.
     public get is_cancelled(): bool {
         return CancellationSource.cancelled_host(this._state) != 0;
     }
 
-    // Marks this source (and all of its tokens) as cancelled.
+    /// Marks this source (and all of its tokens) as cancelled.
     public fun cancel(): void {
         CancellationSource.cancel_host(this._state);
     }
@@ -43,7 +43,7 @@ shared public class CancellationSource {
         return CancellationSource.register_host(this._state);
     }
 
-    // Returns a token that observes this source's cancelled state.
+    /// Returns a token that observes this source's cancelled state.
     public get token(): CancellationToken {
         return CancellationToken(this);
     }

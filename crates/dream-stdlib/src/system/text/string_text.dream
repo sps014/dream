@@ -1,0 +1,454 @@
+module system.text;
+
+// The `string` primitive.
+extend string: Comparable<string>, Equatable<string> {
+    /// Orders this string against `other` lexicographically.
+    public fun compare(borrow other: string): int {
+        return string.compare_raw(this, other);
+    }
+
+    /// True when the string has no characters.
+    @inline
+    public fun is_empty(): bool {
+        return this.length == 0;
+    }
+
+    /// Gets the character at the specified index.
+    public fun this[index: int]: char {
+        return this.char_at(index);
+    }
+
+    /// Replaces the UTF-16 code unit at `index`; an invalid index panics.
+    @inline
+    public fun this[index: int] = value: char {
+        // Force the same bounds panic as `char_at` / `s[i]` before the low-level write
+        // (which would otherwise append when `index == length`).
+        this.char_at(index);
+        string.set(this, index, value);
+    }
+
+    /// Gets an iterator for the string's characters.
+    public fun iterator(): StringIterator {
+        return StringIterator(this);
+    }
+
+    /// Gets a substring from start to end (O(1) slice of the parent).
+    public fun substring(start: int, end: int): string {
+        return string.substring_raw(this, start, end);
+    }
+
+    /// The index of the first occurrence of `target`, or `None`.
+    public fun index_of(target: char): Option<int> {
+        let i = string.view_find_char(this, 0, this.length, 0, (int)target);
+        if i < 0 {
+            return Option.None;
+        }
+        return Option.Some(i);
+    }
+
+    /// The index of the first occurrence of substring `sub`, or `None`.
+    public fun index_of(borrow sub: string): Option<int> {
+        let i = string.view_find(this, 0, this.length, sub, 0, sub.length, 0);
+        if i < 0 {
+            return Option.None;
+        }
+        return Option.Some(i);
+    }
+
+    /// True if `sub` occurs anywhere in this string.
+    public fun contains(borrow sub: string): bool {
+        return string.view_find(this, 0, this.length, sub, 0, sub.length, 0) >= 0;
+    }
+
+    /// True if this string begins with `prefix`.
+    public fun starts_with(borrow prefix: string): bool {
+        let n = prefix.length;
+        if n > this.length {
+            return false;
+        }
+        return string.view_eq(this, 0, n, prefix, 0, n) != 0;
+    }
+
+    /// True if this string ends with `suffix`.
+    public fun ends_with(borrow suffix: string): bool {
+        let n = suffix.length;
+        let hay = this.length;
+        if n > hay {
+            return false;
+        }
+        return string.view_eq(this, hay - n, n, suffix, 0, n) != 0;
+    }
+
+    /// A new string with every uppercase letter lowercased.
+    public fun to_lower(): string {
+        let n = this.length;
+        let result = string.alloc(n);
+        let i = 0;
+        while i < n {
+            let c = this.char_at(i);
+            string.set(result, i, c.to_lower());
+            i = i + 1;
+        }
+        return result;
+    }
+
+    /// A new string with every lowercase letter uppercased.
+    public fun to_upper(): string {
+        let n = this.length;
+        let result = string.alloc(n);
+        let i = 0;
+        while i < n {
+            let c = this.char_at(i);
+            string.set(result, i, c.to_upper());
+            i = i + 1;
+        }
+        return result;
+    }
+
+    /// Full Unicode lowercase via `Unicode.to_lower_unicode`.
+    public fun to_lower_unicode(): string {
+        return Unicode.to_lower_unicode(this);
+    }
+
+    /// Full Unicode uppercase via `Unicode.to_upper_unicode`.
+    public fun to_upper_unicode(): string {
+        return Unicode.to_upper_unicode(this);
+    }
+
+    /// User-perceived grapheme clusters via `Unicode.graphemes`.
+    public fun graphemes(): string[] {
+        return Unicode.graphemes(this);
+    }
+
+    /// Unicode normalization to the requested form.
+    public fun normalize(form: UnicodeNormForm): string {
+        return Unicode.normalize(this, form);
+    }
+
+    /// A new string with leading and trailing whitespace removed.
+    public fun trim(): string {
+        let n = this.length;
+        let start = 0;
+        while (start < n) && (this._is_space_at(start) == true) {
+            start = start + 1;
+        }
+        let end = n;
+        while (end > start) && (this._is_space_at(end - 1) == true) {
+            end = end - 1;
+        }
+        return this.substring(start, end);
+    }
+
+    /// A new string with leading whitespace removed.
+    public fun trim_start(): string {
+        let n = this.length;
+        let start = 0;
+        while (start < n) && (this._is_space_at(start) == true) {
+            start = start + 1;
+        }
+        return this.substring(start, n);
+    }
+
+    /// A new string with trailing whitespace removed.
+    public fun trim_end(): string {
+        let n = this.length;
+        let end = n;
+        while (end > 0) && (this._is_space_at(end - 1) == true) {
+            end = end - 1;
+        }
+        return this.substring(0, end);
+    }
+
+    /// True when `trim()` is empty.
+    public fun is_blank(): bool {
+        return this.trim().is_empty();
+    }
+
+    /// Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
+    public fun pad_start(width: int, pad: string): string {
+        if (pad.is_empty()) || (this.length >= width) {
+            return this;
+        }
+        let sb = StringBuilder();
+        while sb.length + this.length < width {
+            sb.append(pad);
+        }
+        sb.append(this);
+        let out = sb.build();
+        if out.length > width {
+            return out.substring(out.length - width, out.length);
+        }
+        return out;
+    }
+
+    /// Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).
+    public fun pad_end(width: int, pad: string): string {
+        if (pad.is_empty()) || (this.length >= width) {
+            return this;
+        }
+        let sb = StringBuilder();
+        sb.append(this);
+        while sb.length < width {
+            sb.append(pad);
+        }
+        let out = sb.build();
+        if out.length > width {
+            return out.substring(0, width);
+        }
+        return out;
+    }
+
+    /// The index of the last occurrence of `target`, or `None`.
+    public fun last_index_of(target: char): Option<int> {
+        let i = string.view_rfind_char(this, 0, this.length, (int)target);
+        if i < 0 {
+            return Option.None;
+        }
+        return Option.Some(i);
+    }
+
+    /// The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`.
+    /// Byte-compare scan like `index_of` — allocates nothing per candidate.
+    public fun last_index_of(borrow sub: string): Option<int> {
+        let i = string.view_rfind(this, 0, this.length, sub, 0, sub.length);
+        if i < 0 {
+            return Option.None;
+        }
+        return Option.Some(i);
+    }
+
+    /// Replaces the first occurrence of `old` with `replacement`.
+    public fun replace_first(borrow old: string, borrow replacement: string): string {
+        let at = this.index_of(old);
+        if at.is_none() {
+            return this;
+        }
+        let i = at.unwrap_or(0);
+        return this.substring(0, i) + replacement + this.substring(i + old.length, this.length);
+    }
+
+    /// Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur,
+    /// returns `[this]` (consistent with `split`), never an empty array.
+    public fun split_once(sep: char): string[] {
+        let at = this.index_of(sep);
+        if at.is_none() {
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
+        }
+        let i = at.unwrap_or(0);
+        let out = Buffer.alloc<string>(2);
+        out[0] = this.substring(0, i);
+        out[1] = this.substring(i + 1, this.length);
+        return out;
+    }
+
+    /// Splits at the first occurrence of `sep`; returns a one-element array when no separator
+    /// is found.
+    public fun split_once(borrow sep: string): string[] {
+        if sep.is_empty() {
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
+        }
+        let at = this.index_of(sep);
+        if at.is_none() {
+            let whole = Buffer.alloc<string>(1);
+            whole[0] = this;
+            return whole;
+        }
+        let i = at.unwrap_or(0);
+        let out = Buffer.alloc<string>(2);
+        out[0] = this.substring(0, i);
+        out[1] = this.substring(i + sep.length, this.length);
+        return out;
+    }
+
+    /// `Some` remainder when this starts with `prefix`.
+    public fun strip_prefix(borrow prefix: string): Option<string> {
+        if this.starts_with(prefix) == false {
+            return Option.None;
+        }
+        return Option.Some(this.substring(prefix.length, this.length));
+    }
+
+    /// `Some` remainder when this ends with `suffix`.
+    public fun strip_suffix(borrow suffix: string): Option<string> {
+        if this.ends_with(suffix) == false {
+            return Option.None;
+        }
+        return Option.Some(this.substring(0, this.length - suffix.length));
+    }
+
+    /// Iterates over the lines without copying them. Lines end at `\n`; a trailing `\r` is
+    /// dropped from each line, and a final line terminator does not produce an empty line.
+    /// Call `to_string()` on a line to keep an owned copy.
+    public fun lines(): StringLines {
+        return this.span().lines();
+    }
+
+    /// A new string repeated `times` times.
+    public fun repeat(times: int): string {
+        if times <= 0 {
+            return "";
+        }
+        let n = this.byte_size();
+        if n == 0 {
+            return "";
+        }
+        let total = checked_size(n, times);
+        let buf = Buffer.alloc<byte>(total);
+        let i = 0;
+        while i < times {
+            string.copy_utf8(buf, i * n, this, 0, n);
+            i = i + 1;
+        }
+        return string.from_utf8_prefix_n(buf, total, total / 2);
+    }
+
+    /// Value equality (`Equatable<string>`); identical to `this == other`.
+    public fun equals(borrow other: string): bool {
+        return this == other;
+    }
+
+    /// Splits this string on the single character `sep`.
+    public fun split(sep: char): string[] {
+        let n = this.length;
+        let c = (int)sep;
+        let result = Buffer.alloc<string>(string.view_count_char(this, 0, n, c) + 1);
+        // The separator count fixes capacity before any result slot is written.
+        let start = 0;
+        let idx = 0;
+        let at = string.view_find_char(this, 0, n, 0, c);
+        while at >= 0 {
+            Buffer.set_unchecked<string>(result, idx, this.substring(start, at));
+            idx = idx + 1;
+            start = at + 1;
+            at = string.view_find_char(this, 0, n, start, c);
+        }
+        Buffer.set_unchecked<string>(result, idx, this.substring(start, n));
+        return result;
+    }
+
+    /// Splits this string on every occurrence of substring `sep`.
+    public fun split(borrow sep: string): string[] {
+        let w = sep.length;
+        if w == 0 {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        let n = this.length;
+        let parts = 1;
+        let at = string.view_find(this, 0, n, sep, 0, w, 0);
+        while at >= 0 {
+            parts = parts + 1;
+            at = string.view_find(this, 0, n, sep, 0, w, at + w);
+        }
+        let result = Buffer.alloc<string>(parts);
+        // The separator count fixes capacity before any result slot is written.
+        let start = 0;
+        let idx = 0;
+        at = string.view_find(this, 0, n, sep, 0, w, 0);
+        while at >= 0 {
+            Buffer.set_unchecked<string>(result, idx, this.substring(start, at));
+            idx = idx + 1;
+            start = at + w;
+            at = string.view_find(this, 0, n, sep, 0, w, start);
+        }
+        Buffer.set_unchecked<string>(result, idx, this.substring(start, n));
+        return result;
+    }
+
+    /// Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+    public fun split(sep: char, limit: int): string[] {
+        if limit < 1 {
+            return this.split(sep);
+        }
+        if limit == 1 {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        let all = this.split(sep);
+        if all.length <= limit {
+            return all;
+        }
+        let out = Buffer.alloc<string>(limit);
+        let i = 0;
+        while i < limit - 1 {
+            out[i] = all[i];
+            i = i + 1;
+        }
+        let sb = StringBuilder();
+        while i < all.length {
+            if sb.is_empty() == false {
+                sb.append_char(sep);
+            }
+            sb.append(all[i]);
+            i = i + 1;
+        }
+        out[limit - 1] = sb.build();
+        return out;
+    }
+
+    /// Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).
+    public fun split(borrow sep: string, limit: int): string[] {
+        if limit < 1 {
+            return this.split(sep);
+        }
+        if limit == 1 {
+            let one = Buffer.alloc<string>(1);
+            one[0] = this;
+            return one;
+        }
+        let all = this.split(sep);
+        if all.length <= limit {
+            return all;
+        }
+        let out = Buffer.alloc<string>(limit);
+        let i = 0;
+        while i < limit - 1 {
+            out[i] = all[i];
+            i = i + 1;
+        }
+        let sb = StringBuilder();
+        while i < all.length {
+            if sb.is_empty() == false {
+                sb.append(sep);
+            }
+            sb.append(all[i]);
+            i = i + 1;
+        }
+        out[limit - 1] = sb.build();
+        return out;
+    }
+
+    /// A new string with every occurrence of `old` replaced by `replacement`.
+    public fun replace(borrow old: string, borrow replacement: string): string {
+        let w = old.length;
+        if w == 0 {
+            return this;
+        }
+        let n = this.length;
+        let at = string.view_find(this, 0, n, old, 0, w, 0);
+        if at < 0 {
+            return this;
+        }
+        let sb = StringBuilder(n * 2);
+        let start = 0;
+        while at >= 0 {
+            sb.append_utf8_slice(this, start * 2, (at - start) * 2);
+            sb.append(replacement);
+            start = at + w;
+            at = string.view_find(this, 0, n, old, 0, w, start);
+        }
+        sb.append_utf8_slice(this, start * 2, (n - start) * 2);
+        return sb.build();
+    }
+
+    fun _is_space_at(index: int): bool {
+        let c = this.char_at(index);
+        return c.is_whitespace();
+    }
+}

@@ -11,6 +11,7 @@ use crate::backend::shared::js_marshal::{
     array_elems, array_syms, box_prim, emits_js_marshal, is_marshalable, is_option_union,
     js_bridge, struct_syms, unbox_prim,
 };
+use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_hir::{TypeLayout, UnionLayout, UnionVariant};
 use dream_types::{TyKind, TypeId};
 
@@ -116,7 +117,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             TyKind::Prim(p) => {
                 let (method, _) = box_prim(p);
                 let v = self.load_mem(mem_ty(cx, ty), at, MARSHAL_ALIGN);
-                let v = if method == "box_double" {
+                let v = if p.is_float() {
                     V::s(self.conv(&v, &Ty::F64))
                 } else {
                     v
@@ -159,7 +160,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         match self.interner.kind(ty).clone() {
             TyKind::Prim(p) => {
                 let (method, _) = box_prim(p);
-                let v = if method == "box_double" {
+                let v = if p.is_float() {
                     V::s(self.conv(v, &Ty::F64))
                 } else {
                     v.clone()
@@ -339,8 +340,8 @@ fn union_to_js(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
         return;
     }
     if is_option_union(layout) {
-        let none = variant(layout, "None").discriminant;
-        let payload = variant(layout, "Some").fields[0].clone();
+        let none = variant(layout, OPTION_NONE).discriminant;
+        let payload = variant(layout, OPTION_SOME).fields[0].clone();
         let disc = fx.load_disc(&this);
         let is_none = fx.w.icmp("eq", &disc, &Value::i32(none as i64));
         let r = fx.if_else_v(
@@ -422,8 +423,8 @@ fn js_to_union(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
         }
     };
     if is_option_union(layout) {
-        let none = variant(layout, "None").discriminant;
-        let some = variant(layout, "Some");
+        let none = variant(layout, OPTION_NONE).discriminant;
+        let some = variant(layout, OPTION_SOME);
         let payload = some.fields[0].clone();
         let null = fx.js_is_null(&j);
         let then_b = fx.w.new_block("none");

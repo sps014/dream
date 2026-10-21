@@ -284,7 +284,7 @@ fn spans_over_private_owned_strings_do_not_count_references_in_the_loop() {
             return sum;
         }
         fun main(): void {
-            System.println(owned_span(System.env_or("DREAM_SPAN_INPUT", "!"), 100));
+            System.println(owned_span(System.env("DREAM_SPAN_INPUT").unwrap_or("!"), 100));
         }
     "#,
     );

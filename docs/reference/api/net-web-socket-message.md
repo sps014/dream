@@ -12,7 +12,7 @@ A complete WebSocket data message or the peer's closing handshake.
 public enum WebSocketMessage
 ```
 
-## `text`
+## `Text`
 
 A text message with its payload.
 
@@ -20,7 +20,7 @@ A text message with its payload.
 Text(text: string)
 ```
 
-## `bytes`
+## `Binary`
 
 A binary message with its payload.
 
@@ -28,7 +28,7 @@ A binary message with its payload.
 Binary(bytes: byte[])
 ```
 
-## `code`
+## `Close`
 
 A close message with its status code and reason.
 

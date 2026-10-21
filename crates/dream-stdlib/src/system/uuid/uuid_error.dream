@@ -1,20 +1,20 @@
 module system.uuid;
 
-// Invalid UUID text or an unavailable secure entropy source.
+/// Invalid UUID text or an unavailable secure entropy source.
 public class UuidError: Error {
     detail: string;
 
-    // Creates a UUID error without including secret input.
+    /// Creates a UUID error without including secret input.
     public constructor(message: string) {
         this.detail = message;
     }
 
-    // Stable UUID error code.
+    /// Stable UUID error code.
     public fun code(): string {
         return "EUUID";
     }
 
-    // Human-readable validation or entropy failure.
+    /// Human-readable validation or entropy failure.
     public fun message(): string {
         return this.detail;
     }

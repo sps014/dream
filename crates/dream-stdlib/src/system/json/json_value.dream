@@ -53,32 +53,32 @@ public class JsonValue {
         return JsonValue(k, bool_val, num_val, str_val, none_items, none_keys, none_vals, none_map);
     }
 
-    // A new null JSON value.
-    public static fun none(): JsonValue {
+    /// Creates a JSON `null`.
+    public static fun null(): JsonValue {
         return JsonValue._scalar(0, false, 0.0d, "");
     }
 
-    // A new boolean JSON value.
-    public static fun boolean(b: bool): JsonValue {
+    /// Creates a JSON boolean holding `b`.
+    public static fun from_bool(b: bool): JsonValue {
         return JsonValue._scalar(1, b, 0.0d, "");
     }
 
-    // A new number JSON value.
-    public static fun number(n: double): JsonValue {
+    /// Creates a JSON number holding `n`. Integral values serialize without a decimal point.
+    public static fun from_double(n: double): JsonValue {
         return JsonValue._scalar(2, false, n, "");
     }
 
-    // A new number JSON value from int.
+    /// Creates a JSON number holding `n`; every `int` is represented exactly.
     public static fun from_int(n: int): JsonValue {
-        return JsonValue.number((double)n);
+        return JsonValue.from_double((double)n);
     }
 
-    // A new string JSON value.
+    /// Creates a JSON string holding `s`.
     public static fun from_string(s: string): JsonValue {
         return JsonValue._scalar(3, false, 0.0d, s);
     }
 
-    // A new empty JSON array (allocates only the items list).
+    /// Creates an empty JSON array; add elements with `push`.
     public static fun array(): JsonValue {
         let none_keys: Option<List<string>> = Option.None;
         let none_vals: Option<List<JsonValue>> = Option.None;
@@ -95,7 +95,8 @@ public class JsonValue {
         );
     }
 
-    // A new empty JSON object (allocates keys, parallel values, and map).
+    /// Creates an empty JSON object; add properties with `value[key] = item`. Properties
+    /// serialize in insertion order.
     public static fun dict(): JsonValue {
         let none_items: Option<List<JsonValue>> = Option.None;
         return JsonValue(
@@ -110,7 +111,7 @@ public class JsonValue {
         );
     }
 
-    // The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.
+    /// The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.
     public fun kind(): JsonKind {
         if this.kind == 1 {
             return JsonKind.Bool;
@@ -130,22 +131,22 @@ public class JsonValue {
         return JsonKind.Null;
     }
 
-    // True if the value is null.
+    /// True if the value is null.
     public fun is_null(): bool {
         return this.kind == 0;
     }
 
-    // True if the value is an array.
+    /// True if the value is an array.
     public fun is_array(): bool {
         return this.kind == 4;
     }
 
-    // True if the value is an object.
+    /// True if the value is an object.
     public fun is_object(): bool {
         return this.kind == 5;
     }
 
-    // Returns the value as a bool when this is a JSON boolean.
+    /// Returns the value as a bool when this is a JSON boolean.
     public fun as_bool(): Option<bool> {
         if this.kind != 1 {
             return Option.None;
@@ -153,7 +154,7 @@ public class JsonValue {
         return Option.Some(this.bool_val);
     }
 
-    // Returns the value as a double when this is a JSON number.
+    /// Returns the value as a double when this is a JSON number.
     public fun as_double(): Option<double> {
         if this.kind != 2 {
             return Option.None;
@@ -161,7 +162,7 @@ public class JsonValue {
         return Option.Some(this.num_val);
     }
 
-    // Returns the value as an integer when this is a JSON number.
+    /// Returns the value as an integer when this is a JSON number.
     public fun as_int(): Option<int> {
         if this.kind != 2 {
             return Option.None;
@@ -169,7 +170,7 @@ public class JsonValue {
         return Option.Some((int)this.num_val);
     }
 
-    // Returns the value as a string when this is a JSON string.
+    /// Returns the value as a string when this is a JSON string.
     public fun as_string(): Option<string> {
         if this.kind != 3 {
             return Option.None;
@@ -193,77 +194,6 @@ public class JsonValue {
             return Option.None;
         }
         return this.obj_map;
-    }
-
-    /// Returns the string value, or `fallback` for a different JSON kind.
-    public fun str_or(fallback: string): string {
-        return this.as_string().unwrap_or(fallback);
-    }
-
-    /// Returns the integer value, or `fallback` for a different JSON kind.
-    public fun int_or(fallback: int): int {
-        return this.as_int().unwrap_or(fallback);
-    }
-
-    /// Returns the boolean value, or `fallback` for a different JSON kind.
-    public fun bool_or(fallback: bool): bool {
-        return this.as_bool().unwrap_or(fallback);
-    }
-
-    /// Returns the numeric value, or `fallback` for a different JSON kind.
-    public fun double_or(fallback: double): double {
-        return this.as_double().unwrap_or(fallback);
-    }
-
-    /// Returns the named string property, or `None` if missing or not a string.
-    public fun get_str(borrow key: string): Option<string> {
-        switch (this[key]) {
-            Some(v) => {
-                return v.as_string();
-            },
-            None => {
-                return Option.None;
-            },
-        }
-    }
-
-    /// Returns the named integer property, or `None` if missing or not numeric.
-    public fun get_int(borrow key: string): Option<int> {
-        switch (this[key]) {
-            Some(v) => {
-                return v.as_int();
-            },
-            None => {
-                return Option.None;
-            },
-        }
-    }
-
-    /// Returns the named boolean property, or `None` if missing or not a boolean.
-    public fun get_bool(borrow key: string): Option<bool> {
-        switch (this[key]) {
-            Some(v) => {
-                return v.as_bool();
-            },
-            None => {
-                return Option.None;
-            },
-        }
-    }
-
-    /// Returns the named string property, or `fallback` if missing or not a string.
-    public fun get_str_or(borrow key: string, fallback: string): string {
-        return this.get_str(key).unwrap_or(fallback);
-    }
-
-    /// Returns the named integer property, or `fallback` if missing or not numeric.
-    public fun get_int_or(borrow key: string, fallback: int): int {
-        return this.get_int(key).unwrap_or(fallback);
-    }
-
-    /// Returns the named property, or `fallback` when absent or not an object.
-    public fun get_or(borrow key: string, fallback: JsonValue): JsonValue {
-        return this[key].unwrap_or(fallback);
     }
 
     /// Removes the named object property; returns whether it existed.
@@ -292,33 +222,36 @@ public class JsonValue {
         return true;
     }
 
-    // True if the object has the given key.
-    public fun has(borrow key: string): bool {
+    /// Returns whether this is an object with a property named `key`. Always `false` for
+    /// arrays and scalars.
+    public fun contains(borrow key: string): bool {
         return switch (this.obj_map) {
             Some(m) => m.contains(key),
             None => false,
         };
     }
 
-    // The value for `key`, or `None` when this is not an object or the key is absent.
-    public fun this[borrow key: string]: Option<JsonValue> {
+    /// Returns the property named `key`, or `None` when this is not an object or the
+    /// property is absent. Chain `as_string`, `as_int`, and similar readers through
+    /// `and_then` to read a typed property.
+    public fun get(borrow key: string): Option<JsonValue> {
         return switch (this.obj_map) {
             Some(m) => m.get(key),
             None => Option.None,
         };
     }
 
-    // The value for `key`. Panics when this is not an object or the key is absent — use
-    // `get(key)` for absence-tolerant reads.
-    public fun at(borrow key: string): JsonValue {
-        let at = this[key];
-        if at.is_none() {
+    /// Returns the property named `key`. Panics when this is not an object or the
+    /// property is absent; use `get` when absence is expected.
+    public fun this[borrow key: string]: JsonValue {
+        let found = this.get(key);
+        if found.is_none() {
             System.panic("JsonValue key not found: " + key);
         }
-        return at.unwrap_or(JsonValue.none());
+        return found.unwrap_or(JsonValue.null());
     }
 
-    // Sets the value for `key` (objects only).
+    /// Sets the value for `key` (objects only).
     public fun this[key: string] = value: JsonValue {
         switch (this.obj_map) {
             Some(m) => {
@@ -349,7 +282,7 @@ public class JsonValue {
         }
     }
 
-    // The object key at `index`, or `None`.
+    /// The object key at `index`, or `None`.
     public fun key_at(index: int): Option<string> {
         switch (this.obj_keys) {
             Some(keys) => {
@@ -364,7 +297,7 @@ public class JsonValue {
         }
     }
 
-    // The object value at insertion index `index`, or `None`.
+    /// The object value at insertion index `index`, or `None`.
     public fun value_at(index: int): Option<JsonValue> {
         switch (this.obj_vals) {
             Some(vals) => {
@@ -379,12 +312,12 @@ public class JsonValue {
         }
     }
 
-    // The keys of the object (empty list when not an object).
+    /// The keys of the object (empty list when not an object).
     public fun keys(): List<string> {
         return this.obj_keys.unwrap_or(List<string>());
     }
 
-    // The array element at `index`, or `None`.
+    /// The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
         switch (this.items) {
             Some(items) => {
@@ -399,7 +332,7 @@ public class JsonValue {
         }
     }
 
-    // Appends a value to the array.
+    /// Appends a value to the array.
     public fun push(value: JsonValue): void {
         switch (this.items) {
             Some(items) => {
@@ -409,7 +342,7 @@ public class JsonValue {
         }
     }
 
-    // Element count for arrays/objects (0 for scalars).
+    /// Element count for arrays/objects (0 for scalars).
     public get length(): int {
         if this.kind == 5 {
             return switch (this.obj_keys) {

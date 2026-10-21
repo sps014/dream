@@ -39,7 +39,7 @@ public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>
 Seeks the source and discards buffered input only after success. Unsupported or failed seeks preserve unread buffered bytes.
 
 ```dream
-public fun seek(position: long): Result<bool, IoError>
+public fun seek(position: long): Result<Unit, IoError>
 ```
 
 ## `tell`

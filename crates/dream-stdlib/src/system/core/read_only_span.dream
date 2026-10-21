@@ -1,8 +1,8 @@
 module system.core;
 
-// `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
-// `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
-// The same `ref struct` escape rules as `Span<T>` apply (see `docs/language/types/spans.md`).
+/// `ReadOnlySpan<T>` - a `Span<T>` without the writers: no indexer setter, `set`, `fill`, or
+/// `copy_from`. Take one when a function borrows a run of elements and promises not to change them.
+/// The same `ref struct` escape rules as `Span<T>` apply (see `docs/language/types/spans.md`).
 @slot_walk("length", "at_unchecked", "")
 public ref struct ReadOnlySpan<T> {
     internal array: T[];
@@ -11,7 +11,7 @@ public ref struct ReadOnlySpan<T> {
     internal offset: int;
     internal _length: int;
 
-    // A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`.
+    /// A view of `array[offset .. offset + length)`. Traps unless that range lies inside `array`.
     public constructor(borrow array: T[], offset: int, length: int) {
         if (offset < 0) || (length < 0) || (length > array.length - offset) {
             System.panic("Span range out of bounds");
@@ -42,23 +42,23 @@ public ref struct ReadOnlySpan<T> {
         return ReadOnlySpan<T>(src, 0, src.length);
     }
 
-    // A read-only span over the whole of `array`.
+    /// A read-only span over the whole of `array`.
     public static fun of(borrow array: T[]): ReadOnlySpan<T> {
         return ReadOnlySpan<T>(array, 0, array.length);
     }
 
-    // Number of elements this span covers.
+    /// Number of elements this span covers.
     public get length(): int {
         return this._length;
     }
 
-    // True when this span covers no elements.
+    /// True when this span covers no elements.
     @inline
     public fun is_empty(): bool {
         return this._length == 0;
     }
 
-    // The element at `index` (relative to this span). Traps if out of range.
+    /// The element at `index` (relative to this span). Traps if out of range.
     public fun this[index: int]: T {
         if (index < 0) || (index >= this._length) {
             System.panic("Span index out of range");
@@ -88,31 +88,34 @@ public ref struct ReadOnlySpan<T> {
         return Buffer.get_unchecked<T>(this.array, this.offset + index);
     }
 
-    // A sub-span covering `[start, start + count)`. Traps if the range doesn't fit.
-    public fun slice(start: int, count: int): ReadOnlySpan<T> {
-        if (start < 0) || (count < 0) || (count > this._length - start) {
+    /// Returns a view of elements from `start` (inclusive) to `end` (exclusive) that shares
+    /// this span's storage. Panics unless `0 <= start <= end <= length`.
+    public fun slice(start: int, end: int): ReadOnlySpan<T> {
+        if (start < 0) || (end < start) || (end > this._length) {
             System.panic("Span slice out of range");
         }
-        return ReadOnlySpan<T>(this.array, this.offset + start, count);
+        return ReadOnlySpan<T>(this.array, this.offset + start, end - start);
     }
 
-    /// Returns a view of `count` elements starting at `start`; invalid bounds panic.
-    public fun slice(start: int, count: int): ReadOnlySpan<T> where T: SpanCharacter {
-        if (start < 0) || (count < 0) || (count > this._length - start) {
+    /// Returns a view of UTF-16 units from `start` (inclusive) to `end` (exclusive), including
+    /// views over a `string`. Panics unless `0 <= start <= end <= length`.
+    public fun slice(start: int, end: int): ReadOnlySpan<T> where T: SpanCharacter {
+        if (start < 0) || (end < start) || (end > this._length) {
             System.panic("Span slice out of range");
         }
         if this._text {
-            return ReadOnlySpan<T>(this.src, this.offset + start, count);
+            return ReadOnlySpan<T>(this.src, this.offset + start, end - start);
         }
-        return ReadOnlySpan<T>(this.array, this.offset + start, count);
+        return ReadOnlySpan<T>(this.array, this.offset + start, end - start);
     }
 
-    // The sub-span from `start` to the end. Traps if `start` is outside `[0, length]`.
+    /// Returns a view from `start` to the end of this span. Panics unless
+    /// `0 <= start <= length`.
     public fun slice(start: int): ReadOnlySpan<T> {
-        return this.slice(start, this._length - start);
+        return this.slice(start, this._length);
     }
 
-    // Index of the first element equal to `value` (by value equality), or `None`.
+    /// Index of the first element equal to `value` (by value equality), or `None`.
     public fun index_of(borrow value: T): Option<int> {
         let i = 0;
         while i < this._length {
@@ -141,13 +144,13 @@ public ref struct ReadOnlySpan<T> {
         return Option.None;
     }
 
-    // True when some element equals `value`.
+    /// True when some element equals `value`.
     public fun contains(borrow value: T): bool {
         return this.index_of(value).is_some();
     }
 
-    // True when `other` has the same length and pairwise-equal elements. Element-wise `==` even
-    // for unmanaged `T`: a bitwise compare would disagree with `==` on floating-point NaN and -0.0.
+    /// True when `other` has the same length and pairwise-equal elements. Element-wise `==` even
+    /// for unmanaged `T`: a bitwise compare would disagree with `==` on floating-point NaN and -0.0.
     public fun sequence_equal(other: ReadOnlySpan<T>): bool {
         if this._length != other._length {
             return false;
@@ -168,8 +171,8 @@ public ref struct ReadOnlySpan<T> {
         return true;
     }
 
-    // Copies every element into `dst` starting at index 0. Traps if `dst` is shorter. Overlap
-    // within one array is handled like `Span<T>.copy_from`.
+    /// Copies every element into `dst` starting at index 0. Traps if `dst` is shorter. Overlap
+    /// within one array is handled like `Span<T>.copy_from`.
     public fun copy_to(dst: Span<T>): void {
         if this._length > dst._length {
             System.panic("Span copy_to overflow");
@@ -189,7 +192,7 @@ public ref struct ReadOnlySpan<T> {
         }
     }
 
-    // Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
+    /// Array-backed unmanaged elements use one bulk copy; strings widen UTF-16 units.
     public fun copy_to(dst: Span<T>): void where T: unmanaged {
         if this._length > dst._length {
             System.panic("Span copy_to overflow");
@@ -205,7 +208,7 @@ public ref struct ReadOnlySpan<T> {
         Buffer.elems_copy<T>(dst.array, dst.offset, this.array, this.offset, this._length);
     }
 
-    // Copies every element into a fresh, independently-owned array.
+    /// Copies every element into a fresh, independently-owned array.
     public fun to_array(): T[] {
         let result = Buffer.alloc<T>(this._length);
         let i = 0;

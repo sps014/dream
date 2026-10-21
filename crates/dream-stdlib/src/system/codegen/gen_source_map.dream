@@ -9,12 +9,12 @@ public class GenSourceMap {
     /// Source locations associated with generated output.
     public mappings: JsonValue;
 
-    // Creates an empty builder.
+    /// Creates an empty builder.
     public constructor() {
         this.mappings = JsonValue.array();
     }
 
-    // Maps a half-open artifact range to a snapshot node identity.
+    /// Maps a half-open artifact range to a snapshot node identity.
     public fun add(line: int, column: int, end_line: int, end_column: int, target: string): void {
         let m = JsonValue.dict();
         m["line"] = JsonValue.from_int(line);

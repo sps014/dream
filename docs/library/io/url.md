@@ -15,13 +15,13 @@ requires an absolute URL and returns `Result<Url, ParseError>`.
 import system;
 import system.net;
 
-fun main(): Result<bool, ParseError> {
+fun main(): Result<Unit, ParseError> {
     let base = Url.parse("HTTPS://Example.COM:443/v1/")?;
     let users = base.resolve("users")?;
     users.query.append("role", "admin");
     users.query.append("role", "editor");
     System.println(users.to_string());
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 ```
 

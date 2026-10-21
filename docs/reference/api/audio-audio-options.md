@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioOptions`
 
 Resource limits for a player. Values are snapshotted by its constructor.
 
@@ -12,7 +12,7 @@ Resource limits for a player. Values are snapshotted by its constructor.
 public class AudioOptions
 ```
 
-## Declaration
+## `max_decoded_bytes`
 
 Maximum decoded PCM bytes for byte sources, which decode completely; defaults to 256 MiB.
 
@@ -20,7 +20,7 @@ Maximum decoded PCM bytes for byte sources, which decode completely; defaults to
 public max_decoded_bytes: int
 ```
 
-## Declaration
+## `max_compressed_bytes`
 
 Maximum encoded bytes a streamed file or URL queues ahead of its decoder; defaults to 8 MiB. An encoded element that cannot fit, such as an oversized WebM frame, fails with ELIMIT. Track length is not limited.
 
@@ -28,7 +28,7 @@ Maximum encoded bytes a streamed file or URL queues ahead of its decoder; defaul
 public max_compressed_bytes: int
 ```
 
-## Declaration
+## `buffer_seconds`
 
 Decoded audio a streamed source keeps queued for output, in seconds; defaults to one. Values are clamped between 1,024 frames and 30 seconds.
 
@@ -36,11 +36,10 @@ Decoded audio a streamed source keeps queued for output, in seconds; defaults to
 public buffer_seconds: double
 ```
 
-## Declaration
+## `constructor`
 
 Creates the default resource limits.
 
 ```dream
 public constructor()
 ```
-

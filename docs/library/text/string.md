@@ -20,7 +20,7 @@ fun main() {
 }
 ```
 
-`.length` counts UTF-16 code units, not Unicode scalars. Use `.byte_size()` for the raw UTF-16 payload size (`length * 2`). `string.empty` is the shared empty string.
+`.length` counts UTF-16 code units, not Unicode scalars. Use `.byte_size()` for the raw UTF-16 payload size (`length * 2`). Every empty string literal `""` shares one allocation.
 
 ## Look up and change
 
@@ -37,7 +37,7 @@ fun main() {
 | --- | --- |
 | `contains` / `starts_with` / `ends_with` | tests |
 | `index_of(char or string)` / `last_index_of` | `Option<int>` |
-| `split(sep)` / `split(sep, limit)` / `split_once` / `lines` | `string[]` |
+| `split(sep)` / `split(sep, limit)` / `split_once` | `string[]` |
 | `replace(old, new)` / `replace_first` | new string |
 | `trim` / `trim_start` / `trim_end` / `is_blank` / `repeat(n)` | whitespace / repeat |
 | `pad_start` / `pad_end` | pad to a width |
@@ -96,6 +96,6 @@ Use `text.normalize(UnicodeNormForm.Nfc)` or `Unicode.normalize(text, UnicodeNor
 
 `graphemes()` returns the pieces a reader sees as characters. This differs from `.length`, which counts the stored UTF-16 units. Use graphemes when splitting visible text, especially text containing accents or emoji.
 
-For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string.md), [Unicode reference](../../reference/api/text-unicode.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
+For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md), [Unicode reference](../../reference/api/text-unicode.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
 
 `StringBuilder.append_utf8_slice(text, start, byte_len)` is an advanced method: its positions and length refer to the string's stored payload bytes. Use ordinary `append` for whole strings. An invalid nonempty byte range stops the program.

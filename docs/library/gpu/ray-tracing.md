@@ -85,11 +85,11 @@ fun shadow_mask(scene: GpuAccelerationStructure, hits: GpuBuffer<int>, size: int
     }
 }
 
-async fun run(): Result<bool, GpuError> {
+async fun run(): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     if !device.supports(GpuFeature.RayQuery) {
         System.println(device.backend.to_string() + " has no ray queries");
-        return Result.Ok(false);
+        return Result.Ok(Unit());
     }
 
     let corners = device.buffer_from(
@@ -115,7 +115,7 @@ async fun run(): Result<bool, GpuError> {
         }
         System.println(row.to_string());
     }
-    return Result.Ok(true);
+    return Result.Ok(Unit());
 }
 
 async fun main(): void {

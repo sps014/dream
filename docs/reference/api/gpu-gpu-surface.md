@@ -41,7 +41,7 @@ public get height(): int
 Resizes later frames to `width` by `height` physical pixels, the size carried by `WindowEvent.Resized`. Non-positive sizes, such as a minimized window's, are ignored.
 
 ```dream
-public fun resize(width: int, height: int): Result<bool, GpuError>
+public fun resize(width: int, height: int): Result<Unit, GpuError>
 ```
 
 ## `begin_frame`

@@ -3,16 +3,25 @@ module system.codegen;
 import system.json;
 
 /// A diagnostic associated with a declaration in the generator's input.
-public class GenCompilationError {
+public class GenCompilationError: Error {
     /// Target declaration or build target associated with this result.
     public target: string;
 
-    /// Human-readable explanation of the result or failure.
-    public message: string;
+    _message: string;
 
     // Decodes a pre-generation error restricted to this generator's triggered declarations.
-    public constructor(borrow v: JsonValue) {
+    internal constructor(borrow v: JsonValue) {
         this.target = gen_str(v, "target");
-        this.message = gen_str(v, "message");
+        this._message = gen_str(v, "message");
+    }
+
+    /// Returns `EGENERATE`, the code shared by every generator input diagnostic.
+    public fun code(): string {
+        return "EGENERATE";
+    }
+
+    /// Returns the compiler's explanation of the failure in `target`.
+    public fun message(): string {
+        return this._message;
     }
 }

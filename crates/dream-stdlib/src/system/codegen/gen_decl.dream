@@ -4,15 +4,15 @@ import system;
 import system.collections;
 import system.json;
 
-// A class, struct, union, enum or interface the generator's triggers selected.
+/// A class, struct, union, enum or interface the generator's triggers selected.
 public class GenDecl {
-    /// Stable identifier of this entry.
+    /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;
 
-    /// Name identifying this entry.
+    /// Unqualified declaration name (`User`).
     public name: string;
 
-    /// Category of this entry.
+    /// Whether this declares a class, struct, union, enum, or interface.
     public kind: DeclKind;
 
     /// Fully qualified module containing the declaration.
@@ -21,7 +21,7 @@ public class GenDecl {
     /// Declared access level of this symbol.
     public visibility: string;
 
-    /// Source location associated with this entry.
+    /// Where the declaration is written in source.
     public location: GenLocation;
 
     /// Names of the declared type parameters, in order.
@@ -42,7 +42,8 @@ public class GenDecl {
     /// Choices declared by this union or enum, in declaration order.
     public variants: List<GenVariant>;
 
-    // Creates the snapshot model from the supplied values.
+    /// Creates a `GenDecl` from its parts. Generators normally receive these from `GenContext`
+    /// rather than constructing them.
     public constructor(
         id: string,
         name: string,
@@ -71,17 +72,17 @@ public class GenDecl {
         this.variants = variants;
     }
 
-    // Returns the requested model information.
+    /// The first `@A` attached to this declaration, decoded into `A`, or `None` when absent.
     public fun attribute<A>(): Option<A> {
         return GenAttributes.decode<A>(this.attributes);
     }
 
-    // Tests whether the requested attribute is attached to this model node.
+    /// Whether this declaration carries at least one `@A` attribute.
     public fun has<A>(): bool {
         return GenAttributes.has(this.attributes, GenAttributes.id<A>());
     }
 
-    // `Name` or `Name<T, U>`: the spelling of this type inside its own generic scope.
+    /// `Name` or `Name<T, U>`: the spelling of this type inside its own generic scope.
     public fun self_type(): string {
         if this.generics.is_empty() {
             return this.name;

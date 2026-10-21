@@ -10,7 +10,7 @@ public static class Array {
     }
 
     // A `T[]` of length `len` whose every slot holds `value` (evaluated once, shared).
-    public static fun repeat<T>(len: int, value: T): T[] {
+    internal static fun repeat<T>(len: int, value: T): T[] {
         let out = Buffer.alloc<T>(len);
         let i = 0;
         while i < len {
@@ -22,7 +22,7 @@ public static class Array {
 
     // Like `repeat`, but calls `fill()` once per slot so each element can be a fresh value
     // (`[v; n]` uses this whenever `v` itself constructs an array, giving distinct rows).
-    public static fun repeat_with<T>(len: int, fill: fun(): T): T[] {
+    internal static fun repeat_with<T>(len: int, fill: fun(): T): T[] {
         let out = Buffer.alloc<T>(len);
         let i = 0;
         while i < len {

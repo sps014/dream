@@ -2,7 +2,7 @@ module system.webapi.auth;
 
 /// One external OIDC identity provider. Redirect URIs must match the registered callback exactly.
 public class OidcOptions {
-    /// Name identifying this entry.
+    /// Provider name used in login routes and to label linked identities.
     public name: string;
 
     /// Identity of the token issuer.

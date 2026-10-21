@@ -41,7 +41,7 @@ public get format(): GpuTextureFormat
 Replaces the texels of mip level `mip` with `data`, tightly packed rows from top to bottom in the texture's format.
 
 ```dream
-public fun write(mip: int, data: byte[]): Result<bool, GpuError>
+public fun write(mip: int, data: byte[]): Result<Unit, GpuError>
 ```
 
 ## `read`

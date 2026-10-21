@@ -49,7 +49,7 @@ public get capacity(): int
 Reserves room for additional elements without changing length or existing values.
 
 ```dream
-public fun reserve(additional: int): Result<bool, CapacityError>
+public fun reserve(additional: int): Result<Unit, CapacityError>
 ```
 
 ## `push`
@@ -142,7 +142,7 @@ public fun reverse(): void
 
 ## `slice`
 
-A new list of `this[start .. end)` (clamped; empty when the span is inverted).
+Returns a new list holding the elements from `start` (inclusive) to `end` (exclusive). Panics unless `0 <= start <= end <= length`.
 
 ```dream
 public fun slice(start: int, end: int): List<T>

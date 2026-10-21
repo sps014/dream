@@ -9,7 +9,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 A calendar date and time of day.
 
 ```dream
-public struct DateTime: Equatable<DateTime>
+public struct DateTime: Equatable<DateTime>, Comparable<DateTime>
 ```
 
 ## `constructor`
@@ -38,7 +38,7 @@ public get offset_minutes(): int
 
 ## `utc_now`
 
-The current instant in UTC.
+Returns the current instant with a UTC offset of zero. Unlike `now`, it reads only the clock and does not consult the timezone database, so it works where timezone support is not linked.
 
 ```dream
 public static fun utc_now(): DateTime
@@ -46,7 +46,7 @@ public static fun utc_now(): DateTime
 
 ## `now`
 
-The current instant in the local system timezone.
+Returns the current instant in the machine's local timezone.
 
 ```dream
 public static fun now(): DateTime
@@ -159,7 +159,7 @@ public fun to_zone(zone: TimeZone): DateTime
 
 ## `year`
 
-The year.
+The calendar year in this value's UTC offset (proleptic Gregorian; `0` is 1 BC).
 
 ```dream
 public get year(): int
@@ -167,7 +167,7 @@ public get year(): int
 
 ## `month`
 
-The month.
+The month in this value's UTC offset, from `1` (January) to `12` (December).
 
 ```dream
 public get month(): int
@@ -175,23 +175,15 @@ public get month(): int
 
 ## `day`
 
-The day.
+The day of the month in this value's UTC offset, from `1` to `31`.
 
 ```dream
 public get day(): int
 ```
 
-## `decompose`
-
-Calendar date fields (year/month/day) computed once.
-
-```dream
-public fun decompose(): DateTimeYmd
-```
-
 ## `hour`
 
-The hour.
+The hour of the day in this value's UTC offset, from `0` to `23`.
 
 ```dream
 public get hour(): int
@@ -199,7 +191,7 @@ public get hour(): int
 
 ## `minute`
 
-The minute.
+The minute of the hour, from `0` to `59`.
 
 ```dream
 public get minute(): int
@@ -207,7 +199,7 @@ public get minute(): int
 
 ## `second`
 
-The second.
+The second of the minute, from `0` to `59`; leap seconds are not represented.
 
 ```dream
 public get second(): int
@@ -215,8 +207,16 @@ public get second(): int
 
 ## `millisecond`
 
-The millisecond.
+The millisecond of the second, from `0` to `999`.
 
 ```dream
 public get millisecond(): int
+```
+
+## `day_of_week`
+
+The day of the week (0 = Sunday).
+
+```dream
+public get day_of_week(): int
 ```

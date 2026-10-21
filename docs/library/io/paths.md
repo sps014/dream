@@ -57,7 +57,6 @@ Pass extra segments to `join` as trailing arguments, for example
 | `parent(path)` | `Option<string>` | Everything before the last separator. |
 | `stem(path)` | `string` | File name without its last extension. |
 | `is_absolute(path)` | `bool` | Starts with `/`, `\`, or a drive such as `C:`. |
-| `is_relative(path)` | `bool` | Opposite of `is_absolute`. |
 | `has_extension(path, ext)` | `bool` | Last extension equals `ext`, with or without a leading `.`. |
 | `components(path)` | `string[]` | Nonempty components split on `/` and `\`. |
 

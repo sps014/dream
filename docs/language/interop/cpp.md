@@ -62,7 +62,7 @@ public class Store {
     extern fun put(key: string, value: string): void;
     extern fun get(key: string): Option<string>;
     extern fun find(key: string): Option<Entry>; // borrowed; keeps the Store alive
-    extern fun compact(): Result<bool, string>; // Ok(true), or Err(e.what())
+    extern fun compact(): Result<Unit, string>; // Ok(Unit()), or Err(e.what())
     extern fun on_change(f: fun(string): void): void; // capturing closures are fine
 
     @cpp_name("get_as<int>")
@@ -133,7 +133,7 @@ A `NULL` pointer returned where the declaration is not `Option` traps with the m
 
 Every shim call catches C++ exceptions. With a `Result<T, string>` return, an exception becomes
 `Err(e.what())`. Otherwise the program traps with the message. A `void` C++ member that may throw
-declares `Result<bool, string>` and yields `Ok(true)`, matching the stdlib convention.
+declares `Result<Unit, string>` and yields `Ok(Unit())`, matching the stdlib convention.
 
 ### Callbacks
 

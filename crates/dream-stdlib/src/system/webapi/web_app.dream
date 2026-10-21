@@ -14,7 +14,7 @@ public class WebApp {
     completed: Set<int>;
     serving: Option<Future<void>>;
     overrides: Map<string, string>;
-    startup: List<fun(WebApp): Future<Result<bool, IoError>>>;
+    startup: List<fun(WebApp): Future<Result<Unit, IoError>>>;
     shutdown_hooks: List<fun(WebApp): Future<void>>;
     started_hooks: int;
 
@@ -27,7 +27,7 @@ public class WebApp {
         this.middlewares = List<Middleware>();
         this.routes = List<WebEndpoint>();
         this.overrides = Map<string, string>();
-        this.startup = List<fun(WebApp): Future<Result<bool, IoError>>>();
+        this.startup = List<fun(WebApp): Future<Result<Unit, IoError>>>();
         this.shutdown_hooks = List<fun(WebApp): Future<void>>();
         this.started_hooks = 0;
         this.server_handle = 0;
@@ -44,7 +44,7 @@ public class WebApp {
         this.middlewares = List<Middleware>();
         this.routes = List<WebEndpoint>();
         this.overrides = Map<string, string>();
-        this.startup = List<fun(WebApp): Future<Result<bool, IoError>>>();
+        this.startup = List<fun(WebApp): Future<Result<Unit, IoError>>>();
         this.shutdown_hooks = List<fun(WebApp): Future<void>>();
         this.started_hooks = 0;
         this.server_handle = 0;
@@ -64,16 +64,16 @@ public class WebApp {
     static extern fun shutdown_host(id: int): void;
 
     /// Appends an outer-to-inner middleware layer before startup.
-    public fun use(middleware: Middleware): Result<bool, IoError> {
+    public fun use(middleware: Middleware): Result<Unit, IoError> {
         if this.frozen {
             return Result.Err(IoError.other("", "application configuration is frozen"));
         }
         this.middlewares.push(middleware);
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Mounts a router with an optional additional path prefix.
-    public fun include_router(router: WebRouter, prefix: string = ""): Result<bool, IoError> {
+    public fun include_router(router: WebRouter, prefix: string = ""): Result<Unit, IoError> {
         if this.frozen {
             return Result.Err(IoError.other("", "application configuration is frozen"));
         }
@@ -92,31 +92,31 @@ public class WebApp {
                 )
             );
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Installs generated dependency replacements before startup.
-    public fun override_dependencies(overrides: DependencyOverrides): Result<bool, IoError> {
+    public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError> {
         if this.frozen {
             return Result.Err(IoError.other("", "application configuration is frozen"));
         }
         for (let entry in overrides.providers.entries()) {
             this.overrides[entry.key] = entry.value;
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.
     public fun lifespan(
-        start: fun(WebApp): Future<Result<bool, IoError>>,
+        start: fun(WebApp): Future<Result<Unit, IoError>>,
         stop: fun(WebApp): Future<void>
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         if this.frozen {
             return Result.Err(IoError.other("", "application configuration is frozen"));
         }
         this.startup.push(start);
         this.shutdown_hooks.push(stop);
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     static async fun finish_lifespan(app: WebApp): void {
@@ -140,7 +140,7 @@ public class WebApp {
         return prefix + path;
     }
 
-    fun validate_configuration(): Result<bool, IoError> {
+    fun validate_configuration(): Result<Unit, IoError> {
         let seen = Set<string>();
         for (let path in [this.options.docs_url, this.options.openapi_url, this.options.redoc_url]) {
             if path.is_empty() {
@@ -162,7 +162,7 @@ public class WebApp {
             }
             routes.add(key);
         }
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Stops accepting traffic and cancels active transport operations on this app.
@@ -303,12 +303,12 @@ public class WebApp {
         let ctx = RequestContext(req);
         ctx.app_state = app.state;
         ctx.overrides = app.overrides;
-        Task.scope<bool, string>(
+        Task.scope<Unit, string>(
             async (scope: TaskScope<string>) => {
                 ctx.cancellation_token = Option.Some(scope.token);
                 req.cancellation_token = ctx.cancellation_token;
                 WebApp.respond(app, ctx).await;
-                let result: Result<bool, TaskFailure<string>> = Result.Ok(true);
+                let result: Result<Unit, TaskFailure<string>> = Result.Ok(Unit());
                 return result;
             },
             token: Option.Some(source.token)
@@ -392,7 +392,7 @@ public class WebApp {
             return Result.Err(parsed.unwrap_err());
         }
         let metadata = parsed.unwrap();
-        let id = metadata.get_or("id", JsonValue.none()).as_int().unwrap_or(0);
+        let id = metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0);
         if id <= 0 {
             return Result.Err(IoError.other("", "invalid HTTP server handle"));
         }
@@ -402,7 +402,7 @@ public class WebApp {
         let serving = WebApp.serve(app, id, effective);
         app.serving = Option.Some(serving);
         Promise.start(serving);
-        return Result.Ok(metadata.get_or("port", JsonValue.none()).as_int().unwrap_or(0));
+        return Result.Ok(metadata.get("port").unwrap_or(JsonValue.null()).as_int().unwrap_or(0));
     }
 
     /// Listens and waits until shutdown or cancellation.
@@ -411,7 +411,7 @@ public class WebApp {
         host: string,
         port: int,
         token: Option<CancellationToken> = Option.None
-    ): Future<Result<bool, IoError>> {
+    ): Future<Result<Unit, IoError>> {
         return WebApp.run_owned(this, host, port, token);
     }
 
@@ -420,10 +420,10 @@ public class WebApp {
         host: string,
         port: int,
         token: Option<CancellationToken>
-    ): Result<bool, IoError> {
+    ): Result<Unit, IoError> {
         app.listen(host, port, token).await?;
         app.wait(token).await;
-        return Result.Ok(true);
+        return Result.Ok(Unit());
     }
 
     /// Produces documentation for this application's mounted routes only.
@@ -438,16 +438,16 @@ public class WebApp {
             let all = Json.deserialize<JsonValue>(route.paths).unwrap_or(JsonValue.dict());
             let components = Json.deserialize<JsonValue>(route.components)
                 .unwrap_or(JsonValue.dict());
-            for (let key in components.get_or("schemas", JsonValue.none()).keys()) {
-                schemas[key] = components.get_or("schemas", JsonValue.none())
-                    .get_or(key, JsonValue.none());
+            for (let key in components.get("schemas").unwrap_or(JsonValue.null()).keys()) {
+                schemas[key] = components.get("schemas").unwrap_or(JsonValue.null())
+                    .get(key).unwrap_or(JsonValue.null());
             }
-            for (let key in components.get_or("securitySchemes", JsonValue.none()).keys()) {
-                security[key] = components.get_or("securitySchemes", JsonValue.none())
-                    .get_or(key, JsonValue.none());
+            for (let key in components.get("securitySchemes").unwrap_or(JsonValue.null()).keys()) {
+                security[key] = components.get("securitySchemes").unwrap_or(JsonValue.null())
+                    .get(key).unwrap_or(JsonValue.null());
             }
             let method = route.method.to_lower();
-            let mounted = paths[route.path].unwrap_or(JsonValue.dict());
+            let mounted = paths.get(route.path).unwrap_or(JsonValue.dict());
             mounted[method] = all;
             paths[route.path] = mounted;
         }
@@ -495,9 +495,9 @@ public class WebApp {
         let settings = JsonValue.dict();
         settings["url"] = JsonValue.from_string(options.openapi_url);
         settings["dom_id"] = JsonValue.from_string("#swagger-ui");
-        settings["deepLinking"] = JsonValue.boolean(options.swagger.deep_linking);
-        settings["persistAuthorization"] = JsonValue.boolean(options.swagger.persist_authorization);
-        settings["tryItOutEnabled"] = JsonValue.boolean(options.swagger.try_it_out_enabled);
+        settings["deepLinking"] = JsonValue.from_bool(options.swagger.deep_linking);
+        settings["persistAuthorization"] = JsonValue.from_bool(options.swagger.persist_authorization);
+        settings["tryItOutEnabled"] = JsonValue.from_bool(options.swagger.try_it_out_enabled);
         if !options.swagger.oauth_redirect_url.is_empty() {
             settings["oauth2RedirectUrl"] = JsonValue.from_string(
                 options.swagger.oauth_redirect_url
@@ -505,7 +505,7 @@ public class WebApp {
         }
         let oauth = JsonValue.dict();
         oauth["clientId"] = JsonValue.from_string(options.swagger.oauth_client_id);
-        oauth["usePkceWithAuthorizationCodeGrant"] = JsonValue.boolean(
+        oauth["usePkceWithAuthorizationCodeGrant"] = JsonValue.from_bool(
             options.swagger.oauth_use_pkce
         );
         return "<!DOCTYPE html><html><head><title>"

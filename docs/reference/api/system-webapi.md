@@ -2,7 +2,6 @@
 
 Read the [Web APIs guide](../../web-server/index.md) for complete examples and behavior. Applications own their routes, options, middleware, lifecycle, and dependency overrides.
 
-- [Auth](webapi-auth.md)
 - [BodyAttribute](webapi-body-attribute.md)
 - [CookieAttribute](webapi-cookie-attribute.md)
 - [Cors](webapi-cors.md)
@@ -17,6 +16,7 @@ Read the [Web APIs guide](../../web-server/index.md) for complete examples and b
 - [GetAttribute](webapi-get-attribute.md)
 - [HeadAttribute](webapi-head-attribute.md)
 - [HeaderAttribute](webapi-header-attribute.md)
+- [HttpAuth](webapi-http-auth.md)
 - [HttpIncoming](webapi-http-incoming.md)
 - [HttpOutgoing](webapi-http-outgoing.md)
 - [HttpStatus](webapi-http-status.md)

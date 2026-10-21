@@ -4,7 +4,7 @@
 
 Read the [audio guide](../../library/system/audio.md) for usage, limits, and current platform restrictions.
 
-## Declaration
+## `AudioError`
 
 A stable audio failure code and a readable explanation.
 
@@ -12,7 +12,7 @@ A stable audio failure code and a readable explanation.
 public class AudioError: Error
 ```
 
-## Declaration
+## `constructor`
 
 Creates a failure with a machine-readable code and message.
 
@@ -20,7 +20,7 @@ Creates a failure with a machine-readable code and message.
 public constructor(code: string, message: string)
 ```
 
-## Declaration
+## `code`
 
 Returns the failure code, such as EINVAL, EFORMAT, ECLOSED, or ENOTSUP.
 
@@ -28,11 +28,10 @@ Returns the failure code, such as EINVAL, EFORMAT, ECLOSED, or ENOTSUP.
 public fun code(): string
 ```
 
-## Declaration
+## `message`
 
 Returns a readable explanation of the failure.
 
 ```dream
 public fun message(): string
 ```
-

@@ -2339,10 +2339,11 @@ fn test_public_fn_exposes_private_enum() {
 }
 
 #[test]
-fn test_main_result_bool_may_fall_off_the_end() {
+fn test_main_result_unit_may_fall_off_the_end() {
     let code = "
         enum Result<T, E> { Ok(T), Err(E) }
-        fun main(): Result<bool, string> { }
+        struct Unit { constructor() {} }
+        fun main(): Result<Unit, string> { }
     ";
     let errors = error_messages(&analyze_code(code));
     assert!(

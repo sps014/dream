@@ -54,8 +54,8 @@ fun collection_query(): void {
 
     Assert.eq((xs.all(c8b_is_positive)).to_string(), "true");
     Assert.eq((xs.any(c8b_is_three)).to_string(), "true");
-    Assert.eq((xs.count_where(c8b_gt_two)).to_string(), "2");
-    Assert.eq((xs.find_where(c8b_gt_two).unwrap_or(-1)).to_string(), "3");
+    Assert.eq((xs.count(c8b_gt_two)).to_string(), "2");
+    Assert.eq((xs.find(c8b_gt_two).unwrap_or(-1)).to_string(), "3");
 
     let doubled = xs.seq().map(c8b_times_two).to_list();
     Assert.eq((doubled.length).to_string(), "4");
@@ -70,7 +70,7 @@ fun collection_query(): void {
     Assert.eq((from_iface.seq().to_list().length).to_string(), "4");
 
     Assert.eq((xs.seq().distinct().to_list().length).to_string(), "4");
-    Assert.eq((xs.seq().order_by(c8b_asc).to_list()[0]).to_string(), "1");
+    Assert.eq((xs.seq().sort_by(c8b_asc).to_list()[0]).to_string(), "1");
 }
 
 let c8b_visits: int = 0;

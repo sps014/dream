@@ -355,6 +355,8 @@ pub fn compile_llvm(
     };
     let stamp_path = bin.with_extension("flags");
     let driver = cc::resolve_target_cc(config, &spec)?;
+    let vendor_exports: Vec<_> =
+        dream_mir::runtime::modules::vendor_runtime_exports(need).collect();
     let stamp = format!(
         "native-c-shim-v5\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt),
@@ -390,7 +392,7 @@ pub fn compile_llvm(
         }
     }
     let stamp = format!(
-        "{stamp}\n{}\n{spec:?}\n{driver:?}\n{:?}\n{}",
+        "{stamp}\n{}\n{spec:?}\n{driver:?}\n{:?}\n{}\n{vendor_exports:?}",
         config.fingerprint(),
         driver
             .cc_command(config, &spec)?
@@ -431,6 +433,7 @@ pub fn compile_llvm(
         _ => None,
     };
     let mut exports = native.runtime_exports.clone();
+    exports.extend(vendor_exports.into_iter().map(str::to_owned));
     exports.extend(library::exports(&abi_path)?);
     let shim = shim_bitcode(&tools, &spec, ll_path)?;
     let mut debug_objects = runtime_objects;

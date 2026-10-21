@@ -142,6 +142,38 @@ fn out_dir(tag: &str) -> PathBuf {
 }
 
 #[test]
+fn optimized_audio_decoder_keeps_vendor_allocator_reference() {
+    if !llvm_available() {
+        return;
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let source =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/compiler/audio_offline.dream");
+    let binary = temporary.path().join("audio.bin");
+    let built = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        .args(["build", "--release", "-o"])
+        .arg(binary.with_extension("ll"))
+        .arg(source)
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let output = std::process::Command::new(binary).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        common::normalize_stdout(String::from_utf8_lossy(&output.stdout).into_owned()).trim(),
+        "audio offline: passed"
+    );
+}
+
+#[test]
 fn cli_optimization_remarks_are_first_pass_artifacts() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("remarks.dream");

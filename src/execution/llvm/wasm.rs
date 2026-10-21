@@ -372,6 +372,7 @@ pub fn link_wasm(
     let sigs = RuntimeSigs::parse(&sigs_text)?;
     let mut public: Vec<String> = KEEP_PUBLIC.iter().map(|s| s.to_string()).collect();
     public.extend(sigs.exports.iter().cloned());
+    public.extend(dream_mir::runtime::modules::vendor_runtime_exports(need).map(str::to_owned));
     public.extend(module_exports(&src).map(str::to_string));
     public.extend(packages.public);
     public.sort();

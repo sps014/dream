@@ -61,6 +61,8 @@ pub struct RuntimeModule {
     pub native_extra_c: &'static [&'static str],
     /// Path relative to `runtime/c` of a vendor file list (`pcre2/SOURCES`).
     pub vendor_sources: Option<&'static str>,
+    /// Runtime symbols referenced from vendor objects outside the optimized bitcode module.
+    pub vendor_runtime_exports: &'static [&'static str],
     pub wasm_defines: &'static [&'static str],
     pub native_defines: &'static [&'static str],
     pub include_dirs: &'static [&'static str],
@@ -75,6 +77,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         shared_c: &["core/audio_fft.c"],
         native_extra_c: &[],
         vendor_sources: None,
+        vendor_runtime_exports: &[],
         wasm_defines: &["DREAM_WASM32"],
         native_defines: &["DREAM_NATIVE"],
         include_dirs: &["core/include"],
@@ -91,6 +94,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         ],
         native_extra_c: &[],
         vendor_sources: Some("core/vendor/opus/SOURCES"),
+        vendor_runtime_exports: &["dream_platform_current"],
         wasm_defines: &["DREAM_WASM32", "HAVE_CONFIG_H", "NDEBUG"],
         native_defines: &["DREAM_NATIVE", "HAVE_CONFIG_H", "NDEBUG"],
         include_dirs: &[
@@ -133,6 +137,7 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         shared_c: &["regex.c"],
         native_extra_c: &["pcre2/pcre2_jit_compile.c"],
         vendor_sources: Some("pcre2/SOURCES"),
+        vendor_runtime_exports: &[],
         wasm_defines: &[
             "HAVE_CONFIG_H",
             "PCRE2_CODE_UNIT_WIDTH=16",
@@ -374,6 +379,13 @@ fn vendor_c_names_static(list_path: &str) -> Vec<&'static str> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+pub fn vendor_runtime_exports(need: RuntimeNeed) -> impl Iterator<Item = &'static str> {
+    RUNTIME_MODULES
+        .iter()
+        .filter(move |module| need.contains(module.need))
+        .flat_map(|module| module.vendor_runtime_exports.iter().copied())
 }
 
 pub fn runtime_need_from_keys<'a, I>(keys: I) -> RuntimeNeed

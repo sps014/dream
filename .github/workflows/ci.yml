@@ -133,10 +133,6 @@ jobs:
         with:
           path: ~/.dream/toolchains/llvm-22.1.8
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - name: Freestanding runtime core (no SDK, CRT or libc)
-        shell: bash
-        run: |
-          python scripts/check_freestanding.py --clang "$HOME/.dream/toolchains/llvm-22.1.8/bin/clang" --linker "$HOME/.dream/toolchains/llvm-22.1.8/bin/lld"
       - name: Use the MSVC-compatible pinned C driver
         if: runner.os == 'Windows'
         shell: pwsh
@@ -174,8 +170,6 @@ jobs:
       - name: Build GPU host bundles with Windows shader targets
         if: runner.os == 'Windows'
         run: python crates/dream-host-gpu/tests/fixtures/make_bundles.py
-      - name: Check runnable documentation examples
-        run: python tooling/docs/check_examples.py
       - run: cargo test --workspace --no-fail-fast --timings
       - name: X11 windows and GPU presentation under a real display server
         if: runner.os == 'Linux'

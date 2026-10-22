@@ -145,6 +145,28 @@ function makeLinearMemory(wasmModule, wasmBytes) {
   });
 }
 
+// Node core modules behind each host family, keyed by the `Dream` import-field prefixes of
+// the hosts that use them (the `fs`, `crypto` and `console_process` chunks and raw sockets).
+const NODE_PRELOADS = [
+  [["file", "dir", "temp"], "node:fs", setNodeFs],
+  [["crypto"], "node:crypto", setNodeCrypto],
+  [["process"], "node:child_process", setNodeChildProcess],
+  [["netSocket"], "node:net", setNodeNet],
+];
+
+// Host calls are synchronous, so the modules a program imports must be loaded before
+// instantiation; the module's own import list says which ones it can reach.
+async function preloadNodeModules(wasmModule) {
+  const fields = WebAssembly.Module.imports(wasmModule)
+    .filter((i) => i.module === "Dream")
+    .map((i) => i.name);
+  await Promise.all(NODE_PRELOADS
+    .filter(([prefixes]) => fields.some((field) => prefixes.some((p) => field.startsWith(p))))
+    .map(async ([, specifier, install]) => {
+      try { install(await import(specifier)); } catch (_) { /* leave unavailable */ }
+    }));
+}
+
 /**
  * Loads and instantiates a Dream module.
  *
@@ -161,24 +183,7 @@ export async function load(source, options = {}) {
   const wasmModule = await WebAssembly.compile(wasmBytes);
   const abi = await resolveAbi(wasmModule, source, options);
 
-  if (isNode && !options.__skipNodePreload) {
-    try {
-      const fs = await import("node:fs");
-      setNodeFs(fs);
-    } catch (_) { /* leave unavailable */ }
-    try {
-      const crypto = await import("node:crypto");
-      setNodeCrypto(crypto);
-    } catch (_) { /* leave unavailable */ }
-    try {
-      const childProcess = await import("node:child_process");
-      setNodeChildProcess(childProcess);
-    } catch (_) { /* leave unavailable */ }
-    try {
-      const net = await import("node:net");
-      setNodeNet(net);
-    } catch (_) { /* leave unavailable */ }
-  }
+  if (isNode && !options.__skipNodePreload) await preloadNodeModules(wasmModule);
 
   let instance = null;
   const getInstance = () => {

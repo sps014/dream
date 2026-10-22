@@ -60,7 +60,7 @@ public class CsvReader {
         if this.failed {
             return Result.Err(CsvError(this.record, this.offset, "CSV reader is failed"));
         }
-        if !CsvCodec.valid(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
+        if !CsvSyntax.valid_delimiter(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
             return Result.Err(this.invalid("invalid delimiter or record limit (maximum 4 MiB)"));
         }
         let bytes = List<byte>();
@@ -135,25 +135,7 @@ public class CsvReader {
             return Result.Err(this.invalid("truncated UTF-8"));
         }
         let text = decoded.unwrap() + trailing.unwrap();
-        if text.length == 0 {
-            this.record = this.record + 1L;
-            let fields: string[] = [""];
-            return Result.Ok(Option.Some(fields));
-        }
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string("csv_read");
-        request["delimiter"] = JsonValue.from_double((double)(int)this.delimiter);
-        request["input"] = JsonValue.from_string(text);
-        let parsed = CsvCodec.request(request);
-        if parsed.is_err() {
-            return Result.Err(this.invalid(parsed.unwrap_err().message()));
-        }
-        let values = parsed.unwrap()["fields"];
-        let fields = Buffer.alloc<string>(values.length);
-        for (let i = 0; i < values.length; i = i + 1) {
-            fields[i] = values.at(i).unwrap().as_string().unwrap();
-        }
         this.record = this.record + 1L;
-        return Result.Ok(Option.Some(fields));
+        return Result.Ok(Option.Some(CsvSyntax.split(text, this.delimiter)));
     }
 }

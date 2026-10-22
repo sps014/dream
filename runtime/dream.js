@@ -17,7 +17,7 @@ function bindTypedImport() { return null; }
 // The full loader accepts arbitrary modules; selective builds specialize these constants.
 const HAS_ASYNC_IMPORTS = true;
 const HAS_DATA_CODECS = true;
-const DATA_CODEC_FILES = { dataCsv: "dream-csv.wasm", dataCompression: "dream-compression.wasm" };
+const DATA_CODEC_FILES = { dataCompression: "dream-compression.wasm" };
 const HAS_JS_HANDLES = true;
 const HAS_CALLBACKS = true;
 const HAS_ARRAYS = true;
@@ -510,7 +510,6 @@ function requestCodec(field, request) {
 
 function makeDataHost() {
   return {
-    dataCsv: request => requestCodec("dataCsv", request),
     dataCompression: request => requestCodec("dataCompression", request),
   };
 }

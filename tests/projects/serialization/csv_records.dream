@@ -1,0 +1,66 @@
+import system.testing;
+import system;
+import system.csv;
+import system.encoding;
+import system.io;
+
+fun encoded(fields: string[]): string {
+    let memory = MemoryStream();
+    CsvWriter(memory).write_record(fields).unwrap();
+    memory.seek(0L).unwrap();
+    return Encoding.utf8_decode(memory.read(1024).unwrap());
+}
+
+fun records(text: string): CsvReader {
+    return CsvReader(MemoryStream(Encoding.utf8_encode(text)));
+}
+
+@test
+fun writer_quotes_only_fields_that_need_it(): void {
+    Assert.eq(encoded(["a", "b c", "1.5"]), "a,b c,1.5\r\n");
+    Assert.eq(encoded(["b,c", "x\"y", "line\nnext", "cr\rhere"]), "\"b,c\",\"x\"\"y\",\"line\nnext\",\"cr\rhere\"\r\n");
+    Assert.eq(encoded(["", "", ""]), ",,\r\n");
+    Assert.eq(encoded([""]), "\"\"\r\n");
+}
+
+@test
+fun reader_unquotes_fields_and_accepts_every_line_ending(): void {
+    let reader = records("a,\"b\"\"c\",,d\r\n\"x,y\",\"multi\r\nline\"\nlast\r\rnext");
+    let first = reader.read_record().unwrap().unwrap();
+    Assert.eq(first.length, 4);
+    Assert.eq(first[0], "a");
+    Assert.eq(first[1], "b\"c");
+    Assert.eq(first[2], "");
+    Assert.eq(first[3], "d");
+    let second = reader.read_record().unwrap().unwrap();
+    Assert.eq(second.length, 2);
+    Assert.eq(second[0], "x,y");
+    Assert.eq(second[1], "multi\r\nline");
+    Assert.eq(reader.read_record().unwrap().unwrap()[0], "last");
+    let blank = reader.read_record().unwrap().unwrap();
+    Assert.eq(blank.length, 1);
+    Assert.eq(blank[0], "");
+    Assert.eq(reader.read_record().unwrap().unwrap()[0], "next");
+    Assert.is_true(reader.read_record().unwrap().is_none());
+}
+
+@test
+fun reader_rejects_misplaced_quotes(): void {
+    let stray = records("ab\"c\n").read_record();
+    Assert.is_true(stray.is_err());
+    Assert.eq(stray.unwrap_err().message(), "quote in an unquoted field");
+    let trailing = records("\"ab\"c\n").read_record();
+    Assert.eq(trailing.unwrap_err().message(), "unexpected byte after a closing quote");
+}
+
+@test
+fun custom_delimiters_round_trip(): void {
+    let memory = MemoryStream();
+    let writer = CsvWriter(memory, delimiter: '\t');
+    writer.write_record(["tab\there", "plain"]).unwrap();
+    memory.seek(0L).unwrap();
+    let fields = CsvReader(memory, delimiter: '\t').read_record().unwrap().unwrap();
+    Assert.eq(fields[0], "tab\there");
+    Assert.eq(fields[1], "plain");
+    Assert.is_true(CsvWriter(MemoryStream(), delimiter: '"').write_record(["a"]).is_err());
+}

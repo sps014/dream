@@ -44,8 +44,8 @@ pin their future until completion or cancellation makes it safe to release.
 - [x] Run real browser compute/readback and rendering assertions.
 
 Portable runtime primitives and shader parsing are C. Shader reflection/layout processing
-is Dream. Codec capabilities retain the existing mature Rust CSV and compression libraries;
-they are separate from the C guest runtime. Browser object creation and WebGPU queue calls
+is Dream, as is CSV. The compression capability retains the mature Rust compression library;
+it is separate from the C guest runtime. Browser object creation and WebGPU queue calls
 remain JavaScript because they invoke browser APIs.
 
 ## Phase 4 — standalone WASI
@@ -110,7 +110,7 @@ node scripts/check-wasm-size.mjs \
     --output target/size/hello.json
 ```
 
-Include `<stem>.csv.wasm` or `<stem>.compression.wasm` for the corresponding codec family.
+Include `<stem>.compression.wasm` when the program uses compression.
 List each required artifact once. `--baseline previous.json` rejects gzip or Brotli growth.
 The standalone C parser binary under `tests/fixtures/` is a test harness, not a deployment dependency.
 

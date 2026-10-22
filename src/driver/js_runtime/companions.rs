@@ -10,18 +10,11 @@ pub(super) fn emit(
     compress: bool,
 ) -> Result<Vec<PathBuf>, Error> {
     let mut written = Vec::new();
-    for (stem, field, bytes) in [
-        (
-            "csv",
-            "dataCsv",
-            include_bytes!("../../../runtime/dream-csv.wasm").as_slice(),
-        ),
-        (
-            "compression",
-            "dataCompression",
-            include_bytes!("../../../runtime/dream-compression.wasm").as_slice(),
-        ),
-    ] {
+    for (stem, field, bytes) in [(
+        "compression",
+        "dataCompression",
+        include_bytes!("../../../runtime/dream-compression.wasm").as_slice(),
+    )] {
         let extension = format!("{stem}.wasm");
         let path = output.with_extension(&extension);
         if imports

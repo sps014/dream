@@ -149,8 +149,7 @@ A runnable bounded pipeline and concurrency benchmark accompany the APIs.
 
 `system.csv` provides strict UTF-8 streaming records with quoted fields, embedded
 newlines, configurable ASCII delimiters, record limits, and byte-oriented errors.
-A shared Rust `csv` adapter supplies field decoding and writer escaping on native
-and WASM hosts. `system.uuid` stores 128 bits inline as two `ulong`s, with value
+Field splitting and writer quoting are written in Dream and need no host. `system.uuid` stores 128 bits inline as two `ulong`s, with value
 equality, hashing, ordering, secure v4 generation, and canonical formatting.
 Secure random APIs now return errors and discard partial entropy on host failure;
 AES key/nonce factories and callers use the fallible APIs directly.

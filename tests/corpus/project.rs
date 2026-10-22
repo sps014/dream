@@ -82,6 +82,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("task_shared_class", "async_tasks", true),
     Case::project("unicode_conformance", "text", true),
     Case::project("union_json", "serialization", true),
+    Case::project("csv_records", "serialization", true),
     Case::project("weak_field_runtime", "ownership", true),
     Case::project("class_basics", "types", true),
     Case::project("class_protocols", "types", true),

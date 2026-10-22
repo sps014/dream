@@ -49,9 +49,6 @@ fn refresh_node(src_dir: &Path, dest_dir: &Path, stem: &str) -> Result<()> {
     copy_required(src_dir, dest_dir, &format!("{stem}.wasm"))?;
     copy_required(src_dir, dest_dir, &format!("{stem}.node.runtime.js"))?;
     for suffix in [
-        "csv.wasm",
-        "csv.wasm.gz",
-        "csv.wasm.br",
         "compression.wasm",
         "compression.wasm.gz",
         "compression.wasm.br",
@@ -177,9 +174,6 @@ mod tests {
         fs::write(source.join("main.wasm"), b"module").unwrap();
         fs::write(source.join("main.node.runtime.js"), b"loader").unwrap();
         for suffix in [
-            "csv.wasm",
-            "csv.wasm.gz",
-            "csv.wasm.br",
             "compression.wasm",
             "compression.wasm.gz",
             "compression.wasm.br",
@@ -188,9 +182,6 @@ mod tests {
         }
         refresh_node(&source, &destination, "main").unwrap();
         for suffix in [
-            "csv.wasm",
-            "csv.wasm.gz",
-            "csv.wasm.br",
             "compression.wasm",
             "compression.wasm.gz",
             "compression.wasm.br",
@@ -201,9 +192,6 @@ mod tests {
         }
         refresh_node(&source, &destination, "main").unwrap();
         for suffix in [
-            "csv.wasm",
-            "csv.wasm.gz",
-            "csv.wasm.br",
             "compression.wasm",
             "compression.wasm.gz",
             "compression.wasm.br",

@@ -5,7 +5,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.io",
         "system.text",
         "system.encoding",
-        "system.json",
         "system.collections",
     ],
     generators: &[],
@@ -15,8 +14,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/csv/csv_error.dream"),
         ),
         (
-            "<std>/system/csv/csv_codec.dream",
-            include_str!("../system/csv/csv_codec.dream"),
+            "<std>/system/csv/csv_syntax.dream",
+            include_str!("../system/csv/csv_syntax.dream"),
         ),
         (
             "<std>/system/csv/csv_reader.dream",

@@ -16,13 +16,9 @@ public class CsvWriter {
 
     /// Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.
     public fun write_record(fields: string[]): Result<Unit, CsvError> {
-        if !CsvCodec.valid(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
+        if !CsvSyntax.valid_delimiter(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
             return Result.Err(CsvError(0L, 0L, "invalid delimiter or record limit"));
         }
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string("csv_write");
-        request["delimiter"] = JsonValue.from_double((double)(int)this.delimiter);
-        let values = JsonValue.array();
         let size = 0;
         for (let field in fields) {
             let bytes = Encoding.utf8_encode(field);
@@ -30,11 +26,8 @@ public class CsvWriter {
                 return Result.Err(CsvError(0L, 0L, "record exceeds configured byte limit"));
             }
             size = size + bytes.length;
-            values.push(JsonValue.from_string(field));
         }
-        request["fields"] = values;
-        let encoded = CsvCodec.request(request)?;
-        let bytes = Encoding.utf8_encode(encoded["text"].as_string().unwrap());
+        let bytes = Encoding.utf8_encode(CsvSyntax.encode(fields, this.delimiter));
         if bytes.length > this.limit {
             return Result.Err(CsvError(0L, 0L, "encoded record exceeds configured byte limit"));
         }

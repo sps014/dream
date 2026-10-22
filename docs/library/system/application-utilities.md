@@ -41,7 +41,7 @@ Failures return `UuidError`, whose `code()` is `EUUID`.
 
 ## Streaming CSV
 
-`CsvReader` borrows a `Reader`; `CsvWriter` borrows a `Writer`. The shared Rust `csv` adapter handles field decoding and quoting on native, Node, and browser targets. The reader frames records incrementally, rejects misplaced/unclosed quotes, validates UTF-8 strictly, and reports a one-based logical record number and absolute byte offset on errors. LF, CRLF, and standalone CR terminate records outside quotes; embedded newlines remain part of quoted fields. Blank records produce one empty field.
+`CsvReader` borrows a `Reader`; `CsvWriter` borrows a `Writer`. Both behave the same on every target and need no host library. The writer ends each record with CRLF and quotes a field only when it contains the delimiter, a quote, or a line break (doubling any quotes inside), or when it is the record's only field and is empty, so `["a", "b,c"]` becomes `a,"b,c"`. The reader frames records incrementally, rejects misplaced/unclosed quotes, validates UTF-8 strictly, and reports a one-based logical record number and absolute byte offset on errors. LF, CRLF, and standalone CR terminate records outside quotes; embedded newlines remain part of quoted fields. Blank records produce one empty field.
 
 ```dream
 import system;

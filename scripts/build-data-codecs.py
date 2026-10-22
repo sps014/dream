@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-FAMILIES = ("csv", "compression")
+FAMILIES = ("compression",)
 METADATA = ROOT / "runtime/src/hosts/data_codecs.json"
 
 

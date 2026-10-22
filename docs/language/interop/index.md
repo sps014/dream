@@ -25,9 +25,9 @@ await run("./main.wasm");
 ```
 
 For a browser, import `main.web.runtime.js` instead and load it from a page served over HTTP.
-If your program uses CSV or compression codecs, also deploy the generated
-`main.data.wasm` beside the runtime file. The loader loads this companion automatically;
-programs without those codecs do not emit it. Keep the companion when copying a build
+If your program uses compression, also deploy the generated
+`main.compression.wasm` beside the runtime file. The loader loads this companion automatically;
+programs without compression do not emit it. Keep the companion when copying a build
 to another directory or web server. A missing companion makes `load` or `run` reject,
 so handle that Promise failure alongside other loading errors.
 JavaScript APIs require the corresponding host: browser DOM APIs are unavailable in Node.

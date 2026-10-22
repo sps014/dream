@@ -9,7 +9,6 @@ site/
 # re-included below.
 *.wat
 *.wasm
-!/runtime/dream-csv.wasm
 !/runtime/dream-compression.wasm
 *.cwasm
 *.abi.json

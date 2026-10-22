@@ -136,9 +136,10 @@ fn codecs_are_binary_companions_only_for_live_codec_imports() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("application.wat");
     fs::write(output.with_extension("abi.json"), r#"{"externs":[]}"#).unwrap();
-    let wasm =
-        wat::parse_str(r#"(module (import "Dream" "dataCsv" (func (param i32) (result i32))))"#)
-            .unwrap();
+    let wasm = wat::parse_str(
+        r#"(module (import "Dream" "dataCompression" (func (param i32) (result i32))))"#,
+    )
+    .unwrap();
     let targets = [JsRuntimeTarget::Web, JsRuntimeTarget::Node];
     let paths = emit_selective_runtimes(
         output.to_str().unwrap(),
@@ -148,16 +149,16 @@ fn codecs_are_binary_companions_only_for_live_codec_imports() {
         &indexmap::IndexMap::new(),
     )
     .unwrap();
-    let companion = output.with_extension("csv.wasm");
+    let companion = output.with_extension("compression.wasm");
     assert!(paths.contains(&companion));
     assert_eq!(
         fs::read(&companion).unwrap(),
-        include_bytes!("../../../runtime/dream-csv.wasm"),
+        include_bytes!("../../../runtime/dream-compression.wasm"),
     );
     for target in targets {
         let runtime =
             fs::read_to_string(output.with_extension(target.runtime_extension())).unwrap();
-        assert!(runtime.contains("application.csv.wasm"));
+        assert!(runtime.contains("application.compression.wasm"));
         assert!(!runtime.contains("dataCodecsBase64"));
     }
     let empty = wat::parse_str("(module)").unwrap();
@@ -169,7 +170,11 @@ fn codecs_are_binary_companions_only_for_live_codec_imports() {
         &indexmap::IndexMap::new(),
     )
     .unwrap();
-    for suffix in ["csv.wasm", "csv.wasm.gz", "csv.wasm.br"] {
+    for suffix in [
+        "compression.wasm",
+        "compression.wasm.gz",
+        "compression.wasm.br",
+    ] {
         assert!(!output.with_extension(suffix).exists());
     }
     let runtime = fs::read_to_string(output.with_extension("web.runtime.js")).unwrap();

@@ -8281,7 +8281,7 @@
       {
         "signature": "public fun flush(): Result<Unit, CsvError>",
         "description": "Flushes the borrowed destination and reports underlying failures.",
-        "line": 49,
+        "line": 42,
         "page": "reference/api/csv-csv-writer.md"
       }
     ]

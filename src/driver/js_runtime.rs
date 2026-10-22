@@ -223,7 +223,7 @@ fn assemble_for_requirements(
             out.push_str(&format!(
                 "const HAS_ASYNC_IMPORTS = {async_imports};\nconst HAS_DATA_CODECS = {};\nconst DATA_CODEC_FILES = {};\n",
                 chunks.contains("data"),
-                serde_json::to_string(&[ ("dataCsv", "csv"), ("dataCompression", "compression") ].into_iter()
+                serde_json::to_string(&[("dataCompression", "compression")].into_iter()
                     .filter(|(field, _)| fields.contains(field))
                     .map(|(field, family)| (field, format!("{}.{family}.wasm", codecs_file.strip_suffix(".data.wasm").unwrap_or("dream"))))
                     .collect::<std::collections::BTreeMap<_,_>>()).map_err(Error::other)?,

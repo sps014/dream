@@ -28,7 +28,6 @@ function requestCodec(field, request) {
 
 export function makeDataHost() {
   return {
-    dataCsv: request => requestCodec("dataCsv", request),
     dataCompression: request => requestCodec("dataCompression", request),
   };
 }

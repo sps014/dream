@@ -7,11 +7,11 @@ api: reference/api/system-cli.md
 
 # Command-line arguments
 
-On native targets, import `system.cli` to declare commands, named flags, typed options, positional
+Import `system.cli` to declare commands, named flags, typed options, positional
 arguments, and subcommands. Parsing returns `Result<ParsedArguments, CliError>`.
 It never prints or exits the process. Help and version requests are successful
 outcomes, so your application decides how to display them.
-CLI parsing is unavailable in browser, Node, and standalone WASM builds.
+Parsing behaves the same on native, Node, browser, and standalone WASI targets.
 
 ```dream
 import system;
@@ -34,7 +34,7 @@ fun main(): void {
 }
 ```
 
-Use `command.parse(System.args)` in a native application. `System.args`
+Use `command.parse(System.args)` to parse the program's own arguments. `System.args`
 is a property containing arguments after the executable/runner, so no executable
 name belongs in the array.
 
@@ -132,7 +132,11 @@ Each parsed command scope has its own values. A selected child is available thro
 `--help`/`-h` return `is_help` with generated `help_text`, including for children.
 After `.version(...)`, `--version`/`-V` return `is_version` with `version_text`;
 versions propagate to subcommands. These requests bypass required argument checks.
-Help and error behavior is consistent across native, Node, and browser applications.
+Help lists the description, a usage line, then `Commands:`, `Arguments:`, and`
+Options:` sections. Each row shows the argument's description followed by any`
+[default: ...]` and `[possible values: ...]`, aligned two spaces after the widest
+entry in its section. Invocation errors start with `error:`, then repeat the usage line
+and suggest `--help`.
 
 ## Error codes
 
@@ -145,7 +149,6 @@ text, and invocation errors include usage guidance.
 | `EARGS` | The command line does not match the definition, such as a missing required value or invalid integer. |
 | `ENOENT` | A getter named an unknown argument, or the argument has no value. |
 | `ETYPE` | The getter does not match the argument's declared type. |
-| `EIO` | The argument parser returned an unreadable result. |
 
 Definition limits are 16 nested levels, 256 arguments per command, and 64 children
 per command.

@@ -109,7 +109,7 @@ public fun subcommand(command: Command): Command
 
 ## `parse`
 
-Parses explicit arguments on native targets; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.
+Parses explicit arguments; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.
 
 ```dream
 @native

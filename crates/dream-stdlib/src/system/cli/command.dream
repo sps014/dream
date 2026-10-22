@@ -1,34 +1,43 @@
 module system.cli;
 
 /// Declarative CLI definition. Parsing consumes arguments without an executable name and never exits.
+// `subcommand` stores copies, so a command tree never refers back to an ancestor.
+@allow_cycle
 public class Command {
-    definition: JsonValue;
+    internal name: string;
+    internal about: string;
+    internal version_text: string;
+    internal subcommand_required: bool;
+    internal arguments: List<CliArgument>;
+    internal children: List<Command>;
     error: string;
 
     /// Creates a command; invalid names or conflicting definitions return errors from parse.
     public constructor(name: string) {
+        this.name = name;
+        this.about = "";
+        this.version_text = "";
+        this.subcommand_required = false;
+        this.arguments = List<CliArgument>();
+        this.children = List<Command>();
         this.error = "";
-        this.definition = JsonValue.dict();
-        this.definition["name"] = JsonValue.from_string(name);
-        this.definition["args"] = JsonValue.array();
-        this.definition["subcommands"] = JsonValue.array();
     }
 
     /// Sets version output and enables --version/-V for this command and its descendants.
     public fun version(value: string): Command {
-        this.definition["version"] = JsonValue.from_string(value);
+        this.version_text = value;
         return this;
     }
 
     /// Sets text included in automatically generated help.
     public fun description(value: string): Command {
-        this.definition["description"] = JsonValue.from_string(value);
+        this.about = value;
         return this;
     }
 
     /// Requires one of the declared subcommands; --help and --version still return normal outcomes.
     public fun require_subcommand(required: bool = true): Command {
-        this.definition["require_subcommand"] = JsonValue.from_bool(required);
+        this.subcommand_required = required;
         return this;
     }
 
@@ -39,8 +48,8 @@ public class Command {
         multiple: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, "positional", "", required, description);
-        argument["multiple"] = JsonValue.from_bool(multiple);
+        let argument = this.argument(name, CliArgumentKind.Positional, "", required, description);
+        argument.multiple = multiple;
         return this;
     }
 
@@ -52,9 +61,9 @@ public class Command {
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, "string", short, required, description);
+        let argument = this.argument(name, CliArgumentKind.String, short, required, description);
         if !required {
-            argument["default_value"] = JsonValue.from_string(default_value);
+            argument.default_value = Option.Some(default_value);
         }
         return this;
     }
@@ -67,26 +76,24 @@ public class Command {
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, "int", short, required, description);
+        let argument = this.argument(name, CliArgumentKind.Int, short, required, description);
         if !required {
-            argument["default_value"] = JsonValue.from_string(default_value.to_string());
+            argument.default_value = Option.Some(default_value.to_string());
         }
         return this;
     }
 
     /// Adds a boolean option defaulting to false; repeated occurrences remain true.
     public fun flag(name: string, short: string = "", description: string = ""): Command {
-        this.argument(name, "flag", short, false, description);
+        this.argument(name, CliArgumentKind.Flag, short, false, description);
         return this;
     }
 
     /// Restricts a previously declared string, positional, or integer argument to these exact values.
     public fun choices(name: string, values: string[]): Command {
-        let arguments = this.definition["args"];
-        for (let i = 0; i < arguments.length; i = i + 1) {
-            let argument = arguments.at(i).unwrap();
-            if argument["name"].as_string().unwrap_or("") == name {
-                argument["choices"] = Command.strings(values);
+        for let argument in this.arguments {
+            if argument.name == name {
+                argument.choices = values.slice(0, values.length);
                 return this;
             }
         }
@@ -100,74 +107,46 @@ public class Command {
             this.error = command.error;
             return this;
         }
-        let snapshot = Json.deserialize<JsonValue>(Json.serialize(command.definition));
-        if snapshot.is_err() {
-            this.error = "invalid subcommand definition";
-            return this;
-        }
-        this.definition["subcommands"].push(snapshot.unwrap());
+        this.children.push(command.copy());
         return this;
     }
 
-    /// Parses explicit arguments on native targets; pass System.args to parse the process arguments.
+    /// Parses explicit arguments; pass System.args to parse the process arguments.
     /// Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.
-    @native
     public fun parse(arguments: string[]): Result<ParsedArguments, CliError> {
         if this.error != "" {
             return Result.Err(CliError("EINVAL", this.error));
         }
-        let request = JsonValue.dict();
-        request["command"] = this.definition;
-        request["args"] = Command.strings(arguments);
-        let decoded = Json.deserialize<JsonValue>(Command.parse_host(Json.serialize(request)));
-        if decoded.is_err() {
-            return Result.Err(CliError("EIO", "invalid CLI host response"));
+        let problem = CliValidation.check(this, 0, false);
+        if problem.length > 0 {
+            return Result.Err(CliError("EINVAL", problem));
         }
-        let wire = decoded.unwrap();
-        if wire.get("kind").unwrap_or(JsonValue.null()).as_string().unwrap_or("") == "error" {
-            return Result.Err(
-                CliError(
-                    wire.get("code").unwrap_or(JsonValue.null()).as_string().unwrap_or("EIO"),
-                    wire.get("message")
-                        .unwrap_or(JsonValue.null())
-                        .as_string()
-                        .unwrap_or("CLI parsing failed")
-                )
-            );
-        }
-        let kind = wire.get("kind").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
-        if kind != "values" && kind != "help" && kind != "version" {
-            return Result.Err(CliError("EIO", "invalid CLI host outcome"));
-        }
-        return Result.Ok(ParsedArguments(wire));
+        return CliParser(this, arguments, this.name, this.name, this.version_text).parse(0);
     }
 
-    @native
-    @runtime("cliParse")
-    static extern fun parse_host(request: string): string;
+    fun copy(): Command {
+        let copy = Command(this.name);
+        copy.about = this.about;
+        copy.version_text = this.version_text;
+        copy.subcommand_required = this.subcommand_required;
+        for let argument in this.arguments {
+            copy.arguments.push(argument.copy());
+        }
+        for let child in this.children {
+            copy.children.push(child.copy());
+        }
+        return copy;
+    }
 
     fun argument(
         name: string,
-        kind: string,
+        kind: CliArgumentKind,
         short: string,
         required: bool,
         description: string
-    ): JsonValue {
-        let argument = JsonValue.dict();
-        argument["name"] = JsonValue.from_string(name);
-        argument["kind"] = JsonValue.from_string(kind);
-        argument["short"] = JsonValue.from_string(short);
-        argument["required"] = JsonValue.from_bool(required);
-        argument["description"] = JsonValue.from_string(description);
-        this.definition["args"].push(argument);
+    ): CliArgument {
+        let argument = CliArgument(name, kind, short, required, description);
+        this.arguments.push(argument);
         return argument;
-    }
-
-    static fun strings(values: string[]): JsonValue {
-        let array = JsonValue.array();
-        for (let i = 0; i < values.length; i = i + 1) {
-            array.push(JsonValue.from_string(values[i]));
-        }
-        return array;
     }
 }

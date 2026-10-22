@@ -1,0 +1,270 @@
+module system.cli;
+
+/// Parses the arguments that belong to one command scope and recurses into a selected subcommand.
+internal class CliParser {
+    command: Command;
+    arguments: string[];
+    // Space-joined command chain for usage lines and hyphen-joined chain for version output.
+    path: string;
+    name: string;
+    version: string;
+    values: List<CliValue>;
+
+    internal constructor(
+        command: Command,
+        arguments: string[],
+        path: string,
+        name: string,
+        version: string
+    ) {
+        this.command = command;
+        this.arguments = arguments;
+        this.path = path;
+        this.name = name;
+        this.version = version;
+        this.values = List<CliValue>();
+        for let argument in this.command.arguments {
+            this.values.push(CliValue(argument));
+        }
+    }
+
+    /// Parses `arguments[start..]`; help and version requests anywhere end parsing successfully.
+    internal fun parse(start: int): Result<ParsedArguments, CliError> {
+        let positional = 0;
+        let only_positional = false;
+        let child: Option<ParsedArguments> = Option.None;
+        let i = start;
+        while i < this.arguments.length {
+            let token = this.arguments[i];
+            i = i + 1;
+            if !only_positional && token == "--" {
+                only_positional = true;
+                continue;
+            }
+            if !only_positional && token.length > 2 && token.starts_with("--") {
+                let body = token.substring(2, token.length);
+                let equals = body.index_of('=');
+                let option = equals.is_some() ? body.substring(0, equals.unwrap()) : body;
+                if equals.is_none() && option == "help" {
+                    return Result.Ok(this.help());
+                }
+                if equals.is_none() && option == "version" && this.version.length > 0 {
+                    return Result.Ok(this.version_outcome());
+                }
+                let index = this.find_long(option);
+                if index < 0 {
+                    return this.fail("unexpected argument '" + token + "' found");
+                }
+                let argument = this.values[index].argument;
+                if argument.kind == CliArgumentKind.Flag {
+                    if equals.is_some() {
+                        return this.fail(
+                            "unexpected value '" + body.substring(equals.unwrap() + 1, body.length)
+                                + "' for '--" + option + "' found; no more were expected"
+                        );
+                    }
+                    this.values[index].provided = true;
+                    continue;
+                }
+                let value = "";
+                if equals.is_some() {
+                    value = body.substring(equals.unwrap() + 1, body.length);
+                } else if i < this.arguments.length && this.accepts(this.arguments[i], argument) {
+                    value = this.arguments[i];
+                    i = i + 1;
+                } else {
+                    return this.missing_value(argument);
+                }
+                let problem = this.store(index, value);
+                if problem.length > 0 {
+                    return this.fail(problem);
+                }
+                continue;
+            }
+            if !only_positional && token.length > 1 && token.starts_with("-") {
+                let j = 1;
+                while j < token.length {
+                    let c = token.char_at(j);
+                    j = j + 1;
+                    if c == 'h' {
+                        return Result.Ok(this.help());
+                    }
+                    if c == 'V' && this.version.length > 0 {
+                        return Result.Ok(this.version_outcome());
+                    }
+                    let index = this.find_short(c);
+                    if index < 0 {
+                        return this.fail("unexpected argument '-" + c.to_string() + "' found");
+                    }
+                    let argument = this.values[index].argument;
+                    if argument.kind == CliArgumentKind.Flag {
+                        this.values[index].provided = true;
+                        continue;
+                    }
+                    let value = "";
+                    if j < token.length {
+                        value = token.substring(j, token.length);
+                        if value.starts_with("=") {
+                            value = value.substring(1, value.length);
+                        }
+                    } else if i < this.arguments.length && this.accepts(this.arguments[i], argument) {
+                        value = this.arguments[i];
+                        i = i + 1;
+                    } else {
+                        return this.missing_value(argument);
+                    }
+                    let problem = this.store(index, value);
+                    if problem.length > 0 {
+                        return this.fail(problem);
+                    }
+                    break;
+                }
+                continue;
+            }
+            if !only_positional {
+                let selected = this.find_child(token);
+                if selected >= 0 {
+                    let scope = this.command.children[selected];
+                    let version = scope.version_text.length > 0 ? scope.version_text : this.version;
+                    let parsed = CliParser(
+                        scope,
+                        this.arguments,
+                        this.path + " " + token,
+                        this.name + "-" + token,
+                        version
+                    ).parse(i)?;
+                    if parsed.is_help || parsed.is_version {
+                        return Result.Ok(parsed);
+                    }
+                    child = Option.Some(parsed);
+                    break;
+                }
+            }
+            let index = this.find_positional(positional);
+            if index < 0 {
+                return this.fail("unexpected argument '" + token + "' found");
+            }
+            let problem = this.store(index, token);
+            if problem.length > 0 {
+                return this.fail(problem);
+            }
+            if !this.values[index].argument.multiple {
+                positional = positional + 1;
+            }
+        }
+        if child.is_none() {
+            let missing = List<string>();
+            for let value in this.values {
+                if value.argument.required && !value.provided {
+                    missing.push(value.argument.display());
+                }
+            }
+            if missing.length > 0 {
+                return this.fail(
+                    "the following required arguments were not provided:\n  " + missing.join("\n  ")
+                );
+            }
+            if this.command.subcommand_required {
+                let names = List<string>();
+                for let scope in this.command.children {
+                    names.push(scope.name);
+                }
+                return this.fail(
+                    "'" + this.path + "' requires a subcommand but one was not provided\n  [subcommands: "
+                        + names.join(", ") + "]"
+                );
+            }
+        }
+        for let value in this.values {
+            if value.argument.kind == CliArgumentKind.Flag {
+                value.values.push(value.provided ? "true" : "false");
+            } else if !value.provided && value.argument.default_value.is_some() {
+                value.values.push(value.argument.default_value.unwrap());
+            }
+        }
+        return Result.Ok(ParsedArguments.values(this.command.name, this.values.take_array(), child));
+    }
+
+    fun help(): ParsedArguments {
+        return ParsedArguments.text(true, CliHelp.help(this.command, this.path, this.version.length > 0));
+    }
+
+    fun version_outcome(): ParsedArguments {
+        return ParsedArguments.text(false, CliHelp.version(this.name, this.version));
+    }
+
+    fun fail(message: string): Result<ParsedArguments, CliError> {
+        return Result.Err(CliError("EARGS", CliHelp.error(this.command, this.path, message)));
+    }
+
+    fun missing_value(borrow argument: CliArgument): Result<ParsedArguments, CliError> {
+        return this.fail("a value is required for '" + argument.display() + "' but none was supplied");
+    }
+
+    // Values that look like options are refused, except negative numbers for integer options.
+    fun accepts(borrow token: string, borrow argument: CliArgument): bool {
+        if token.length < 2 || !token.starts_with("-") {
+            return true;
+        }
+        return argument.kind == CliArgumentKind.Int && CliValidation.parse_int(token).is_some();
+    }
+
+    // Returns a diagnostic, or an empty string after recording the value.
+    fun store(index: int, value: string): string {
+        let entry = this.values[index];
+        let argument = entry.argument;
+        if argument.kind == CliArgumentKind.Int && CliValidation.parse_int(value).is_none() {
+            return "invalid value '" + value + "' for '" + argument.display()
+                + "': expected a decimal 32-bit integer";
+        }
+        if argument.choices.length > 0 && !CliValidation.contains(argument.choices, value) {
+            return "invalid value '" + value + "' for '" + argument.display()
+                + "'\n  [possible values: " + argument.choices.join(", ") + "]";
+        }
+        entry.values.push(value);
+        entry.provided = true;
+        return "";
+    }
+
+    fun find_long(borrow name: string): int {
+        for (let i = 0; i < this.values.length; i = i + 1) {
+            let argument = this.values[i].argument;
+            if !argument.is_positional() && argument.name == name {
+                return i;
+            }
+        }
+        return 0 - 1;
+    }
+
+    fun find_short(c: char): int {
+        for (let i = 0; i < this.values.length; i = i + 1) {
+            let argument = this.values[i].argument;
+            if argument.short.length == 1 && argument.short.char_at(0) == c {
+                return i;
+            }
+        }
+        return 0 - 1;
+    }
+
+    fun find_positional(ordinal: int): int {
+        let seen = 0;
+        for (let i = 0; i < this.values.length; i = i + 1) {
+            if this.values[i].argument.is_positional() {
+                if seen == ordinal {
+                    return i;
+                }
+                seen = seen + 1;
+            }
+        }
+        return 0 - 1;
+    }
+
+    fun find_child(borrow token: string): int {
+        for (let i = 0; i < this.command.children.length; i = i + 1) {
+            if this.command.children[i].name == token {
+                return i;
+            }
+        }
+        return 0 - 1;
+    }
+}

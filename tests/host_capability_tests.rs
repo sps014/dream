@@ -81,18 +81,10 @@ fn compiler_without_any_host_libraries_compiles_and_runs() {
 
 #[test]
 fn optional_services_select_exact_libraries_and_bind_core() {
-    for (source, capability) in [
-        (
-            r#"import system.cli; fun main(): void { let parsed = Command("probe").parse([]); }"#,
-            HostCapability::Cli,
-        ),
-        (
-            r#"import system; fun main(): void { let x = TimeZone.local; }"#,
-            HostCapability::Timezone,
-        ),
-    ] {
-        assert_eq!(inventory(source), vec![HostCapability::Core, capability]);
-    }
+    assert_eq!(
+        inventory(r#"import system; fun main(): void { let x = TimeZone.local; }"#),
+        vec![HostCapability::Core, HostCapability::Timezone]
+    );
     for (stem, capability) in [
         ("crypto_basic", HostCapability::Crypto),
         ("process_run_basic", HostCapability::Process),

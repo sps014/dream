@@ -12,8 +12,6 @@ dream-host-timezone = { path = "../dream-host-timezone", optional = true }
 
 dream-host-net = { path = "../dream-host-net", optional = true }
 
-dream-host-cli = { path = "../dream-host-cli", optional = true }
-
 dream-host-data = { path = "../dream-host-data", optional = true }
 
 dream-host-io = { path = "../dream-host-io", optional = true }
@@ -25,13 +23,12 @@ dream-host-gpu = { path = "../dream-host-gpu", optional = true }
 dream-host-audio = { path = "../dream-host-audio", optional = true }
 
 [features]
-default = ["core", "crypto", "process", "timezone", "net", "cli", "data", "io", "window", "gpu", "audio"]
+default = ["core", "crypto", "process", "timezone", "net", "data", "io", "window", "gpu", "audio"]
 core = ["dep:dream-host-core"]
 crypto = ["core", "dep:dream-host-crypto"]
 process = ["core", "dep:dream-host-process"]
 timezone = ["core", "dep:dream-host-timezone"]
 net = ["core", "dep:dream-host-net"]
-cli = ["core", "dep:dream-host-cli"]
 data = ["core", "dep:dream-host-data"]
 io = ["core", "dep:dream-host-io"]
 window = ["core", "dep:dream-host-window"]

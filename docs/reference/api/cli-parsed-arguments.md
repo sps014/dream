@@ -110,7 +110,7 @@ public fun get_bool(name: string): Result<bool, CliError>
 
 ## `config_keys`
 
-Copies declared names for typed configuration merging; is_present distinguishes explicit values.
+Copies declared names in declaration order for typed configuration merging; is_present distinguishes explicit values.
 
 ```dream
 public fun config_keys(): string[]
@@ -118,7 +118,7 @@ public fun config_keys(): string[]
 
 ## `config_value`
 
-Returns the final explicit scalar value for configuration merging, including typed options.
+Returns the final scalar value for configuration merging, including typed options.
 
 ```dream
 public fun config_value(name: string): Result<string, CliError>

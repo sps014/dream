@@ -22,7 +22,7 @@ public constructor(code: string, message: string)
 
 ## `code`
 
-EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
+EINVAL for definitions, EARGS for invocations, ENOENT for missing values, or ETYPE for incorrect getters.
 
 ```dream
 public fun code(): string

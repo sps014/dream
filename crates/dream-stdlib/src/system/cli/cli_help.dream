@@ -1,0 +1,120 @@
+module system.cli;
+
+/// Generated help, usage, version, and invocation error text for one command scope.
+internal static class CliHelp {
+    /// `path` is the space-separated command chain, such as `tool check`.
+    internal static fun help(borrow command: Command, borrow path: string, version: bool): string {
+        let out = StringBuilder();
+        if command.about.length > 0 {
+            out.append(command.about);
+            out.append("\n\n");
+        }
+        out.append("Usage: ");
+        out.append(CliHelp.usage(command, path));
+        out.append_char('\n');
+        if command.children.length > 0 {
+            let left = List<string>();
+            let right = List<string>();
+            for let child in command.children {
+                left.push(child.name);
+                right.push(child.about);
+            }
+            CliHelp.section(out, "Commands", left, right);
+        }
+        let positional_left = List<string>();
+        let positional_right = List<string>();
+        let option_left = List<string>();
+        let option_right = List<string>();
+        for let argument in command.arguments {
+            if argument.is_positional() {
+                positional_left.push(argument.display());
+                positional_right.push(CliHelp.describe(argument));
+            } else {
+                let short = argument.short.length > 0 ? "-" + argument.short + ", " : "    ";
+                option_left.push(short + argument.display());
+                option_right.push(CliHelp.describe(argument));
+            }
+        }
+        option_left.push("-h, --help");
+        option_right.push("Print help");
+        if version {
+            option_left.push("-V, --version");
+            option_right.push("Print version");
+        }
+        if positional_left.length > 0 {
+            CliHelp.section(out, "Arguments", positional_left, positional_right);
+        }
+        CliHelp.section(out, "Options", option_left, option_right);
+        return out.build();
+    }
+
+    /// `name` is the hyphen-joined command chain, such as `tool-check`.
+    internal static fun version(borrow name: string, borrow version: string): string {
+        return name + " " + version + "\n";
+    }
+
+    /// Formats an invocation failure with the scope's usage line.
+    internal static fun error(borrow command: Command, borrow path: string, borrow message: string): string {
+        return "error: " + message + "\n\nUsage: " + CliHelp.usage(command, path)
+            + "\n\nFor more information, try '--help'.\n";
+    }
+
+    static fun usage(borrow command: Command, borrow path: string): string {
+        let out = StringBuilder();
+        out.append(path);
+        out.append(" [OPTIONS]");
+        for let argument in command.arguments {
+            if !argument.is_positional() && argument.required {
+                out.append_char(' ');
+                out.append(argument.display());
+            }
+        }
+        for let argument in command.arguments {
+            if argument.is_positional() {
+                out.append_char(' ');
+                out.append(argument.display());
+            }
+        }
+        if command.children.length > 0 {
+            out.append(command.subcommand_required ? " <COMMAND>" : " [COMMAND]");
+        }
+        return out.build();
+    }
+
+    static fun describe(borrow argument: CliArgument): string {
+        let parts = List<string>();
+        if argument.description.length > 0 {
+            parts.push(argument.description);
+        }
+        if argument.default_value.is_some() {
+            parts.push("[default: " + argument.default_value.unwrap() + "]");
+        }
+        if argument.choices.length > 0 {
+            parts.push("[possible values: " + argument.choices.join(", ") + "]");
+        }
+        return parts.join(" ");
+    }
+
+    // Rows align their descriptions two columns after the section's widest entry.
+    static fun section(
+        borrow out: StringBuilder,
+        borrow heading: string,
+        borrow left: List<string>,
+        borrow right: List<string>
+    ): void {
+        let width = 0;
+        for let entry in left {
+            width = entry.length > width ? entry.length : width;
+        }
+        out.append_char('\n');
+        out.append(heading);
+        out.append(":\n");
+        for (let i = 0; i < left.length; i = i + 1) {
+            out.append("  ");
+            out.append(left[i]);
+            out.append(" ".repeat(width - left[i].length + 2));
+            out.append(right[i]);
+            out.append_char('\n');
+        }
+    }
+}

@@ -11,7 +11,7 @@ public class CliError: Error {
         this.error_message = message;
     }
 
-    /// EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.
+    /// EINVAL for definitions, EARGS for invocations, ENOENT for missing values, or ETYPE for incorrect getters.
     public fun code(): string {
         return this.error_code;
     }

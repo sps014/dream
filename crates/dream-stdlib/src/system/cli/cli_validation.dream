@@ -1,0 +1,153 @@
+module system.cli;
+
+/// Checks a command tree before parsing; each failure becomes an `EINVAL` `CliError`.
+internal static class CliValidation {
+    /// Returns an empty string for a valid definition, otherwise the diagnostic.
+    internal static fun check(borrow command: Command, depth: int, inherited_version: bool): string {
+        if depth > 16 || command.arguments.length > 256 || command.children.length > 64 {
+            return "command exceeds CLI definition limits";
+        }
+        if !CliValidation.valid_name(command.name) {
+            return "command names must begin with an ASCII letter and contain letters, digits, '_' or '-'";
+        }
+        let version = inherited_version || command.version_text.length > 0;
+        let optional_positional = false;
+        let multiple_positional = false;
+        for (let i = 0; i < command.arguments.length; i = i + 1) {
+            let argument = command.arguments[i];
+            let problem = CliValidation.check_argument(command, i, version);
+            if problem.length > 0 {
+                return problem;
+            }
+            if argument.is_positional() {
+                if multiple_positional || (optional_positional && argument.required) {
+                    return "required positionals must precede optional positionals; only the last can be multiple";
+                }
+                optional_positional = optional_positional || !argument.required;
+                multiple_positional = argument.multiple;
+            }
+        }
+        for (let i = 0; i < command.children.length; i = i + 1) {
+            let child = command.children[i];
+            for (let j = 0; j < i; j = j + 1) {
+                if command.children[j].name == child.name {
+                    return "duplicate subcommand: " + child.name;
+                }
+            }
+            let problem = CliValidation.check(child, depth + 1, version);
+            if problem.length > 0 {
+                return problem;
+            }
+        }
+        if command.subcommand_required && command.children.length == 0 {
+            return "a required subcommand needs at least one definition";
+        }
+        return "";
+    }
+
+    static fun check_argument(borrow command: Command, index: int, version: bool): string {
+        let argument = command.arguments[index];
+        let duplicate = false;
+        let duplicate_short = false;
+        for (let j = 0; j < index; j = j + 1) {
+            let other = command.arguments[j];
+            duplicate = duplicate || other.name == argument.name;
+            duplicate_short = duplicate_short
+                || (argument.short.length > 0 && other.short == argument.short);
+        }
+        if !CliValidation.valid_name(argument.name)
+            || duplicate
+            || argument.name == "help"
+            || argument.name == "version" {
+            return "invalid, duplicate, or reserved argument name: " + argument.name;
+        }
+        if argument.short.length > 0 {
+            if argument.short.length != 1
+                || !CliValidation.letter(argument.short.char_at(0))
+                || argument.short == "h"
+                || (version && argument.short == "V")
+                || duplicate_short {
+                return "invalid, duplicate, or reserved short option: " + argument.short;
+            }
+            if argument.is_positional() {
+                return "positional arguments cannot have short options";
+            }
+        }
+        if !argument.is_positional() && argument.multiple {
+            return "only positional arguments use the multiple setting; repeated options are collected automatically";
+        }
+        if argument.kind == CliArgumentKind.Flag
+            && (argument.required || argument.choices.length > 0 || argument.default_value.is_some()) {
+            return "flags cannot have required values, defaults, or choices";
+        }
+        if argument.kind == CliArgumentKind.Int {
+            for let choice in argument.choices {
+                if CliValidation.parse_int(choice).is_none() {
+                    return "invalid integer default or choice for " + argument.name;
+                }
+            }
+            if argument.default_value.is_some()
+                && CliValidation.parse_int(argument.default_value.unwrap()).is_none() {
+                return "invalid integer default or choice for " + argument.name;
+            }
+        }
+        if argument.default_value.is_some()
+            && argument.choices.length > 0
+            && !CliValidation.contains(argument.choices, argument.default_value.unwrap()) {
+            return "default value for " + argument.name + " must be one of its choices";
+        }
+        return "";
+    }
+
+    /// Parses an optionally signed decimal 32-bit integer.
+    internal static fun parse_int(borrow text: string): Option<int> {
+        let start = text.length > 0 && (text.char_at(0) == '-' || text.char_at(0) == '+') ? 1 : 0;
+        if start == text.length {
+            return Option.None;
+        }
+        let value = 0L;
+        for (let i = start; i < text.length; i = i + 1) {
+            let c = text.char_at(i);
+            if c < '0' || c > '9' {
+                return Option.None;
+            }
+            value = value * 10L + (long)((int)c - 48);
+            if value > 2147483648L {
+                return Option.None;
+            }
+        }
+        if text.char_at(0) == '-' {
+            value = 0L - value;
+        }
+        if value > 2147483647L {
+            return Option.None;
+        }
+        return Option.Some((int)value);
+    }
+
+    internal static fun contains(borrow values: string[], borrow value: string): bool {
+        for let candidate in values {
+            if candidate == value {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static fun valid_name(borrow name: string): bool {
+        if name.length == 0 || name.length > 128 || !CliValidation.letter(name.char_at(0)) {
+            return false;
+        }
+        for (let i = 0; i < name.length; i = i + 1) {
+            let c = name.char_at(i);
+            if !CliValidation.letter(c) && !(c >= '0' && c <= '9') && c != '_' && c != '-' {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static fun letter(c: char): bool {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    }
+}

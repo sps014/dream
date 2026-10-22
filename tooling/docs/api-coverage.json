@@ -793,7 +793,7 @@
       },
       {
         "signature": "public fun code(): string",
-        "description": "EINVAL for definitions, EARGS for invocations, ENOENT for missing values, ETYPE for incorrect getters, or EIO for adapter failures.",
+        "description": "EINVAL for definitions, EARGS for invocations, ENOENT for missing values, or ETYPE for incorrect getters.",
         "line": 15,
         "page": "reference/api/cli-cli-error.md"
       },
@@ -813,73 +813,73 @@
       {
         "signature": "public class Command",
         "description": "Declarative CLI definition. Parsing consumes arguments without an executable name and never exits.",
-        "line": 4,
+        "line": 6,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public constructor(name: string)",
         "description": "Creates a command; invalid names or conflicting definitions return errors from parse.",
-        "line": 9,
+        "line": 16,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun version(value: string): Command",
         "description": "Sets version output and enables --version/-V for this command and its descendants.",
-        "line": 18,
+        "line": 27,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun description(value: string): Command",
         "description": "Sets text included in automatically generated help.",
-        "line": 24,
+        "line": 33,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun require_subcommand(required: bool = true): Command",
         "description": "Requires one of the declared subcommands; --help and --version still return normal outcomes.",
-        "line": 30,
+        "line": 39,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun positional( name: string, required: bool = false, multiple: bool = false, description: string = \"\" ): Command",
         "description": "Adds an ordered string positional; only the last positional can collect multiple arguments.",
-        "line": 36,
+        "line": 45,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun string_option( name: string, short: string = \"\", default_value: string = \"\", required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a string option. Optional values default to empty; repeated occurrences are collected, with the last returned by get_string.",
-        "line": 48,
+        "line": 57,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun int_option( name: string, short: string = \"\", default_value: int = 0, required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a decimal 32-bit integer option. Optional values default to zero; required options ignore defaults.",
-        "line": 63,
+        "line": 72,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun flag(name: string, short: string = \"\", description: string = \"\"): Command",
         "description": "Adds a boolean option defaulting to false; repeated occurrences remain true.",
-        "line": 78,
+        "line": 87,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun choices(name: string, values: string[]): Command",
         "description": "Restricts a previously declared string, positional, or integer argument to these exact values.",
-        "line": 84,
+        "line": 93,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun subcommand(command: Command): Command",
         "description": "Snapshots a child definition. Later edits to the child do not mutate its attached copy.",
-        "line": 98,
+        "line": 105,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun parse(arguments: string[]): Result<ParsedArguments, CliError>",
-        "description": "Parses explicit arguments on native targets; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.",
-        "line": 115,
+        "description": "Parses explicit arguments; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.",
+        "line": 116,
         "page": "reference/api/cli-command.md"
       }
     ]
@@ -892,91 +892,91 @@
       {
         "signature": "public class ParsedArguments",
         "description": "Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.",
-        "line": 4,
+        "line": 6,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get is_help(): bool",
         "description": "True when --help or -h was requested, including for a subcommand.",
-        "line": 12,
+        "line": 45,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get is_version(): bool",
         "description": "True when --version or -V was requested.",
-        "line": 17,
+        "line": 50,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get help_text(): string",
         "description": "Deterministic generated help when is_help is true; otherwise empty.",
-        "line": 22,
+        "line": 55,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get version_text(): string",
         "description": "Generated version text when is_version is true; otherwise empty.",
-        "line": 27,
+        "line": 60,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get command_name(): string",
         "description": "Command name for successful value outcomes; empty for help/version outcomes.",
-        "line": 32,
+        "line": 65,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get subcommand(): Option<ParsedArguments>",
         "description": "Selected child scope, or None when no subcommand was invoked.",
-        "line": 37,
+        "line": 70,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun is_present(name: string): bool",
         "description": "True only for arguments explicitly supplied on the command line, excluding defaults.",
-        "line": 46,
+        "line": 75,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_string(name: string): Result<string, CliError>",
         "description": "Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.",
-        "line": 55,
+        "line": 81,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_strings(name: string): Result<string[], CliError>",
         "description": "Copies all string values in order, including an optional default when no value was supplied.",
-        "line": 64,
+        "line": 90,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_int(name: string): Result<int, CliError>",
         "description": "Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.",
-        "line": 69,
+        "line": 96,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_ints(name: string): Result<int[], CliError>",
         "description": "Copies every parsed integer occurrence in order.",
-        "line": 82,
+        "line": 105,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_bool(name: string): Result<bool, CliError>",
         "description": "Returns the declared boolean flag, false when omitted; wrong getter types return errors.",
-        "line": 96,
+        "line": 115,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun config_keys(): string[]",
-        "description": "Copies declared names for typed configuration merging; is_present distinguishes explicit values.",
-        "line": 105,
+        "description": "Copies declared names in declaration order for typed configuration merging; is_present distinguishes explicit values.",
+        "line": 121,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun config_value(name: string): Result<string, CliError>",
-        "description": "Returns the final explicit scalar value for configuration merging, including typed options.",
-        "line": 110,
+        "description": "Returns the final scalar value for configuration merging, including typed options.",
+        "line": 130,
         "page": "reference/api/cli-parsed-arguments.md"
       }
     ]

@@ -8,7 +8,6 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-net/src/exports.rs"),
-    include_str!("../../dream-host-cli/src/exports.rs"),
     include_str!("../../dream-host-data/src/exports.rs"),
     include_str!("../../dream-host-io/src/exports.rs"),
     include_str!("../../dream-host-window/src/exports.rs"),
@@ -102,12 +101,11 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Process, vec![HOST_SOURCES[1]]),
         (HostCapability::Timezone, vec![HOST_SOURCES[2]]),
         (HostCapability::Net, vec![HOST_SOURCES[3]]),
-        (HostCapability::Cli, vec![HOST_SOURCES[4]]),
-        (HostCapability::Data, vec![HOST_SOURCES[5]]),
-        (HostCapability::Io, vec![HOST_SOURCES[6]]),
-        (HostCapability::Window, vec![HOST_SOURCES[7]]),
-        (HostCapability::Gpu, vec![HOST_SOURCES[8]]),
-        (HostCapability::Audio, vec![HOST_SOURCES[9]]),
+        (HostCapability::Data, vec![HOST_SOURCES[4]]),
+        (HostCapability::Io, vec![HOST_SOURCES[5]]),
+        (HostCapability::Window, vec![HOST_SOURCES[6]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[7]]),
+        (HostCapability::Audio, vec![HOST_SOURCES[8]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();

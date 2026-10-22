@@ -1,5 +1,0 @@
-import system.cli;
-
-fun main(): void {
-    let result = Command("example").parse([]);
-}

@@ -67,7 +67,6 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "netOperationRelease",
             "netOperationClaim",
         ],
-        HostCapability::Cli => &["cliParse"],
         HostCapability::Data => &["dataCompression"],
         HostCapability::Io => &["tempDirectoryCreate", "tempReplace", "tempSupported"],
         HostCapability::Window => &[

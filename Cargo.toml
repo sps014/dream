@@ -117,7 +117,7 @@ overflow-checks = true
 edition = "2024"
 
 [workspace]
-default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net", "crates/dream-host-cli",
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net",
     "crates/dream-host-data", "crates/dream-host-io", "crates/dream-host-window", "crates/dream-host-gpu", "crates/dream-host-audio"]
 members = [
     ".",
@@ -137,7 +137,6 @@ members = [
     "crates/dream-host-process",
     "crates/dream-host-timezone",
     "crates/dream-host-net",
-    "crates/dream-host-cli",
     "crates/dream-host-data",
     "crates/dream-host-io",
     "crates/dream-host-window",

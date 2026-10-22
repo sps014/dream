@@ -1,0 +1,55 @@
+module system.cli;
+
+/// One declared positional, option, or flag of a `Command`.
+internal class CliArgument {
+    internal name: string;
+    internal kind: CliArgumentKind;
+    internal short: string;
+    internal required: bool;
+    internal multiple: bool;
+    internal default_value: Option<string>;
+    internal choices: string[];
+    internal description: string;
+
+    internal constructor(
+        name: string,
+        kind: CliArgumentKind,
+        short: string,
+        required: bool,
+        description: string
+    ) {
+        this.name = name;
+        this.kind = kind;
+        this.short = short;
+        this.required = required;
+        this.multiple = false;
+        this.default_value = Option.None;
+        this.choices = [];
+        this.description = description;
+    }
+
+    /// An independent copy, so later edits to the original definition do not reach it.
+    internal fun copy(): CliArgument {
+        let copy = CliArgument(this.name, this.kind, this.short, this.required, this.description);
+        copy.multiple = this.multiple;
+        copy.default_value = this.default_value;
+        copy.choices = this.choices;
+        return copy;
+    }
+
+    internal fun is_positional(): bool {
+        return this.kind == CliArgumentKind.Positional;
+    }
+
+    /// `--name <name>` for options and flags, or `<name>` / `[name]...` for positionals.
+    internal fun display(): string {
+        if this.is_positional() {
+            let text = this.required ? "<" + this.name + ">" : "[" + this.name + "]";
+            return this.multiple ? text + "..." : text;
+        }
+        if this.kind == CliArgumentKind.Flag {
+            return "--" + this.name;
+        }
+        return "--" + this.name + " <" + this.name + ">";
+    }
+}

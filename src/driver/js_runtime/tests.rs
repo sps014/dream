@@ -123,15 +123,6 @@ fn synchronous_selected_loader_executes_without_async_glue() {
 }
 
 #[test]
-fn cli_is_not_a_javascript_host_capability() {
-    let manifest = parse_manifest(include_str!("../../../runtime/src/chunks.manifest"));
-    assert_eq!(chunk_for_field(&manifest, "cliParse"), None);
-    let text = assemble_selective_runtime(&[], JsRuntimeTarget::Node).unwrap();
-    assert!(!text.contains("cliParserBase64"));
-    assert!(!text.contains("makeCliHost"));
-}
-
-#[test]
 fn codecs_are_binary_companions_only_for_live_codec_imports() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("application.wat");

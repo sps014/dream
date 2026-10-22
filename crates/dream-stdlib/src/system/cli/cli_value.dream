@@ -1,0 +1,14 @@
+module system.cli;
+
+/// Values parsed for one declared argument, in command-line order.
+internal class CliValue {
+    internal argument: CliArgument;
+    internal values: List<string>;
+    internal provided: bool;
+
+    internal constructor(argument: CliArgument) {
+        this.argument = argument;
+        this.values = List<string>();
+        this.provided = false;
+    }
+}

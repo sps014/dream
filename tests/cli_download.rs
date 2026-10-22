@@ -13,38 +13,6 @@ fn successful(output: Output) -> String {
 }
 
 #[test]
-fn cli_parsing_is_rejected_on_web_and_node() {
-    let temp = tempfile::tempdir().unwrap();
-    let source = temp.path().join("main.dream");
-    std::fs::write(
-        &source,
-        include_str!("cases/support/cli_wasm_unsupported.dream"),
-    )
-    .unwrap();
-    for target in ["web", "node"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_dream"))
-            .arg(format!("--{target}"))
-            .arg(&source)
-            .output()
-            .unwrap();
-        assert!(
-            !output.status.success(),
-            "CLI unexpectedly supported on {target}"
-        );
-        let diagnostic = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        assert!(
-            diagnostic.contains(&format!("not available on compile target '{target}'"))
-                && diagnostic.contains("available on: native"),
-            "{diagnostic}",
-        );
-        assert!(!source.with_extension("wasm").exists());
-    }
-}
-#[test]
 fn download_cli_runs_on_native() {
     let server = fixture::HttpFixture::start();
     let temp = tempfile::tempdir().unwrap();

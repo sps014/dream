@@ -3,6 +3,7 @@
 mod array_slots;
 mod body;
 mod calls;
+mod const_blob;
 mod construction;
 mod debug;
 mod debug_views;

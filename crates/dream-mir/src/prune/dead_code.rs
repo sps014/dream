@@ -593,12 +593,15 @@ fn prune_dead_globals(mir: &mut Mir, interner: &TypeInterner) {
             collect_global_reads_terminator(&b.terminator, &mut read);
         }
     }
-    // Managed stores retain ownership and validate publication even without later reads.
+    // Managed stores retain ownership and validate publication even without later reads. An
+    // all-constant array literal owns nothing and has no effect, so an unread table is dead.
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         for b in &mut f.blocks {
             b.stmts.retain(|s| match s {
                 Statement::Assign(Place::Global(g), rv) => {
-                    read.contains(g) || owning.contains(g) || !crate::passes::is_pure(rv)
+                    read.contains(g)
+                        || (!is_const_array_lit(rv)
+                            && (owning.contains(g) || !crate::passes::is_pure(rv)))
                 }
                 _ => true,
             });
@@ -622,6 +625,10 @@ fn prune_dead_globals(mir: &mut Mir, interner: &TypeInterner) {
     // no *MIR function* reads or writes it in that case.
     referenced.insert(Global(0));
     mir.globals.retain(|g| referenced.contains(&g.id));
+}
+
+fn is_const_array_lit(rv: &Rvalue) -> bool {
+    matches!(rv, Rvalue::ArrayLit { elems, .. } if elems.iter().all(|e| matches!(e, Operand::Const(_))))
 }
 
 fn collect_global_reads_stmt(s: &Statement, out: &mut HashSet<Global>) {

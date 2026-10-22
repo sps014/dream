@@ -1,5 +1,6 @@
 //! Rvalues: arithmetic dispatch, strings, allocation and construction, unions and protocol hooks.
 
+use super::const_blob::const_elem_bytes;
 use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, mem_ty, runtime_c_name};
@@ -665,20 +666,13 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.memset0(&p, &Value::i64(size));
         self.install_array_info(&o, elem_ty);
         self.store_ty(&Ty::I32, &p, &V::i32(n), 4);
-        if matches!(self.interner.kind(elem_ty), TyKind::Prim(PrimTy::Byte)) {
-            let bytes: Option<Vec<u8>> = elems
-                .iter()
-                .map(|e| match e {
-                    Operand::Const(crate::Const::Int(n)) => u8::try_from(*n).ok(),
-                    _ => None,
-                })
-                .collect();
-            if let Some(bytes) = bytes.filter(|b| !b.is_empty()) {
-                let source = self.l.byte_blob(&bytes);
-                let dest = self.w.gep_const(&p, crate::abi::LEN_PREFIX_SIZE as i64);
-                self.memcpy(&dest, &source, &Value::i64(bytes.len() as i64));
-                return o;
-            }
+        if let TyKind::Prim(prim) = self.interner.kind(elem_ty)
+            && let Some(bytes) = const_elem_bytes(*prim, es as usize, elems)
+        {
+            let source = self.l.byte_blob(&bytes);
+            let dest = self.w.gep_const(&p, crate::abi::LEN_PREFIX_SIZE as i64);
+            self.memcpy(&dest, &source, &Value::i64(bytes.len() as i64));
+            return o;
         }
         for (i, v) in vals.iter().enumerate() {
             let at = self

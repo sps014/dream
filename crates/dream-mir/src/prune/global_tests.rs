@@ -44,3 +44,47 @@ fn unread_managed_global_stores_preserve_ownership_and_publication() {
     );
     assert_eq!(mir.functions[0].blocks[0].stmts.len(), 2);
 }
+
+#[test]
+fn unread_constant_array_tables_are_dropped() {
+    let mut types = TypeInterner::new();
+    let scalar = types.int();
+    let table = types.array(scalar);
+    let mut mir = Mir {
+        globals: [scalar, table, table]
+            .into_iter()
+            .enumerate()
+            .map(|(id, ty)| MirGlobal {
+                id: Global(id as u32),
+                ty,
+            })
+            .collect(),
+        ..Mir::default()
+    };
+    let mut builder = FunctionBuilder::new("init", types.void());
+    let elem = builder.new_param(scalar, None);
+    builder.assign(
+        Place::Global(Global(1)),
+        Rvalue::ArrayLit {
+            elem_ty: scalar,
+            elems: vec![Operand::Const(Const::Int(1)), Operand::Const(Const::Int(2))],
+        },
+    );
+    builder.assign(
+        Place::Global(Global(2)),
+        Rvalue::ArrayLit {
+            elem_ty: scalar,
+            elems: vec![Operand::Copy(Place::Local(elem))],
+        },
+    );
+    builder.terminate(Terminator::Return(None));
+    mir.functions.push(builder.finish());
+
+    prune_dead_globals(&mut mir, &types);
+
+    assert_eq!(
+        mir.globals.iter().map(|g| g.id).collect::<Vec<_>>(),
+        [Global(0), Global(2)]
+    );
+    assert_eq!(mir.functions[0].blocks[0].stmts.len(), 1);
+}

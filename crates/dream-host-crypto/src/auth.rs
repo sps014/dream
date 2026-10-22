@@ -63,17 +63,12 @@ fn operation(value: &Value) -> Result<Value, &'static str> {
             ))
         }
         "sign" | "verify" => {
-            let algorithm = match field(value, "algorithm")? {
-                "RS256" => Algorithm::RS256,
-                "HS256" => Algorithm::HS256,
-                _ => return Err("unsupported JWT algorithm"),
-            };
+            if field(value, "algorithm")? != "RS256" {
+                return Err("unsupported JWT algorithm");
+            }
             let issuer = field(value, "issuer")?;
             let audience = field(value, "audience")?;
             let key = field(value, "key")?;
-            if algorithm == Algorithm::HS256 && key.len() < 32 {
-                return Err("HS256 requires at least 32 key bytes");
-            }
             if field(value, "action")? == "sign" {
                 let mut claims = value["claims"].clone();
                 if !claims.is_object()
@@ -84,12 +79,9 @@ fn operation(value: &Value) -> Result<Value, &'static str> {
                 }
                 claims["iss"] = json!(issuer);
                 claims["aud"] = json!(audience);
-                let key = if algorithm == Algorithm::HS256 {
-                    EncodingKey::from_secret(key.as_bytes())
-                } else {
-                    EncodingKey::from_rsa_pem(key.as_bytes()).map_err(|_| "invalid signing key")?
-                };
-                jsonwebtoken::encode(&Header::new(algorithm), &claims, &key)
+                let key =
+                    EncodingKey::from_rsa_pem(key.as_bytes()).map_err(|_| "invalid signing key")?;
+                jsonwebtoken::encode(&Header::new(Algorithm::RS256), &claims, &key)
                     .map(|token| json!(token))
                     .map_err(|_| "JWT signing failed")
             } else {
@@ -97,13 +89,9 @@ fn operation(value: &Value) -> Result<Value, &'static str> {
                 if token.len() > 16_384 {
                     return Err("JWT too large");
                 }
-                let key = if algorithm == Algorithm::HS256 {
-                    DecodingKey::from_secret(key.as_bytes())
-                } else {
-                    DecodingKey::from_rsa_pem(key.as_bytes())
-                        .map_err(|_| "invalid verification key")?
-                };
-                let mut validation = Validation::new(algorithm);
+                let key = DecodingKey::from_rsa_pem(key.as_bytes())
+                    .map_err(|_| "invalid verification key")?;
+                let mut validation = Validation::new(Algorithm::RS256);
                 validation.set_issuer(&[issuer]);
                 validation.set_audience(&[audience]);
                 validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
@@ -144,19 +132,12 @@ mod tests {
         );
     }
     #[test]
-    fn jwt_verification_enforces_policy() {
-        let key = "0123456789abcdef0123456789abcdef";
-        let mut request = json!({"action":"sign","algorithm":"HS256","issuer":"test","audience":"api","key":key,"claims":{"sub":"1","exp":jsonwebtoken::get_current_timestamp()+60}});
-        let token = operation(&request).unwrap();
-        request["token"] = token;
-        request["action"] = json!("verify");
-        assert_eq!(operation(&request).unwrap()["sub"], "1");
-        request["audience"] = json!("wrong");
-        assert!(operation(&request).is_err());
-        request["audience"] = json!("api");
-        request["key"] = json!("abcdef0123456789abcdef0123456789");
-        assert!(operation(&request).is_err());
-        request["algorithm"] = json!("none");
-        assert!(operation(&request).is_err());
+    fn jwt_host_accepts_only_rs256_pem_keys() {
+        let mut request = json!({"action":"sign","algorithm":"RS256","issuer":"test","audience":"api","key":"not a pem key","claims":{"sub":"1","exp":jsonwebtoken::get_current_timestamp()+60}});
+        assert_eq!(operation(&request), Err("invalid signing key"));
+        for algorithm in ["HS256", "none"] {
+            request["algorithm"] = json!(algorithm);
+            assert_eq!(operation(&request), Err("unsupported JWT algorithm"));
+        }
     }
 }

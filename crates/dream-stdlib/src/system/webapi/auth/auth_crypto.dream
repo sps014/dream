@@ -54,6 +54,12 @@ internal static class AuthCrypto {
         action: string,
         payload: JsonValue
     ): Result<JsonValue, AuthError> {
+        if options.algorithm == JwtAlgorithm.HS256 {
+            if action == "sign" {
+                return Result.Ok(JsonValue.from_string(Hs256Jwt.sign(options, payload)?));
+            }
+            return Hs256Jwt.verify(options, payload.as_string().unwrap_or(""), AuthCrypto.now());
+        }
         let request = AuthCrypto.request(action);
         request["issuer"] = JsonValue.from_string(options.issuer);
         request["audience"] = JsonValue.from_string(options.audience);

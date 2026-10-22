@@ -1,0 +1,150 @@
+module system.webapi.auth;
+
+/// HS256 JSON Web Tokens (RFC 7519) signed with HMAC-SHA256.
+internal static class Hs256Jwt {
+    /// Signs `claims` after setting `iss` and `aud` from `options`. `claims` must be an object
+    /// with a non-empty string `sub` and a non-negative whole-number `exp`.
+    internal static fun sign(options: JwtOptions, claims: JsonValue): Result<string, AuthError> {
+        let key = Hs256Jwt.key(options.signing_key)?;
+        if !claims.is_object()
+            || Hs256Jwt.text(claims, "sub").is_empty()
+            || Hs256Jwt.seconds(claims, "exp").is_none() {
+            return Result.Err(AuthError("ECRYPTO", "invalid JWT claims"));
+        }
+        claims["iss"] = JsonValue.from_string(options.issuer);
+        claims["aud"] = JsonValue.from_string(options.audience);
+        let header = Encoding.utf8_encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
+        let body = Encoding.utf8_encode(Json.serialize(claims));
+        let signing_input = Encoding.base64url_encode(header) + "." + Encoding.base64url_encode(body);
+        let signature = HmacSha256.sign(key, Encoding.utf8_encode(signing_input));
+        return Result.Ok(signing_input + "." + Encoding.base64url_encode(signature));
+    }
+
+    /// Verifies `token` and returns its claims. The header must name HS256, the signature must
+    /// match, `exp` must not be before `now`, `nbf` (when present) must not be after `now`, `sub`
+    /// must be a non-empty string, and `iss` and `aud` must match `options`.
+    internal static fun verify(
+        options: JwtOptions,
+        token: string,
+        now: long
+    ): Result<JsonValue, AuthError> {
+        let key = Hs256Jwt.key(options.verification_key)?;
+        if token.length > 16384 {
+            return Result.Err(AuthError("ECRYPTO", "JWT too large"));
+        }
+        let parts = token.split('.');
+        if parts.length != 3 {
+            return Hs256Jwt.rejected();
+        }
+        let header = Hs256Jwt.segment_json(parts[0]);
+        if header.is_none() || Hs256Jwt.text(header.unwrap(), "alg") != "HS256" {
+            return Hs256Jwt.rejected();
+        }
+        let signature = Hs256Jwt.segment_bytes(parts[2]);
+        let expected = HmacSha256.sign(key, Encoding.utf8_encode(parts[0] + "." + parts[1]));
+        if signature.is_none() || !Hs256Jwt.same(expected, signature.unwrap()) {
+            return Hs256Jwt.rejected();
+        }
+        let decoded = Hs256Jwt.segment_json(parts[1]);
+        if decoded.is_none() {
+            return Hs256Jwt.rejected();
+        }
+        let claims = decoded.unwrap();
+        let exp = Hs256Jwt.seconds(claims, "exp");
+        if exp.is_none() || exp.unwrap() < now {
+            return Hs256Jwt.rejected();
+        }
+        if claims.contains("nbf") {
+            let nbf = Hs256Jwt.seconds(claims, "nbf");
+            if nbf.is_none() || nbf.unwrap() > now {
+                return Hs256Jwt.rejected();
+            }
+        }
+        if Hs256Jwt.text(claims, "sub").is_empty()
+            || Hs256Jwt.text(claims, "iss") != options.issuer
+            || !Hs256Jwt.has_audience(claims, options.audience) {
+            return Hs256Jwt.rejected();
+        }
+        return Result.Ok(claims);
+    }
+
+    static fun rejected(): Result<JsonValue, AuthError> {
+        return Result.Err(AuthError("ECRYPTO", "invalid access token"));
+    }
+
+    static fun key(secret: string): Result<byte[], AuthError> {
+        let bytes = Encoding.utf8_encode(secret);
+        if bytes.length < 32 {
+            return Result.Err(AuthError("ECRYPTO", "HS256 requires at least 32 key bytes"));
+        }
+        return Result.Ok(bytes);
+    }
+
+    static fun text(borrow value: JsonValue, borrow name: string): string {
+        return value.get(name).unwrap_or(JsonValue.null()).as_string().unwrap_or("");
+    }
+
+    /// Reads a NumericDate claim: a non-negative whole number of seconds since the Unix epoch.
+    static fun seconds(borrow value: JsonValue, borrow name: string): Option<long> {
+        let number = value.get(name).unwrap_or(JsonValue.null()).as_double();
+        if number.is_none() {
+            return Option.None;
+        }
+        let n = number.unwrap();
+        if n < 0.0 || n != Math.floor(n) || n > 9007199254740991.0 {
+            return Option.None;
+        }
+        return Option.Some((long)n);
+    }
+
+    static fun has_audience(borrow claims: JsonValue, borrow audience: string): bool {
+        let aud = claims.get("aud").unwrap_or(JsonValue.null());
+        if aud.as_string().unwrap_or("") == audience {
+            return true;
+        }
+        for (let item in aud.as_array().unwrap_or(List<JsonValue>())) {
+            if item.as_string().unwrap_or("") == audience {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Decodes one unpadded Base64url token segment.
+    static fun segment_bytes(borrow segment: string): Option<byte[]> {
+        if segment.index_of('=').is_some() {
+            return Option.None;
+        }
+        let decoded = Encoding.base64url_decode(segment);
+        if decoded.is_err() {
+            return Option.None;
+        }
+        return Option.Some(decoded.unwrap());
+    }
+
+    static fun segment_json(borrow segment: string): Option<JsonValue> {
+        let bytes = Hs256Jwt.segment_bytes(segment);
+        if bytes.is_none() {
+            return Option.None;
+        }
+        let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes.unwrap()));
+        if parsed.is_err() || !parsed.unwrap().is_object() {
+            return Option.None;
+        }
+        return Option.Some(parsed.unwrap());
+    }
+
+    /// Compares two signatures in time that depends only on their lengths.
+    static fun same(borrow a: byte[], borrow b: byte[]): bool {
+        if a.length != b.length {
+            return false;
+        }
+        let diff = 0;
+        let i = 0;
+        while i < a.length {
+            diff = diff | ((int)a[i] ^ (int)b[i]);
+            i = i + 1;
+        }
+        return diff == 0;
+    }
+}

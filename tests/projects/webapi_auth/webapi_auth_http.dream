@@ -4,6 +4,7 @@ import system.webapi.auth;
 import system.testing;
 import system.net;
 import system.json;
+import system.text;
 
 public class TestAccounts: AuthAccounts {
     hash: string;
@@ -145,6 +146,40 @@ async fun webapi_auth_tokens(): void {
     service.logout(other.refresh_token).await.unwrap();
     Assert.is_true(service.verify(other.access_token).await.is_err());
     Assert.is_true(service.verify("not-a-jwt").await.is_err());
+
+    let sessions = MemoryAuthStore();
+    let issuer = AuthService(
+        JwtOptions("dream-test", "api", key, key, JwtAlgorithm.HS256),
+        TestAccounts(hash),
+        sessions
+    );
+    let fresh = issuer.login("dream", "correct password").await.unwrap();
+    let parts = fresh.access_token.split('.');
+    Assert.eq(parts.length, 3);
+    Assert.is_true(issuer.verify(fresh.access_token).await.is_ok());
+    let other_audience = AuthService(
+        JwtOptions("dream-test", "web", key, key, JwtAlgorithm.HS256),
+        TestAccounts(hash),
+        sessions
+    );
+    Assert.is_true(other_audience.verify(fresh.access_token).await.is_err());
+    let other_secret = "abcdef0123456789abcdef0123456789";
+    let other_key = AuthService(
+        JwtOptions("dream-test", "api", other_secret, other_secret, JwtAlgorithm.HS256),
+        TestAccounts(hash),
+        sessions
+    );
+    Assert.is_true(other_key.verify(fresh.access_token).await.is_err());
+    Assert.is_true(issuer.verify(parts[0] + "." + parts[1] + ".").await.is_err());
+    Assert.is_true(issuer.verify("eyJhbGciOiJub25lIn0." + parts[1] + "." + parts[2]).await.is_err());
+    Assert.is_true(issuer.verify(fresh.access_token + "=").await.is_err());
+    let short_secret = AuthService(
+        JwtOptions("dream-test", "api", "short", "short", JwtAlgorithm.HS256),
+        TestAccounts(hash),
+        MemoryAuthStore()
+    );
+    Assert.is_true(short_secret.login("dream", "correct password").await.is_err());
+
     let store = MemoryAuthStore();
     let original = AuthSession("old", "family", "1", "read", 100L, "csrf");
     store.create(original).await.unwrap();

@@ -224,7 +224,6 @@ const NATIVE_SYS_C: &[&str] = &[
     "time.c",
     "stdio.c",
     "stdio_streams.c",
-    "math.c",
     "worker.c",
 ];
 const WASI_SYS_C: &[&str] = &[
@@ -266,7 +265,6 @@ pub fn component_runtime_c_files(root: &Path) -> Vec<PathBuf> {
                 "dirs.c",
                 "env.c",
                 "file_handle.c",
-                "math.c",
             ]
             .into_iter()
             .map(|name| root.join("sys/native").join(name)),
@@ -554,7 +552,6 @@ mod tests {
             "env.c",
             "time.c",
             "stdio.c",
-            "math.c",
         ] {
             assert_eq!(
                 core.iter()

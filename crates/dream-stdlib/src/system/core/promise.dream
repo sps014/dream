@@ -6,10 +6,6 @@ public static class Promise {
     @intrinsic(Intrinsic.PromiseAll)
     internal static extern async fun all_host<T>(borrow promises: T[]): T[];
 
-    /// Waits for the first successful future and returns its result.
-    @intrinsic(Intrinsic.PromiseAny)
-    internal static extern async fun any_host<T>(borrow promises: T[]): T;
-
     /// Returns the result of the first future to complete.
     @intrinsic(Intrinsic.PromiseRace)
     internal static extern async fun race_host<T>(borrow promises: T[]): T;
@@ -23,16 +19,9 @@ public static class Promise {
         return Promise.all_host(promises).await;
     }
 
-    /// Waits for any promise in the array to resolve.
-    public static async fun any<T>(
-        borrow promises: Future<T>[],
-        token: Option<CancellationToken> = Option.None
-    ): T {
-        CancellationToken.throw_if_opt(token);
-        return Promise.any_host(promises).await;
-    }
-
-    /// Returns the first promise to resolve or reject.
+    /// Waits until the first future in `promises` completes and returns its result. The other
+    /// futures are not cancelled; use `Promise.cancel` when their work should stop.
+    /// Throws when `token` is already cancelled before waiting starts.
     public static async fun race<T>(
         borrow promises: Future<T>[],
         token: Option<CancellationToken> = Option.None

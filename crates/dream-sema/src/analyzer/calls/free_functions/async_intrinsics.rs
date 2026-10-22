@@ -1,20 +1,21 @@
-//! Promise combinators: `all(xs): Future<T[]>` and `any`/`race(xs): Future<T>`.
+//! Promise combinators: `all(xs): Future<T[]>` and `race(xs): Future<T>`.
 
 use super::*;
 use dream_abi::intrinsics;
 use dream_syntax::nodes::ExpressionNode;
 
 impl<'a> Analyzer<'a> {
-    /// Types `all(xs: Future<T>[]): Future<T[]>` and `any`/`race(xs: Future<T>[]): Future<T>`.
+    /// Types `all(xs: Future<T>[]): Future<T[]>` and `race(xs: Future<T>[]): Future<T>`.
     pub(crate) fn analyze_async_intrinsic(
         &mut self,
+        combinator: intrinsics::IntrinsicOp,
         name: &SyntaxToken,
         params: &[ExpressionNode<'a>],
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        // all/any/race take a single `Future<T>[]` argument.
+        // all/race take a single `Future<T>[]` argument.
         if params.len() != 1 {
             diagnostics.report_error(
                 format!(
@@ -55,11 +56,11 @@ impl<'a> Analyzer<'a> {
                 Type::Void
             }
         };
-        if name.text == intrinsics::PROMISE_ALL {
+        if combinator == intrinsics::IntrinsicOp::PromiseAll {
             // Future<T[]>
             Ok(Self::future_type(Type::Array(Box::new(inner_t))))
         } else {
-            // any / race -> Future<T>
+            // race -> Future<T>
             Ok(Self::future_type(inner_t))
         }
     }

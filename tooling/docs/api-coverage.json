@@ -6816,31 +6816,25 @@
       {
         "signature": "public static async fun all<T>( borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None ): T[]",
         "description": "Waits for all promises in the array to resolve.",
-        "line": 18,
-        "page": "reference/api/core-promise.md"
-      },
-      {
-        "signature": "public static async fun any<T>( borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None ): T",
-        "description": "Waits for any promise in the array to resolve.",
-        "line": 27,
+        "line": 14,
         "page": "reference/api/core-promise.md"
       },
       {
         "signature": "public static async fun race<T>( borrow promises: Future<T>[], token: Option<CancellationToken> = Option.None ): T",
-        "description": "Returns the first promise to resolve or reject.",
-        "line": 36,
+        "description": "Waits until the first future in `promises` completes and returns its result. The other futures are not cancelled; use `Promise.cancel` when their work should stop. Throws when `token` is already cancelled before waiting starts.",
+        "line": 25,
         "page": "reference/api/core-promise.md"
       },
       {
         "signature": "public static extern fun cancel(borrow future: object): void",
         "description": "Requests cancellation of a future and of its awaited work when no other owner needs it. Cancellation of an in-flight network request is best effort; use `CancellationToken` for cooperative application cancellation.",
-        "line": 52,
+        "line": 41,
         "page": "reference/api/core-promise.md"
       },
       {
         "signature": "public static extern fun start(borrow future: object): void",
         "description": "Explicitly launches a lazy future without awaiting it (fire-and-forget). Futures only run when awaited, passed to `all`/`any`/`race`, or started here; a never-started future never executes. Takes the future as `object` (futures are heap refs) like `cancel`.",
-        "line": 58,
+        "line": 47,
         "page": "reference/api/core-promise.md"
       }
     ]

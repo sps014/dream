@@ -26,9 +26,6 @@ pub fn component_host_supported(module: &str, field: &str) -> bool {
     if module.starts_with("c/") {
         return true;
     }
-    if module == "env" {
-        return PURE_MATH_ENV_FIELDS.contains(&field);
-    }
     if module != "Dream" {
         return false;
     }
@@ -98,15 +95,4 @@ pub fn component_host_supported(module: &str, field: &str) -> bool {
             | "netSocketClose"
             | "netSocketControl"
     )
-}
-
-/// `env` math imports: pure functions of their numeric arguments on every host (libm natively,
-/// `Math.*` in JS), so they read and write no Dream heap state.
-pub const PURE_MATH_ENV_FIELDS: &[&str] = &[
-    "abs", "floor", "ceil", "round", "sqrt", "pow", "sin", "cos", "tan", "asin", "acos", "atan",
-    "atan2", "log", "log10", "exp", "hypot",
-];
-
-pub fn is_pure_math_env_import(module: &str, field: &str) -> bool {
-    module == "env" && PURE_MATH_ENV_FIELDS.contains(&field)
 }

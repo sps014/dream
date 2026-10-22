@@ -118,7 +118,7 @@ static void foreign_drain(void) {
             if (w) {
                 ptr_at(f, F_WAKER)[0] = 0;
                 int32_t wk = i32_at(w, F_KIND)[0];
-                if (wk == FUTURE_KIND_ALL || wk == FUTURE_KIND_ANY) {
+                if (wk == FUTURE_KIND_ALL || wk == FUTURE_KIND_RACE) {
                     dream_combinator_progress(w, f);
                 } else {
                     dream_enqueue(w);

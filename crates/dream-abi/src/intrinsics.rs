@@ -134,11 +134,6 @@ pub const LENGTH: &str = "length";
 /// `sleep(ms)`: the async timer intrinsic (a free function, unlike the `Promise.*` combinators).
 pub const SLEEP: &str = "sleep";
 
-/// Internal free-function names the async combinators lower to (`build_async_intrinsic_call`).
-pub const PROMISE_ALL: &str = "__promise_all";
-pub const PROMISE_ANY: &str = "__promise_any";
-pub const PROMISE_RACE: &str = "__promise_race";
-
 // --- `@intrinsic(Intrinsic.Member)` static-method registry ----------------------------------------------
 // The string inside `@intrinsic(Intrinsic.Member)` on a stdlib static method. Both semantics (typing) and
 // codegen (lowering) classify the attribute key through [`IntrinsicOp`] so the set of attributed
@@ -147,7 +142,6 @@ pub const PROMISE_RACE: &str = "__promise_race";
 pub const ATTR_PRINT: &str = "print";
 pub const ATTR_PRINTLN: &str = "println";
 pub const ATTR_PROMISE_ALL: &str = "promise_all";
-pub const ATTR_PROMISE_ANY: &str = "promise_any";
 pub const ATTR_PROMISE_RACE: &str = "promise_race";
 pub const ATTR_JSON_SERIALIZE: &str = "json_serialize";
 pub const ATTR_JSON_DESERIALIZE: &str = "json_deserialize";
@@ -289,8 +283,6 @@ pub enum IntrinsicOp {
     Println,
     /// `Promise.all(xs)` — await all, yield `Future<T[]>`.
     PromiseAll,
-    /// `Promise.any(xs)` — first to settle, yield `Future<T>`.
-    PromiseAny,
     /// `Promise.race(xs)` — first to settle, yield `Future<T>`.
     PromiseRace,
     /// `Json.serialize<T>(x)` — `T` to its JSON string.
@@ -447,7 +439,6 @@ impl IntrinsicOp {
             ATTR_PRINT => IntrinsicOp::Print,
             ATTR_PRINTLN => IntrinsicOp::Println,
             ATTR_PROMISE_ALL => IntrinsicOp::PromiseAll,
-            ATTR_PROMISE_ANY => IntrinsicOp::PromiseAny,
             ATTR_PROMISE_RACE => IntrinsicOp::PromiseRace,
             ATTR_JSON_SERIALIZE => IntrinsicOp::JsonSerialize,
             ATTR_JSON_DESERIALIZE => IntrinsicOp::JsonDeserialize,
@@ -545,15 +536,9 @@ impl IntrinsicOp {
             .and_then(IntrinsicOp::from_key)
     }
 
-    /// For the async combinators, the internal `__promise_*` free-function name they delegate to
-    /// (used by both the type checker and codegen); `None` for non-combinator ops.
-    pub fn promise_combinator(self) -> Option<&'static str> {
-        Some(match self {
-            IntrinsicOp::PromiseAll => PROMISE_ALL,
-            IntrinsicOp::PromiseAny => PROMISE_ANY,
-            IntrinsicOp::PromiseRace => PROMISE_RACE,
-            _ => return None,
-        })
+    /// True for the async combinators that take a `Future<T>[]`.
+    pub fn is_promise_combinator(self) -> bool {
+        matches!(self, IntrinsicOp::PromiseAll | IntrinsicOp::PromiseRace)
     }
 
     /// True when a runtime helper may keep a raw guest pointer after the call returns, without a

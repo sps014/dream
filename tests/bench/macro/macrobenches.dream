@@ -461,7 +461,7 @@ async fun bench_async_fanout(iters: int): void {
             k = k + 1;
         }
         // Both racers carry the same value, so the winner never changes the checksum.
-        acc = acc + Promise.any([leaf_job(i), leaf_job(i + 1024)]).await;
+        acc = acc + Promise.race([leaf_job(i), leaf_job(i + 1024)]).await;
         i = i + 1;
     }
     sw.stop();

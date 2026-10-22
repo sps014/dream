@@ -28,7 +28,7 @@ Use `async` for work that may need to wait. Calling an async function creates a 
 
 Dream has cooperative concurrency with `async`/`await`.
 The model is **lazy**: calling an `async fun` builds a `Future<T>` but does *not* run it.
-The body runs when the future is first **awaited**, passed to a combinator (`Promise.all` / `any` / `race`), or launched with `Promise.start`.
+The body runs when the future is first **awaited**, passed to a combinator (`Promise.all` / `race`), or launched with `Promise.start`.
 
 A future that is never started never runs, and a cancelled-before-start future is simply discarded.
 
@@ -132,12 +132,14 @@ Static methods on the built-in `Promise` class, over `Future<T>[]`:
 | Method | Signature | Resolves when |
 | --- | --- | --- |
 | `Promise.all` | `Promise.all(xs: Future<T>[]): Future<T[]>` | every future has resolved (results in order) |
-| `Promise.any` | `Promise.any(xs: Future<T>[]): Future<T>` | the first future resolves |
-| `Promise.race` | `Promise.race(xs: Future<T>[]): Future<T>` | the first future settles |
+| `Promise.race` | `Promise.race(xs: Future<T>[]): Future<T>` | the first future completes |
 
 ```dream
-let first = Promise.any([work(10), work(20)]).await;
+let first = Promise.race([work(10), work(20)]).await;
 ```
+
+`Promise.race` does not cancel the futures that finish later. Call `Promise.cancel` on them when
+their work should stop.
 
 `Time.sleep(ms: int, token: Option<CancellationToken> = None): Future<void>` is an awaitable timer.
 On the native host it uses a virtual clock; in the browser it uses `setTimeout`.

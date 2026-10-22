@@ -70,8 +70,6 @@ internal enum Intrinsic {
     Println,
     /// Identifies the promise all operation for an `@intrinsic` declaration.
     PromiseAll,
-    /// Identifies the promise any operation for an `@intrinsic` declaration.
-    PromiseAny,
     /// Identifies the promise race operation for an `@intrinsic` declaration.
     PromiseRace,
     /// Identifies the json serialize operation for an `@intrinsic` declaration.

@@ -30,7 +30,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.retain_rc_global_sink(callee.take_params.get(i).copied().unwrap_or(false), a);
             vals.push(self.operand(a));
         }
-        let combinator_result = if name == "dream_all" || name == "dream_any" {
+        let combinator_result = if name == "dream_all" || name == "dream_race" {
             let TyKind::Struct(_, arguments) = self.interner.kind(callee.ret) else {
                 crate::internal_error!("combinator must return a Future");
             };
@@ -52,7 +52,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     Value::zero(Ty::Ptr)
                 };
             vals.push(V::s(array_info));
-        } else if name == "dream_any" {
+        } else if name == "dream_race" {
             let (_, clone) =
                 super::glue::future_ownership::copies(self.l, combinator_result.unwrap());
             vals.push(V::s(Value::global(clone)));

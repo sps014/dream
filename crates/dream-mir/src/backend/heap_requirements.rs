@@ -1,6 +1,7 @@
 //! Conservative proof for programs whose generated entry cannot perform guest heap work.
 
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement};
+use dream_abi::intrinsics::{IntrinsicOp, is_llvm_intrinsic_key};
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 use std::collections::BTreeSet;
 
@@ -8,11 +9,8 @@ pub(super) fn required(mir: &Mir, interner: &TypeInterner, embedding: bool) -> b
     if embedding
         || mir.uses_defer
         || !mir.polls.is_empty()
-        || !mir.intrinsics.is_empty()
-        || mir
-            .imports
-            .iter()
-            .any(|i| !dream_abi::runtime_hosts::is_pure_math_env_import(&i.module, &i.field))
+        || mir.intrinsics.iter().any(|(_, key)| !scalar_intrinsic(key))
+        || !mir.imports.is_empty()
         || mir
             .globals
             .iter()
@@ -65,6 +63,11 @@ pub(super) fn required(mir: &Mir, interner: &TypeInterner, embedding: bool) -> b
                 })
             })
     })
+}
+
+/// LLVM intrinsics and float bit casts only transform their numeric arguments.
+fn scalar_intrinsic(key: &str) -> bool {
+    is_llvm_intrinsic_key(key) || matches!(IntrinsicOp::from_key(key), Some(IntrinsicOp::Float(_)))
 }
 
 fn scalar(interner: &TypeInterner, ty: TypeId) -> bool {

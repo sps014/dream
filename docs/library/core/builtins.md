@@ -53,7 +53,9 @@ fun main() {
 
 Example: `Math.sqrt(9.0)` → `3.0`. A negative input is NaN.
 
-`Math.abs`, `floor`, `ceil`, `round`, `sqrt`, `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`, `log` / `log10` / `exp` / `hypot`, `min` / `max` / `clamp`, and `Math.PI` / `Math.E`. Angles are radians.
+`Math.floor`, `ceil`, `round`, `sqrt`, `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`, `log` / `log10` / `exp` / `hypot`, and `Math.PI` / `Math.E`. Angles are radians. `round` sends halfway cases away from zero (`Math.round(-2.5)` is `-3.0`). Every function gives the same result on native and WebAssembly targets.
+
+Absolute value, minimum, maximum, and clamping are methods on the number itself: `x.abs()`, `x.min(y)`, `x.max(y)`, and `x.clamp(low, high)`.
 
 ## Timing
 

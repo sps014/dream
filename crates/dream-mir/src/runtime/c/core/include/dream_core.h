@@ -1357,12 +1357,6 @@ typedef struct {
 dream_ptr dream_sb_grow_bytes(dream_sb *sb, dream_ptr bytes, int64_t need);
 dream_ptr dream_sb_buffer(int32_t capacity);
 
-double dream_host_abs(double value);
-double dream_host_log(double value);
-double dream_host_log10(double value);
-double dream_host_exp(double value);
-double dream_host_hypot(double x, double y);
-
 DREAM_ALWAYS_INLINE const void *dream_str_units_fast(dream_ptr s) {
     const uint16_t *d;
     if (dream_i32(s)[1] == DREAM_STR_SLICE) {
@@ -1578,7 +1572,7 @@ void dream_yield_run(dream_ptr producer, dream_ptr ready);
 int dream_async_pending(void);
 dream_ptr dream_sleep(int32_t ms);
 dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info);
-dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result));
+dream_ptr dream_race(dream_ptr arr, dream_result (*clone)(dream_result));
 #ifndef DREAM_WASM32
 int32_t delayMsAsync(dream_ptr future, int32_t ms);
 #endif

@@ -1141,25 +1141,6 @@ function defaultEnv(getInstance, options) {
     print_char: (v) => writeOut(String.fromCharCode(v)),
     print_err_string: (ptr) => writeErr(getInstance().readString(ptr)),
     print_err_char: (v) => writeErr(String.fromCharCode(v)),
-    sin: Math.sin,
-    cos: Math.cos,
-    tan: Math.tan,
-    asin: Math.asin,
-    acos: Math.acos,
-    atan: Math.atan,
-    atan2: Math.atan2,
-    abs: Math.abs,
-    sqrt: Math.sqrt,
-    // LLVM can narrow a double sqrt followed by a float cast into this libm call.
-    sqrtf: value => Math.fround(Math.sqrt(value)),
-    pow: Math.pow,
-    log: Math.log,
-    log10: Math.log10,
-    exp: Math.exp,
-    hypot: Math.hypot,
-    floor: Math.floor,
-    ceil: Math.ceil,
-    round: Math.round,
   };
 }
 

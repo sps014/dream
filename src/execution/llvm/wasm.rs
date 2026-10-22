@@ -521,7 +521,7 @@ pub fn link_wasm(
         .arg(builtins);
     // Codec parsers use standard C routines beyond Dream's small freestanding libc.
     // Archive extraction retains only their unresolved routines, without WASI services.
-    if need.contains(RuntimeNeed::AUDIO_DECODE) {
+    if need.contains(RuntimeNeed::AUDIO_DECODE) || need.contains(RuntimeNeed::AUDIO_FFT) {
         let flavor = if threads {
             "wasm32-wasip1-threads"
         } else {

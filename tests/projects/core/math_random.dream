@@ -16,6 +16,53 @@ fun math_advanced(): void {
     Assert.eq(Math.atan(0.0d).to_string(), "0");
 }
 
+fun within_ulp(actual: double, expected: double): bool {
+    let tolerance = expected.abs() * 2.3e-16d;
+    return (actual - expected).abs() <= tolerance;
+}
+
+@test
+@timeout(180000)
+fun math_accuracy(): void {
+    Assert.is_true(within_ulp(Math.pow(2.0d, -0.5d), 0.7071067811865476d));
+    Assert.is_true(within_ulp(Math.pow(1.0001d, 10000.0d), 2.7181459268249255d));
+    Assert.is_true(within_ulp(Math.exp(1.0d), 2.718281828459045d));
+    Assert.is_true(within_ulp(Math.log(10.0d), 2.302585092994046d));
+    Assert.is_true(within_ulp(Math.log10(2.0d), 0.3010299956639812d));
+    Assert.is_true(within_ulp(Math.sin(1.0d), 0.8414709848078965d));
+    Assert.is_true(within_ulp(Math.cos(1.0d), 0.5403023058681398d));
+    Assert.is_true(within_ulp(Math.tan(0.75d), 0.9315964599440725d));
+    Assert.is_true(within_ulp(Math.sin(1.0e22d), -0.8522008497671888d));
+    Assert.is_true(within_ulp(Math.tan(-9.977373851436584e27d), -0.8006911953030831d));
+    Assert.is_true(within_ulp(Math.asin(0.5d), 0.5235987755982989d));
+    Assert.is_true(within_ulp(Math.acos(-0.5d), 2.0943951023931957d));
+    Assert.is_true(within_ulp(Math.atan2(1.0d, -1.0d), 2.356194490192345d));
+    Assert.is_true(within_ulp(Math.hypot(3.0d, 4.0d), 5.0d));
+    Assert.eq(Math.sqrt(2.0d), 1.4142135623730951d);
+}
+
+@test
+@timeout(180000)
+fun math_special_values(): void {
+    let infinity = 1.0d / 0.0d;
+    let nan = 0.0d / 0.0d;
+    Assert.eq(Math.round(2.5d), 3.0d);
+    Assert.eq(Math.round(-2.5d), -3.0d);
+    Assert.eq(Math.round(-0.4d), 0.0d);
+    Assert.eq(Math.floor(-0.5d), -1.0d);
+    Assert.eq(Math.ceil(-0.5d), 0.0d);
+    Assert.eq(Math.pow(nan, 0.0d), 1.0d);
+    Assert.is_true(Math.pow(-8.0d, 1.0d / 3.0d) != Math.pow(-8.0d, 1.0d / 3.0d));
+    Assert.eq(Math.pow(-2.0d, 3.0d), -8.0d);
+    Assert.eq(Math.log(0.0d), -infinity);
+    Assert.is_true(Math.log(-1.0d) != Math.log(-1.0d));
+    Assert.is_true(Math.sqrt(-1.0d) != Math.sqrt(-1.0d));
+    Assert.eq(Math.exp(710.0d), infinity);
+    Assert.eq(Math.exp(-746.0d), 0.0d);
+    Assert.eq(Math.hypot(infinity, nan), infinity);
+    Assert.eq(Math.atan2(0.0d, -1.0d), Math.PI);
+}
+
 @test
 @timeout(180000)
 fun random_basic(): void {

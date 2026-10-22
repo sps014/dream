@@ -1,7 +1,7 @@
 #include "async_frame.h"
 
 #define KIND_ALL FUTURE_KIND_ALL
-#define KIND_ANY FUTURE_KIND_ANY
+#define KIND_RACE FUTURE_KIND_RACE
 
 typedef struct {
     void (*copy)(dream_ptr, dream_ptr);
@@ -14,7 +14,7 @@ static CombinatorState *combinator_state(dream_ptr f) {
 void dream_combinator_progress(dream_ptr w, dream_ptr child) {
     int32_t kind = i32_at(w, F_KIND)[0];
     if (status_of(w)) { return; }
-    if (kind != KIND_ANY && --i32_at(w, F_REMAINING)[0] > 0) { return; }
+    if (kind != KIND_RACE && --i32_at(w, F_REMAINING)[0] > 0) { return; }
     int32_t n = i32_at(w, F_COUNT)[0];
     dream_ptr kids = ptr_at(w, F_CHILDREN)[0];
     for (int32_t i = 0; i < n; ++i) {
@@ -22,7 +22,7 @@ void dream_combinator_progress(dream_ptr w, dream_ptr child) {
         if (c && ptr_at(c, F_WAKER)[0] == w) { ptr_at(c, F_WAKER)[0] = 0; }
     }
     CombinatorState *state = combinator_state(w);
-    if (kind == KIND_ANY) {
+    if (kind == KIND_RACE) {
         memcpy((char *)dream_p(w) + F_WIDE, (char *)dream_p(child) + F_WIDE, 8);
         dream_async_complete(w, state->clone(*result_at(child)));
     } else {
@@ -68,4 +68,4 @@ static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize, void
 
 dream_ptr dream_all(dream_ptr arr, int32_t esize, void (*copy)(dream_ptr, dream_ptr), const dream_type_info *info) { return combinator_new(arr, KIND_ALL, esize, copy, NULL, info); }
 
-dream_ptr dream_any(dream_ptr arr, dream_result (*clone)(dream_result)) { return combinator_new(arr, KIND_ANY, 8, NULL, clone, NULL); }
+dream_ptr dream_race(dream_ptr arr, dream_result (*clone)(dream_result)) { return combinator_new(arr, KIND_RACE, 8, NULL, clone, NULL); }

@@ -40,7 +40,6 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("Print", "print"),
     ("Println", "println"),
     ("PromiseAll", "promise_all"),
-    ("PromiseAny", "promise_any"),
     ("PromiseRace", "promise_race"),
     ("JsonSerialize", "json_serialize"),
     ("JsonDeserialize", "json_deserialize"),

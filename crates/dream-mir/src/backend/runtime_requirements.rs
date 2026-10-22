@@ -2,7 +2,8 @@
 //! invoke the embedding contract, so their requirements remain conservative.
 
 use crate::Mir;
-use dream_abi::{intrinsics::IntrinsicOp, js_abi, runtime_hosts};
+use dream_abi::intrinsics::{IntrinsicOp, is_llvm_intrinsic_key};
+use dream_abi::{js_abi, runtime_hosts};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RuntimeRequirements {
@@ -23,7 +24,7 @@ impl RuntimeRequirements {
         let opaque_intrinsics = mir
             .intrinsics
             .iter()
-            .any(|(_, key)| IntrinsicOp::from_key(key).is_none());
+            .any(|(_, key)| IntrinsicOp::from_key(key).is_none() && !is_llvm_intrinsic_key(key));
         let callbacks = embedding
             || opaque_intrinsics
             || mir.intrinsics.iter().any(|(_, key)| {
@@ -35,10 +36,9 @@ impl RuntimeRequirements {
             || !mir.polls.is_empty()
             || mir.functions.iter().any(|f| f.is_async)
             || mir.imports.iter().any(|i| {
-                !(runtime_hosts::is_pure_math_env_import(&i.module, &i.field)
-                    || (i.module == js_abi::HOST_MODULE
-                        && [runtime_hosts::PROCESS_ARGS, runtime_hosts::PROCESS_EXE_PATH]
-                            .contains(&i.field.as_str())))
+                !(i.module == js_abi::HOST_MODULE
+                    && [runtime_hosts::PROCESS_ARGS, runtime_hosts::PROCESS_EXE_PATH]
+                        .contains(&i.field.as_str()))
             });
         let process_arguments = embedding
             || opaque_intrinsics

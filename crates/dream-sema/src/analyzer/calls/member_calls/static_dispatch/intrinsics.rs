@@ -360,15 +360,14 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        // Promise combinators (`Promise.all/any/race`) are typed by the shared async
+        // Promise combinators (`Promise.all/race`) are typed by the shared async
         // intrinsic logic; classify via the registry and delegate when applicable.
         if let Some(combinator) = intrinsics::IntrinsicOp::from_attributes(&template.attributes)
-            .and_then(|op| op.promise_combinator())
+            .filter(|op| op.is_promise_combinator())
         {
-            let mut s_tok = method.clone();
-            s_tok.text = combinator.to_string();
             let ret = self.analyze_async_intrinsic(
-                &s_tok,
+                combinator,
+                method,
                 params,
                 ctx.parent_function,
                 ctx.symbol_table,
@@ -376,7 +375,7 @@ impl<'a> Analyzer<'a> {
             )?;
             // `analyze_async_intrinsic` only types the combinator; its argument analysis leaves
             // the future-array HIR in `last`. Reuse it as the single arg of a direct call to the
-            // combinator intrinsic so the MIR backend lowers it to `$dream_all/$dream_any`
+            // combinator intrinsic so the MIR backend lowers it to `$dream_all/$dream_race`
             // (rather than emitting only the array, which would await the raw array pointer).
             let arg_hir = self.hir_take();
             let identity = self.function_table.declaration_node(template);

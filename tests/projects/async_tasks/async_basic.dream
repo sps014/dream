@@ -28,7 +28,7 @@ async fun async_combinators(): void {
     Assert.eq(results[0], 4);
     Assert.eq(results[1], 9);
 
-    let first = Promise.any([c31_work(10), c31_work(20)]).await;
+    let first = Promise.race([c31_work(10), c31_work(20)]).await;
     Assert.eq(first, 100);
 }
 

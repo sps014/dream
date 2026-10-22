@@ -9,7 +9,7 @@
 
 #define KIND_HOST FUTURE_KIND_HOST
 #define KIND_ALL FUTURE_KIND_ALL
-#define KIND_ANY FUTURE_KIND_ANY
+#define KIND_RACE FUTURE_KIND_RACE
 
 #include "node_pool.h"
 
@@ -44,7 +44,7 @@ void dream_future_fini(dream_ptr f) {
         ptr_at(f, F_CHILDREN)[0] = 0;
     }
     int32_t kind = i32_at(f, F_KIND)[0];
-    if (kind == KIND_ALL || kind == KIND_ANY) {
+    if (kind == KIND_ALL || kind == KIND_RACE) {
         dream_ptr children = ptr_at(f, F_CHILDREN)[0];
         int32_t count = i32_at(f, F_COUNT)[0];
         for (int32_t i = 0; children && i < count; ++i) {
@@ -101,7 +101,7 @@ void dream_start(dream_ptr f) {
     i32_at(f, F_NEXT)[0] = 1;
     dream_retain(f);
     kind = i32_at(f, F_KIND)[0];
-    if (kind == KIND_ALL || kind == KIND_ANY) {
+    if (kind == KIND_ALL || kind == KIND_RACE) {
         /* Combinators are passive (no poll fn); starting one starts its members. Members that
          * are themselves combinators recurse through dream_start above. */
         dream_ptr kids = ptr_at(f, F_CHILDREN)[0];
@@ -245,7 +245,7 @@ void dream_async_complete(dream_ptr f, dream_result res) {
     if (w) {
         ptr_at(f, F_WAKER)[0] = 0;
         wk = i32_at(w, F_KIND)[0];
-        if (wk == KIND_ALL || wk == KIND_ANY) {
+        if (wk == KIND_ALL || wk == KIND_RACE) {
             dream_combinator_progress(w, f);
         } else {
             dream_enqueue(w);

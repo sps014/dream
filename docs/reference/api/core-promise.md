@@ -23,20 +23,9 @@ public static async fun all<T>(
 ): T[]
 ```
 
-## `any`
-
-Waits for any promise in the array to resolve.
-
-```dream
-public static async fun any<T>(
-    borrow promises: Future<T>[],
-    token: Option<CancellationToken> = Option.None
-): T
-```
-
 ## `race`
 
-Returns the first promise to resolve or reject.
+Waits until the first future in `promises` completes and returns its result. The other futures are not cancelled; use `Promise.cancel` when their work should stop. Throws when `token` is already cancelled before waiting starts.
 
 ```dream
 public static async fun race<T>(

@@ -626,21 +626,6 @@ fn to_string_router(l: &mut Lcx<'_>) {
             i32t.clone(),
         ),
         call_arm(vec![abi::TAG_CHAR], "dream_char_to_string".into(), i32t),
-        call_arm(
-            vec![abi::TAG_FLOAT],
-            "dream_float_to_string".into(),
-            Some(Ty::F32),
-        ),
-        call_arm(
-            vec![abi::TAG_FLOAT16],
-            "dream_float16_to_string".into(),
-            Some(Ty::F16),
-        ),
-        call_arm(
-            vec![abi::TAG_DOUBLE],
-            "dream_double_to_string".into(),
-            Some(Ty::F64),
-        ),
         (
             vec![abi::TAG_STRING],
             Box::new(|fx, p| {
@@ -650,6 +635,18 @@ fn to_string_router(l: &mut Lcx<'_>) {
         ),
         call_arm(vec![abi::TAG_ARRAY], "dream_array_to_string".into(), None),
     ];
+    // Floating-point text comes from `system.primitives`; a module built without the prelude has
+    // no such method, and its boxed floats fall through to the default arm.
+    let floats = [
+        (abi::TAG_FLOAT, l.cx.interner.float(), Ty::F32),
+        (abi::TAG_FLOAT16, l.cx.interner.float16(), Ty::F16),
+        (abi::TAG_DOUBLE, l.cx.interner.double(), Ty::F64),
+    ];
+    for (tag, ty, ir_ty) in floats {
+        if let Some(def) = l.cx.mir.object_methods.get(&ty).and_then(|m| m.to_string) {
+            arms.push(call_arm(vec![tag], l.cx.callee_sym(def, &[]), Some(ir_ty)));
+        }
+    }
     let wide = l.cx.mir.layouts.target.ptr_size == 8;
     arms.push(call_arm(
         vec![abi::TAG_ISIZE],

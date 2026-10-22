@@ -445,9 +445,10 @@ fn rc_golden_unique_class_no_retain() {
         "the destroy must stay guarded by the last-reference check:\n{}",
         main.body
     );
+    // Each `println(b.n)` releases the temporary text it printed; nothing else may.
     assert_eq!(
         count_in(&main.body, "@dream_release("),
-        0,
+        count_in(&main.body, "@dream_int_to_string_fast("),
         "unique Box must not fall back to the generic release cascade:\n{}",
         main.body
     );

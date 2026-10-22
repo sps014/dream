@@ -52,6 +52,14 @@ Returns `1.0` for a positive value, `-1.0` for a negative value, and the value i
 public fun signum(): double
 ```
 
+## `to_string`
+
+Returns the shortest decimal text that rounds back to exactly this value, so `0.1d` prints as `0.1` and `0.1d + 0.2d` as `0.30000000000000004`. Values from 1e-7 up to but not including 1e21 use plain notation (`0.1`, `3`, `1500000`); smaller and larger magnitudes use an exponent (`1e+21`, `1.5e-8`). NaN is `nan`, the infinities are `inf` and `-inf`, and both zeros are `0`.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `parse`
 
 Parses a decimal double from `text`.

@@ -589,8 +589,8 @@ fn test_hir_emission_extern_import_with_result() {
 
 #[test]
 fn test_hir_emission_print_int_and_println() {
-    // `System.print(int)` lowers to `print_int`; `println` adds a trailing newline (`\n` = 10) via
-    // `print_char`.
+    // `System.print(int)` renders through `dream_int_to_string_fast` and `print_string`; `println`
+    // then writes the interned `"\n"` literal.
     let code = format!(
         "{SYSTEM_STUB}
         fun run(): void {{
@@ -600,13 +600,13 @@ fn test_hir_emission_print_int_and_println() {
     );
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("call void @print_int(i32 41)"),
-        "print(int) should call print_int:\n{}",
+        c.contains("call ptr @dream_int_to_string_fast(i32 41)"),
+        "print(int) should render through dream_int_to_string_fast:\n{}",
         c
     );
     assert!(
-        c.contains("call void @print_char(i32 10)"),
-        "println should append a newline via print_char:\n{}",
+        c.contains("[i16 10]"),
+        "println should append an interned newline:\n{}",
         c
     );
 }
@@ -634,32 +634,24 @@ fn test_hir_emission_print_char() {
     let code = format!("{SYSTEM_STUB} fun run(): void {{ System.print('x'); }}");
     let c = emit_hir_to_module(&code);
     assert!(
-        c.contains("print_char("),
-        "print(char) should call print_char:\n{}",
+        c.contains("dream_char_to_string("),
+        "print(char) should render through dream_char_to_string:\n{}",
         c
     );
 }
 
 #[test]
-fn test_hir_emission_print_bool_float_double_long() {
-    // Non-`int`/`char`/`string` scalars render through their `*_to_string` formatter (float/double
-    // go through the host `print_float`/`print_double`) then print as strings.
+fn test_hir_emission_print_bool_long() {
+    // Scalars render through their runtime `*_to_string` formatter, then print as strings.
     let code = format!(
         "{SYSTEM_STUB}
-        fun run(b: bool, f: float, d: double, l: long): void {{
+        fun run(b: bool, l: long): void {{
             System.print(b);
-            System.print(f);
-            System.print(d);
             System.print(l);
         }}"
     );
     let c = emit_hir_to_module(&code);
-    for helper in [
-        "dream_bool_to_string(",
-        "print_float(",
-        "print_double(",
-        "dream_long_to_string(",
-    ] {
+    for helper in ["dream_bool_to_string(", "dream_long_to_string("] {
         assert!(c.contains(helper), "missing {helper} in print:\n{}", c);
     }
 }

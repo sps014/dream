@@ -103,8 +103,6 @@ internal enum Intrinsic {
     StringCharAtUnchecked,
     /// Identifies the string builder buffer operation for an `@intrinsic` declaration.
     StringBuilderBuffer,
-    /// Identifies the string builder push double operation for an `@intrinsic` declaration.
-    StringBuilderPushDouble,
     /// Identifies the string clone range operation for an `@intrinsic` declaration.
     StringCloneRange,
     /// Identifies the string json boundary operation for an `@intrinsic` declaration.

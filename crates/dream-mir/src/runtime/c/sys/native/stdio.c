@@ -9,17 +9,6 @@
 #include <conio.h>
 #endif
 
-void print_int(int32_t v) { printf("%d", v); fflush(stdout); }
-
-void print_char(int32_t c) {
-    if (c == 10) {
-        fputc('\n', stdout);
-    } else {
-        fputc((int)c, stdout);
-    }
-    fflush(stdout);
-}
-
 static void write_string(FILE *stream, dream_ptr s) {
     char text[1024];
     const uint16_t *units = dream_str_units(s);
@@ -51,24 +40,6 @@ void print_err_char(int32_t c) {
     fputc(c == 10 ? '\n' : (int)c, stderr);
     fflush(stderr);
 }
-
-static void print_float_shortest(float v) {
-    char text[32];
-    char *end;
-    snprintf(text, sizeof(text), "%.6f", (double)v);
-    end = text + strlen(text);
-    while (end > text && end[-1] == '0') {
-        *--end = 0;
-    }
-    if (end > text && end[-1] == '.') {
-        *--end = 0;
-    }
-    fputs(text, stdout);
-}
-
-void print_float(float v) { print_float_shortest(v); fflush(stdout); }
-
-void print_double(double v) { printf("%.16g", v); fflush(stdout); }
 
 dream_ptr consoleReadLine(void) {
     char buf[4096];

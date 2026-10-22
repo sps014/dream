@@ -338,6 +338,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/math.dream"),
         ),
         (
+            "<std>/system/core/shortest_decimal.dream",
+            include_str!("../system/core/shortest_decimal.dream"),
+        ),
+        (
+            "<std>/system/core/shortest_decimal_tables.dream",
+            include_str!("../system/core/shortest_decimal_tables.dream"),
+        ),
+        (
             "<std>/system/core/math_trig.dream",
             include_str!("../system/core/math_trig.dream"),
         ),

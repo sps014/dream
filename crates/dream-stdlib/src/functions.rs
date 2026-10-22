@@ -24,13 +24,7 @@ impl StdlibFunction {
     /// Host functions that are always imported into every module but are NOT user-callable.
     /// The `print`/`println` builtins lower to these; users never name them directly.
     pub fn host_imports() -> Vec<StdlibFunction> {
-        let imports = vec![
-            Self::imported("print_string", &["string"], None),
-            Self::imported("print_int", &["int"], None),
-            Self::imported("print_float", &["float"], None),
-            Self::imported("print_double", &["double"], None),
-            Self::imported("print_char", &["char"], None),
-        ];
+        let imports = vec![Self::imported("print_string", &["string"], None)];
         imports
     }
 

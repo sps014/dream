@@ -78,7 +78,16 @@ extend float16: Comparable<float16> {
         return this > float16.max_value || this < float16.min_value;
     }
 
-    /// Parses decimal text such as `"0.125"`, `"-3"`, or `"6.1e-05"` and rounds it to the nearest
+    /// Returns the shortest decimal text that rounds back to exactly this value, so `0.1h` prints
+    /// as `0.1` and the largest value, 65504, as `65500`. The layout, NaN, infinity, and zero spellings
+    /// match `double.to_string`.
+    public override fun to_string(): string {
+        let sb = StringBuilder();
+        ShortestDecimal.append(sb, (double)this, 10, 15);
+        return sb.build();
+    }
+
+    /// Parses decimal text such as `"0.125"`, `"-3"`, or `"6.1e-5"` and rounds it to the nearest
     /// `float16`. Magnitudes of 65520 or more become infinity. Also accepts `"nan"`, `"inf"`,
     /// `"+inf"`, and `"-inf"`, so every string produced by `to_string` parses back to the same
     /// value.

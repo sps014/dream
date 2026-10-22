@@ -141,6 +141,19 @@ System.println((1.5f).min(2.0f)); // 1.5
 let d = double.parse("2.5").unwrap_or(0.0d);
 ```
 
+### Printing floating-point values
+
+`System.print`, `to_string`, string concatenation, `StringBuilder.append_double`, and collection or struct formatting all write the same text for a floating-point value: the shortest decimal that rounds back to exactly that value in its own width. The output is identical on every target.
+
+```dream
+System.println(0.1d); // 0.1
+System.println(0.1d + 0.2d); // 0.30000000000000004
+System.println(1.0f / 3.0f); // 0.33333334 (float keeps about 7 digits)
+System.println(3.0d); // 3
+```
+
+Magnitudes from 1e-7 up to, but not including, 1e21 print in plain notation, such as `0.000001` or `1500000`. Smaller and larger magnitudes print with an exponent, such as `1e-7`, `1.5e-8`, or `1e+21`. NaN prints as `nan`, the infinities as `inf` and `-inf`, and both zeros as `0`.
+
 ### Half precision: `float16`
 
 A `float16` keeps 11 significant bits (about 3 decimal digits) and holds finite values up to ±65,504. Values smaller than 6.1 × 10⁻⁵ are stored as subnormals, down to about 6 × 10⁻⁸.

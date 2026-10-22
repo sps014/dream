@@ -164,7 +164,6 @@ pub const ATTR_SLEEP: &str = "sleep";
 /// `String.alloc(n)` / `String.set(s, i, c)` — low-level string buffer primitives.
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";
 pub const ATTR_STRING_BUILDER_BUFFER: &str = "string_builder_buffer";
-pub const ATTR_STRING_BUILDER_PUSH_DOUBLE: &str = "string_builder_push_double";
 pub const ATTR_STRING_CLONE_RANGE: &str = "string_clone_range";
 pub const ATTR_STRING_JSON_BOUNDARY: &str = "string_json_boundary";
 pub const ATTR_STRING_SET: &str = "string_set";
@@ -331,7 +330,6 @@ pub enum IntrinsicOp {
     /// `StringBuilder` span views its buffer through (retains only that buffer).
     StringView,
     StringBuilderBuffer,
-    StringBuilderPushDouble,
     StringCloneRange,
     StringJsonBoundary,
     /// `Debug.free_list_head()` — head of the allocator free list.
@@ -455,7 +453,6 @@ impl IntrinsicOp {
             ATTR_STRING_ALLOC => IntrinsicOp::StringAlloc,
             ATTR_STRING_CHAR_AT_UNCHECKED => IntrinsicOp::StringCharAtUnchecked,
             ATTR_STRING_BUILDER_BUFFER => IntrinsicOp::StringBuilderBuffer,
-            ATTR_STRING_BUILDER_PUSH_DOUBLE => IntrinsicOp::StringBuilderPushDouble,
             ATTR_STRING_CLONE_RANGE => IntrinsicOp::StringCloneRange,
             ATTR_STRING_JSON_BOUNDARY => IntrinsicOp::StringJsonBoundary,
             ATTR_STRING_SET => IntrinsicOp::StringSet,

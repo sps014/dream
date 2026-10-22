@@ -70,21 +70,6 @@ pub fn elem_base(array_ptr: u32) -> u32 {
     array_ptr.wrapping_add(LEN_PREFIX_SIZE)
 }
 
-pub const ENV_PRINT_IMPORTS: &[(&str, PrintVal)] = &[
-    (PRINT_STRING, PrintVal::I32),
-    (PRINT_INT, PrintVal::I32),
-    (PRINT_FLOAT, PrintVal::F32),
-    (PRINT_DOUBLE, PrintVal::F64),
-    (PRINT_CHAR, PrintVal::I32),
-];
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PrintVal {
-    I32,
-    F32,
-    F64,
-}
-
 #[cfg(test)]
 mod abi_h_lockstep {
     use super::*;

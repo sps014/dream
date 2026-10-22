@@ -1,0 +1,272 @@
+module system.core;
+
+// Ryu (Ulf Adams, PLDI 2018) with the double-precision tables. Every `float` and `float16` value is
+// exactly a `double`, and the 125-bit tables bound the error for any significand below 2^55, so one
+// core finds the shortest digits for all three widths once the value is split into the significand
+// and exponent of its own format.
+/// Shortest round-trip decimal text for `double`, `float`, and `float16` values.
+internal static class ShortestDecimal {
+    /// Appends the shortest decimal text that reads back as `value` in the binary format with
+    /// `mantissa_bits` stored fraction bits and exponent `bias`. `value` must be exactly
+    /// representable in that format. Values from 1e-7 up to but not including 1e21 use plain
+    /// notation (`0.1`, `3`, `1500000`); others use an exponent (`1e+21`, `1.5e-8`). NaN is `nan`,
+    /// the infinities are `inf` and `-inf`, and both zeros are `0`.
+    internal static fun append(
+        borrow sb: StringBuilder,
+        value: double,
+        mantissa_bits: int,
+        bias: int
+    ): void {
+        if value != value {
+            sb.append("nan");
+            return;
+        }
+        if value == 0.0d {
+            sb.append_char('0');
+            return;
+        }
+        let bits = (ulong)Math.to_bits(value);
+        if (bits >> 63uL) != 0uL {
+            sb.append_char('-');
+        }
+        let exponent = (int)((bits >> 52uL) & 0x7FFuL);
+        let fraction = bits & 0x000FFFFFFFFFFFFFuL;
+        if exponent == 0x7FF {
+            sb.append("inf");
+            return;
+        }
+        let ieee_exponent = 0;
+        let ieee_fraction = fraction;
+        if exponent != 0 {
+            let unbiased = exponent - 1023;
+            let shift = 52 - mantissa_bits;
+            if unbiased >= 1 - bias {
+                ieee_exponent = unbiased + bias;
+                ieee_fraction = fraction >> (ulong)shift;
+            } else {
+                ieee_fraction = (fraction | 0x0010000000000000uL) >> (ulong)(shift + 1 - bias - unbiased);
+            }
+        }
+        ShortestDecimal.append_digits(sb, ieee_fraction, ieee_exponent, mantissa_bits, bias);
+    }
+
+    static fun append_digits(
+        borrow sb: StringBuilder,
+        ieee_fraction: ulong,
+        ieee_exponent: int,
+        mantissa_bits: int,
+        bias: int
+    ): void {
+        let e2 = 1 - bias - mantissa_bits - 2;
+        let m2 = ieee_fraction;
+        if ieee_exponent != 0 {
+            e2 = ieee_exponent - bias - mantissa_bits - 2;
+            m2 = (1uL << (ulong)mantissa_bits) | ieee_fraction;
+        }
+        let accept_bounds = (m2 & 1uL) == 0uL;
+        let mv = 4uL * m2;
+        let mm_shift = 0uL;
+        if ieee_fraction != 0uL || ieee_exponent <= 1 {
+            mm_shift = 1uL;
+        }
+        let mm = mv - 1uL - mm_shift;
+        let mp = mv + 2uL;
+        let vr = 0uL;
+        let vp = 0uL;
+        let vm = 0uL;
+        let e10 = 0;
+        let vm_trailing_zeros = false;
+        let vr_trailing_zeros = false;
+        if e2 >= 0 {
+            let q = (e2 * 78913) >> 18;
+            if e2 > 3 {
+                q = q - 1;
+            }
+            e10 = q;
+            let shift = ShortestDecimal.pow5_bits(q) + 124 - e2 + q;
+            let lo = RYU_POW5_INV_SPLIT[2 * q];
+            let hi = RYU_POW5_INV_SPLIT[2 * q + 1];
+            vr = ShortestDecimal.mul_shift(mv, lo, hi, shift);
+            vp = ShortestDecimal.mul_shift(mp, lo, hi, shift);
+            vm = ShortestDecimal.mul_shift(mm, lo, hi, shift);
+            if q <= 21 {
+                // At most one of mp, mv, and mm can be a multiple of 5.
+                if mv % 5uL == 0uL {
+                    vr_trailing_zeros = ShortestDecimal.pow5_factor(mv) >= q;
+                } else if accept_bounds {
+                    vm_trailing_zeros = ShortestDecimal.pow5_factor(mm) >= q;
+                } else if ShortestDecimal.pow5_factor(mp) >= q {
+                    vp = vp - 1uL;
+                }
+            }
+        } else {
+            let q = ((0 - e2) * 732923) >> 20;
+            if 0 - e2 > 1 {
+                q = q - 1;
+            }
+            e10 = q + e2;
+            let i = 0 - e2 - q;
+            let shift = q - ShortestDecimal.pow5_bits(i) + 125;
+            let lo = RYU_POW5_SPLIT[2 * i];
+            let hi = RYU_POW5_SPLIT[2 * i + 1];
+            vr = ShortestDecimal.mul_shift(mv, lo, hi, shift);
+            vp = ShortestDecimal.mul_shift(mp, lo, hi, shift);
+            vm = ShortestDecimal.mul_shift(mm, lo, hi, shift);
+            if q <= 1 {
+                // mv = 4 * m2 always has two trailing zero bits; mm has one exactly when mm_shift is 1.
+                vr_trailing_zeros = true;
+                if accept_bounds {
+                    vm_trailing_zeros = mm_shift == 1uL;
+                } else {
+                    vp = vp - 1uL;
+                }
+            } else if q < 63 {
+                vr_trailing_zeros = (mv & ((1uL << (ulong)q) - 1uL)) == 0uL;
+            }
+        }
+
+        let removed = 0;
+        let last_removed = 0uL;
+        while vp / 10uL > vm / 10uL {
+            vm_trailing_zeros = vm_trailing_zeros && (vm % 10uL == 0uL);
+            vr_trailing_zeros = vr_trailing_zeros && (last_removed == 0uL);
+            last_removed = vr % 10uL;
+            vr = vr / 10uL;
+            vp = vp / 10uL;
+            vm = vm / 10uL;
+            removed = removed + 1;
+        }
+        if vm_trailing_zeros {
+            while vm % 10uL == 0uL {
+                vr_trailing_zeros = vr_trailing_zeros && (last_removed == 0uL);
+                last_removed = vr % 10uL;
+                vr = vr / 10uL;
+                vp = vp / 10uL;
+                vm = vm / 10uL;
+                removed = removed + 1;
+            }
+        }
+        if vr_trailing_zeros && last_removed == 5uL && vr % 2uL == 0uL {
+            // The exact value ends in ...50...0: round half to even.
+            last_removed = 4uL;
+        }
+        let output = vr;
+        if (vr == vm && (!accept_bounds || !vm_trailing_zeros)) || last_removed >= 5uL {
+            output = output + 1uL;
+        }
+        ShortestDecimal.append_layout(sb, output, e10 + removed);
+    }
+
+    /// Writes `digits * 10^exponent` in JavaScript `Number.prototype.toString` layout.
+    static fun append_layout(borrow sb: StringBuilder, digits: ulong, exponent: int): void {
+        let count = 1;
+        let scale = 1uL;
+        while digits / scale >= 10uL {
+            scale = scale * 10uL;
+            count = count + 1;
+        }
+        // The value is 0.d1d2...dn * 10^point.
+        let point = count + exponent;
+        if count <= point && point <= 21 {
+            ShortestDecimal.append_run(sb, digits, scale, count);
+            let zeros = point - count;
+            while zeros > 0 {
+                sb.append_char('0');
+                zeros = zeros - 1;
+            }
+        } else if 0 < point && point <= 21 {
+            let rest = ShortestDecimal.append_run(sb, digits, scale, point);
+            sb.append_char('.');
+            ShortestDecimal.append_run(sb, rest, scale / ShortestDecimal.pow10(point), count - point);
+        } else if -6 < point && point <= 0 {
+            sb.append("0.");
+            let zeros = 0 - point;
+            while zeros > 0 {
+                sb.append_char('0');
+                zeros = zeros - 1;
+            }
+            ShortestDecimal.append_run(sb, digits, scale, count);
+        } else {
+            let rest = ShortestDecimal.append_run(sb, digits, scale, 1);
+            if count > 1 {
+                sb.append_char('.');
+                ShortestDecimal.append_run(sb, rest, scale / 10uL, count - 1);
+            }
+            sb.append_char('e');
+            if point - 1 < 0 {
+                sb.append_char('-');
+                sb.append_int(1 - point);
+            } else {
+                sb.append_char('+');
+                sb.append_int(point - 1);
+            }
+        }
+    }
+
+    /// Appends the leading `count` digits of `digits`, whose most significant digit has place value
+    /// `scale`, and returns the digits that remain.
+    static fun append_run(borrow sb: StringBuilder, digits: ulong, scale: ulong, count: int): ulong {
+        let rest = digits;
+        let place = scale;
+        let i = 0;
+        while i < count {
+            let digit = rest / place;
+            sb.append_char((char)(48 + (int)digit));
+            rest = rest - digit * place;
+            place = place / 10uL;
+            i = i + 1;
+        }
+        return rest;
+    }
+
+    static fun pow10(n: int): ulong {
+        let result = 1uL;
+        let i = 0;
+        while i < n {
+            result = result * 10uL;
+            i = i + 1;
+        }
+        return result;
+    }
+
+    /// The bit length of 5^e, for 0 <= e <= 3528.
+    static fun pow5_bits(e: int): int {
+        return ((e * 1217359) >> 19) + 1;
+    }
+
+    static fun pow5_factor(value: ulong): int {
+        let rest = value;
+        let count = 0;
+        while rest % 5uL == 0uL {
+            rest = rest / 5uL;
+            count = count + 1;
+        }
+        return count;
+    }
+
+    /// (m * (hi * 2^64 + lo)) >> shift for 64 < shift < 128, where m is below 2^55.
+    static fun mul_shift(m: ulong, lo: ulong, hi: ulong, shift: int): ulong {
+        let high0 = ShortestDecimal.mul_high(m, lo);
+        let low1 = m * hi;
+        let high1 = ShortestDecimal.mul_high(m, hi);
+        let sum = high0 + low1;
+        if sum < high0 {
+            high1 = high1 + 1uL;
+        }
+        let distance = (ulong)(shift - 64);
+        return (high1 << (64uL - distance)) | (sum >> distance);
+    }
+
+    /// The upper 64 bits of the 128-bit product `a * b`.
+    static fun mul_high(a: ulong, b: ulong): ulong {
+        let a_lo = a & 0xFFFFFFFFuL;
+        let a_hi = a >> 32uL;
+        let b_lo = b & 0xFFFFFFFFuL;
+        let b_hi = b >> 32uL;
+        let lo_lo = a_lo * b_lo;
+        let hi_lo = a_hi * b_lo;
+        let lo_hi = a_lo * b_hi;
+        let cross = (lo_lo >> 32uL) + (hi_lo & 0xFFFFFFFFuL) + lo_hi;
+        return a_hi * b_hi + (hi_lo >> 32uL) + (cross >> 32uL);
+    }
+}

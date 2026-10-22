@@ -532,7 +532,12 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                 .enumerate()
                 .filter_map(|(i, f)| reachable.contains(&i).then_some(f)),
         );
-        for ty in &live_types {
+        // A primitive needs no layout to be live: any reachable value of it may be converted.
+        let primitives = mir
+            .object_methods
+            .keys()
+            .filter(|ty| matches!(interner.kind(**ty), TyKind::Prim(_)));
+        for ty in live_types.iter().chain(primitives) {
             if let Some(methods) = mir.object_methods.get(ty) {
                 let defs = [
                     methods.to_string.filter(|_| protocols.needs_to_string(*ty)),

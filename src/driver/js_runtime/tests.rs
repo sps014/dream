@@ -36,14 +36,13 @@ fn node_target_pins_is_node() {
 
 #[test]
 fn env_hosts_are_selected_from_the_final_import_inventory() {
-    let live = vec![("env".into(), "print_char".into())];
+    let live = vec![("env".into(), "print_err_char".into())];
     let assembled = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
     let text = minify_js_source(&assembled).unwrap();
-    assert!(text.contains("print_char:"));
-    assert!(!text.contains("print_float:"));
-    assert!(!text.contains("print_double:"));
+    assert!(text.contains("print_err_char:"));
+    assert!(!text.contains("print_err_string:"));
     assert!(!text.contains("write_stream:"));
-    assert!(!text.contains("print_int:"));
+    assert!(!text.contains("print_string:"));
 }
 
 #[test]
@@ -76,14 +75,14 @@ fn synchronous_selected_loader_executes_without_async_glue() {
     }
     let wasm = wat::parse_str(
         r#"(module
-            (import "env" "print_int" (func $print (param i32)))
+            (import "env" "print_err_char" (func $print (param i32)))
             (memory (export "memory") 1)
             (func (export "main") (result i32)
                 i32.const 7 call $print i32.const 0)
         )"#,
     )
     .unwrap();
-    let live = vec![("env".into(), "print_int".into())];
+    let live = vec![("env".into(), "print_err_char".into())];
     let requirements = Requirements::from_abi(&serde_json::json!({"externs": []}), &live).unwrap();
     let source = assemble_for_requirements(
         &live,
@@ -278,5 +277,5 @@ fn manifest_fields_match_previous_prefix_table() {
     assert_eq!(chunk_for_field(&manifest, "windowPoll"), Some("window"));
     assert_eq!(chunk_for_field(&manifest, "windowCanvas"), Some("window"));
     assert_eq!(chunk_for_field(&manifest, "delay"), None);
-    assert_eq!(chunk_for_field(&manifest, "print_int"), None);
+    assert_eq!(chunk_for_field(&manifest, "print_string"), None);
 }

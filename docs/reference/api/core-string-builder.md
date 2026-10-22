@@ -94,7 +94,7 @@ public fun append_long(n: long): void
 
 ## `append_double`
 
-Appends the decimal representation of `n`.
+Appends the same text as `n.to_string()` without allocating an intermediate string.
 
 ```dream
 public fun append_double(n: double): void

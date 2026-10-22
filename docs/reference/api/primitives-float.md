@@ -52,6 +52,14 @@ Returns `1.0` for a positive value, `-1.0` for a negative value, and the value i
 public fun signum(): float
 ```
 
+## `to_string`
+
+Returns the shortest decimal text that rounds back to exactly this value, so `0.1f` prints as `0.1`. The layout, NaN, infinity, and zero spellings match `double.to_string`.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `parse`
 
 Parses a decimal float from `text`.

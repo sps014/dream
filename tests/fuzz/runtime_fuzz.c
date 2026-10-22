@@ -1,5 +1,5 @@
-/* libFuzzer entry for the portable runtime's text paths: UTF-8 <-> UTF-16 conversion, float
- * formatting, and view search. The first input byte picks the target; the rest is its input.
+/* libFuzzer entry for the portable runtime's text paths: UTF-8 <-> UTF-16 conversion and view
+ * search. The first input byte picks the target; the rest is its input.
  * Build and run through `scripts/fuzz_runtime.sh`. */
 #include "../../crates/dream-mir/src/runtime/c/core/include/dream_core.h"
 #include <stdio.h>
@@ -8,7 +8,6 @@
 int32_t string_view_find(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int32_t no,
                          int32_t nn, int32_t from);
 dream_ptr string_from_utf8(dream_ptr bytes);
-dream_ptr dream_double_to_string(double v);
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
@@ -40,16 +39,6 @@ static void fuzz_utf8(const uint8_t *data, size_t n) {
     }
     dream_release(text);
     dream_release(bytes);
-}
-
-static void fuzz_format(const uint8_t *data, size_t n) {
-    double v = 0;
-    memcpy(&v, data, n < sizeof(v) ? n : sizeof(v));
-    dream_ptr s = dream_double_to_string(v);
-    if (dream_str_len(s) <= 0 || dream_str_len(s) > 64) {
-        abort();
-    }
-    dream_release(s);
 }
 
 static int32_t naive_find(const uint16_t *h, int32_t hn, const uint16_t *nd, int32_t nn, int32_t from) {
@@ -91,9 +80,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size == 0) {
         return 0;
     }
-    switch (data[0] % 3) {
+    switch (data[0] % 2) {
     case 0: fuzz_utf8(data + 1, size - 1); break;
-    case 1: fuzz_format(data + 1, size - 1); break;
     default: fuzz_find(data + 1, size - 1); break;
     }
     return 0;

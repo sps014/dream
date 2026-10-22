@@ -1514,11 +1514,6 @@ dream_ptr dream_ulong_to_string(int64_t v);
 dream_ptr dream_byte_to_string(int32_t v);
 dream_ptr dream_bool_to_string(int32_t v);
 dream_ptr dream_char_to_string(int32_t v);
-dream_ptr dream_float_to_string(float v);
-/* Shortest round-trip text of a binary16 value passed widened to float. */
-dream_ptr dream_float16_to_string(float v);
-dream_ptr dream_double_to_string(double v);
-void dream_sb_push_double(dream_ptr sb, double v);
 dream_ptr string_clone_range(dream_ptr ptr, int32_t start, int32_t end);
 int32_t string_json_boundary(dream_ptr s, int32_t start);
 
@@ -1661,13 +1656,9 @@ void cancellation_subscribe(dream_ptr future, uintptr_t registration) DREAM_WASM
 void cancellation_notify(uintptr_t registration) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "cancellationNotify");
 void async_host_cancel(dream_ptr future) DREAM_WASM_IMPORT(DREAM_MODULE_HOST, "asyncHostCancel");
 void platform_write(int stream, const void *bytes, size_t size, int encoding) DREAM_WASM_IMPORT("env", "write_text");
-DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_INT) void print_int(int32_t v);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_STRING) void print_string(dream_ptr s);
-DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_CHAR) void print_char(int32_t c);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_ERR_STRING) void print_err_string(dream_ptr s);
 DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_ERR_CHAR) void print_err_char(int32_t c);
-DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_FLOAT) void print_float(float v);
-DREAM_WASM_IMPORT(DREAM_MODULE_ENV, DREAM_SYM_PRINT_DOUBLE) void print_double(double v);
 DREAM_WASM_IMPORT(DREAM_MODULE_HOST, DREAM_SYM_TIME_NOW_NANOS) int64_t timeNowNanos(void);
 DREAM_WASM_IMPORT(DREAM_MODULE_HOST, DREAM_SYM_DATE_NOW_MILLIS) int64_t dateNowMillis(void);
 #else
@@ -1677,13 +1668,9 @@ int64_t processCpuTimeNanos(void);
 int64_t processMemoryBytes(void);
 int64_t dateNowMillis(void);
 int32_t dateLocalOffsetMinutes(int64_t epoch_millis);
-void print_int(int32_t v);
 void print_string(dream_ptr s);
-void print_char(int32_t c);
 void print_err_string(dream_ptr s);
 void print_err_char(int32_t c);
-void print_float(float v);
-void print_double(double v);
 
 int32_t fileOpen(dream_ptr path, dream_ptr mode);
 int32_t fileDelete(dream_ptr path);

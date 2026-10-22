@@ -106,6 +106,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("primitive_parse", "core", true),
     Case::project("math_random", "core", true),
     Case::project("float16", "core", true),
+    Case::project("float_format", "core", true),
     Case::project("futures_timers", "core", true),
     Case::project("datetime", "core", true),
     Case::project("option_result", "core", true),

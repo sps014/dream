@@ -59,6 +59,17 @@ extend double: Comparable<double> {
         return this;
     }
 
+    /// Returns the shortest decimal text that rounds back to exactly this value, so `0.1d` prints
+    /// as `0.1` and `0.1d + 0.2d` as `0.30000000000000004`.
+    /// Values from 1e-7 up to but not including 1e21 use plain notation (`0.1`, `3`, `1500000`);
+    /// smaller and larger magnitudes use an exponent (`1e+21`, `1.5e-8`). NaN is `nan`, the
+    /// infinities are `inf` and `-inf`, and both zeros are `0`.
+    public override fun to_string(): string {
+        let sb = StringBuilder();
+        ShortestDecimal.append(sb, this, 52, 1023);
+        return sb.build();
+    }
+
     /// Parses a decimal double from `text`.
     public static fun parse(borrow text: string): Result<double, ParseError> {
         let n = text.length;

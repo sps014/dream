@@ -138,6 +138,7 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
         "false".into(),
         "-".into(),
         "".into(),
+        "\n".into(),
     ];
     v.push("length".into());
     v.push("type".into());

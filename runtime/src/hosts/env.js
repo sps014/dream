@@ -2,22 +2,6 @@ import { getNodeFs } from "../platform.js";
 
 /** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
 
-/** Native host parity: `%.6f` with trailing zeros (and dot) trimmed. */
-function formatFloat(v) {
-  if (!Number.isFinite(v)) return String(v);
-  let text = v.toFixed(6);
-  if (text.includes(".")) {
-    text = text.replace(/0+$/, "").replace(/\.$/, "");
-  }
-  return text === "-0" ? "0" : text;
-}
-
-/** Native host parity: `%.16g`. */
-function formatDouble(v) {
-  if (!Number.isFinite(v)) return String(v);
-  return String(Number(v.toPrecision(16)));
-}
-
 function nodeStdoutWrite(s) {
   const fs = getNodeFs();
   const fd =
@@ -110,10 +94,6 @@ function defaultEnv(getInstance, options) {
     },
     print_string: (ptr) => writeOut(getInstance().readString(ptr)),
     println: (ptr) => writeLine(getInstance().readString(ptr)),
-    print_int: (v) => writeOut(String(v)),
-    print_float: (v) => writeOut(formatFloat(v)),
-    print_double: (v) => writeOut(formatDouble(v)),
-    print_char: (v) => writeOut(String.fromCharCode(v)),
     print_err_string: (ptr) => writeErr(getInstance().readString(ptr)),
     print_err_char: (v) => writeErr(String.fromCharCode(v)),
   };

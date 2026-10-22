@@ -70,9 +70,17 @@ Returns true when this value is positive or negative infinity, for example the r
 public fun is_infinite(): bool
 ```
 
+## `to_string`
+
+Returns the shortest decimal text that rounds back to exactly this value, so `0.1h` prints as `0.1` and the largest value, 65504, as `65500`. The layout, NaN, infinity, and zero spellings match `double.to_string`.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `parse`
 
-Parses decimal text such as `"0.125"`, `"-3"`, or `"6.1e-05"` and rounds it to the nearest `float16`. Magnitudes of 65520 or more become infinity. Also accepts `"nan"`, `"inf"`, `"+inf"`, and `"-inf"`, so every string produced by `to_string` parses back to the same value. Parsing stops at the first character that cannot continue the number; text with no digits fails with a `ParseError`.
+Parses decimal text such as `"0.125"`, `"-3"`, or `"6.1e-5"` and rounds it to the nearest `float16`. Magnitudes of 65520 or more become infinity. Also accepts `"nan"`, `"inf"`, `"+inf"`, and `"-inf"`, so every string produced by `to_string` parses back to the same value. Parsing stops at the first character that cannot continue the number; text with no digits fails with a `ParseError`.
 
 ```dream
 public static fun parse(borrow text: string): Result<float16, ParseError>

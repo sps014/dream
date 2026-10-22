@@ -11,7 +11,7 @@ use crate::backend::shared::place_policy::{
 use crate::backend::shared::protocol_names::to_string_fn;
 use crate::{Callee, Operand, Place, Rvalue, Statement};
 use dream_abi::intrinsics::IntrinsicOp;
-use dream_types::{PrimTy, TyKind, TypeId};
+use dream_types::TypeId;
 
 impl<'l, 'a> Fx<'l, 'a> {
     pub fn stmts(&mut self, stmts: &[Statement]) {
@@ -494,39 +494,17 @@ impl<'l, 'a> Fx<'l, 'a> {
 
     fn print(&mut self, arg: &Operand, ty: TypeId, newline: bool) {
         let a = self.operand(arg);
-        match self.interner.kind(ty) {
-            TyKind::Prim(PrimTy::Int) | TyKind::Enum(_) => {
-                let x = self.conv_v(&a, &Ty::I32, false);
-                self.call("print_int", &[x]);
-            }
-            TyKind::Prim(PrimTy::Char) => {
-                let x = self.conv_v(&a, &Ty::I32, false);
-                self.call("print_char", &[x]);
-            }
-            TyKind::Prim(PrimTy::String) => {
-                self.call("print_string", &[a]);
-            }
-            TyKind::Prim(PrimTy::Float) => {
-                let x = self.conv_v(&a, &Ty::F32, false);
-                self.call("print_float", &[x]);
-            }
-            TyKind::Prim(PrimTy::Double) => {
-                let x = self.conv_v(&a, &Ty::F64, false);
-                self.call("print_double", &[x]);
-            }
-            _ => {
-                let conv = to_string_fn(&self.l.cx, ty);
-                if conv.is_empty() {
-                    self.call("print_string", &[a]);
-                } else {
-                    let s = self.call_v(&conv, &[a]);
-                    self.call("print_string", std::slice::from_ref(&s));
-                    self.call("dream_release", &[s]);
-                }
-            }
+        let conv = to_string_fn(&self.l.cx, ty);
+        if conv.is_empty() {
+            self.call("print_string", &[a]);
+        } else {
+            let s = self.call_v(&conv, &[a]);
+            self.call("print_string", std::slice::from_ref(&s));
+            self.call("dream_release", &[s]);
         }
         if newline {
-            self.call("print_char", &[V::i32(10)]);
+            let line = V::s(self.l.str_val("\n"));
+            self.call("print_string", &[line]);
         }
     }
 }

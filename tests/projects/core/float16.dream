@@ -244,9 +244,9 @@ fun float16_subnormals(): void {
     Assert.eq(smallest_normal - largest_subnormal, smallest);
     Assert.eq(largest_subnormal + smallest, smallest_normal);
     Assert.eq(float16.parse("6.1e-05").unwrap_or(0.0h), largest_subnormal);
-    Assert.eq(smallest.to_string(), "6e-08");
-    Assert.eq(largest_subnormal.to_string(), "6.1e-05");
-    Assert.eq(smallest_normal.to_string(), "6.104e-05");
+    Assert.eq(smallest.to_string(), "6e-8");
+    Assert.eq(largest_subnormal.to_string(), "0.000061");
+    Assert.eq(smallest_normal.to_string(), "0.00006104");
 }
 
 @test
@@ -259,7 +259,8 @@ fun float16_widening(): void {
     Assert.eq((double)f, 0.0999755859375d);
     Assert.eq(f16a_widen(h), (float)0.0999755859375d);
     Assert.is_true(1.0f + h > 1.09f);
-    Assert.eq((2.0d * h).to_string(), "0.199951");
+    Assert.eq((2.0d * h).to_string(), "0.199951171875");
+    Assert.eq(h.to_string(), "0.1");
 
     Assert.eq((int)2.75h, 2);
     Assert.eq((int)(-2.75h), 0 - 2);

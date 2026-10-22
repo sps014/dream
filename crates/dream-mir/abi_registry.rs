@@ -139,10 +139,6 @@ GUEST_ENTRY_FN: &str = "dream_guest_entry" => "DREAM_SYM_GUEST_ENTRY_FN";
 /// Host import module for the fixed `print_*` builtins.
 ENV_MODULE: &str = "env" => "DREAM_MODULE_ENV";
 PRINT_STRING: &str = "print_string" => "DREAM_SYM_PRINT_STRING";
-PRINT_INT: &str = "print_int" => "DREAM_SYM_PRINT_INT";
-PRINT_FLOAT: &str = "print_float" => "DREAM_SYM_PRINT_FLOAT";
-PRINT_DOUBLE: &str = "print_double" => "DREAM_SYM_PRINT_DOUBLE";
-PRINT_CHAR: &str = "print_char" => "DREAM_SYM_PRINT_CHAR";
 /// Diagnostic stream: panics and a failing `main`'s `Error:` line. Kept off stdout so program
 /// output stays clean and pipeable.
 PRINT_ERR_STRING: &str = "print_err_string" => "DREAM_SYM_PRINT_ERR_STRING";

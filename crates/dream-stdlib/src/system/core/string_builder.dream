@@ -145,12 +145,9 @@ public class StringBuilder {
         StringBuilder.push_long(this, n);
     }
 
-    @intrinsic(Intrinsic.StringBuilderPushDouble)
-    static extern fun push_double(borrow sb: StringBuilder, n: double): void;
-
-    /// Appends the decimal representation of `n`.
+    /// Appends the same text as `n.to_string()` without allocating an intermediate string.
     public fun append_double(n: double): void {
-        StringBuilder.push_double(this, n);
+        ShortestDecimal.append(this, n, 52, 1023);
     }
 
     /// Appends `text` followed by a newline character.

@@ -56,7 +56,6 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("StringAlloc", "string_alloc"),
     ("StringCharAtUnchecked", "string_char_at_unchecked"),
     ("StringBuilderBuffer", "string_builder_buffer"),
-    ("StringBuilderPushDouble", "string_builder_push_double"),
     ("StringCloneRange", "string_clone_range"),
     ("StringJsonBoundary", "string_json_boundary"),
     ("StringSet", "string_set"),

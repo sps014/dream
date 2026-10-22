@@ -324,7 +324,6 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         "string_builder_push" => "dream_sb_push".into(),
         "string_builder_push_int" => "dream_sb_push_int".into(),
         "string_builder_push_long" => "dream_sb_push_long".into(),
-        dream_abi::intrinsics::ATTR_STRING_BUILDER_PUSH_DOUBLE => "dream_sb_push_double".into(),
         dream_abi::intrinsics::ATTR_FUNCBOX_NEW => "dream_funcbox_new".into(),
         dream_abi::intrinsics::ATTR_FUNCBOX_FUNCIDX => "dream_funcbox_funcidx".into(),
         dream_abi::intrinsics::ATTR_FUNCBOX_ENV => "dream_funcbox_env".into(),

@@ -30,9 +30,9 @@ pub(crate) fn to_string_fn(cx: &Cx<'_>, ty: TypeId) -> String {
         TyKind::Prim(PrimTy::Byte) => "dream_byte_to_string".into(),
         TyKind::Prim(PrimTy::Bool) => "dream_bool_to_string".into(),
         TyKind::Prim(PrimTy::Char) => "dream_char_to_string".into(),
-        TyKind::Prim(PrimTy::Float) => "dream_float_to_string".into(),
-        TyKind::Prim(PrimTy::Float16) => "dream_float16_to_string".into(),
-        TyKind::Prim(PrimTy::Double) => "dream_double_to_string".into(),
+        TyKind::Prim(PrimTy::Float | PrimTy::Float16 | PrimTy::Double) => {
+            crate::internal_error!("floating-point to_string is defined by system.primitives")
+        }
         TyKind::Prim(PrimTy::String) => String::new(),
         TyKind::Enum(_) => "dream_int_to_string".into(),
         TyKind::Array(e) => c_ident(&format!("array_to_string_t{}", e.0)),

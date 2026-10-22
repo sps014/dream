@@ -23,6 +23,13 @@ impl<'a> Analyzer<'a> {
         if diagnostics.has_errors() {
             return Err(SemanticError::AnalysisFailed);
         }
+        let primitives: Vec<_> = self
+            .type_ctx
+            .interner
+            .iter_kinds()
+            .filter(|(_, kind)| matches!(kind, dream_types::TyKind::Prim(_)))
+            .map(|(id, _)| id)
+            .collect();
         let object_methods = layouts
             .structs
             .keys()
@@ -33,14 +40,19 @@ impl<'a> Analyzer<'a> {
                     .keys()
                     .filter(|ty| self.union_table.contains_key(*ty)),
             )
-            .map(|&ty| {
-                (
-                    ty,
-                    dream_hir::ObjectMethods {
-                        to_string: self.unique_method_def(ty, dream_abi::intrinsics::TO_STRING),
-                        hash_code: self.unique_method_def(ty, dream_abi::intrinsics::HASH_CODE),
-                    },
-                )
+            .copied()
+            .chain(primitives)
+            .filter_map(|ty| {
+                let methods = dream_hir::ObjectMethods {
+                    to_string: self.unique_method_def(ty, dream_abi::intrinsics::TO_STRING),
+                    hash_code: self.unique_method_def(ty, dream_abi::intrinsics::HASH_CODE),
+                };
+                let primitive = matches!(
+                    self.type_ctx.interner.kind(ty),
+                    dream_types::TyKind::Prim(_)
+                );
+                (!primitive || methods.to_string.is_some() || methods.hash_code.is_some())
+                    .then_some((ty, methods))
             })
             .collect();
         self.validate_layout_case_labels(&layouts, diagnostics);

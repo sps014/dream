@@ -254,8 +254,8 @@ pub enum Statement {
         sig: TypeId,
         args: Vec<Operand>,
     },
-    /// The `print`/`println` builtins, lowered to the host `print_*` imports. `ty` is the argument's
-    /// interned type (selecting `$print_int`/`$print_char`/`$print_string`); `newline` appends `\n`.
+    /// The `print`/`println` builtins: the argument's `to_string` for its interned type `ty`, written
+    /// through the host `print_string` import; `newline` appends `\n`.
     Print {
         arg: Operand,
         ty: TypeId,

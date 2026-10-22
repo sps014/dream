@@ -104,10 +104,21 @@ fn classify_hash(cx: &Context<'_>, ty: TypeId, reach: &mut ProtocolReach) {
     }
 }
 
+/// A primitive whose `to_string` is written in Dream rather than supplied by the runtime.
+fn has_dream_to_string(cx: &Context<'_>, ty: TypeId) -> bool {
+    cx.mir
+        .object_methods
+        .get(&ty)
+        .is_some_and(|methods| methods.to_string.is_some())
+}
+
 fn classify(cx: &Context<'_>, ty: TypeId, reach: &mut ProtocolReach) {
     match cx.interner.kind(ty) {
         TyKind::Array(e) => {
             reach.to_string.insert(*e);
+        }
+        TyKind::Prim(_) if has_dream_to_string(cx, ty) => {
+            reach.to_string.insert(ty);
         }
         TyKind::Prim(_) | TyKind::Enum(_) => {}
         _ if cx.mir.layouts.structs.contains_key(&ty)
@@ -161,6 +172,10 @@ fn close_over_layouts(
         }
         for d in deps {
             let dep_key = match cx.interner.kind(d) {
+                TyKind::Prim(_) if !hash && has_dream_to_string(cx, d) => {
+                    set.insert(d);
+                    continue;
+                }
                 TyKind::Prim(_) | TyKind::Void => continue,
                 TyKind::Array(e) => {
                     // `array_to_string_t{e}` is keyed by the element whatever its kind, including

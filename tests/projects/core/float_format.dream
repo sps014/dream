@@ -1,0 +1,83 @@
+import system.testing;
+import system;
+import system.collections;
+
+struct Reading {
+    public value: double;
+
+    public constructor(value: double) {
+        this.value = value;
+    }
+}
+
+// Expected texts are Python `repr` (double) and numpy's shortest unique digits (float, float16),
+// written in the JavaScript `Number.prototype.toString` layout.
+@test
+fun double_shortest_round_trip(): void {
+    Assert.eq((0.1d + 0.2d).to_string(), "0.30000000000000004");
+    Assert.eq((1.0d / 3.0d).to_string(), "0.3333333333333333");
+    Assert.eq((2.0d / 3.0d).to_string(), "0.6666666666666666");
+    Assert.eq(0.3d.to_string(), "0.3");
+    Assert.eq(123.456d.to_string(), "123.456");
+    Assert.eq(3.141592653589793d.to_string(), "3.141592653589793");
+    Assert.eq(9007199254740993.0d.to_string(), "9007199254740992");
+    Assert.eq(9.5367431640625e-7d.to_string(), "9.5367431640625e-7");
+    Assert.eq(5e-324d.to_string(), "5e-324");
+    Assert.eq(2.2250738585072014e-308d.to_string(), "2.2250738585072014e-308");
+    Assert.eq(1.7976931348623157e308d.to_string(), "1.7976931348623157e+308");
+}
+
+@test
+fun double_layout_switches_to_exponent_outside_1e_minus_7_to_1e21(): void {
+    Assert.eq(100.0d.to_string(), "100");
+    Assert.eq((-2.5d).to_string(), "-2.5");
+    Assert.eq(1e20d.to_string(), "100000000000000000000");
+    Assert.eq(123456789012345680000.0d.to_string(), "123456789012345680000");
+    Assert.eq(1e21d.to_string(), "1e+21");
+    Assert.eq(1e23d.to_string(), "1e+23");
+    Assert.eq(0.000001d.to_string(), "0.000001");
+    Assert.eq(0.0000001d.to_string(), "1e-7");
+    Assert.eq(1.5e-8d.to_string(), "1.5e-8");
+}
+
+@test
+fun double_special_values(): void {
+    let zero = 0.0d;
+    Assert.eq(zero.to_string(), "0");
+    Assert.eq((0.0d - zero).to_string(), "0");
+    Assert.eq((-1.0d * zero).to_string(), "0");
+    Assert.eq((1.0d / zero).to_string(), "inf");
+    Assert.eq((-1.0d / zero).to_string(), "-inf");
+    Assert.eq((zero / zero).to_string(), "nan");
+}
+
+@test
+fun float_and_float16_use_their_own_precision(): void {
+    Assert.eq(0.1f.to_string(), "0.1");
+    Assert.eq((1.0f / 3.0f).to_string(), "0.33333334");
+    Assert.eq((0.1f + 0.2f).to_string(), "0.3");
+    Assert.eq(16777216.0f.to_string(), "16777216");
+    Assert.eq(3.4028235e38f.to_string(), "3.4028235e+38");
+    Assert.eq(1.1754944e-38f.to_string(), "1.1754944e-38");
+    Assert.eq(((float)1.401298464324817e-45d).to_string(), "1e-45");
+    Assert.eq(0.1h.to_string(), "0.1");
+    Assert.eq((1.0h / 3.0h).to_string(), "0.3333");
+    Assert.eq((0.1h + 0.2h).to_string(), "0.2998");
+    Assert.eq(1000.5h.to_string(), "1000.5");
+    Assert.eq(2049.0h.to_string(), "2048");
+    Assert.eq(65504.0h.to_string(), "65500");
+}
+
+@test
+fun every_conversion_path_shares_the_formatter(): void {
+    let sb = StringBuilder();
+    sb.append_double(0.1d + 0.2d);
+    Assert.eq(sb.build(), "0.30000000000000004");
+    Assert.eq([0.1d, 0.25d, 1e21d].to_string(), "[0.1, 0.25, 1e+21]");
+    let readings = List<float>();
+    readings.push(0.1f);
+    readings.push(2.5f);
+    Assert.eq(readings.to_string(), "[0.1, 2.5]");
+    Assert.eq(Reading(0.3d).to_string(), "Reading { value: 0.3 }");
+    Assert.eq("x=" + 0.5d.to_string(), "x=0.5");
+}

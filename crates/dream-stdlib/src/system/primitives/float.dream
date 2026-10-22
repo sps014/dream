@@ -61,6 +61,15 @@ extend float: Comparable<float> {
         return this;
     }
 
+    /// Returns the shortest decimal text that rounds back to exactly this value, so
+    /// `0.1f` prints as `0.1`. The layout, NaN, infinity, and zero spellings match
+    /// `double.to_string`.
+    public override fun to_string(): string {
+        let sb = StringBuilder();
+        ShortestDecimal.append(sb, (double)this, 23, 127);
+        return sb.build();
+    }
+
     /// Parses a decimal float from `text`.
     public static fun parse(borrow text: string): Result<float, ParseError> {
         return switch (double.parse(text)) {

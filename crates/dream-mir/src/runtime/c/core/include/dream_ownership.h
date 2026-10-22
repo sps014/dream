@@ -36,6 +36,15 @@ typedef enum dream_counter {
     DREAM_COUNT_PUBLISH_VISIT,
     DREAM_COUNT_LIMIT
 } dream_counter;
+/* Heap gauges read through the same ids, measured by a heap walk on each read in every build.
+ * Only native heaps are walked; wasm32 reads 0. */
+enum {
+    DREAM_GAUGE_HEAP_COMMITTED = DREAM_COUNT_LIMIT,
+    DREAM_GAUGE_HEAP_LIVE_BYTES,
+    DREAM_GAUGE_HEAP_FREE_BYTES,
+    DREAM_GAUGE_LIMIT
+};
+int64_t dream_heap_gauge(int32_t id);
 extern uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];
 DREAM_ALWAYS_INLINE void dream_count(dream_counter k, uint64_t n) {
 #if defined(DREAM_RUNTIME_COUNTERS) && DREAM_RUNTIME_COUNTERS

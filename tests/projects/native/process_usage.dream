@@ -14,6 +14,30 @@ fun process_usage(): void {
     Assert.is_true(System.memory_bytes > 0L);
 }
 
+fun heap_gauge_fill(): long {
+    let values = List<long>();
+    let i = 0L;
+    while i < 100000L {
+        values.push(i);
+        i = i + 1L;
+    }
+    return Debug.runtime_counter(12);
+}
+
+@test
+@timeout(180000)
+fun heap_gauges(): void {
+    let live_before = Debug.runtime_counter(12);
+    let free_before = Debug.runtime_counter(13);
+    Assert.is_true(Debug.runtime_counter(11) >= live_before + free_before);
+    Assert.is_true(live_before > 0L);
+
+    let live_during = heap_gauge_fill();
+    Assert.is_true(live_during - live_before >= 800000L);
+    Assert.is_true(Debug.runtime_counter(13) - free_before >= 800000L);
+    Assert.is_true(Debug.runtime_counter(12) < live_during);
+}
+
 // `Option<string>` is a nullable `const char*`: a NULL result becomes `None`.
 @c("c", "getenv")
 extern fun c5e_getenv(name: string): Option<string>;

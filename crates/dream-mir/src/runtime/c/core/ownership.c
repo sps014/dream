@@ -29,7 +29,12 @@ void dream_visit_owned(dream_ptr p, void (*edge)(dream_ptr, void *), void *argum
     visit_set(saved);
 }
 uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];
+__attribute__((weak)) int64_t dream_heap_gauge(int32_t id) {
+    (void)id;
+    return 0;
+}
 int64_t debug_get_runtime_counter(int32_t id) {
+    if (id >= DREAM_COUNT_LIMIT && id < DREAM_GAUGE_LIMIT) { return dream_heap_gauge(id); }
     if (id < 0 || id >= DREAM_COUNT_LIMIT) { return 0; }
     return (int64_t)__atomic_load_n(&dream_runtime_counters[id], __ATOMIC_RELAXED);
 }

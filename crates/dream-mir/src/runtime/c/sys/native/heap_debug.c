@@ -80,7 +80,9 @@ static void save_string(dream_leak_scan *scan, char *data) {
     }
 }
 
-static void scan_map(dream_leak_scan *scan, char *base, size_t len) {
+typedef void (*block_visitor)(void *context, char *block, size_t sz);
+
+static void walk_map(char *base, size_t len, block_visitor visit, void *context) {
     char *p = base;
     char *end = base + len;
     while ((size_t)(end - p) >= NATIVE_HEAP_HEADER_SIZE) {
@@ -99,30 +101,76 @@ static void scan_map(dream_leak_scan *scan, char *base, size_t len) {
         if (sz > (size_t)(end - p)) {
             break;
         }
-        // An untouched arena tail reads as zero-count class-0 blocks. Pinned singletons
-        // (`dream_pin_immortal`) are never freed by design and already left `live_objects`,
-        // so counting them here would report a leak the accounting denies.
-        int32_t rc = *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA);
-        int32_t raw_tag = *dream_block_tag(block);
-        if (raw_tag != DREAM_TAG_FREED && rc != 0 && rc != DREAM_RC_IMMORTAL) {
-            int32_t tag = raw_tag & TAG_VALUE_MASK;
-            dream_leak_tally(scan, tag, 1, (uint64_t)sz);
-            if (tag == TAG_STRING) {
-                save_string(scan, block + NATIVE_HEAP_HEADER_SIZE);
-            }
-        }
+        visit(context, block, sz);
         p += sz;
     }
 }
 
-void dream_leak_scan_heap(dream_leak_scan *scan) {
+/* Other threads keep allocating during the walk; their private blocks are read without
+ * synchronization, so a walk is a diagnostic snapshot rather than an exact census. */
+static void walk_heap(block_visitor visit, void *context) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     for (size_t map = 0; map < dream_heap_map_count_locked(); ++map) {
         size_t size;
         char *base = (char *)dream_heap_map_at_locked(map, &size);
-        scan_map(scan, base, size);
+        walk_map(base, size, visit, context);
     }
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
+}
+
+static int32_t block_rc(char *block) {
+    return *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA);
+}
+
+static void tally_leak(void *context, char *block, size_t sz) {
+    dream_leak_scan *scan = context;
+    // An untouched arena tail reads as zero-count class-0 blocks. Pinned singletons
+    // (`dream_pin_immortal`) are never freed by design and already left `live_objects`,
+    // so counting them here would report a leak the accounting denies.
+    int32_t rc = block_rc(block);
+    int32_t raw_tag = *dream_block_tag(block);
+    if (raw_tag != DREAM_TAG_FREED && rc != 0 && rc != DREAM_RC_IMMORTAL) {
+        int32_t tag = raw_tag & TAG_VALUE_MASK;
+        dream_leak_tally(scan, tag, 1, (uint64_t)sz);
+        if (tag == TAG_STRING) {
+            save_string(scan, block + NATIVE_HEAP_HEADER_SIZE);
+        }
+    }
+}
+
+void dream_leak_scan_heap(dream_leak_scan *scan) {
+    walk_heap(tally_leak, scan);
+}
+
+typedef struct {
+    uint64_t live;
+    uint64_t free;
+} heap_usage;
+
+static void tally_usage(void *context, char *block, size_t sz) {
+    heap_usage *usage = context;
+    if (*dream_block_tag(block) == DREAM_TAG_FREED) {
+        usage->free += sz;
+    } else if (block_rc(block) != 0) {
+        usage->live += sz;
+    }
+}
+
+int64_t dream_heap_gauge(int32_t id) {
+    if (id == DREAM_GAUGE_HEAP_COMMITTED) {
+        uint64_t committed = 0;
+        dream_platform_current->lock(DREAM_LOCK_HEAP);
+        for (size_t map = 0; map < dream_heap_map_count_locked(); ++map) {
+            size_t size;
+            (void)dream_heap_map_at_locked(map, &size);
+            committed += size;
+        }
+        dream_platform_current->unlock(DREAM_LOCK_HEAP);
+        return (int64_t)committed;
+    }
+    heap_usage usage = {0, 0};
+    walk_heap(tally_usage, &usage);
+    return (int64_t)(id == DREAM_GAUGE_HEAP_LIVE_BYTES ? usage.live : usage.free);
 }
 
 /* Largest footprint first; the tag breaks ties so the report is deterministic. */

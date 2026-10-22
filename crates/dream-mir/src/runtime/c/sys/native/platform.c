@@ -69,5 +69,5 @@ static void platform_write(int stream, const void *bytes, size_t size, int encod
 }
 static void platform_object_drop(void *ptr) { dream_lock_forget((dream_ptr)ptr); }
 const dream_platform dream_default_platform = {
-    malloc, realloc, free, platform_map, platform_release, abort, platform_write, platform_lock, platform_unlock, platform_object_drop
+    malloc, realloc, free, platform_map, platform_release, dream_monotonic_ns, abort, platform_write, platform_lock, platform_unlock, platform_object_drop
 };

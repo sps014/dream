@@ -28,11 +28,13 @@ static size_t unused_release(void *ptr, size_t size) {
     (void)size;
     return 0;
 }
+/* Nothing is ever released, so idle memory needs no age. */
+static int64_t unused_now(void) { return 0; }
 static void *platform_resize(void *p, size_t size) {
     if (size > INT32_MAX) { return NULL; }
     return realloc(p, size);
 }
 static void platform_object_drop(void *ptr) { (void)ptr; }
 const dream_platform dream_default_platform = {
-    malloc, platform_resize, free, unused_map, unused_release, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop
+    malloc, platform_resize, free, unused_map, unused_release, unused_now, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop
 };

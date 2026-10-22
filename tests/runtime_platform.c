@@ -38,6 +38,8 @@ static size_t release(void *ptr, size_t size) {
     memset((void *)start, 0xa5, end - start);
     return end - start;
 }
+static int64_t clock_ns = 10000000000;
+static int64_t now(void) { return clock_ns; }
 static void write_bytes(int stream, const void *bytes, size_t size, int encoding) {
     assert(stream == 2);
     if (encoding == DREAM_TEXT_UTF16) { dream_write_utf16(stream, bytes, (int32_t)size); return; }
@@ -130,7 +132,7 @@ static void check_invalid_utf8(void) {
 }
 int main(int argc, char **argv) {
     assert(argc == 2);
-    dream_platform platform = {allocate, resize, deallocate, map, release, terminal_abort, write_bytes,
+    dream_platform platform = {allocate, resize, deallocate, map, release, now, terminal_abort, write_bytes,
                                lock, unlock, object_drop};
     dream_set_platform(&platform);
     if (strcmp(argv[1], "raw-memory") == 0) {
@@ -211,7 +213,7 @@ int main(int argc, char **argv) {
         assert(allocations - before_records <= 2);
     }
     if (strcmp(argv[1], "idle-release") == 0) {
-        enum { BLOCKS = 24, BYTES = 1 << 20 };
+        enum { BLOCKS = 25, BYTES = 1 << 20 };
         dream_ptr blocks[BLOCKS];
         for (int round = 0; round < 2; round++) {
             for (int i = 0; i < BLOCKS; i++) {
@@ -219,14 +221,20 @@ int main(int argc, char **argv) {
                 memset(dream_p(blocks[i]), round + 1, BYTES);
             }
             int mapped = mappings;
+            int released = releases;
             assert(dream_heap_released_bytes() == 0);
-            for (int i = 0; i < BLOCKS; i++) {
+            for (int i = 0; i < BLOCKS - 1; i++) {
                 assert(((unsigned char *)dream_p(blocks[i]))[BYTES - 1] == round + 1);
                 dream_recycle(blocks[i]);
             }
-            /* 16 MiB of the 24 freed blocks stays resident; the rest goes back to the OS. */
-            assert(releases == (round + 1) * 9);
-            assert(dream_heap_released_bytes() >= (uint64_t)9 * (BYTES - 8192));
+            /* Freshly freed blocks stay resident however far they exceed the budget. */
+            assert(releases == released);
+            clock_ns += 2000000000;
+            dream_recycle(blocks[BLOCKS - 1]);
+            /* Once they sat idle, all but 15 MiB of them goes back to the OS; the block freed
+             * just now stays resident. */
+            assert(releases == released + 10);
+            assert(dream_heap_released_bytes() >= (uint64_t)10 * (BYTES - 8192));
             assert(mappings == mapped);
         }
         return 0;

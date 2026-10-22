@@ -255,7 +255,7 @@ static void account_frees(uint32_t n) {
 static void heap_refresh_fast(void);
 
 static uintptr_t large_tick(void) {
-    return ((uintptr_t)((uint64_t)timeNowNanos() >> 20)) & LARGE_TICK_MASK;
+    return ((uintptr_t)((uint64_t)dream_platform_current->now() >> 20)) & LARGE_TICK_MASK;
 }
 
 /* Unlinks resident blocks idle for LARGE_RELEASE_AGE until the resident total fits the budget.

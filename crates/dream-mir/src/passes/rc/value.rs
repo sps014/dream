@@ -369,8 +369,22 @@ pub(super) fn insert_early_value_drops(
     }
     let borrowers = payload_borrowers(func, &owning);
     let mut drop_at: Vec<(usize, usize, u32)> = Vec::new();
+    let mut resume_drops: Vec<(usize, u32)> = Vec::new();
     for (bi, block) in func.blocks.iter().enumerate() {
-        if skip_await_blocks && matches!(block.terminator, Terminator::Await { .. }) {
+        if skip_await_blocks && let Terminator::Await { resume, .. } = &block.terminator {
+            // The value stays whole until resume; dropping it there keeps a loop that rebuilds
+            // it from leaking the previous iteration's nested refs.
+            for &local in &owning {
+                let used = block.stmts.iter().any(|stmt| {
+                    stmt_reads(stmt).contains(&local) || assigns_local(stmt, local)
+                });
+                let borrowed = borrowers
+                    .get(&local)
+                    .is_some_and(|deps| deps.iter().any(|c| live.out()[bi].contains(c)));
+                if used && !borrowed && !live.out()[bi].contains(&local) {
+                    resume_drops.push((resume.0 as usize, local));
+                }
+            }
             continue;
         }
         for (si, stmt) in block.stmts.iter().enumerate() {
@@ -405,11 +419,29 @@ pub(super) fn insert_early_value_drops(
             }
         }
     }
+    let mut newly_dropped = BTreeSet::new();
+    for (ri, local) in resume_drops {
+        let already = func.blocks[ri]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::ValueDrop(l) if l.0 == local));
+        if already {
+            continue;
+        }
+        if !func.locals[local as usize].manual_drop {
+            newly_dropped.insert(local);
+        }
+        func.locals[local as usize].manual_drop = true;
+        let stmts = &mut func.blocks[ri].stmts;
+        stmts.insert(0, Statement::ValueKill(Local(local)));
+        stmts.insert(0, Statement::ValueDrop(Local(local)));
+        *changed = true;
+    }
     if drop_at.is_empty() {
+        insert_killed_value_exit_drops(func, &newly_dropped, changed);
         return;
     }
     let mut by_block: IndexMap<usize, Vec<(usize, u32)>> = IndexMap::new();
-    let mut newly_dropped = BTreeSet::new();
     for (bi, si, local) in drop_at {
         if !func.locals[local as usize].manual_drop {
             newly_dropped.insert(local);

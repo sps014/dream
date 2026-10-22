@@ -135,3 +135,28 @@ async fun async_generic_sink_reuse(): void {
     Assert.eq(c34_id_of(h, 2).await, 7);
     Assert.eq(h.id, 7);
 }
+
+// A value struct holding a reference, rebuilt on each pass of a loop that awaits, must drop the
+// previous pass's copy; the leak check catches the retained array otherwise.
+async fun c3e_chunked_length(bytes: byte[]): int {
+    let offset = 0;
+    let total = 0;
+    while offset < bytes.length {
+        let count = bytes.length - offset;
+        if count > 16 {
+            count = 16;
+        }
+        let chunk = Span<byte>(bytes, offset, count).to_array();
+        Time.delay(0).await.unwrap();
+        offset = offset + count;
+        total = total + chunk.length;
+    }
+    return total;
+}
+
+@test
+@timeout(180000)
+async fun async_loop_value_struct_drop(): void {
+    let bytes = Array.alloc<byte>(100);
+    Assert.eq(c3e_chunked_length(bytes).await, 100);
+}

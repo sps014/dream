@@ -13,7 +13,6 @@ use crate::backend::shared::glue::{
     FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems,
     inline_release_sym, release_sym, self_tail_field, struct_field_drops,
 };
-use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_hir::TypeLayout;
 use dream_types::TypeId;
 use std::collections::BTreeSet;
@@ -173,10 +172,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let (kind, none, payload) = if self.interner.is_niche_union(ty) {
                     (2, 0, 0)
                 } else {
-                    let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
-                    let none = u.variant(OPTION_NONE).expect("Option None").discriminant;
-                    let payload = u.variant(OPTION_SOME).expect("Option Some").fields[0].offset;
-                    (0, none, payload)
+                    let o = self.l.cx.option_layout(ty);
+                    (0, o.none, o.payload_offset)
                 };
                 self.call(
                     "dream_weak_drop_field",
@@ -240,32 +237,15 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
         let pp = self.ptr(p);
         let n = self.load_ty(Ty::I32, &pp, 4, false);
-        let n = self.conv(&n, &Ty::I64);
-        let slot = self.w.alloca(Ty::I64, 8);
-        self.w.store(&Value::i64(0), &slot, 8, &[]);
-        let head = self.w.new_block("arr.head");
-        let body = self.w.new_block("arr.body");
-        let done = self.w.new_block("arr.done");
-        self.w.br(head);
-        self.w.switch_to(head);
-        let i = self.w.load(Ty::I64, &slot, 8, &[]);
-        let lt = self.w.icmp("slt", &i, &n);
-        self.w.cond_br(&lt, body, done);
-        self.w.switch_to(body);
-        let off = self.w.bin("mul", &i, &Value::i64(es));
-        let off = self.w.bin("add", &off, &Value::i64(4));
-        let at = self.addr_dyn(p, &off);
-        if value {
-            let at = self.as_ref(&V::s(at));
-            self.value_refs(elem, &at, false);
-        } else {
-            let c = self.load_ty(self.h(), &at, ELEM_ALIGN, true);
-            self.drop_rc_slot(elem, &c);
-        }
-        let inc = self.w.bin("add", &i, &Value::i64(1));
-        self.w.store(&inc, &slot, 8, &[]);
-        self.w.br(head);
-        self.w.switch_to(done);
+        self.for_each_array_elem(p, &n, es, |fx, _, at| {
+            if value {
+                let at = fx.as_ref(&V::s(at));
+                fx.value_refs(elem, &at, false);
+            } else {
+                let c = fx.load_ty(fx.h(), &at, ELEM_ALIGN, true);
+                fx.drop_rc_slot(elem, &c);
+            }
+        });
     }
 
     fn rc_last_or_ret(&mut self, p: &V) {

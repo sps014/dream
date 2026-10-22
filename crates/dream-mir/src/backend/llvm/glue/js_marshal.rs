@@ -5,14 +5,13 @@ use super::super::fx::{Fx, V, align_at};
 use super::super::ir::{Ty, Value};
 use super::super::lcx::Lcx;
 use super::{glue, register};
-use crate::abi::LEN_PREFIX_SIZE;
 use crate::backend::shared::abi_types::{elem_size, mem_ty, native_scalar_size};
+use crate::backend::shared::cx::OptionLayout;
 use crate::backend::shared::js_marshal::{
     array_elems, array_syms, box_prim, emits_js_marshal, is_marshalable, is_option_union,
     js_bridge, struct_syms, unbox_prim,
 };
-use dream_abi::names::{OPTION_NONE, OPTION_SOME};
-use dream_hir::{TypeLayout, UnionLayout, UnionVariant};
+use dream_hir::{TypeLayout, UnionLayout};
 use dream_types::{TyKind, TypeId};
 
 /// Marshaled addresses may be interior (a value field of another struct), so only the
@@ -302,14 +301,6 @@ fn js_to_struct(l: &mut Lcx<'_>, ty: TypeId, layout: &TypeLayout) {
     fx.finish();
 }
 
-fn variant<'u>(layout: &'u UnionLayout, name: &str) -> &'u UnionVariant {
-    layout
-        .variants
-        .iter()
-        .find(|v| v.name == name)
-        .unwrap_or_else(|| crate::internal_error!("Option union missing {name}"))
-}
-
 fn niche_payload(layout: &UnionLayout) -> TypeId {
     layout
         .variants
@@ -340,16 +331,15 @@ fn union_to_js(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
         return;
     }
     if is_option_union(layout) {
-        let none = variant(layout, OPTION_NONE).discriminant;
-        let payload = variant(layout, OPTION_SOME).fields[0].clone();
+        let o = OptionLayout::of(layout);
         let disc = fx.load_disc(&this);
-        let is_none = fx.w.icmp("eq", &disc, &Value::i32(none as i64));
+        let is_none = fx.w.icmp("eq", &disc, &Value::i32(o.none as i64));
         let r = fx.if_else_v(
             &is_none,
             |fx| fx.bridge("host_null", &[]),
             |fx| {
-                let at = fx.addr(&this, payload.offset as i64);
-                fx.stored_to_js(&at, payload.ty).unwrap_or_else(|| {
+                let at = fx.addr(&this, o.payload_offset as i64);
+                fx.stored_to_js(&at, o.payload_ty).unwrap_or_else(|| {
                     crate::internal_error!("Option payload should be marshalable")
                 })
             },
@@ -423,21 +413,19 @@ fn js_to_union(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
         }
     };
     if is_option_union(layout) {
-        let none = variant(layout, OPTION_NONE).discriminant;
-        let some = variant(layout, OPTION_SOME);
-        let payload = some.fields[0].clone();
+        let o = OptionLayout::of(layout);
         let null = fx.js_is_null(&j);
         let then_b = fx.w.new_block("none");
         let else_b = fx.w.new_block("some");
         let join = fx.w.new_block("join");
         fx.w.cond_br(&null, then_b, else_b);
         fx.w.switch_to(then_b);
-        fx.write_disc(&base, none);
+        fx.write_disc(&base, o.none);
         fx.w.br(join);
         fx.w.switch_to(else_b);
-        fx.write_disc(&base, some.discriminant);
-        let dst = fx.addr(&base, payload.offset as i64);
-        if !fx.write_from_js(&dst, &j, payload.ty) {
+        fx.write_disc(&base, o.some);
+        let dst = fx.addr(&base, o.payload_offset as i64);
+        if !fx.write_from_js(&dst, &j, o.payload_ty) {
             crate::internal_error!("Option payload should be marshalable");
         }
         fx.w.br(join);
@@ -466,34 +454,6 @@ fn js_to_union(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
     fx.finish();
 }
 
-/// `for (i = 0; i < n; i++) body(fx, i)` over an `i32` counter.
-fn count_loop(fx: &mut Fx<'_, '_>, n: &V, body: impl FnOnce(&mut Fx<'_, '_>, &V)) {
-    let slot = fx.w.alloca(Ty::I32, 4);
-    fx.w.store(&Value::i32(0), &slot, 4, &[]);
-    let head = fx.w.new_block("head");
-    let step = fx.w.new_block("step");
-    let done = fx.w.new_block("done");
-    fx.w.br(head);
-    fx.w.switch_to(head);
-    let i = V::s(fx.w.load(Ty::I32, &slot, 4, &[]));
-    let nv = fx.conv(n, &Ty::I32);
-    let lt = fx.w.icmp("slt", &i.v, &nv);
-    fx.w.cond_br(&lt, step, done);
-    fx.w.switch_to(step);
-    body(fx, &i);
-    let inc = fx.w.bin("add", &i.v, &Value::i32(1));
-    fx.w.store(&inc, &slot, 4, &[]);
-    fx.w.br(head);
-    fx.w.switch_to(done);
-}
-
-fn elem_at(fx: &mut Fx<'_, '_>, arr: &V, i: &V, esize: i64) -> Value {
-    let i64v = fx.conv(i, &Ty::I64);
-    let off = fx.w.bin("mul", &i64v, &Value::i64(esize));
-    let off = fx.w.bin("add", &off, &Value::i64(LEN_PREFIX_SIZE as i64));
-    fx.addr_dyn(arr, &off)
-}
-
 fn array_to_js(l: &mut Lcx<'_>, elem: TypeId) {
     let esize = elem_size(&l.cx, elem) as i64;
     let mut fx = glue(l, &array_syms(elem).0);
@@ -508,8 +468,7 @@ fn array_to_js(l: &mut Lcx<'_>, elem: TypeId) {
         },
         |_| V::i32(0),
     );
-    count_loop(&mut fx, &n, |fx, i| {
-        let at = elem_at(fx, &arr, i, esize);
+    fx.for_each_array_elem(&arr, &n, esize, |fx, i, at| {
         let v = fx
             .stored_to_js(&at, elem)
             .unwrap_or_else(|| crate::internal_error!("array element should be marshalable"));
@@ -528,10 +487,9 @@ fn js_to_array(l: &mut Lcx<'_>, elem: TypeId) {
     let n = fx.bridge("as_int", &[len]);
     let o = fx.call_v("dream_array_new", &[n.clone(), V::i32(esize)]);
     fx.install_array_info(&o, elem);
-    count_loop(&mut fx, &n, |fx, i| {
+    fx.for_each_array_elem(&o, &n, esize, |fx, i, dst| {
         let idx = fx.bridge("box_int", std::slice::from_ref(i));
         let jv = fx.bridge("index_get", &[j.clone(), idx]);
-        let dst = elem_at(fx, &o, i, esize);
         if !fx.write_from_js(&dst, &jv, elem) {
             crate::internal_error!("array element should be marshalable");
         }

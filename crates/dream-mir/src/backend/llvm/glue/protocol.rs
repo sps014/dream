@@ -267,34 +267,17 @@ fn array_to_string(l: &mut Lcx<'_>, elem: TypeId) {
     let reserve = fx.w.bin("add", &reserve, &Value::i64(2));
     fx.call("dream_strb_reserve", &[sb.clone(), V::s(reserve)]);
     fx.strb_lit(&sb, "[");
-    let slot = fx.w.alloca(Ty::I64, 8);
-    fx.w.store(&Value::i64(0), &slot, 8, &[]);
-    let head = fx.w.new_block("head");
-    let body = fx.w.new_block("body");
-    let done = fx.w.new_block("done");
-    fx.w.br(head);
-    fx.w.switch_to(head);
-    let i = fx.w.load(Ty::I64, &slot, 8, &[]);
-    let lt = fx.w.icmp("slt", &i, &n64);
-    fx.w.cond_br(&lt, body, done);
-    fx.w.switch_to(body);
-    let not_first = fx.w.icmp("ne", &i, &Value::i64(0));
-    fx.if_then(&not_first, |fx| fx.strb_lit(&sb, ", "));
-    let off = fx.w.bin("mul", &i, &Value::i64(es));
-    let off =
-        fx.w.bin("add", &off, &Value::i64(abi::LEN_PREFIX_SIZE as i64));
-    let at = fx.addr_dyn(&p, &off);
-    let value = if fx.is_value(elem) {
-        fx.as_ref(&V::s(at))
-    } else {
-        let m = mem_ty(&fx.l.cx, elem);
-        fx.load_mem(m, &at, ELEM_ALIGN)
-    };
-    fx.strb_conv(&sb, &conv, value);
-    let inc = fx.w.bin("add", &i, &Value::i64(1));
-    fx.w.store(&inc, &slot, 8, &[]);
-    fx.w.br(head);
-    fx.w.switch_to(done);
+    fx.for_each_array_elem(&p, &n, es, |fx, i, at| {
+        let not_first = fx.w.icmp("ne", &i.v, &Value::i32(0));
+        fx.if_then(&not_first, |fx| fx.strb_lit(&sb, ", "));
+        let value = if fx.is_value(elem) {
+            fx.as_ref(&V::s(at))
+        } else {
+            let m = mem_ty(&fx.l.cx, elem);
+            fx.load_mem(m, &at, ELEM_ALIGN)
+        };
+        fx.strb_conv(&sb, &conv, value);
+    });
     fx.strb_lit(&sb, "]");
     fx.strb_finish(&sb);
     fx.finish();

@@ -13,7 +13,6 @@ use super::{glue, register};
 use crate::backend::shared::abi_types::{c_ident, elem_size, import_call_name};
 use crate::backend::shared::panic_msgs;
 use dream_abi::c_abi::shim;
-use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_hir::{CShape, HImport};
 use dream_types::TypeId;
 
@@ -185,7 +184,8 @@ impl<'l, 'a> Fx<'l, 'a> {
                 args.push(p);
             }
             CShape::Ptr { optional: true } => {
-                let (none, off) = self.option_layout(ty);
+                let o = self.l.cx.option_layout(ty);
+                let (none, off) = (o.none, o.payload_offset);
                 let disc = {
                     let p = self.ptr(a);
                     self.load_ty(Ty::I32, &p, 4, false)
@@ -268,38 +268,10 @@ impl<'l, 'a> Fx<'l, 'a> {
         fp
     }
 
-    /// `(None discriminant, Some payload offset)` of an `Option<CPtr>`.
-    fn option_layout(&self, ty: TypeId) -> (i32, u32) {
-        let u = self
-            .l
-            .cx
-            .nunion(ty)
-            .unwrap_or_else(|| crate::internal_error!("Option<CPtr> without a union layout"));
-        let none = u
-            .variant(OPTION_NONE)
-            .unwrap_or_else(|| crate::internal_error!("Option without None"))
-            .discriminant;
-        let off = u
-            .variant(OPTION_SOME)
-            .and_then(|v| v.fields.first())
-            .unwrap_or_else(|| crate::internal_error!("Option without a Some payload"))
-            .offset;
-        (none, off)
-    }
-
     /// A fresh `Option<CPtr>` envelope holding `p` (`None` for `NULL`).
     pub(super) fn option_cptr_new(&mut self, ty: TypeId, p: &V) -> V {
-        let u = self
-            .l
-            .cx
-            .nunion(ty)
-            .unwrap_or_else(|| crate::internal_error!("Option<CPtr> without a union layout"));
-        let size = u.size as i64;
-        let some = u
-            .variant(OPTION_SOME)
-            .unwrap_or_else(|| crate::internal_error!("Option without Some"))
-            .discriminant;
-        let (none, off) = self.option_layout(ty);
+        let o = self.l.cx.option_layout(ty);
+        let (size, some, none, off) = (o.size as i64, o.some, o.none, o.payload_offset);
         let tag = self.l.cx.type_tag(ty) as i64;
         let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag)]);
         let bp = self.ptr(&b);

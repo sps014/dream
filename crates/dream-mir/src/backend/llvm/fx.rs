@@ -407,6 +407,40 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.w.switch_to(join);
     }
 
+    /// Runs `body(fx, i, at)` for each of the first `len` elements of the length-prefixed array
+    /// `arr`, where `i` is the `i32` index and `at` the address of an `esize`-byte element.
+    pub fn for_each_array_elem(
+        &mut self,
+        arr: &V,
+        len: &V,
+        esize: i64,
+        body: impl FnOnce(&mut Self, &V, Value),
+    ) {
+        let n = self.conv(len, &Ty::I32);
+        let slot = self.w.alloca(Ty::I32, 4);
+        self.w.store(&Value::i32(0), &slot, 4, &[]);
+        let head = self.w.new_block("arr.head");
+        let step = self.w.new_block("arr.body");
+        let done = self.w.new_block("arr.done");
+        self.w.br(head);
+        self.w.switch_to(head);
+        let i = V::s(self.w.load(Ty::I32, &slot, 4, &[]));
+        let lt = self.w.icmp("slt", &i.v, &n);
+        self.w.cond_br(&lt, step, done);
+        self.w.switch_to(step);
+        let wide = self.conv(&i, &Ty::I64);
+        let off = self.w.bin("mul", &wide, &Value::i64(esize));
+        let off = self
+            .w
+            .bin("add", &off, &Value::i64(crate::abi::LEN_PREFIX_SIZE as i64));
+        let at = self.addr_dyn(arr, &off);
+        body(self, &i, at);
+        let inc = self.w.bin("add", &i.v, &Value::i32(1));
+        self.w.store(&inc, &slot, 4, &[]);
+        self.w.br(head);
+        self.w.switch_to(done);
+    }
+
     /// `cond ? then() : else_()`, both producing values of the same type.
     pub fn if_else_v(
         &mut self,

@@ -829,11 +829,6 @@ fn const_int_value(
     }
 }
 
-/// True if a type lowers to a reference (used by RC insertion and the backend).
-pub fn is_reference(interner: &TypeInterner, ty: TypeId) -> bool {
-    interner.is_reference(ty)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

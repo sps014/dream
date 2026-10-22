@@ -116,33 +116,16 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         let p = fx.arg(0);
         let pp = fx.ptr(&p);
         let n = fx.load_ty(Ty::I32, &pp, 4, false);
-        let n = fx.conv(&n, &Ty::I64);
-        let slot = fx.w.alloca(Ty::I64, 8);
-        fx.w.store(&Value::i64(0), &slot, 8, &[]);
-        let head = fx.w.new_block("edge.head");
-        let body = fx.w.new_block("edge.body");
-        let done = fx.w.new_block("edge.done");
-        fx.w.br(head);
-        fx.w.switch_to(head);
-        let i = fx.w.load(Ty::I64, &slot, 8, &[]);
-        let lt = fx.w.icmp("slt", &i, &n);
-        fx.w.cond_br(&lt, body, done);
-        fx.w.switch_to(body);
-        let off = fx.w.bin("mul", &i, &Value::i64(es));
-        let off = fx.w.bin("add", &off, &Value::i64(4));
-        let at = fx.addr_dyn(&p, &off);
-        if fx.is_value(elem) {
-            let at = fx.as_ref(&V::s(at));
-            fx.visit_refs(elem, &at);
-        } else if fx.is_rc(elem) {
-            let child = fx.load_ty(fx.h(), &at, 4, true);
-            let child = fx.as_ref(&child);
-            fx.call("dream_visit_edge", &[child]);
-        }
-        let inc = fx.w.bin("add", &i, &Value::i64(1));
-        fx.w.store(&inc, &slot, 8, &[]);
-        fx.w.br(head);
-        fx.w.switch_to(done);
+        fx.for_each_array_elem(&p, &n, es, |fx, _, at| {
+            if fx.is_value(elem) {
+                let at = fx.as_ref(&V::s(at));
+                fx.visit_refs(elem, &at);
+            } else if fx.is_rc(elem) {
+                let child = fx.load_ty(fx.h(), &at, 4, true);
+                let child = fx.as_ref(&child);
+                fx.call("dream_visit_edge", &[child]);
+            }
+        });
         fx.w.ret(None);
         fx.finish();
         let mut fx = glue(l, &symbol(elem, "array_clear"));

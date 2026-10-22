@@ -171,20 +171,7 @@ pub(crate) fn infer_cursor_families(
             }
         }
     }
-    let mut parent: Vec<usize> = (0..n).collect();
-    fn find(p: &mut [usize], x: usize) -> usize {
-        let mut r = x;
-        while p[r] != r {
-            r = p[r];
-        }
-        let mut c = x;
-        while p[c] != r {
-            let next = p[c];
-            p[c] = r;
-            c = next;
-        }
-        r
-    }
+    let mut parent = crate::union_find::UnionFind::new(n);
     for i in 0..n {
         if !member[i] {
             continue;
@@ -192,16 +179,13 @@ pub(crate) fn infer_cursor_families(
         for s in &srcs[i] {
             let b = s.base() as usize;
             if member[b] {
-                let (ra, rb) = (find(&mut parent, i), find(&mut parent, b));
-                if ra != rb {
-                    parent[ra.max(rb)] = ra.min(rb);
-                }
+                parent.union(i, b);
             }
         }
     }
     let mut families: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
     for (i, _) in member.iter().enumerate().filter(|(_, m)| **m) {
-        let r = find(&mut parent, i);
+        let r = parent.find(i);
         families.entry(r).or_default().push(i as u32);
     }
     // Single-definition aliases are `infer_cursors`' job; only loop-carried shapes qualify.

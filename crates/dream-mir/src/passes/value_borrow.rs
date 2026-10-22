@@ -206,14 +206,6 @@ fn defines(f: &MirFunction, l: Local) -> bool {
     })
 }
 
-fn find(root: &mut [usize], mut x: usize) -> usize {
-    while root[x] != x {
-        root[x] = root[root[x]];
-        x = root[x];
-    }
-    x
-}
-
 struct Ctx<'a> {
     f: &'a MirFunction,
     interner: &'a TypeInterner,
@@ -243,22 +235,16 @@ fn borrow_families(
     if !candidate.iter().any(|&c| c) {
         return false;
     }
-    let mut root: Vec<usize> = (0..n).collect();
+    let mut root = crate::union_find::UnionFind::new(n);
     for s in f.blocks.iter().flat_map(|b| &b.stmts) {
         if let Statement::Assign(Place::Local(d), Rvalue::Use(Operand::Copy(Place::Local(src)))) = s
             && candidate[d.0 as usize]
             && f.local_ty(*d) == f.local_ty(*src)
         {
-            let (a, b) = (
-                find(&mut root, d.0 as usize),
-                find(&mut root, src.0 as usize),
-            );
-            root[a.max(b)] = a.min(b);
+            root.union(d.0 as usize, src.0 as usize);
         }
     }
-    let family: Vec<Option<usize>> = (0..n)
-        .map(|i| candidate[i].then(|| find(&mut root, i)))
-        .collect();
+    let family: Vec<Option<usize>> = (0..n).map(|i| candidate[i].then(|| root.find(i))).collect();
     let members = {
         let owners: BTreeSet<Local> = f
             .blocks

@@ -234,22 +234,11 @@ fn defined_local(s: &Statement) -> Option<u32> {
 /// parameter. Every definition of such a local yields at most one token.
 fn single_token_locals(f: &MirFunction) -> BTreeSet<u32> {
     let n = f.locals.len();
-    let mut parent: Vec<usize> = (0..n).collect();
-    fn find(parent: &mut [usize], mut x: usize) -> usize {
-        while parent[x] != x {
-            parent[x] = parent[parent[x]];
-            x = parent[x];
-        }
-        x
-    }
-    let union = |parent: &mut Vec<usize>, a: u32, b: u32| {
+    let mut parent = crate::union_find::UnionFind::new(n);
+    let union = |parent: &mut crate::union_find::UnionFind, a: u32, b: u32| {
         let (a, b) = (a as usize, b as usize);
-        if a >= n || b >= n {
-            return;
-        }
-        let (ra, rb) = (find(parent, a), find(parent, b));
-        if ra != rb {
-            parent[ra.max(rb)] = ra.min(rb);
+        if a < n && b < n {
+            parent.union(a, b);
         }
     };
     let mut shared: BTreeSet<u32> = f.params.iter().map(|p| p.0).collect();
@@ -318,10 +307,10 @@ fn single_token_locals(f: &MirFunction) -> BTreeSet<u32> {
     let shared_roots: BTreeSet<usize> = shared
         .iter()
         .filter(|l| (**l as usize) < n)
-        .map(|l| find(&mut parent, *l as usize))
+        .map(|l| parent.find(*l as usize))
         .collect();
     (0..n)
-        .filter(|l| !shared_roots.contains(&find(&mut parent, *l)))
+        .filter(|l| !shared_roots.contains(&parent.find(*l)))
         .map(|l| l as u32)
         .collect()
 }

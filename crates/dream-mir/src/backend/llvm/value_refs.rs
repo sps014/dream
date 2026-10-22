@@ -8,7 +8,6 @@ use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::place_policy::is_owned_temp_move;
 use crate::rc_store::rvalue_owns_result;
-use dream_abi::names::{OPTION_NONE, OPTION_SOME};
 use dream_types::TypeId;
 
 #[derive(Clone)]
@@ -27,12 +26,8 @@ impl Fx<'_, '_> {
         } else if self.interner.is_niche_union(ty) {
             (2, 0, 0)
         } else {
-            let u = self.l.cx.nunion(ty).expect("validated weak Option layout");
-            (
-                0,
-                u.variant(OPTION_NONE).expect("Option None").discriminant,
-                u.variant(OPTION_SOME).expect("Option Some").fields[0].offset,
-            )
+            let o = self.l.cx.option_layout(ty);
+            (0, o.none, o.payload_offset)
         };
         self.call(
             "dream_value_observer_release",

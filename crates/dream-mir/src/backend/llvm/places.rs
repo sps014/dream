@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 use super::fx::{Fx, V, align_at, mem_ll};
 use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{MemTy, array_elem_ty, elem_size, mem_ty};
+use crate::backend::shared::cx::OptionLayout;
 use crate::backend::shared::glue::{release_sym, retain_sym};
 use crate::backend::shared::panic_msgs;
 use crate::backend::shared::place_policy::{
@@ -14,7 +15,7 @@ use crate::backend::shared::place_policy::{
 };
 use crate::rc_store::rvalue_owns_result;
 use crate::{Const, Global, Local, Operand, Place, Rvalue};
-use dream_abi::names::{OPTION_NONE, OPTION_SOME, THIS_NAME};
+use dream_abi::names::THIS_NAME;
 use dream_types::{TyKind, TypeId};
 
 /// Array payload elements sit at `data + 4 + i * es`, so nothing wider than 4 is guaranteed.
@@ -199,18 +200,12 @@ impl<'l, 'a> Fx<'l, 'a> {
         } else if fld.is_weak && self.interner.is_niche_union(fld.ty) {
             (2, 0, 0, 0, 0, V::s(Value::zero(Ty::Ptr)))
         } else if fld.is_weak {
-            let u = self
-                .l
-                .cx
-                .nunion(fld.ty)
-                .unwrap_or_else(|| crate::internal_error!("weak field requires Option"));
-            let none = u.variant(OPTION_NONE).unwrap().discriminant;
-            let offset = u.variant(OPTION_SOME).unwrap().fields[0].offset;
+            let o = self.l.cx.option_layout(fld.ty);
             (
                 0,
-                none,
-                offset,
-                u.size.max(16),
+                o.none,
+                o.payload_offset,
+                o.size.max(16),
                 self.l.cx.type_tag(fld.ty),
                 V::s(Value::global(format!("dream_type_info_{}", fld.ty.0))),
             )
@@ -675,18 +670,19 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             return;
         }
-        let Some(u) = self.l.cx.nunion(fld.ty).cloned() else {
+        let Some(u) = self.l.cx.nunion(fld.ty) else {
             self.store_ty(&self.h(), slot, rhs, align);
             return;
         };
-        let some = u.variant(OPTION_SOME).map(|v| v.discriminant).unwrap_or(0);
-        let none = u.variant(OPTION_NONE).map(|v| v.discriminant).unwrap_or(1);
-        let poff = u
-            .variant(OPTION_SOME)
-            .and_then(|v| v.fields.first())
-            .map(|f| f.offset)
-            .unwrap_or(8) as i64;
-        let size = u.size.max(16) as i64;
+        let OptionLayout {
+            none,
+            some,
+            payload_offset,
+            size,
+            ..
+        } = OptionLayout::of(u);
+        let poff = payload_offset as i64;
+        let size = size.max(16) as i64;
         let drop_src = rvalue_owns_result(rv).then(|| release_sym(&self.l.cx, fld.ty));
         let src = self.as_ref(rhs);
         let box_ = self.call_v("dream_malloc", &[V::i64(size), V::i32(0)]);

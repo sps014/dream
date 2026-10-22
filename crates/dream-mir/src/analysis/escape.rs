@@ -149,7 +149,7 @@ impl LocalEscape {
     pub(crate) fn analyze(f: &MirFunction, interner: &TypeInterner, sums: &ParamSummaries) -> Self {
         let n = f.locals.len();
         let tracked = |l: Local| interner.is_reference(f.local_ty(l));
-        let mut uf = UnionFind::new(n);
+        let mut uf = crate::union_find::UnionFind::new(n);
         for b in &f.blocks {
             for s in &b.stmts {
                 if let Statement::Assign(Place::Local(d), rv) = s
@@ -157,13 +157,13 @@ impl LocalEscape {
                 {
                     alias_sources(rv, |src| {
                         if tracked(src) {
-                            uf.union(d.0, src.0);
+                            uf.union(d.0 as usize, src.0 as usize);
                         }
                     });
                 }
             }
         }
-        let root: Vec<u32> = (0..n as u32).map(|l| uf.find(l)).collect();
+        let root: Vec<u32> = (0..n).map(|l| uf.find(l) as u32).collect();
         let mut level = vec![Escape::No; n];
         let mut mark = |l: Local, e: Escape| {
             if (l.0 as usize) < n && tracked(l) {
@@ -433,33 +433,5 @@ fn term_uses(t: &Terminator, mark: &mut impl FnMut(Local, Escape)) {
         | Terminator::Return(None)
         | Terminator::AsyncComplete(None)
         | Terminator::Unreachable => {}
-    }
-}
-
-struct UnionFind {
-    parent: Vec<u32>,
-}
-
-impl UnionFind {
-    fn new(n: usize) -> Self {
-        UnionFind {
-            parent: (0..n as u32).collect(),
-        }
-    }
-
-    fn find(&mut self, mut x: u32) -> u32 {
-        while self.parent[x as usize] != x {
-            let p = self.parent[x as usize];
-            self.parent[x as usize] = self.parent[p as usize];
-            x = p;
-        }
-        x
-    }
-
-    fn union(&mut self, a: u32, b: u32) {
-        let (ra, rb) = (self.find(a), self.find(b));
-        if ra != rb {
-            self.parent[ra.max(rb) as usize] = ra.min(rb);
-        }
     }
 }

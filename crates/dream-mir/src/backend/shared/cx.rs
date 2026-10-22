@@ -12,6 +12,37 @@ use indexmap::IndexMap;
 use indexmap::IndexMap as HashMap;
 use std::sync::OnceLock;
 
+/// Discriminants and payload slot of a boxed `Option<T>` union.
+#[derive(Clone, Copy)]
+pub(crate) struct OptionLayout {
+    pub none: i32,
+    pub some: i32,
+    pub payload_offset: u32,
+    pub payload_ty: TypeId,
+    pub size: u32,
+}
+
+impl OptionLayout {
+    pub(crate) fn of(u: &dream_hir::UnionLayout) -> Self {
+        let variant = |name| {
+            u.variant(name)
+                .unwrap_or_else(|| crate::internal_error!("Option union missing {name}"))
+        };
+        let some = variant(dream_abi::names::OPTION_SOME);
+        let payload = some
+            .fields
+            .first()
+            .unwrap_or_else(|| crate::internal_error!("Option without a Some payload"));
+        Self {
+            none: variant(dream_abi::names::OPTION_NONE).discriminant,
+            some: some.discriminant,
+            payload_offset: payload.offset,
+            payload_ty: payload.ty,
+            size: u.size,
+        }
+    }
+}
+
 pub(crate) struct Cx<'a> {
     pub mir: &'a Mir,
     pub interner: &'a TypeInterner,
@@ -95,6 +126,13 @@ impl<'a> Cx<'a> {
 
     pub(crate) fn nunion(&self, ty: TypeId) -> Option<&dream_hir::UnionLayout> {
         self.mir.layouts.unions.get(&ty)
+    }
+
+    pub(crate) fn option_layout(&self, ty: TypeId) -> OptionLayout {
+        OptionLayout::of(
+            self.nunion(ty)
+                .unwrap_or_else(|| crate::internal_error!("Option without a union layout")),
+        )
     }
 
     pub(crate) fn intrinsic_key(&self, def: DefId) -> Option<&str> {

@@ -21,6 +21,7 @@ mod prune;
 mod rc_store;
 pub mod runtime;
 mod simd;
+mod union_find;
 pub mod verify;
 mod visit;
 

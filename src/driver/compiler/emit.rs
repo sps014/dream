@@ -258,8 +258,6 @@ impl Compiler {
             "opt.ll",
             "s",
             "wasm",
-            "csv.wasm",
-            "compression.wasm",
             "wat",
             "bin",
             "abi.json",

@@ -1,0 +1,510 @@
+module system.compress;
+
+/// Streaming DEFLATE decoder (RFC 1951) inside gzip (RFC 1952) or zlib (RFC 1950) framing. Input is
+/// pulled from the source on demand, and decoding pauses between symbols when the output fills.
+// The source is a borrowed caller stream; the decoder never hands itself back to it.
+@allow_cycle
+internal class Inflater {
+    source: Reader;
+    gzip: bool;
+    limit: long;
+    input: byte[];
+    offset: int;
+    eof: bool;
+    source_error: Option<IoError>;
+    error: string;
+    // Unconsumed input bits, least significant first; `count` is how many are valid.
+    bits: int;
+    count: int;
+    window: byte[];
+    position: int;
+    total: long;
+    // 0 stream header, 1 block header, 2 stored block, 3 Huffman block, 4 trailer, 5 done.
+    state: int;
+    last: bool;
+    stored_left: int;
+    copy_left: int;
+    copy_distance: int;
+    literals: HuffmanTable;
+    distances: HuffmanTable;
+    lengths: int[];
+    length_base: int[];
+    length_extra: int[];
+    distance_base: int[];
+    distance_extra: int[];
+    crc: Crc32;
+    adler: Adler32;
+
+    internal constructor(source: Reader, gzip: bool, limit: long) {
+        this.source = source;
+        this.gzip = gzip;
+        this.limit = limit;
+        this.input = [];
+        this.offset = 0;
+        this.eof = false;
+        this.source_error = Option.None;
+        this.error = "";
+        this.bits = 0;
+        this.count = 0;
+        this.window = Array.alloc<byte>(32768);
+        this.position = 0;
+        this.total = 0L;
+        this.state = 0;
+        this.last = false;
+        this.stored_left = 0;
+        this.copy_left = 0;
+        this.copy_distance = 0;
+        this.literals = HuffmanTable();
+        this.distances = HuffmanTable();
+        this.lengths = Array.alloc<int>(320);
+        this.length_base = [
+            3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99,
+            115, 131, 163, 195, 227, 258
+        ];
+        this.length_extra = [
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
+        ];
+        this.distance_base = [
+            1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025,
+            1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
+        ];
+        this.distance_extra = [
+            0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
+            12, 13, 13
+        ];
+        this.crc = Crc32();
+        this.adler = Adler32();
+    }
+
+    /// True once the trailer has been read and verified.
+    internal fun done(): bool {
+        return this.state == 5;
+    }
+
+    /// Decodes up to `capacity` bytes. The result is empty only after the stream is complete.
+    internal fun read(capacity: int): Result<byte[], IoError> {
+        let out = Array.alloc<byte>(capacity);
+        let n = 0;
+        let checked = 0;
+        while n < capacity && this.state != 5 && this.error == "" {
+            if this.copy_left > 0 {
+                let run = this.copy_left < capacity - n ? this.copy_left : capacity - n;
+                for (let k = 0; k < run; k = k + 1) {
+                    let b = this.window[(this.position - this.copy_distance) & 32767];
+                    this.window[this.position] = b;
+                    this.position = (this.position + 1) & 32767;
+                    out[n] = b;
+                    n = n + 1;
+                }
+                this.copy_left = this.copy_left - run;
+            } else if this.state == 0 {
+                this.read_header();
+            } else if this.state == 1 {
+                this.read_block_header();
+            } else if this.state == 2 {
+                if this.stored_left == 0 {
+                    this.state = this.last ? 4 : 1;
+                } else if this.need(8) {
+                    let b = (byte)this.take(8);
+                    this.window[this.position] = b;
+                    this.position = (this.position + 1) & 32767;
+                    out[n] = b;
+                    n = n + 1;
+                    this.stored_left = this.stored_left - 1;
+                }
+            } else if this.state == 3 {
+                let symbol = this.decode(this.literals);
+                if symbol < 0 {
+                    break;
+                }
+                if symbol < 256 {
+                    let b = (byte)symbol;
+                    this.window[this.position] = b;
+                    this.position = (this.position + 1) & 32767;
+                    out[n] = b;
+                    n = n + 1;
+                } else if symbol == 256 {
+                    this.state = this.last ? 4 : 1;
+                } else {
+                    this.read_match(symbol - 257, this.total + (long)(n - checked));
+                }
+            } else {
+                this.account(out, checked, n);
+                checked = n;
+                this.read_trailer();
+            }
+        }
+        this.account(out, checked, n);
+        if this.source_error.is_some() {
+            return Result.Err(this.source_error.unwrap());
+        }
+        if this.error != "" {
+            return Result.Err(IoError("", "ECOMPRESS", this.error));
+        }
+        return Result.Ok(n == capacity ? out : out.slice(0, n));
+    }
+
+    /// Rejects input after the trailer, whether already buffered or still in the source.
+    internal fun check_end(): Result<Unit, IoError> {
+        if this.offset < this.input.length || this.count >= 8 {
+            return Result.Err(IoError("", "ECOMPRESS", "trailing bytes after compressed stream"));
+        }
+        let extra = this.source.read(1)?;
+        if extra.length > 0 {
+            return Result.Err(IoError("", "ECOMPRESS", "trailing bytes after compressed stream"));
+        }
+        return Result.Ok(Unit());
+    }
+
+    fun account(borrow out: byte[], start: int, end: int): void {
+        if end == start {
+            return;
+        }
+        if this.gzip {
+            this.crc.update(out, start, end - start);
+        } else {
+            this.adler.update(out, start, end - start);
+        }
+        this.total = this.total + (long)(end - start);
+        if this.total > this.limit {
+            this.fail("compression output limit exceeded");
+        }
+    }
+
+    fun fail(message: string): void {
+        if this.error == "" {
+            this.error = message;
+        }
+    }
+
+    /// The next source byte, or -1 at end of input or after a source failure.
+    fun next_byte(): int {
+        if this.offset == this.input.length {
+            if this.eof || this.source_error.is_some() {
+                return 0 - 1;
+            }
+            let next = this.source.read(8192);
+            if next.is_err() {
+                this.source_error = Option.Some(next.unwrap_err());
+                return 0 - 1;
+            }
+            this.input = next.unwrap();
+            this.offset = 0;
+            if this.input.length == 0 {
+                this.eof = true;
+                return 0 - 1;
+            }
+        }
+        let b = (int)this.input[this.offset];
+        this.offset = this.offset + 1;
+        return b;
+    }
+
+    /// Ensures `n` (at most 16) bits are buffered, failing the stream when input ends first.
+    fun need(n: int): bool {
+        while this.count < n {
+            let b = this.next_byte();
+            if b < 0 {
+                this.fail("truncated or incomplete compressed stream");
+                return false;
+            }
+            this.bits = this.bits | (b << this.count);
+            this.count = this.count + 8;
+        }
+        return true;
+    }
+
+    fun take(n: int): int {
+        let value = this.bits & ((1 << n) - 1);
+        this.bits = this.bits >> n;
+        this.count = this.count - n;
+        return value;
+    }
+
+    /// Reads one byte-aligned byte, or -1 after failing the stream.
+    fun byte_value(): int {
+        return this.need(8) ? this.take(8) : 0 - 1;
+    }
+
+    fun decode(borrow table: HuffmanTable): int {
+        while this.count < 9 {
+            let b = this.next_byte();
+            if b < 0 {
+                break;
+            }
+            this.bits = this.bits | (b << this.count);
+            this.count = this.count + 8;
+        }
+        let entry = table.fast[this.bits & 511];
+        if entry >= 0 && (entry & 15) <= this.count {
+            this.take(entry & 15);
+            return entry >> 4;
+        }
+        let code = 0;
+        let first = 0;
+        let index = 0;
+        for (let len = 1; len < 16; len = len + 1) {
+            if !this.need(1) {
+                return 0 - 1;
+            }
+            code = code | this.take(1);
+            let n = table.counts[len];
+            if code - n < first {
+                return table.symbols[index + (code - first)];
+            }
+            index = index + n;
+            first = (first + n) * 2;
+            code = code * 2;
+        }
+        this.fail("invalid Huffman code");
+        return 0 - 1;
+    }
+
+    fun read_match(length_symbol: int, produced: long): void {
+        if length_symbol >= 29 {
+            this.fail("invalid literal/length code");
+            return;
+        }
+        if !this.need(this.length_extra[length_symbol]) {
+            return;
+        }
+        let length = this.length_base[length_symbol] + this.take(this.length_extra[length_symbol]);
+        let distance_symbol = this.decode(this.distances);
+        if distance_symbol < 0 {
+            return;
+        }
+        if distance_symbol >= 30 {
+            this.fail("invalid distance code");
+            return;
+        }
+        if !this.need(this.distance_extra[distance_symbol]) {
+            return;
+        }
+        let distance = this.distance_base[distance_symbol]
+            + this.take(this.distance_extra[distance_symbol]);
+        if (long)distance > produced {
+            this.fail("invalid distance too far back");
+            return;
+        }
+        this.copy_left = length;
+        this.copy_distance = distance;
+    }
+
+    fun read_header(): void {
+        if this.gzip {
+            let id1 = this.byte_value();
+            let id2 = this.byte_value();
+            let method = this.byte_value();
+            let flags = this.byte_value();
+            for (let i = 0; i < 6; i = i + 1) {
+                this.byte_value();
+            }
+            if this.error != "" {
+                return;
+            }
+            if id1 != 31 || id2 != 139 {
+                this.fail("invalid gzip header");
+                return;
+            }
+            if method != 8 || (flags & 0xE0) != 0 {
+                this.fail("unsupported gzip header");
+                return;
+            }
+            if (flags & 4) != 0 {
+                let low = this.byte_value();
+                let extra = low + this.byte_value() * 256;
+                for (let i = 0; i < extra && this.error == ""; i = i + 1) {
+                    this.byte_value();
+                }
+            }
+            if (flags & 8) != 0 {
+                while this.byte_value() > 0 {
+                }
+            }
+            if (flags & 16) != 0 {
+                while this.byte_value() > 0 {
+                }
+            }
+            if (flags & 2) != 0 {
+                this.byte_value();
+                this.byte_value();
+            }
+        } else {
+            let cmf = this.byte_value();
+            let flg = this.byte_value();
+            if this.error != "" {
+                return;
+            }
+            if (cmf & 15) != 8 || (cmf >> 4) > 7 || (cmf * 256 + flg) % 31 != 0 {
+                this.fail("invalid zlib header");
+                return;
+            }
+            if (flg & 32) != 0 {
+                this.fail("zlib preset dictionaries are not supported");
+                return;
+            }
+        }
+        this.state = 1;
+    }
+
+    fun read_block_header(): void {
+        if !this.need(3) {
+            return;
+        }
+        this.last = this.take(1) == 1;
+        let kind = this.take(2);
+        if kind == 0 {
+            this.take(this.count & 7);
+            if !this.need(16) {
+                return;
+            }
+            let length = this.take(16);
+            if !this.need(16) {
+                return;
+            }
+            if (length ^ 0xFFFF) != this.take(16) {
+                this.fail("invalid stored block lengths");
+                return;
+            }
+            this.stored_left = length;
+            this.state = 2;
+        } else if kind == 1 {
+            for (let i = 0; i < 288; i = i + 1) {
+                this.lengths[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8;
+            }
+            this.literals.build(this.lengths, 0, 288);
+            // Symbols 30 and 31 complete the fixed code; read_match rejects them.
+            for (let i = 0; i < 32; i = i + 1) {
+                this.lengths[i] = 5;
+            }
+            this.distances.build(this.lengths, 0, 32);
+            this.state = 3;
+        } else if kind == 2 {
+            if this.read_tables() {
+                this.state = 3;
+            }
+        } else {
+            this.fail("invalid block type");
+        }
+    }
+
+    fun read_tables(): bool {
+        if !this.need(14) {
+            return false;
+        }
+        let literal_count = this.take(5) + 257;
+        let distance_count = this.take(5) + 1;
+        let code_count = this.take(4) + 4;
+        if literal_count > 286 || distance_count > 30 {
+            this.fail("invalid code lengths");
+            return false;
+        }
+        let order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        for (let i = 0; i < 19; i = i + 1) {
+            if i < code_count {
+                if !this.need(3) {
+                    return false;
+                }
+                this.lengths[order[i]] = this.take(3);
+            } else {
+                this.lengths[order[i]] = 0;
+            }
+        }
+        if !this.literals.build(this.lengths, 0, 19) || !this.literals.complete {
+            this.fail("invalid code lengths code");
+            return false;
+        }
+        let total = literal_count + distance_count;
+        let index = 0;
+        while index < total {
+            let symbol = this.decode(this.literals);
+            if symbol < 0 {
+                return false;
+            }
+            if symbol < 16 {
+                this.lengths[index] = symbol;
+                index = index + 1;
+            } else {
+                let value = 0;
+                let repeat = 0;
+                if symbol == 16 {
+                    if index == 0 {
+                        this.fail("repeated code length without a previous length");
+                        return false;
+                    }
+                    value = this.lengths[index - 1];
+                    repeat = this.need(2) ? 3 + this.take(2) : 0;
+                } else if symbol == 17 {
+                    repeat = this.need(3) ? 3 + this.take(3) : 0;
+                } else {
+                    repeat = this.need(7) ? 11 + this.take(7) : 0;
+                }
+                if this.error != "" {
+                    return false;
+                }
+                if index + repeat > total {
+                    this.fail("too many code lengths");
+                    return false;
+                }
+                for (let k = 0; k < repeat; k = k + 1) {
+                    this.lengths[index] = value;
+                    index = index + 1;
+                }
+            }
+        }
+        if this.lengths[256] == 0 {
+            this.fail("missing end-of-block code");
+            return false;
+        }
+        if !this.literals.build(this.lengths, 0, literal_count) {
+            this.fail("invalid literal/length code lengths");
+            return false;
+        }
+        if !this.distances.build(this.lengths, literal_count, distance_count) {
+            this.fail("invalid distance code lengths");
+            return false;
+        }
+        return true;
+    }
+
+    fun read_word(big_endian: bool): uint {
+        let word = 0u;
+        for (let i = 0; i < 4; i = i + 1) {
+            let b = this.byte_value();
+            if b < 0 {
+                return 0u;
+            }
+            word = big_endian ? (word << 8u) | (uint)b : word | ((uint)b << (uint)(i * 8));
+        }
+        return word;
+    }
+
+    fun read_trailer(): void {
+        this.take(this.count & 7);
+        if this.gzip {
+            let crc = this.read_word(false);
+            let size = this.read_word(false);
+            if this.error != "" {
+                return;
+            }
+            if crc != this.crc.value() {
+                this.fail("compressed data checksum mismatch");
+                return;
+            }
+            if size != (uint)(this.total & 0xFFFFFFFFL) {
+                this.fail("compressed data length mismatch");
+                return;
+            }
+        } else {
+            let adler = this.read_word(true);
+            if this.error != "" {
+                return;
+            }
+            if adler != this.adler.value() {
+                this.fail("compressed data checksum mismatch");
+                return;
+            }
+        }
+        this.state = 5;
+    }
+}

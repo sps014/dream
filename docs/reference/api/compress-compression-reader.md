@@ -14,7 +14,7 @@ public class CompressionReader: Reader
 
 ## `read`
 
-Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.
+Returns up to `max_bytes` (at most 64 KiB) decoded bytes, or an empty array once the stream is complete. Malformed, truncated, oversized, or concatenated input returns an `ECOMPRESS` error, and source read failures are returned unchanged; either closes the reader.
 
 ```dream
 public fun read(max_bytes: int): Result<byte[], IoError>
@@ -22,7 +22,7 @@ public fun read(max_bytes: int): Result<byte[], IoError>
 
 ## `close`
 
-Releases codec state without closing the borrowed source.
+Stops decoding without closing the borrowed source; later reads fail.
 
 ```dream
 public fun close(): void

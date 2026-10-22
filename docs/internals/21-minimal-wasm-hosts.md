@@ -1,7 +1,6 @@
 # Minimal WASM hosts — implementation tracker
 
-Track the complete download: main WASM, generated JavaScript, required codec modules,
-and shader assets. Measurements include raw bytes, gzip level 9, and Brotli quality 11.
+Track the complete download: main WASM, generated JavaScript, and shader assets. Measurements include raw bytes, gzip level 9, and Brotli quality 11.
 
 ## Phase 1 — common ABI and native-only CLI
 
@@ -39,13 +38,11 @@ pin their future until completion or cancellation makes it safe to release.
 - [x] Use typed spans for GPU uploads and command streams.
 - [x] Preserve per-reference SHA-256 verification, device-loss handling, and asynchronous cleanup.
 - [x] Keep the device alive while child GPU resources still own it, matching native ownership.
-- [x] Separate CSV and compression modules and preload only live codec families.
-- [x] Copy live companions into aliases and remove stale codec companions on rebuild.
+- [x] Replace the CSV and compression codec modules with Dream implementations linked into the main WASM.
 - [x] Run real browser compute/readback and rendering assertions.
 
 Portable runtime primitives and shader parsing are C. Shader reflection/layout processing
-is Dream, as is CSV. The compression capability retains the mature Rust compression library;
-it is separate from the C guest runtime. Browser object creation and WebGPU queue calls
+is Dream, as are CSV and gzip/zlib compression. Browser object creation and WebGPU queue calls
 remain JavaScript because they invoke browser APIs.
 
 ## Phase 4 — standalone WASI
@@ -73,8 +70,8 @@ with other Dream tasks. Command components are experimental.
 - [x] Workspace tests.
 - [x] Full native and Node assertion corpora.
 - [x] Documentation tooling tests, API inventory, and strict MkDocs build.
-- [x] Generated capability/header, codec-module, C parser, and WIT-binding freshness checks.
-- [x] Fresh Hello World, CSV, and GPU compute builds produce byte-identical WASM, WAT, ABI metadata, JavaScript, and required companions.
+- [x] Generated guest-contract/header, C parser, and WIT-binding freshness checks.
+- [x] Fresh Hello World, CSV, and GPU compute builds produce byte-identical WASM, WAT, ABI metadata, and JavaScript.
 - [x] Real browser WebGPU and standalone WASI execution.
 - [x] Final refresh of recorded size reports and checks after the last edits.
 
@@ -97,8 +94,8 @@ Recorded results are in `tests/size/deployment-sizes.json`. Sizes below are byte
 | worker | 15,539 | 14,492 | 13,969 | 12,962 |
 | filesystem | 15,348 | 13,303 | 13,809 | 11,940 |
 | http | 46,339 | 45,235 | 37,925 | 36,901 |
-| csv | 161,334 | 81,695 | 140,216 | 70,996 |
-| compression | 163,643 | 112,346 | 141,730 | 96,951 |
+| csv | 161,334 | 18,705 | 140,216 | 16,289 |
+| compression | 163,643 | 26,974 | 141,730 | 23,004 |
 | gpu_compute | 37,070 | 36,957 | 31,607 | 31,577 |
 | gpu_render | 38,105 | 37,960 | 32,366 | 32,302 |
 
@@ -110,7 +107,6 @@ node scripts/check-wasm-size.mjs \
     --output target/size/hello.json
 ```
 
-Include `<stem>.compression.wasm` when the program uses compression.
 List each required artifact once. `--baseline previous.json` rejects gzip or Brotli growth.
 The standalone C parser binary under `tests/fixtures/` is a test harness, not a deployment dependency.
 
@@ -118,7 +114,6 @@ Regeneration checks:
 
 ```sh
 python scripts/generate-capabilities.py --check
-python scripts/build-data-codecs.py --check
 python scripts/build-gpu-parser.py --check
 python scripts/generate-wasi-bindings.py --check
 node scripts/bundle-runtime.mjs --check

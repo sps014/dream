@@ -54,7 +54,5 @@ fun main(): void {
         runner.write_text("import {pathToFileURL} from 'node:url';\nconst {run} = await import(pathToFileURL(" + json.dumps(str(runtime)) + "));\nawait run(pathToFileURL(" + json.dumps(str(wasm)) + "), {imports: {sum: values => Array.from(values).reduce((a,b) => a+b,0), invoke: callback => callback(7)}, stdout: text => process.stdout.write(text)});\n", encoding='utf-8')
         actual = command(['node', runner], work)
         assert actual == expected, (name, actual, expected)
-        if name in ['csv', 'compression']:
-            assert wasm.with_suffix('.' + name + '.wasm').is_file()
         print('PASS Node ' + name, flush=True)
 print('Packaged compiler smoke checks passed', flush=True)

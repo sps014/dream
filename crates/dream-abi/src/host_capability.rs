@@ -11,7 +11,6 @@ pub enum HostCapability {
     Process,
     Timezone,
     Net,
-    Data,
     Io,
     Window,
     Gpu,
@@ -19,13 +18,12 @@ pub enum HostCapability {
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 9] = [
         Self::Core,
         Self::Crypto,
         Self::Process,
         Self::Timezone,
         Self::Net,
-        Self::Data,
         Self::Io,
         Self::Window,
         Self::Gpu,
@@ -39,7 +37,6 @@ impl HostCapability {
             Self::Process => "process",
             Self::Timezone => "timezone",
             Self::Net => "net",
-            Self::Data => "data",
             Self::Io => "io",
             Self::Window => "window",
             Self::Gpu => "gpu",
@@ -54,7 +51,6 @@ impl HostCapability {
             Self::Process => "dream_host_process",
             Self::Timezone => "dream_host_timezone",
             Self::Net => "dream_host_net",
-            Self::Data => "dream_host_data",
             Self::Io => "dream_host_io",
             Self::Window => "dream_host_window",
             Self::Gpu => "dream_host_gpu",

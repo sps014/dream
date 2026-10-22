@@ -192,7 +192,7 @@ if [ ! -f "${BIN_DIR}/dream${EXT}" ] || [ ! -f "${BIN_DIR}/dreamer${EXT}" ]; the
   exit 1
 fi
 
-for capability in core unicode crypto process timezone net cli data io; do
+for capability in core crypto process timezone net io; do
   HOST_LIBRARY_OK=0
   for lib in "libdream_host_${capability}.so" "libdream_host_${capability}.dylib" "dream_host_${capability}.dll"; do
     if [ -f "${BIN_DIR}/${lib}" ]; then

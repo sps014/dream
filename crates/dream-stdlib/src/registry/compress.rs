@@ -1,7 +1,7 @@
 use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.compress",
-    deps: &["system.io", "system.json", "system.encoding"],
+    deps: &["system.io"],
     generators: &[],
     files: &[
         (
@@ -9,12 +9,32 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/compress/compression_format.dream"),
         ),
         (
-            "<std>/system/compress/compression_step.dream",
-            include_str!("../system/compress/compression_step.dream"),
+            "<std>/system/compress/crc32.dream",
+            include_str!("../system/compress/crc32.dream"),
         ),
         (
-            "<std>/system/compress/compression_codec.dream",
-            include_str!("../system/compress/compression_codec.dream"),
+            "<std>/system/compress/adler32.dream",
+            include_str!("../system/compress/adler32.dream"),
+        ),
+        (
+            "<std>/system/compress/huffman_table.dream",
+            include_str!("../system/compress/huffman_table.dream"),
+        ),
+        (
+            "<std>/system/compress/huffman_codes.dream",
+            include_str!("../system/compress/huffman_codes.dream"),
+        ),
+        (
+            "<std>/system/compress/bit_writer.dream",
+            include_str!("../system/compress/bit_writer.dream"),
+        ),
+        (
+            "<std>/system/compress/inflater.dream",
+            include_str!("../system/compress/inflater.dream"),
+        ),
+        (
+            "<std>/system/compress/deflater.dream",
+            include_str!("../system/compress/deflater.dream"),
         ),
         (
             "<std>/system/compress/compression.dream",

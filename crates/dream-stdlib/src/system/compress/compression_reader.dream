@@ -3,25 +3,19 @@ module system.compress;
 /// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
 @allow_cycle
 public class CompressionReader: Reader {
-    source: Reader;
-    codec: CompressionCodec;
-    input: byte[];
-    offset: int;
-    eof: bool;
+    inflater: Inflater;
     finished: bool;
     closed: bool;
 
-    internal constructor(source: Reader, codec: CompressionCodec) {
-        this.source = source;
-        this.codec = codec;
-        this.input = [];
-        this.offset = 0;
-        this.eof = false;
+    internal constructor(inflater: Inflater) {
+        this.inflater = inflater;
         this.finished = false;
         this.closed = false;
     }
 
-    /// Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.
+    /// Returns up to `max_bytes` (at most 64 KiB) decoded bytes, or an empty array once the stream
+    /// is complete. Malformed, truncated, oversized, or concatenated input returns an `ECOMPRESS`
+    /// error, and source read failures are returned unchanged; either closes the reader.
     public fun read(max_bytes: int): Result<byte[], IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
@@ -32,74 +26,24 @@ public class CompressionReader: Reader {
         if max_bytes == 0 || this.finished {
             return Result.Ok(Buffer.alloc<byte>(0));
         }
-        let capacity = max_bytes;
-        if capacity > 65536 {
-            capacity = 65536;
+        let next = this.inflater.read(max_bytes < 65536 ? max_bytes : 65536);
+        if next.is_err() {
+            this.close();
+            return next;
         }
-        while true {
-            if this.offset == this.input.length && !this.eof {
-                let next = this.source.read(8192);
-                if next.is_err() {
-                    this.close();
-                    return Result.Err(next.unwrap_err());
-                }
-                this.input = next.unwrap();
-                this.offset = 0;
-                this.eof = this.input.length == 0;
-                if this.input.length > 8192 {
-                    this.close();
-                    return Result.Err(IoError.other("", "reader exceeded requested size"));
-                }
-            }
-            let next = this.codec.step(
-                Span<byte>(this.input, this.offset, this.input.length - this.offset).to_array(),
-                capacity,
-                this.eof
-            );
-            if next.is_err() {
+        if this.inflater.done() {
+            let end = this.inflater.check_end();
+            if end.is_err() {
                 this.close();
-                return Result.Err(next.unwrap_err());
+                return Result.Err(end.unwrap_err());
             }
-            let progress = next.unwrap();
-            this.offset = this.offset + progress.consumed;
-            if progress.finished {
-                if this.offset < this.input.length {
-                    this.close();
-                    return Result.Err(
-                        IoError("", "ECOMPRESS", "trailing bytes after compressed stream")
-                    );
-                }
-                let extra = this.source.read(1);
-                if extra.is_err() {
-                    this.close();
-                    return Result.Err(extra.unwrap_err());
-                }
-                if extra.unwrap().length > 0 {
-                    this.close();
-                    return Result.Err(
-                        IoError("", "ECOMPRESS", "trailing bytes after compressed stream")
-                    );
-                }
-                this.finished = true;
-                this.codec.close();
-            }
-            if progress.bytes.length > 0 || this.finished {
-                return Result.Ok(progress.bytes);
-            }
-            if progress.consumed == 0 {
-                this.close();
-                return Result.Err(IoError("", "ECOMPRESS", "decoder made no progress"));
-            }
+            this.finished = true;
         }
+        return next;
     }
 
-    /// Releases codec state without closing the borrowed source.
+    /// Stops decoding without closing the borrowed source; later reads fail.
     public fun close(): void {
-        this.codec.close();
         this.closed = true;
-    }
-
-    del() {
-        this.close();
     }
 }

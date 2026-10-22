@@ -14,7 +14,7 @@ public class CompressionWriter: Writer
 
 ## `write`
 
-Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.
+Accepts up to 64 KiB and returns how many bytes were taken. Completed compressed output is written to the destination as blocks fill; exceeding the output limit returns an `ECOMPRESS` error and closes the writer.
 
 ```dream
 public fun write(bytes: byte[]): Result<int, IoError>
@@ -38,7 +38,7 @@ public fun finish(): Result<Unit, IoError>
 
 ## `close`
 
-Abandons codec state without finishing or closing the borrowed destination.
+Abandons the stream without finishing or closing the borrowed destination; later writes fail.
 
 ```dream
 public fun close(): void

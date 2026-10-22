@@ -8,10 +8,12 @@ public static class Compression {
         format: CompressionFormat = CompressionFormat.Gzip,
         max_output_bytes: long = 67108864L
     ): Result<CompressionWriter, IoError> {
+        Compression.check_limit(max_output_bytes)?;
         return Result.Ok(
             CompressionWriter(
                 destination,
-                CompressionCodec.create(format, true, max_output_bytes)?
+                Deflater(format == CompressionFormat.Gzip),
+                max_output_bytes
             )
         );
     }
@@ -22,8 +24,20 @@ public static class Compression {
         format: CompressionFormat = CompressionFormat.Gzip,
         max_output_bytes: long = 67108864L
     ): Result<CompressionReader, IoError> {
+        Compression.check_limit(max_output_bytes)?;
         return Result.Ok(
-            CompressionReader(source, CompressionCodec.create(format, false, max_output_bytes)?)
+            CompressionReader(
+                Inflater(source, format == CompressionFormat.Gzip, max_output_bytes)
+            )
         );
+    }
+
+    static fun check_limit(limit: long): Result<Unit, IoError> {
+        if limit < 0L || limit > 1073741824L {
+            return Result.Err(
+                IoError.invalid("", "compression output limit must be between zero and 1 GiB")
+            );
+        }
+        return Result.Ok(Unit());
     }
 }

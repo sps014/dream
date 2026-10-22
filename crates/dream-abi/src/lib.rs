@@ -5,7 +5,6 @@
 
 pub mod attributes;
 pub mod c_abi;
-pub mod capabilities;
 pub mod exports;
 pub mod gpu_bindings;
 pub mod guest_contract;

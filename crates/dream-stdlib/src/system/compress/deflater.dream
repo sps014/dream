@@ -1,0 +1,438 @@
+module system.compress;
+
+/// Streaming DEFLATE encoder (RFC 1951) inside gzip (RFC 1952) or zlib (RFC 1950) framing. Input
+/// is grouped into blocks of up to 64 KiB, matched against a 32 KiB history, and each block is
+/// emitted as whichever of the stored, fixed-Huffman, or dynamic-Huffman encodings is smallest.
+internal class Deflater {
+    gzip: bool;
+    // 32 KiB of history followed by up to 64 KiB of pending input; data[start..end] is pending.
+    data: byte[];
+    start: int;
+    end: int;
+    total_in: long;
+    // Hash-chain heads and links hold position + 1, with 0 meaning no earlier position. Links are
+    // indexed by position & 32767, which survives the 64 KiB window slide.
+    head: int[];
+    prev: int[];
+    // A literal byte, or (length << 16) | distance for a match.
+    tokens: int[];
+    token_count: int;
+    literal_freq: int[];
+    distance_freq: int[];
+    length_code: int[];
+    distance_code: int[];
+    length_base: int[];
+    length_extra: int[];
+    distance_base: int[];
+    distance_extra: int[];
+    fixed_lengths: int[];
+    fixed_codes: int[];
+    fixed_distance_lengths: int[];
+    fixed_distance_codes: int[];
+    out: BitWriter;
+    crc: Crc32;
+    adler: Adler32;
+
+    internal constructor(gzip: bool) {
+        this.gzip = gzip;
+        this.data = Array.alloc<byte>(98304);
+        this.start = 0;
+        this.end = 0;
+        this.total_in = 0L;
+        this.head = Array.alloc<int>(32768);
+        this.prev = Array.alloc<int>(32768);
+        this.tokens = Array.alloc<int>(65536);
+        this.token_count = 0;
+        this.literal_freq = Array.alloc<int>(286);
+        this.distance_freq = Array.alloc<int>(30);
+        this.length_base = [
+            3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99,
+            115, 131, 163, 195, 227, 258
+        ];
+        this.length_extra = [
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
+        ];
+        this.distance_base = [
+            1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025,
+            1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
+        ];
+        this.distance_extra = [
+            0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12,
+            12, 13, 13
+        ];
+        this.length_code = Array.alloc<int>(259);
+        for (let code = 0; code < 28; code = code + 1) {
+            let base = this.length_base[code];
+            for (let len = base; len < base + (1 << this.length_extra[code]); len = len + 1) {
+                this.length_code[len] = code;
+            }
+        }
+        this.length_code[258] = 28;
+        // Distances up to 256 index directly; longer ones by (distance - 1) >> 7, as in zlib.
+        this.distance_code = Array.alloc<int>(512);
+        for (let code = 0; code < 30; code = code + 1) {
+            let base = this.distance_base[code];
+            for (let d = base; d < base + (1 << this.distance_extra[code]); d = d + 1) {
+                this.distance_code[d <= 256 ? d - 1 : 256 + ((d - 1) >> 7)] = code;
+            }
+        }
+        this.fixed_lengths = Array.alloc<int>(288);
+        for (let i = 0; i < 288; i = i + 1) {
+            this.fixed_lengths[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8;
+        }
+        this.fixed_codes = HuffmanCodes.codes(this.fixed_lengths, 288);
+        this.fixed_distance_lengths = Array.alloc<int>(30);
+        for (let i = 0; i < 30; i = i + 1) {
+            this.fixed_distance_lengths[i] = 5;
+        }
+        this.fixed_distance_codes = HuffmanCodes.codes(this.fixed_distance_lengths, 30);
+        this.out = BitWriter();
+        this.crc = Crc32();
+        this.adler = Adler32();
+        let header: byte[] = gzip
+            ? [(byte)0x1F, (byte)0x8B, (byte)8, (byte)0, (byte)0, (byte)0, (byte)0, (byte)0, (byte)0, (byte)0xFF]
+            : [(byte)0x78, (byte)0x9C];
+        for let b in header {
+            this.out.push(b);
+        }
+    }
+
+    /// Buffers `bytes[0..count]` and returns any compressed output completed so far.
+    internal fun write(borrow bytes: byte[], count: int): byte[] {
+        if this.gzip {
+            this.crc.update(bytes, 0, count);
+        } else {
+            this.adler.update(bytes, 0, count);
+        }
+        let i = 0;
+        while i < count {
+            let run = count - i;
+            let block_room = 65536 - (this.end - this.start);
+            let data_room = this.data.length - this.end;
+            run = run < block_room ? run : block_room;
+            run = run < data_room ? run : data_room;
+            for (let k = 0; k < run; k = k + 1) {
+                this.data[this.end + k] = bytes[i + k];
+            }
+            this.end = this.end + run;
+            i = i + run;
+            if this.end - this.start == 65536 || this.end == this.data.length {
+                this.compress_block(false);
+            }
+            if this.end == this.data.length {
+                this.slide();
+            }
+        }
+        return this.out.take();
+    }
+
+    /// Compresses pending input and ends on a byte boundary with an empty stored block, so a
+    /// decoder can reproduce every byte written so far.
+    internal fun flush(): byte[] {
+        this.compress_block(false);
+        this.out.put(0, 3);
+        this.out.align();
+        this.out.push((byte)0);
+        this.out.push((byte)0);
+        this.out.push((byte)0xFF);
+        this.out.push((byte)0xFF);
+        return this.out.take();
+    }
+
+    /// Compresses pending input as the final block and appends the checksum trailer.
+    internal fun finish(): byte[] {
+        this.compress_block(true);
+        this.out.align();
+        if this.gzip {
+            this.push_word(this.crc.value(), false);
+            this.push_word((uint)(this.total_in & 0xFFFFFFFFL), false);
+        } else {
+            this.push_word(this.adler.value(), true);
+        }
+        return this.out.take();
+    }
+
+    fun push_word(word: uint, big_endian: bool): void {
+        for (let i = 0; i < 4; i = i + 1) {
+            let shift = big_endian ? (uint)(24 - i * 8) : (uint)(i * 8);
+            this.out.push((byte)(word >> shift));
+        }
+    }
+
+    fun slide(): void {
+        for (let i = 0; i < 32768; i = i + 1) {
+            this.data[i] = this.data[i + 65536];
+        }
+        this.start = this.start - 65536;
+        this.end = this.end - 65536;
+        for (let i = 0; i < 32768; i = i + 1) {
+            this.head[i] = this.head[i] > 65536 ? this.head[i] - 65536 : 0;
+            this.prev[i] = this.prev[i] > 65536 ? this.prev[i] - 65536 : 0;
+        }
+    }
+
+    fun hash(p: int): int {
+        return (((int)this.data[p] << 10) ^ ((int)this.data[p + 1] << 5) ^ (int)this.data[p + 2])
+            & 32767;
+    }
+
+    fun insert(p: int): void {
+        let h = this.hash(p);
+        this.prev[p & 32767] = this.head[h];
+        this.head[h] = p + 1;
+    }
+
+    fun distance_symbol(distance: int): int {
+        return this.distance_code[distance <= 256 ? distance - 1 : 256 + ((distance - 1) >> 7)];
+    }
+
+    fun tokenize(): void {
+        for (let i = 0; i < 286; i = i + 1) {
+            this.literal_freq[i] = 0;
+        }
+        for (let i = 0; i < 30; i = i + 1) {
+            this.distance_freq[i] = 0;
+        }
+        this.token_count = 0;
+        let p = this.start;
+        while p < this.end {
+            let best_length = 0;
+            let best_distance = 0;
+            if this.end - p >= 3 {
+                let h = this.hash(p);
+                let candidate = this.head[h] - 1;
+                let max_length = this.end - p < 258 ? this.end - p : 258;
+                let chain = 128;
+                while candidate >= 0 && p - candidate <= 32768 && chain > 0 {
+                    if this.data[candidate + best_length] == this.data[p + best_length] {
+                        let len = 0;
+                        while len < max_length && this.data[candidate + len] == this.data[p + len] {
+                            len = len + 1;
+                        }
+                        if len > best_length {
+                            best_length = len;
+                            best_distance = p - candidate;
+                            if len == max_length {
+                                break;
+                            }
+                        }
+                    }
+                    let next = this.prev[candidate & 32767] - 1;
+                    if next >= candidate {
+                        break;
+                    }
+                    candidate = next;
+                    chain = chain - 1;
+                }
+                this.prev[p & 32767] = this.head[h];
+                this.head[h] = p + 1;
+            }
+            if best_length >= 3 {
+                this.tokens[this.token_count] = (best_length << 16) | best_distance;
+                this.token_count = this.token_count + 1;
+                let length_symbol = 257 + this.length_code[best_length];
+                this.literal_freq[length_symbol] = this.literal_freq[length_symbol] + 1;
+                let distance_symbol = this.distance_symbol(best_distance);
+                this.distance_freq[distance_symbol] = this.distance_freq[distance_symbol] + 1;
+                for (let q = p + 1; q < p + best_length; q = q + 1) {
+                    if this.end - q >= 3 {
+                        this.insert(q);
+                    }
+                }
+                p = p + best_length;
+            } else {
+                let literal = (int)this.data[p];
+                this.tokens[this.token_count] = literal;
+                this.token_count = this.token_count + 1;
+                this.literal_freq[literal] = this.literal_freq[literal] + 1;
+                p = p + 1;
+            }
+        }
+        this.literal_freq[256] = 1;
+    }
+
+    /// Bits needed for the block's symbols and extra bits with the given code lengths.
+    fun data_bits(borrow lengths: int[], borrow distance_lengths: int[]): long {
+        let bits = 0L;
+        for (let s = 0; s < 286; s = s + 1) {
+            let extra = s > 256 ? this.length_extra[s - 257] : 0;
+            bits = bits + (long)(this.literal_freq[s] * (lengths[s] + extra));
+        }
+        for (let d = 0; d < 30; d = d + 1) {
+            bits = bits + (long)(this.distance_freq[d] * (distance_lengths[d] + this.distance_extra[d]));
+        }
+        return bits;
+    }
+
+    fun compress_block(last: bool): void {
+        let pending = this.end - this.start;
+        if pending == 0 && !last {
+            return;
+        }
+        this.total_in = this.total_in + (long)pending;
+        this.tokenize();
+        let order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        let lengths = HuffmanCodes.lengths(this.literal_freq, 286, 15);
+        let distance_lengths = HuffmanCodes.lengths(this.distance_freq, 30, 15);
+        let literal_count = 286;
+        while literal_count > 257 && lengths[literal_count - 1] == 0 {
+            literal_count = literal_count - 1;
+        }
+        let distance_count = 30;
+        while distance_count > 1 && distance_lengths[distance_count - 1] == 0 {
+            distance_count = distance_count - 1;
+        }
+        let all = Array.alloc<int>(literal_count + distance_count);
+        for (let i = 0; i < literal_count; i = i + 1) {
+            all[i] = lengths[i];
+        }
+        for (let i = 0; i < distance_count; i = i + 1) {
+            all[literal_count + i] = distance_lengths[i];
+        }
+        // Run-length coded lengths: symbol + (repeat extra value << 8).
+        let runs = Array.alloc<int>(all.length);
+        let run_count = 0;
+        let code_freq = Array.alloc<int>(19);
+        let i = 0;
+        while i < all.length {
+            let value = all[i];
+            let run = 1;
+            while i + run < all.length && all[i + run] == value {
+                run = run + 1;
+            }
+            i = i + run;
+            if value == 0 {
+                while run >= 11 {
+                    let r = run < 138 ? run : 138;
+                    runs[run_count] = 18 + ((r - 11) << 8);
+                    run_count = run_count + 1;
+                    code_freq[18] = code_freq[18] + 1;
+                    run = run - r;
+                }
+                if run >= 3 {
+                    runs[run_count] = 17 + ((run - 3) << 8);
+                    run_count = run_count + 1;
+                    code_freq[17] = code_freq[17] + 1;
+                    run = 0;
+                }
+            } else {
+                runs[run_count] = value;
+                run_count = run_count + 1;
+                code_freq[value] = code_freq[value] + 1;
+                run = run - 1;
+                while run >= 3 {
+                    let r = run < 6 ? run : 6;
+                    runs[run_count] = 16 + ((r - 3) << 8);
+                    run_count = run_count + 1;
+                    code_freq[16] = code_freq[16] + 1;
+                    run = run - r;
+                }
+            }
+            while run > 0 {
+                runs[run_count] = value;
+                run_count = run_count + 1;
+                code_freq[value] = code_freq[value] + 1;
+                run = run - 1;
+            }
+        }
+        let code_lengths = HuffmanCodes.lengths(code_freq, 19, 7);
+        let code_count = 19;
+        while code_count > 4 && code_lengths[order[code_count - 1]] == 0 {
+            code_count = code_count - 1;
+        }
+        let dynamic_bits = 17L + (long)(3 * code_count) + this.data_bits(lengths, distance_lengths);
+        for (let s = 0; s < 19; s = s + 1) {
+            let extra = s == 16 ? 2 : s == 17 ? 3 : s == 18 ? 7 : 0;
+            dynamic_bits = dynamic_bits + (long)(code_freq[s] * (code_lengths[s] + extra));
+        }
+        let fixed_bits = 3L + this.data_bits(this.fixed_lengths, this.fixed_distance_lengths);
+        let stored_blocks = pending == 0 ? 1 : (pending + 65534) / 65535;
+        let stored_bits = (long)(pending + 5 * stored_blocks) * 8L + 7L;
+        let flag = last ? 1 : 0;
+        if stored_bits <= fixed_bits && stored_bits <= dynamic_bits {
+            this.emit_stored(last, pending);
+        } else if fixed_bits <= dynamic_bits {
+            this.out.put(flag | 2, 3);
+            this.emit_tokens(
+                this.fixed_lengths,
+                this.fixed_codes,
+                this.fixed_distance_lengths,
+                this.fixed_distance_codes
+            );
+        } else {
+            this.out.put(flag | 4, 3);
+            this.out.put(literal_count - 257, 5);
+            this.out.put(distance_count - 1, 5);
+            this.out.put(code_count - 4, 4);
+            for (let k = 0; k < code_count; k = k + 1) {
+                this.out.put(code_lengths[order[k]], 3);
+            }
+            let codes = HuffmanCodes.codes(code_lengths, 19);
+            for (let k = 0; k < run_count; k = k + 1) {
+                let symbol = runs[k] & 255;
+                this.out.put(codes[symbol], code_lengths[symbol]);
+                if symbol >= 16 {
+                    this.out.put(runs[k] >> 8, symbol == 16 ? 2 : symbol == 17 ? 3 : 7);
+                }
+            }
+            this.emit_tokens(
+                lengths,
+                HuffmanCodes.codes(lengths, 286),
+                distance_lengths,
+                HuffmanCodes.codes(distance_lengths, 30)
+            );
+        }
+        this.start = this.end;
+    }
+
+    fun emit_stored(last: bool, pending: int): void {
+        let offset = this.start;
+        let remaining = pending;
+        while true {
+            let chunk = remaining < 65535 ? remaining : 65535;
+            let final = last && chunk == remaining;
+            this.out.put(final ? 1 : 0, 3);
+            this.out.align();
+            this.out.push((byte)chunk);
+            this.out.push((byte)(chunk >> 8));
+            this.out.push((byte)(chunk ^ 0xFFFF));
+            this.out.push((byte)((chunk ^ 0xFFFF) >> 8));
+            for (let k = 0; k < chunk; k = k + 1) {
+                this.out.push(this.data[offset + k]);
+            }
+            offset = offset + chunk;
+            remaining = remaining - chunk;
+            if remaining == 0 {
+                break;
+            }
+        }
+    }
+
+    fun emit_tokens(
+        borrow lengths: int[],
+        borrow codes: int[],
+        borrow distance_lengths: int[],
+        borrow distance_codes: int[]
+    ): void {
+        for (let k = 0; k < this.token_count; k = k + 1) {
+            let token = this.tokens[k];
+            if token < 256 {
+                this.out.put(codes[token], lengths[token]);
+            } else {
+                let length = token >> 16;
+                let distance = token & 0xFFFF;
+                let code = this.length_code[length];
+                this.out.put(codes[257 + code], lengths[257 + code]);
+                if this.length_extra[code] > 0 {
+                    this.out.put(length - this.length_base[code], this.length_extra[code]);
+                }
+                let d = this.distance_symbol(distance);
+                this.out.put(distance_codes[d], distance_lengths[d]);
+                if this.distance_extra[d] > 0 {
+                    this.out.put(distance - this.distance_base[d], this.distance_extra[d]);
+                }
+            }
+        }
+        this.out.put(codes[256], lengths[256]);
+    }
+}

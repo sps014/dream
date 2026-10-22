@@ -1,7 +1,0 @@
-{
-  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
-  "source_sha256": "6e344cf24728f3edf2ea4b2f44441a87d6407d9311c83b5f2dc90fa14d104704",
-  "families": {
-    "compression": "600cdda8cea111258ef041d3afe4b21aa9a286730102fdc49d6504cbf2ddfbec"
-  }
-}

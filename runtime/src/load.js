@@ -1,7 +1,6 @@
 import { bindTypedImport } from "./typed_imports.js";
-import { HAS_GENERIC_IMPORTS, HAS_ASYNC_IMPORTS, HAS_DATA_CODECS, DATA_CODEC_FILES } from "./features.js";
+import { HAS_GENERIC_IMPORTS, HAS_ASYNC_IMPORTS } from "./features.js";
 import { wrapAsyncImport } from "./async.js";
-import { loadDataCodecs } from "./hosts/data.js";
 import { TAGS, HEAP_HEADER_SIZE } from "./core.js";
 import { DreamInstance } from "./instance.js";
 import {
@@ -155,22 +154,12 @@ function makeLinearMemory(wasmModule, wasmBytes) {
  * @param {string|object} [options.abi] - URL/path to (or parsed) `.abi.json` for auto-marshaling.
  * @param {function} [options.stdout] - Custom output sink for print builtins.
  * @param {function} [options.dreamHosts] - Optional host-factory composer; defaults to full module.
- * @param {object} [options.dataCodecs] - Codec companion overrides keyed by host field.
  * @returns {Promise<DreamInstance>}
  */
 export async function load(source, options = {}) {
   const wasmBytes = await fetchBytes(source);
   const wasmModule = await WebAssembly.compile(wasmBytes);
   const abi = await resolveAbi(wasmModule, source, options);
-  if (HAS_DATA_CODECS && !options.dreamHosts) {
-    const imports = WebAssembly.Module.imports(wasmModule);
-    for (const [field, file] of Object.entries(DATA_CODEC_FILES)) {
-      const override = abi?.externs?.some(entry => entry.module === "Dream" && entry.field === field && options.imports?.[entry.name]);
-      if (!override && imports.some(entry => entry.module === "Dream" && entry.name === field)) {
-        await loadDataCodecs(field, options.dataCodecs?.[field] ?? new URL(file, import.meta.url));
-      }
-    }
-  }
 
   if (isNode && !options.__skipNodePreload) {
     try {

@@ -8,7 +8,6 @@
 //! generates the data-driven `defaultDreamModule` composer. The chunk table lives in
 //! `runtime/src/chunks.manifest`, shared with `scripts/bundle-runtime.mjs`.
 
-mod companions;
 mod host_exports;
 mod requirements;
 mod typed;
@@ -164,7 +163,7 @@ fn assemble_selective_runtime(
     live_imports: &[LiveImport],
     target: JsRuntimeTarget,
 ) -> Result<String, Error> {
-    assemble_runtime(live_imports, target, true, "dream-data.wasm")
+    assemble_runtime(live_imports, target, true)
 }
 
 #[cfg(test)]
@@ -172,21 +171,14 @@ fn assemble_runtime(
     live_imports: &[LiveImport],
     target: JsRuntimeTarget,
     async_imports: bool,
-    codecs_file: &str,
 ) -> Result<String, Error> {
-    assemble_for_requirements(
-        live_imports,
-        target,
-        Requirements::full(async_imports),
-        codecs_file,
-    )
+    assemble_for_requirements(live_imports, target, Requirements::full(async_imports))
 }
 
 fn assemble_for_requirements(
     live_imports: &[LiveImport],
     target: JsRuntimeTarget,
     requirements: Requirements,
-    codecs_file: &str,
 ) -> Result<String, Error> {
     let manifest = parse_manifest(include_str!("../../runtime/src/chunks.manifest"));
     let mut chunks: BTreeSet<&str> = BTreeSet::new();
@@ -220,14 +212,7 @@ fn assemble_for_requirements(
     for rel in &manifest.always {
         if rel == "features.js" {
             out.push_str(&requirements.constants());
-            out.push_str(&format!(
-                "const HAS_ASYNC_IMPORTS = {async_imports};\nconst HAS_DATA_CODECS = {};\nconst DATA_CODEC_FILES = {};\n",
-                chunks.contains("data"),
-                serde_json::to_string(&[("dataCompression", "compression")].into_iter()
-                    .filter(|(field, _)| fields.contains(field))
-                    .map(|(field, family)| (field, format!("{}.{family}.wasm", codecs_file.strip_suffix(".data.wasm").unwrap_or("dream"))))
-                    .collect::<std::collections::BTreeMap<_,_>>()).map_err(Error::other)?,
-            ));
+            out.push_str(&format!("const HAS_ASYNC_IMPORTS = {async_imports};\n"));
             continue;
         }
         let path = src.join(rel);
@@ -334,22 +319,9 @@ pub(crate) fn emit_selective_runtimes(
     let abi: serde_json::Value =
         serde_json::from_slice(&fs::read(&abi_path)?).map_err(Error::other)?;
     let requirements = Requirements::from_abi(&abi, &live_imports)?;
-    let codecs_path = Path::new(wat_path).with_extension("data.wasm");
-    let codecs_file = codecs_path
-        .file_name()
-        .ok_or_else(|| Error::other("missing WASM artifact filename"))?
-        .to_string_lossy();
-    if !targets.is_empty() {
-        written.extend(companions::emit(
-            Path::new(wat_path),
-            &live_imports,
-            minify,
-        )?);
-    }
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
-        let mut text =
-            assemble_for_requirements(&live_imports, target, requirements, &codecs_file)?;
+        let mut text = assemble_for_requirements(&live_imports, target, requirements)?;
         text = text.replace(
             "function bindTypedImport() { return null; }",
             &typed::generate(&abi, &live_imports)?,

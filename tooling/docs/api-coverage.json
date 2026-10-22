@@ -5187,7 +5187,7 @@
       {
         "signature": "public static fun reader( source: Reader, format: CompressionFormat = CompressionFormat.Gzip, max_output_bytes: long = 67108864L ): Result<CompressionReader, IoError>",
         "description": "Creates a strict single-stream decoder; the output limit prevents unbounded expansion.",
-        "line": 20,
+        "line": 22,
         "page": "reference/api/compress-compression.md"
       }
     ]
@@ -5230,14 +5230,14 @@
       },
       {
         "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
-        "description": "Returns partial decoded bytes; malformed, truncated, oversized, or concatenated input returns an error.",
-        "line": 25,
+        "description": "Returns up to `max_bytes` (at most 64 KiB) decoded bytes, or an empty array once the stream is complete. Malformed, truncated, oversized, or concatenated input returns an `ECOMPRESS` error, and source read failures are returned unchanged; either closes the reader.",
+        "line": 19,
         "page": "reference/api/compress-compression-reader.md"
       },
       {
         "signature": "public fun close(): void",
-        "description": "Releases codec state without closing the borrowed source.",
-        "line": 97,
+        "description": "Stops decoding without closing the borrowed source; later reads fail.",
+        "line": 46,
         "page": "reference/api/compress-compression-reader.md"
       }
     ]
@@ -5255,26 +5255,26 @@
       },
       {
         "signature": "public fun write(bytes: byte[]): Result<int, IoError>",
-        "description": "Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.",
-        "line": 17,
+        "description": "Accepts up to 64 KiB and returns how many bytes were taken. Completed compressed output is written to the destination as blocks fill; exceeding the output limit returns an `ECOMPRESS` error and closes the writer.",
+        "line": 23,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun flush(): Result<Unit, IoError>",
         "description": "Emits a synchronization boundary and flushes the borrowed destination without ending the stream.",
-        "line": 52,
+        "line": 36,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun finish(): Result<Unit, IoError>",
         "description": "Finishes the trailer, releases encoder state, and flushes the borrowed destination.",
-        "line": 75,
+        "line": 45,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun close(): void",
-        "description": "Abandons codec state without finishing or closing the borrowed destination.",
-        "line": 103,
+        "description": "Abandons the stream without finishing or closing the borrowed destination; later writes fail.",
+        "line": 55,
         "page": "reference/api/compress-compression-writer.md"
       }
     ]

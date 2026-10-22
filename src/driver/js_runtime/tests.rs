@@ -47,19 +47,17 @@ fn env_hosts_are_selected_from_the_final_import_inventory() {
 
 #[test]
 fn synchronous_runtime_omits_async_bridge_but_cancellation_keeps_it() {
-    let sync = assemble_runtime(&[], JsRuntimeTarget::Node, false, "dream-data.wasm").unwrap();
+    let sync = assemble_runtime(&[], JsRuntimeTarget::Node, false).unwrap();
     assert!(!sync.contains("function wrapAsyncImport("));
     assert!(!sync.contains("const runLoopPumps"));
     let compressed = minify_js_source(&sync).unwrap();
     assert!(!compressed.contains("wrapAsyncImport"));
     assert!(!compressed.contains("awaited JS promise rejected"));
-    let async_runtime =
-        assemble_runtime(&[], JsRuntimeTarget::Node, true, "dream-data.wasm").unwrap();
+    let async_runtime = assemble_runtime(&[], JsRuntimeTarget::Node, true).unwrap();
     assert!(async_runtime.contains("function wrapAsyncImport("));
     assert!(compressed.len() < minify_js_source(&async_runtime).unwrap().len());
     let cancel = vec![("Dream".into(), "cancellationWait".into())];
-    let selected =
-        assemble_runtime(&cancel, JsRuntimeTarget::Web, false, "dream-data.wasm").unwrap();
+    let selected = assemble_runtime(&cancel, JsRuntimeTarget::Web, false).unwrap();
     assert!(selected.contains("function wrapAsyncImport("));
     assert!(selected.contains("const HAS_ASYNC_IMPORTS = true;"));
 }
@@ -84,13 +82,7 @@ fn synchronous_selected_loader_executes_without_async_glue() {
     .unwrap();
     let live = vec![("env".into(), "print_err_char".into())];
     let requirements = Requirements::from_abi(&serde_json::json!({"externs": []}), &live).unwrap();
-    let source = assemble_for_requirements(
-        &live,
-        JsRuntimeTarget::Node,
-        requirements,
-        "dream-data.wasm",
-    )
-    .unwrap();
+    let source = assemble_for_requirements(&live, JsRuntimeTarget::Node, requirements).unwrap();
     for unused in [
         "\n  registerHandle(value) {",
         "\n  callback(index,",
@@ -120,57 +112,6 @@ fn synchronous_selected_loader_executes_without_async_glue() {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
     }
-}
-
-#[test]
-fn codecs_are_binary_companions_only_for_live_codec_imports() {
-    let dir = tempfile::tempdir().unwrap();
-    let output = dir.path().join("application.wat");
-    fs::write(output.with_extension("abi.json"), r#"{"externs":[]}"#).unwrap();
-    let wasm = wat::parse_str(
-        r#"(module (import "Dream" "dataCompression" (func (param i32) (result i32))))"#,
-    )
-    .unwrap();
-    let targets = [JsRuntimeTarget::Web, JsRuntimeTarget::Node];
-    let paths = emit_selective_runtimes(
-        output.to_str().unwrap(),
-        &wasm,
-        &targets,
-        true,
-        &indexmap::IndexMap::new(),
-    )
-    .unwrap();
-    let companion = output.with_extension("compression.wasm");
-    assert!(paths.contains(&companion));
-    assert_eq!(
-        fs::read(&companion).unwrap(),
-        include_bytes!("../../../runtime/dream-compression.wasm"),
-    );
-    for target in targets {
-        let runtime =
-            fs::read_to_string(output.with_extension(target.runtime_extension())).unwrap();
-        assert!(runtime.contains("application.compression.wasm"));
-        assert!(!runtime.contains("dataCodecsBase64"));
-    }
-    let empty = wat::parse_str("(module)").unwrap();
-    emit_selective_runtimes(
-        output.to_str().unwrap(),
-        &empty,
-        &targets,
-        true,
-        &indexmap::IndexMap::new(),
-    )
-    .unwrap();
-    for suffix in [
-        "compression.wasm",
-        "compression.wasm.gz",
-        "compression.wasm.br",
-    ] {
-        assert!(!output.with_extension(suffix).exists());
-    }
-    let runtime = fs::read_to_string(output.with_extension("web.runtime.js")).unwrap();
-    assert!(!runtime.contains("application.csv.wasm"));
-    assert!(!runtime.contains("failed to fetch data codecs"));
 }
 
 #[test]

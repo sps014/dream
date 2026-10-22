@@ -118,7 +118,7 @@ edition = "2024"
 
 [workspace]
 default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net",
-    "crates/dream-host-data", "crates/dream-host-io", "crates/dream-host-window", "crates/dream-host-gpu", "crates/dream-host-audio"]
+    "crates/dream-host-io", "crates/dream-host-window", "crates/dream-host-gpu", "crates/dream-host-audio"]
 members = [
     ".",
     "crates/dream-text",
@@ -137,7 +137,6 @@ members = [
     "crates/dream-host-process",
     "crates/dream-host-timezone",
     "crates/dream-host-net",
-    "crates/dream-host-data",
     "crates/dream-host-io",
     "crates/dream-host-window",
     "crates/dream-host-gpu",
@@ -151,11 +150,3 @@ members = [
 # crate's default `native` feature.
 resolver = "3"
 
-# Portable codec capability modules are separate from the C guest runtime.
-[profile.capability-wasm]
-inherits = "release"
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true

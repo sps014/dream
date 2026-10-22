@@ -188,8 +188,8 @@ TCP_NODELAY, and independent accepted-stream ownership. UDP preserves datagram
 boundaries, empty messages, explicit truncation, broadcast and TTL options.
 Close wakes pending operations. Browsers expose unsupported raw-socket capability.
 
-Streaming gzip/zlib wrappers share `flate2`/`zlib-rs` on native and WASM adapters,
-with chunk/output limits, checksum/truncation errors, explicit finish, and strict
+Streaming gzip/zlib wrappers are DEFLATE, CRC-32, and Adler-32 written in Dream,
+identical on every target, with chunk/output limits, checksum/truncation errors, explicit finish, and strict
 single-stream termination. List, Queue, Map, and Set share additional-element
 reserve semantics and seeded operation-sequence tests. Additional cryptography
 remains conditional on concrete application requirements; no speculative

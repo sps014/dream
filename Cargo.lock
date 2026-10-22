@@ -1083,7 +1083,6 @@ dependencies = [
  "dream-host-audio",
  "dream-host-core",
  "dream-host-crypto",
- "dream-host-data",
  "dream-host-gpu",
  "dream-host-io",
  "dream-host-net",
@@ -1131,18 +1130,6 @@ dependencies = [
  "dream-host-core",
  "getrandom 0.2.17",
  "jsonwebtoken",
- "serde_json",
-]
-
-[[package]]
-name = "dream-host-data"
-version = "0.1.0"
-dependencies = [
- "dream-abi",
- "dream-host-abi",
- "dream-host-core",
- "flate2",
- "hex",
  "serde_json",
 ]
 
@@ -1547,7 +1534,6 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.8.9",
- "zlib-rs",
 ]
 
 [[package]]
@@ -5722,12 +5708,6 @@ dependencies = [
  "thiserror 2.0.18",
  "zopfli",
 ]
-
-[[package]]
-name = "zlib-rs"
-version = "0.6.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"

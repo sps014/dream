@@ -1,0 +1,126 @@
+module system.compress;
+
+/// Builds complete, length-limited canonical Huffman codes for the DEFLATE encoder.
+internal static class HuffmanCodes {
+    /// Code lengths for `freq[0..n]` with no code longer than `limit` bits. At least two symbols
+    /// always receive codes so every code is complete.
+    internal static fun lengths(borrow freq: int[], n: int, limit: int): int[] {
+        let weights = Array.alloc<int>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            weights[i] = freq[i];
+        }
+        while true {
+            let lengths = HuffmanCodes.tree_lengths(weights, n);
+            let longest = 0;
+            for (let i = 0; i < n; i = i + 1) {
+                longest = lengths[i] > longest ? lengths[i] : longest;
+            }
+            if longest <= limit {
+                return lengths;
+            }
+            // Flattening the weights shortens the deepest codes; all-ones weights give a balanced
+            // tree, which fits every DEFLATE limit.
+            for (let i = 0; i < n; i = i + 1) {
+                if weights[i] > 0 {
+                    weights[i] = (weights[i] >> 1) | 1;
+                }
+            }
+        }
+    }
+
+    /// Canonical codes for `lengths[0..n]`, bit-reversed for least-significant-first output.
+    internal static fun codes(borrow lengths: int[], n: int): int[] {
+        let counts = Array.alloc<int>(16);
+        for (let i = 0; i < n; i = i + 1) {
+            counts[lengths[i]] = counts[lengths[i]] + 1;
+        }
+        counts[0] = 0;
+        let next = Array.alloc<int>(16);
+        let code = 0;
+        for (let len = 1; len < 16; len = len + 1) {
+            code = (code + counts[len - 1]) << 1;
+            next[len] = code;
+        }
+        let codes = Array.alloc<int>(n);
+        for (let i = 0; i < n; i = i + 1) {
+            let len = lengths[i];
+            if len > 0 {
+                let value = next[len];
+                next[len] = value + 1;
+                let reversed = 0;
+                for (let b = 0; b < len; b = b + 1) {
+                    reversed = (reversed << 1) | ((value >> b) & 1);
+                }
+                codes[i] = reversed;
+            }
+        }
+        return codes;
+    }
+
+    static fun tree_lengths(borrow weights: int[], n: int): int[] {
+        let lengths = Array.alloc<int>(n);
+        let order = Array.alloc<int>(n);
+        let m = 0;
+        for (let i = 0; i < n; i = i + 1) {
+            if weights[i] > 0 {
+                order[m] = i;
+                m = m + 1;
+            }
+        }
+        if m < 2 {
+            let only = m == 1 ? order[0] : 0;
+            lengths[only] = 1;
+            lengths[only == 0 ? 1 : 0] = 1;
+            return lengths;
+        }
+        for (let i = 1; i < m; i = i + 1) {
+            let symbol = order[i];
+            let j = i;
+            while j > 0 && weights[order[j - 1]] > weights[symbol] {
+                order[j] = order[j - 1];
+                j = j - 1;
+            }
+            order[j] = symbol;
+        }
+        // Leaves occupy nodes 0..m in ascending weight; merged nodes follow in creation order, so
+        // both queues stay sorted and each merge takes the two lightest fronts.
+        let weight = Array.alloc<int>(2 * m);
+        let parent = Array.alloc<int>(2 * m);
+        for (let i = 0; i < m; i = i + 1) {
+            weight[i] = weights[order[i]];
+        }
+        let leaf = 0;
+        let merged = m;
+        let next = m;
+        while next < 2 * m - 1 {
+            let a = 0;
+            if leaf < m && (merged >= next || weight[leaf] <= weight[merged]) {
+                a = leaf;
+                leaf = leaf + 1;
+            } else {
+                a = merged;
+                merged = merged + 1;
+            }
+            let b = 0;
+            if leaf < m && (merged >= next || weight[leaf] <= weight[merged]) {
+                b = leaf;
+                leaf = leaf + 1;
+            } else {
+                b = merged;
+                merged = merged + 1;
+            }
+            weight[next] = weight[a] + weight[b];
+            parent[a] = next;
+            parent[b] = next;
+            next = next + 1;
+        }
+        let depth = Array.alloc<int>(2 * m);
+        for (let k = 2 * m - 3; k >= 0; k = k - 1) {
+            depth[k] = depth[parent[k]] + 1;
+        }
+        for (let i = 0; i < m; i = i + 1) {
+            lengths[order[i]] = depth[i];
+        }
+        return lengths;
+    }
+}

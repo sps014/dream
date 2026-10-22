@@ -1,5 +1,3 @@
-#[path = "src/capabilities.rs"]
-pub mod capabilities;
 #[path = "src/gpu_bindings.rs"]
 pub mod gpu_bindings;
 #[path = "src/guest_contract.rs"]
@@ -22,15 +20,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "crates/dream-mir/src/runtime/c/include/dream_guest_contract.h",
             guest_contract::c_header(),
         ),
-        (
-            "crates/dream-abi/src/capability_types.rs",
-            capabilities::rust_types(),
-        ),
-        (
-            "crates/dream-mir/src/runtime/c/include/dream_capabilities.h",
-            capabilities::c_header(),
-        ),
-        ("runtime/src/capabilities.js", capabilities::javascript()),
     ]);
     for (path, expected) in artifacts {
         let path = root.join(path);

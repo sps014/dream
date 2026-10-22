@@ -4,48 +4,32 @@ module system.compress;
 @allow_cycle
 public class CompressionWriter: Writer {
     destination: Writer;
-    codec: CompressionCodec;
+    deflater: Deflater;
+    limit: long;
+    written: long;
     closed: bool;
 
-    internal constructor(destination: Writer, codec: CompressionCodec) {
+    internal constructor(destination: Writer, deflater: Deflater, limit: long) {
         this.destination = destination;
-        this.codec = codec;
+        this.deflater = deflater;
+        this.limit = limit;
+        this.written = 0L;
         this.closed = false;
     }
 
-    /// Accepts up to 64 KiB; completed compressed writes remain visible if a later operation fails.
+    /// Accepts up to 64 KiB and returns how many bytes were taken. Completed compressed output is
+    /// written to the destination as blocks fill; exceeding the output limit returns an
+    /// `ECOMPRESS` error and closes the writer.
     public fun write(bytes: byte[]): Result<int, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
         }
-        if bytes.length == 0 {
+        let count = bytes.length < 65536 ? bytes.length : 65536;
+        if count == 0 {
             return Result.Ok(0);
         }
-        let count = bytes.length;
-        if count > 65536 {
-            count = 65536;
-        }
-        let input = Span<byte>(bytes, 0, count).to_array();
-        while true {
-            let next = this.codec.step(input, 65536, false);
-            if next.is_err() {
-                this.close();
-                return Result.Err(next.unwrap_err());
-            }
-            let progress = next.unwrap();
-            let written = this.destination.write_all(progress.bytes);
-            if written.is_err() {
-                this.close();
-                return Result.Err(written.unwrap_err());
-            }
-            if progress.consumed > 0 {
-                return Result.Ok(progress.consumed);
-            }
-            if progress.bytes.length == 0 {
-                this.close();
-                return Result.Err(IoError.other("", "compressor made no progress"));
-            }
-        }
+        this.emit(this.deflater.write(bytes, count))?;
+        return Result.Ok(count);
     }
 
     /// Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
@@ -53,21 +37,7 @@ public class CompressionWriter: Writer {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
         }
-        while true {
-            let next = this.codec.step([], 65536, false, true);
-            if next.is_err() {
-                this.close();
-                return Result.Err(next.unwrap_err());
-            }
-            let written = this.destination.write_all(next.unwrap().bytes);
-            if written.is_err() {
-                this.close();
-                return Result.Err(written.unwrap_err());
-            }
-            if next.unwrap().bytes.length < 65536 {
-                break;
-            }
-        }
+        this.emit(this.deflater.flush())?;
         return this.destination.flush();
     }
 
@@ -76,36 +46,26 @@ public class CompressionWriter: Writer {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
         }
-        while true {
-            let next = this.codec.step([], 65536, true);
-            if next.is_err() {
-                this.close();
-                return Result.Err(next.unwrap_err());
-            }
-            let written = this.destination.write_all(next.unwrap().bytes);
-            if written.is_err() {
-                this.close();
-                return Result.Err(written.unwrap_err());
-            }
-            if next.unwrap().finished {
-                break;
-            }
-            if next.unwrap().bytes.length == 0 {
-                this.close();
-                return Result.Err(IoError.other("", "compressor made no progress"));
-            }
-        }
+        this.emit(this.deflater.finish())?;
         this.close();
         return this.destination.flush();
     }
 
-    /// Abandons codec state without finishing or closing the borrowed destination.
+    /// Abandons the stream without finishing or closing the borrowed destination; later writes fail.
     public fun close(): void {
-        this.codec.close();
         this.closed = true;
     }
 
-    del() {
-        this.close();
+    fun emit(borrow output: byte[]): Result<Unit, IoError> {
+        if this.written + (long)output.length > this.limit {
+            this.close();
+            return Result.Err(IoError("", "ECOMPRESS", "compression output limit exceeded"));
+        }
+        this.written = this.written + (long)output.length;
+        let result = this.destination.write_all(output);
+        if result.is_err() {
+            this.close();
+        }
+        return result;
     }
 }

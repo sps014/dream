@@ -236,28 +236,22 @@
         "brotli": 140216
       },
       "current": {
-        "raw": 210644,
-        "gzip": 81695,
-        "brotli": 70996
+        "raw": 58391,
+        "gzip": 18705,
+        "brotli": 16289
       },
       "artifacts": [
         {
-          "file": "csv.csv.wasm",
-          "raw": 116410,
-          "gzip": 53196,
-          "brotli": 46649
-        },
-        {
           "file": "csv.wasm",
-          "raw": 79896,
-          "gzip": 23222,
-          "brotli": 19537
+          "raw": 46917,
+          "gzip": 14246,
+          "brotli": 12222
         },
         {
           "file": "csv.web.runtime.js",
-          "raw": 14338,
-          "gzip": 5277,
-          "brotli": 4810
+          "raw": 11474,
+          "gzip": 4459,
+          "brotli": 4067
         }
       ]
     },
@@ -269,28 +263,22 @@
         "brotli": 141730
       },
       "current": {
-        "raw": 287621,
-        "gzip": 112346,
-        "brotli": 96951
+        "raw": 90509,
+        "gzip": 26974,
+        "brotli": 23004
       },
       "artifacts": [
         {
-          "file": "compression.compression.wasm",
-          "raw": 173567,
-          "gzip": 81419,
-          "brotli": 70835
-        },
-        {
           "file": "compression.wasm",
-          "raw": 99121,
-          "gzip": 25467,
-          "brotli": 21143
+          "raw": 78488,
+          "gzip": 22328,
+          "brotli": 18757
         },
         {
           "file": "compression.web.runtime.js",
-          "raw": 14933,
-          "gzip": 5460,
-          "brotli": 4973
+          "raw": 12021,
+          "gzip": 4646,
+          "brotli": 4247
         }
       ]
     },

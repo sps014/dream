@@ -19,7 +19,6 @@ def commands():
         ["cargo", "build", "--release", "--workspace"],
         ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
         ["cargo", "test", "--workspace", "--", "--test-threads=8"],
-        [sys.executable, "scripts/build-data-codecs.py", "--check"],
         [sys.executable, "scripts/generate-capabilities.py", "--check"],
         ["node", "scripts/bundle-runtime.mjs", "--check"],
         ["node", "--test", *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "scripts").glob("test-*-host.mjs")),

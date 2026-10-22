@@ -86,7 +86,7 @@ UDP `send(host, port, data)` sends one message, including an empty message. `rec
 
 ## Streaming gzip and zlib
 
-`system.compress` uses the same Rust `flate2`/`zlib-rs` adapter on native, Node, and browser hosts. Wrappers borrow their underlying streams. Encoding and decoding operate in bounded chunks and enforce a total output limit, defaulting to 64 MiB and configurable up to 1 GiB.
+`system.compress` reads and writes standard DEFLATE streams (RFC 1951) in gzip (RFC 1952) or zlib (RFC 1950) framing. Output is interchangeable with other gzip and zlib tools, and behaves the same on native, Node, browser, and WASI targets with no extra files to deploy. Wrappers borrow their underlying streams. Encoding and decoding operate in bounded chunks and enforce a total output limit, defaulting to 64 MiB and configurable up to 1 GiB.
 
 ```dream
 import system;
@@ -112,11 +112,11 @@ fun main(): void {
 | --- | --- | --- |
 | `Compression.writer(destination, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionWriter, IoError>` | Creates an encoder writing to `destination`. |
 | `Compression.reader(source, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionReader, IoError>` | Creates a decoder reading from `source`. |
-| `writer.write(bytes)` | `Result<int, IoError>` | Compresses up to 64 KiB and returns how many bytes it consumed. |
+| `writer.write(bytes)` | `Result<int, IoError>` | Accepts up to 64 KiB and returns how many bytes it consumed. Compressed blocks reach the destination as they fill. |
 | `writer.flush()` | `Result<Unit, IoError>` | Writes pending data without ending the stream. |
 | `writer.finish()` | `Result<Unit, IoError>` | Writes the trailer and flushes. |
 | `reader.read(max_bytes)` | `Result<byte[], IoError>` | Returns decoded bytes; empty at the end of the stream. |
-| `close()` | `void` | Discards codec state without closing the borrowed stream. |
+| `close()` | `void` | Stops the wrapper without closing the borrowed stream; later calls fail. |
 
 | `CompressionFormat` | Framing |
 | --- | --- |
@@ -126,7 +126,7 @@ fun main(): void {
 A `max_output_bytes` outside 0 to 1 GiB returns `EINVAL`; corrupt, truncated,
 oversized, or trailing input returns `ECOMPRESS`.
 
-`CompressionWriter` implements `Writer`. `flush()` emits a synchronization boundary and flushes its destination. `finish()` emits the trailer, releases encoder state, and flushes. `close()` abandons codec state without closing or finishing the borrowed destination. Dropping a writer also abandons it, so call `finish()` to observe trailer and flush failures.
+`CompressionWriter` implements `Writer`. `flush()` emits a synchronization boundary and flushes its destination. `finish()` emits the trailer, releases encoder state, and flushes. `close()` abandons the stream without closing or finishing the borrowed destination. Dropping a writer also abandons it, so call `finish()` to observe trailer and flush failures.
 
 `CompressionReader` implements `Reader` and verifies checksums and complete stream termination. Corruption, truncation, expansion beyond the configured limit, concatenated members, and trailing bytes return errors. Successful EOF requires the underlying source to reach EOF after exactly one compressed stream. A failure can occur after previously decoded bytes have been consumed; those side effects are preserved.
 

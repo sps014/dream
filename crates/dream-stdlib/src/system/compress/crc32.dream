@@ -1,0 +1,33 @@
+module system.compress;
+
+/// Running CRC-32 (ISO 3309, reflected polynomial 0xEDB88320) as used by the gzip trailer.
+internal class Crc32 {
+    table: uint[];
+    state: uint;
+
+    internal constructor() {
+        this.table = Array.alloc<uint>(256);
+        for (let n = 0; n < 256; n = n + 1) {
+            let c = (uint)n;
+            for (let k = 0; k < 8; k = k + 1) {
+                c = (c & 1u) != 0u ? 0xEDB88320u ^ (c >> 1u) : c >> 1u;
+            }
+            this.table[n] = c;
+        }
+        this.state = 0xFFFFFFFFu;
+    }
+
+    /// Adds `bytes[start..start + count]` to the checksum.
+    internal fun update(borrow bytes: byte[], start: int, count: int): void {
+        let c = this.state;
+        for (let i = start; i < start + count; i = i + 1) {
+            c = this.table[(int)((c ^ (uint)bytes[i]) & 0xFFu)] ^ (c >> 8u);
+        }
+        this.state = c;
+    }
+
+    /// The checksum of every byte added so far.
+    internal fun value(): uint {
+        return this.state ^ 0xFFFFFFFFu;
+    }
+}

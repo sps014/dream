@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 
-MEASURED_CAPABILITIES = ("core", "unicode", "crypto", "process", "timezone", "net", "cli", "data", "io")
+MEASURED_CAPABILITIES = ("core", "crypto", "process", "timezone", "net", "io")
 
 
 def measure(compiler, host_directory, llvm_directory):

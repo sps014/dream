@@ -169,49 +169,35 @@ pub(crate) fn build_abi_json(
     }
 
     fn c_param_tag(param: &ParameterNode, extern_attrs: &[AttributeNode], ptr_size: u32) -> String {
+        let word = if ptr_size == 8 { "long" } else { "int" };
         // C out-params use Dream `ref` (address passed); tagged for the native host trampoline.
         if param.is_ref {
-            let ty = param.type_.get_type();
-            if ty == "long" {
-                return "out_long".to_string();
-            }
-            if ty == "isize" || ty == "usize" {
-                return if ptr_size == 8 { "out_long" } else { "out_int" }.to_string();
-            }
-            if ty == "int" {
-                return "out_int".to_string();
-            }
-            if ty.starts_with("fun(") || matches!(param.type_, Type::Function(..)) {
-                return "fn".to_string();
-            }
-            return format!("out_struct:{ty}");
+            return match &param.type_ {
+                Type::Integer(_) => "out_int".to_string(),
+                Type::Long(_) => "out_long".to_string(),
+                Type::ISize(_) | Type::USize(_) => format!("out_{word}"),
+                Type::Function(..) => "fn".to_string(),
+                ty => format!("out_struct:{}", ty.get_type()),
+            };
         }
-        let ty = &param.type_;
-        if let Type::Function(params, ret) = ty {
-            return fn_tag_from_types(params, ret, ptr_size);
-        }
-        if let Type::Array(inner) = ty
-            && matches!(**inner, Type::Byte(_))
-        {
-            return "bytes".to_string();
-        }
-        let type_str = ty.get_type();
-        match type_str.as_str() {
-            "string" => {
-                if marshal_kind(extern_attrs) == Some(dream_abi::attributes::MarshalKind::LpWStr) {
-                    "string_utf16".to_string()
-                } else {
-                    "string".to_string()
-                }
+        match &param.type_ {
+            Type::Function(params, ret) => fn_tag_from_types(params, ret, ptr_size),
+            Type::Array(inner) if matches!(**inner, Type::Byte(_)) => "bytes".to_string(),
+            Type::String(_)
+                if marshal_kind(extern_attrs)
+                    == Some(dream_abi::attributes::MarshalKind::LpWStr) =>
+            {
+                "string_utf16".to_string()
             }
-            "int" => "int".to_string(),
-            "long" => "long".to_string(),
-            "isize" | "usize" => if ptr_size == 8 { "long" } else { "int" }.to_string(),
-            "bool" => "bool".to_string(),
-            "float" => "float".to_string(),
-            "double" => "double".to_string(),
-            "byte" => "byte".to_string(),
-            other => format!("struct_ptr:{other}"),
+            Type::String(_) => "string".to_string(),
+            Type::Integer(_) => "int".to_string(),
+            Type::Long(_) => "long".to_string(),
+            Type::ISize(_) | Type::USize(_) => word.to_string(),
+            Type::Boolean(_) => "bool".to_string(),
+            Type::Float(_) => "float".to_string(),
+            Type::Double(_) => "double".to_string(),
+            Type::Byte(_) => "byte".to_string(),
+            ty => format!("struct_ptr:{}", ty.get_type()),
         }
     }
 
@@ -521,17 +507,16 @@ fn c_field_tag(ty: &Type, by_name: &BTreeMap<&str, &StructDeclarationNode<'_>>) 
             }
             "ptr".to_string()
         }
-        Type::Array(_) => "ptr".to_string(),
-        _ => {
-            let key = ty.get_type();
-            if matches!(
-                key.as_str(),
-                "bool" | "byte" | "int" | "float" | "long" | "double" | "ulong" | "isize" | "usize"
-            ) {
-                return key;
-            }
-            "ptr".to_string()
-        }
+        Type::Boolean(_)
+        | Type::Byte(_)
+        | Type::Integer(_)
+        | Type::Float(_)
+        | Type::Long(_)
+        | Type::Double(_)
+        | Type::ULong(_)
+        | Type::ISize(_)
+        | Type::USize(_) => ty.get_type(),
+        _ => "ptr".to_string(),
     }
 }
 

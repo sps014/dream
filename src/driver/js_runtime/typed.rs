@@ -5,7 +5,7 @@ use std::io::Error;
 use crate::driver::abi::LiveImport;
 
 pub(super) fn supports(ty: &str) -> bool {
-    !ty.contains("js") && !ty.contains("fun(") && !ty.contains("[][]")
+    !ty.contains("js") && !ty.contains("fun(") && !ty.contains("[][]") && !ty.contains("float16")
 }
 
 fn array(ty: &str) -> Option<(&'static str, &str)> {

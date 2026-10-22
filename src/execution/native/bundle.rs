@@ -123,11 +123,6 @@ mod tests {
         assert!(
             !args
                 .iter()
-                .any(|arg| arg.contains("dream_host_unicode_abi"))
-        );
-        assert!(
-            !args
-                .iter()
                 .any(|arg| arg.contains("dream_host_process_abi"))
         );
         assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
@@ -179,11 +174,7 @@ mod tests {
             false,
         );
         let args = format!("{command:?}");
-        for capability in [
-            HostCapability::Crypto,
-            HostCapability::Unicode,
-            HostCapability::Process,
-        ] {
+        for capability in [HostCapability::Crypto, HostCapability::Process] {
             assert!(!args.contains(capability.link_name()));
         }
     }

@@ -71,12 +71,12 @@ fn minimal_pack_runs_without_hosts_and_replaces_capability_heavy_pack() {
             String::from_utf8_lossy(&output.stderr)
         );
     };
-    std::fs::write(&source, "import system; import system.text; fun main(): void { System.println(Unicode.normalize(\"Hello, world!\", UnicodeNormForm.Nfc)); }").unwrap();
+    std::fs::write(&source, "import system; fun main(): void { let zone = TimeZone.local; System.println(\"Hello, world!\"); }").unwrap();
     pack();
     for capability in HostCapability::ALL {
         assert_eq!(
             package.join(capability.library_name(&spec)).is_file(),
-            matches!(capability, HostCapability::Core | HostCapability::Unicode)
+            matches!(capability, HostCapability::Core | HostCapability::Timezone)
         );
     }
     for (program, stdout) in [

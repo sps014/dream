@@ -1,0 +1,98 @@
+module system.text;
+
+/// Locale-independent full case mapping (Unicode `SpecialCasing` without language conditions).
+internal static class UnicodeCase {
+    /// Lowercases `text`, mapping capital sigma to final sigma at the end of a word.
+    internal static fun to_lower(text: string): string {
+        if CodePoints.all_below(text, 128) {
+            return text.to_lower();
+        }
+        let cps = CodePoints.decode(text);
+        let out = StringBuilder();
+        let i = 0;
+        while i < cps.length {
+            let cp = cps[i];
+            if cp == 931 {
+                if UnicodeCase.ends_word(cps, i) {
+                    CodePoints.append(out, 962);
+                } else {
+                    CodePoints.append(out, 963);
+                }
+            } else {
+                UnicodeCase.append_mapped(
+                    out,
+                    cp,
+                    UNICODE_LOWER_KEYS,
+                    UNICODE_LOWER_VALUES,
+                    UNICODE_LOWER_EXTRA
+                );
+            }
+            i = i + 1;
+        }
+        return out.build();
+    }
+
+    /// Uppercases `text`, expanding characters such as `ß` to `SS`.
+    internal static fun to_upper(text: string): string {
+        if CodePoints.all_below(text, 128) {
+            return text.to_upper();
+        }
+        let cps = CodePoints.decode(text);
+        let out = StringBuilder();
+        let i = 0;
+        while i < cps.length {
+            UnicodeCase.append_mapped(
+                out,
+                cps[i],
+                UNICODE_UPPER_KEYS,
+                UNICODE_UPPER_VALUES,
+                UNICODE_UPPER_EXTRA
+            );
+            i = i + 1;
+        }
+        return out.build();
+    }
+
+    static fun append_mapped(
+        borrow out: StringBuilder,
+        cp: int,
+        borrow keys: int[],
+        borrow values: int[],
+        borrow extra: int[]
+    ): void {
+        let at = UnicodeLookup.index(keys, cp);
+        if at < 0 {
+            CodePoints.append(out, cp);
+            return;
+        }
+        let mapped = values[at];
+        if mapped < 2097152 {
+            CodePoints.append(out, mapped);
+            return;
+        }
+        let start = mapped - 2097152;
+        let n = extra[start];
+        let j = 1;
+        while j <= n {
+            CodePoints.append(out, extra[start + j]);
+            j = j + 1;
+        }
+    }
+
+    /// The `Final_Sigma` condition: a cased letter precedes the sigma and none follows it,
+    /// ignoring case-ignorable characters in between.
+    static fun ends_word(borrow cps: int[], at: int): bool {
+        let i = at - 1;
+        while i >= 0 && UnicodeLookup.in_ranges(UNICODE_CASE_IGNORABLE_RANGES, cps[i]) {
+            i = i - 1;
+        }
+        if i < 0 || !UnicodeLookup.in_ranges(UNICODE_CASED_RANGES, cps[i]) {
+            return false;
+        }
+        let j = at + 1;
+        while j < cps.length && UnicodeLookup.in_ranges(UNICODE_CASE_IGNORABLE_RANGES, cps[j]) {
+            j = j + 1;
+        }
+        return j >= cps.length || !UnicodeLookup.in_ranges(UNICODE_CASED_RANGES, cps[j]);
+    }
+}

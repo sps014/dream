@@ -17407,190 +17407,153 @@
       },
       {
         "signature": "public fun to_lower_unicode(): string",
-        "description": "Full Unicode lowercase via `Unicode.to_lower_unicode`.",
-        "line": 109,
+        "description": "A new string with every character lowercased by the Unicode full case mapping, which can change the length (`\"İ\"` becomes `\"i̇\"`). Capital sigma becomes final sigma `ς` at the end of a word. The result is the same on every target and does not depend on a locale.",
+        "line": 111,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun to_upper_unicode(): string",
-        "description": "Full Unicode uppercase via `Unicode.to_upper_unicode`.",
-        "line": 114,
+        "description": "A new string with every character uppercased by the Unicode full case mapping, which can change the length (`\"straße\"` becomes `\"STRASSE\"`). The result is the same on every target and does not depend on a locale.",
+        "line": 118,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun graphemes(): string[]",
-        "description": "User-perceived grapheme clusters via `Unicode.graphemes`.",
-        "line": 119,
+        "description": "Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.",
+        "line": 125,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun normalize(form: UnicodeNormForm): string",
-        "description": "Unicode normalization to the requested form.",
-        "line": 124,
+        "description": "Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.",
+        "line": 131,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim(): string",
         "description": "A new string with leading and trailing whitespace removed.",
-        "line": 129,
+        "line": 136,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_start(): string",
         "description": "A new string with leading whitespace removed.",
-        "line": 143,
+        "line": 150,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_end(): string",
         "description": "A new string with trailing whitespace removed.",
-        "line": 153,
+        "line": 160,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun is_blank(): bool",
         "description": "True when `trim()` is empty.",
-        "line": 163,
+        "line": 170,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_start(width: int, pad: string): string",
         "description": "Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 168,
+        "line": 175,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_end(width: int, pad: string): string",
         "description": "Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 185,
+        "line": 192,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(target: char): Option<int>",
         "description": "The index of the last occurrence of `target`, or `None`.",
-        "line": 202,
+        "line": 209,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow sub: string): Option<int>",
         "description": "The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.",
-        "line": 212,
+        "line": 219,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun replace_first(borrow old: string, borrow replacement: string): string",
         "description": "Replaces the first occurrence of `old` with `replacement`.",
-        "line": 221,
+        "line": 228,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split_once(sep: char): string[]",
         "description": "Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur, returns `[this]` (consistent with `split`), never an empty array.",
-        "line": 232,
+        "line": 239,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split_once(borrow sep: string): string[]",
         "description": "Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.",
-        "line": 248,
+        "line": 255,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_prefix(borrow prefix: string): Option<string>",
         "description": "`Some` remainder when this starts with `prefix`.",
-        "line": 268,
+        "line": 275,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_suffix(borrow suffix: string): Option<string>",
         "description": "`Some` remainder when this ends with `suffix`.",
-        "line": 276,
+        "line": 283,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun lines(): StringLines",
         "description": "Iterates over the lines without copying them. Lines end at `\\n`; a trailing `\\r` is dropped from each line, and a final line terminator does not produce an empty line. Call `to_string()` on a line to keep an owned copy.",
-        "line": 286,
+        "line": 293,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun repeat(times: int): string",
         "description": "A new string repeated `times` times.",
-        "line": 291,
+        "line": 298,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun equals(borrow other: string): bool",
         "description": "Value equality (`Equatable<string>`); identical to `this == other`.",
-        "line": 310,
+        "line": 317,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char): string[]",
         "description": "Splits this string on the single character `sep`.",
-        "line": 315,
+        "line": 322,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 334,
+        "line": 341,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 364,
+        "line": 371,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 396,
+        "line": 403,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 428,
+        "line": 435,
         "page": "reference/api/text-string-text-2.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/text/unicode.dream",
-    "package": "system.text",
-    "page": "reference/api/text-unicode.md",
-    "declarations": [
-      {
-        "signature": "public static class Unicode",
-        "description": "ICU-class Unicode helpers (normalization, grapheme segmentation, full case folding).",
-        "line": 4,
-        "page": "reference/api/text-unicode.md"
-      },
-      {
-        "signature": "public static fun normalize(text: string, form: UnicodeNormForm): string",
-        "description": "Normalizes `text` to the requested Unicode form.",
-        "line": 18,
-        "page": "reference/api/text-unicode.md"
-      },
-      {
-        "signature": "public static fun to_lower_unicode(text: string): string",
-        "description": "Full Unicode lowercase (not limited to ASCII).",
-        "line": 31,
-        "page": "reference/api/text-unicode.md"
-      },
-      {
-        "signature": "public static fun to_upper_unicode(text: string): string",
-        "description": "Full Unicode uppercase (not limited to ASCII).",
-        "line": 36,
-        "page": "reference/api/text-unicode.md"
-      },
-      {
-        "signature": "public static fun graphemes(text: string): string[]",
-        "description": "Splits `text` into user-perceived grapheme clusters.",
-        "line": 41,
-        "page": "reference/api/text-unicode.md"
       }
     ]
   },
@@ -17601,7 +17564,7 @@
     "declarations": [
       {
         "signature": "public enum UnicodeNormForm",
-        "description": "Unicode normalization forms for `Unicode.normalize`.",
+        "description": "Unicode normalization forms accepted by `string.normalize`.",
         "line": 4,
         "page": "reference/api/text-unicode-norm-form.md"
       },

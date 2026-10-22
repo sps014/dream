@@ -108,7 +108,7 @@ public fun to_upper(): string
 
 ## `to_lower_unicode`
 
-Full Unicode lowercase via `Unicode.to_lower_unicode`.
+A new string with every character lowercased by the Unicode full case mapping, which can change the length (`"İ"` becomes `"i̇"`). Capital sigma becomes final sigma `ς` at the end of a word. The result is the same on every target and does not depend on a locale.
 
 ```dream
 public fun to_lower_unicode(): string
@@ -116,7 +116,7 @@ public fun to_lower_unicode(): string
 
 ## `to_upper_unicode`
 
-Full Unicode uppercase via `Unicode.to_upper_unicode`.
+A new string with every character uppercased by the Unicode full case mapping, which can change the length (`"straße"` becomes `"STRASSE"`). The result is the same on every target and does not depend on a locale.
 
 ```dream
 public fun to_upper_unicode(): string
@@ -124,7 +124,7 @@ public fun to_upper_unicode(): string
 
 ## `graphemes`
 
-User-perceived grapheme clusters via `Unicode.graphemes`.
+Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.
 
 ```dream
 public fun graphemes(): string[]
@@ -132,7 +132,7 @@ public fun graphemes(): string[]
 
 ## `normalize`
 
-Unicode normalization to the requested form.
+Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.
 
 ```dream
 public fun normalize(form: UnicodeNormForm): string

@@ -1,0 +1,75 @@
+module system.text;
+
+/// Binary searches over the generated Unicode property tables.
+internal static class UnicodeLookup {
+    /// The index of `key` in the ascending `keys`, or -1 when it is absent.
+    internal static fun index(borrow keys: int[], key: int): int {
+        let lo = 0;
+        let hi = keys.length - 1;
+        while lo <= hi {
+            let mid = (lo + hi) >> 1;
+            let k = keys[mid];
+            if k == key {
+                return mid;
+            }
+            if k < key {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return -1;
+    }
+
+    /// The index of `key` in the ascending `keys`, or -1 when it is absent.
+    internal static fun index_long(borrow keys: long[], key: long): int {
+        let lo = 0;
+        let hi = keys.length - 1;
+        while lo <= hi {
+            let mid = (lo + hi) >> 1;
+            let k = keys[mid];
+            if k == key {
+                return mid;
+            }
+            if k < key {
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return -1;
+    }
+
+    /// The value of the run containing `cp`. `starts` ascends from 0, and run `i` covers
+    /// `starts[i]` up to the next start.
+    internal static fun run_value(borrow starts: int[], borrow values: int[], cp: int): int {
+        let lo = 0;
+        let hi = starts.length - 1;
+        while lo < hi {
+            let mid = (lo + hi + 1) >> 1;
+            if starts[mid] <= cp {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return values[lo];
+    }
+
+    /// True when `cp` lies in one of the inclusive `[low, high]` pairs stored flat in `ranges`.
+    internal static fun in_ranges(borrow ranges: int[], cp: int): bool {
+        let lo = 0;
+        let hi = ranges.length / 2 - 1;
+        while lo <= hi {
+            let mid = (lo + hi) >> 1;
+            if cp < ranges[mid * 2] {
+                hi = mid - 1;
+            } else if (cp > ranges[mid * 2 + 1]) {
+                lo = mid + 1;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+}

@@ -90,8 +90,8 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
                 .arg(&library),
         );
     };
-    let unicode_source = root.path().join("unicode.c");
-    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v3(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    let timezone_source = root.path().join("timezone.c");
+    std::fs::write(&timezone_source, "void dream_host_timezone_abi_v3(void) {}\nvoid *dateLocalZoneName(void) { return 0; }\nint dateZoneOffsetMinutes(void *zone, long long millis) { (void)zone; (void)millis; return 0; }\n").unwrap();
     checked(
         Command::new(&tools)
             .args([
@@ -100,18 +100,18 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
                 &format!("{}-linux-gnu", spec.triple.architecture),
                 "-shared",
                 "-fPIC",
-                "-Wl,-soname,libdream_host_unicode.so",
+                "-Wl,-soname,libdream_host_timezone.so",
             ])
-            .arg(&unicode_source)
+            .arg(&timezone_source)
             .arg("-o")
-            .arg(libs.join("libdream_host_unicode.so")),
+            .arg(libs.join("libdream_host_timezone.so")),
     );
     build_host("dream_host_core_abi_v3");
     let source = root.path().join("main.dream");
     let ir = root.path().join("main.ll");
     std::fs::write(
         &source,
-        "import system.text; fun main(): void { let x = Unicode.to_lower_unicode(\"X\"); }",
+        "import system; fun main(): void { let zone = TimeZone.local; }",
     )
     .unwrap();
     let compile = || {

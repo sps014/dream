@@ -48,7 +48,7 @@ fun main() {
 | `normalize(form)` / `graphemes()` | Unicode normalize / grapheme clusters |
 | `equals` / `compare` | equality / ordering |
 
-`Unicode.normalize`, `Unicode.to_lower_unicode`, `Unicode.to_upper_unicode`, and `Unicode.graphemes` are the static forms of the same helpers.
+The Unicode helpers follow Unicode 16.0 and give the same result on every target, including the browser. Case mapping does not depend on a locale: `"İ".to_lower_unicode()` is `"i̇"` everywhere, and a capital sigma at the end of a word lowercases to `ς`. Full case mapping can change the length, as in `"straße".to_upper_unicode() == "STRASSE"`.
 
 ## Views without allocating
 
@@ -92,10 +92,10 @@ The same visible text can be represented by different sequences of characters. N
 | `UnicodeNormForm.Nfkc` | Also replaces compatibility forms, such as presentation variants |
 | `UnicodeNormForm.Nfkd` | Applies compatibility replacements and separates components |
 
-Use `text.normalize(UnicodeNormForm.Nfc)` or `Unicode.normalize(text, UnicodeNormForm.Nfc)`. Compatibility forms can change distinctions in the original text; choose them deliberately.
+Use `text.normalize(UnicodeNormForm.Nfc)`. Compatibility forms can change distinctions in the original text; choose them deliberately.
 
 `graphemes()` returns the pieces a reader sees as characters. This differs from `.length`, which counts the stored UTF-16 units. Use graphemes when splitting visible text, especially text containing accents or emoji.
 
-For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md), [Unicode reference](../../reference/api/text-unicode.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
+For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md), [normalization forms reference](../../reference/api/text-unicode-norm-form.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
 
 `StringBuilder.append_utf8_slice(text, start, byte_len)` is an advanced method: its positions and length refer to the string's stored payload bytes. Use ordinary `append` for whole strings. An invalid nonempty byte range stops the program.

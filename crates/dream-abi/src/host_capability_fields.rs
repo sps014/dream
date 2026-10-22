@@ -20,12 +20,6 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "audioOutputSink",
             "audioOutputCapture",
         ],
-        HostCapability::Unicode => &[
-            "unicodeNormalize",
-            "unicodeToLower",
-            "unicodeToUpper",
-            "unicodeGraphemes",
-        ],
         HostCapability::Crypto => &[
             "cryptoAesGcmEncrypt",
             "cryptoAesGcmDecrypt",

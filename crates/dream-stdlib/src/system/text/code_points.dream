@@ -1,0 +1,66 @@
+module system.text;
+
+/// Conversion between strings and Unicode scalar values.
+internal static class CodePoints {
+    /// The scalar values of `text`. An unpaired surrogate is kept as its own value.
+    internal static fun decode(borrow text: string): int[] {
+        let n = text.length;
+        let count = 0;
+        let i = 0;
+        while i < n {
+            i = i + CodePoints.width_at(text, i);
+            count = count + 1;
+        }
+        let out = Array.alloc<int>(count);
+        i = 0;
+        let w = 0;
+        while i < n {
+            out[w] = CodePoints.at(text, i);
+            i = i + CodePoints.width_at(text, i);
+            w = w + 1;
+        }
+        return out;
+    }
+
+    /// The scalar starting at UTF-16 index `i`.
+    internal static fun at(borrow text: string, i: int): int {
+        let hi = (int)text.char_at(i);
+        if hi >= 55296 && hi <= 56319 && i + 1 < text.length {
+            let lo = (int)text.char_at(i + 1);
+            if lo >= 56320 && lo <= 57343 {
+                return 65536 + ((hi - 55296) << 10) + (lo - 56320);
+            }
+        }
+        return hi;
+    }
+
+    /// The number of UTF-16 units (1 or 2) of the scalar starting at index `i`.
+    internal static fun width_at(borrow text: string, i: int): int {
+        if CodePoints.at(text, i) >= 65536 {
+            return 2;
+        }
+        return 1;
+    }
+
+    /// Appends `cp` to `out` as UTF-16.
+    internal static fun append(borrow out: StringBuilder, cp: int): void {
+        if cp >= 65536 {
+            out.append_char((char)(55296 + ((cp - 65536) >> 10)));
+            out.append_char((char)(56320 + ((cp - 65536) & 1023)));
+        } else {
+            out.append_char((char)cp);
+        }
+    }
+
+    /// True when every UTF-16 unit of `text` is below `limit`.
+    internal static fun all_below(borrow text: string, limit: int): bool {
+        let i = 0;
+        while i < text.length {
+            if (int)text.char_at(i) >= limit {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+}

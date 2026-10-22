@@ -121,6 +121,19 @@ fun unicode_normalize(): void {
 }
 
 @test
+fun unicode_case_mapping(): void {
+    Assert.eq(("ΟΔΟΣ ΣΑΣ").to_lower_unicode(), "οδος σας");
+    Assert.eq(("Σ").to_lower_unicode(), "σ");
+    Assert.eq(("ΑΣ.").to_lower_unicode(), "ας.");
+    Assert.eq(("İ").to_lower_unicode(), "i̇");
+    Assert.eq(("ﬁ ŉ").to_upper_unicode(), "FI ʼN");
+    Assert.eq(("ǅ").to_lower_unicode(), "ǆ");
+    Assert.eq(("ǅ").to_upper_unicode(), "Ǆ");
+    Assert.eq(("𐐨").to_upper_unicode(), "𐐀");
+    Assert.eq(("Hello").to_lower_unicode(), "hello");
+}
+
+@test
 @timeout(180000)
 fun fmt_basic(): void {
     let args1: object[] = Array.alloc<object>(2);

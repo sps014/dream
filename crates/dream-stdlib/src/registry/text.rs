@@ -30,8 +30,36 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/text/unicode_norm_form.dream"),
         ),
         (
-            "<std>/system/text/unicode.dream",
-            include_str!("../system/text/unicode.dream"),
+            "<std>/system/text/code_points.dream",
+            include_str!("../system/text/code_points.dream"),
+        ),
+        (
+            "<std>/system/text/unicode_lookup.dream",
+            include_str!("../system/text/unicode_lookup.dream"),
+        ),
+        (
+            "<std>/system/text/unicode_case_data.dream",
+            include_str!("../system/text/unicode_case_data.dream"),
+        ),
+        (
+            "<std>/system/text/unicode_case.dream",
+            include_str!("../system/text/unicode_case.dream"),
+        ),
+        (
+            "<std>/system/text/unicode_normalization_data.dream",
+            include_str!("../system/text/unicode_normalization_data.dream"),
+        ),
+        (
+            "<std>/system/text/unicode_normalizer.dream",
+            include_str!("../system/text/unicode_normalizer.dream"),
+        ),
+        (
+            "<std>/system/text/grapheme_data.dream",
+            include_str!("../system/text/grapheme_data.dream"),
+        ),
+        (
+            "<std>/system/text/grapheme_breaker.dream",
+            include_str!("../system/text/grapheme_breaker.dream"),
         ),
         (
             "<std>/system/text/string_iterator.dream",

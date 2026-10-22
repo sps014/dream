@@ -339,8 +339,8 @@ fn optional_service_binding_works_in_static_and_shared_libraries() {
     project(
         &root,
         r#"
-        import system.text;
-        @export fun normalized_len(): int { return Unicode.normalize("é", UnicodeNormForm.Nfc).length; }
+        import system;
+        @export fun zone_name_len(): int { return TimeZone.local.name.length; }
     "#,
     );
     for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
@@ -353,14 +353,14 @@ fn optional_service_binding_works_in_static_and_shared_libraries() {
             manifest.host_capabilities,
             vec![
                 dream_abi::host_capability::HostCapability::Core,
-                dream_abi::host_capability::HostCapability::Unicode
+                dream_abi::host_capability::HostCapability::Timezone
             ]
         );
         let exe = consumer(
             &root,
             &product,
             kind,
-            "#include \"lib.h\"\n#include <assert.h>\nint main(void) { dream_thread_attach(); assert(normalized_len() == 1); dream_thread_detach(); return 0; }\n",
+            "#include \"lib.h\"\n#include <assert.h>\nint main(void) { dream_thread_attach(); assert(zone_name_len() > 0); dream_thread_detach(); return 0; }\n",
         );
         command(run_consumer(&exe));
     }

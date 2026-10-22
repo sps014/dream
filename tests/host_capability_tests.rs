@@ -87,10 +87,6 @@ fn optional_services_select_exact_libraries_and_bind_core() {
             HostCapability::Cli,
         ),
         (
-            r#"import system.text; fun main(): void { let x = Unicode.normalize("text", UnicodeNormForm.Nfc); }"#,
-            HostCapability::Unicode,
-        ),
-        (
             r#"import system; fun main(): void { let x = TimeZone.local; }"#,
             HostCapability::Timezone,
         ),
@@ -113,7 +109,7 @@ fn service_combinations_keep_one_core_and_canonical_order() {
             r#"
         import system; import system.text; import system.crypto;
         fun main(): void {
-            let text = Unicode.to_lower_unicode("X");
+            let text = "X".to_lower_unicode().normalize(UnicodeNormForm.Nfc);
             let bytes = SecureRandom.bytes(1);
             let zone = TimeZone.local;
         }
@@ -121,9 +117,18 @@ fn service_combinations_keep_one_core_and_canonical_order() {
         ),
         vec![
             HostCapability::Core,
-            HostCapability::Unicode,
             HostCapability::Crypto,
             HostCapability::Timezone
         ]
+    );
+}
+
+#[test]
+fn unicode_text_needs_no_host_library() {
+    assert_eq!(
+        inventory(
+            r#"import system.text; fun main(): void { let x = "Ǆ".to_lower_unicode().normalize(UnicodeNormForm.Nfkc).graphemes(); }"#
+        ),
+        vec![]
     );
 }

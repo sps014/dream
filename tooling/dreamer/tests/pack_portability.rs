@@ -178,7 +178,7 @@ fn packed_application_has_no_builder_runtime_dependency() {
     .unwrap();
     std::fs::write(
         project.join("src/main.dream"),
-        format!("import system;\nimport system.text;\nfun main(): void {{ System.println(Unicode.normalize(\"{MESSAGE}\", UnicodeNormForm.Nfc)); }}\n"),
+        format!("import system;\nfun main(): void {{ let zone = TimeZone.local; System.println(\"{MESSAGE}\"); }}\n"),
     )
     .unwrap();
     checked_text(
@@ -223,7 +223,7 @@ fn packed_application_has_no_builder_runtime_dependency() {
         let path = moved.join(capability.library_name(&dream_abi::target::TargetSpec::host()));
         assert_eq!(
             path.is_file(),
-            matches!(capability, HostCapability::Core | HostCapability::Unicode)
+            matches!(capability, HostCapability::Core | HostCapability::Timezone)
         );
         if path.is_file() {
             inspect_loader(&path, false);

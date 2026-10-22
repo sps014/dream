@@ -7,7 +7,6 @@ mod fields;
 #[serde(rename_all = "lowercase")]
 pub enum HostCapability {
     Core,
-    Unicode,
     Crypto,
     Process,
     Timezone,
@@ -21,9 +20,8 @@ pub enum HostCapability {
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 11] = [
         Self::Core,
-        Self::Unicode,
         Self::Crypto,
         Self::Process,
         Self::Timezone,
@@ -39,7 +37,6 @@ impl HostCapability {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Core => "core",
-            Self::Unicode => "unicode",
             Self::Crypto => "crypto",
             Self::Process => "process",
             Self::Timezone => "timezone",
@@ -56,7 +53,6 @@ impl HostCapability {
     pub const fn link_name(self) -> &'static str {
         match self {
             Self::Core => "dream_host_core",
-            Self::Unicode => "dream_host_unicode",
             Self::Crypto => "dream_host_crypto",
             Self::Process => "dream_host_process",
             Self::Timezone => "dream_host_timezone",
@@ -176,15 +172,15 @@ mod tests {
                 .is_err()
         );
         let manifest = HostManifest::parse(
-            r#"{"native_abi_version":3,"host_capabilities":["timezone","unicode","crypto","unicode"]}"#,
+            r#"{"native_abi_version":3,"host_capabilities":["timezone","process","crypto","process"]}"#,
         )
         .unwrap();
         assert_eq!(
             manifest.host_capabilities,
             vec![
                 HostCapability::Core,
-                HostCapability::Unicode,
                 HostCapability::Crypto,
+                HostCapability::Process,
                 HostCapability::Timezone,
             ]
         );

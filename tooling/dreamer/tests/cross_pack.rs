@@ -55,8 +55,8 @@ fn packages_foreign_elf_and_its_target_libraries() {
             .arg("-o")
             .arg(&library),
     );
-    let unicode_source = root.path().join("unicode.c");
-    std::fs::write(&unicode_source, "void dream_host_unicode_abi_v3(void) {}\nvoid *unicodeToLower(void *text) { return text; }\n").unwrap();
+    let timezone_source = root.path().join("timezone.c");
+    std::fs::write(&timezone_source, "void dream_host_timezone_abi_v3(void) {}\nvoid *dateLocalZoneName(void) { return 0; }\nint dateZoneOffsetMinutes(void *zone, long long millis) { (void)zone; (void)millis; return 0; }\n").unwrap();
     checked(
         Command::new(&zig)
             .args([
@@ -65,18 +65,18 @@ fn packages_foreign_elf_and_its_target_libraries() {
                 &format!("{}-linux-gnu", arch),
                 "-shared",
                 "-fPIC",
-                "-Wl,-soname,libdream_host_unicode.so",
+                "-Wl,-soname,libdream_host_timezone.so",
             ])
-            .arg(&unicode_source)
+            .arg(&timezone_source)
             .arg("-o")
-            .arg(library.with_file_name("libdream_host_unicode.so")),
+            .arg(library.with_file_name("libdream_host_timezone.so")),
     );
     let project = root.path().join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("dream.toml"), "[package]\nname = \"foreign\"\nversion = \"0.1.0\"\ntype = \"bin\"\nentry = \"src/main.dream\"\n").unwrap();
     std::fs::write(
         project.join("src/main.dream"),
-        "import system.text; fun main(): void { let x = Unicode.to_lower_unicode(\"X\"); }",
+        "import system; fun main(): void { let zone = TimeZone.local; }",
     )
     .unwrap();
     checked(

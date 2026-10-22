@@ -36,8 +36,8 @@ Dream/
 │   ├── dream-stdlib/               Embedded prelude .dream files + STD_PACKAGES registry
 │   ├── dream-sema/                 Semantic analyzer + tables + hir_emit (fused; no MIR dep)
 │   ├── dream-mir/                  CFG MIR, passes, backend/llvm (textual LLVM IR), runtime/c
-│   ├── dream-host/                 Distribution features: core/unicode/crypto/process/timezone
-│   ├── dream-host-{core,unicode,crypto,process,timezone}/ Separate native capability cdylibs
+│   ├── dream-host/                 Distribution features: core/crypto/process/timezone/…
+│   ├── dream-host-{core,crypto,process,timezone,…}/ Separate native capability cdylibs
 │   └── dream-host-abi/       Shared C ABI conversions
 ├── src/                            Root `dream` crate — driver, CLI, execution only
 │   ├── main.rs                     CLI entry point
@@ -96,7 +96,7 @@ dream-stdlib ← dream-syntax, dream-abi
 dream-sema ← dream-syntax, dream-types, dream-hir, dream-abi, dream-stdlib
 dream-mir ← dream-hir, dream-types, dream-abi, dream-stdlib
 dream-host → optional capability crates; independent of dream
-dream-host-{unicode,crypto,process,timezone} → core cdylib through C ABI
+dream-host-{crypto,process,timezone,…} → core cdylib through C ABI
 dream-host-abi ← dream-mir (guest layout constants)
 dream (driver/CLI/execution) ← dream-sema, dream-mir, dream-stdlib, dream-abi, …
 dream-lsp ← dream
@@ -280,4 +280,4 @@ When committing only part of a dirty working tree, generate and validate the inv
 - Memory: AST uses `bumpalo` arena allocation — mind lifetimes tied to the `Bump` arena.
 - Avoid `unsafe` unless there's no idiomatic composition available.
 - Deps of note (don't reinvent): `logos` (lexing), `bumpalo` (arena alloc), `indexmap` (deterministic maps), `wat` (dev-dep; parses emitted `.wat` in tests), `crossterm` (raw terminal I/O), `chrono` (OS timezone lookups only — calendar math is hand-written in Dream itself), `tower-lsp`+`tokio`+`dashmap` (LSP server).
-- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` selects core/unicode/crypto/process/timezone packages through Cargo features; all five are enabled by default. Core owns guest binding and icon storage; other capability libraries dynamically call core. Never duplicate that state in statically linked helpers or re-embed hosts in the compiler.
+- The compiler's `native` feature enables execution/linking tools, not runtime hosts. `dream-host` selects capability packages (core, crypto, process, timezone, net, …) through Cargo features; all are enabled by default. Core owns guest binding and icon storage; other capability libraries dynamically call core. Never duplicate that state in statically linked helpers or re-embed hosts in the compiler.

@@ -1,0 +1,109 @@
+module system.text;
+
+/// Extended grapheme cluster segmentation (UAX #29).
+internal static class GraphemeBreaker {
+    /// Splits `text` into extended grapheme clusters.
+    internal static fun split(text: string): string[] {
+        let parts = List<string>();
+        let n = text.length;
+        if n == 0 {
+            return parts.take_array();
+        }
+        let start = 0;
+        let prev = GraphemeBreaker.props(CodePoints.at(text, 0));
+        let regional = 0;
+        if (prev & 15) == 6 {
+            regional = 1;
+        }
+        let emoji = GraphemeBreaker.next_emoji(0, prev);
+        let conjunct = GraphemeBreaker.next_conjunct(0, prev);
+        let i = CodePoints.width_at(text, 0);
+        while i < n {
+            let cur = GraphemeBreaker.props(CodePoints.at(text, i));
+            if GraphemeBreaker.breaks(prev, cur, regional, emoji, conjunct) {
+                parts.push(text.substring(start, i));
+                start = i;
+            }
+            if (cur & 15) == 6 {
+                regional = regional + 1;
+            } else {
+                regional = 0;
+            }
+            emoji = GraphemeBreaker.next_emoji(emoji, cur);
+            conjunct = GraphemeBreaker.next_conjunct(conjunct, cur);
+            prev = cur;
+            i = i + CodePoints.width_at(text, i);
+        }
+        parts.push(text.substring(start, n));
+        return parts.take_array();
+    }
+
+    /// Packed properties: bits 0-3 Grapheme_Cluster_Break, bit 4 Extended_Pictographic, bits 5-6
+    /// Indic_Conjunct_Break.
+    static fun props(cp: int): int {
+        return UnicodeLookup.run_value(UNICODE_GRAPHEME_STARTS, UNICODE_GRAPHEME_VALUES, cp);
+    }
+
+    /// GB11 progress: 1 after `ExtPict Extend*`, 2 after a following ZWJ.
+    static fun next_emoji(state: int, p: int): int {
+        if (p & 16) != 0 {
+            return 1;
+        }
+        let gcb = p & 15;
+        if state == 1 && gcb == 4 {
+            return 1;
+        }
+        if state == 1 && gcb == 5 {
+            return 2;
+        }
+        return 0;
+    }
+
+    /// GB9c progress: 1 after a consonant and extenders, 2 once a linker has been seen.
+    static fun next_conjunct(state: int, p: int): int {
+        let incb = p >> 5;
+        if incb == 1 {
+            return 1;
+        }
+        if state != 0 && incb == 3 {
+            return 2;
+        }
+        if state != 0 && incb == 2 {
+            return state;
+        }
+        return 0;
+    }
+
+    static fun breaks(prev: int, cur: int, regional: int, emoji: int, conjunct: int): bool {
+        let a = prev & 15;
+        let b = cur & 15;
+        if a == 1 && b == 2 {
+            return false;
+        }
+        if a == 1 || a == 2 || a == 3 || b == 1 || b == 2 || b == 3 {
+            return true;
+        }
+        if a == 9 && (b == 9 || b == 10 || b == 12 || b == 13) {
+            return false;
+        }
+        if (a == 12 || a == 10) && (b == 10 || b == 11) {
+            return false;
+        }
+        if (a == 13 || a == 11) && b == 11 {
+            return false;
+        }
+        if b == 4 || b == 5 || b == 8 || a == 7 {
+            return false;
+        }
+        if conjunct == 2 && (cur >> 5) == 1 {
+            return false;
+        }
+        if emoji == 2 && (cur & 16) != 0 {
+            return false;
+        }
+        if a == 6 && b == 6 && regional % 2 == 1 {
+            return false;
+        }
+        return true;
+    }
+}

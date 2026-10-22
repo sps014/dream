@@ -37,7 +37,7 @@ fn host_capability_dependency_boundaries_are_explicit() {
     }
     let manifest: toml::Value =
         toml::from_str(include_str!("../crates/dream-host/Cargo.toml")).unwrap();
-    for capability in ["core", "unicode", "crypto", "process", "timezone"] {
+    for capability in ["core", "crypto", "process", "timezone"] {
         assert!(manifest["features"][capability].is_array());
         assert_eq!(
             manifest["dependencies"][format!("dream-host-{capability}")]["optional"].as_bool(),

@@ -4,7 +4,6 @@ use dream_abi::js_abi::HOST_MODULE;
 use std::collections::HashSet;
 
 const HOST_SOURCES: &[&str] = &[
-    include_str!("../../dream-host-unicode/src/exports.rs"),
     include_str!("../../dream-host-crypto/src/exports.rs"),
     include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
@@ -99,17 +98,16 @@ fn every_native_dream_host_fn_is_declared_in_the_prelude() {
 fn capability_inventory_matches_each_library_exports() {
     use dream_abi::host_capability::HostCapability;
     for (capability, sources) in [
-        (HostCapability::Unicode, vec![HOST_SOURCES[0]]),
-        (HostCapability::Crypto, vec![HOST_SOURCES[1]]),
-        (HostCapability::Process, vec![HOST_SOURCES[2]]),
-        (HostCapability::Timezone, vec![HOST_SOURCES[3]]),
-        (HostCapability::Net, vec![HOST_SOURCES[4]]),
-        (HostCapability::Cli, vec![HOST_SOURCES[5]]),
-        (HostCapability::Data, vec![HOST_SOURCES[6]]),
-        (HostCapability::Io, vec![HOST_SOURCES[7]]),
-        (HostCapability::Window, vec![HOST_SOURCES[8]]),
-        (HostCapability::Gpu, vec![HOST_SOURCES[9]]),
-        (HostCapability::Audio, vec![HOST_SOURCES[10]]),
+        (HostCapability::Crypto, vec![HOST_SOURCES[0]]),
+        (HostCapability::Process, vec![HOST_SOURCES[1]]),
+        (HostCapability::Timezone, vec![HOST_SOURCES[2]]),
+        (HostCapability::Net, vec![HOST_SOURCES[3]]),
+        (HostCapability::Cli, vec![HOST_SOURCES[4]]),
+        (HostCapability::Data, vec![HOST_SOURCES[5]]),
+        (HostCapability::Io, vec![HOST_SOURCES[6]]),
+        (HostCapability::Window, vec![HOST_SOURCES[7]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[8]]),
+        (HostCapability::Audio, vec![HOST_SOURCES[9]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();

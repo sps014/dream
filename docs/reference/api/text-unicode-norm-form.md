@@ -6,7 +6,7 @@ Read the [usage guide](../../library/text/string.md) for examples and common tas
 
 ## `UnicodeNormForm`
 
-Unicode normalization forms for `Unicode.normalize`.
+Unicode normalization forms accepted by `string.normalize`.
 
 ```dream
 public enum UnicodeNormForm

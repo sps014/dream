@@ -58,4 +58,51 @@ The dispatcher writes incrementally with backpressure. Client disconnect cancels
 
 Once response headers or chunks have been sent, later errors cannot replace them with a new HTTP error status. Design the stream protocol to communicate application-level failures when needed.
 
+## Reading a request body as a stream
+
+`read_body_bytes` and `read_body_text` read the whole request body into memory. For a body that may be large, call `incoming.stream()` to read it in chunks as the client sends it. The returned `HttpRequestStream` is an `AsyncReader`, so you can loop over `read_async` or pass it to `Streams.copy_async`.
+
+```dream
+import system;
+import system.webapi;
+
+@router("")
+class Routes {
+    @post("/count-lines")
+    public static async fun count_lines(incoming: HttpIncoming): HttpOutgoing {
+        let stream = incoming.stream();
+        let lines = 0;
+        while true {
+            let chunk = stream.read_async(65536).await;
+            if chunk.is_err() {
+                return HttpOutgoing.detail("failed to read request body", 400);
+            }
+            let bytes = chunk.unwrap();
+            if bytes.length == 0 {
+                break;
+            }
+            for (let b in bytes) {
+                if b == (byte)10 {
+                    lines++;
+                }
+            }
+        }
+        return HttpOutgoing.text(lines.to_string());
+    }
+}
+
+async fun main(): void {
+    let app = WebApp();
+    app.include_router(Routes.router()).unwrap();
+    app.run("127.0.0.1", 8000).await.unwrap();
+}
+```
+
+Try `curl --data-binary @access.log http://127.0.0.1:8000/count-lines`. An empty chunk marks the end of the body. The request's cancellation applies to every read, so a client disconnect stops the loop with an error.
+
+A body can be read whole or streamed, but not both, because streamed bytes are not kept:
+
+- If the body was already read with `read_body_bytes`, `read_body_text`, or `form`, `stream()` replays the bytes held in memory.
+- Once you start reading `stream()`, `read_body_bytes`, `read_body_text`, and `form` fail with `ECLOSED`.
+
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

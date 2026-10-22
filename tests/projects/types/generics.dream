@@ -26,6 +26,10 @@ fun ce3_natural_order<T: Comparable<T>>(a: T, b: T): int {
     return a.compare(b);
 }
 
+fun ce3_produce<T>(body: fun(): T): T {
+    return body();
+}
+
 fun ce3_apply_cmp(cmp: fun(int, int): int, a: int, b: int): int {
     return cmp(a, b);
 }
@@ -84,6 +88,7 @@ fun generic_fn_value_no_annotation(): void {
     Assert.eq((f(3, 1)).to_string(), "1");
     let g: fun(int, int): int = f;
     Assert.eq((g(1, 2)).to_string(), "-1");
+    Assert.eq(ce3_produce<double>(() => 0.1).to_string(), "0.1");
 }
 
 @test

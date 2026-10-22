@@ -84,8 +84,10 @@ Attribute arguments are positional. Ordinary function and constructor calls supp
 | A body is not valid JSON | 422 | `json` |
 | A required header is missing inside a dependency provider | 401 | — |
 | The request body cannot be read | 400 | — |
-| The request body exceeds the 16 MiB host limit | 413 | — |
+| A multipart form exceeds its [limits](uploads.md#form-limits) | 400 | — |
 
 The 422 responses use the same `{"detail": [{"loc", "type", "msg"}]}` shape as model validation.
+
+The server sets no limit on body size. Set one at your [reverse proxy](../deploy/web-server.md#request-size-limits), or read large bodies with [`stream()`](streaming.md#reading-a-request-body-as-a-stream).
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

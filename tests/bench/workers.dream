@@ -87,6 +87,54 @@ async fun spawned_jobs(iters: int): int {
 }
 
 @noinline
+async fun spawned_empty(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        Task.spawn(() => Unit()).await;
+        total = total + 1;
+    }
+    return total;
+}
+
+@noinline
+async fun spawned_strings(iters: int): int {
+    let total = 0;
+    for (let i = 0; i < iters; i = i + 1) {
+        let value = i & 15;
+        total = total + Task.spawn(() => "value:" + value.to_string()).await.length;
+    }
+    return total;
+}
+
+fun spin(work: int): int {
+    let acc = 0;
+    for (let k = 0; k < work; k = k + 1) {
+        acc = (acc * 31 + k) & 65535;
+    }
+    return acc;
+}
+
+@noinline
+async fun pool_uneven(iters: int): int {
+    let pool = TaskPool(8);
+    let total = 0;
+    for (let round = 0; round < iters; round = round + 1) {
+        let pending = List<Future<Result<int, TaskPoolError>>>(64);
+        for (let i = 0; i < 64; i = i + 1) {
+            let work = ((i * 37) % 100 + 1) * 2000;
+            let job = pool.dispatch(() => spin(work));
+            Promise.start(job);
+            pending.push(job);
+        }
+        for (let i = 0; i < 64; i = i + 1) {
+            total = (total + pending[i].await.unwrap()) & 1048575;
+        }
+    }
+    pool.close().await.unwrap();
+    return total;
+}
+
+@noinline
 async fun scoped_jobs(size: int, iters: int): int {
     let total = 0;
     for (let i = 0; i < iters; i = i + 1) {
@@ -128,15 +176,35 @@ async fun run_suite(): void {
     sw = Stopwatch();
     v = spawned_jobs(1000).await;
     sw.stop();
-    report("task_spawn", sw.elapsed_nanos, 1000, v);
+    report("task_spawn_scalar", sw.elapsed_nanos, 1000, v);
     sw = Stopwatch();
-    v = scoped_jobs(16, 100).await;
+    v = spawned_empty(1000).await;
     sw.stop();
-    report("task_scope_16", sw.elapsed_nanos, 100, v);
+    report("task_spawn_empty", sw.elapsed_nanos, 1000, v);
+    sw = Stopwatch();
+    v = spawned_strings(1000).await;
+    sw.stop();
+    report("task_spawn_string", sw.elapsed_nanos, 1000, v);
+    sw = Stopwatch();
+    v = scoped_jobs(1, 400).await;
+    sw.stop();
+    report("task_fanout_1", sw.elapsed_nanos, 400, v);
+    sw = Stopwatch();
+    v = scoped_jobs(8, 100).await;
+    sw.stop();
+    report("task_fanout_8", sw.elapsed_nanos, 100, v);
     sw = Stopwatch();
     v = scoped_jobs(64, 25).await;
     sw.stop();
-    report("task_scope_64", sw.elapsed_nanos, 25, v);
+    report("task_fanout_64", sw.elapsed_nanos, 25, v);
+    sw = Stopwatch();
+    v = scoped_jobs(256, 6).await;
+    sw.stop();
+    report("task_fanout_256", sw.elapsed_nanos, 6, v);
+    sw = Stopwatch();
+    v = pool_uneven(10).await;
+    sw.stop();
+    report("taskpool_uneven", sw.elapsed_nanos, 10, v);
 }
 
 async fun main(): void {

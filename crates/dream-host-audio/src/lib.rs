@@ -1,6 +1,6 @@
 //! Native audio output. Guest calls serialize graph mutations; callbacks stay in C.
 use dream_host_abi::{DreamPtr, alloc_f32s, alloc_string, read_f32s, read_string};
-use std::collections::BTreeMap;
+use dream_host_abi::handles::HandleTable;
 use std::ffi::{CStr, c_char, c_void};
 use std::sync::Mutex;
 
@@ -27,12 +27,10 @@ struct Player(*mut c_void);
 // All control access is serialized by PLAYERS; miniaudio synchronizes its audio threads.
 unsafe impl Send for Player {}
 struct Players {
-    next: i32,
-    active: BTreeMap<i32, Player>,
+    active: HandleTable<Player>,
 }
 static PLAYERS: Mutex<Players> = Mutex::new(Players {
-    next: 1,
-    active: BTreeMap::new(),
+    active: HandleTable::new(),
 });
 
 #[unsafe(no_mangle)]
@@ -59,9 +57,6 @@ pub unsafe extern "C" fn audioOutputCreate(samples: DreamPtr, rate: i32, channel
     let Ok(mut players) = PLAYERS.lock() else {
         return 0;
     };
-    if players.next == i32::MAX {
-        return 0;
-    }
     let player = unsafe { dream_audio_output_create(samples.as_ptr(), count, rate, channels) };
     register(&mut players, player)
 }
@@ -70,10 +65,13 @@ fn register(players: &mut Players, player: *mut c_void) -> i32 {
     if player.is_null() {
         return 0;
     }
-    let handle = players.next;
-    players.next += 1;
-    players.active.insert(handle, Player(player));
-    handle
+    match players.active.insert(Player(player)) {
+        Some(handle) => handle,
+        None => {
+            unsafe { dream_audio_output_close(player) };
+            0
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -81,9 +79,6 @@ pub extern "C" fn audioOutputStream(rate: i32, channels: i32, frames: i32) -> i3
     let Ok(mut players) = PLAYERS.lock() else {
         return 0;
     };
-    if players.next == i32::MAX {
-        return 0;
-    }
     let player = unsafe { dream_audio_output_stream(rate, channels, frames) };
     register(&mut players, player)
 }
@@ -99,7 +94,7 @@ pub unsafe extern "C" fn audioOutputWrite(handle: i32, samples: DreamPtr) -> i32
     let Ok(players) = PLAYERS.lock() else {
         return 0;
     };
-    players.active.get(&handle).map_or(0, |p| unsafe {
+    players.active.get(handle).map_or(0, |p| unsafe {
         dream_audio_output_write(p.0, samples.as_ptr(), count)
     })
 }
@@ -112,7 +107,7 @@ pub extern "C" fn audioOutputControl(handle: i32, command: i32, value: f64) -> i
     let Ok(players) = PLAYERS.lock() else {
         return 0;
     };
-    players.active.get(&handle).map_or(0, |p| unsafe {
+    players.active.get(handle).map_or(0, |p| unsafe {
         dream_audio_output_control(p.0, command, value)
     })
 }
@@ -127,7 +122,7 @@ pub extern "C" fn audioOutputQuery(handle: i32, field: i32) -> f64 {
     };
     players
         .active
-        .get(&handle)
+        .get(handle)
         .map_or(0.0, |p| unsafe { dream_audio_output_query(p.0, field) })
 }
 
@@ -139,7 +134,7 @@ pub extern "C" fn audioOutputClose(handle: i32) {
     let Ok(mut players) = PLAYERS.lock() else {
         return;
     };
-    if let Some(player) = players.active.remove(&handle) {
+    if let Some(player) = players.active.remove(handle) {
         unsafe { dream_audio_output_close(player.0) };
     }
 }
@@ -152,7 +147,7 @@ pub extern "C" fn audioOutputCapture(handle: i32, frames: i32) -> DreamPtr {
     let Ok(players) = PLAYERS.lock() else {
         return alloc_f32s(&[]);
     };
-    let Some(player) = players.active.get(&handle) else {
+    let Some(player) = players.active.get(handle) else {
         return alloc_f32s(&[]);
     };
     let mut result = vec![0.0; 5 + frames as usize * 2];
@@ -212,7 +207,7 @@ pub unsafe extern "C" fn audioOutputSink(handle: i32, id: DreamPtr) -> i32 {
     };
     players
         .active
-        .get(&handle)
+        .get(handle)
         .map_or(0, |p| unsafe { dream_audio_output_sink(p.0, index) })
 }
 

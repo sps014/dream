@@ -60,6 +60,13 @@ unsafe extern "C" fn guest_truncate(_: *mut u8, _: u32) -> u32 {
 }
 unsafe extern "C" fn guest_pin(_: *mut u8) {}
 
+unsafe extern "C" fn set_park(
+    _: Option<unsafe extern "C" fn(i64, *mut u8)>,
+    _: Option<unsafe extern "C" fn(*mut u8)>,
+    _: *mut u8,
+) {
+}
+
 #[test]
 fn capabilities_share_core_binding_and_allocation() {
     let directory = std::env::current_exe()
@@ -102,6 +109,7 @@ fn capabilities_share_core_binding_and_allocation() {
             status: Some(guest_status),
             retain: Some(guest_pin),
             release: Some(guest_pin),
+            set_park: Some(set_park),
         };
         assert_eq!(bind(&context), 0);
 

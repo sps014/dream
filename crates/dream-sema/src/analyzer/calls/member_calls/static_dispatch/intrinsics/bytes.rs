@@ -105,6 +105,10 @@ impl<'a> Analyzer<'a> {
                     &method.position,
                     diagnostics,
                 );
+                if self.wire_inline(&payload) {
+                    self.hir_set_wire_encode(value);
+                    return Ok(named("string"));
+                }
                 self.hir_set_to_bytes(value);
                 let bytes = self.hir_take();
                 let bytes_ty = self.bytes_type();
@@ -145,6 +149,10 @@ impl<'a> Analyzer<'a> {
                     &method.position,
                     diagnostics,
                 );
+                if self.wire_inline(&target) {
+                    self.hir_set_wire_decode(&target, text);
+                    return Ok(target);
+                }
                 let named = |name: &str| -> Type {
                     let mut t = method.clone();
                     t.text = name.to_string();
@@ -164,6 +172,18 @@ impl<'a> Analyzer<'a> {
         }
 
         crate::internal_error!("unclassified bytes intrinsic")
+    }
+
+    /// Scalars, enums and value structs are copied straight between the value and the wire
+    /// string; arrays still go through a `byte[]`.
+    fn wire_inline(&mut self, payload: &Type) -> bool {
+        let ty = self.type_ctx.lower(payload);
+        let interner = &self.type_ctx.interner;
+        match interner.kind(ty) {
+            dream_types::TyKind::Prim(prim) => *prim != dream_types::PrimTy::String,
+            dream_types::TyKind::Enum(_) => true,
+            _ => interner.is_value_type(ty),
+        }
     }
 
     fn bytes_type(&self) -> dream_types::TypeId {

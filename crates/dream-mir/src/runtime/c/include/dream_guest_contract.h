@@ -31,5 +31,6 @@ typedef struct dream_guest_context {
     int32_t (*status)(void *);
     void (*retain)(void *);
     void (*release)(void *);
+    void (*set_park)(void (*)(int64_t, void *), void (*)(void *), void *);
 } dream_guest_context;
 #endif

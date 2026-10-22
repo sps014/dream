@@ -80,7 +80,10 @@ async fun webapi_resources(): void {
     let other = WebApp();
     other.include_router(ResourceRoutes.router()).unwrap();
     other.override_dependencies(ResourceOverrides.dependencies()).unwrap();
-    let port = app.listen("127.0.0.1", 0).await.unwrap();
+    // Shutdown waits for in-flight requests; the grace period force-closes `/resource-wait`.
+    let port = app.listen("127.0.0.1", 0, ServerConfig(timeout_graceful_shutdown_ms: 100))
+        .await
+        .unwrap();
     let second = other.listen("127.0.0.1", 0).await.unwrap();
     let client = HttpClient();
     let base = "http://127.0.0.1:" + port.to_string();

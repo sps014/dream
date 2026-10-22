@@ -205,7 +205,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     });
     let url = format!("https://localhost:{}", address.port());
     // Controlled trust stores avoid OS certificate lookup/network activity in this local fixture.
-    let resource = http::lock(http::registry()).clients[&client].clone();
+    let resource = http::lock(http::registry()).clients.get(client).unwrap().clone();
     let untrusted = {
         let _guard = crate::socket_operations::runtime().unwrap().enter();
         reqwest::Client::builder()

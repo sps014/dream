@@ -28,6 +28,16 @@ Per host:
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.
 
+### Exit status of a native run
+
+A native run exits with the program's own status: 0 when `main` finishes normally, or the value a
+`main(): int` returns, or a failure status when `main` returns a failing `Result`. When the program crashes, the
+run prints what stopped it, for example `guest crashed: killed by signal 11 (SIGSEGV)` on Linux and
+macOS or `guest crashed: terminated by exception 0xC00000FD (STATUS_STACK_OVERFLOW)` on Windows. The
+exit status is then `128 + signal` on Linux and macOS, as shells report it, and 255 on Windows. A
+panic prints its message before the crash line. To find where a crash happened, rebuild with `-g`
+and run the binary under a debugger.
+
 
 ### Profile-guided native builds
 

@@ -5,6 +5,7 @@
 
 use dream_host_abi::window_surface::{WINDOW_PLATFORM_APPKIT, WindowSurface};
 use dream_host_window::{dream_window_surface_v1, host, wire::kind};
+use std::time::{Duration, Instant};
 
 fn records(values: &[f32]) -> Vec<(u8, Vec<f32>)> {
     let mut out = Vec::new();
@@ -57,10 +58,50 @@ fn null_platform_pump() {
         0
     );
 
+    park_and_wake(id);
+
     host::close(id);
     assert!(host::poll(id).is_empty());
     assert!(host::query(id).is_empty());
     assert_eq!(unsafe { dream_window_surface_v1(id, &mut surface) }, 0);
+}
+
+/// The scheduler's idle wait runs `host::park`, so it must return promptly on a wake from another
+/// thread, honor its timeout, and leave the events it pumped for the next poll.
+fn park_and_wake(id: i32) {
+    let waker = std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(50));
+        host::wake();
+    });
+    let started = Instant::now();
+    host::park(-1);
+    let woke = started.elapsed();
+    waker.join().unwrap();
+    assert!(
+        woke < Duration::from_secs(5),
+        "a wake from another thread ends an indefinite park ({woke:?})"
+    );
+
+    host::wake();
+    let started = Instant::now();
+    host::park(-1);
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "a wake posted before parking is not lost"
+    );
+
+    let started = Instant::now();
+    host::park(20_000_000);
+    assert!(started.elapsed() < Duration::from_secs(5), "park honors its timeout");
+
+    host::poll(id);
+    host::set_size(id, 300, 200);
+    host::park(10_000_000);
+    let events = records(&host::poll(id));
+    assert!(
+        events.contains(&(kind::RESIZED, vec![300.0, 200.0])),
+        "events pumped while parked reach the next poll: {events:?}"
+    );
 }
 
 fn worker_threads_are_refused() {

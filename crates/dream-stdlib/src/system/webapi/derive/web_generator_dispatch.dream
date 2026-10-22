@@ -28,7 +28,8 @@ extend WebGenerator {
                         ) + ");"
                 );
             }
-            let args = this.arguments(route.function, out, Map<string, string>(), route);
+            let memo = Map<string, string>();
+            let args = this.arguments(route.function, out, memo, route);
             let call = this.calls.get(route.function.id).unwrap() + "(" + args + ")";
             let ty = web_return_type(route.function);
             let stream = ty.name == "AsyncIterable" || ty.name == "Iterable";
@@ -37,7 +38,7 @@ extend WebGenerator {
             }
             if route.websocket {
                 out.line(call + ";");
-                out.line("return HttpOutgoing.already_sent();");
+                out.line("return " + memo.get(nameof(ServerWebSocket)).unwrap() + ".finish();");
             } else if stream {
                 this.emit_stream(route, call, out);
             } else if ty.kind == TypeRefKind.Void {

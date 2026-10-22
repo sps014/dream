@@ -1,11 +1,10 @@
 //! Asynchronous host operations the guest polls by id: start, wait, read the status-prefixed
 //! result, cancel, claim owned resources, and release.
 
-use crate::{ForeignFuture, complete_foreign_future, lock};
+use crate::{ForeignFuture, complete_foreign_future, handles::HandleTable, lock};
 use std::{
-    collections::BTreeMap,
     future::Future,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex},
 };
 use tokio::{runtime::Runtime, sync::watch, task::AbortHandle};
 
@@ -42,60 +41,48 @@ struct Operation<C> {
     task: Option<AbortHandle>,
 }
 
-struct Registry<C> {
-    next: i32,
-    operations: BTreeMap<i32, Arc<Mutex<Operation<C>>>>,
-}
+type Shared<C> = Arc<Mutex<Operation<C>>>;
 
 /// One capability's operation table; `runtime` supplies the Tokio runtime work is spawned on.
 pub struct Operations<C> {
-    registry: OnceLock<Mutex<Registry<C>>>,
+    registry: Mutex<HandleTable<Shared<C>>>,
     runtime: fn() -> Result<&'static Runtime, Failure>,
 }
 
 impl<C: Detach> Operations<C> {
     pub const fn new(runtime: fn() -> Result<&'static Runtime, Failure>) -> Self {
         Self {
-            registry: OnceLock::new(),
+            registry: Mutex::new(HandleTable::new()),
             runtime,
         }
     }
 
-    fn registry(&self) -> &Mutex<Registry<C>> {
-        self.registry.get_or_init(|| {
-            Mutex::new(Registry {
-                next: 0,
-                operations: BTreeMap::new(),
-            })
-        })
+    fn get(&self, id: i32) -> Option<Shared<C>> {
+        lock(&self.registry).get(id).cloned()
     }
 
-    fn get(&self, id: i32) -> Option<Arc<Mutex<Operation<C>>>> {
-        lock(self.registry()).operations.get(&id).cloned()
+    /// Operations started and not yet released.
+    pub fn live(&self) -> usize {
+        lock(&self.registry).len()
     }
 
-    /// Spawns `work` and returns its id, or 0 when the table is full. `work` receives a
-    /// receiver that flips to `true` on cancellation.
+    /// Spawns `work` and returns its id, or 0 when `handles::MAX_LIVE` operations are live.
+    /// `work` receives a receiver that flips to `true` on cancellation.
     pub fn start<F, W>(&'static self, work: W) -> i32
     where
         F: Future<Output = Result<Output<C>, Failure>> + Send + 'static,
         W: FnOnce(watch::Receiver<bool>) -> F + Send + 'static,
     {
         let (cancel, cancellation) = watch::channel(false);
-        let mut registry = lock(self.registry());
-        if registry.next == i32::MAX || registry.operations.len() >= 4096 {
-            return 0;
-        }
-        registry.next += 1;
-        let id = registry.next;
         let state = Arc::new(Mutex::new(Operation {
             result: None,
             waiters: Vec::new(),
             task: None,
             cancel,
         }));
-        registry.operations.insert(id, state.clone());
-        drop(registry);
+        let Some(id) = lock(&self.registry).insert(state.clone()) else {
+            return 0;
+        };
         match (self.runtime)() {
             Err(error) => {
                 lock(&state).result = Some(Err(error));
@@ -155,7 +142,7 @@ impl<C: Detach> Operations<C> {
 
     /// Drops the operation, aborting unfinished work and waking any waiters.
     pub fn release(&self, id: i32) {
-        let operation = lock(self.registry()).operations.remove(&id);
+        let operation = lock(&self.registry).remove(id);
         if let Some(operation) = operation {
             let mut operation = lock(&operation);
             if let Some(task) = operation.task.take() {

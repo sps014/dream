@@ -1,10 +1,17 @@
 module system.task;
 
 /// Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.
+/// Each worker holds at most two jobs. Further dispatches wait in submission order and go to the
+/// least-loaded worker once one finishes, so a long job holds up at most one job behind it.
 @allow_cycle
 public class TaskPool {
     ids: int[];
-    next: int;
+    // Jobs running on each worker; a worker below 1 is free.
+    loads: int[];
+    // Slots handed to dispatches, at most two per worker.
+    occupied: int;
+    // Dispatches waiting for a worker, oldest first; cancelling a source grants it the worker.
+    internal waiters: List<CancellationSource>;
     active: int;
     closing: bool;
     changed: CancellationSource;
@@ -16,10 +23,12 @@ public class TaskPool {
             count = 0;
         }
         this.ids = Buffer.alloc<int>(count);
+        this.loads = Buffer.alloc<int>(count);
         for (let i = 0; i < count; i = i + 1) {
             this.ids[i] = Task.spawn_host(false);
         }
-        this.next = 0;
+        this.occupied = 0;
+        this.waiters = List<CancellationSource>();
         this.active = 0;
         this.closing = false;
         this.changed = CancellationSource();
@@ -55,15 +64,23 @@ public class TaskPool {
         let guard = CancellationSource();
         TaskPool.protect_host(guard);
         let wrapped: fun(string): string = (_raw: string) => Bytes.to_wire<TOut>(body());
-        let id = pool.ids[pool.next];
-        pool.next = (pool.next + 1) % pool.ids.length;
-        if pool.active == 0 {
-            pool.changed = CancellationSource();
+        pool.begin();
+        let worker = pool.try_acquire();
+        if worker < 0 {
+            worker = TaskPool.wait_worker(pool).await;
         }
-        pool.active = pool.active + 1;
-        let wire = Task.dispatch_host(id, Task.funcidx(wrapped), Task.env(wrapped), "").await;
+        if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) {
+            pool.finish(worker);
+            return Result.Err(TaskPoolError.Cancelled);
+        }
+        let wire = Task.dispatch_host(
+            pool.ids[worker],
+            Task.funcidx(wrapped),
+            Task.env(wrapped),
+            ""
+        ).await;
         TaskPool.keep_alive(wrapped);
-        pool.settled();
+        pool.finish(worker);
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) {
             return Result.Err(TaskPoolError.Cancelled);
         }
@@ -102,27 +119,84 @@ public class TaskPool {
             }
             return Bytes.to_wire<TOut>(pending.await);
         };
-        let id = pool.ids[pool.next];
-        pool.next = (pool.next + 1) % pool.ids.length;
-        if pool.active == 0 {
-            pool.changed = CancellationSource();
+        pool.begin();
+        let worker = pool.try_acquire();
+        if worker < 0 {
+            worker = TaskPool.wait_worker(pool).await;
         }
-        pool.active = pool.active + 1;
-        let wire = Task.dispatch_host(id, Task.funcidx_async(wrapped), Task.env_async(wrapped), "")
-            .await;
+        if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) {
+            pool.finish(worker);
+            return Result.Err(TaskPoolError.Cancelled);
+        }
+        let wire = Task.dispatch_host(
+            pool.ids[worker],
+            Task.funcidx_async(wrapped),
+            Task.env_async(wrapped),
+            ""
+        ).await;
         TaskPool.keep_alive(wrapped);
-        pool.settled();
+        pool.finish(worker);
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) {
             return Result.Err(TaskPoolError.Cancelled);
         }
         return Result.Ok(Bytes.from_wire<TOut>(wire));
     }
 
-    fun settled(): void {
+    fun begin(): void {
+        if this.active == 0 {
+            this.changed = CancellationSource();
+        }
+        this.active = this.active + 1;
+    }
+
+    // Claims the least-loaded worker, or returns -1 when every slot is taken or others wait. Two
+    // slots per worker keep its next job queued while the owner learns the last one finished.
+    fun try_acquire(): int {
+        if this.occupied >= this.ids.length * 2 || !this.waiters.is_empty() {
+            return -1;
+        }
+        this.occupied = this.occupied + 1;
+        return this.claim();
+    }
+
+    // Waits in submission order for a slot handed over by `release_slot`.
+    static async fun wait_worker(pool: TaskPool): int {
+        let ticket = TaskPoolTicket(pool);
+        pool.waiters.push(ticket.ready);
+        ticket.ready.token.wait_cancelled().await;
+        ticket.used = true;
+        return pool.claim();
+    }
+
+    fun claim(): int {
+        let worker = 0;
+        for (let i = 1; i < this.loads.length; i = i + 1) {
+            if this.loads[i] < this.loads[worker] {
+                worker = i;
+            }
+        }
+        this.loads[worker] = this.loads[worker] + 1;
+        return worker;
+    }
+
+    fun finish(worker: int): void {
+        this.loads[worker] = this.loads[worker] - 1;
+        this.release_slot();
         this.active = this.active - 1;
         if this.active == 0 {
             this.changed.cancel();
         }
+    }
+
+    // Hands a released worker to the oldest waiter, or returns it to the pool.
+    internal fun release_slot(): void {
+        if this.waiters.is_empty() {
+            this.occupied = this.occupied - 1;
+            return;
+        }
+        let next = this.waiters[0];
+        this.waiters.remove_at(0);
+        next.cancel();
     }
 
     /// Maps CPU work with at most size active dispatches and preserves input order.

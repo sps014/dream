@@ -11,14 +11,14 @@ public class WebApp {
     server_handle: int;
     frozen: bool;
     requests: Map<int, Future<void>>;
-    completed: Set<int>;
     serving: Option<Future<void>>;
     overrides: Map<string, string>;
     startup: List<fun(WebApp): Future<Result<Unit, IoError>>>;
     shutdown_hooks: List<fun(WebApp): Future<void>>;
     started_hooks: int;
 
-    /// Values stored for this request by handlers and middleware.
+    /// Application-wide values shared by every request; each request sees this map as
+    /// `RequestContext.app_state`.
     public state: Map<string, string>;
 
     /// Creates a `WebApp` with default settings.
@@ -33,7 +33,6 @@ public class WebApp {
         this.server_handle = 0;
         this.frozen = false;
         this.requests = Map<int, Future<void>>();
-        this.completed = Set<int>();
         this.serving = Option.None;
         this.state = Map<string, string>();
     }
@@ -50,7 +49,6 @@ public class WebApp {
         this.server_handle = 0;
         this.frozen = false;
         this.requests = Map<int, Future<void>>();
-        this.completed = Set<int>();
         this.serving = Option.None;
         this.state = Map<string, string>();
     }
@@ -200,11 +198,11 @@ public class WebApp {
             WebApp.close_host(id);
             app.server_handle = 0;
         }
+        // Each handler removes itself from `requests` when it finishes; `values()` is a snapshot.
         for (let request in app.requests.values()) {
             request.await;
         }
         app.requests.clear();
-        app.completed.clear();
         app.serving = Option.None;
         WebApp.finish_lifespan(app).await;
     }
@@ -251,18 +249,33 @@ public class WebApp {
         source.cancel();
     }
 
+    // Starlette semantics: the first registered route whose path and method match wins, a GET
+    // route also answers HEAD (hyper drops the body but keeps the GET headers), and a path that
+    // matches only under other methods answers 405 with those methods in `Allow`.
     static async fun dispatch(app: WebApp, ctx: RequestContext): HttpOutgoing {
+        let method = ctx.incoming.method;
+        let path = ctx.incoming.path;
+        let allowed = List<string>();
         for (let route in app.routes) {
-            if route.method != ctx.incoming.method {
+            if !WebRouting.path_matches(route.path, path) {
                 continue;
             }
-            let matched = WebRouting.match_path(route.path, ctx.incoming.path);
-            if matched.is_some() {
+            let serves_head = route.method == "GET" && !route.websocket;
+            if route.method == method || (method == "HEAD" && serves_head) {
                 let handler = route.handler;
-                return handler(ctx, matched.unwrap()).await;
+                return handler(ctx, WebRouting.path_params(route.path, path)).await;
+            }
+            if !allowed.contains(route.method) {
+                allowed.push(route.method);
+            }
+            if serves_head && !allowed.contains("HEAD") {
+                allowed.push("HEAD");
             }
         }
-        return HttpOutgoing.not_found();
+        if allowed.is_empty() {
+            return HttpOutgoing.not_found();
+        }
+        return HttpOutgoing.method_not_allowed(allowed);
     }
 
     static async fun respond(app: WebApp, ctx: RequestContext): void {
@@ -315,7 +328,7 @@ public class WebApp {
         ).await;
         RequestContext.finish(ctx).await;
         Promise.cancel(watcher);
-        app.completed.add(req.req_id);
+        app.requests.remove(req.req_id);
     }
 
     static async fun serve(app: WebApp, id: int, token: Option<CancellationToken>): void {
@@ -331,10 +344,6 @@ public class WebApp {
                 app.shutdown();
                 return;
             }
-            for (let completed_id in app.completed) {
-                app.requests.remove(completed_id);
-            }
-            app.completed.clear();
             let req = HttpIncoming(metadata.unwrap());
             operation.claim();
             operation.close();
@@ -344,20 +353,34 @@ public class WebApp {
         }
     }
 
-    /// Binds this app; port zero selects an ephemeral port.
+    /// Binds this app with the default `ServerConfig` and returns the bound port; port zero
+    /// selects an ephemeral port.
     @native
     public fun listen(
         host: string,
         port: int,
         token: Option<CancellationToken> = Option.None
     ): Future<Result<int, IoError>> {
-        return WebApp.listen_owned(this, host, port, token);
+        return WebApp.listen_owned(this, host, port, ServerConfig(), token);
+    }
+
+    /// Binds this app with the transport settings in `config` and returns the bound port;
+    /// port zero selects an ephemeral port. Negative settings fail with `EINVAL`.
+    @native
+    public fun listen(
+        host: string,
+        port: int,
+        config: ServerConfig,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<int, IoError>> {
+        return WebApp.listen_owned(this, host, port, config, token);
     }
 
     static async fun listen_owned(
         app: WebApp,
         host: string,
         port: int,
+        config: ServerConfig,
         token: Option<CancellationToken>
     ): Result<int, IoError> {
         let effective = CancellationToken.resolve(token);
@@ -366,6 +389,7 @@ public class WebApp {
             return Result.Err(IoError("", "EBUSY", "application has already started"));
         }
         app.validate_configuration()?;
+        config.validate()?;
         app.frozen = true;
         for (let start in app.startup) {
             let result = start(app).await;
@@ -378,8 +402,7 @@ public class WebApp {
         let request = WebOperation.request("listen", 0);
         request["host"] = JsonValue.from_string(host);
         request["port"] = JsonValue.from_int(port);
-        request["cert"] = JsonValue.from_string(app.options.tls_cert_path);
-        request["key"] = JsonValue.from_string(app.options.tls_key_path);
+        request["config"] = config.to_json();
         let operation = WebOperation.start(request, []);
         let result = operation.wait(effective).await;
         if result.is_err() {
@@ -394,6 +417,7 @@ public class WebApp {
         let metadata = parsed.unwrap();
         let id = metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0);
         if id <= 0 {
+            WebApp.finish_lifespan(app).await;
             return Result.Err(IoError.other("", "invalid HTTP server handle"));
         }
         app.server_handle = id;
@@ -405,23 +429,35 @@ public class WebApp {
         return Result.Ok(metadata.get("port").unwrap_or(JsonValue.null()).as_int().unwrap_or(0));
     }
 
-    /// Listens and waits until shutdown or cancellation.
+    /// Listens with the default `ServerConfig` and waits until shutdown or cancellation.
     @native
     public fun run(
         host: string,
         port: int,
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Unit, IoError>> {
-        return WebApp.run_owned(this, host, port, token);
+        return WebApp.run_owned(this, host, port, ServerConfig(), token);
+    }
+
+    /// Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.
+    @native
+    public fun run(
+        host: string,
+        port: int,
+        config: ServerConfig,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Unit, IoError>> {
+        return WebApp.run_owned(this, host, port, config, token);
     }
 
     static async fun run_owned(
         app: WebApp,
         host: string,
         port: int,
+        config: ServerConfig,
         token: Option<CancellationToken>
     ): Result<Unit, IoError> {
-        app.listen(host, port, token).await?;
+        app.listen(host, port, config, token).await?;
         app.wait(token).await;
         return Result.Ok(Unit());
     }

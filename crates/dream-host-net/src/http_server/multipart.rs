@@ -1,14 +1,40 @@
 use super::{
-    request,
-    state::{self, error},
+    request::{self, BodySource},
+    state::{self, Upload, error, lock, tables},
 };
 use crate::socket_operations::{Failure, Output};
 use bytes::Bytes;
-use futures_util::stream;
-use serde_json::json;
-use std::convert::Infallible;
+use futures_util::{StreamExt, stream};
+use http_body_util::BodyDataStream;
+use serde_json::{Value, json};
+use std::{
+    io::{Read, Seek, SeekFrom, Write},
+    sync::{Arc, Mutex},
+};
+use tempfile::SpooledTempFile;
 
-pub(super) async fn parse(id: i32) -> Result<Output, Failure> {
+/// Starlette's `UploadFile` spool: parts up to this size stay in memory.
+const SPOOL_BYTES: usize = 1 << 20;
+
+struct Limits {
+    max_files: u64,
+    max_fields: u64,
+    max_part_size: usize,
+}
+
+fn limit(value: &Value, name: &str) -> Result<u64, Failure> {
+    value[name]
+        .as_u64()
+        .ok_or_else(|| error("EINVAL", format!("invalid form limit {name}")))
+}
+
+pub(super) async fn parse(id: i32, value: &Value) -> Result<Output, Failure> {
+    let limits = Limits {
+        max_files: limit(value, "max_files")?,
+        max_fields: limit(value, "max_fields")?,
+        max_part_size: usize::try_from(limit(value, "max_part_size")?)
+            .map_err(|_| error("EINVAL", "invalid form limit max_part_size"))?,
+    };
     let request = state::request(id)?;
     let headers = request.metadata["headers"]
         .as_array()
@@ -19,28 +45,142 @@ pub(super) async fn parse(id: i32) -> Result<Output, Failure> {
         .and_then(|h| h[1].as_str())
         .unwrap_or("");
     let boundary = multer::parse_boundary(content_type).map_err(|e| error("EINVAL", e))?;
-    let bytes = request::body(id).await?;
-    let source = stream::once(async move { Ok::<_, Infallible>(Bytes::from(bytes)) });
-    let constraints = multer::Constraints::new().size_limit(
-        multer::SizeLimit::new()
-            .whole_stream(state::MAX_BODY as u64)
-            .per_field(state::MAX_BODY as u64),
-    );
-    let mut multipart = multer::Multipart::with_constraints(source, boundary, constraints);
+    let mut multipart = match request::take_source(id).await? {
+        BodySource::Stream(body) => multer::Multipart::new(BodyDataStream::new(body), boundary),
+        BodySource::Cached(bytes) => multer::Multipart::new(
+            stream::once(async move { Ok::<Bytes, std::io::Error>(bytes) }).boxed(),
+            boundary,
+        ),
+    };
     let mut fields = Vec::new();
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| error("EINVAL", e))?
-    {
-        let name = field.name().unwrap_or("").to_string();
-        let filename = field.file_name().map(str::to_string);
-        let content_type = field
-            .content_type()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        let bytes = field.bytes().await.map_err(|e| error("EINVAL", e))?;
-        fields.push(json!({"name":name,"filename":filename,"content_type":content_type,"bytes":hex::encode(bytes)}));
+    let mut files = Vec::new();
+    let mut handles = Vec::new();
+    let result = async {
+        while let Some(mut field) = multipart
+            .next_field()
+            .await
+            .map_err(|e| error("EINVAL", e))?
+        {
+            let name = field.name().unwrap_or("").to_string();
+            let Some(filename) = field.file_name().map(str::to_string) else {
+                if fields.len() as u64 >= limits.max_fields {
+                    return Err(error(
+                        "EINVAL",
+                        format!("too many fields; the maximum is {}", limits.max_fields),
+                    ));
+                }
+                let mut text = Vec::new();
+                while let Some(chunk) = field.chunk().await.map_err(|e| error("EINVAL", e))? {
+                    if text.len() + chunk.len() > limits.max_part_size {
+                        return Err(error(
+                            "EINVAL",
+                            format!(
+                                "form field {name} exceeds the maximum part size of {} bytes",
+                                limits.max_part_size
+                            ),
+                        ));
+                    }
+                    text.extend_from_slice(&chunk);
+                }
+                let text = String::from_utf8(text)
+                    .map_err(|_| error("EINVAL", format!("form field {name} is not UTF-8")))?;
+                fields.push(json!({"name":name,"value":text}));
+                continue;
+            };
+            if files.len() as u64 >= limits.max_files {
+                return Err(error(
+                    "EINVAL",
+                    format!("too many files; the maximum is {}", limits.max_files),
+                ));
+            }
+            let content_type = field
+                .content_type()
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            let part_headers = field
+                .headers()
+                .iter()
+                .map(|(k, v)| [k.as_str().to_string(), String::from_utf8_lossy(v.as_bytes()).to_string()])
+                .collect::<Vec<_>>();
+            let upload: Upload = Arc::new(Mutex::new(SpooledTempFile::new(SPOOL_BYTES)));
+            let handle = lock(tables())
+                .uploads
+                .insert(upload.clone())
+                .ok_or_else(|| error("ELIMIT", "too many open uploaded files"))?;
+            handles.push(handle);
+            let mut size = 0u64;
+            while let Some(chunk) = field.chunk().await.map_err(|e| error("EINVAL", e))? {
+                size += chunk.len() as u64;
+                let file = upload.clone();
+                tokio::task::spawn_blocking(move || lock(&file).write_all(&chunk))
+                    .await
+                    .map_err(|e| error("EIO", e))?
+                    .map_err(|e| error("EIO", e))?;
+            }
+            let file = upload.clone();
+            tokio::task::spawn_blocking(move || lock(&file).seek(SeekFrom::Start(0)))
+                .await
+                .map_err(|e| error("EIO", e))?
+                .map_err(|e| error("EIO", e))?;
+            files.push(json!({"name":name,"filename":filename,"content_type":content_type,"headers":part_headers,"size":size,"handle":handle}));
+        }
+        Ok(())
     }
-    Ok(Output::bytes(json!(fields).to_string().into_bytes()))
+    .await;
+    if let Err(failure) = result {
+        let mut tables = lock(tables());
+        for handle in handles {
+            tables.uploads.remove(handle);
+        }
+        return Err(failure);
+    }
+    lock(&request.uploads).extend(handles);
+    Ok(Output::bytes(
+        json!({"fields":fields,"files":files}).to_string().into_bytes(),
+    ))
+}
+
+pub(super) async fn read(id: i32, value: &Value) -> Result<Output, Failure> {
+    let max = value["max_bytes"]
+        .as_i64()
+        .ok_or_else(|| error("EINVAL", "invalid read size"))?;
+    let upload = state::upload(id)?;
+    let bytes = tokio::task::spawn_blocking(move || {
+        let mut file = lock(&upload);
+        let mut bytes = Vec::new();
+        if max < 0 {
+            file.read_to_end(&mut bytes)?;
+        } else {
+            (&mut *file).take(max as u64).read_to_end(&mut bytes)?;
+        }
+        Ok::<_, std::io::Error>(bytes)
+    })
+    .await
+    .map_err(|e| error("EIO", e))?
+    .map_err(|e| error("EIO", e))?;
+    Ok(Output::bytes(bytes))
+}
+
+pub(super) async fn seek(id: i32, value: &Value) -> Result<Output, Failure> {
+    let offset = &value["offset"];
+    let offset = offset
+        .as_u64()
+        .or_else(|| {
+            offset
+                .as_f64()
+                .filter(|n| *n >= 0.0 && n.fract() == 0.0)
+                .map(|n| n as u64)
+        })
+        .ok_or_else(|| error("EINVAL", "invalid seek offset"))?;
+    let upload = state::upload(id)?;
+    tokio::task::spawn_blocking(move || lock(&upload).seek(SeekFrom::Start(offset)))
+        .await
+        .map_err(|e| error("EIO", e))?
+        .map_err(|e| error("EIO", e))?;
+    Ok(Output::bytes(vec![]))
+}
+
+pub(crate) fn close(id: i32) {
+    let upload = lock(tables()).uploads.remove(id);
+    drop(upload);
 }

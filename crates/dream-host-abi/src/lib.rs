@@ -3,6 +3,7 @@
 //! Allocation and completion go through the core C ABI so Rust static linking cannot
 //! duplicate the callback state. Counts retain Dream's int ABI; references use native pointers.
 
+pub mod handles;
 #[cfg(feature = "operations")]
 pub mod operations;
 pub mod window_surface;
@@ -39,10 +40,35 @@ unsafe extern "C" {
     fn dream_host_array_new(length: i32, element_size: i32) -> DreamPtr;
     fn dream_host_complete_foreign(future: DreamPtr, result: u64);
     fn dream_host_app_icon(length: *mut usize) -> *const u8;
+    fn dream_host_set_park(
+        park: Option<unsafe extern "C" fn(i64, *mut u8)>,
+        wake: Option<unsafe extern "C" fn(*mut u8)>,
+        context: *mut u8,
+    );
 }
 
 pub fn complete_foreign_future(future: ForeignFuture, result: u64) {
     unsafe { dream_host_complete_foreign(future.0, result) }
+}
+
+/// Hooks that let a host own the calling thread's idle wait. `park(timeout_ns)` blocks until
+/// `wake` is called from any thread or the timeout passes (-1 waits indefinitely); it must not
+/// call back into the guest.
+#[derive(Clone, Copy)]
+pub struct SchedulerPark {
+    pub park: unsafe extern "C" fn(i64, *mut u8),
+    pub wake: unsafe extern "C" fn(*mut u8),
+}
+
+/// Installs `hooks` for the calling thread's guest scheduler, or restores its default wait when
+/// `hooks` is `None`. Does nothing before a guest has bound the core library.
+pub fn set_scheduler_park(hooks: Option<SchedulerPark>) {
+    match hooks {
+        Some(hooks) => unsafe {
+            dream_host_set_park(Some(hooks.park), Some(hooks.wake), std::ptr::null_mut())
+        },
+        None => unsafe { dream_host_set_park(None, None, std::ptr::null_mut()) },
+    }
 }
 
 pub fn app_icon_png() -> Option<&'static [u8]> {

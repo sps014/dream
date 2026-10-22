@@ -999,8 +999,17 @@ impl Launch<'_> {
         ) {
             Ok(0) => ExitCode::SUCCESS,
             Ok(code) => ExitCode::from(code.clamp(1, 255) as u8),
-            // `dream_panic` / `abort()` already printed the crash on stderr.
-            Err(e) if e.downcast_ref::<GuestAborted>().is_some() => ExitCode::FAILURE,
+            Err(ref e) if let Some(&GuestAborted(crash)) = e.downcast_ref::<GuestAborted>() => {
+                if !crash.already_reported() {
+                    ui.error(&format!("guest crashed: {crash}"));
+                    ui.help(
+                        "rebuild with `-g` to keep debug info, then run the binary under a \
+                         debugger (lldb, or the Dream debug configuration in your editor) to see \
+                         where it crashed",
+                    );
+                }
+                ExitCode::from(crash.exit_code())
+            }
             Err(e) => {
                 ui.error(&format!("execution failed: {e}"));
                 ExitCode::FAILURE

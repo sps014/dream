@@ -103,6 +103,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/web_app_options.dream"),
         ),
         (
+            "<std>/system/webapi/server_config.dream",
+            include_str!("../system/webapi/server_config.dream"),
+        ),
+        (
+            "<std>/system/webapi/http_request_stream.dream",
+            include_str!("../system/webapi/http_request_stream.dream"),
+        ),
+        (
+            "<std>/system/webapi/form_data.dream",
+            include_str!("../system/webapi/form_data.dream"),
+        ),
+        (
             "<std>/system/webapi/web_operation.dream",
             include_str!("../system/webapi/web_operation.dream"),
         ),

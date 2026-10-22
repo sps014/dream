@@ -1,0 +1,27 @@
+module system.task;
+
+// A dispatch waiting for pool capacity, owned by the waiting frame. Dropping it before it ran
+// passes granted capacity to the next waiter, so a dropped dispatch never strands a worker slot.
+@allow_cycle
+internal class TaskPoolTicket {
+    pool: TaskPool;
+    internal ready: CancellationSource;
+    internal used: bool;
+
+    internal constructor(pool: TaskPool) {
+        this.pool = pool;
+        this.ready = CancellationSource();
+        this.used = false;
+    }
+
+    del() {
+        if this.used {
+            return;
+        }
+        if this.ready.is_cancelled {
+            this.pool.release_slot();
+        } else {
+            this.pool.waiters.remove(this.ready);
+        }
+    }
+}

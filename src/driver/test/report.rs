@@ -3,6 +3,7 @@
 
 use super::project::TestHost;
 use super::runner::PlannedTest;
+use crate::execution::native::exit_status::describe;
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -189,20 +190,6 @@ impl State {
         }
         self.report
     }
-}
-
-fn describe(status: ExitStatus) -> String {
-    if let Some(code) = status.code() {
-        return format!("exit code {code}");
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        if let Some(signal) = status.signal() {
-            return format!("killed by signal {signal}");
-        }
-    }
-    format!("{status}")
 }
 
 #[cfg(all(test, unix))]

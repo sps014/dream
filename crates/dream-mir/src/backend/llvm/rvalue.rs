@@ -243,23 +243,49 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let p = self.ptr(&a);
                 self.load_ty(Ty::I32, &p, 4, false)
             }
-            Rvalue::ToBytes { value, ty } => {
+            Rvalue::ToBytes { value, ty, wire } => {
                 let sz = elem_size(&self.l.cx, *ty) as i64;
                 let v = self.operand(value);
+                let helper = if *wire { "dream_to_wire" } else { "dream_to_bytes" };
                 match self.interner.kind(*ty) {
-                    TyKind::Prim(PrimTy::String) => self.call_v("dream_to_bytes", &[v, V::i32(sz)]),
+                    TyKind::Prim(PrimTy::String) => self.call_v(helper, &[v, V::i32(sz)]),
                     TyKind::Prim(_) | TyKind::Enum(_) => {
                         let (t, _) =
                             super::fx::mem_ll(mem_ty(&self.l.cx, *ty), &self.h(), &self.word());
                         let tmp = self.w.alloca(t.clone(), 8);
                         self.store_ty(&t, &tmp, &v, 8);
                         let addr = self.as_ref(&V::s(tmp));
-                        self.call_v("dream_to_bytes", &[addr, V::i32(sz)])
+                        self.call_v(helper, &[addr, V::i32(sz)])
                     }
-                    _ => self.call_v("dream_to_bytes", &[v, V::i32(sz)]),
+                    _ => self.call_v(helper, &[v, V::i32(sz)]),
                 }
             }
-            Rvalue::FromBytes { bytes, ty } => {
+            Rvalue::FromBytes {
+                bytes,
+                ty,
+                wire: true,
+            } => {
+                let b = self.operand(bytes);
+                let sz = elem_size(&self.l.cx, *ty) as i64;
+                match self.interner.kind(*ty) {
+                    TyKind::Prim(_) | TyKind::Enum(_) => {
+                        let m = mem_ty(&self.l.cx, *ty);
+                        let (t, _) = super::fx::mem_ll(m, &self.h(), &self.word());
+                        let tmp = self.w.alloca(t, 8);
+                        let addr = self.as_ref(&V::s(tmp.clone()));
+                        self.call("dream_from_wire", &[b, addr, V::i32(sz)]);
+                        self.load_mem(m, &tmp, 8)
+                    }
+                    _ => {
+                        let tag = self.l.cx.type_tag(*ty);
+                        self.call_v(
+                            "dream_from_wire_box",
+                            &[b, V::i64(sz), V::i32(tag as i64)],
+                        )
+                    }
+                }
+            }
+            Rvalue::FromBytes { bytes, ty, .. } => {
                 let tag = self.l.cx.type_tag(*ty);
                 let sz = elem_size(&self.l.cx, *ty) as i64;
                 let b = self.operand(bytes);

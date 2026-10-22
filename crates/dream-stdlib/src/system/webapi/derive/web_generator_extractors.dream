@@ -42,16 +42,12 @@ extend WebGenerator {
         let value = this.fresh();
         if p.ty.name == nameof(ServerWebSocket) {
             out.line(
-                "let "
-                    + value
-                    + "_upgrade = ServerWebSocket.upgrade(ctx.incoming, ctx.cancellation_token).await;"
+                "if !ServerWebSocket.is_handshake(ctx.incoming) { return HttpOutgoing.detail(\"websocket upgrade required\", 400); }"
             );
             out.line(
-                "if "
-                    + value
-                    + "_upgrade.is_err() { return HttpOutgoing.detail(\"websocket upgrade failed\", 400); }"
+                "let " + value + " = ServerWebSocket(ctx.incoming, ctx.cancellation_token);"
             );
-            out.line("let " + value + " = " + value + "_upgrade.unwrap();");
+            memo[nameof(ServerWebSocket)] = value;
             return value;
         }
         if p.has<BodyAttribute>() {
@@ -109,39 +105,27 @@ extend WebGenerator {
             }
             out.line(
                 "let "
-                    + value + "_parts = ctx.incoming.multipart_parts(ctx.cancellation_token).await;"
+                    + value + "_form = ctx.incoming.form(token: ctx.cancellation_token).await;"
             );
             out.line(
                 "if "
                     + value
-                    + "_parts.is_err() { return HttpOutgoing.from_body_error("
-                    + value + "_parts.unwrap_err()); }"
+                    + "_form.is_err() { return HttpOutgoing.from_body_error("
+                    + value + "_form.unwrap_err()); }"
             );
-            let kind = "string";
-            if p.has<FileAttribute>() {
-                kind = "UploadedFile";
-            }
-            out.line("let " + value + "_option: Option<" + kind + "> = Option.None;");
-            out.line(
-                "for (let part in "
-                    + value + "_parts.unwrap().as_array().unwrap_or(List<JsonValue>())) {"
-            );
-            out.line(
-                "if part.get(\"name\").and_then((item: JsonValue) => item.as_string()).unwrap_or(\"\") == "
-                    + web_quote(name) + " {"
-            );
-            let content = "Encoding.hex_decode(part.get(\"bytes\").and_then((item: JsonValue) => item.as_string()).unwrap_or(\"\")).unwrap_or([])";
             if p.has<FileAttribute>() {
                 out.line(
-                    "if part.get(\"filename\").and_then((item: JsonValue) => item.as_string()).is_some() { "
-                        + value
-                        + "_option = Option.Some(UploadedFile(part.get(\"filename\").and_then((item: JsonValue) => item.as_string()).unwrap_or(\"\"), part.get(\"content_type\").and_then((item: JsonValue) => item.as_string()).unwrap_or(\"\"), "
-                        + content + ")); }"
+                    "let "
+                        + value + "_option = " + value + "_form.unwrap().file(" + web_quote(name)
+                        + ");"
                 );
             } else {
-                out.line(value + "_option = Option.Some(Encoding.utf8_decode(" + content + "));");
+                out.line(
+                    "let "
+                        + value + "_option = " + value + "_form.unwrap().get(" + web_quote(name)
+                        + ");"
+                );
             }
-            out.line("} }");
             if p.has<FileAttribute>() {
                 if p.ty.is_option() {
                     return value + "_option";

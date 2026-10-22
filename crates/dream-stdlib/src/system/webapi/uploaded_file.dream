@@ -1,20 +1,117 @@
 module system.webapi;
 
-/// One `multipart/form-data` file part (`@file`).
-public class UploadedFile {
-    /// Original filename reported with the upload.
+/// One file part of a `multipart/form-data` request, bound by `@file` or returned by
+/// `HttpIncoming.form`. The contents stay in memory up to 1 MiB and then move to a temporary
+/// file, so large uploads do not fill memory. The file is deleted when it is closed, when this
+/// object is released, or when the request finishes, whichever comes first.
+public class UploadedFile: AsyncReader {
+    handle: int;
+
+    /// Original filename reported by the client.
     public filename: string;
 
-    /// Media type of the response body.
+    /// Media type the client reported for this part; empty when none was sent.
     public content_type: string;
 
-    /// Contents as a byte array.
-    public bytes: byte[];
+    /// Headers sent with this part, such as `Content-Disposition`.
+    public headers: HttpHeaders;
 
-    /// Creates a `UploadedFile` with `filename`, `content_type`, `bytes`.
-    public constructor(filename: string, content_type: string, bytes: byte[]) {
+    /// Size of the uploaded contents in bytes.
+    public size: long;
+
+    internal constructor(
+        handle: int,
+        filename: string,
+        content_type: string,
+        headers: HttpHeaders,
+        size: long
+    ) {
+        this.handle = handle;
         this.filename = filename;
         this.content_type = content_type;
-        this.bytes = bytes;
+        this.headers = headers;
+        this.size = size;
+    }
+
+    del() {
+        this.close();
+    }
+
+    /// Reads up to `size` bytes from the current position; a negative `size` reads the rest of
+    /// the file. An empty result means the end of the file. Fails with `ECLOSED` after `close`
+    /// or once the request has finished.
+    @native
+    public fun read(
+        size: int = -1,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<byte[], IoError>> {
+        return UploadedFile.read_owned(this, size, token);
+    }
+
+    static async fun read_owned(
+        file: UploadedFile,
+        size: int,
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
+        if file.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        let request = WebOperation.request("upload_read", file.handle);
+        request["max_bytes"] = JsonValue.from_int(size);
+        return WebOperation.submit(request, [], token).await;
+    }
+
+    /// Moves the read position to `offset` bytes from the start of the file.
+    @native
+    public fun seek(
+        offset: long,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Unit, IoError>> {
+        return UploadedFile.seek_owned(this, offset, token);
+    }
+
+    static async fun seek_owned(
+        file: UploadedFile,
+        offset: long,
+        token: Option<CancellationToken>
+    ): Result<Unit, IoError> {
+        if file.handle <= 0 {
+            return Result.Err(IoError.closed(""));
+        }
+        if offset < 0L {
+            return Result.Err(IoError.invalid("", "negative seek offset"));
+        }
+        let request = WebOperation.request("upload_seek", file.handle);
+        request["offset"] = JsonValue.from_double((double)offset);
+        WebOperation.submit(request, [], token).await?;
+        return Result.Ok(Unit());
+    }
+
+    @native
+    @runtime("httpServerCloseUpload")
+    static extern fun close_host(handle: int): void;
+
+    /// Deletes the stored contents now; later reads fail with `ECLOSED`. Safe to call repeatedly.
+    public fun close(): void {
+        if this.handle > 0 {
+            UploadedFile.close_host(this.handle);
+            this.handle = 0;
+        }
+    }
+
+    /// Reads up to `max_bytes` from the current position; an empty result for a positive
+    /// request is the end of the file.
+    public async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
+        let lifetime = [this];
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if max_bytes == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
+        return UploadedFile.read_owned(lifetime[0], max_bytes, token).await;
     }
 }

@@ -194,6 +194,58 @@ fn unreferenced_apis_inside_live_chunks_are_removed() {
 }
 
 #[test]
+fn worker_session_handles_are_generational() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    let source = include_str!("../../../runtime/src/workers.js");
+    let start = source.find("function makeSessionTable()").unwrap();
+    let end = start + source[start..].find("\n}\n").unwrap() + 2;
+    let script = format!(
+        r#"{table}
+const t = makeSessionTable();
+const fail = (m) => {{ throw new Error(m); }};
+const a = t.insert("a");
+if (!(a > 0)) fail("handle must be positive");
+t.remove(a);
+if (t.get(a) !== undefined) fail("stale handle must miss");
+const b = t.insert("b"), c = t.insert("c");
+t.remove(b); t.remove(c);
+if ((t.insert("d") & 0x7fffff) !== (a & 0x7fffff)) fail("free slots must be reused oldest first");
+let wrapped = false;
+const generations = new Map();
+for (let i = 0; i < 2000; i++) {{
+  const id = t.insert(i);
+  if (!(id > 0)) fail("handle must stay positive");
+  const slot = id & 0x7fffff, generation = id >>> 23;
+  if (generations.has(slot) && generation < generations.get(slot)) wrapped = true;
+  generations.set(slot, generation);
+  if (t.get(id) !== i) fail("lookup");
+  t.remove(id);
+}}
+if (!wrapped) fail("generation must wrap back to 1");
+"#,
+        table = &source[start..end]
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("sessions.mjs");
+    fs::write(&path, script).unwrap();
+    let output = std::process::Command::new("node")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn selective_runtime_is_deterministic() {
     let live = vec![
         ("Dream".into(), "jsGlobal".into()),

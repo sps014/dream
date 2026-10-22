@@ -3,10 +3,11 @@ use reqwest::{
     header::{HeaderName, HeaderValue},
 };
 use serde::Deserialize;
+use dream_host_abi::handles::HandleTable;
 use std::{
     collections::BTreeMap,
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -43,24 +44,19 @@ struct Operation {
     response_body: Option<i32>,
     waiter: Option<dream_host_abi::ForeignFuture>,
 }
-#[derive(Default)]
 struct Registry {
-    next: i32,
-    clients: BTreeMap<i32, Arc<ClientState>>,
-    bodies: BTreeMap<i32, Arc<Body>>,
-    operations: BTreeMap<i32, Arc<Mutex<Operation>>>,
+    clients: HandleTable<Arc<ClientState>>,
+    bodies: HandleTable<Arc<Body>>,
+    operations: HandleTable<Arc<Mutex<Operation>>>,
 }
 use dream_host_abi::lock;
 fn registry() -> &'static Mutex<Registry> {
-    static STATE: OnceLock<Mutex<Registry>> = OnceLock::new();
-    STATE.get_or_init(Mutex::default)
-}
-fn next(state: &mut Registry) -> i32 {
-    if state.next == i32::MAX {
-        return 0;
-    }
-    state.next += 1;
-    state.next
+    static STATE: Mutex<Registry> = Mutex::new(Registry {
+        clients: HandleTable::new(),
+        bodies: HandleTable::new(),
+        operations: HandleTable::new(),
+    });
+    &STATE
 }
 fn failure(code: &'static str, text: impl ToString) -> Failure {
     (code, text.to_string())
@@ -116,24 +112,16 @@ impl ClientState {
     }
 }
 pub(crate) fn client_create() -> i32 {
-    let mut state = lock(registry());
-    if state.clients.len() >= 1024 {
-        return 0;
-    }
-    let id = next(&mut state);
-    if id != 0 {
-        state.clients.insert(
-            id,
-            Arc::new(ClientState {
-                pools: Mutex::default(),
-                closed: watch::channel(false).0,
-            }),
-        );
-    }
-    id
+    lock(registry())
+        .clients
+        .insert(Arc::new(ClientState {
+            pools: Mutex::default(),
+            closed: watch::channel(false).0,
+        }))
+        .unwrap_or(0)
 }
 pub(crate) fn client_close(id: i32) {
-    if let Some(client) = lock(registry()).clients.remove(&id) {
+    if let Some(client) = lock(registry()).clients.remove(id) {
         client.closed.send_replace(true);
     }
 }
@@ -141,20 +129,16 @@ fn start(future: impl Future<Output = Result<Output, Failure>> + Send + 'static)
     let Ok(rt) = runtime() else {
         return 0;
     };
-    let mut state = lock(registry());
-    if state.operations.len() >= 1024 {
-        return 0;
-    }
-    let id = next(&mut state);
-    if id == 0 {
-        return 0;
-    }
     let operation = Arc::new(Mutex::new(Operation {
         result: None,
         task: None,
         response_body: None,
         waiter: None,
     }));
+    let mut state = lock(registry());
+    let Some(id) = state.operations.insert(operation.clone()) else {
+        return 0;
+    };
     let task_operation = operation.clone();
     let task = rt.spawn(async move {
         let result = future.await;
@@ -168,12 +152,11 @@ fn start(future: impl Future<Output = Result<Output, Failure>> + Send + 'static)
         }
     });
     lock(&operation).task = Some(task.abort_handle());
-    state.operations.insert(id, operation);
     id
 }
 pub(crate) fn send(client: i32, json: &str, bytes: Vec<u8>) -> i32 {
     let request = serde_json::from_str::<Request>(json).map_err(|e| failure("EINVAL", e));
-    let client = lock(registry()).clients.get(&client).cloned();
+    let client = lock(registry()).clients.get(client).cloned();
     let prepared = (|| {
         let request = request?;
         if request.max_redirects < -1 {
@@ -231,7 +214,7 @@ impl Drop for Busy {
     }
 }
 pub(crate) fn read(id: i32, count: i32) -> i32 {
-    let body = lock(registry()).bodies.get(&id).cloned();
+    let body = lock(registry()).bodies.get(id).cloned();
     let prepared = (|| {
         if count < 0 {
             return Err(failure("EINVAL", "negative read size"));
@@ -268,17 +251,17 @@ pub(crate) fn read(id: i32, count: i32) -> i32 {
     })
 }
 pub(crate) fn body_close(id: i32) {
-    if let Some(body) = lock(registry()).bodies.remove(&id) {
+    if let Some(body) = lock(registry()).bodies.remove(id) {
         body.closed.send_replace(true);
     }
 }
 pub(crate) fn claim(id: i32) {
-    if let Some(operation) = lock(registry()).operations.get(&id) {
+    if let Some(operation) = lock(registry()).operations.get(id) {
         lock(operation).response_body = None;
     }
 }
 pub(crate) fn release(id: i32) {
-    let operation = lock(registry()).operations.remove(&id);
+    let operation = lock(registry()).operations.remove(id);
     if let Some(operation) = operation {
         let (body, waiter) = {
             let mut operation = lock(&operation);
@@ -297,7 +280,7 @@ pub(crate) fn release(id: i32) {
     }
 }
 pub(crate) fn wait(id: i32, waiter: dream_host_abi::ForeignFuture) -> bool {
-    let operation = lock(registry()).operations.get(&id).cloned();
+    let operation = lock(registry()).operations.get(id).cloned();
     let Some(operation) = operation else {
         return false;
     };
@@ -311,7 +294,7 @@ pub(crate) fn wait(id: i32, waiter: dream_host_abi::ForeignFuture) -> bool {
 
 pub(crate) fn poll(id: i32) -> Vec<u8> {
     let mut state = lock(registry());
-    let Some(operation) = state.operations.get(&id).cloned() else {
+    let Some(operation) = state.operations.get(id).cloned() else {
         return error_bytes(failure("ECLOSED", "HTTP operation is closed"));
     };
     let Some(result) = lock(&operation).result.take() else {
@@ -325,37 +308,32 @@ pub(crate) fn poll(id: i32) -> Vec<u8> {
             wire
         }
         Ok(Output::Response(response)) => {
-            if state.bodies.len() >= 1024 {
-                return error_bytes(failure("ELIMIT", "too many open response bodies"));
-            }
-            let id = next(&mut state);
-            if id == 0 {
-                return error_bytes(failure("ELIMIT", "HTTP handle space exhausted"));
-            }
             let headers: Vec<_> = response
                 .headers()
                 .iter()
                 .map(|(k, v)| {
                     (
-                        k.as_str(),
+                        k.as_str().to_string(),
                         String::from_utf8_lossy(v.as_bytes()).into_owned(),
                     )
                 })
                 .collect();
-            let metadata = serde_json::json!({"body": id, "status": response.status().as_u16(), "url": response.url().as_str(), "headers": headers});
-            state.bodies.insert(
-                id,
-                Arc::new(Body {
-                    state: AsyncMutex::new(BodyState {
-                        response,
-                        remainder: Vec::new(),
-                        offset: 0,
-                        eof: false,
-                    }),
-                    busy: AtomicBool::new(false),
-                    closed: watch::channel(false).0,
+            let status = response.status().as_u16();
+            let url = response.url().to_string();
+            let body = Arc::new(Body {
+                state: AsyncMutex::new(BodyState {
+                    response,
+                    remainder: Vec::new(),
+                    offset: 0,
+                    eof: false,
                 }),
-            );
+                busy: AtomicBool::new(false),
+                closed: watch::channel(false).0,
+            });
+            let Some(id) = state.bodies.insert(body) else {
+                return error_bytes(failure("ELIMIT", "too many open response bodies"));
+            };
+            let metadata = serde_json::json!({"body": id, "status": status, "url": url, "headers": headers});
             lock(&operation).response_body = Some(id);
             let mut wire = vec![1];
             wire.extend(metadata.to_string().as_bytes());

@@ -516,11 +516,15 @@ impl<'a> Analyzer<'a> {
         self.pending_lambdas
             .insert(def, (func_ref, self.current_generic_bindings.clone()));
         self.inherit_generator_context(def);
+        let env = if self.direct_capture_type(receiver_ty) {
+            self.direct_captures.insert((def, recv_name.clone()));
+            receiver_hir
+        } else {
+            self.hir_build_cell_new(receiver_ty, receiver_hir)?
+        };
         self.closure_captures
             .insert(def, vec![(recv_name, receiver_ty.clone())]);
-
-        let cell = self.hir_build_cell_new(receiver_ty, receiver_hir)?;
-        self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
+        self.hir_set_capturing_func_value(&name, env, &func_ty, &box_ret);
         Some(func_ty)
     }
 

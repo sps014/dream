@@ -6,7 +6,7 @@ use crate::backend::Backend;
 use crate::bundle;
 use crate::error::{Code, HostError, HostResult};
 use crate::ffi;
-use crate::handles::Handles;
+use dream_host_abi::handles::HandleTable;
 use crate::waiter::{Finish, Job, Waiter};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -231,7 +231,7 @@ pub struct Entry {
 
 #[derive(Default)]
 pub struct State {
-    pub handles: Handles<Entry>,
+    pub handles: HandleTable<Entry>,
     /// Released by the guest, still referenced by unfinished GPU work.
     deferred: Vec<Entry>,
 }

@@ -17,7 +17,7 @@ public class HttpIncoming {
     /// HTTP headers associated with this message.
     public headers: HttpHeaders;
 
-    multipart: Option<JsonValue>;
+    form_data: Option<FormData>;
     internal cancellation_token: Option<CancellationToken>;
 
     internal constructor(metadata: JsonValue) {
@@ -26,7 +26,7 @@ public class HttpIncoming {
         this.path = metadata.get("path").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         this.query = metadata.get("query").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
         this.headers = HttpHeaders();
-        this.multipart = Option.None;
+        this.form_data = Option.None;
         this.cancellation_token = Option.None;
         for (let pair in metadata.get("headers").unwrap_or(JsonValue.null())
             .as_array()
@@ -70,7 +70,7 @@ public class HttpIncoming {
         return WebRouting.cookie_value(this.headers.get("Cookie").unwrap_or(""), name);
     }
 
-    fun resolve_token(token: Option<CancellationToken>): Option<CancellationToken> {
+    internal fun resolve_token(token: Option<CancellationToken>): Option<CancellationToken> {
         let effective = CancellationToken.resolve(token);
         if effective.is_some() {
             return effective;
@@ -78,7 +78,9 @@ public class HttpIncoming {
         return this.cancellation_token;
     }
 
-    /// Reads the bounded request body as bytes, with inherited cancellation.
+    /// Reads the whole request body as bytes and caches it; later calls return the same bytes.
+    /// The server sets no size limit, so bound large bodies at a proxy or read them with
+    /// `stream`. Fails with `ECLOSED` after `stream` was read.
     @native
     public fun read_body_bytes(
         token: Option<CancellationToken> = Option.None
@@ -94,7 +96,8 @@ public class HttpIncoming {
             .await;
     }
 
-    /// Reads the bounded request body as UTF-8 text.
+    /// Reads the whole request body as UTF-8 text, with the caching and limits of
+    /// `read_body_bytes`.
     @native
     public async fun read_body_text(
         token: Option<CancellationToken> = Option.None
@@ -103,25 +106,54 @@ public class HttpIncoming {
         return Result.Ok(Encoding.utf8_decode(lifetime[0].read_body_bytes(token).await?));
     }
 
-    internal fun multipart_parts(
-        token: Option<CancellationToken>
-    ): Future<Result<JsonValue, IoError>> {
-        return HttpIncoming.multipart_owned(this, this.resolve_token(token));
+    /// Returns the body as a stream of chunks read as they arrive, for bodies too large to hold
+    /// in memory. After streaming starts, `read_body_bytes`, `read_body_text` and `form` fail
+    /// with `ECLOSED`; if the body was already read, the stream replays it.
+    public fun stream(): HttpRequestStream {
+        return HttpRequestStream(this);
     }
 
-    static async fun multipart_owned(
+    /// Parses a `multipart/form-data` body. Text fields larger than `max_part_size` bytes, more
+    /// than `max_fields` text fields or more than `max_files` files fail with `EINVAL`; file
+    /// parts have no size limit and spool to disk past 1 MiB. Later calls return the same
+    /// `FormData`, whatever limits they pass. Fails with `ECLOSED` after `stream` was read.
+    @native
+    public fun form(
+        max_files: int = 1000,
+        max_fields: int = 1000,
+        max_part_size: int = 1048576,
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<FormData, IoError>> {
+        return HttpIncoming.form_owned(
+            this,
+            max_files,
+            max_fields,
+            max_part_size,
+            this.resolve_token(token)
+        );
+    }
+
+    static async fun form_owned(
         incoming: HttpIncoming,
+        max_files: int,
+        max_fields: int,
+        max_part_size: int,
         token: Option<CancellationToken>
-    ): Result<JsonValue, IoError> {
+    ): Result<FormData, IoError> {
         let lifetime = [incoming];
-        if lifetime[0].multipart.is_none() {
-            let bytes = WebOperation.submit(
-                WebOperation.request("multipart", lifetime[0].req_id),
-                [],
-                token
-            ).await?;
-            lifetime[0].multipart = Option.Some(WebOperation.parse(bytes)?);
+        if lifetime[0].form_data.is_some() {
+            return Result.Ok(lifetime[0].form_data.unwrap());
         }
-        return Result.Ok(lifetime[0].multipart.unwrap());
+        if max_files < 0 || max_fields < 0 || max_part_size < 0 {
+            return Result.Err(IoError.invalid("", "form limits must not be negative"));
+        }
+        let request = WebOperation.request("form", lifetime[0].req_id);
+        request["max_files"] = JsonValue.from_int(max_files);
+        request["max_fields"] = JsonValue.from_int(max_fields);
+        request["max_part_size"] = JsonValue.from_int(max_part_size);
+        let bytes = WebOperation.submit(request, [], token).await?;
+        let form = FormData(WebOperation.parse(bytes)?);
+        lifetime[0].form_data = Option.Some(form);
+        return Result.Ok(form);
     }
 }

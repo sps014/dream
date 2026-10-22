@@ -51,6 +51,66 @@ async fun task_pool_typed(): void {
     pool.close().await.unwrap();
 }
 
+struct TaskWirePair {
+    public whole: long;
+    public part: double;
+}
+
+enum TaskWireColor {
+    Red,
+    Green,
+    Blue,
+}
+
+@test
+@timeout(180000)
+async fun task_wire_scalars(): void {
+    Assert.eq(Task.spawn(() => 9223372036854775807L).await, 9223372036854775807L);
+    Assert.eq(Task.spawn(() => -9223372036854775807L - 1L).await, -9223372036854775807L - 1L);
+    let pi: double = 3.141592653589793;
+    Assert.is_true(Task.spawn<double>(() => pi).await == pi);
+    let zero: double = -0.0;
+    let negative_zero: double = Task.spawn<double>(() => zero).await;
+    let one: double = 1.0;
+    Assert.is_true(one / negative_zero < zero);
+    Assert.is_true(Task.spawn(() => true).await);
+    Assert.eq((int)Task.spawn(() => (byte)255).await, 255);
+    Assert.is_true(Task.spawn<float>(() => 1.5f).await == 1.5f);
+    Assert.is_true(Task.spawn(() => TaskWireColor.Blue).await == TaskWireColor.Blue);
+    let pair = Task.spawn(
+        () => {
+            let value = TaskWirePair();
+            value.whole = -42L;
+            value.part = 0.1;
+            return value;
+        }
+    ).await;
+    Assert.eq(pair.whole, -42L);
+    Assert.is_true(pair.part == 0.1);
+    let pool = TaskPool(2);
+    let huge: double = 1e300;
+    Assert.is_true(pool.dispatch<double>(() => huge).await.unwrap() == huge);
+    pool.close().await.unwrap();
+}
+
+// Dispatches beyond the pool size queue for the next free worker; a cancelled queued dispatch
+// must hand its turn on rather than strand the only worker.
+@test
+@timeout(180000)
+async fun task_pool_queued_cancel(): void {
+    let pool = TaskPool(1);
+    let first = pool.dispatch(() => 1);
+    Promise.start(first);
+    let second = pool.dispatch(() => 2);
+    Promise.start(second);
+    Promise.cancel(second);
+    let third = pool.dispatch(() => 3);
+    Promise.start(third);
+    Assert.eq(first.await.unwrap(), 1);
+    Assert.eq(third.await.unwrap(), 3);
+    pool.close().await.unwrap();
+}
+
 @test
 @timeout(180000)
 async fun task_pool_hundred(): void {

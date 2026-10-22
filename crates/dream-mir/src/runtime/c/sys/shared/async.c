@@ -185,11 +185,11 @@ dream_ptr dream_event_new(void) {
 
 void dream_event_complete(dream_ptr f) {
 #ifndef DREAM_WASM32
-    /* Only the owner stores its own scheduler and claimers only clear it, so a lock-free read
-     * decides locality; dream_foreign_work_end still claims under the lock. */
-    int local = __atomic_load_n(scheduler_at(f), __ATOMIC_RELAXED) == &sched;
+    /* Only the owner stores its own scheduler and claimers only replace it, so a lock-free read
+     * decides locality. A completer that claims first owns the hand-back through foreign_drain. */
+    int local = __atomic_load_n(scheduler_at(f), __ATOMIC_ACQUIRE) == &sched;
     if (!local) { dream_complete_foreign(f, 0); return; }
-    dream_foreign_work_end(f);
+    if (!dream_foreign_work_end(f)) { return; }
     if (status_of(f) == 2) { scheduler_drop_start_retain(f); return; }
 #endif
     dream_async_complete(f, 0);
@@ -278,15 +278,15 @@ void dream_cancel(dream_ptr f) {
         return;
     }
 #ifndef DREAM_WASM32
-    /* The host still holds an in-flight frame; its completion hands it back to drop the retain. */
-    dream_mutex_lock(&foreign_claim_mu);
-    if (status_of(f)) {
-        dream_mutex_unlock(&foreign_claim_mu);
+    /* The host still holds an in-flight frame; its completion hands it back to drop the retain.
+     * Reading F_SCHEDULER after winning the status CAS sees either the owner's scheduler or a
+     * completer's sentinel, and both mean foreign_drain will drop the retain. */
+    int32_t idle = 0;
+    if (!__atomic_compare_exchange_n(i32_at(f, F_STATUS), &idle, 2, 0, __ATOMIC_ACQ_REL,
+                                     __ATOMIC_ACQUIRE)) {
         return;
     }
-    status_store(f, 2);
-    in_flight = *scheduler_at(f) != NULL;
-    dream_mutex_unlock(&foreign_claim_mu);
+    in_flight = __atomic_load_n(scheduler_at(f), __ATOMIC_ACQUIRE) != NULL;
 #else
     if (status_of(f)) {
         return;
@@ -368,6 +368,10 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     /* A foreign completion landing after this check is routed by foreign_drain on this thread,
      * which reads the waker only once it is set. */
     if (status_of(child)) {
+        /* A cancelled frame never wrote the result slot the resumed parent would read. */
+        if (DREAM_UNLIKELY(status_of(child) == 2)) {
+            DREAM_PANIC_LITERAL(u"panic: awaited a cancelled future");
+        }
         dream_enqueue(parent);
         return;
     }
@@ -460,14 +464,14 @@ void dream_run_loop(void) {
                 /* Re-check under the lock: a foreign completion between the drain above and
                  * this wait must not be slept through. */
                 if (!sched.fq_head && !dream_callback_pending()) {
-                    dream_cond_wait_ns(&sched.cv, &sched.mu, due - now);
+                    scheduler_park(due - now);
                 }
                 dream_mutex_unlock(&sched.mu);
             } else if (!timer_head) {
                 /* No timers: park until a foreign completion signals. */
                 dream_mutex_lock(&sched.mu);
                 if (!sched.fq_head && !dream_callback_pending()) {
-                    dream_cond_wait(&sched.cv, &sched.mu);
+                    scheduler_park(-1);
                 }
                 dream_mutex_unlock(&sched.mu);
             }

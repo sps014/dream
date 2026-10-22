@@ -1,34 +1,53 @@
 module system.webapi;
 
 internal class WebRouting {
-    internal static fun match_path(
-        borrow pattern: string,
-        borrow path: string
-    ): Option<Map<string, string>> {
-        let params = Map<string, string>();
+    /// Whether `path` has the segments of `pattern`, where `{name}` matches any one segment.
+    internal static fun path_matches(borrow pattern: string, borrow path: string): bool {
         let pi = WebRouting.skip_slash(pattern, 0);
         let si = WebRouting.skip_slash(path, 0);
         let pn = pattern.length;
         let sn = path.length;
         while pi < pn || si < sn {
             if pi >= pn || si >= sn {
-                let none: Option<Map<string, string>> = Option.None;
-                return none;
+                return false;
             }
             let pe = WebRouting.find_slash(pattern, pi);
             let se = WebRouting.find_slash(path, si);
-            if (pe - pi) >= 3 && pattern.char_at(pi) == '{' && pattern.char_at(pe - 1) == '}' {
-                params[pattern.substring(pi + 1, pe - 1)] = Encoding.uri_decode_component(
-                    path.substring(si, se)
-                ).unwrap_or(path.substring(si, se));
-            } else if !WebRouting.region_eq(pattern, pi, pe, path, si, se) {
-                let none2: Option<Map<string, string>> = Option.None;
-                return none2;
+            if !WebRouting.is_param(pattern, pi, pe)
+                && !WebRouting.region_eq(pattern, pi, pe, path, si, se) {
+                return false;
             }
             pi = WebRouting.skip_slash(pattern, pe);
             si = WebRouting.skip_slash(path, se);
         }
-        return Option.Some(params);
+        return true;
+    }
+
+    /// The percent-decoded `{name}` segments of a `path` that `path_matches` accepted.
+    internal static fun path_params(
+        borrow pattern: string,
+        borrow path: string
+    ): Map<string, string> {
+        let params = Map<string, string>();
+        let pi = WebRouting.skip_slash(pattern, 0);
+        let si = WebRouting.skip_slash(path, 0);
+        while pi < pattern.length && si < path.length {
+            let pe = WebRouting.find_slash(pattern, pi);
+            let se = WebRouting.find_slash(path, si);
+            if WebRouting.is_param(pattern, pi, pe) {
+                let raw = path.substring(si, se);
+                params[pattern.substring(pi + 1, pe - 1)] = Encoding.uri_decode_component(raw)
+                    .unwrap_or(raw);
+            }
+            pi = WebRouting.skip_slash(pattern, pe);
+            si = WebRouting.skip_slash(path, se);
+        }
+        return params;
+    }
+
+    static fun is_param(borrow pattern: string, start: int, end: int): bool {
+        return (end - start) >= 3 && pattern.char_at(start) == '{'
+            && pattern.char_at(end - 1) == '}';
     }
 
     internal static fun cookie_value(borrow header: string, borrow name: string): Option<string> {

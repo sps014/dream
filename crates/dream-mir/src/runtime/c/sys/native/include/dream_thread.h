@@ -1,7 +1,8 @@
 #ifndef DREAM_THREAD_H
 #define DREAM_THREAD_H
 
-/* Threads, locks and a monotonic clock over pthreads, or Win32 where the MSVC target has no pthread.h. */
+/* Threads, locks and a monotonic clock over pthreads, or Win32 where the MSVC target has no pthread.h.
+ * dream_word_wait blocks while *word == expected and may return spuriously; callers loop. */
 
 #include <stdint.h>
 
@@ -54,6 +55,14 @@ static inline void dream_thread_release(dream_thread t) { CloseHandle(t); }
 static inline dream_thread_id dream_thread_self(void) { return GetCurrentThreadId(); }
 static inline int dream_thread_id_eq(dream_thread_id a, dream_thread_id b) { return a == b; }
 static inline void dream_thread_yield(void) { SwitchToThread(); }
+
+#if defined(_MSC_VER)
+#pragma comment(lib, "synchronization")
+#endif
+static inline void dream_word_wait(uint32_t *word, uint32_t expected) {
+    WaitOnAddress(word, &expected, sizeof(expected), INFINITE);
+}
+static inline void dream_word_wake_one(uint32_t *word) { WakeByAddressSingle(word); }
 
 static inline int64_t dream_monotonic_ns(void) {
     static LARGE_INTEGER freq;
@@ -110,6 +119,31 @@ static inline void dream_thread_release(dream_thread t) { pthread_detach(t); }
 static inline dream_thread_id dream_thread_self(void) { return pthread_self(); }
 static inline int dream_thread_id_eq(dream_thread_id a, dream_thread_id b) { return pthread_equal(a, b); }
 static inline void dream_thread_yield(void) { sched_yield(); }
+
+#if defined(__linux__)
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+static inline void dream_word_wait(uint32_t *word, uint32_t expected) {
+    syscall(SYS_futex, word, FUTEX_WAIT_PRIVATE, expected, NULL, NULL, 0);
+}
+static inline void dream_word_wake_one(uint32_t *word) {
+    syscall(SYS_futex, word, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+}
+#elif defined(__APPLE__)
+/* The libc++ atomic-wait primitive; os_sync_wait_on_address needs macOS 14.4. */
+extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);
+extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
+#define DREAM_UL_COMPARE_AND_WAIT 1u
+static inline void dream_word_wait(uint32_t *word, uint32_t expected) {
+    __ulock_wait(DREAM_UL_COMPARE_AND_WAIT, word, expected, 0);
+}
+static inline void dream_word_wake_one(uint32_t *word) {
+    __ulock_wake(DREAM_UL_COMPARE_AND_WAIT, word, 0);
+}
+#else
+#error "dream_word_wait needs a futex-style primitive on this platform"
+#endif
 
 static inline int64_t dream_monotonic_ns(void) {
     struct timespec ts;

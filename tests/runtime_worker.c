@@ -31,6 +31,13 @@ static void pause_acquired(void *worker);
 #include "../crates/dream-mir/src/runtime/c/sys/native/worker.c"
 #undef dream_thread_start
 
+static uint32_t live_workers(void) {
+    dream_mutex_lock(&reg_mu);
+    uint32_t live = slot_count - free_len;
+    dream_mutex_unlock(&reg_mu);
+    return live;
+}
+
 void dream_complete_foreign_owned(dream_ptr future, dream_ptr reply) {
     if (!future) { dream_release(reply); return; }
     TestCompletion *completion = (TestCompletion *)future;
@@ -84,9 +91,7 @@ void dream_callback_set_waker(void (*wake)(void *), void *context) {
 }
 void dream_release_closure_env(dream_ptr env) { dream_release(env); }
 void dream_panic(dream_ptr message) {
-    dream_mutex_lock(&reg_mu);
-    assert(HASH_COUNT(workers) == 0);
-    dream_mutex_unlock(&reg_mu);
+    assert(live_workers() == 0);
     for (int i = 0; i < dream_str_len(message); ++i) {
         fputc(dream_char_at_u(message, i), stderr);
     }
@@ -222,7 +227,7 @@ static void concurrent_session_handoffs(void) {
         assert(dream_thread_start(&threads[i], repeated_sessions, NULL) == 0);
     }
     for (int i = 0; i < 8; ++i) { dream_thread_join(threads[i]); }
-    assert(HASH_COUNT(workers) == 0);
+    assert(live_workers() == 0);
     assert(debug_get_live_objects() == 0);
 }
 
@@ -390,13 +395,43 @@ static void session_job_reuse(void) {
     release_worker(w);
 }
 
+/* FIFO reuse visits every free slot once per lap, so 256 laps wrap each 8-bit generation. */
+static void generational_ids(void) {
+    int32_t first = workerSpawn(0);
+    uint32_t slot = (uint32_t)first & WORKER_SLOT_MASK;
+    workerTerminate(first);
+    assert(!acquire_worker(first));
+    int32_t previous = first;
+    int saw_wrap = 0;
+    int laps = 256 * ((int)slot_count + 1);
+    for (int i = 0; i < laps; i++) {
+        int32_t id = workerSpawn(0);
+        assert(id > 0);
+        assert(id != previous);
+        if (((uint32_t)id & WORKER_SLOT_MASK) == slot && ((uint32_t)id >> WORKER_SLOT_BITS) == 1u
+            && i > 0) {
+            saw_wrap = 1;
+        }
+        assert(!acquire_worker(previous));
+        previous = id;
+        workerTerminate(id);
+    }
+    assert(saw_wrap);
+    int32_t a = workerSpawn(0), b = workerSpawn(0);
+    workerTerminate(a);
+    workerTerminate(b);
+    int32_t c = workerSpawn(0);
+    assert(((uint32_t)c & WORKER_SLOT_MASK) != ((uint32_t)b & WORKER_SLOT_MASK));
+    workerTerminate(c);
+    assert(live_workers() == 0);
+}
+
 int main(int argc, char **argv) {
     dream_thread guard;
     assert(dream_thread_start(&guard, watchdog, NULL) == 0);
     dream_thread_release(guard);
     if (argc > 1) {
-        if (strcmp(argv[1], "start-failure") == 0) { fail_start = 1; }
-        else { next_id = (int64_t)INT32_MAX + 1; }
+        fail_start = strcmp(argv[1], "start-failure") == 0;
         /* Threads bind on the first job, so a start failure surfaces at dispatch. */
         int32_t id = workerSpawn(0);
         dream_ptr msg = dream_utf8_to_string("start");
@@ -412,9 +447,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 100; ++i) {
             ids[i] = workerSpawn(0);
             assert(ids[i] > 0);
-            if (i) { assert(ids[i] > ids[i - 1]); }
+            for (int j = 0; j < i; ++j) { assert(ids[i] != ids[j]); }
         }
-        assert(HASH_COUNT(workers) == 100);
+        assert(live_workers() == 100);
         for (int i = 0; i < 100; ++i) {
             char text[16];
             snprintf(text, sizeof(text), "job-%d", i);
@@ -434,7 +469,7 @@ int main(int argc, char **argv) {
             dream_release(reply);
         }
         for (int i = 99; i >= 0; --i) { workerTerminate(ids[i]); }
-        assert(HASH_COUNT(workers) == 0);
+        assert(live_workers() == 0);
         assert(debug_get_live_objects() == 0);
     }
 
@@ -444,7 +479,7 @@ int main(int argc, char **argv) {
         assert(dream_thread_start(&owners[i], spawn_group, &pool[i * 25]) == 0);
     }
     for (int i = 0; i < 4; ++i) { dream_thread_join(owners[i]); }
-    assert(HASH_COUNT(workers) == 100);
+    assert(live_workers() == 100);
     for (int i = 0; i < 100; ++i) {
         for (int j = 0; j < i; ++j) { assert(pool[i] != pool[j]); }
     }
@@ -456,7 +491,7 @@ int main(int argc, char **argv) {
         dream_release(reply);
     }
     for (int i = 0; i < 100; ++i) { workerTerminate(pool[i]); }
-    assert(HASH_COUNT(workers) == 0);
+    assert(live_workers() == 0);
     assert(debug_get_live_objects() == 0);
     session_job_reuse();
     acquired_operation_survives_termination();
@@ -464,6 +499,7 @@ int main(int argc, char **argv) {
     concurrent_session_handoffs();
     one_shot_cancellation();
     termination_boundaries();
+    generational_ids();
     puts("worker registry stress passed");
 }
 

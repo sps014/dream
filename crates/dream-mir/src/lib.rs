@@ -637,15 +637,20 @@ pub enum Rvalue {
     ArrayLen(Operand),
     /// `Bytes.of<T>(v)` — allocate a `byte[]` of `T`'s inline byte size and raw-copy the value's
     /// bytes into its payload. `value` pushes the value's (inline) address; `ty` is `T`.
+    /// With `wire`, the destination is instead a `string` holding one code unit per byte.
     ToBytes {
         value: Operand,
         ty: TypeId,
+        wire: bool,
     },
     /// `Bytes.to<T>(bytes)` — allocate a fresh block of `T`'s inline byte size (tagged as `T`) and
     /// raw-copy the `byte[]` buffer's payload into it. `bytes` pushes the buffer; `ty` is `T`.
+    /// With `wire`, `bytes` is a one-code-unit-per-byte `string` and `T` is a scalar or value
+    /// struct decoded in place, so nothing is allocated.
     FromBytes {
         bytes: Operand,
         ty: TypeId,
+        wire: bool,
     },
     /// `Buffer.realloc<T>(arr, new_len)` (`@unsafe`) — resizes `array`'s backing block via the
     /// allocator's `$realloc`, preserving the overlapping prefix and zero-filling any grown tail.

@@ -1,9 +1,10 @@
 use crate::operations::{Failure, Output, runtime};
+use dream_host_abi::handles::HandleTable;
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
     process::Stdio,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::{
@@ -58,15 +59,7 @@ struct Child {
     cancel: watch::Sender<bool>,
     exit: watch::Receiver<Option<Result<i32, Failure>>>,
 }
-#[derive(Default)]
-struct Children {
-    next: i32,
-    children: BTreeMap<i32, Arc<Child>>,
-}
-fn children() -> &'static Mutex<Children> {
-    static CHILDREN: OnceLock<Mutex<Children>> = OnceLock::new();
-    CHILDREN.get_or_init(Mutex::default)
-}
+static CHILDREN: Mutex<HandleTable<Arc<Child>>> = Mutex::new(HandleTable::new());
 use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
@@ -75,14 +68,13 @@ fn io(error: std::io::Error) -> Failure {
     ("EIO", error.to_string())
 }
 fn child(id: i32) -> Result<Arc<Child>, Failure> {
-    lock(children())
-        .children
-        .get(&id)
+    lock(&CHILDREN)
+        .get(id)
         .cloned()
         .ok_or_else(|| error("ECLOSED", "child process is closed"))
 }
 pub(crate) fn close(id: i32) {
-    if let Some(child) = lock(children()).children.remove(&id) {
+    if let Some(child) = lock(&CHILDREN).remove(id) {
         let _ = child.cancel.send(true);
     }
 }
@@ -161,16 +153,9 @@ async fn spawn(command: &str, wire: &[u8], options: &Options) -> Result<OwnedChi
         cancel,
         exit,
     });
-    let id = {
-        let mut registry = lock(children());
-        if registry.next == i32::MAX || registry.children.len() >= 1024 {
-            return Err(error("ELIMIT", "too many child processes"));
-        }
-        registry.next += 1;
-        let id = registry.next;
-        registry.children.insert(id, state.clone());
-        id
-    };
+    let id = lock(&CHILDREN)
+        .insert(state.clone())
+        .ok_or_else(|| error("ELIMIT", "too many child processes"))?;
     let timeout_ms = options.timeout_ms;
     runtime()?.spawn(async move {
         let deadline = async {

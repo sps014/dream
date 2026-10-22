@@ -132,6 +132,10 @@ pub extern "C" fn httpServerClose(id: i32) {
 pub extern "C" fn httpServerReleaseRequest(id: i32) {
     crate::http_server::release(id);
 }
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerCloseUpload(id: i32) {
+    crate::http_server::close_upload(id);
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn httpServerWaitAsync(future: DreamPtr, id: i32) -> i32 {

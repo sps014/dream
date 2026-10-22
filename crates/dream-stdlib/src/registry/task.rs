@@ -78,6 +78,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/task/task_wait_guard.dream"),
         ),
         (
+            "<std>/system/task/task_pool_ticket.dream",
+            include_str!("../system/task/task_pool_ticket.dream"),
+        ),
+        (
             "<std>/system/task/task.dream",
             include_str!("../system/task/task.dream"),
         ),

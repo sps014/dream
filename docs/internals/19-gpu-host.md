@@ -107,7 +107,9 @@ layout together. `-reflection-json` is accepted and ignored.
 
 ## Resources
 
-Handles are positive and never reused; `0` means failure. The guest keeps each handle in a
+Handles come from `dream_host_abi::handles::HandleTable`: they are positive, `0` means failure,
+and a released slot comes back with a new generation, so a stale handle misses instead of naming
+a newer resource and the id space never runs out. The guest keeps each handle in a
 `GpuOwnedHandle`, and command encoders and `GpuArgs` keep the owned handles of every resource
 their commands name, so a resource whose last user reference is gone is released only after
 `submit` handed its commands to the host. Each entry records its owning device,

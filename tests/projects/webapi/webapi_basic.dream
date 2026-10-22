@@ -153,8 +153,35 @@ async fun webapi_basic(): void {
         "--dream\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\ntitle\r\n--dream\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nbody\r\n--dream--\r\n"
     );
     let upload = client.send(multipart).await.unwrap();
-    Assert.eq(upload.read_text().await.unwrap(), "title:a.txt:body");
+    Assert.eq(upload.read_text().await.unwrap(), "title:a.txt:body:od");
     upload.close();
+    let binary_body = List<byte>();
+    binary_body.push_all(
+        Encoding.utf8_encode(
+            "--b\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"x.bin\"\r\n\r\n"
+        )
+    );
+    binary_body.push_all([(byte)0, (byte)13, (byte)10, (byte)128, (byte)255]);
+    binary_body.push_all(Encoding.utf8_encode("\r\n--b--\r\n"));
+    let binary_upload = HttpRequest(HttpMethod.Post, Url.parse(base + "/upload-bytes").unwrap());
+    binary_upload.headers.set("Content-Type", "multipart/form-data; boundary=b");
+    binary_upload.body = binary_body.take_array();
+    let binary_reply = client.send(binary_upload).await.unwrap();
+    Assert.eq(binary_reply.read_text().await.unwrap(), "5,0,13,10,128,255");
+    binary_reply.close();
+    let streamed = HttpRequest(HttpMethod.Post, Url.parse(base + "/echo-stream").unwrap());
+    streamed.body = Encoding.utf8_encode("streamed!");
+    let streamed_reply = client.send(streamed).await.unwrap();
+    Assert.eq(streamed_reply.read_text().await.unwrap(), "streamed!:3:ECLOSED");
+    streamed_reply.close();
+    let limited = HttpRequest(HttpMethod.Post, Url.parse(base + "/limited-form").unwrap());
+    limited.headers.set("Content-Type", "multipart/form-data; boundary=b");
+    limited.body = Encoding.utf8_encode(
+        "--b\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n1\r\n--b\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n2\r\n--b--\r\n"
+    );
+    let limited_reply = client.send(limited).await.unwrap();
+    Assert.eq(limited_reply.read_text().await.unwrap(), "EINVAL");
+    limited_reply.close();
     let preflight = HttpRequest(HttpMethod.Options, Url.parse(base + "/hello/1").unwrap());
     preflight.headers.set("Origin", "https://example.com");
     preflight.headers.set("Access-Control-Request-Method", "GET");
@@ -181,6 +208,16 @@ async fun webapi_basic(): void {
         }
     }
     socket.close().await.unwrap();
+    let cross_site = HttpRequest(HttpMethod.Get, Url.parse(base + "/ws").unwrap());
+    cross_site.headers.set("Origin", "https://evil.example");
+    cross_site.headers.set("Upgrade", "websocket");
+    cross_site.headers.set("Connection", "Upgrade");
+    cross_site.headers.set("Sec-WebSocket-Version", "13");
+    cross_site.headers.set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+    let rejected = client.send(cross_site).await.unwrap();
+    Assert.eq(rejected.status, 403);
+    rejected.close();
+    webapi_get(client, base, "/ws", 400).await;
     let idle_socket = WebSocket.connect("ws://127.0.0.1:" + port.to_string() + "/ws", 5000)
         .await
         .unwrap();
@@ -283,12 +320,60 @@ class WebapiRoutes {
     }
 
     @post("/multipart")
-    public static fun webapi_multipart(@form title: string, @file upload: UploadedFile): string {
-        return title + ":" + upload.filename + ":" + Encoding.utf8_decode(upload.bytes);
+    public static async fun webapi_multipart(
+        @form title: string,
+        @file upload: UploadedFile
+    ): string {
+        let first = Encoding.utf8_decode(upload.read().await.unwrap());
+        upload.seek(1L).await.unwrap();
+        let again = Encoding.utf8_decode(upload.read(2).await.unwrap());
+        return title + ":" + upload.filename + ":" + first + ":" + again;
+    }
+
+    @post("/upload-bytes")
+    public static async fun webapi_upload_bytes(@file upload: UploadedFile): string {
+        let bytes = upload.read().await.unwrap();
+        let text = upload.size.to_string();
+        for (let b in bytes) {
+            text = text + "," + ((int)b).to_string();
+        }
+        return text;
+    }
+
+    @post("/echo-stream")
+    public static async fun webapi_echo_stream(req: HttpIncoming): string {
+        let stream = req.stream();
+        let text = "";
+        let chunks = 0;
+        while true {
+            let chunk = stream.read_async(3).await.unwrap();
+            if chunk.length == 0 {
+                break;
+            }
+            chunks++;
+            text = text + Encoding.utf8_decode(chunk);
+        }
+        let after = req.read_body_text().await;
+        return text + ":" + chunks.to_string() + ":" + after.unwrap_err().code();
+    }
+
+    @post("/limited-form")
+    public static async fun webapi_limited_form(req: HttpIncoming): string {
+        let strict = req.form(max_fields: 1).await;
+        if strict.is_err() {
+            return strict.unwrap_err().code();
+        }
+        return strict.unwrap().get_all("a").join(",");
     }
 
     @websocket("/ws")
-    public static async fun webapi_ws(ws: ServerWebSocket): void {
+    public static async fun webapi_ws(ws: ServerWebSocket, req: HttpIncoming): void {
+        let origin = req.headers.get("Origin");
+        if origin.is_some() && origin.unwrap() != "https://trusted.example" {
+            ws.close_with(1008, "origin not allowed").await.unwrap();
+            return;
+        }
+        ws.accept().await.unwrap();
         await for (let message in ws.messages()) {
             switch (message) {
                 Text(text) => {

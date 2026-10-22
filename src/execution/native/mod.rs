@@ -4,10 +4,12 @@ pub(crate) mod bundle;
 pub(crate) mod c_link;
 pub(crate) mod capability_abi;
 pub(crate) mod cc;
+pub mod exit_status;
 pub(crate) mod native_c;
 pub(crate) mod pgo;
 pub(crate) mod runtime_manifest;
 
+pub use exit_status::Crash;
 pub use pgo::Pgo;
 
 use crate::driver::wasm_opt::OptLevel;
@@ -157,23 +159,22 @@ fn parse_leak_live(stderr: &str) -> Option<u64> {
     digits.parse().ok()
 }
 
-/// The guest was killed by a signal (`abort()`, SIGSEGV, …). Stderr from the C runtime
-/// (the panic message) has already been written to the inherited terminal; callers must
-/// not wrap this in another `error: … (status …)` line.
+/// The guest crashed: a Unix signal (`abort()`, SIGSEGV, …) or a Windows exception. A panic
+/// message from the C runtime, when there is one, is already on the inherited stderr.
 #[derive(Debug)]
-pub struct GuestAborted;
+pub struct GuestAborted(pub Crash);
 
 impl std::fmt::Display for GuestAborted {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "native guest aborted")
+        write!(f, "guest crashed: {}", self.0)
     }
 }
 
 impl std::error::Error for GuestAborted {}
 
 /// Runs the guest and answers its exit status. A non-zero status is a normal outcome — `main` may
-/// return `int` or a failing `Result` — so only a crash (killed by a signal, no status at all) is
-/// an error here; callers that treat any failure as their own decide that for themselves.
+/// return `int` or a failing `Result` — so only a crash is an error here; callers that treat any
+/// failure as their own decide that for themselves.
 /// `cwd` is the directory the guest starts in (the build output when the package has assets).
 pub fn run_native_bin(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
@@ -185,10 +186,10 @@ pub fn run_native_bin(
     let mut cmd = native_command(config, bin, module, cwd)?;
     cmd.args(extra_args);
     let status = cmd.status()?;
-    match status.code() {
-        Some(code) => Ok(code),
-        None => Err(Box::new(GuestAborted)),
+    if let Some(crash) = Crash::of(status) {
+        return Err(Box::new(GuestAborted(crash)));
     }
+    Ok(status.code().unwrap_or(1))
 }
 
 /// A guest command with its run environment. Paths are made absolute before a `cwd` change so the

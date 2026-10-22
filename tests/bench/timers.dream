@@ -70,7 +70,55 @@ async fun timer_burst(n: int, iters: int): int {
     return total;
 }
 
+@noinline
+async fun timer_armed(n: int): int {
+    let pending = Array.alloc<Future<Result<Unit, CancelledError>>>(n);
+    for (let i = 0; i < n; i = i + 1) {
+        pending[i] = Time.sleep(60000 + (i * 7919) % 1000);
+        Promise.start(pending[i]);
+    }
+    Time.sleep(0).await;
+    for (let i = 0; i < n; i = i + 1) {
+        Promise.cancel(pending[i]);
+    }
+    return n;
+}
+
+@noinline
+async fun timer_churn(background: int, iters: int): int {
+    let armed = Array.alloc<Future<Result<Unit, CancelledError>>>(background);
+    for (let i = 0; i < background; i = i + 1) {
+        armed[i] = Time.sleep(60000 + i);
+        Promise.start(armed[i]);
+    }
+    for (let i = 0; i < iters; i = i + 1) {
+        let timer = Time.sleep(30000 + i % 60000);
+        Promise.start(timer);
+        Promise.cancel(timer);
+    }
+    for (let i = 0; i < background; i = i + 1) {
+        Promise.cancel(armed[i]);
+    }
+    return iters;
+}
+
 async fun run_suite(): void {
+    let swa = Stopwatch();
+    let va = timer_armed(100).await;
+    swa.stop();
+    report("timer_armed_100", swa.elapsed_nanos, 100, va);
+    swa = Stopwatch();
+    va = timer_armed(10000).await;
+    swa.stop();
+    report("timer_armed_10k", swa.elapsed_nanos, 10000, va);
+    swa = Stopwatch();
+    va = timer_armed(100000).await;
+    swa.stop();
+    report("timer_armed_100k", swa.elapsed_nanos, 100000, va);
+    swa = Stopwatch();
+    va = timer_churn(1000, 10000).await;
+    swa.stop();
+    report("timer_churn_1k", swa.elapsed_nanos, 10000, va);
     let sw1 = Stopwatch();
     let v1 = timer_burst(1, 5000).await;
     sw1.stop();

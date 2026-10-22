@@ -131,7 +131,7 @@ impl<'a> Analyzer<'a> {
             self.hir.ok = false;
             return;
         };
-        if self.boxed_locals.contains(name) {
+        if self.captured_by_cell(name, ty) {
             self.declare_boxed_local(name, ty, value, BoxKind::Cell);
             return;
         }

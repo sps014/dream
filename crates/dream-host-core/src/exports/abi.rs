@@ -28,6 +28,7 @@ pub unsafe extern "C" fn dream_host_bind_v3(context: *const GuestContext) -> u32
         || context.status.is_none()
         || context.retain.is_none()
         || context.release.is_none()
+        || context.set_park.is_none()
     {
         return HostStatus::Invalid as u32;
     }
@@ -91,6 +92,18 @@ pub extern "C" fn dream_host_truncate(reference: DreamPtr, length: u32) -> u32 {
 pub extern "C" fn dream_host_complete_foreign(future: DreamPtr, result: u64) {
     if let Some(complete) = guest().and_then(|g| g.complete) {
         unsafe { complete(future, result) }
+    }
+}
+
+/// Installs (or, with null hooks, removes) the calling thread's scheduler park hooks.
+#[unsafe(no_mangle)]
+pub extern "C" fn dream_host_set_park(
+    park: Option<unsafe extern "C" fn(i64, *mut u8)>,
+    wake: Option<unsafe extern "C" fn(*mut u8)>,
+    context: *mut u8,
+) {
+    if let Some(set_park) = guest().and_then(|g| g.set_park) {
+        unsafe { set_park(park, wake, context) }
     }
 }
 

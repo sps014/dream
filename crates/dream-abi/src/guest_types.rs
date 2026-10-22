@@ -20,6 +20,7 @@ pub struct GuestContext {
     pub status: Option<unsafe extern "C" fn(*mut u8) -> i32>,
     pub retain: Option<unsafe extern "C" fn(*mut u8)>,
     pub release: Option<unsafe extern "C" fn(*mut u8)>,
+    pub set_park: Option<unsafe extern "C" fn(Option<unsafe extern "C" fn(i64, *mut u8)>, Option<unsafe extern "C" fn(*mut u8)>, *mut u8)>,
 }
 /// Transport failures are independent of capability-specific error details.
 #[repr(u32)]

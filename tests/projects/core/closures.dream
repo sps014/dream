@@ -207,3 +207,31 @@ fun closure_void_indirect_call(): void {
     c80_run(inc);
     Assert.eq(counter.value, 13);
 }
+
+class c81_Gauge {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+
+    public fun show(): string {
+        return this.value.to_string();
+    }
+}
+
+// A never-rebound capture is shared by identity; a rebound one still observes later assignments.
+@test
+@timeout(180000)
+fun closure_capture_rebinding(): void {
+    let label = "fixed";
+    let fixed = c81_Gauge(1);
+    let moving = c81_Gauge(1);
+    let read = () => label + " " + fixed.show() + " " + moving.show();
+    fixed.value = 2;
+    moving = c81_Gauge(3);
+    Assert.eq(read(), "fixed 2 3");
+    let bound = fixed.show;
+    fixed.value = 4;
+    Assert.eq(bound(), "4");
+}

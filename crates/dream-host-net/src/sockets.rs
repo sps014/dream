@@ -1,9 +1,9 @@
 use crate::socket_operations::{self as operations, Failure, Output};
 use serde_json::{Value, json};
+use dream_host_abi::handles::HandleTable;
 use std::{
-    collections::BTreeMap,
     net::SocketAddr,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::{
@@ -33,15 +33,7 @@ struct Resource {
     socket: Socket,
     closed: watch::Sender<bool>,
 }
-#[derive(Default)]
-struct Registry {
-    next: i32,
-    sockets: BTreeMap<i32, Arc<Resource>>,
-}
-fn registry() -> &'static Mutex<Registry> {
-    static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
-    REGISTRY.get_or_init(Mutex::default)
-}
+static SOCKETS: Mutex<HandleTable<Arc<Resource>>> = Mutex::new(HandleTable::new());
 use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
@@ -50,14 +42,13 @@ fn io(error: std::io::Error) -> Failure {
     crate::sockets::error("EIO", error)
 }
 fn resource(id: i32) -> Result<Arc<Resource>, Failure> {
-    lock(registry())
-        .sockets
-        .get(&id)
+    lock(&SOCKETS)
+        .get(id)
         .cloned()
         .ok_or_else(|| error("ECLOSED", "socket is closed"))
 }
 pub(crate) fn close(id: i32) {
-    if let Some(socket) = lock(registry()).sockets.remove(&id) {
+    if let Some(socket) = lock(&SOCKETS).remove(id) {
         socket.closed.send_replace(true);
     }
 }
@@ -66,16 +57,10 @@ fn register(
     local: SocketAddr,
     peer: Option<SocketAddr>,
 ) -> Result<Output, Failure> {
-    let mut registry = lock(registry());
-    if registry.next == i32::MAX || registry.sockets.len() >= 1024 {
-        return Err(error("ELIMIT", "socket capacity exhausted"));
-    }
-    registry.next += 1;
-    let id = registry.next;
     let (closed, _) = watch::channel(false);
-    registry
-        .sockets
-        .insert(id, Arc::new(Resource { socket, closed }));
+    let id = lock(&SOCKETS)
+        .insert(Arc::new(Resource { socket, closed }))
+        .ok_or_else(|| error("ELIMIT", "socket capacity exhausted"))?;
     let bytes = json!({"id":id,"local_host":local.ip().to_string(),"local_port":local.port(),"peer_host":peer.map(|p| p.ip().to_string()),"peer_port":peer.map(|p| p.port())}).to_string().into_bytes();
     Ok(Output {
         bytes,
@@ -318,7 +303,7 @@ mod tests {
     }
     #[test]
     fn resources_cancel_and_unclaimed_handles_are_reclaimed() {
-        let baseline = lock(registry()).sockets.len();
+        let baseline = lock(&SOCKETS).len();
         let listener = metadata(&complete(
             start("listen", json!({"host":"127.0.0.1","port":0}), &[]),
             true,
@@ -338,7 +323,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(1));
         }
         operations::OPERATIONS.release(unclaimed);
-        assert_eq!(lock(registry()).sockets.len(), baseline);
+        assert_eq!(lock(&SOCKETS).len(), baseline);
     }
     fn metadata_error(wire: &[u8]) -> Value {
         assert_eq!(wire[0], 2);

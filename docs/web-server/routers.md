@@ -39,12 +39,20 @@ This app exposes `/v1/users/{id}`. Mount the same descriptor on another app with
 | `@put(path)` | Static method | Handles `PUT` requests. |
 | `@patch(path)` | Static method | Handles `PATCH` requests. |
 | `@delete(path)` | Static method | Handles `DELETE` requests. |
-| `@head(path)` | Static method | Handles `HEAD` requests. |
+| `@head(path)` | Static method | Handles `HEAD` requests. A `@get` route already answers `HEAD` for its path, so use this only when `HEAD` needs different behavior. |
 | `@options(path)` | Static method | Handles `OPTIONS` requests. |
 | `@websocket(path)` | Static method | Upgrades the request to a [WebSocket](websockets.md). |
 | `@use(middleware)` | Class or static method | Runs a [middleware](middleware.md) function around the group or route; repeatable. |
 
 Route paths are relative to the router prefix. Write a named segment as `{name}` and bind it with a parameter of the same name. Other per-route attributes are covered in their guides: [`@operation` and `@response`](openapi.md#operation-attributes), [`@requires_scopes`](authorization.md), and [`@produces`](streaming.md).
+
+## How a request finds its route
+
+Routes are tried in the order they were mounted, and within a router in declaration order. The first route whose path and method both match handles the request, so a fixed path such as `/users/me` must come before `/users/{id}` to be reachable.
+
+- A `HEAD` request is served by the first matching `@get` route. The response carries the same status and headers as `GET` but no body.
+- When the path matches but no route accepts the method, the response is 405 Method Not Allowed, with an `Allow` header listing the methods the path does accept (for example `Allow: GET, HEAD, POST`).
+- When no route matches the path, the response is 404 Not Found.
 
 ## Mounting
 

@@ -70,6 +70,14 @@ const CALLBACKS: &[(&str, &str, &str)] = &[
         "void (*release)(void *)",
         "unsafe extern \"C\" fn(*mut u8)",
     ),
+    // Replaces the calling thread's idle wait: `park(timeout_ns, context)` blocks until woken or
+    // the timeout (-1 waits indefinitely), and `wake(context)` may be called from any thread.
+    // Null hooks restore the default wait.
+    (
+        "set_park",
+        "void (*set_park)(void (*)(int64_t, void *), void (*)(void *), void *)",
+        "unsafe extern \"C\" fn(Option<unsafe extern \"C\" fn(i64, *mut u8)>, Option<unsafe extern \"C\" fn(*mut u8)>, *mut u8)",
+    ),
 ];
 
 pub fn c_header() -> String {

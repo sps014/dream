@@ -161,6 +161,7 @@ System.println(tok.check().is_err()); // true → ECANCELLED
 Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites).
 `Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`.
 `Promise.cancel(future)` marks a future cancelled; pending sleeps are dropped when the token is cancelled.
+A cancelled future has no result, so awaiting it afterwards panics with `awaited a cancelled future`.
 Cancellation follows ownership: the future being awaited by the cancelled one is cancelled as well, unless something else still holds it (a stored handle, a `Task.scope` job, another awaiter), in which case it keeps running.
 
 Cancelling a not-yet-started future means it never runs.
@@ -237,6 +238,19 @@ await run("user.wasm", {
 ```
 
 A complete example: [`sample/interop/async_fetch.dream`](https://github.com/sps014/dream/blob/main/sample/interop/async_fetch.dream).
+
+### When the Promise rejects
+
+A typed result such as `string` or `int` has no value that means "failed", so a rejected Promise stops the program: the `run` call rejects with the Promise's reason. Catch failures in JavaScript and resolve with a value your Dream code can check when the failure is expected:
+
+```js
+getUser: (id) =>
+  fetch(`/api/user/${id}`)
+    .then((r) => (r.ok ? r.text() : ""))
+    .catch(() => ""),
+```
+
+A Promise awaited as a [`js` value](../interop/js-type.md#awaiting-js-promises) reports rejection as `None` instead, and a rejection caused by cancelling the awaiting task is not a failure.
 
 ## Limitations
 

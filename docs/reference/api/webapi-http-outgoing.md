@@ -153,6 +153,14 @@ Creates a 404 Not Found response.
 public static fun not_found(): HttpOutgoing
 ```
 
+## `method_not_allowed`
+
+Creates a 405 Method Not Allowed response whose `Allow` header lists `allowed`, the methods that the requested path accepts, separated by `, `.
+
+```dream
+public static fun method_not_allowed(allowed: List<string>): HttpOutgoing
+```
+
 ## `empty`
 
 Creates a response without a body, with status 204 by default.

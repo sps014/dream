@@ -370,7 +370,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     /// `dream_from_bytes` hands back a heap box; a value-struct destination copies it out and
     /// frees it here (its type is not RC-tracked, so no scope-exit release covers it).
     fn store_from_bytes_value(&mut self, place: &Place, rv: &Rvalue) -> bool {
-        let Rvalue::FromBytes { ty, .. } = rv else {
+        let Rvalue::FromBytes { bytes, ty, wire } = rv else {
             return false;
         };
         if !self.is_value(*ty) {
@@ -379,6 +379,12 @@ impl<'l, 'a> Fx<'l, 'a> {
         let Some(dst) = self.value_dest(place) else {
             return false;
         };
+        if *wire {
+            let text = self.operand(bytes);
+            let sz = elem_size(&self.l.cx, *ty) as i64;
+            self.call("dream_from_wire", &[text, dst, V::i32(sz)]);
+            return true;
+        }
         let size = native_scalar_size(&self.l.cx, *ty).0.max(1) as i64;
         let boxed = self.rvalue(rv, None);
         let (dp, bp) = (self.ptr(&dst), self.ptr(&boxed));

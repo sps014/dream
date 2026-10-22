@@ -1511,6 +1511,9 @@ DREAM_ALWAYS_INLINE void dream_sb_push_long(dream_ptr sb, int64_t v) {
 dream_ptr dream_array_to_string(dream_ptr arr);
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size);
 dream_ptr dream_from_bytes(dream_ptr bytes, dream_size size, int32_t tag);
+dream_ptr dream_to_wire(dream_ptr value, int32_t size);
+void dream_from_wire(dream_ptr text, dream_ptr dst, int32_t size);
+dream_ptr dream_from_wire_box(dream_ptr text, dream_size size, int32_t tag);
 int32_t dream_object_hash_code(dream_ptr p);
 int32_t dream_bitcast_f32(float v);
 int32_t dream_hash_double(double v);
@@ -1751,8 +1754,9 @@ void dream_complete_foreign(dream_ptr f, dream_result res);
 /* Called by a delegate-shape poll thunk before handing `future` to a deferred host: binds it to
  * this thread's scheduler, which stays in dream_run_loop while the work is in flight. */
 void dream_foreign_work_begin(dream_ptr future);
-/* Undo `dream_foreign_work_begin` when the host did not defer (returned 0). */
-void dream_foreign_work_end(dream_ptr future);
+/* Undo `dream_foreign_work_begin` when the host did not defer (returned 0). Returns 0 when a
+ * foreign completion already claimed the frame and will hand it back through the queue. */
+int dream_foreign_work_end(dream_ptr future);
 dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 /* Called by runtime init when the program links C: worker threads then serve one session each. */
 void dream_worker_isolate_threads(void);

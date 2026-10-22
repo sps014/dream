@@ -8,12 +8,6 @@ extern dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 static dream_mutex reg_mu = DREAM_MUTEX_INIT;
 
 #define worker_failure(message) DREAM_PANIC_LITERAL(u##message)
-#define registry_failure(message) do { \
-    dream_mutex_unlock(&reg_mu); \
-    worker_failure(message); \
-} while (0)
-#define uthash_fatal(msg) registry_failure("panic: out of memory indexing workers")
-#include "uthash.h"
 
 typedef struct Job {
     int32_t fn;
@@ -33,24 +27,31 @@ typedef struct Worker {
     Job *head;
     Job *tail;
     Job *spare;
+    /* The first spare, so a one-shot session's only job costs no allocation of its own. */
+    Job inline_job;
     dream_ptr active_future;
     int dead;
     int busy;
     int detached;
+    /* The serving thread is blocked on cv waiting for work or callbacks. Producers clear it as
+     * they signal, so a burst into one session wakes its thread once. */
+    int parked;
     /* A session holds a pool thread only while it has work or thread-bound callbacks, so
      * stopping an idle session never waits on a wake-up and join. */
     int bound;
-    UT_hash_handle hh;
 } Worker;
 
 /* Pool threads outlive sessions: thread creation dominated short Task fan-outs, so a thread
  * whose session goes idle parks here for the next session with work instead of exiting. */
 typedef struct PoolThread {
-    dream_mutex mu;
-    dream_cond cv;
     struct Worker *assigned;
+    /* POOL_IDLE until the thread blocks (POOL_PARKED) or is handed work (POOL_ASSIGNED); an
+     * assignment only makes the wake syscall when it replaces POOL_PARKED. */
+    uint32_t state;
     struct PoolThread *next;
 } PoolThread;
+
+enum { POOL_IDLE, POOL_ASSIGNED, POOL_PARKED };
 
 #define POOL_IDLE_MAX 64u
 /* Dream code keeps no thread-local state a later session could observe, but C linked into the
@@ -60,8 +61,17 @@ static int isolate_threads;
 
 void dream_worker_isolate_threads(void) { isolate_threads = 1; }
 
-static Worker *workers;
-static int64_t next_id = 1;
+/* Generational ids, the layout of dream_host_abi::handles: id = generation << 23 | slot with
+ * generation 1..=255, so ids stay positive and a stale id misses instead of naming a newer
+ * session. Free slots are reused FIFO, so a generation wraps only after 255 trips through the
+ * whole free ring and the id space never runs out. Guarded by reg_mu. */
+#define WORKER_SLOT_BITS 23
+#define WORKER_SLOT_MASK ((1u << WORKER_SLOT_BITS) - 1u)
+typedef struct WorkerSlot { Worker *worker; uint8_t generation; } WorkerSlot;
+static WorkerSlot *slots;
+static uint32_t slot_count, slot_capacity;
+static uint32_t *free_ring;
+static uint32_t free_head, free_len;
 static dream_mutex pool_mu = DREAM_MUTEX_INIT;
 static PoolThread *idle_threads;
 static unsigned idle_count;
@@ -73,6 +83,10 @@ static void release_worker(Worker *w) {
     }
 }
 
+static void free_job(Worker *w, Job *j) {
+    if (j != &w->inline_job) { free(j); }
+}
+
 static void release_job(Worker *w, Job *j) {
     if (j->future) { dream_complete_foreign_owned(j->future, 0); j->future = 0; }
     dream_release(j->msg);
@@ -82,7 +96,7 @@ static void release_job(Worker *w, Job *j) {
     /* Payload finalizers run before the cleared job becomes reusable. The caller or worker
      * thread holds a session reference, so the spare never crosses session lifetimes. */
     if (!__atomic_compare_exchange_n(&w->spare, &empty, j, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
-        free(j);
+        free_job(w, j);
     }
 }
 
@@ -95,9 +109,49 @@ static void release_jobs(Worker *w, Job *j) {
 }
 
 static Worker *find_worker(int32_t id) {
-    Worker *w;
-    HASH_FIND(hh, workers, &id, sizeof(id), w);
-    return w;
+    if (id <= 0) { return NULL; }
+    uint32_t slot = (uint32_t)id & WORKER_SLOT_MASK;
+    if (slot >= slot_count || slots[slot].generation != (uint32_t)id >> WORKER_SLOT_BITS) {
+        return NULL;
+    }
+    return slots[slot].worker;
+}
+
+/* Caller holds reg_mu. Returns 0 when the table cannot grow. */
+static int32_t register_worker(Worker *w) {
+    uint32_t slot;
+    if (free_len > 0) {
+        slot = free_ring[free_head];
+        free_head = (free_head + 1u) % slot_capacity;
+        free_len--;
+    } else {
+        if (slot_count > WORKER_SLOT_MASK) { return 0; }
+        if (slot_count == slot_capacity) {
+            uint32_t capacity = slot_capacity ? slot_capacity * 2u : 64u;
+            WorkerSlot *grown = realloc(slots, capacity * sizeof(*grown));
+            if (!grown) { return 0; }
+            slots = grown;
+            /* The ring is empty here, so it needs no reordering. */
+            uint32_t *ring = realloc(free_ring, capacity * sizeof(*ring));
+            if (!ring) { return 0; }
+            free_ring = ring;
+            free_head = 0;
+            slot_capacity = capacity;
+        }
+        slot = slot_count++;
+        slots[slot].generation = 1;
+    }
+    slots[slot].worker = w;
+    return (int32_t)(((uint32_t)slots[slot].generation << WORKER_SLOT_BITS) | slot);
+}
+
+/* Caller holds reg_mu and has checked that find_worker(id) is the session to drop. */
+static void unregister_worker(int32_t id) {
+    uint32_t slot = (uint32_t)id & WORKER_SLOT_MASK;
+    slots[slot].worker = NULL;
+    slots[slot].generation = slots[slot].generation == 255u ? 1u : slots[slot].generation + 1u;
+    free_ring[(free_head + free_len) % slot_capacity] = slot;
+    free_len++;
 }
 
 static Worker *acquire_worker(int32_t id) {
@@ -116,7 +170,10 @@ static Worker *acquire_worker(int32_t id) {
 static void callback_wake(void *context) {
     Worker *w = context;
     dream_mutex_lock(&w->mu);
-    dream_cond_broadcast(&w->cv);
+    if (w->parked) {
+        w->parked = 0;
+        dream_cond_broadcast(&w->cv);
+    }
     dream_mutex_unlock(&w->mu);
 }
 
@@ -149,7 +206,9 @@ static WorkerCompletion run_worker(Worker *w) {
             if (!isolate_threads && !dream_callback_owned()) {
                 break;
             }
+            w->parked = 1;
             dream_cond_wait(&w->cv, &w->mu);
+            w->parked = 0;
         }
         if (!w->head || w->dead) {
             /* owner_finish waits for outstanding wake callbacks; posts arriving meanwhile
@@ -217,31 +276,31 @@ static DREAM_THREAD_PROC(worker_main) {
     for (;;) {
         Worker *w = pt->assigned;
         WorkerCompletion completed = run_worker(w);
-        dream_mutex_lock(&pt->mu);
         dream_mutex_lock(&pool_mu);
         if (isolate_threads || idle_count >= POOL_IDLE_MAX) {
             dream_mutex_unlock(&pool_mu);
-            dream_mutex_unlock(&pt->mu);
             dream_complete_foreign_owned(completed.future, completed.reply);
             break;
         }
         pt->assigned = NULL;
+        __atomic_store_n(&pt->state, POOL_IDLE, __ATOMIC_RELAXED);
         pt->next = idle_threads;
         idle_threads = pt;
         idle_count++;
         dream_mutex_unlock(&pool_mu);
-        dream_mutex_unlock(&pt->mu);
         /* Make the retired thread available before waking the caller. An immediate next
          * submission can assign it during completion, avoiding a needless park/wake pair. */
         dream_complete_foreign_owned(completed.future, completed.reply);
-        dream_mutex_lock(&pt->mu);
-        while (!pt->assigned) {
-            dream_cond_wait(&pt->cv, &pt->mu);
+        uint32_t state = POOL_IDLE;
+        if (__atomic_compare_exchange_n(&pt->state, &state, POOL_PARKED, 0, __ATOMIC_ACQUIRE,
+                                        __ATOMIC_ACQUIRE)) {
+            state = POOL_PARKED;
         }
-        dream_mutex_unlock(&pt->mu);
+        while (state != POOL_ASSIGNED) {
+            dream_word_wait(&pt->state, POOL_PARKED);
+            state = __atomic_load_n(&pt->state, __ATOMIC_ACQUIRE);
+        }
     }
-    dream_cond_destroy(&pt->cv);
-    dream_mutex_destroy(&pt->mu);
     free(pt);
     dream_heap_thread_exit();
     return 0;
@@ -254,12 +313,13 @@ static int assign_thread(Worker *w) {
         idle_threads = pt->next;
         idle_count--;
         dream_mutex_unlock(&pool_mu);
-        /* A removed idle thread stays parked until assigned. Its own mutex avoids waking
-         * every submitted job into contention with the rest of the burst's assignments. */
-        dream_mutex_lock(&pt->mu);
+        /* A removed idle thread is reachable only from here, so the release exchange
+         * publishes `assigned` to it. The thread may run and exit before the wake; futex and
+         * WaitOnAddress only hash the address, so waking a freed word is harmless. */
         pt->assigned = w;
-        dream_cond_signal(&pt->cv);
-        dream_mutex_unlock(&pt->mu);
+        if (__atomic_exchange_n(&pt->state, POOL_ASSIGNED, __ATOMIC_RELEASE) == POOL_PARKED) {
+            dream_word_wake_one(&pt->state);
+        }
         return 0;
     }
     dream_mutex_unlock(&pool_mu);
@@ -267,13 +327,10 @@ static int assign_thread(Worker *w) {
     if (!pt) {
         return -1;
     }
-    dream_mutex_init(&pt->mu);
-    dream_cond_init(&pt->cv);
     pt->assigned = w;
+    pt->state = POOL_ASSIGNED;
     dream_thread th;
     if (dream_thread_start(&th, worker_main, pt) != 0) {
-        dream_cond_destroy(&pt->cv);
-        dream_mutex_destroy(&pt->mu);
         free(pt);
         return -1;
     }
@@ -288,18 +345,17 @@ int32_t workerSpawn(int32_t one_shot) {
     }
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->one_shot = one_shot;
+    w->spare = &w->inline_job;
     w->refs = 1; /* Registry membership; a bound thread adds its own. */
     dream_mutex_init(&w->mu);
     dream_cond_init(&w->cv);
     dream_mutex_lock(&reg_mu);
-    if (next_id > INT32_MAX) {
-        dream_mutex_unlock(&reg_mu);
-        destroy_worker(w);
-        worker_failure("panic: worker ID space exhausted");
-    }
-    int32_t id = w->id = (int32_t)next_id++;
-    HASH_ADD(hh, workers, id, sizeof(w->id), w);
+    int32_t id = w->id = register_worker(w);
     dream_mutex_unlock(&reg_mu);
+    if (id == 0) {
+        destroy_worker(w);
+        worker_failure("panic: out of memory indexing workers");
+    }
     return id;
 }
 
@@ -310,7 +366,7 @@ static void bind_thread(Worker *w) {
     if (assign_thread(w) != 0) {
         dream_mutex_lock(&reg_mu);
         if (find_worker(w->id) == w) {
-            HASH_DEL(workers, w);
+            unregister_worker(w->id);
         }
         dream_mutex_unlock(&reg_mu);
         worker_failure("panic: could not start a worker thread");
@@ -353,7 +409,12 @@ static int enqueue(Worker *w, Job *j, int *bind) {
     w->tail = j;
     *bind = !w->bound;
     w->bound = 1;
-    dream_cond_broadcast(&w->cv);
+    /* Only the serving thread waits for work: terminators wait after `dead` is set, which
+     * rejected this enqueue above. */
+    if (w->parked) {
+        w->parked = 0;
+        dream_cond_signal(&w->cv);
+    }
     return 1;
 }
 
@@ -376,7 +437,7 @@ static Worker *take_worker(int32_t id) {
     dream_mutex_lock(&reg_mu);
     Worker *w = find_worker(id);
     if (w) {
-        HASH_DEL(workers, w);
+        unregister_worker(id);
     }
     dream_mutex_unlock(&reg_mu);
     return w;
@@ -388,7 +449,8 @@ static void destroy_worker(Worker *w) {
     dream_mutex_lock(&w->mu);
     dream_mutex_unlock(&w->mu);
     release_jobs(w, w->head);
-    free(__atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE));
+    Job *spare = __atomic_exchange_n(&w->spare, NULL, __ATOMIC_ACQUIRE);
+    if (spare) { free_job(w, spare); }
     dream_mutex_destroy(&w->mu);
     dream_cond_destroy(&w->cv);
     free(w);

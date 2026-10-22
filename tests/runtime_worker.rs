@@ -83,15 +83,13 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         String::from_utf8_lossy(&output.stdout).trim_end(),
         "worker registry stress passed"
     );
-    for (mode, message) in [
-        ("start-failure", "panic: could not start a worker thread"),
-        ("id-exhaustion", "panic: worker ID space exhausted"),
-    ] {
-        let output = Command::new(&binary)
-            .arg(mode)
-            .output()
-            .expect("worker failure harness");
-        assert_eq!(output.status.code(), Some(86), "{mode}: {output:?}");
-        assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), message);
-    }
+    let output = Command::new(&binary)
+        .arg("start-failure")
+        .output()
+        .expect("worker failure harness");
+    assert_eq!(output.status.code(), Some(86), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        "panic: could not start a worker thread"
+    );
 }

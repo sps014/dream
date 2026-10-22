@@ -61,10 +61,14 @@ impl<'a> Analyzer<'a> {
         }
         // An unsuffixed integer literal on the right takes the left operand's integer type, so the
         // parser's `x++` / `x += 1` desugaring (`x = x + 1`) type-checks for `byte`/`uint`/`ulong`.
+        // A bare decimal next to a `double` is a `double` too, so `d == 0.1` compares 0.1 itself
+        // rather than the widened `float` nearest to it.
         if opr.kind == TokenKind::DotDotToken {
             self.current_expected_type = Some(Type::Integer(opr.clone()));
-        } else if matches!(right, ExpressionNode::Literal(Type::Integer(_)))
-            && left_value.is_integer()
+        } else if (matches!(right, ExpressionNode::Literal(Type::Integer(_)))
+            && left_value.is_integer())
+            || (matches!(right, ExpressionNode::Literal(Type::Float(_)))
+                && matches!(left_value, Type::Double(_)))
         {
             self.current_expected_type = Some(left_value.clone());
         }

@@ -1,55 +1,87 @@
-// Benchmark: parallel tasks vs. sequential (single-threaded) calls.
+// Benchmark: the same CPU jobs run sequentially and then as parallel tasks.
 //
-//   dream run sample/task_bench.dream
+// Build in release mode so timings reflect optimized code:
+//   dream run --release sample/task_bench.dream
+//
+// Every job's result feeds a checksum, so neither mode can be optimized away, and the two
+// checksums must match before any timing is reported. Each mode runs several rounds and the
+// median round is printed.
 import system;
 import system.task;
 
-fun heavy(input: string): string {
-    let seed = input.length;
-    let acc = 0;
+fun heavy(seed: int): long {
+    let acc: long = 0;
     let i = 0;
     while i < 60000000 {
-        acc = acc + ((i + seed) % 9);
+        acc = acc + (long)((i + seed) % 9);
         i = i + 1;
     }
-    return acc.to_string();
+    return acc;
 }
 
-fun ms_between(start: long, end: long): long {
-    return (end - start) / 1000000;
+fun sequential(tasks: int): long {
+    let sum: long = 0;
+    for (let j = 0; j < tasks; j = j + 1) {
+        sum = sum + heavy(j);
+    }
+    return sum;
 }
 
-async fun main(): void {
+fun spawn_job(seed: int): Future<long> {
+    return Task.spawn(() => heavy(seed));
+}
+
+async fun parallel(tasks: int): long {
+    let jobs = Array.alloc<Future<long>>(tasks);
+    for (let j = 0; j < tasks; j = j + 1) {
+        jobs[j] = spawn_job(j);
+    }
+    // Promise.all starts every job before waiting, so the jobs overlap.
+    let results = Promise.all(jobs).await;
+    let sum: long = 0;
+    for (let value in results) {
+        sum = sum + value;
+    }
+    return sum;
+}
+
+fun median(samples: List<long>): long {
+    samples.sort();
+    return samples[samples.length / 2];
+}
+
+async fun main(): int {
     let tasks = 8;
+    let rounds = 5;
+    let seq_times = List<long>();
+    let par_times = List<long>();
+    let seq_sum: long = 0;
+    let par_sum: long = 0;
 
-    let seq_start = Time.nano_time();
-    let i = 0;
-    while i < tasks {
-        heavy("seq");
-        i = i + 1;
-    }
-    let seq_end = Time.nano_time();
-    let seq_ms = ms_between(seq_start, seq_end);
+    for (let round = 0; round < rounds; round = round + 1) {
+        let seq_start = Time.nano_time();
+        seq_sum = sequential(tasks);
+        seq_times.push((Time.nano_time() - seq_start) / 1000000);
 
-    let par_start = Time.nano_time();
-    let workers = Array.alloc<Future<string>>(tasks);
-    let s = 0;
-    while s < tasks {
-        workers[s] = Task.spawn(() => heavy("par"));
-        s = s + 1;
-    }
-    let c = 0;
-    while c < tasks {
-        workers[c].await;
-        c = c + 1;
-    }
-    let par_end = Time.nano_time();
-    let par_ms = ms_between(par_start, par_end);
+        let par_start = Time.nano_time();
+        par_sum = parallel(tasks).await;
+        par_times.push((Time.nano_time() - par_start) / 1000000);
 
+        if seq_sum != par_sum {
+            System.println("MISMATCH: sequential " + seq_sum.to_string() + " != parallel " + par_sum.to_string());
+            return 1;
+        }
+    }
+
+    let seq_ms = median(seq_times);
+    let par_ms = median(par_times);
     System.println("tasks:       " + tasks.to_string());
+    System.println("rounds:      " + rounds.to_string() + " (median shown)");
+    System.println("checksum:    " + seq_sum.to_string());
     System.println("sequential:  " + seq_ms.to_string() + " ms");
     System.println("parallel:    " + par_ms.to_string() + " ms");
     if par_ms > 0 {
-        System.println("speedup:     " + (seq_ms / par_ms).to_string() + "x");
+        System.println("speedup:     " + ((double)seq_ms / (double)par_ms).to_string() + "x");
     }
+    return 0;
 }

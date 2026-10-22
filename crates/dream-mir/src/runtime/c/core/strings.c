@@ -169,6 +169,37 @@ dream_ptr dream_from_bytes(dream_ptr bytes, dream_size size, int32_t tag) {
     return p;
 }
 
+/* The task wire carries bytes as one code unit each, so a scalar costs exactly the string. */
+dream_ptr dream_to_wire(dream_ptr value, int32_t size) {
+    dream_ptr s = dream_string_alloc(size);
+    uint16_t *units = (uint16_t *)dream_str_units(s);
+    const unsigned char *src = (const unsigned char *)dream_p(value);
+    for (int32_t i = 0; i < size; i++) {
+        units[i] = src[i];
+    }
+    return s;
+}
+
+/* A short wire string zero-fills the tail, matching `dream_from_bytes`. */
+void dream_from_wire(dream_ptr text, dream_ptr dst, int32_t size) {
+    unsigned char *out = (unsigned char *)dream_p(dst);
+    const uint16_t *units = dream_str_units(text);
+    int32_t n = dream_str_len(text);
+    if (n > size) {
+        n = size;
+    }
+    for (int32_t i = 0; i < n; i++) {
+        out[i] = (unsigned char)units[i];
+    }
+    memset(out + n, 0, (size_t)(size - n));
+}
+
+dream_ptr dream_from_wire_box(dream_ptr text, dream_size size, int32_t tag) {
+    dream_ptr p = dream_malloc(size, tag);
+    dream_from_wire(text, p, (int32_t)size);
+    return p;
+}
+
 void string_copy_utf8(dream_ptr dst, int32_t dst_off, dream_ptr src, int32_t src_off, int32_t count) {
     if (count <= 0 || !dst || !src) {
         return;

@@ -158,7 +158,9 @@ convert explicitly:
 ## Awaiting JS Promises
 
 Await a JS Promise directly — it resolves to **`Option<js>`**: `Some(value)` on success, `None`
-when the Promise rejected or resolved with `null`/`undefined`:
+when the Promise rejected or resolved with `null`/`undefined`. A rejection reason is printed on
+the console. Typed `extern async fun` results stop the program on rejection instead; see
+[Awaiting JavaScript promises](../concurrency/async.md#when-the-promise-rejects).
 
 ```dream
 async fun load(): void {

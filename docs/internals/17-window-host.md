@@ -26,21 +26,43 @@ the main thread, so the host needs no thread of its own:
   main-thread run loop that the guest scheduler does not own. On macOS a blocked main thread
   would also deadlock AppKit.
 
+### Parking inside the window system
+
+When nothing is ready, `dream_run_loop` parks the thread until a timer is due or a foreign
+completion arrives. A plain condvar wait would leave the OS event queue unserviced, and the
+platform would mark a window "not responding" during a slow `await`. The scheduler therefore
+accepts park hooks through the guest context's `set_park` callback, which hosts reach as
+`dream_host_set_park` in the core library (`dream_host_abi::set_scheduler_park`):
+
+- While at least one window is open, the window host installs `park` =
+  `glfwWaitEventsTimeout` (`glfwWaitEvents` without a timer) and `wake` = `glfwPostEmptyEvent`.
+  Closing the last window restores the condvar wait.
+- The scheduler re-checks its foreign queue under its mutex, unlocks, and calls `park`. Foreign
+  completions and callback wakes call `wake` under the same mutex after signalling the condvar.
+  A wake that lands between the re-check and the GLFW wait leaves an empty event queued, so the
+  wait returns at once and no wakeup is lost.
+- Events GLFW receives while parked go into the per-window receiver queues, and the next
+  `windowPoll` returns them.
+- Hooks are per scheduler (one per thread), and only the main thread installs them.
+
 Consequences:
 
-- An `await` that parks the scheduler, such as a slow network read, also stops event processing.
-  Frame loops should await only per-frame work, such as GPU presentation.
+- An `await` that parks the scheduler, such as a slow network read, keeps the window responsive,
+  but the frame loop does not draw until it resumes. Run the frame loop as its own task and start
+  background I/O with `Promise.start`, checking its result each frame.
 - While the user live-resizes a window, macOS runs a modal loop inside `glfwPollEvents`, so the
   guest does not run until the resize ends. This is a known GLFW limitation.
 - `InitHint::CocoaChdirResources(false)` keeps the working directory unchanged when a program is
   packaged as an `.app` bundle.
 
 The harness test `crates/dream-host-window/tests/main_thread.rs` uses `harness = false`, so its
-checks run on the process main thread. It covers four things:
+checks run on the process main thread. It covers five things:
 
 - It asserts `pthread_main_np` on macOS.
 - It drives real GLFW windows on the display-free Null platform. Setting a size produces a
   `Resized` record on the next poll.
+- `host::park` returns promptly on a wake from another thread, keeps a wake posted before it
+  started, honors its timeout, and leaves the events it pumped for the next poll.
 - It checks that a worker thread is refused.
 - With `DREAM_WINDOW_DISPLAY_TEST=1`, it opens a real window and checks the AppKit surface handle.
 

@@ -30,8 +30,14 @@ function unpackWire(data) {
   return s;
 }
 
+// Structured clone copies short strings faster than allocating and filling a Uint16Array.
+const WIRE_PACK_MIN = 256;
+
 function packWire(s) {
   const n = s == null ? 0 : s.length;
+  if (n < WIRE_PACK_MIN) {
+    return s ?? "";
+  }
   const u = new Uint16Array(n);
   for (let i = 0; i < n; i++) {
     u[i] = s.charCodeAt(i);
@@ -52,6 +58,7 @@ const WORKER_BOOT_UNPACK = `function unpackWire(data) {
 }
 function packWire(s) {
   const n = s == null ? 0 : s.length;
+  if (n < ${WIRE_PACK_MIN}) return s ?? "";
   const u = new Uint16Array(n);
   for (let i = 0; i < n; i++) u[i] = s.charCodeAt(i);
   return u;
@@ -80,6 +87,8 @@ parentPort.on('message', (m) => {
       parentPort.postMessage({ t: 'closed' });
       parentPort.close();
     }
+  }).catch((err) => {
+    parentPort.postMessage({ t: 'error', phase: m.t, message: String((err && err.stack) || err) });
   });
 });
 `;
@@ -104,20 +113,74 @@ self.onmessage = (e) => {
       self.postMessage({ t: 'closed' });
       self.close();
     }
+  }).catch((err) => {
+    self.postMessage({ t: 'error', phase: m.t, message: String((err && err.stack) || err) });
   });
 };
 `;
 }
 
 /**
+ * Generational session handles: `(generation << 23) | slot`, generation 1..255, so a handle is
+ * always a positive i32 and ids never run out. Freed slots are reused oldest-first, so a stale
+ * handle misses until its slot has cycled through the whole free queue 255 times.
+ */
+function makeSessionTable() {
+  const GEN_SHIFT = 23;
+  const SLOT_MASK = (1 << GEN_SHIFT) - 1;
+  const entries = [];
+  const free = [];
+  let freeHead = 0;
+  const entryOf = (id) => {
+    if (!(id > 0)) return undefined;
+    const e = entries[id & SLOT_MASK];
+    return e && e.state !== null && e.gen === id >>> GEN_SHIFT ? e : undefined;
+  };
+  return {
+    insert(state) {
+      let slot;
+      if (freeHead < free.length) {
+        slot = free[freeHead++];
+        if (freeHead >= 1024 && freeHead * 2 >= free.length) {
+          free.splice(0, freeHead);
+          freeHead = 0;
+        }
+      } else {
+        slot = entries.length;
+        if (slot > SLOT_MASK) return 0;
+        entries.push({ gen: 1, state: null });
+      }
+      const e = entries[slot];
+      e.state = state;
+      return (e.gen << GEN_SHIFT) | slot;
+    },
+    get(id) {
+      return entryOf(id)?.state;
+    },
+    remove(id) {
+      const e = entryOf(id);
+      if (!e) return undefined;
+      const state = e.state;
+      e.state = null;
+      e.gen = e.gen === 255 ? 1 : e.gen + 1;
+      free.push(id & SLOT_MASK);
+      return state;
+    },
+  };
+}
+
+/**
  * Builds the worker session/dispatch hosts behind `system.task`'s `Task` and `TaskPool`.
  * Each slot runs a separate instance with shared memory; one-shot sessions retire before
  * their reply resumes Dream. Dispatch returns a Promise bridged into Dream's scheduler.
+ *
+ * A worker that fails (bootstrap rejection, crash, exit, undeliverable message) settles every
+ * call it owed exactly once and records the failure as the instance's fatal host error, so the
+ * awaiting program traps instead of decoding an empty reply as a result.
  */
 function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
-  const reg = new Map();
+  const sessions = makeSessionTable();
   const stopping = new Set();
-  let nextId = 1;
   /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
   let NodeWorkerCtor = null;
   /**
@@ -128,6 +191,95 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
    */
   const idle = [];
   const IDLE_MAX = 64;
+  /** A worker retired before `ready` that still has not booted after this long is wedged. */
+  const BOOT_TIMEOUT_MS = 10000;
+
+  const instanceOrNull = () => {
+    try {
+      return typeof getInstance === "function" ? getInstance() : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const describeFailure = (err) => {
+    if (err && typeof err === "object" && "phase" in err) return `${err.phase}: ${err.message}`;
+    if (err && typeof err === "object" && "message" in err) return String(err.stack || err.message);
+    return String(err);
+  };
+
+  const revokeBlob = (slot) => {
+    if (!slot.blobUrl) return;
+    try {
+      URL.revokeObjectURL(slot.blobUrl);
+    } catch (_) {
+      /* ignore */
+    }
+    slot.blobUrl = null;
+  };
+
+  const releaseStack = (slot) => {
+    const stack = slot.stack;
+    slot.stack = 0;
+    if (!stack) return;
+    const inst = instanceOrNull();
+    if (inst) inst.exports.dream_wasm_raw_free(stack);
+  };
+
+  /** Stops the worker; the stack returns to the heap only once the thread can no longer use it. */
+  const killSlot = (slot) => {
+    if (slot.killed) return slot.killed;
+    revokeBlob(slot);
+    slot.killed = new Promise((resolve) => {
+      const done = () => {
+        releaseStack(slot);
+        resolve();
+      };
+      if (!slot.worker) {
+        done();
+        return;
+      }
+      let result;
+      try {
+        result = slot.worker.terminate();
+      } catch (_) {
+        done();
+        return;
+      }
+      if (result && typeof result.then === "function") result.then(done, done);
+      else done();
+    });
+    return slot.killed;
+  };
+
+  const finishSlot = (slot) => {
+    const finish = slot.finish;
+    slot.finish = null;
+    if (finish) finish();
+  };
+
+  const failSlot = (slot, err) => {
+    if (slot.failed) return;
+    slot.failed = true;
+    if (slot.bootTimer) clearTimeout(slot.bootTimer);
+    slot.bootTimer = null;
+    slot.queued = [];
+    slot.terminateWhenReady = null;
+    slot.closed = null;
+    const at = idle.indexOf(slot);
+    if (at >= 0) idle.splice(at, 1);
+    const state = slot.state;
+    slot.state = null;
+    if (state && !slot.retired) {
+      sessions.remove(state.id);
+      const inst = instanceOrNull();
+      if (inst) inst._hostError ??= new Error(`Dream task worker failed (${describeFailure(err)})`);
+      const pending = state.pending;
+      state.pending = [];
+      for (const p of pending) p("");
+    }
+    killSlot(slot).then(() => finishSlot(slot));
+  };
 
   // A slot is one worker; `slot.state` is the session it currently serves.
   const postJob = (state, job) => {
@@ -138,9 +290,12 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
   };
 
   const onWorkerMessage = (slot, m) => {
+    if (slot.failed) return;
     if (m.t === "ready") {
       slot.ready = true;
       slot.stack = Number(m.stack ?? 0);
+      if (slot.bootTimer) clearTimeout(slot.bootTimer);
+      slot.bootTimer = null;
       if (slot.terminateWhenReady) {
         slot.queued = [];
         slot.terminateWhenReady();
@@ -158,6 +313,8 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       const text = unpackWire(m.data);
       if (state.pending.length > 0) state.pending.shift()(text);
       if (state.oneShot) terminateWorker(state.id);
+    } else if (m.t === "error") {
+      failSlot(slot, m);
     }
   };
 
@@ -165,8 +322,16 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     // Browser: `onmessage` event with `e.data`. Node worker_threads: `message` event with data directly.
     if (typeof worker.on === "function" && isNode) {
       worker.on("message", (m) => onWorkerMessage(slot, m));
+      worker.on("error", (e) => failSlot(slot, e));
+      worker.on("messageerror", (e) => failSlot(slot, e));
+      worker.on("exit", (code) => failSlot(slot, new Error(`worker exited with code ${code}`)));
     } else {
       worker.onmessage = (e) => onWorkerMessage(slot, e.data);
+      worker.onerror = (e) => {
+        if (typeof e.preventDefault === "function") e.preventDefault();
+        failSlot(slot, e.error ?? new Error(e.message || "worker error"));
+      };
+      worker.onmessageerror = () => failSlot(slot, new Error("worker message could not be deserialized"));
     }
   };
 
@@ -193,6 +358,11 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       blobUrl: null,
       stack: 0,
       idle: true,
+      failed: false,
+      retired: false,
+      killed: null,
+      finish: null,
+      bootTimer: null,
     };
 
     const finishSpawn = (worker) => {
@@ -207,31 +377,43 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       });
     };
 
+    const spawnOrFail = (create) => {
+      let worker;
+      try {
+        worker = create();
+      } catch (err) {
+        failSlot(slot, err);
+        return;
+      }
+      finishSpawn(worker);
+    };
+
     if (isNode) {
       // Spawn synchronously once the ctor is cached; first call kicks off an async import and
       // queues the init until it resolves (postJob already buffers until `ready`).
-      const startNode = (NodeWorker) => {
-        const worker = new NodeWorker(workerBootSource(import.meta.url, { node: true }), {
-          eval: true,
-        });
-        finishSpawn(worker);
-      };
+      const startNode = (NodeWorker) =>
+        spawnOrFail(() => new NodeWorker(workerBootSource(import.meta.url, { node: true }), { eval: true }));
       if (NodeWorkerCtor) {
         startNode(NodeWorkerCtor);
       } else {
         // Synchronous-looking spawn from Dream's POV: register the id immediately; jobs queue
         // until the worker posts `ready`. The dynamic import of worker_threads is one-shot.
-        import("node:worker_threads").then(({ Worker }) => {
-          NodeWorkerCtor = Worker;
-          startNode(Worker);
-        });
+        import("node:worker_threads").then(
+          ({ Worker }) => {
+            NodeWorkerCtor = Worker;
+            if (!slot.failed) startNode(Worker);
+          },
+          (err) => failSlot(slot, err),
+        );
       }
     } else if (typeof Worker !== "undefined") {
-      const url = URL.createObjectURL(
-        new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
-      );
-      slot.blobUrl = url;
-      finishSpawn(new Worker(url, { type: "module" }));
+      spawnOrFail(() => {
+        const url = URL.createObjectURL(
+          new Blob([workerBootSource(import.meta.url)], { type: "text/javascript" }),
+        );
+        slot.blobUrl = url;
+        return new Worker(url, { type: "module" });
+      });
     } else {
       throw new Error(
         "Task needs a thread runtime (browser Worker or Node worker_threads); neither is available in this environment",
@@ -248,6 +430,9 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       pending: [],
       inflight: 0,
     };
+    const id = sessions.insert(state);
+    if (!id) return 0;
+    state.id = id;
     const reused = idle.pop();
     if (reused) {
       reused.state = state;
@@ -257,18 +442,17 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     } else {
       state.slot = startWorker(state);
     }
-    const id = nextId++;
-    state.id = id;
-    reg.set(id, state);
     return id;
   };
 
   const terminateWorker = (id) => {
-    const s = reg.get(id);
+    const s = sessions.remove(id);
     if (!s) return;
-    reg.delete(id);
-    for (const p of s.pending) p("");
+    const owed = s.pending;
+    s.pending = [];
+    for (const p of owed) p("");
     const slot = s.slot;
+    if (slot.failed) return;
     // A worker mid-job, or whose last job left host calls running, cannot be handed on: they
     // would settle into the next session's thread.
     if (slot.worker && slot.ready && slot.idle && s.inflight === 0 && idle.length < IDLE_MAX) {
@@ -278,49 +462,38 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       idle.push(slot);
       return;
     }
-    const revokeBlob = () => {
-      if (!slot.blobUrl) return;
-      try {
-        URL.revokeObjectURL(slot.blobUrl);
-      } catch (_) {
-        /* ignore */
+    slot.state = null;
+    slot.retired = true;
+    const stopped = new Promise((resolve) => {
+      slot.finish = resolve;
+      const stop = () => killSlot(slot).then(() => finishSlot(slot));
+      // A booting worker may hold the shared bootstrap gate, and killing it there would leave
+      // every later worker waiting on that gate forever. It retires once it reports ready, or
+      // fails once the boot timeout shows it never will.
+      // Finished bodies retire gracefully; a busy body still needs immediate termination.
+      if (!slot.ready) {
+        slot.terminateWhenReady = stop;
+        slot.bootTimer = setTimeout(
+          () => failSlot(slot, new Error("worker bootstrap timed out")),
+          BOOT_TIMEOUT_MS,
+        );
+        if (typeof slot.bootTimer?.unref === "function") slot.bootTimer.unref();
+      } else if (s.inflight === 0) {
+        slot.closed = stop;
+        slot.worker.postMessage({ t: "term" });
+      } else {
+        stop();
       }
-    };
-    const releaseStack = () => {
-      if (slot.stack && typeof getInstance === "function") {
-        getInstance().exports.dream_wasm_raw_free(slot.stack);
-      }
-    };
-    if (slot.worker || !slot.ready) {
-      const stopped = new Promise((resolve) => {
-        const terminate = () => {
-          const result = slot.worker.terminate();
-          if (result && typeof result.then === "function") {
-            result.then(() => { releaseStack(); resolve(); }, resolve);
-          } else { releaseStack(); resolve(); }
-        };
-        // A booting worker may hold the shared bootstrap gate, and killing it there would leave
-        // every later worker waiting on that gate forever. It retires once it reports ready.
-        // Finished bodies retire gracefully; a busy body still needs immediate termination.
-        if (!slot.ready) {
-          // The browser may not have fetched the boot script from its blob URL yet.
-          slot.terminateWhenReady = () => { revokeBlob(); terminate(); };
-        } else if (s.inflight === 0) {
-          slot.closed = terminate;
-          slot.worker.postMessage({ t: "term" });
-        } else { terminate(); }
-      });
-      stopping.add(stopped);
-      stopped.then(() => stopping.delete(stopped));
-    }
-    if (slot.ready) revokeBlob();
+    });
+    stopping.add(stopped);
+    stopped.then(() => stopping.delete(stopped));
   };
 
   return {
     workerSpawn: spawnWorker,
     workerDispatch: (id, fnIndex, env, msg) =>
       new Promise((resolve) => {
-        const s = reg.get(id);
+        const s = sessions.get(id);
         if (!s) return resolve("");
         publish(env);
         s.pending.push(resolve);

@@ -48,6 +48,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "httpServerClose",
             "httpServerShutdown",
             "httpServerReleaseRequest",
+            "httpServerCloseUpload",
             "netSocketStart",
             "netSocketWait",
             "netSocketResult",

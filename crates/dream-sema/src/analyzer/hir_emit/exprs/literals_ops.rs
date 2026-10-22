@@ -82,6 +82,21 @@ impl<'a> Analyzer<'a> {
         Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))))
     }
 
+    /// The environment slot `closure` receives for captured `name`: its cell, or for an unboxed
+    /// class, string or `fun` binding (see `Analyzer::captured_by_cell`) the value itself, recorded
+    /// in `direct_captures` for the closure's receiving prologue.
+    pub(in crate::analyzer) fn hir_capture_slot(
+        &mut self,
+        closure: dream_types::DefId,
+        name: &str,
+        ty: &Type,
+    ) -> Option<HExpr> {
+        if !self.hir.boxed.contains_key(name) && self.direct_capture_type(ty) {
+            self.direct_captures.insert((closure, name.to_string()));
+        }
+        self.hir_read_cell_ref(name)
+    }
+
     /// Sets `last` to a read of an already-allocated local (used by the match-expression desugar to
     /// yield the result temporary as the match's value).
     pub(in crate::analyzer) fn hir_set_local_read(&mut self, local: LocalId, ty: TypeId) {

@@ -60,10 +60,11 @@ public class HttpOutgoing {
         return HttpOutgoing.json_text("{\"detail\":" + WebApp.json_escape(message) + "}", status);
     }
 
-    /// Preserves body-limit failures as 413 while other read failures remain 400.
+    /// A 400 response for a failed body read; invalid input such as a form over its limits
+    /// keeps the failure message as the detail.
     public static fun from_body_error(error: IoError): HttpOutgoing {
-        if error.code() == "ELIMIT" {
-            return HttpOutgoing.detail("request body too large", 413);
+        if error.code() == "EINVAL" {
+            return HttpOutgoing.detail(error.message(), 400);
         }
         return HttpOutgoing.detail("failed to read request body", 400);
     }
@@ -121,6 +122,14 @@ public class HttpOutgoing {
     /// Creates a 404 Not Found response.
     public static fun not_found(): HttpOutgoing {
         return HttpOutgoing.from_status(HttpStatus.not_found());
+    }
+
+    /// Creates a 405 Method Not Allowed response whose `Allow` header lists `allowed`, the methods
+    /// that the requested path accepts, separated by `, `.
+    public static fun method_not_allowed(allowed: List<string>): HttpOutgoing {
+        let res = HttpOutgoing.text("Method Not Allowed", 405);
+        res.headers.set("Allow", allowed.join(", "));
+        return res;
     }
 
     /// Creates a response without a body, with status 204 by default.

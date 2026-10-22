@@ -1,0 +1,32 @@
+module system.webapi;
+
+/// The body of one inbound request, read in chunks as it arrives from the client.
+/// When the body was already read with `read_body_bytes` or `read_body_text`, the stream
+/// replays those cached bytes. Once streaming starts, the whole-body readers and
+/// `HttpIncoming.form` fail with `ECLOSED`, because the bytes are no longer buffered.
+public class HttpRequestStream: AsyncReader {
+    incoming: HttpIncoming;
+
+    internal constructor(incoming: HttpIncoming) {
+        this.incoming = incoming;
+    }
+
+    /// Reads up to `max_bytes` of the body; an empty result for a positive request is the end
+    /// of the body. Zero consumes nothing. The request's cancellation applies when `token` is
+    /// omitted.
+    public async unique fun read_async(
+        max_bytes: int,
+        token: Option<CancellationToken> = Option.None
+    ): Result<byte[], IoError> {
+        let lifetime = [this];
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if max_bytes == 0 {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
+        let request = WebOperation.request("body_read", lifetime[0].incoming.req_id);
+        request["max_bytes"] = JsonValue.from_int(max_bytes);
+        return WebOperation.submit(request, [], lifetime[0].incoming.resolve_token(token)).await;
+    }
+}

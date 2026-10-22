@@ -1,11 +1,11 @@
 use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
 use futures_util::{Sink, SinkExt, StreamExt};
 use serde_json::{Value, json};
+use dream_host_abi::handles::HandleTable;
 use std::{
-    collections::BTreeMap,
     pin::Pin,
-    sync::{Arc, Mutex, OnceLock},
-    time::Duration,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -14,8 +14,8 @@ use tokio::{
 use tokio_tungstenite::{
     WebSocketStream,
     tungstenite::{
-        Message,
-        protocol::{CloseFrame, Role, frame::coding::CloseCode},
+        self, Message,
+        protocol::{CloseFrame, Role, WebSocketConfig, frame::coding::CloseCode},
     },
 };
 
@@ -33,35 +33,91 @@ impl Drop for Socket {
         self.reader.abort();
     }
 }
-#[derive(Default)]
-struct Registry {
-    next: i32,
-    sockets: BTreeMap<i32, Arc<Socket>>,
-}
-fn registry() -> &'static Mutex<Registry> {
-    static VALUE: OnceLock<Mutex<Registry>> = OnceLock::new();
-    VALUE.get_or_init(Mutex::default)
-}
+static SOCKETS: Mutex<HandleTable<Arc<Socket>>> = Mutex::new(HandleTable::new());
 use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }
-fn register<S: Transport + 'static>(stream: WebSocketStream<S>) -> Result<Output, Failure> {
-    let mut registry = lock(registry());
-    if registry.next == i32::MAX || registry.sockets.len() >= 1024 {
-        return Err(error("ELIMIT", "WebSocket capacity exhausted"));
+/// Per-socket limits; the server takes them from `ServerConfig`.
+pub(crate) struct Limits {
+    pub max_size: Option<usize>,
+    pub max_queue: usize,
+    pub ping_interval: Option<Duration>,
+    pub ping_timeout: Duration,
+}
+impl Limits {
+    const CLIENT: Self = Self {
+        max_size: None,
+        max_queue: 64,
+        ping_interval: None,
+        ping_timeout: Duration::ZERO,
+    };
+    fn config(&self) -> Option<WebSocketConfig> {
+        self.max_size.map(|size| {
+            WebSocketConfig::default()
+                .max_message_size(Some(size))
+                .max_frame_size(Some(size))
+        })
     }
-    registry.next += 1;
-    let id = registry.next;
+}
+fn close_frame(code: u16, reason: &str) -> Message {
+    Message::Close(Some(CloseFrame {
+        code: CloseCode::from(code),
+        reason: reason.into(),
+    }))
+}
+fn closed_event(code: u16, reason: &str) -> Value {
+    json!({"kind":"close","code":code,"reason":reason})
+}
+fn register<S: Transport + 'static>(
+    stream: WebSocketStream<S>,
+    limits: &Limits,
+) -> Result<Output, Failure> {
     let (write, mut read) = stream.split();
     let write = Arc::new(AsyncMutex::new(Box::pin(write) as Write));
     let (closed, mut stopped) = watch::channel(false);
-    let (sender, receiver) = mpsc::channel(64);
+    let (sender, receiver) = mpsc::channel(limits.max_queue);
     let writer = write.clone();
     let disconnected = closed.clone();
+    let ping_interval = limits.ping_interval;
+    let ping_timeout = limits.ping_timeout;
     let task = tokio::spawn(async move {
         let work = async {
-            while let Some(message) = read.next().await {
+            let mut awaiting_pong: Option<Instant> = None;
+            let mut last_ping = Instant::now();
+            loop {
+                let deadline = match (ping_interval, awaiting_pong) {
+                    (None, _) => None,
+                    (Some(_), Some(sent)) => Some(sent + ping_timeout),
+                    (Some(interval), None) => Some(last_ping + interval),
+                };
+                let timer = async {
+                    match deadline {
+                        Some(at) => tokio::time::sleep_until(at.into()).await,
+                        None => std::future::pending().await,
+                    }
+                };
+                let message = tokio::select! {
+                    message = read.next() => message,
+                    _ = timer => {
+                        if awaiting_pong.is_some() {
+                            let reason = "keepalive ping timeout";
+                            let _ = writer.lock().await.send(close_frame(1011, reason)).await;
+                            let _ = sender.send(Ok(closed_event(1011, reason))).await;
+                            break;
+                        }
+                        let now = Instant::now();
+                        last_ping = now;
+                        awaiting_pong = Some(now);
+                        if writer.lock().await.send(Message::Ping(Default::default())).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+                let Some(message) = message else {
+                    break;
+                };
                 let output = match message {
                     Ok(Message::Text(text)) => Ok(json!({"kind":"text","text":text.as_str()})),
                     Ok(Message::Binary(bytes)) => {
@@ -79,7 +135,17 @@ fn register<S: Transport + 'static>(stream: WebSocketStream<S>) -> Result<Output
                         }
                         continue;
                     }
+                    Ok(Message::Pong(_)) => {
+                        awaiting_pong = None;
+                        continue;
+                    }
                     Ok(_) => continue,
+                    Err(tungstenite::Error::Capacity(_)) => {
+                        let reason = "message too big";
+                        let _ = writer.lock().await.send(close_frame(1009, reason)).await;
+                        let _ = sender.send(Ok(closed_event(1009, reason))).await;
+                        break;
+                    }
                     Err(e) => {
                         let _ = sender.send(Err(error("EIO", e))).await;
                         break;
@@ -93,37 +159,50 @@ fn register<S: Transport + 'static>(stream: WebSocketStream<S>) -> Result<Output
         tokio::select! { _ = work => {}, _ = stopped.changed() => {} }
         disconnected.send_replace(true);
     });
-    registry.sockets.insert(
-        id,
-        Arc::new(Socket {
-            read: AsyncMutex::new(receiver),
-            write,
-            closed,
-            reader: task.abort_handle(),
-        }),
-    );
+    let socket = Arc::new(Socket {
+        read: AsyncMutex::new(receiver),
+        write,
+        closed,
+        reader: task.abort_handle(),
+    });
+    let id = lock(&SOCKETS)
+        .insert(socket)
+        .ok_or_else(|| error("ELIMIT", "WebSocket capacity exhausted"))?;
     Ok(Output {
         bytes: json!({"id":id}).to_string().into_bytes(),
         child: Some(OwnedResource::new(id, close)),
     })
 }
-pub(crate) async fn from_upgraded(stream: hyper::upgrade::Upgraded) -> Result<Output, Failure> {
+pub(crate) async fn from_upgraded(
+    stream: hyper::upgrade::Upgraded,
+    limits: &Limits,
+) -> Result<Output, Failure> {
     let io: Box<dyn Transport> = Box::new(hyper_util::rt::TokioIo::new(stream));
-    register(WebSocketStream::from_raw_socket(io, Role::Server, None).await)
+    register(
+        WebSocketStream::from_raw_socket(io, Role::Server, limits.config()).await,
+        limits,
+    )
 }
 pub(crate) fn disconnected(id: i32) -> Result<watch::Receiver<bool>, Failure> {
     Ok(socket(id)?.closed.subscribe())
 }
+/// Sends a server-initiated close frame; the peer's reply reaches the guest as a close event.
+pub(crate) async fn close_with(id: i32, code: u16, reason: &str) {
+    let Ok(socket) = socket(id) else {
+        return;
+    };
+    let mut write = socket.write.lock().await;
+    let _ = write.send(close_frame(code, reason)).await;
+}
 pub(crate) fn close(id: i32) {
-    if let Some(socket) = lock(registry()).sockets.remove(&id) {
+    if let Some(socket) = lock(&SOCKETS).remove(id) {
         socket.closed.send_replace(true);
         socket.reader.abort();
     }
 }
 fn socket(id: i32) -> Result<Arc<Socket>, Failure> {
-    lock(registry())
-        .sockets
-        .get(&id)
+    lock(&SOCKETS)
+        .get(id)
         .cloned()
         .ok_or_else(|| error("ECLOSED", "WebSocket is closed"))
 }
@@ -184,7 +263,7 @@ async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
             tokio_tungstenite::client_async_tls(url, Box::new(tcp) as Box<dyn Transport>)
                 .await
                 .map_err(|e| error("EIO", e))?;
-        return register(stream);
+        return register(stream, &Limits::CLIENT);
     }
     let id = value["id"]
         .as_i64()

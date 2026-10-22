@@ -744,8 +744,8 @@ impl<'a> Analyzer<'a> {
         match captures.len() {
             0 => self.hir_set_func_value(&name, &func_ty, &box_ret),
             1 => {
-                let (cap_name, _) = &captures[0];
-                match self.hir_read_cell_ref(cap_name) {
+                let (cap_name, cap_ty) = &captures[0];
+                match self.hir_capture_slot(def, cap_name, cap_ty) {
                     Some(cell) => {
                         self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
                     }
@@ -755,8 +755,8 @@ impl<'a> Analyzer<'a> {
             _ => {
                 let mut cells = Vec::with_capacity(captures.len());
                 let mut ok = true;
-                for (cap_name, _) in &captures {
-                    match self.hir_read_cell_ref(cap_name) {
+                for (cap_name, cap_ty) in &captures {
+                    match self.hir_capture_slot(def, cap_name, cap_ty) {
                         Some(cell) => cells.push(cell),
                         None => {
                             ok = false;

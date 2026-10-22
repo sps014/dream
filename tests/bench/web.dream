@@ -1,0 +1,5707 @@
+import system;
+import system.webapi;
+import system.net;
+import system.json;
+
+let sink: int = 0;
+let measuring: bool = true;
+let counters_on: bool = System.env("DREAM_BENCH_COUNTERS").unwrap_or("") == "1";
+let last_allocations: long = 0;
+
+fun report(name: string, nanos: long, iters: int, checksum: int): void {
+    let counters = "";
+    if counters_on {
+        let allocations = Debug.total_allocations;
+        counters = " counters=allocs:" + (allocations - last_allocations).to_string();
+        last_allocations = allocations;
+    }
+    if measuring {
+        System.println(
+            "bench "
+                + name
+                + " ns_total="
+                + nanos.to_string()
+                + " iters="
+                + iters.to_string()
+                + " ns_per_op="
+                + (nanos / (long)iters).to_string()
+                + " checksum="
+                + checksum.to_string()
+                + counters
+        );
+    }
+    sink = sink + checksum;
+}
+
+@json
+class BenchPayload {
+    public name: string;
+    public count: int;
+
+    public constructor(name: string, count: int) {
+        this.name = name;
+        this.count = count;
+    }
+}
+
+async fun bench_layer(ctx: RequestContext, next: Next): HttpOutgoing {
+    ctx.set("layers", ctx.get("layers").unwrap_or("") + "x");
+    return next.call().await;
+}
+
+@router("")
+class BenchBasic {
+    @get("/plain")
+    public static fun plain(): string {
+        return "hello";
+    }
+
+    @post("/echo")
+    public static fun echo(@body payload: BenchPayload): BenchPayload {
+        return payload;
+    }
+
+    @use(bench_layer)
+    @use(bench_layer)
+    @use(bench_layer)
+    @get("/layered")
+    public static fun layered(ctx: RequestContext): string {
+        return ctx.get("layers").unwrap_or("");
+    }
+}
+
+@router("/n10")
+class BenchRoutes10 {
+    @get("/r0/{id}")
+    public static fun r0(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r1/{id}")
+    public static fun r1(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r2/{id}")
+    public static fun r2(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r3/{id}")
+    public static fun r3(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r4/{id}")
+    public static fun r4(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r5/{id}")
+    public static fun r5(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r6/{id}")
+    public static fun r6(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r7/{id}")
+    public static fun r7(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r8/{id}")
+    public static fun r8(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r9/{id}")
+    public static fun r9(@path id: int): string {
+        return id.to_string();
+    }
+}
+
+@router("/n100")
+class BenchRoutes100 {
+    @get("/r0/{id}")
+    public static fun r0(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r1/{id}")
+    public static fun r1(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r2/{id}")
+    public static fun r2(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r3/{id}")
+    public static fun r3(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r4/{id}")
+    public static fun r4(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r5/{id}")
+    public static fun r5(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r6/{id}")
+    public static fun r6(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r7/{id}")
+    public static fun r7(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r8/{id}")
+    public static fun r8(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r9/{id}")
+    public static fun r9(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r10/{id}")
+    public static fun r10(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r11/{id}")
+    public static fun r11(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r12/{id}")
+    public static fun r12(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r13/{id}")
+    public static fun r13(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r14/{id}")
+    public static fun r14(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r15/{id}")
+    public static fun r15(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r16/{id}")
+    public static fun r16(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r17/{id}")
+    public static fun r17(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r18/{id}")
+    public static fun r18(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r19/{id}")
+    public static fun r19(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r20/{id}")
+    public static fun r20(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r21/{id}")
+    public static fun r21(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r22/{id}")
+    public static fun r22(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r23/{id}")
+    public static fun r23(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r24/{id}")
+    public static fun r24(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r25/{id}")
+    public static fun r25(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r26/{id}")
+    public static fun r26(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r27/{id}")
+    public static fun r27(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r28/{id}")
+    public static fun r28(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r29/{id}")
+    public static fun r29(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r30/{id}")
+    public static fun r30(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r31/{id}")
+    public static fun r31(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r32/{id}")
+    public static fun r32(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r33/{id}")
+    public static fun r33(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r34/{id}")
+    public static fun r34(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r35/{id}")
+    public static fun r35(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r36/{id}")
+    public static fun r36(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r37/{id}")
+    public static fun r37(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r38/{id}")
+    public static fun r38(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r39/{id}")
+    public static fun r39(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r40/{id}")
+    public static fun r40(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r41/{id}")
+    public static fun r41(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r42/{id}")
+    public static fun r42(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r43/{id}")
+    public static fun r43(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r44/{id}")
+    public static fun r44(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r45/{id}")
+    public static fun r45(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r46/{id}")
+    public static fun r46(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r47/{id}")
+    public static fun r47(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r48/{id}")
+    public static fun r48(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r49/{id}")
+    public static fun r49(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r50/{id}")
+    public static fun r50(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r51/{id}")
+    public static fun r51(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r52/{id}")
+    public static fun r52(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r53/{id}")
+    public static fun r53(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r54/{id}")
+    public static fun r54(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r55/{id}")
+    public static fun r55(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r56/{id}")
+    public static fun r56(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r57/{id}")
+    public static fun r57(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r58/{id}")
+    public static fun r58(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r59/{id}")
+    public static fun r59(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r60/{id}")
+    public static fun r60(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r61/{id}")
+    public static fun r61(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r62/{id}")
+    public static fun r62(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r63/{id}")
+    public static fun r63(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r64/{id}")
+    public static fun r64(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r65/{id}")
+    public static fun r65(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r66/{id}")
+    public static fun r66(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r67/{id}")
+    public static fun r67(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r68/{id}")
+    public static fun r68(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r69/{id}")
+    public static fun r69(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r70/{id}")
+    public static fun r70(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r71/{id}")
+    public static fun r71(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r72/{id}")
+    public static fun r72(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r73/{id}")
+    public static fun r73(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r74/{id}")
+    public static fun r74(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r75/{id}")
+    public static fun r75(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r76/{id}")
+    public static fun r76(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r77/{id}")
+    public static fun r77(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r78/{id}")
+    public static fun r78(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r79/{id}")
+    public static fun r79(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r80/{id}")
+    public static fun r80(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r81/{id}")
+    public static fun r81(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r82/{id}")
+    public static fun r82(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r83/{id}")
+    public static fun r83(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r84/{id}")
+    public static fun r84(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r85/{id}")
+    public static fun r85(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r86/{id}")
+    public static fun r86(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r87/{id}")
+    public static fun r87(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r88/{id}")
+    public static fun r88(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r89/{id}")
+    public static fun r89(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r90/{id}")
+    public static fun r90(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r91/{id}")
+    public static fun r91(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r92/{id}")
+    public static fun r92(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r93/{id}")
+    public static fun r93(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r94/{id}")
+    public static fun r94(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r95/{id}")
+    public static fun r95(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r96/{id}")
+    public static fun r96(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r97/{id}")
+    public static fun r97(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r98/{id}")
+    public static fun r98(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r99/{id}")
+    public static fun r99(@path id: int): string {
+        return id.to_string();
+    }
+}
+
+@router("/n1000")
+class BenchRoutes1000 {
+    @get("/r0/{id}")
+    public static fun r0(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r1/{id}")
+    public static fun r1(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r2/{id}")
+    public static fun r2(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r3/{id}")
+    public static fun r3(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r4/{id}")
+    public static fun r4(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r5/{id}")
+    public static fun r5(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r6/{id}")
+    public static fun r6(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r7/{id}")
+    public static fun r7(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r8/{id}")
+    public static fun r8(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r9/{id}")
+    public static fun r9(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r10/{id}")
+    public static fun r10(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r11/{id}")
+    public static fun r11(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r12/{id}")
+    public static fun r12(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r13/{id}")
+    public static fun r13(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r14/{id}")
+    public static fun r14(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r15/{id}")
+    public static fun r15(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r16/{id}")
+    public static fun r16(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r17/{id}")
+    public static fun r17(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r18/{id}")
+    public static fun r18(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r19/{id}")
+    public static fun r19(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r20/{id}")
+    public static fun r20(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r21/{id}")
+    public static fun r21(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r22/{id}")
+    public static fun r22(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r23/{id}")
+    public static fun r23(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r24/{id}")
+    public static fun r24(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r25/{id}")
+    public static fun r25(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r26/{id}")
+    public static fun r26(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r27/{id}")
+    public static fun r27(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r28/{id}")
+    public static fun r28(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r29/{id}")
+    public static fun r29(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r30/{id}")
+    public static fun r30(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r31/{id}")
+    public static fun r31(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r32/{id}")
+    public static fun r32(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r33/{id}")
+    public static fun r33(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r34/{id}")
+    public static fun r34(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r35/{id}")
+    public static fun r35(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r36/{id}")
+    public static fun r36(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r37/{id}")
+    public static fun r37(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r38/{id}")
+    public static fun r38(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r39/{id}")
+    public static fun r39(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r40/{id}")
+    public static fun r40(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r41/{id}")
+    public static fun r41(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r42/{id}")
+    public static fun r42(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r43/{id}")
+    public static fun r43(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r44/{id}")
+    public static fun r44(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r45/{id}")
+    public static fun r45(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r46/{id}")
+    public static fun r46(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r47/{id}")
+    public static fun r47(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r48/{id}")
+    public static fun r48(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r49/{id}")
+    public static fun r49(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r50/{id}")
+    public static fun r50(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r51/{id}")
+    public static fun r51(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r52/{id}")
+    public static fun r52(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r53/{id}")
+    public static fun r53(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r54/{id}")
+    public static fun r54(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r55/{id}")
+    public static fun r55(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r56/{id}")
+    public static fun r56(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r57/{id}")
+    public static fun r57(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r58/{id}")
+    public static fun r58(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r59/{id}")
+    public static fun r59(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r60/{id}")
+    public static fun r60(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r61/{id}")
+    public static fun r61(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r62/{id}")
+    public static fun r62(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r63/{id}")
+    public static fun r63(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r64/{id}")
+    public static fun r64(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r65/{id}")
+    public static fun r65(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r66/{id}")
+    public static fun r66(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r67/{id}")
+    public static fun r67(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r68/{id}")
+    public static fun r68(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r69/{id}")
+    public static fun r69(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r70/{id}")
+    public static fun r70(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r71/{id}")
+    public static fun r71(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r72/{id}")
+    public static fun r72(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r73/{id}")
+    public static fun r73(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r74/{id}")
+    public static fun r74(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r75/{id}")
+    public static fun r75(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r76/{id}")
+    public static fun r76(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r77/{id}")
+    public static fun r77(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r78/{id}")
+    public static fun r78(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r79/{id}")
+    public static fun r79(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r80/{id}")
+    public static fun r80(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r81/{id}")
+    public static fun r81(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r82/{id}")
+    public static fun r82(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r83/{id}")
+    public static fun r83(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r84/{id}")
+    public static fun r84(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r85/{id}")
+    public static fun r85(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r86/{id}")
+    public static fun r86(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r87/{id}")
+    public static fun r87(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r88/{id}")
+    public static fun r88(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r89/{id}")
+    public static fun r89(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r90/{id}")
+    public static fun r90(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r91/{id}")
+    public static fun r91(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r92/{id}")
+    public static fun r92(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r93/{id}")
+    public static fun r93(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r94/{id}")
+    public static fun r94(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r95/{id}")
+    public static fun r95(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r96/{id}")
+    public static fun r96(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r97/{id}")
+    public static fun r97(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r98/{id}")
+    public static fun r98(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r99/{id}")
+    public static fun r99(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r100/{id}")
+    public static fun r100(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r101/{id}")
+    public static fun r101(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r102/{id}")
+    public static fun r102(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r103/{id}")
+    public static fun r103(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r104/{id}")
+    public static fun r104(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r105/{id}")
+    public static fun r105(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r106/{id}")
+    public static fun r106(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r107/{id}")
+    public static fun r107(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r108/{id}")
+    public static fun r108(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r109/{id}")
+    public static fun r109(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r110/{id}")
+    public static fun r110(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r111/{id}")
+    public static fun r111(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r112/{id}")
+    public static fun r112(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r113/{id}")
+    public static fun r113(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r114/{id}")
+    public static fun r114(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r115/{id}")
+    public static fun r115(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r116/{id}")
+    public static fun r116(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r117/{id}")
+    public static fun r117(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r118/{id}")
+    public static fun r118(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r119/{id}")
+    public static fun r119(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r120/{id}")
+    public static fun r120(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r121/{id}")
+    public static fun r121(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r122/{id}")
+    public static fun r122(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r123/{id}")
+    public static fun r123(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r124/{id}")
+    public static fun r124(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r125/{id}")
+    public static fun r125(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r126/{id}")
+    public static fun r126(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r127/{id}")
+    public static fun r127(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r128/{id}")
+    public static fun r128(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r129/{id}")
+    public static fun r129(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r130/{id}")
+    public static fun r130(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r131/{id}")
+    public static fun r131(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r132/{id}")
+    public static fun r132(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r133/{id}")
+    public static fun r133(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r134/{id}")
+    public static fun r134(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r135/{id}")
+    public static fun r135(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r136/{id}")
+    public static fun r136(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r137/{id}")
+    public static fun r137(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r138/{id}")
+    public static fun r138(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r139/{id}")
+    public static fun r139(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r140/{id}")
+    public static fun r140(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r141/{id}")
+    public static fun r141(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r142/{id}")
+    public static fun r142(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r143/{id}")
+    public static fun r143(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r144/{id}")
+    public static fun r144(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r145/{id}")
+    public static fun r145(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r146/{id}")
+    public static fun r146(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r147/{id}")
+    public static fun r147(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r148/{id}")
+    public static fun r148(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r149/{id}")
+    public static fun r149(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r150/{id}")
+    public static fun r150(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r151/{id}")
+    public static fun r151(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r152/{id}")
+    public static fun r152(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r153/{id}")
+    public static fun r153(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r154/{id}")
+    public static fun r154(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r155/{id}")
+    public static fun r155(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r156/{id}")
+    public static fun r156(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r157/{id}")
+    public static fun r157(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r158/{id}")
+    public static fun r158(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r159/{id}")
+    public static fun r159(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r160/{id}")
+    public static fun r160(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r161/{id}")
+    public static fun r161(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r162/{id}")
+    public static fun r162(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r163/{id}")
+    public static fun r163(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r164/{id}")
+    public static fun r164(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r165/{id}")
+    public static fun r165(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r166/{id}")
+    public static fun r166(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r167/{id}")
+    public static fun r167(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r168/{id}")
+    public static fun r168(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r169/{id}")
+    public static fun r169(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r170/{id}")
+    public static fun r170(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r171/{id}")
+    public static fun r171(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r172/{id}")
+    public static fun r172(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r173/{id}")
+    public static fun r173(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r174/{id}")
+    public static fun r174(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r175/{id}")
+    public static fun r175(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r176/{id}")
+    public static fun r176(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r177/{id}")
+    public static fun r177(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r178/{id}")
+    public static fun r178(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r179/{id}")
+    public static fun r179(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r180/{id}")
+    public static fun r180(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r181/{id}")
+    public static fun r181(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r182/{id}")
+    public static fun r182(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r183/{id}")
+    public static fun r183(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r184/{id}")
+    public static fun r184(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r185/{id}")
+    public static fun r185(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r186/{id}")
+    public static fun r186(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r187/{id}")
+    public static fun r187(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r188/{id}")
+    public static fun r188(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r189/{id}")
+    public static fun r189(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r190/{id}")
+    public static fun r190(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r191/{id}")
+    public static fun r191(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r192/{id}")
+    public static fun r192(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r193/{id}")
+    public static fun r193(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r194/{id}")
+    public static fun r194(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r195/{id}")
+    public static fun r195(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r196/{id}")
+    public static fun r196(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r197/{id}")
+    public static fun r197(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r198/{id}")
+    public static fun r198(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r199/{id}")
+    public static fun r199(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r200/{id}")
+    public static fun r200(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r201/{id}")
+    public static fun r201(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r202/{id}")
+    public static fun r202(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r203/{id}")
+    public static fun r203(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r204/{id}")
+    public static fun r204(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r205/{id}")
+    public static fun r205(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r206/{id}")
+    public static fun r206(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r207/{id}")
+    public static fun r207(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r208/{id}")
+    public static fun r208(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r209/{id}")
+    public static fun r209(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r210/{id}")
+    public static fun r210(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r211/{id}")
+    public static fun r211(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r212/{id}")
+    public static fun r212(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r213/{id}")
+    public static fun r213(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r214/{id}")
+    public static fun r214(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r215/{id}")
+    public static fun r215(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r216/{id}")
+    public static fun r216(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r217/{id}")
+    public static fun r217(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r218/{id}")
+    public static fun r218(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r219/{id}")
+    public static fun r219(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r220/{id}")
+    public static fun r220(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r221/{id}")
+    public static fun r221(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r222/{id}")
+    public static fun r222(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r223/{id}")
+    public static fun r223(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r224/{id}")
+    public static fun r224(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r225/{id}")
+    public static fun r225(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r226/{id}")
+    public static fun r226(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r227/{id}")
+    public static fun r227(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r228/{id}")
+    public static fun r228(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r229/{id}")
+    public static fun r229(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r230/{id}")
+    public static fun r230(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r231/{id}")
+    public static fun r231(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r232/{id}")
+    public static fun r232(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r233/{id}")
+    public static fun r233(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r234/{id}")
+    public static fun r234(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r235/{id}")
+    public static fun r235(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r236/{id}")
+    public static fun r236(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r237/{id}")
+    public static fun r237(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r238/{id}")
+    public static fun r238(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r239/{id}")
+    public static fun r239(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r240/{id}")
+    public static fun r240(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r241/{id}")
+    public static fun r241(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r242/{id}")
+    public static fun r242(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r243/{id}")
+    public static fun r243(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r244/{id}")
+    public static fun r244(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r245/{id}")
+    public static fun r245(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r246/{id}")
+    public static fun r246(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r247/{id}")
+    public static fun r247(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r248/{id}")
+    public static fun r248(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r249/{id}")
+    public static fun r249(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r250/{id}")
+    public static fun r250(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r251/{id}")
+    public static fun r251(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r252/{id}")
+    public static fun r252(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r253/{id}")
+    public static fun r253(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r254/{id}")
+    public static fun r254(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r255/{id}")
+    public static fun r255(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r256/{id}")
+    public static fun r256(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r257/{id}")
+    public static fun r257(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r258/{id}")
+    public static fun r258(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r259/{id}")
+    public static fun r259(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r260/{id}")
+    public static fun r260(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r261/{id}")
+    public static fun r261(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r262/{id}")
+    public static fun r262(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r263/{id}")
+    public static fun r263(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r264/{id}")
+    public static fun r264(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r265/{id}")
+    public static fun r265(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r266/{id}")
+    public static fun r266(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r267/{id}")
+    public static fun r267(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r268/{id}")
+    public static fun r268(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r269/{id}")
+    public static fun r269(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r270/{id}")
+    public static fun r270(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r271/{id}")
+    public static fun r271(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r272/{id}")
+    public static fun r272(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r273/{id}")
+    public static fun r273(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r274/{id}")
+    public static fun r274(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r275/{id}")
+    public static fun r275(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r276/{id}")
+    public static fun r276(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r277/{id}")
+    public static fun r277(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r278/{id}")
+    public static fun r278(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r279/{id}")
+    public static fun r279(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r280/{id}")
+    public static fun r280(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r281/{id}")
+    public static fun r281(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r282/{id}")
+    public static fun r282(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r283/{id}")
+    public static fun r283(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r284/{id}")
+    public static fun r284(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r285/{id}")
+    public static fun r285(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r286/{id}")
+    public static fun r286(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r287/{id}")
+    public static fun r287(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r288/{id}")
+    public static fun r288(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r289/{id}")
+    public static fun r289(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r290/{id}")
+    public static fun r290(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r291/{id}")
+    public static fun r291(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r292/{id}")
+    public static fun r292(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r293/{id}")
+    public static fun r293(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r294/{id}")
+    public static fun r294(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r295/{id}")
+    public static fun r295(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r296/{id}")
+    public static fun r296(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r297/{id}")
+    public static fun r297(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r298/{id}")
+    public static fun r298(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r299/{id}")
+    public static fun r299(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r300/{id}")
+    public static fun r300(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r301/{id}")
+    public static fun r301(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r302/{id}")
+    public static fun r302(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r303/{id}")
+    public static fun r303(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r304/{id}")
+    public static fun r304(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r305/{id}")
+    public static fun r305(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r306/{id}")
+    public static fun r306(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r307/{id}")
+    public static fun r307(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r308/{id}")
+    public static fun r308(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r309/{id}")
+    public static fun r309(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r310/{id}")
+    public static fun r310(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r311/{id}")
+    public static fun r311(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r312/{id}")
+    public static fun r312(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r313/{id}")
+    public static fun r313(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r314/{id}")
+    public static fun r314(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r315/{id}")
+    public static fun r315(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r316/{id}")
+    public static fun r316(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r317/{id}")
+    public static fun r317(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r318/{id}")
+    public static fun r318(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r319/{id}")
+    public static fun r319(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r320/{id}")
+    public static fun r320(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r321/{id}")
+    public static fun r321(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r322/{id}")
+    public static fun r322(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r323/{id}")
+    public static fun r323(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r324/{id}")
+    public static fun r324(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r325/{id}")
+    public static fun r325(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r326/{id}")
+    public static fun r326(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r327/{id}")
+    public static fun r327(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r328/{id}")
+    public static fun r328(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r329/{id}")
+    public static fun r329(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r330/{id}")
+    public static fun r330(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r331/{id}")
+    public static fun r331(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r332/{id}")
+    public static fun r332(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r333/{id}")
+    public static fun r333(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r334/{id}")
+    public static fun r334(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r335/{id}")
+    public static fun r335(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r336/{id}")
+    public static fun r336(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r337/{id}")
+    public static fun r337(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r338/{id}")
+    public static fun r338(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r339/{id}")
+    public static fun r339(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r340/{id}")
+    public static fun r340(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r341/{id}")
+    public static fun r341(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r342/{id}")
+    public static fun r342(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r343/{id}")
+    public static fun r343(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r344/{id}")
+    public static fun r344(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r345/{id}")
+    public static fun r345(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r346/{id}")
+    public static fun r346(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r347/{id}")
+    public static fun r347(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r348/{id}")
+    public static fun r348(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r349/{id}")
+    public static fun r349(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r350/{id}")
+    public static fun r350(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r351/{id}")
+    public static fun r351(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r352/{id}")
+    public static fun r352(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r353/{id}")
+    public static fun r353(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r354/{id}")
+    public static fun r354(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r355/{id}")
+    public static fun r355(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r356/{id}")
+    public static fun r356(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r357/{id}")
+    public static fun r357(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r358/{id}")
+    public static fun r358(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r359/{id}")
+    public static fun r359(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r360/{id}")
+    public static fun r360(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r361/{id}")
+    public static fun r361(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r362/{id}")
+    public static fun r362(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r363/{id}")
+    public static fun r363(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r364/{id}")
+    public static fun r364(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r365/{id}")
+    public static fun r365(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r366/{id}")
+    public static fun r366(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r367/{id}")
+    public static fun r367(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r368/{id}")
+    public static fun r368(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r369/{id}")
+    public static fun r369(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r370/{id}")
+    public static fun r370(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r371/{id}")
+    public static fun r371(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r372/{id}")
+    public static fun r372(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r373/{id}")
+    public static fun r373(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r374/{id}")
+    public static fun r374(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r375/{id}")
+    public static fun r375(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r376/{id}")
+    public static fun r376(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r377/{id}")
+    public static fun r377(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r378/{id}")
+    public static fun r378(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r379/{id}")
+    public static fun r379(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r380/{id}")
+    public static fun r380(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r381/{id}")
+    public static fun r381(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r382/{id}")
+    public static fun r382(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r383/{id}")
+    public static fun r383(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r384/{id}")
+    public static fun r384(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r385/{id}")
+    public static fun r385(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r386/{id}")
+    public static fun r386(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r387/{id}")
+    public static fun r387(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r388/{id}")
+    public static fun r388(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r389/{id}")
+    public static fun r389(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r390/{id}")
+    public static fun r390(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r391/{id}")
+    public static fun r391(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r392/{id}")
+    public static fun r392(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r393/{id}")
+    public static fun r393(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r394/{id}")
+    public static fun r394(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r395/{id}")
+    public static fun r395(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r396/{id}")
+    public static fun r396(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r397/{id}")
+    public static fun r397(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r398/{id}")
+    public static fun r398(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r399/{id}")
+    public static fun r399(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r400/{id}")
+    public static fun r400(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r401/{id}")
+    public static fun r401(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r402/{id}")
+    public static fun r402(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r403/{id}")
+    public static fun r403(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r404/{id}")
+    public static fun r404(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r405/{id}")
+    public static fun r405(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r406/{id}")
+    public static fun r406(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r407/{id}")
+    public static fun r407(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r408/{id}")
+    public static fun r408(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r409/{id}")
+    public static fun r409(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r410/{id}")
+    public static fun r410(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r411/{id}")
+    public static fun r411(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r412/{id}")
+    public static fun r412(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r413/{id}")
+    public static fun r413(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r414/{id}")
+    public static fun r414(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r415/{id}")
+    public static fun r415(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r416/{id}")
+    public static fun r416(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r417/{id}")
+    public static fun r417(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r418/{id}")
+    public static fun r418(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r419/{id}")
+    public static fun r419(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r420/{id}")
+    public static fun r420(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r421/{id}")
+    public static fun r421(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r422/{id}")
+    public static fun r422(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r423/{id}")
+    public static fun r423(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r424/{id}")
+    public static fun r424(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r425/{id}")
+    public static fun r425(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r426/{id}")
+    public static fun r426(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r427/{id}")
+    public static fun r427(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r428/{id}")
+    public static fun r428(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r429/{id}")
+    public static fun r429(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r430/{id}")
+    public static fun r430(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r431/{id}")
+    public static fun r431(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r432/{id}")
+    public static fun r432(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r433/{id}")
+    public static fun r433(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r434/{id}")
+    public static fun r434(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r435/{id}")
+    public static fun r435(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r436/{id}")
+    public static fun r436(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r437/{id}")
+    public static fun r437(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r438/{id}")
+    public static fun r438(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r439/{id}")
+    public static fun r439(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r440/{id}")
+    public static fun r440(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r441/{id}")
+    public static fun r441(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r442/{id}")
+    public static fun r442(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r443/{id}")
+    public static fun r443(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r444/{id}")
+    public static fun r444(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r445/{id}")
+    public static fun r445(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r446/{id}")
+    public static fun r446(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r447/{id}")
+    public static fun r447(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r448/{id}")
+    public static fun r448(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r449/{id}")
+    public static fun r449(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r450/{id}")
+    public static fun r450(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r451/{id}")
+    public static fun r451(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r452/{id}")
+    public static fun r452(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r453/{id}")
+    public static fun r453(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r454/{id}")
+    public static fun r454(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r455/{id}")
+    public static fun r455(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r456/{id}")
+    public static fun r456(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r457/{id}")
+    public static fun r457(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r458/{id}")
+    public static fun r458(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r459/{id}")
+    public static fun r459(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r460/{id}")
+    public static fun r460(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r461/{id}")
+    public static fun r461(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r462/{id}")
+    public static fun r462(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r463/{id}")
+    public static fun r463(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r464/{id}")
+    public static fun r464(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r465/{id}")
+    public static fun r465(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r466/{id}")
+    public static fun r466(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r467/{id}")
+    public static fun r467(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r468/{id}")
+    public static fun r468(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r469/{id}")
+    public static fun r469(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r470/{id}")
+    public static fun r470(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r471/{id}")
+    public static fun r471(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r472/{id}")
+    public static fun r472(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r473/{id}")
+    public static fun r473(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r474/{id}")
+    public static fun r474(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r475/{id}")
+    public static fun r475(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r476/{id}")
+    public static fun r476(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r477/{id}")
+    public static fun r477(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r478/{id}")
+    public static fun r478(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r479/{id}")
+    public static fun r479(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r480/{id}")
+    public static fun r480(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r481/{id}")
+    public static fun r481(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r482/{id}")
+    public static fun r482(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r483/{id}")
+    public static fun r483(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r484/{id}")
+    public static fun r484(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r485/{id}")
+    public static fun r485(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r486/{id}")
+    public static fun r486(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r487/{id}")
+    public static fun r487(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r488/{id}")
+    public static fun r488(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r489/{id}")
+    public static fun r489(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r490/{id}")
+    public static fun r490(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r491/{id}")
+    public static fun r491(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r492/{id}")
+    public static fun r492(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r493/{id}")
+    public static fun r493(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r494/{id}")
+    public static fun r494(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r495/{id}")
+    public static fun r495(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r496/{id}")
+    public static fun r496(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r497/{id}")
+    public static fun r497(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r498/{id}")
+    public static fun r498(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r499/{id}")
+    public static fun r499(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r500/{id}")
+    public static fun r500(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r501/{id}")
+    public static fun r501(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r502/{id}")
+    public static fun r502(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r503/{id}")
+    public static fun r503(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r504/{id}")
+    public static fun r504(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r505/{id}")
+    public static fun r505(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r506/{id}")
+    public static fun r506(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r507/{id}")
+    public static fun r507(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r508/{id}")
+    public static fun r508(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r509/{id}")
+    public static fun r509(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r510/{id}")
+    public static fun r510(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r511/{id}")
+    public static fun r511(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r512/{id}")
+    public static fun r512(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r513/{id}")
+    public static fun r513(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r514/{id}")
+    public static fun r514(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r515/{id}")
+    public static fun r515(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r516/{id}")
+    public static fun r516(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r517/{id}")
+    public static fun r517(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r518/{id}")
+    public static fun r518(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r519/{id}")
+    public static fun r519(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r520/{id}")
+    public static fun r520(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r521/{id}")
+    public static fun r521(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r522/{id}")
+    public static fun r522(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r523/{id}")
+    public static fun r523(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r524/{id}")
+    public static fun r524(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r525/{id}")
+    public static fun r525(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r526/{id}")
+    public static fun r526(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r527/{id}")
+    public static fun r527(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r528/{id}")
+    public static fun r528(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r529/{id}")
+    public static fun r529(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r530/{id}")
+    public static fun r530(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r531/{id}")
+    public static fun r531(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r532/{id}")
+    public static fun r532(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r533/{id}")
+    public static fun r533(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r534/{id}")
+    public static fun r534(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r535/{id}")
+    public static fun r535(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r536/{id}")
+    public static fun r536(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r537/{id}")
+    public static fun r537(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r538/{id}")
+    public static fun r538(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r539/{id}")
+    public static fun r539(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r540/{id}")
+    public static fun r540(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r541/{id}")
+    public static fun r541(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r542/{id}")
+    public static fun r542(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r543/{id}")
+    public static fun r543(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r544/{id}")
+    public static fun r544(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r545/{id}")
+    public static fun r545(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r546/{id}")
+    public static fun r546(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r547/{id}")
+    public static fun r547(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r548/{id}")
+    public static fun r548(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r549/{id}")
+    public static fun r549(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r550/{id}")
+    public static fun r550(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r551/{id}")
+    public static fun r551(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r552/{id}")
+    public static fun r552(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r553/{id}")
+    public static fun r553(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r554/{id}")
+    public static fun r554(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r555/{id}")
+    public static fun r555(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r556/{id}")
+    public static fun r556(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r557/{id}")
+    public static fun r557(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r558/{id}")
+    public static fun r558(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r559/{id}")
+    public static fun r559(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r560/{id}")
+    public static fun r560(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r561/{id}")
+    public static fun r561(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r562/{id}")
+    public static fun r562(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r563/{id}")
+    public static fun r563(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r564/{id}")
+    public static fun r564(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r565/{id}")
+    public static fun r565(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r566/{id}")
+    public static fun r566(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r567/{id}")
+    public static fun r567(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r568/{id}")
+    public static fun r568(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r569/{id}")
+    public static fun r569(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r570/{id}")
+    public static fun r570(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r571/{id}")
+    public static fun r571(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r572/{id}")
+    public static fun r572(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r573/{id}")
+    public static fun r573(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r574/{id}")
+    public static fun r574(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r575/{id}")
+    public static fun r575(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r576/{id}")
+    public static fun r576(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r577/{id}")
+    public static fun r577(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r578/{id}")
+    public static fun r578(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r579/{id}")
+    public static fun r579(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r580/{id}")
+    public static fun r580(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r581/{id}")
+    public static fun r581(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r582/{id}")
+    public static fun r582(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r583/{id}")
+    public static fun r583(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r584/{id}")
+    public static fun r584(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r585/{id}")
+    public static fun r585(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r586/{id}")
+    public static fun r586(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r587/{id}")
+    public static fun r587(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r588/{id}")
+    public static fun r588(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r589/{id}")
+    public static fun r589(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r590/{id}")
+    public static fun r590(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r591/{id}")
+    public static fun r591(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r592/{id}")
+    public static fun r592(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r593/{id}")
+    public static fun r593(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r594/{id}")
+    public static fun r594(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r595/{id}")
+    public static fun r595(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r596/{id}")
+    public static fun r596(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r597/{id}")
+    public static fun r597(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r598/{id}")
+    public static fun r598(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r599/{id}")
+    public static fun r599(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r600/{id}")
+    public static fun r600(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r601/{id}")
+    public static fun r601(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r602/{id}")
+    public static fun r602(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r603/{id}")
+    public static fun r603(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r604/{id}")
+    public static fun r604(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r605/{id}")
+    public static fun r605(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r606/{id}")
+    public static fun r606(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r607/{id}")
+    public static fun r607(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r608/{id}")
+    public static fun r608(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r609/{id}")
+    public static fun r609(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r610/{id}")
+    public static fun r610(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r611/{id}")
+    public static fun r611(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r612/{id}")
+    public static fun r612(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r613/{id}")
+    public static fun r613(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r614/{id}")
+    public static fun r614(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r615/{id}")
+    public static fun r615(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r616/{id}")
+    public static fun r616(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r617/{id}")
+    public static fun r617(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r618/{id}")
+    public static fun r618(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r619/{id}")
+    public static fun r619(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r620/{id}")
+    public static fun r620(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r621/{id}")
+    public static fun r621(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r622/{id}")
+    public static fun r622(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r623/{id}")
+    public static fun r623(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r624/{id}")
+    public static fun r624(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r625/{id}")
+    public static fun r625(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r626/{id}")
+    public static fun r626(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r627/{id}")
+    public static fun r627(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r628/{id}")
+    public static fun r628(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r629/{id}")
+    public static fun r629(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r630/{id}")
+    public static fun r630(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r631/{id}")
+    public static fun r631(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r632/{id}")
+    public static fun r632(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r633/{id}")
+    public static fun r633(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r634/{id}")
+    public static fun r634(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r635/{id}")
+    public static fun r635(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r636/{id}")
+    public static fun r636(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r637/{id}")
+    public static fun r637(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r638/{id}")
+    public static fun r638(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r639/{id}")
+    public static fun r639(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r640/{id}")
+    public static fun r640(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r641/{id}")
+    public static fun r641(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r642/{id}")
+    public static fun r642(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r643/{id}")
+    public static fun r643(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r644/{id}")
+    public static fun r644(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r645/{id}")
+    public static fun r645(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r646/{id}")
+    public static fun r646(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r647/{id}")
+    public static fun r647(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r648/{id}")
+    public static fun r648(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r649/{id}")
+    public static fun r649(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r650/{id}")
+    public static fun r650(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r651/{id}")
+    public static fun r651(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r652/{id}")
+    public static fun r652(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r653/{id}")
+    public static fun r653(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r654/{id}")
+    public static fun r654(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r655/{id}")
+    public static fun r655(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r656/{id}")
+    public static fun r656(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r657/{id}")
+    public static fun r657(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r658/{id}")
+    public static fun r658(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r659/{id}")
+    public static fun r659(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r660/{id}")
+    public static fun r660(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r661/{id}")
+    public static fun r661(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r662/{id}")
+    public static fun r662(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r663/{id}")
+    public static fun r663(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r664/{id}")
+    public static fun r664(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r665/{id}")
+    public static fun r665(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r666/{id}")
+    public static fun r666(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r667/{id}")
+    public static fun r667(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r668/{id}")
+    public static fun r668(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r669/{id}")
+    public static fun r669(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r670/{id}")
+    public static fun r670(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r671/{id}")
+    public static fun r671(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r672/{id}")
+    public static fun r672(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r673/{id}")
+    public static fun r673(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r674/{id}")
+    public static fun r674(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r675/{id}")
+    public static fun r675(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r676/{id}")
+    public static fun r676(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r677/{id}")
+    public static fun r677(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r678/{id}")
+    public static fun r678(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r679/{id}")
+    public static fun r679(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r680/{id}")
+    public static fun r680(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r681/{id}")
+    public static fun r681(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r682/{id}")
+    public static fun r682(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r683/{id}")
+    public static fun r683(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r684/{id}")
+    public static fun r684(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r685/{id}")
+    public static fun r685(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r686/{id}")
+    public static fun r686(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r687/{id}")
+    public static fun r687(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r688/{id}")
+    public static fun r688(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r689/{id}")
+    public static fun r689(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r690/{id}")
+    public static fun r690(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r691/{id}")
+    public static fun r691(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r692/{id}")
+    public static fun r692(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r693/{id}")
+    public static fun r693(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r694/{id}")
+    public static fun r694(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r695/{id}")
+    public static fun r695(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r696/{id}")
+    public static fun r696(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r697/{id}")
+    public static fun r697(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r698/{id}")
+    public static fun r698(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r699/{id}")
+    public static fun r699(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r700/{id}")
+    public static fun r700(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r701/{id}")
+    public static fun r701(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r702/{id}")
+    public static fun r702(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r703/{id}")
+    public static fun r703(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r704/{id}")
+    public static fun r704(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r705/{id}")
+    public static fun r705(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r706/{id}")
+    public static fun r706(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r707/{id}")
+    public static fun r707(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r708/{id}")
+    public static fun r708(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r709/{id}")
+    public static fun r709(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r710/{id}")
+    public static fun r710(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r711/{id}")
+    public static fun r711(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r712/{id}")
+    public static fun r712(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r713/{id}")
+    public static fun r713(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r714/{id}")
+    public static fun r714(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r715/{id}")
+    public static fun r715(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r716/{id}")
+    public static fun r716(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r717/{id}")
+    public static fun r717(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r718/{id}")
+    public static fun r718(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r719/{id}")
+    public static fun r719(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r720/{id}")
+    public static fun r720(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r721/{id}")
+    public static fun r721(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r722/{id}")
+    public static fun r722(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r723/{id}")
+    public static fun r723(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r724/{id}")
+    public static fun r724(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r725/{id}")
+    public static fun r725(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r726/{id}")
+    public static fun r726(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r727/{id}")
+    public static fun r727(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r728/{id}")
+    public static fun r728(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r729/{id}")
+    public static fun r729(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r730/{id}")
+    public static fun r730(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r731/{id}")
+    public static fun r731(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r732/{id}")
+    public static fun r732(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r733/{id}")
+    public static fun r733(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r734/{id}")
+    public static fun r734(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r735/{id}")
+    public static fun r735(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r736/{id}")
+    public static fun r736(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r737/{id}")
+    public static fun r737(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r738/{id}")
+    public static fun r738(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r739/{id}")
+    public static fun r739(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r740/{id}")
+    public static fun r740(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r741/{id}")
+    public static fun r741(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r742/{id}")
+    public static fun r742(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r743/{id}")
+    public static fun r743(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r744/{id}")
+    public static fun r744(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r745/{id}")
+    public static fun r745(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r746/{id}")
+    public static fun r746(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r747/{id}")
+    public static fun r747(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r748/{id}")
+    public static fun r748(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r749/{id}")
+    public static fun r749(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r750/{id}")
+    public static fun r750(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r751/{id}")
+    public static fun r751(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r752/{id}")
+    public static fun r752(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r753/{id}")
+    public static fun r753(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r754/{id}")
+    public static fun r754(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r755/{id}")
+    public static fun r755(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r756/{id}")
+    public static fun r756(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r757/{id}")
+    public static fun r757(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r758/{id}")
+    public static fun r758(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r759/{id}")
+    public static fun r759(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r760/{id}")
+    public static fun r760(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r761/{id}")
+    public static fun r761(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r762/{id}")
+    public static fun r762(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r763/{id}")
+    public static fun r763(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r764/{id}")
+    public static fun r764(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r765/{id}")
+    public static fun r765(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r766/{id}")
+    public static fun r766(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r767/{id}")
+    public static fun r767(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r768/{id}")
+    public static fun r768(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r769/{id}")
+    public static fun r769(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r770/{id}")
+    public static fun r770(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r771/{id}")
+    public static fun r771(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r772/{id}")
+    public static fun r772(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r773/{id}")
+    public static fun r773(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r774/{id}")
+    public static fun r774(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r775/{id}")
+    public static fun r775(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r776/{id}")
+    public static fun r776(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r777/{id}")
+    public static fun r777(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r778/{id}")
+    public static fun r778(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r779/{id}")
+    public static fun r779(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r780/{id}")
+    public static fun r780(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r781/{id}")
+    public static fun r781(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r782/{id}")
+    public static fun r782(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r783/{id}")
+    public static fun r783(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r784/{id}")
+    public static fun r784(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r785/{id}")
+    public static fun r785(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r786/{id}")
+    public static fun r786(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r787/{id}")
+    public static fun r787(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r788/{id}")
+    public static fun r788(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r789/{id}")
+    public static fun r789(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r790/{id}")
+    public static fun r790(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r791/{id}")
+    public static fun r791(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r792/{id}")
+    public static fun r792(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r793/{id}")
+    public static fun r793(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r794/{id}")
+    public static fun r794(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r795/{id}")
+    public static fun r795(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r796/{id}")
+    public static fun r796(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r797/{id}")
+    public static fun r797(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r798/{id}")
+    public static fun r798(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r799/{id}")
+    public static fun r799(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r800/{id}")
+    public static fun r800(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r801/{id}")
+    public static fun r801(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r802/{id}")
+    public static fun r802(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r803/{id}")
+    public static fun r803(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r804/{id}")
+    public static fun r804(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r805/{id}")
+    public static fun r805(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r806/{id}")
+    public static fun r806(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r807/{id}")
+    public static fun r807(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r808/{id}")
+    public static fun r808(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r809/{id}")
+    public static fun r809(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r810/{id}")
+    public static fun r810(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r811/{id}")
+    public static fun r811(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r812/{id}")
+    public static fun r812(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r813/{id}")
+    public static fun r813(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r814/{id}")
+    public static fun r814(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r815/{id}")
+    public static fun r815(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r816/{id}")
+    public static fun r816(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r817/{id}")
+    public static fun r817(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r818/{id}")
+    public static fun r818(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r819/{id}")
+    public static fun r819(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r820/{id}")
+    public static fun r820(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r821/{id}")
+    public static fun r821(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r822/{id}")
+    public static fun r822(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r823/{id}")
+    public static fun r823(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r824/{id}")
+    public static fun r824(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r825/{id}")
+    public static fun r825(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r826/{id}")
+    public static fun r826(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r827/{id}")
+    public static fun r827(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r828/{id}")
+    public static fun r828(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r829/{id}")
+    public static fun r829(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r830/{id}")
+    public static fun r830(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r831/{id}")
+    public static fun r831(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r832/{id}")
+    public static fun r832(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r833/{id}")
+    public static fun r833(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r834/{id}")
+    public static fun r834(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r835/{id}")
+    public static fun r835(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r836/{id}")
+    public static fun r836(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r837/{id}")
+    public static fun r837(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r838/{id}")
+    public static fun r838(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r839/{id}")
+    public static fun r839(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r840/{id}")
+    public static fun r840(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r841/{id}")
+    public static fun r841(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r842/{id}")
+    public static fun r842(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r843/{id}")
+    public static fun r843(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r844/{id}")
+    public static fun r844(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r845/{id}")
+    public static fun r845(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r846/{id}")
+    public static fun r846(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r847/{id}")
+    public static fun r847(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r848/{id}")
+    public static fun r848(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r849/{id}")
+    public static fun r849(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r850/{id}")
+    public static fun r850(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r851/{id}")
+    public static fun r851(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r852/{id}")
+    public static fun r852(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r853/{id}")
+    public static fun r853(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r854/{id}")
+    public static fun r854(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r855/{id}")
+    public static fun r855(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r856/{id}")
+    public static fun r856(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r857/{id}")
+    public static fun r857(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r858/{id}")
+    public static fun r858(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r859/{id}")
+    public static fun r859(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r860/{id}")
+    public static fun r860(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r861/{id}")
+    public static fun r861(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r862/{id}")
+    public static fun r862(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r863/{id}")
+    public static fun r863(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r864/{id}")
+    public static fun r864(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r865/{id}")
+    public static fun r865(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r866/{id}")
+    public static fun r866(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r867/{id}")
+    public static fun r867(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r868/{id}")
+    public static fun r868(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r869/{id}")
+    public static fun r869(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r870/{id}")
+    public static fun r870(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r871/{id}")
+    public static fun r871(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r872/{id}")
+    public static fun r872(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r873/{id}")
+    public static fun r873(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r874/{id}")
+    public static fun r874(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r875/{id}")
+    public static fun r875(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r876/{id}")
+    public static fun r876(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r877/{id}")
+    public static fun r877(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r878/{id}")
+    public static fun r878(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r879/{id}")
+    public static fun r879(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r880/{id}")
+    public static fun r880(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r881/{id}")
+    public static fun r881(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r882/{id}")
+    public static fun r882(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r883/{id}")
+    public static fun r883(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r884/{id}")
+    public static fun r884(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r885/{id}")
+    public static fun r885(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r886/{id}")
+    public static fun r886(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r887/{id}")
+    public static fun r887(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r888/{id}")
+    public static fun r888(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r889/{id}")
+    public static fun r889(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r890/{id}")
+    public static fun r890(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r891/{id}")
+    public static fun r891(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r892/{id}")
+    public static fun r892(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r893/{id}")
+    public static fun r893(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r894/{id}")
+    public static fun r894(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r895/{id}")
+    public static fun r895(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r896/{id}")
+    public static fun r896(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r897/{id}")
+    public static fun r897(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r898/{id}")
+    public static fun r898(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r899/{id}")
+    public static fun r899(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r900/{id}")
+    public static fun r900(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r901/{id}")
+    public static fun r901(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r902/{id}")
+    public static fun r902(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r903/{id}")
+    public static fun r903(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r904/{id}")
+    public static fun r904(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r905/{id}")
+    public static fun r905(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r906/{id}")
+    public static fun r906(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r907/{id}")
+    public static fun r907(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r908/{id}")
+    public static fun r908(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r909/{id}")
+    public static fun r909(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r910/{id}")
+    public static fun r910(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r911/{id}")
+    public static fun r911(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r912/{id}")
+    public static fun r912(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r913/{id}")
+    public static fun r913(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r914/{id}")
+    public static fun r914(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r915/{id}")
+    public static fun r915(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r916/{id}")
+    public static fun r916(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r917/{id}")
+    public static fun r917(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r918/{id}")
+    public static fun r918(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r919/{id}")
+    public static fun r919(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r920/{id}")
+    public static fun r920(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r921/{id}")
+    public static fun r921(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r922/{id}")
+    public static fun r922(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r923/{id}")
+    public static fun r923(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r924/{id}")
+    public static fun r924(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r925/{id}")
+    public static fun r925(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r926/{id}")
+    public static fun r926(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r927/{id}")
+    public static fun r927(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r928/{id}")
+    public static fun r928(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r929/{id}")
+    public static fun r929(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r930/{id}")
+    public static fun r930(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r931/{id}")
+    public static fun r931(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r932/{id}")
+    public static fun r932(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r933/{id}")
+    public static fun r933(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r934/{id}")
+    public static fun r934(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r935/{id}")
+    public static fun r935(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r936/{id}")
+    public static fun r936(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r937/{id}")
+    public static fun r937(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r938/{id}")
+    public static fun r938(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r939/{id}")
+    public static fun r939(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r940/{id}")
+    public static fun r940(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r941/{id}")
+    public static fun r941(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r942/{id}")
+    public static fun r942(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r943/{id}")
+    public static fun r943(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r944/{id}")
+    public static fun r944(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r945/{id}")
+    public static fun r945(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r946/{id}")
+    public static fun r946(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r947/{id}")
+    public static fun r947(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r948/{id}")
+    public static fun r948(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r949/{id}")
+    public static fun r949(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r950/{id}")
+    public static fun r950(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r951/{id}")
+    public static fun r951(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r952/{id}")
+    public static fun r952(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r953/{id}")
+    public static fun r953(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r954/{id}")
+    public static fun r954(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r955/{id}")
+    public static fun r955(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r956/{id}")
+    public static fun r956(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r957/{id}")
+    public static fun r957(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r958/{id}")
+    public static fun r958(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r959/{id}")
+    public static fun r959(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r960/{id}")
+    public static fun r960(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r961/{id}")
+    public static fun r961(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r962/{id}")
+    public static fun r962(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r963/{id}")
+    public static fun r963(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r964/{id}")
+    public static fun r964(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r965/{id}")
+    public static fun r965(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r966/{id}")
+    public static fun r966(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r967/{id}")
+    public static fun r967(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r968/{id}")
+    public static fun r968(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r969/{id}")
+    public static fun r969(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r970/{id}")
+    public static fun r970(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r971/{id}")
+    public static fun r971(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r972/{id}")
+    public static fun r972(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r973/{id}")
+    public static fun r973(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r974/{id}")
+    public static fun r974(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r975/{id}")
+    public static fun r975(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r976/{id}")
+    public static fun r976(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r977/{id}")
+    public static fun r977(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r978/{id}")
+    public static fun r978(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r979/{id}")
+    public static fun r979(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r980/{id}")
+    public static fun r980(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r981/{id}")
+    public static fun r981(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r982/{id}")
+    public static fun r982(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r983/{id}")
+    public static fun r983(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r984/{id}")
+    public static fun r984(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r985/{id}")
+    public static fun r985(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r986/{id}")
+    public static fun r986(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r987/{id}")
+    public static fun r987(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r988/{id}")
+    public static fun r988(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r989/{id}")
+    public static fun r989(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r990/{id}")
+    public static fun r990(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r991/{id}")
+    public static fun r991(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r992/{id}")
+    public static fun r992(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r993/{id}")
+    public static fun r993(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r994/{id}")
+    public static fun r994(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r995/{id}")
+    public static fun r995(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r996/{id}")
+    public static fun r996(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r997/{id}")
+    public static fun r997(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r998/{id}")
+    public static fun r998(@path id: int): string {
+        return id.to_string();
+    }
+
+    @get("/r999/{id}")
+    public static fun r999(@path id: int): string {
+        return id.to_string();
+    }
+}
+
+@noinline
+async fun get_loop(client: HttpClient, url: string, iters: int): int {
+    let total = 0;
+    let target = Url.parse(url).unwrap();
+    for (let i = 0; i < iters; i++) {
+        let response = client.send(HttpRequest(HttpMethod.Get, target)).await.unwrap();
+        total = total + response.status + response.read_text().await.unwrap().length;
+        response.close();
+    }
+    return total;
+}
+
+@noinline
+async fun echo_loop(client: HttpClient, url: string, iters: int): int {
+    let total = 0;
+    let target = Url.parse(url).unwrap();
+    let body = Encoding.utf8_encode(Json.serialize(BenchPayload("bench", 42)));
+    for (let i = 0; i < iters; i++) {
+        let request = HttpRequest(HttpMethod.Post, target);
+        request.headers.set("Content-Type", "application/json");
+        request.body = body;
+        let response = client.send(request).await.unwrap();
+        total = total + response.status + response.read_text().await.unwrap().length;
+        response.close();
+    }
+    return total;
+}
+
+async fun timed(name: string, client: HttpClient, url: string, iters: int): void {
+    let sw = Stopwatch();
+    let value = get_loop(client, url, iters).await;
+    sw.stop();
+    report(name, sw.elapsed_nanos, iters, value);
+}
+
+async fun run_suite(client: HttpClient, basic: string, routed: List<string>): void {
+    timed("web_plaintext", client, basic + "/plain", 500).await;
+    let sw = Stopwatch();
+    let value = echo_loop(client, basic + "/echo", 500).await;
+    sw.stop();
+    report("web_json_echo", sw.elapsed_nanos, 500, value);
+    timed("web_middleware_3", client, basic + "/layered", 500).await;
+    timed("web_routes_10", client, routed[0] + "/n10/r9/7", 500).await;
+    timed("web_routes_100", client, routed[1] + "/n100/r99/7", 500).await;
+    timed("web_routes_1000", client, routed[2] + "/n1000/r999/7", 500).await;
+}
+
+async fun main(): void {
+    let basic_app = WebApp();
+    basic_app.include_router(BenchBasic.router()).unwrap();
+    let basic = "http://127.0.0.1:" + basic_app.listen("127.0.0.1", 0).await.unwrap().to_string();
+    let routed = List<string>();
+    let app10 = WebApp();
+    app10.include_router(BenchRoutes10.router()).unwrap();
+    routed.push("http://127.0.0.1:" + app10.listen("127.0.0.1", 0).await.unwrap().to_string());
+    let app100 = WebApp();
+    app100.include_router(BenchRoutes100.router()).unwrap();
+    routed.push("http://127.0.0.1:" + app100.listen("127.0.0.1", 0).await.unwrap().to_string());
+    let app1000 = WebApp();
+    app1000.include_router(BenchRoutes1000.router()).unwrap();
+    routed.push("http://127.0.0.1:" + app1000.listen("127.0.0.1", 0).await.unwrap().to_string());
+    let client = HttpClient();
+    measuring = false;
+    run_suite(client, basic, routed).await;
+    measuring = true;
+    let passes = int.parse(System.env("DREAM_BENCH_PASSES").unwrap_or("5")).unwrap_or(5);
+    for (let p = 0; p < passes; p = p + 1) {
+        run_suite(client, basic, routed).await;
+    }
+    client.close().unwrap();
+    basic_app.shutdown();
+    app10.shutdown();
+    app100.shutdown();
+    app1000.shutdown();
+    System.println("sink " + sink.to_string());
+}

@@ -1,0 +1,105 @@
+module system.webapi;
+
+/// Transport settings for `WebApp.listen` and `WebApp.run`, named after Uvicorn's options.
+/// A zero limit or timeout means "none".
+public class ServerConfig {
+    /// Path to the PEM server certificate; leave empty to serve plain HTTP.
+    public ssl_certfile: string;
+
+    /// Path to the PEM private key for `ssl_certfile`.
+    public ssl_keyfile: string;
+
+    /// When more connections are open or more requests are in flight than this, new requests
+    /// receive `503 Service Unavailable`. Zero accepts everything.
+    public limit_concurrency: int;
+
+    /// Maximum number of connections the operating system queues before the server accepts them.
+    public backlog: int;
+
+    /// Milliseconds an idle keep-alive connection, or a client still sending its request headers,
+    /// may stay silent before the server closes it. Zero waits forever.
+    public timeout_keep_alive_ms: int;
+
+    /// Milliseconds `shutdown` waits for in-flight requests before closing their connections.
+    /// Zero waits until every request finishes.
+    public timeout_graceful_shutdown_ms: int;
+
+    /// Largest request head (request line plus headers) in bytes; larger requests are rejected
+    /// with `431`. Must be at least 8192.
+    public max_header_bytes: int;
+
+    /// Largest WebSocket message in bytes; a larger message closes the socket with code 1009.
+    /// Zero removes the limit.
+    public ws_max_size: int;
+
+    /// Inbound WebSocket messages buffered per socket before the server stops reading from it.
+    public ws_max_queue: int;
+
+    /// Milliseconds between server pings on each WebSocket. Zero disables pings.
+    public ws_ping_interval_ms: int;
+
+    /// Milliseconds the client has to answer a ping before the socket closes with code 1011.
+    public ws_ping_timeout_ms: int;
+
+    /// Creates a `ServerConfig`; every default matches Uvicorn's.
+    public constructor(
+        ssl_certfile: string = "",
+        ssl_keyfile: string = "",
+        limit_concurrency: int = 0,
+        backlog: int = 2048,
+        timeout_keep_alive_ms: int = 5000,
+        timeout_graceful_shutdown_ms: int = 0,
+        max_header_bytes: int = 16384,
+        ws_max_size: int = 16777216,
+        ws_max_queue: int = 32,
+        ws_ping_interval_ms: int = 20000,
+        ws_ping_timeout_ms: int = 20000
+    ) {
+        this.ssl_certfile = ssl_certfile;
+        this.ssl_keyfile = ssl_keyfile;
+        this.limit_concurrency = limit_concurrency;
+        this.backlog = backlog;
+        this.timeout_keep_alive_ms = timeout_keep_alive_ms;
+        this.timeout_graceful_shutdown_ms = timeout_graceful_shutdown_ms;
+        this.max_header_bytes = max_header_bytes;
+        this.ws_max_size = ws_max_size;
+        this.ws_max_queue = ws_max_queue;
+        this.ws_ping_interval_ms = ws_ping_interval_ms;
+        this.ws_ping_timeout_ms = ws_ping_timeout_ms;
+    }
+
+    internal fun validate(): Result<Unit, IoError> {
+        if this.limit_concurrency < 0
+            || this.backlog < 0
+            || this.timeout_keep_alive_ms < 0
+            || this.timeout_graceful_shutdown_ms < 0
+            || this.ws_max_size < 0
+            || this.ws_max_queue < 0
+            || this.ws_ping_interval_ms < 0
+            || this.ws_ping_timeout_ms < 0 {
+            return Result.Err(IoError.invalid("", "server settings must not be negative"));
+        }
+        if this.max_header_bytes < 8192 {
+            return Result.Err(IoError.invalid("", "max_header_bytes must be at least 8192"));
+        }
+        return Result.Ok(Unit());
+    }
+
+    internal fun to_json(): JsonValue {
+        let value = JsonValue.dict();
+        value["ssl_certfile"] = JsonValue.from_string(this.ssl_certfile);
+        value["ssl_keyfile"] = JsonValue.from_string(this.ssl_keyfile);
+        value["limit_concurrency"] = JsonValue.from_int(this.limit_concurrency);
+        value["backlog"] = JsonValue.from_int(this.backlog);
+        value["timeout_keep_alive_ms"] = JsonValue.from_int(this.timeout_keep_alive_ms);
+        value["timeout_graceful_shutdown_ms"] = JsonValue.from_int(
+            this.timeout_graceful_shutdown_ms
+        );
+        value["max_header_bytes"] = JsonValue.from_int(this.max_header_bytes);
+        value["ws_max_size"] = JsonValue.from_int(this.ws_max_size);
+        value["ws_max_queue"] = JsonValue.from_int(this.ws_max_queue);
+        value["ws_ping_interval_ms"] = JsonValue.from_int(this.ws_ping_interval_ms);
+        value["ws_ping_timeout_ms"] = JsonValue.from_int(this.ws_ping_timeout_ms);
+        return value;
+    }
+}

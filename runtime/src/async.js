@@ -79,10 +79,11 @@ export function wrapAsyncImport(getInstance, fn, signature) {
 
   return startAsyncImport(getInstance, fn,
     (inst, args) => marshalArgs(inst, params, args),
-    (inst, value) => boxTag != null ? boxLong64(inst, value, boxTag) : marshalResult(inst, result, value));
+    (inst, value) => boxTag != null ? boxLong64(inst, value, boxTag) : marshalResult(inst, result, value),
+    resultBase === "js");
 }
 
-export function startAsyncImport(getInstance, fn, convertArgs, convertResult) {
+export function startAsyncImport(getInstance, fn, convertArgs, convertResult, rejectsAsNull = false) {
   return (future, ...rawArgs) => {
     const inst = getInstance();
     const exports = inst.exports;
@@ -127,10 +128,19 @@ export function startAsyncImport(getInstance, fn, convertArgs, convertResult) {
     }).then(
       (value) => settle(value),
       (err) => {
-        // A rejected Promise has no Dream-level error channel yet; settle the future with a
-        // zero/null result (a `null` `js` handle for a `js` result) so the scheduler is not left
-        // hanging, and surface the reason on the console for diagnosis.
-        console.error("Dream: awaited JS promise rejected:", err);
+        // A `js` result reports rejection as a null handle, which `js.await_promise` surfaces
+        // as `None`; a rejection caused by cancellation is the expected outcome. Any other
+        // rejection is a host failure the typed result cannot express, so it traps through the
+        // fatal host error. The future still settles so the scheduler drains instead of hanging.
+        if (cancellation.requested) {
+          settle(null);
+          return;
+        }
+        if (rejectsAsNull) {
+          console.error("Dream: awaited JS promise rejected:", err);
+        } else {
+          inst._hostError ??= err instanceof Error ? err : new Error(`awaited JS promise rejected: ${String(err)}`);
+        }
         settle(null);
       },
     );

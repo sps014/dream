@@ -50,6 +50,8 @@ fun numeric_literals(): void {
     let zero: double = 0;
     Assert.eq(d.to_string(), "3.14");
     Assert.eq(zero.to_string(), "0");
+    let tenth: double = 0.1;
+    Assert.is_true(tenth == 0.1);
 
     /* a plain block
     comment spanning

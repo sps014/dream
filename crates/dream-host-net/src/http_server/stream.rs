@@ -70,9 +70,6 @@ pub(super) fn begin(id: i32, value: &Value) -> Result<Output, Failure> {
     Ok(Output::bytes(vec![]))
 }
 pub(super) async fn write(id: i32, bytes: Vec<u8>) -> Result<Output, Failure> {
-    if bytes.len() > state::MAX_BODY {
-        return Err(error("ELIMIT", "HTTP chunk exceeds 16 MiB"));
-    }
     let request = state::request(id)?;
     let sender = lock(&request.stream)
         .clone()

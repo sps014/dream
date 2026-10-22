@@ -3,7 +3,7 @@
 use std::{path::Path, process::Command};
 
 #[test]
-fn foreign_queues_resume_on_their_owner_without_an_unrelated_claim_lock() {
+fn foreign_queues_resume_on_their_owner() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let runtime = root.join("crates/dream-mir/src/runtime/c");
     let temp = tempfile::tempdir().unwrap();

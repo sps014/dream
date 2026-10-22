@@ -94,9 +94,7 @@ static DREAM_THREAD_PROC(scheduler_stress) {
             dream_foreign_work_begin(batch.frames[i]);
             assert(dream_tag_shared(batch.frames[i]));
             if ((i & 3u) == 1) {
-                dream_mutex_lock(&foreign_claim_mu);
-                i32_at(batch.frames[i], F_STATUS)[0] = 2;
-                dream_mutex_unlock(&foreign_claim_mu);
+                __atomic_store_n(i32_at(batch.frames[i], F_STATUS), 2, __ATOMIC_RELEASE);
             }
         }
         dream_thread thread;
@@ -119,47 +117,6 @@ static DREAM_THREAD_PROC(scheduler_stress) {
         }
     }
     return 0;
-}
-
-static int prepared, proceed, drained, callback_done;
-static DREAM_THREAD_PROC(independent_drain) {
-    (void)arg;
-    owner_thread = 1;
-    dream_ptr f = frame();
-    dream_foreign_work_begin(f);
-    dream_complete_foreign(f, 31);
-    __atomic_store_n(&prepared, 1, __ATOMIC_RELEASE);
-    while (!__atomic_load_n(&proceed, __ATOMIC_ACQUIRE)) { dream_thread_yield(); }
-    foreign_drain();
-    assert(!foreign_outstanding() && i32_at(f, F_NEXT)[0] == 2);
-    frame_free(f);
-    __atomic_store_n(&drained, 1, __ATOMIC_RELEASE);
-    return 0;
-}
-static DREAM_THREAD_PROC(independent_wake) {
-    callback_wake(arg);
-    __atomic_store_n(&callback_done, 1, __ATOMIC_RELEASE);
-    return 0;
-}
-static int began, finish_begin;
-static DREAM_THREAD_PROC(independent_begin) {
-    (void)arg;
-    owner_thread = 1;
-    dream_ptr f = frame();
-    dream_foreign_work_begin(f);
-    __atomic_store_n(&began, 1, __ATOMIC_RELEASE);
-    while (!__atomic_load_n(&finish_begin, __ATOMIC_ACQUIRE)) { dream_thread_yield(); }
-    dream_foreign_work_end(f);
-    assert(!foreign_outstanding());
-    frame_free(f);
-    return 0;
-}
-static int wait_flag(int *flag) {
-    int64_t deadline = dream_monotonic_ns() + INT64_C(2000000000);
-    while (!__atomic_load_n(flag, __ATOMIC_ACQUIRE) && dream_monotonic_ns() < deadline) {
-        dream_thread_yield();
-    }
-    return __atomic_load_n(flag, __ATOMIC_ACQUIRE);
 }
 
 static dream_ptr during_drain;
@@ -208,32 +165,15 @@ int main(void) {
     assert(wakes == 1 && !*ptr_at(f, F_WAKER));
     frame_free(f); frame_free(waker);
     drain_detached_batches();
-
-    dream_thread drain_thread, wake_thread;
-    assert(dream_thread_start(&drain_thread, independent_drain, NULL) == 0);
-    assert(wait_flag(&prepared));
-    dream_mutex_lock(&foreign_claim_mu);
-    __atomic_store_n(&proceed, 1, __ATOMIC_RELEASE);
-    assert(dream_thread_start(&wake_thread, independent_wake, &sched) == 0);
-    int drain_ok = wait_flag(&drained);
-    int wake_ok = wait_flag(&callback_done);
-    dream_mutex_unlock(&foreign_claim_mu);
-    dream_thread_join(drain_thread); dream_thread_join(wake_thread);
-    assert(drain_ok && wake_ok);
-
-    dream_thread begin_thread;
-    dream_mutex_lock(&foreign_claim_mu);
-    assert(dream_thread_start(&begin_thread, independent_begin, NULL) == 0);
-    int begin_ok = wait_flag(&began);
-    dream_mutex_unlock(&foreign_claim_mu);
-    __atomic_store_n(&finish_begin, 1, __ATOMIC_RELEASE);
-    dream_thread_join(begin_thread);
-    assert(begin_ok);
+    callback_wake(&sched);
+    dream_mutex_lock(&sched.mu);
+    scheduler_park(1000);
+    dream_mutex_unlock(&sched.mu);
 
     dream_thread threads[16];
     for (unsigned i = 0; i < 16; i++) { assert(dream_thread_start(&threads[i], scheduler_stress, NULL) == 0); }
     for (unsigned i = 0; i < 16; i++) { dream_thread_join(threads[i]); }
-    assert(dropped == 4105 && published == 7180 && node_live == 0);
+    assert(dropped == 4103 && published == 7177 && node_live == 0);
     puts("foreign queue scheduler isolation passed");
     return 0;
 }

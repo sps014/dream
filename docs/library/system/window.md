@@ -153,6 +153,15 @@ on that thread, so a normal game loop needs no extra setup. Calls from a `Task` 
 reach the window: `Window.open` returns a `WindowError` with code `ETHREAD`, and the other methods
 do nothing.
 
+While a native window is open, an `await` that has to wait, such as a slow network read, keeps
+handling the window system's events, so the operating system never reports the window as not
+responding. Your frame loop does not draw while it waits, though. To keep drawing, move slow work
+into its own `async` function that stores its result in an object the frame loop reads, start it
+with `Promise.start`, and let the frame loop `await` only per-frame work such as presenting a frame
+or `Time.delay(16)`.
+
+On macOS, live-resizing a window still pauses the program until the resize ends.
+
 In a browser, use `Window.canvas` with the `id` of a `<canvas>` element on the page.
 `Window.open` also works there: it adds a canvas of the requested size to the page. The browser
 only delivers input while your program is waiting, so a browser frame loop must `await` something

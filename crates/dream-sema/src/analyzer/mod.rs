@@ -232,6 +232,13 @@ pub struct Analyzer<'a> {
     /// struct instead of the heap `CaptureCell<T>` (see `hir_declare_local`/`hir_begin_function`).
     /// Cleared and repopulated per function in `hir_begin_function`.
     ref_boxed_locals: HashSet<String>,
+    /// Captured names of the current function that are never rebound (see
+    /// `capture_scan::BindingWrites::rebound`). A captured class, string or `fun` value among them
+    /// stays a plain local, and closures carry the reference itself as their environment.
+    unboxed_captures: HashSet<String>,
+    /// `(lifted closure, captured name)` pairs whose environment slot holds the captured reference
+    /// itself rather than a `CaptureCell<T>`.
+    direct_captures: HashSet<(dream_types::DefId, String)>,
     /// For each synthesized capturing-lambda function (keyed by its lifted name, e.g. `__lambda_3`):
     /// the ordered list of `(captured name, its type in the enclosing scope)` it closes over.
     /// Consulted by identifier resolution *inside that lifted function's own body* to redirect a
@@ -457,6 +464,8 @@ impl<'a> Analyzer<'a> {
             lambda_counter: 0,
             boxed_locals: HashSet::new(),
             ref_boxed_locals: HashSet::new(),
+            unboxed_captures: HashSet::new(),
+            direct_captures: HashSet::new(),
             moved_locals: HashSet::new(),
             closure_parents: indexmap::IndexMap::new(),
             closure_captures: HashMap::new(),

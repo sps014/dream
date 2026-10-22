@@ -82,11 +82,13 @@ For any other code, construct one directly: `HttpStatus(402, "Payment Required")
 
 | Status | When |
 | --- | --- |
-| 400 | The request body cannot be read. |
+| 400 | The request body cannot be read, or a multipart form exceeds its [limits](uploads.md#form-limits). |
 | 401 | Authentication is missing or invalid. |
-| 403 | The user lacks a required scope. |
+| 403 | The user lacks a required scope, or a WebSocket handler closed before accepting. |
 | 404 | No route matches the path. |
-| 413 | The body exceeds the 16 MiB host limit. |
+| 405 | The path matches a route, but not for this method. The `Allow` header lists the methods it accepts. |
+| 431 | The request headers exceed `ServerConfig.max_header_bytes`. |
+| 503 | `ServerConfig.limit_concurrency` is exceeded, or the server is shutting down. |
 | 422 | Input validation failed. The body is a `detail` array whose items have `loc`, `type`, and `msg`. |
 
 A middleware layer may return a response without invoking the endpoint.

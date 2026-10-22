@@ -169,6 +169,22 @@ impl<'a> Analyzer<'a> {
                         .skip(1)
                         .collect()
                 })
+        } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty())
+            && let Some(template) = self.generic_function_template(&function_name)
+        {
+            let type_params = template.generic_parameters.as_deref().unwrap_or(&[]);
+            (type_params.len() == args.len()).then(|| {
+                let concrete: Vec<Type> = args
+                    .iter()
+                    .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                    .collect();
+                let bindings = generic_bindings(type_params, &concrete);
+                template
+                    .parameters
+                    .iter()
+                    .map(|p| Self::monomorphize_type(&p.type_, &bindings))
+                    .collect()
+            })
         } else if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty()) {
             // A generic constructor call (`Cell<int>(v)`). The struct isn't
             // instantiated yet at this point (that happens inside `analyze_constructor_call`,

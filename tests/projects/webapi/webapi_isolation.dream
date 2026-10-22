@@ -44,6 +44,19 @@ async fun webapi_isolation(): void {
     Assert.eq(webapi_get(client, base2, "/v2/state", 200).await, "second");
     webapi_get(client, base1, "/hidden", 404).await;
     webapi_get(client, base2, "/state", 404).await;
+    let wrong_method = client.send(
+        HttpRequest(HttpMethod.Delete, Url.parse(base1 + "/state").unwrap())
+    ).await.unwrap();
+    Assert.eq(wrong_method.status, 405);
+    Assert.eq(wrong_method.headers.get("Allow").unwrap(), "GET, HEAD");
+    wrong_method.close();
+    let head = client.send(HttpRequest(HttpMethod.Head, Url.parse(base1 + "/state").unwrap()))
+        .await
+        .unwrap();
+    Assert.eq(head.status, 200);
+    Assert.eq(head.headers.get("Content-Length").unwrap(), "5");
+    Assert.eq(head.read_text().await.unwrap(), "");
+    head.close();
     Assert.is_true(!first.openapi().contains("/hidden"));
     Assert.is_true(second.openapi().contains("/v2/state"));
     Assert.is_true(webapi_get(client, base1, "/docs", 200).await.contains("/assets/swagger.js"));

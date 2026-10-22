@@ -6,6 +6,7 @@
 
 use crate::thread::is_window_thread;
 use crate::wire::{self, Wire, kind};
+use dream_host_abi::SchedulerPark;
 use dream_host_abi::window_surface::{self as surface, WindowSurface};
 use glfw::{
     ClientApiHint, Context, CursorMode, Glfw, GlfwReceiver, InitHint, JoystickId, PWindow,
@@ -183,6 +184,12 @@ pub fn open(title: &str, width: i32, height: i32, flags: i32) -> Result<i32, Hos
         };
         window.set_all_polling(true);
         unsafe { ffi::glfwSetInputMode(window.window_ptr(), ffi::GLFW_LOCK_KEY_MODS, 1) };
+        if windows.is_empty() {
+            dream_host_abi::set_scheduler_park(Some(SchedulerPark {
+                park: park_hook,
+                wake: wake_hook,
+            }));
+        }
         let id = *next_id;
         *next_id += 1;
         windows.insert(
@@ -201,7 +208,40 @@ pub fn open(title: &str, width: i32, height: i32, flags: i32) -> Result<i32, Hos
 }
 
 pub fn close(id: i32) {
-    with_host(|host| host.windows.remove(&id));
+    with_host(|host| {
+        if host.windows.remove(&id).is_some() && host.windows.is_empty() {
+            dream_host_abi::set_scheduler_park(None);
+        }
+    });
+}
+
+/// Waits for platform events for at most `timeout_ns` (indefinitely when negative), running
+/// GLFW's callbacks so their events wait in each window's queue for the next `poll`. Returns
+/// early when `wake` is called from any thread.
+pub fn park(timeout_ns: i64) {
+    if !is_window_thread() || HOST.with_borrow(Option::is_none) {
+        return;
+    }
+    // Direct FFI: the scheduler parks between guest calls, and GLFW callbacks only touch the
+    // receivers' channels, never the `HOST` cell.
+    if timeout_ns < 0 {
+        unsafe { ffi::glfwWaitEvents() };
+    } else {
+        unsafe { ffi::glfwWaitEventsTimeout(timeout_ns as f64 / 1e9) };
+    }
+}
+
+/// Makes a concurrent or upcoming `park` return. Safe from any thread once GLFW is initialized.
+pub fn wake() {
+    unsafe { ffi::glfwPostEmptyEvent() };
+}
+
+unsafe extern "C" fn park_hook(timeout_ns: i64, _context: *mut u8) {
+    park(timeout_ns);
+}
+
+unsafe extern "C" fn wake_hook(_context: *mut u8) {
+    wake();
 }
 
 /// Pumps the platform queue and returns this window's events plus gamepad changes and samples.

@@ -9,7 +9,6 @@ pub mod error;
 mod exports;
 mod ffi;
 pub mod guest;
-mod handles;
 pub mod mlp;
 pub mod pipelines;
 pub mod raytracing;

@@ -1,13 +1,37 @@
 module system.webapi;
 
-/// A WebSocket accepted by a native WebApp route.
+/// A WebSocket connection offered to a `@websocket` route. The handshake stays open until the
+/// handler calls `accept`; closing the socket first, or returning without accepting it, answers
+/// the handshake with 403 Forbidden.
 public class ServerWebSocket {
     id: int;
+    incoming: HttpIncoming;
     token: Option<CancellationToken>;
+    rejected: bool;
 
-    internal constructor(id: int, token: Option<CancellationToken>) {
-        this.id = id;
+    internal constructor(incoming: HttpIncoming, token: Option<CancellationToken>) {
+        this.id = 0;
+        this.incoming = incoming;
         this.token = token;
+        this.rejected = false;
+    }
+
+    internal static fun is_handshake(incoming: HttpIncoming): bool {
+        return incoming.method == "GET"
+            && incoming.headers.get("Upgrade").unwrap_or("").to_lower() == "websocket";
+    }
+
+    // The HTTP response for the handshake once the handler returns: an accepted socket has
+    // already answered with 101.
+    internal fun finish(): HttpOutgoing {
+        if this.id > 0 {
+            return HttpOutgoing.already_sent();
+        }
+        return HttpOutgoing.from_status(HttpStatus.forbidden());
+    }
+
+    static fun not_accepted<T>(): Result<T, IoError> {
+        return Result.Err(IoError("", "EINVAL", "WebSocket has not been accepted"));
     }
 
     fun resolve_token(token: Option<CancellationToken>): Option<CancellationToken> {
@@ -27,22 +51,38 @@ public class ServerWebSocket {
     static extern fun close_host(id: int): void;
 
     del() {
-        ServerWebSocket.close_host(this.id);
+        if this.id > 0 {
+            ServerWebSocket.close_host(this.id);
+        }
     }
 
-    internal static async fun upgrade(
-        incoming: HttpIncoming,
+    /// Completes the WebSocket handshake with 101 Switching Protocols. Call it once, after any
+    /// checks on the handshake request such as its `Origin` header; messages can be sent and
+    /// received only after it succeeds. Fails when the request is not a valid WebSocket upgrade,
+    /// the client disconnected, or the socket was already accepted or closed.
+    @native
+    public fun accept(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<Unit, IoError>> {
+        return ServerWebSocket.accept_owned(this, this.resolve_token(token));
+    }
+
+    static async fun accept_owned(
+        socket: ServerWebSocket,
         token: Option<CancellationToken>
-    ): Result<ServerWebSocket, IoError> {
-        let operation = WebOperation.start(WebOperation.request("upgrade", incoming.req_id), []);
-        let metadata = WebOperation.parse(operation.wait(token).await?)?;
-        let socket = ServerWebSocket(
-            metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0),
-            token
+    ): Result<Unit, IoError> {
+        if socket.id > 0 || socket.rejected {
+            return Result.Err(IoError("", "EINVAL", "WebSocket was already accepted or closed"));
+        }
+        let operation = WebOperation.start(
+            WebOperation.request("upgrade", socket.incoming.req_id),
+            []
         );
+        let metadata = WebOperation.parse(operation.wait(token).await?)?;
+        socket.id = metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0);
         operation.claim();
         operation.close();
-        return Result.Ok(socket);
+        return Result.Ok(Unit());
     }
 
     static async fun submit(
@@ -51,6 +91,9 @@ public class ServerWebSocket {
         bytes: byte[],
         token: Option<CancellationToken>
     ): Result<byte[], IoError> {
+        if socket.id <= 0 {
+            return ServerWebSocket.not_accepted<byte[]>();
+        }
         if CancellationToken.is_cancelled_opt(token) {
             ServerWebSocket.close_host(socket.id);
             return Result.Err(IoError.cancelled());
@@ -186,7 +229,13 @@ public class ServerWebSocket {
         }
     }
 
-    /// Sends a normal closing handshake.
+    static async fun reject_owned(socket: ServerWebSocket): Result<Unit, IoError> {
+        socket.rejected = true;
+        return Result.Ok(Unit());
+    }
+
+    /// Sends a normal closing handshake; before `accept`, rejects the connection with 403
+    /// Forbidden like `close_with`.
     @native
     public fun close(
         token: Option<CancellationToken> = Option.None
@@ -194,13 +243,18 @@ public class ServerWebSocket {
         return this.close_with(1000, "", token);
     }
 
-    /// Sends a closing handshake with a code and reason.
+    /// Sends a closing handshake with a code and reason. Before `accept`, this rejects the
+    /// connection instead: the handshake is answered with 403 Forbidden when the handler returns,
+    /// and `code` and `reason` are not sent. Use code 1008 (policy violation) for that case.
     @native
     public fun close_with(
         code: int,
         reason: string,
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Unit, IoError>> {
+        if this.id <= 0 {
+            return ServerWebSocket.reject_owned(this);
+        }
         return ServerWebSocket.send_owned(
             this,
             "close",

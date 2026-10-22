@@ -332,6 +332,27 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Records the inline `Bytes.to_wire<T>(v)` encode for a scalar or value-struct `T`.
+    pub(in crate::analyzer) fn hir_set_wire_encode(&mut self, value: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        let string_ty = self.type_ctx.interner.string();
+        self.hir.last =
+            value.map(|value| HExpr::new(string_ty, HExprKind::WireEncode(Box::new(value))));
+    }
+
+    /// Records the inline `Bytes.from_wire<T>(s)` decode for a scalar or value-struct `T`.
+    pub(in crate::analyzer) fn hir_set_wire_decode(&mut self, target: &Type, text: Option<HExpr>) {
+        if !self.active() {
+            self.hir.last = None;
+            return;
+        }
+        let ty = self.type_ctx.lower(target);
+        self.hir.last = text.map(|text| HExpr::new(ty, HExprKind::WireDecode(Box::new(text))));
+    }
+
     /// Records `Buffer.realloc<T>(arr, new_len)` — an in-place `$realloc`-based grow/shrink of
     /// `arr`'s backing block. Drops out of coverage if either operand is not representable.
     pub(in crate::analyzer) fn hir_set_array_realloc(

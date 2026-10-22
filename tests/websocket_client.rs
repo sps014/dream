@@ -86,13 +86,12 @@ import system.testing;
 @test
 @timeout(5000)
 async fun tls_listen(): void {{
-    let options = WebAppOptions();
-    options.tls_cert_path = {cert}; options.tls_key_path = {key};
-    let app = WebApp(options);
-    Assert.is_true(app.listen("127.0.0.1", 0).await.unwrap() > 0);
+    let config = ServerConfig(ssl_certfile: {cert}, ssl_keyfile: {key});
+    let app = WebApp();
+    Assert.is_true(app.listen("127.0.0.1", 0, config).await.unwrap() > 0);
     app.shutdown(); app.wait().await;
-    options.tls_key_path = "";
-    Assert.is_true(WebApp(options).listen("127.0.0.1", 0).await.is_err());
+    config.ssl_keyfile = "";
+    Assert.is_true(WebApp().listen("127.0.0.1", 0, config).await.is_err());
 }}
 "#,
         cert = serde_json::to_string(&cert).unwrap(),

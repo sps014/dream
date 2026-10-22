@@ -36,7 +36,8 @@ dream_ptr dream_funcbox_env(dream_ptr box) {
     return box ? funcbox_get_env(box) : 0;
 }
 
-/* Single-capture env is a tagged CaptureCell; multi-capture is `TAG_CLOSURE_ENV` so
+/* Single-capture env is a tagged CaptureCell, or the captured class, string or funcbox itself when
+ * its binding is never rebound; multi-capture is `TAG_CLOSURE_ENV` so
  * `dream_release_object` runs typed `release_array_t{object}` instead of shallow-freeing
  * `TAG_ARRAY`. */
 void dream_release_closure_env(dream_ptr env) {

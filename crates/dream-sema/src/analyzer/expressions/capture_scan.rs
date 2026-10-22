@@ -49,21 +49,36 @@ pub(in crate::analyzer) fn scan_function_captures(stmts: &[StatementNode]) -> Ha
 /// like its sibling: a name is collected regardless of whether the call it's passed to turns out
 /// to actually resolve to a `ref` parameter (a later mismatch is a separate diagnostic, not this
 /// pass's concern) — boxing a name that wasn't strictly needed is never unsound, only unnecessary.
-pub(in crate::analyzer) fn scan_ref_argument_targets(stmts: &[StatementNode]) -> HashSet<String> {
-    let mut out = HashSet::new();
+pub(in crate::analyzer) fn scan_binding_writes(stmts: &[StatementNode]) -> BindingWrites {
+    let mut out = BindingWrites::default();
     walk_stmts_for_ref_targets(stmts, &mut out);
     out
 }
 
-fn walk_stmts_for_ref_targets(stmts: &[StatementNode], out: &mut HashSet<String>) {
+/// Names a function body may rebind, collected by [`scan_binding_writes`] over the whole body
+/// including nested lambdas.
+#[derive(Default)]
+pub(in crate::analyzer) struct BindingWrites {
+    /// Names passed as `ref` arguments.
+    pub ref_targets: HashSet<String>,
+    /// Names that are assigned, incremented, `ref`-passed or declared `weak`. A captured name
+    /// outside this set holds one value for its whole life, so a closure may carry that value
+    /// instead of sharing a `CaptureCell<T>`.
+    pub rebound: HashSet<String>,
+}
+
+fn walk_stmts_for_ref_targets(stmts: &[StatementNode], out: &mut BindingWrites) {
     for s in stmts {
         walk_stmt_for_ref_targets(s, out);
     }
 }
 
-fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
+fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut BindingWrites) {
     match stmt {
-        StatementNode::Assignment(_, e) => walk_expr_for_ref_targets(e, out),
+        StatementNode::Assignment(name, e) => {
+            out.rebound.insert(name.text.clone());
+            walk_expr_for_ref_targets(e, out)
+        }
         StatementNode::IndexAssignment(a, b, v) => {
             walk_expr_for_ref_targets(a, out);
             walk_expr_for_ref_targets(b, out);
@@ -73,8 +88,13 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(a, out);
             walk_expr_for_ref_targets(v, out);
         }
-        StatementNode::Declaration(_, _, e, _, _)
-        | StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_ref_targets(e, out),
+        StatementNode::Declaration(name, _, e, _, is_weak) => {
+            if *is_weak {
+                out.rebound.insert(name.text.clone());
+            }
+            walk_expr_for_ref_targets(e, out)
+        }
+        StatementNode::TupleDeclaration { init: e, .. } => walk_expr_for_ref_targets(e, out),
         StatementNode::FunctionInvocation(_, _, args) => {
             for a in args {
                 walk_expr_for_ref_targets(a, out);
@@ -157,12 +177,13 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut HashSet<String>) {
     }
 }
 
-fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
+fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut BindingWrites) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
         ExpressionNode::RefArgument(_, inner) => {
             if let ExpressionNode::Identifier(tok) = inner {
-                out.insert(tok.text.clone());
+                out.ref_targets.insert(tok.text.clone());
+                out.rebound.insert(tok.text.clone());
             }
             walk_expr_for_ref_targets(inner, out);
         }
@@ -188,7 +209,12 @@ fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut HashSet<String>) {
             walk_expr_for_ref_targets(r, out);
         }
         ExpressionNode::Unary(_, e) => walk_expr_for_ref_targets(e, out),
-        ExpressionNode::IncDec { target, .. } => walk_expr_for_ref_targets(target, out),
+        ExpressionNode::IncDec { target, .. } => {
+            if let ExpressionNode::Identifier(tok) = target {
+                out.rebound.insert(tok.text.clone());
+            }
+            walk_expr_for_ref_targets(target, out)
+        }
         ExpressionNode::Parenthesized(_, e) => walk_expr_for_ref_targets(e, out),
         ExpressionNode::FunctionCall(_, _, args) => {
             for a in args {

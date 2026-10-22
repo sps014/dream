@@ -5,6 +5,7 @@ uint32_t dream_guest_length(dream_ptr reference);
 uint32_t dream_guest_truncate(dream_ptr reference, uint32_t length);
 void *dream_guest_data(dream_ptr reference, uint32_t kind);
 int32_t dream_async_host_status(dream_ptr future);
+void dream_sched_set_park(void (*park)(int64_t, void *), void (*wake)(void *), void *context);
 void dream_capability_bind(uint32_t (*bind)(const dream_guest_context *)) {
     const dream_guest_context context = {
         DREAM_GUEST_ABI_VERSION, sizeof(dream_guest_context),
@@ -17,6 +18,7 @@ void dream_capability_bind(uint32_t (*bind)(const dream_guest_context *)) {
         (int32_t (*)(void *))dream_async_host_status,
         (void (*)(void *))dream_retain,
         (void (*)(void *))dream_release,
+        dream_sched_set_park,
     };
     if (bind(&context) != 0) { dream_platform_abort(); }
 }

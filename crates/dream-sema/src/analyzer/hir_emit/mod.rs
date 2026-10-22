@@ -194,10 +194,15 @@ impl<'a> Analyzer<'a> {
         // *only* `ref`-passed gets its own address-taking box instead: the stack-resident
         // `RefBox<T>` value struct (`ref_boxed_locals`, see `hir_declare_local`) — no heap
         // allocation or ARC bookkeeping, since its storage never needs to outlive this call.
-        let ref_targets =
-            super::expressions::capture_scan::scan_ref_argument_targets(function.body);
-        self.ref_boxed_locals = ref_targets
+        let writes = super::expressions::capture_scan::scan_binding_writes(function.body);
+        self.ref_boxed_locals = writes
+            .ref_targets
             .difference(&self.boxed_locals)
+            .cloned()
+            .collect();
+        self.unboxed_captures = self
+            .boxed_locals
+            .difference(&writes.rebound)
             .cloned()
             .collect();
         self.capturing_fun_locals.clear();
@@ -309,7 +314,7 @@ impl<'a> Analyzer<'a> {
             if param.is_ref {
                 continue;
             }
-            if self.boxed_locals.contains(&param.name.text) {
+            if self.captured_by_cell(&param.name.text, &param.type_) {
                 self.box_captured_param(&param.name.text, &param.type_);
             } else if self.ref_boxed_locals.contains(&param.name.text) {
                 self.box_ref_only_param(&param.name.text, &param.type_);
@@ -321,15 +326,14 @@ impl<'a> Analyzer<'a> {
         // `CaptureCell<T>` its creating scope boxed it into, so `hir_set_var`/`hir_assign_local`'s
         // `self.hir.boxed`-driven redirect (see `hir_declare_local`) applies transparently to it
         // too — reads/writes inside this body go through `.value` exactly like a captured `let`'s.
-        if let Some(captures) = lookup_def_for_captures
-            .and_then(|def| self.closure_captures.get(&def))
-            .cloned()
+        if let Some(def) = lookup_def_for_captures
+            && let Some(captures) = self.closure_captures.get(&def).cloned()
         {
             if captures.len() == 1 {
                 let (cap_name, cap_ty) = &captures[0];
-                self.receive_closure_capture(cap_name, cap_ty);
+                self.receive_closure_capture(def, cap_name, cap_ty);
             } else if captures.len() > 1 {
-                self.receive_closure_captures_array(&captures);
+                self.receive_closure_captures_array(def, &captures);
             }
         }
     }
@@ -343,10 +347,28 @@ impl<'a> Analyzer<'a> {
         if !self.active() {
             return;
         }
-        if self.boxed_locals.contains(name) {
+        if self.captured_by_cell(name, ty) {
             self.box_captured_param(name, ty);
         } else if self.ref_boxed_locals.contains(name) {
             self.box_ref_only_param(name, ty);
+        }
+    }
+
+    /// True when captured `name` needs a shared `CaptureCell<T>`. A never-rebound heap reference
+    /// that release dispatch understands by its tag (a class instance, string or `fun` value) can
+    /// instead sit in the closure environment directly, saving the cell allocation.
+    pub(in crate::analyzer) fn captured_by_cell(&mut self, name: &str, ty: &Type) -> bool {
+        self.boxed_locals.contains(name)
+            && !(self.unboxed_captures.contains(name) && self.direct_capture_type(ty))
+    }
+
+    pub(in crate::analyzer) fn direct_capture_type(&mut self, ty: &Type) -> bool {
+        let id = self.type_ctx.lower(ty);
+        let interner = &self.type_ctx.interner;
+        match interner.kind(id) {
+            TyKind::Prim(PrimTy::String) | TyKind::Func(..) => true,
+            TyKind::Struct(..) => interner.is_reference(id) && !interner.is_ref_struct_type(id),
+            _ => false,
         }
     }
 
@@ -415,29 +437,40 @@ impl<'a> Analyzer<'a> {
     /// `CaptureCell<T>` its creating scope boxed it into (a plain reinterpret — both are `i32` pointers
     /// at runtime), aliases it into a local under `cap_name`, and records it in `self.hir.boxed` so
     /// this body's reads/writes of `cap_name` go through the cell like any other captured name.
-    fn receive_closure_capture(&mut self, cap_name: &str, cap_ty: &Type) {
+    /// A direct capture (`Analyzer::direct_captures`) is the value itself and binds unboxed.
+    fn receive_closure_capture(&mut self, def: DefId, cap_name: &str, cap_ty: &Type) {
         let Some(env) = self.hir_read_closure_env() else {
             self.hir.ok = false;
             return;
         };
-        let cell_ty = Self::cell_type(cap_ty);
-        let cell_tid = self.type_ctx.lower(&cell_ty);
+        self.bind_received_capture(def, cap_name, cap_ty, env);
+    }
+
+    fn bind_received_capture(&mut self, def: DefId, cap_name: &str, cap_ty: &Type, slot: HExpr) {
         let elem_tid = self.type_ctx.lower(cap_ty);
-        let cast = HExpr::new(cell_tid, HExprKind::Cast(Box::new(env)));
+        let direct = self.direct_captures.contains(&(def, cap_name.to_string()));
+        let slot_tid = if direct {
+            elem_tid
+        } else {
+            self.type_ctx.lower(&Self::cell_type(cap_ty))
+        };
+        let cast = HExpr::new(slot_tid, HExprKind::Cast(Box::new(slot)));
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
         self.hir
             .locals
-            .insert(cap_name.to_string(), (local, cell_tid));
+            .insert(cap_name.to_string(), (local, slot_tid));
         self.hir.local_decls.push(HLocal {
             id: local,
             name: cap_name.to_string(),
-            ty: cell_tid,
+            ty: slot_tid,
         });
-        self.hir.boxed.insert(cap_name.to_string(), elem_tid);
+        if !direct {
+            self.hir.boxed.insert(cap_name.to_string(), elem_tid);
+        }
         self.push_stmt(HStmt::Let {
             local,
-            ty: cell_tid,
+            ty: slot_tid,
             value: cast,
         });
     }
@@ -447,7 +480,7 @@ impl<'a> Analyzer<'a> {
     /// plain reinterpret, same as the single-capture case), then aliases each `captures[i]` name to
     /// a fresh local reading `array[i]` cast back to its own `CaptureCell<T>` — everything past that
     /// point (the `self.hir.boxed` redirect) is identical to a single capture.
-    fn receive_closure_captures_array(&mut self, captures: &[(String, Type)]) {
+    fn receive_closure_captures_array(&mut self, def: DefId, captures: &[(String, Type)]) {
         let Some(env) = self.hir_read_closure_env() else {
             self.hir.ok = false;
             return;
@@ -478,24 +511,7 @@ impl<'a> Analyzer<'a> {
                     index: Box::new(index),
                 },
             );
-            let cell_ty = Self::cell_type(cap_ty);
-            let cell_tid = self.type_ctx.lower(&cell_ty);
-            let elem_tid = self.type_ctx.lower(cap_ty);
-            let cast = HExpr::new(cell_tid, HExprKind::Cast(Box::new(elem)));
-            let local = LocalId(self.hir.next_local);
-            self.hir.next_local += 1;
-            self.hir.locals.insert(cap_name.clone(), (local, cell_tid));
-            self.hir.local_decls.push(HLocal {
-                id: local,
-                name: cap_name.clone(),
-                ty: cell_tid,
-            });
-            self.hir.boxed.insert(cap_name.clone(), elem_tid);
-            self.push_stmt(HStmt::Let {
-                local,
-                ty: cell_tid,
-                value: cast,
-            });
+            self.bind_received_capture(def, cap_name, cap_ty, elem);
         }
     }
 

@@ -9,6 +9,7 @@ mod websocket;
 
 pub(crate) use listen::{close, shutdown, start};
 
+pub(crate) use multipart::close as close_upload;
 pub(crate) use state::release;
 
 #[cfg(test)]

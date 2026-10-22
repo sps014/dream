@@ -190,6 +190,8 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         | K::ArrayNew { len: x, .. }
         | K::ToBytes(x)
         | K::FromBytes(x)
+        | K::WireEncode(x)
+        | K::WireDecode(x)
         | K::Await(x)
         | K::Discriminant(x)
         | K::UnionField { base: x, .. }

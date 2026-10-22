@@ -501,11 +501,13 @@ impl FnPrinter<'_> {
                     self.operand(len)
                 )
             }
-            Rvalue::ToBytes { value, ty } => {
-                format!("to_bytes::<{}>({})", self.cx.ty(*ty), self.operand(value))
+            Rvalue::ToBytes { value, ty, wire } => {
+                let op = if *wire { "to_wire" } else { "to_bytes" };
+                format!("{op}::<{}>({})", self.cx.ty(*ty), self.operand(value))
             }
-            Rvalue::FromBytes { bytes, ty } => {
-                format!("from_bytes::<{}>({})", self.cx.ty(*ty), self.operand(bytes))
+            Rvalue::FromBytes { bytes, ty, wire } => {
+                let op = if *wire { "from_wire" } else { "from_bytes" };
+                format!("{op}::<{}>({})", self.cx.ty(*ty), self.operand(bytes))
             }
             Rvalue::ArraySlotTake {
                 elem_ty,

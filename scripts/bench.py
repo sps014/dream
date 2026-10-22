@@ -45,6 +45,7 @@ SUITES = {
     "map_phases": ROOT / "tests/bench/map_phases.dream",
     "io": ROOT / "tests/bench/io.dream",
     "webapi": ROOT / "tests/bench/webapi.dream",
+    "web": ROOT / "tests/bench/web.dream",
     "text": ROOT / "tests/bench/text.dream",
     "search": ROOT / "tests/bench/search.dream",
     "scheduler": ROOT / "tests/bench/scheduler.dream",

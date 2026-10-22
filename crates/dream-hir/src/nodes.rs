@@ -301,6 +301,12 @@ pub enum HExprKind {
     /// `Bytes.to<T>(bytes)` — reconstruct a blittable value of the node's type from the `byte[]`
     /// buffer `.0`, copying its payload into a fresh block of `T`'s size.
     FromBytes(Box<HExpr>),
+    /// `Bytes.to_wire<T>(v)` for a scalar or value-struct `T`: writes `.0`'s bytes straight into
+    /// a fresh one-code-unit-per-byte `string`. Node type is `string`.
+    WireEncode(Box<HExpr>),
+    /// `Bytes.from_wire<T>(s)` for a scalar or value-struct `T`: reads the node's type back out
+    /// of the wire string `.0` without an intermediate buffer.
+    WireDecode(Box<HExpr>),
     /// Unmanaged memory access; the address grants neither ownership nor a lifetime.
     RawLoad(Box<HExpr>),
     RawStore {

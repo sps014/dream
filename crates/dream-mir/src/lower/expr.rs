@@ -262,10 +262,22 @@ impl Lowerer<'_> {
             HExprKind::ToBytes(v) => Rvalue::ToBytes {
                 value: self.lower_operand(v),
                 ty: v.ty,
+                wire: false,
             },
             HExprKind::FromBytes(bytes) => Rvalue::FromBytes {
                 bytes: self.lower_operand(bytes),
                 ty: e.ty,
+                wire: false,
+            },
+            HExprKind::WireEncode(v) => Rvalue::ToBytes {
+                value: self.lower_operand(v),
+                ty: v.ty,
+                wire: true,
+            },
+            HExprKind::WireDecode(text) => Rvalue::FromBytes {
+                bytes: self.lower_operand(text),
+                ty: e.ty,
+                wire: true,
             },
             HExprKind::RawLoad(address) => Rvalue::RawLoad {
                 address: self.lower_operand(address),

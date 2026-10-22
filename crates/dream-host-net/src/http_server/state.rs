@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::Infallible,
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 use tokio::sync::{Mutex as AsyncMutex, OnceCell, mpsc, oneshot, watch};
 
@@ -41,9 +41,7 @@ pub(super) fn tables() -> &'static Mutex<Tables> {
     static TABLES: OnceLock<Mutex<Tables>> = OnceLock::new();
     TABLES.get_or_init(Mutex::default)
 }
-pub(super) fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
-    value.lock().unwrap_or_else(|e| e.into_inner())
-}
+pub(super) use dream_host_abi::lock;
 pub(super) fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }

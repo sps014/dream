@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dream-host-core = { path = "../dream-host-core" }
-dream-host-abi = { path = "../dream-host-abi" }
+dream-host-abi = { path = "../dream-host-abi", features = ["operations"] }
 indexmap = "2"
 
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "process", "io-util"] }

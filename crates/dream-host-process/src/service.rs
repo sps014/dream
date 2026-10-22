@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::{
     collections::BTreeMap,
     process::Stdio,
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 use tokio::{
@@ -67,9 +67,7 @@ fn children() -> &'static Mutex<Children> {
     static CHILDREN: OnceLock<Mutex<Children>> = OnceLock::new();
     CHILDREN.get_or_init(Mutex::default)
 }
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
-}
+use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }
@@ -93,8 +91,8 @@ pub(crate) struct OwnedChild {
     child: Arc<Child>,
     detached: bool,
 }
-impl OwnedChild {
-    pub fn detach(&mut self) {
+impl dream_host_abi::operations::Detach for OwnedChild {
+    fn detach(&mut self) {
         self.detached = true;
     }
 }
@@ -327,7 +325,7 @@ async fn run(
     result
 }
 pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
-    crate::operations::start(move |mut cancellation| async move {
+    crate::operations::OPERATIONS.start(move |mut cancellation| async move {
         if *cancellation.borrow() {
             return Err(error("ECANCELLED", "process operation cancelled"));
         }

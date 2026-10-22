@@ -42,9 +42,7 @@ fn registry() -> &'static Mutex<Registry> {
     static VALUE: OnceLock<Mutex<Registry>> = OnceLock::new();
     VALUE.get_or_init(Mutex::default)
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value.lock().unwrap_or_else(|e| e.into_inner())
-}
+use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }
@@ -130,7 +128,7 @@ fn socket(id: i32) -> Result<Arc<Socket>, Failure> {
         .ok_or_else(|| error("ECLOSED", "WebSocket is closed"))
 }
 pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
-    operations::start(move |mut cancellation| async move {
+    operations::OPERATIONS.start(move |mut cancellation| async move {
         let value: Value = serde_json::from_str(&request).map_err(|e| error("EINVAL", e))?;
         let timeout = value["timeout_ms"]
             .as_u64()

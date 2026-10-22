@@ -42,9 +42,7 @@ fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     REGISTRY.get_or_init(Mutex::default)
 }
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
-}
+use dream_host_abi::lock;
 fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }
@@ -110,7 +108,7 @@ fn endpoint(value: &Value) -> Result<(&str, u16), Failure> {
 }
 
 pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
-    operations::start(move |mut cancellation| async move {
+    operations::OPERATIONS.start(move |mut cancellation| async move {
         let value: Value = serde_json::from_str(&request)
             .map_err(|_| error("EINVAL", "invalid socket request"))?;
         let timeout = value["timeout_ms"]
@@ -299,12 +297,12 @@ mod tests {
     fn complete(id: i32, claim: bool) -> Vec<u8> {
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
         loop {
-            let wire = operations::result(id);
+            let wire = operations::OPERATIONS.result(id);
             if wire[0] != 0 {
                 if claim {
-                    operations::claim(id);
+                    operations::OPERATIONS.claim(id);
                 }
-                operations::release(id);
+                operations::OPERATIONS.release(id);
                 return wire;
             }
             assert!(
@@ -327,7 +325,7 @@ mod tests {
         ));
         let id = listener["id"].as_i64().unwrap() as i32;
         let pending = start("accept", json!({"id":id}), &[]);
-        operations::cancel(pending);
+        operations::OPERATIONS.cancel(pending);
         assert_eq!(
             metadata_error(&complete(pending, false))["code"],
             "ECANCELLED"
@@ -335,11 +333,11 @@ mod tests {
         close(id);
         let unclaimed = start("listen", json!({"host":"127.0.0.1","port":0}), &[]);
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
-        while operations::result(unclaimed)[0] == 0 {
+        while operations::OPERATIONS.result(unclaimed)[0] == 0 {
             assert!(std::time::Instant::now() < deadline);
             std::thread::sleep(Duration::from_millis(1));
         }
-        operations::release(unclaimed);
+        operations::OPERATIONS.release(unclaimed);
         assert_eq!(lock(registry()).sockets.len(), baseline);
     }
     fn metadata_error(wire: &[u8]) -> Value {

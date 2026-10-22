@@ -69,26 +69,26 @@ pub unsafe extern "C" fn netSocketStart(request: DreamPtr, bytes: DreamPtr) -> i
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketWaitAsync(future: DreamPtr, id: i32) -> i32 {
-    if !crate::socket_operations::wait(id, dream_host_abi::ForeignFuture::new(future)) {
+    if !crate::socket_operations::OPERATIONS.wait(id, dream_host_abi::ForeignFuture::new(future)) {
         dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
     }
     1
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketResult(id: i32) -> DreamPtr {
-    dream_host_abi::alloc_bytes(&crate::socket_operations::result(id))
+    dream_host_abi::alloc_bytes(&crate::socket_operations::OPERATIONS.result(id))
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketCancel(id: i32) {
-    crate::socket_operations::cancel(id);
+    crate::socket_operations::OPERATIONS.cancel(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketRelease(id: i32) {
-    crate::socket_operations::release(id);
+    crate::socket_operations::OPERATIONS.release(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketClaim(id: i32) {
-    crate::socket_operations::claim(id);
+    crate::socket_operations::OPERATIONS.claim(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netSocketClose(id: i32) {

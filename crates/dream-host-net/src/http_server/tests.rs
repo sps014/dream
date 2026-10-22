@@ -7,7 +7,7 @@ fn wait(id: i32) -> Vec<u8> {
     assert!(id > 0);
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let wire = operations::result(id);
+        let wire = operations::OPERATIONS.result(id);
         if wire[0] != 0 {
             return wire;
         }
@@ -18,8 +18,8 @@ fn wait(id: i32) -> Vec<u8> {
 fn take(id: i32) -> Vec<u8> {
     let wire = wait(id);
     assert_eq!(wire[0], 1, "{}", String::from_utf8_lossy(&wire));
-    operations::claim(id);
-    operations::release(id);
+    operations::OPERATIONS.claim(id);
+    operations::OPERATIONS.release(id);
     wire[1..].to_vec()
 }
 fn metadata(bytes: Vec<u8>) -> Value {
@@ -156,7 +156,7 @@ fn websocket_upgrade_echo_close_and_handshake_validation() {
     let operation = op("upgrade", request, vec![]);
     let wire = wait(operation);
     assert_eq!(wire[0], 2);
-    operations::release(operation);
+    operations::OPERATIONS.release(operation);
     respond("respond", request, b"not a WebSocket");
     assert_eq!(ordinary.join().unwrap(), 200);
     super::release(request);
@@ -166,14 +166,14 @@ fn websocket_upgrade_echo_close_and_handshake_validation() {
 fn cancellation_and_unclaimed_resource_release() {
     let (server, _) = listen("", "");
     let operation = op("accept", server, vec![]);
-    operations::cancel(operation);
+    operations::OPERATIONS.cancel(operation);
     let wire = wait(operation);
     assert_eq!(wire[0], 2);
     assert_eq!(
         serde_json::from_slice::<Value>(&wire[1..]).unwrap()["code"],
         "ECANCELLED"
     );
-    operations::release(operation);
+    operations::OPERATIONS.release(operation);
     let waiting = op("wait", server, vec![]);
     take(op("shutdown", server, vec![]));
     take(waiting);

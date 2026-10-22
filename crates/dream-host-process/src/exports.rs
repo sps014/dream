@@ -9,19 +9,19 @@ pub unsafe extern "C" fn processStart(request: DreamPtr, bytes: DreamPtr) -> i32
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processOperationResult(id: i32) -> DreamPtr {
-    alloc_bytes(&crate::operations::result(id))
+    alloc_bytes(&crate::operations::OPERATIONS.result(id))
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processOperationCancel(id: i32) {
-    crate::operations::cancel(id);
+    crate::operations::OPERATIONS.cancel(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processOperationRelease(id: i32) {
-    crate::operations::release(id);
+    crate::operations::OPERATIONS.release(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processOperationClaim(id: i32) {
-    crate::operations::claim(id);
+    crate::operations::OPERATIONS.claim(id);
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processClose(id: i32) {
@@ -29,7 +29,7 @@ pub extern "C" fn processClose(id: i32) {
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn processOperationWaitAsync(future: DreamPtr, id: i32) -> i32 {
-    if !crate::operations::wait(id, dream_host_abi::ForeignFuture::new(future)) {
+    if !crate::operations::OPERATIONS.wait(id, dream_host_abi::ForeignFuture::new(future)) {
         dream_host_abi::complete_foreign_future(dream_host_abi::ForeignFuture::new(future), 0);
     }
     1

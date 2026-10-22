@@ -207,7 +207,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     // Controlled trust stores avoid OS certificate lookup/network activity in this local fixture.
     let resource = http::lock(http::registry()).clients[&client].clone();
     let untrusted = {
-        let _guard = http::runtime().unwrap().enter();
+        let _guard = crate::socket_operations::runtime().unwrap().enter();
         reqwest::Client::builder()
             .tls_certs_only([])
             .build()
@@ -218,7 +218,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     assert_eq!(rejected[0], 2);
     assert_eq!(json(&rejected)["code"], "ETRANSPORT");
     let trusted = {
-        let _guard = http::runtime().unwrap().enter();
+        let _guard = crate::socket_operations::runtime().unwrap().enter();
         reqwest::Client::builder()
             .tls_certs_only([reqwest::Certificate::from_der(&certificate).unwrap()])
             .build()

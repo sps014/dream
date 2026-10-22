@@ -3,11 +3,21 @@
 //! Allocation and completion go through the core C ABI so Rust static linking cannot
 //! duplicate the callback state. Counts retain Dream's int ABI; references use native pointers.
 
+#[cfg(feature = "operations")]
+pub mod operations;
 pub mod window_surface;
 
 pub use dream_abi::guest_contract::{GUEST_ABI_VERSION, GuestContext, HostStatus};
 
 pub type DreamPtr = *mut u8;
+
+/// Bytes of the `i32` element count that precedes a guest array's elements.
+pub const ARRAY_COUNT_SIZE: usize = 4;
+
+/// Locks `value`, recovering the data when a panicking holder poisoned the mutex.
+pub fn lock<T>(value: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    value.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// A published future stays retained by the guest scheduler until foreign completion.
 pub struct ForeignFuture(DreamPtr);

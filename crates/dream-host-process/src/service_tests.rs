@@ -33,9 +33,9 @@ fn start(mode: &str, timeout: u64, limit: usize) -> i32 {
 fn complete(id: i32) -> Vec<u8> {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
-        let result = operations::result(id);
+        let result = operations::OPERATIONS.result(id);
         if result[0] != 0 {
-            operations::release(id);
+            operations::OPERATIONS.release(id);
             return result;
         }
         assert!(
@@ -74,7 +74,7 @@ fn deadlines_cancellation_and_output_limits_complete() {
     );
     let id = start("sleep", 0, 1_000_000);
     std::thread::sleep(Duration::from_millis(30));
-    operations::cancel(id);
+    operations::OPERATIONS.cancel(id);
     let cancelled = complete(id);
     assert_eq!(cancelled[0], 2);
     assert_eq!(

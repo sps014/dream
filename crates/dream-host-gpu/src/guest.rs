@@ -16,7 +16,7 @@ impl OutBytes {
     pub fn alloc(len: usize) -> Option<Self> {
         let ptr = if waiter::has_completion_hook() {
             // Host tests run without a guest; mimic the guest array layout.
-            let storage = vec![0u8; len + 4].into_boxed_slice();
+            let storage = vec![0u8; len + dream_host_abi::ARRAY_COUNT_SIZE].into_boxed_slice();
             let raw = Box::into_raw(storage) as *mut u8;
             unsafe { raw.cast::<i32>().write_unaligned(len as i32) };
             raw
@@ -31,7 +31,7 @@ impl OutBytes {
 
     pub fn data_mut(&mut self) -> &mut [u8] {
         if waiter::has_completion_hook() {
-            unsafe { std::slice::from_raw_parts_mut((self.ptr as *mut u8).add(4), self.len) }
+            unsafe { std::slice::from_raw_parts_mut((self.ptr as *mut u8).add(dream_host_abi::ARRAY_COUNT_SIZE), self.len) }
         } else {
             unsafe { dream_host_abi::bytes_mut(self.ptr as *mut u8) }
         }
@@ -61,5 +61,5 @@ impl OutBytes {
 pub unsafe fn test_bytes(value: u64) -> Vec<u8> {
     let ptr = value as *const u8;
     let len = unsafe { ptr.cast::<i32>().read_unaligned() } as usize;
-    unsafe { std::slice::from_raw_parts(ptr.add(4), len) }.to_vec()
+    unsafe { std::slice::from_raw_parts(ptr.add(dream_host_abi::ARRAY_COUNT_SIZE), len) }.to_vec()
 }

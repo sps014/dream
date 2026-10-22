@@ -28,7 +28,7 @@ pub(crate) fn close(id: i32) {
     }
 }
 pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
-    operations::start(move |mut cancellation| async move {
+    operations::OPERATIONS.start(move |mut cancellation| async move {
         let value: Value = serde_json::from_str(&request).map_err(|e| error("EINVAL", e))?;
         let timeout = value["timeout_ms"]
             .as_u64()

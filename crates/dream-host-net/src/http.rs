@@ -6,18 +6,17 @@ use serde::Deserialize;
 use std::{
     collections::BTreeMap,
     sync::{
-        Arc, Mutex, MutexGuard, OnceLock,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
 use tokio::{
-    runtime::Runtime,
     sync::{Mutex as AsyncMutex, watch},
     task::AbortHandle,
 };
 
-pub(crate) type Failure = (&'static str, String);
+use crate::socket_operations::{Failure, runtime};
 type ClientPools = BTreeMap<(u64, i32), Client>;
 struct ClientState {
     pools: Mutex<ClientPools>,
@@ -51,24 +50,10 @@ struct Registry {
     bodies: BTreeMap<i32, Arc<Body>>,
     operations: BTreeMap<i32, Arc<Mutex<Operation>>>,
 }
-fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
-    value.lock().unwrap_or_else(|e| e.into_inner())
-}
+use dream_host_abi::lock;
 fn registry() -> &'static Mutex<Registry> {
     static STATE: OnceLock<Mutex<Registry>> = OnceLock::new();
     STATE.get_or_init(Mutex::default)
-}
-fn runtime() -> Result<&'static Runtime, Failure> {
-    static RT: OnceLock<Result<Runtime, String>> = OnceLock::new();
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()
-            .map_err(|e| e.to_string())
-    })
-    .as_ref()
-    .map_err(|e| ("EIO", e.clone()))
 }
 fn next(state: &mut Registry) -> i32 {
     if state.next == i32::MAX {

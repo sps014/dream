@@ -6,7 +6,7 @@ See the [Web APIs guide](../../web-server/index.md) for runnable examples, lifec
 
 ## `WebAppOptions`
 
-API metadata, documentation endpoints and native TLS settings. Empty URLs disable endpoints.
+API metadata and documentation endpoints. Empty URLs disable endpoints; transport settings, including TLS, belong to `ServerConfig`.
 
 ```dream
 public class WebAppOptions
@@ -52,22 +52,6 @@ Path serving ReDoc; an empty path disables it.
 public redoc_url: string
 ```
 
-## `tls_cert_path`
-
-Path to the server certificate; leave empty to serve plain HTTP.
-
-```dream
-public tls_cert_path: string
-```
-
-## `tls_key_path`
-
-Path to the private key for the server certificate.
-
-```dream
-public tls_key_path: string
-```
-
 ## `summary`
 
 Short summary displayed in the API documentation.
@@ -102,7 +86,7 @@ public swagger: SwaggerOptions
 
 ## `constructor`
 
-Creates a `WebAppOptions` with `title`, `version`, `docs_url`, `openapi_url`, `redoc_url`, `tls_cert_path`, `tls_key_path`, `summary`, `description`, `terms_of_service`.
+Creates a `WebAppOptions` with `title`, `version`, `docs_url`, `openapi_url`, `redoc_url`, `summary`, `description`, `terms_of_service`.
 
 ```dream
 public constructor(
@@ -111,8 +95,6 @@ public constructor(
     docs_url: string = "/docs",
     openapi_url: string = "/openapi.json",
     redoc_url: string = "/redoc",
-    tls_cert_path: string = "",
-    tls_key_path: string = "",
     summary: string = "",
     description: string = "",
     terms_of_service: string = ""

@@ -17,18 +17,33 @@ public class HttpIncoming {
     /// HTTP headers associated with this message.
     public headers: HttpHeaders;
 
+    /// Address of the client: the connecting peer, or the `X-Forwarded-For` client when the peer
+    /// is a trusted proxy (see `ServerConfig.forwarded_allow_ips`).
+    public client_host: string;
+
+    /// Port of the connecting peer, or 0 when `client_host` came from `X-Forwarded-For`.
+    public client_port: int;
+
+    /// `"http"` or `"https"`: whether the connection used TLS, or the trusted proxy's
+    /// `X-Forwarded-Proto`.
+    public scheme: string;
+
     form_data: Option<FormData>;
     internal cancellation_token: Option<CancellationToken>;
 
     // Decodes the host's request record after its version byte: `[id][method code][method
-    // text when the code is 0][path][query][headers]`, matching `http_server::request::record`.
-    // The caller checks `metadata.at_end()`; the id is kept either way so `del` releases it.
+    // text when the code is 0][path][query][headers][client host][client port][scheme]`, matching
+    // `http_server::request::record`. The caller checks `metadata.at_end()`; the id is kept
+    // either way so `del` releases it.
     internal constructor(borrow metadata: WireReader) {
         this.req_id = metadata.i32();
         this.method = HttpIncoming.method_name(metadata);
         this.path = metadata.text();
         this.query = metadata.text();
         this.headers = HttpHeaders.read_wire(metadata);
+        this.client_host = metadata.text();
+        this.client_port = metadata.i32();
+        this.scheme = metadata.text();
         this.form_data = Option.None;
         this.cancellation_token = Option.None;
     }

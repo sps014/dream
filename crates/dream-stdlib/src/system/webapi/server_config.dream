@@ -41,6 +41,18 @@ public class ServerConfig {
     /// Milliseconds the client has to answer a ping before the socket closes with code 1011.
     public ws_ping_timeout_ms: int;
 
+    /// When true, requests from a peer listed in `forwarded_allow_ips` take their client address
+    /// from `X-Forwarded-For` and their scheme from `X-Forwarded-Proto`.
+    public proxy_headers: bool;
+
+    /// Comma-separated addresses and CIDR networks of trusted proxies, such as
+    /// `"127.0.0.1,10.0.0.0/8"`. `"*"` trusts every peer; use it only behind a proxy that
+    /// overwrites these headers.
+    public forwarded_allow_ips: string;
+
+    /// Most requests one HTTP/2 connection may have in progress at once. Must be at least 1.
+    public h2_max_concurrent_streams: int;
+
     /// Creates a `ServerConfig`; every default matches Uvicorn's.
     public constructor(
         ssl_certfile: string = "",
@@ -53,7 +65,10 @@ public class ServerConfig {
         ws_max_size: int = 16777216,
         ws_max_queue: int = 32,
         ws_ping_interval_ms: int = 20000,
-        ws_ping_timeout_ms: int = 20000
+        ws_ping_timeout_ms: int = 20000,
+        proxy_headers: bool = true,
+        forwarded_allow_ips: string = "127.0.0.1",
+        h2_max_concurrent_streams: int = 100
     ) {
         this.ssl_certfile = ssl_certfile;
         this.ssl_keyfile = ssl_keyfile;
@@ -66,6 +81,9 @@ public class ServerConfig {
         this.ws_max_queue = ws_max_queue;
         this.ws_ping_interval_ms = ws_ping_interval_ms;
         this.ws_ping_timeout_ms = ws_ping_timeout_ms;
+        this.proxy_headers = proxy_headers;
+        this.forwarded_allow_ips = forwarded_allow_ips;
+        this.h2_max_concurrent_streams = h2_max_concurrent_streams;
     }
 
     internal fun validate(): Result<Unit, IoError> {
@@ -79,6 +97,9 @@ public class ServerConfig {
         }
         if this.max_header_bytes < 8192 {
             return Result.Err(IoError.invalid("", "max_header_bytes must be at least 8192"));
+        }
+        if this.h2_max_concurrent_streams < 1 {
+            return Result.Err(IoError.invalid("", "h2_max_concurrent_streams must be at least 1"));
         }
         return Result.Ok(Unit());
     }
@@ -96,5 +117,8 @@ public class ServerConfig {
         writer.i32(this.ws_max_queue);
         writer.i32(this.ws_ping_interval_ms);
         writer.i32(this.ws_ping_timeout_ms);
+        writer.i32(this.proxy_headers ? 1 : 0);
+        writer.i32(this.h2_max_concurrent_streams);
+        writer.text(this.forwarded_allow_ips);
     }
 }

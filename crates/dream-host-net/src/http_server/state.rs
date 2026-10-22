@@ -1,3 +1,4 @@
+use super::forwarded::{Client, Trusted};
 use crate::socket_operations::Failure;
 use bytes::Bytes;
 use dream_host_abi::handles::HandleTable;
@@ -29,6 +30,9 @@ pub(super) struct Config {
     pub timeout_graceful_shutdown: Option<Duration>,
     pub max_header_bytes: usize,
     pub websocket: crate::websocket::Limits,
+    pub proxy_headers: bool,
+    pub forwarded_allow: Trusted,
+    pub h2_max_concurrent_streams: u32,
 }
 impl Config {
     /// Reads the settings the guest's `ServerConfig.write_wire` appends after the TLS paths.
@@ -49,6 +53,13 @@ impl Config {
         let ws_max_queue = number("ws_max_queue")?;
         let ping_interval = number("ws_ping_interval_ms")?;
         let ping_timeout = number("ws_ping_timeout_ms")?;
+        let proxy_headers = number("proxy_headers")? != 0;
+        let h2_max_concurrent_streams = number("h2_max_concurrent_streams")?;
+        let forwarded_allow = Trusted::parse(
+            reader
+                .text()
+                .map_err(|_| error("EINVAL", "malformed server settings"))?,
+        )?;
         if max_header_bytes < MIN_HEADER_BYTES {
             return Err(error(
                 "EINVAL",
@@ -69,6 +80,9 @@ impl Config {
                 ping_interval: some(ping_interval),
                 ping_timeout: millis(ping_timeout),
             },
+            proxy_headers,
+            forwarded_allow,
+            h2_max_concurrent_streams: h2_max_concurrent_streams.max(1),
         })
     }
 }
@@ -99,6 +113,7 @@ pub(super) enum BodyState {
 
 pub(super) struct Request {
     pub head: hyper::http::request::Parts,
+    pub client: Client,
     pub upgraded: AtomicBool,
     pub accepted: AtomicBool,
     pub server: Arc<Server>,

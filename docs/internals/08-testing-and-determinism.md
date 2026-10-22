@@ -161,6 +161,22 @@ python3 scripts/test_corpus.py --both
 
 Shared Dream assertions validate the same behavior independently on native and Node. Isolated output and trap cases also compare guest stdout after newline normalization; diagnostics and exit statuses are checked separately. Target-width expectations belong in the Dream assertions. The corpus inventory audit checks that sources are registered once and that expected-output sidecars are absent.
 
+### Web server soak — `soak::web_task_and_websocket_soak` (`tests/soak/`)
+
+An ignored, local-only test that runs `tests/soak/service.dream` under steady HTTP, upload,
+streaming, `Task.spawn` and WebSocket load. Between load bursts it samples RSS, threads, OS
+handles and the heap gauges (`Debug.runtime_counter` 11–13). It fails on any 5xx or transport
+failure, on idle live-heap or thread/handle growth, and, for runs of 30 minutes or more past
+warm-up, on an RSS slope above 1 MB/h. It is not part of CI. Run it before changing the HTTP
+host, the scheduler or the heap:
+
+```bash
+DREAM_SOAK_MINUTES=60 cargo test --release --test integration soak:: -- --ignored --nocapture
+```
+
+`DREAM_SOAK_WARMUP_MINUTES` (default 10) and `DREAM_SOAK_SAMPLE_SECS` (default 60) tune the
+warm-up and sampling interval.
+
 ### Determinism test — `codegen_is_deterministic` (`tests/e2e_tests.rs`)
 
 Compiles the same input twice and asserts byte-identical output. This guards the contract below.

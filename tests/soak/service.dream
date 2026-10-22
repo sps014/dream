@@ -1,0 +1,78 @@
+import system;
+import system.net;
+import system.task;
+import system.webapi;
+
+@router("")
+class SoakRoutes {
+    @get("/plain")
+    public static fun plain(): string {
+        return "ok";
+    }
+
+    @post("/echo")
+    public static async fun echo(req: HttpIncoming): string {
+        return req.read_body_text().await.unwrap_or("");
+    }
+
+    @post("/upload")
+    public static async fun upload(@file upload: UploadedFile): string {
+        return upload.size.to_string();
+    }
+
+    @get("/stream")
+    public static async fun stream(): AsyncIterable<string> {
+        let i = 0;
+        while i < 8 {
+            yield "chunk-" + i.to_string() + "\n";
+            i++;
+        }
+    }
+
+    @get("/task")
+    public static async fun task(): string {
+        return Task.spawn(() => 21 * 2).await.to_string();
+    }
+
+    @get("/stats")
+    public static fun stats(): string {
+        return Debug.runtime_counter(11)
+            .to_string()
+            + " "
+            + Debug.runtime_counter(12)
+            .to_string() + " " + Debug.runtime_counter(13)
+            .to_string();
+    }
+
+    @websocket("/ws")
+    public static async fun ws(ws: ServerWebSocket, req: HttpIncoming): void {
+        ws.accept().await.unwrap();
+        await for (let message in ws.messages()) {
+            switch (message) {
+                Text(text) => {
+                    if ws.send_text(text).await.is_err() {
+                        return;
+                    }
+                },
+                Binary(bytes) => {
+                    if ws.send_binary(bytes).await.is_err() {
+                        return;
+                    }
+                },
+                Close(_, _) => {},
+            }
+        }
+    }
+}
+
+async fun main(): void {
+    let app = WebApp();
+    app.include_router(SoakRoutes.router()).unwrap();
+    let listened = app.listen("127.0.0.1", 0).await;
+    if listened.is_err() {
+        System.println("listen failed: " + listened.unwrap_err().to_string());
+        return;
+    }
+    System.println("listening " + listened.unwrap().to_string());
+    app.wait().await;
+}

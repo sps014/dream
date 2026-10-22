@@ -62,7 +62,7 @@ public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void
 
 ## `set`
 
-Replaces the element at `index`; an out-of-range index panics.
+Stores `value` under `key` for the rest of this request, replacing any earlier value.
 
 ```dream
 public fun set(key: string, value: string): void
@@ -70,7 +70,7 @@ public fun set(key: string, value: string): void
 
 ## `get`
 
-Returns the element at `index`; an out-of-range index panics.
+Returns the value stored under `key` for this request, or `None` when nothing was stored.
 
 ```dream
 public fun get(key: string): Option<string>

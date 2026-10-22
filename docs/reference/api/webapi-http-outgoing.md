@@ -94,7 +94,7 @@ public static fun detail(message: string, status: int = 500): HttpOutgoing
 
 ## `from_body_error`
 
-Preserves body-limit failures as 413 while other read failures remain 400.
+A 400 response for a failed body read; invalid input such as a form over its limits keeps the failure message as the detail.
 
 ```dream
 public static fun from_body_error(error: IoError): HttpOutgoing

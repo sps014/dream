@@ -81,6 +81,8 @@ struct Settings<'a> {
     ws_max_size: i32,
     ping_interval_ms: i32,
     ping_timeout_ms: i32,
+    proxy_headers: bool,
+    forwarded_allow_ips: &'a str,
 }
 impl Default for Settings<'_> {
     fn default() -> Self {
@@ -94,6 +96,8 @@ impl Default for Settings<'_> {
             ws_max_size: 16777216,
             ping_interval_ms: 20000,
             ping_timeout_ms: 20000,
+            proxy_headers: true,
+            forwarded_allow_ips: "127.0.0.1",
         }
     }
 }
@@ -112,7 +116,10 @@ fn listen_operation(settings: Settings<'_>) -> i32 {
         .i32(settings.ws_max_size)
         .i32(32)
         .i32(settings.ping_interval_ms)
-        .i32(settings.ping_timeout_ms);
+        .i32(settings.ping_timeout_ms)
+        .i32(settings.proxy_headers.into())
+        .i32(100)
+        .text(settings.forwarded_allow_ips);
     start(request.finish(), vec![])
 }
 fn listen_with(settings: Settings<'_>) -> (i32, u16) {
@@ -357,6 +364,86 @@ fn websocket_ping_timeout_closes_silent_peer() {
     websocket::close(socket);
     super::release(request);
     peer.join().unwrap();
+    close(server);
+}
+/// Accepts one request and returns its id with the client host, port and scheme fields.
+fn accept_client(server: i32) -> (i32, String, i32, String) {
+    let record = take(op(Action::Accept, server, vec![]));
+    let mut reader = Reader::new(&record);
+    assert_eq!(reader.u8().unwrap(), VERSION);
+    let id = reader.i32().unwrap();
+    if reader.u8().unwrap() == 0 {
+        reader.text().unwrap();
+    }
+    reader.text().unwrap();
+    reader.text().unwrap();
+    for _ in 0..reader.i32().unwrap() {
+        reader.text().unwrap();
+        reader.text().unwrap();
+    }
+    let host = reader.text().unwrap().to_owned();
+    let port = reader.i32().unwrap();
+    let scheme = reader.text().unwrap().to_owned();
+    reader.finish().unwrap();
+    (id, host, port, scheme)
+}
+#[test]
+fn proxy_headers_apply_only_to_trusted_peers() {
+    for (allowed, expected_host, expected_scheme) in [
+        ("127.0.0.1", "203.0.113.7", "https"),
+        ("10.0.0.0/8", "127.0.0.1", "http"),
+    ] {
+        let (server, port) = listen_with(Settings {
+            forwarded_allow_ips: allowed,
+            ..Settings::default()
+        });
+        let client = client(async move {
+            reqwest::Client::new()
+                .get(format!("http://127.0.0.1:{port}/"))
+                .header("x-forwarded-for", "203.0.113.7, 127.0.0.1")
+                .header("x-forwarded-proto", "https")
+                .send()
+                .await
+                .unwrap()
+                .status()
+        });
+        let (request, host, client_port, scheme) = accept_client(server);
+        assert_eq!((host.as_str(), scheme.as_str()), (expected_host, expected_scheme));
+        assert_eq!(client_port == 0, expected_host != "127.0.0.1");
+        respond(Action::Respond, request, b"ok");
+        super::release(request);
+        assert_eq!(client.join().unwrap(), 200);
+        close(server);
+    }
+}
+#[test]
+fn serves_http2_with_prior_knowledge() {
+    let (server, port) = listen("", "");
+    let client = client(async move {
+        let http = reqwest::Client::builder()
+            .http2_prior_knowledge()
+            .build()
+            .unwrap();
+        let mut versions = Vec::new();
+        for _ in 0..2 {
+            let response = http
+                .get(format!("http://127.0.0.1:{port}/h2"))
+                .send()
+                .await
+                .unwrap();
+            versions.push((response.version(), response.text().await.unwrap()));
+        }
+        versions
+    });
+    for _ in 0..2 {
+        let request = accept(server);
+        respond(Action::Respond, request, b"over h2");
+        super::release(request);
+    }
+    for (version, body) in client.join().unwrap() {
+        assert_eq!(version, reqwest::Version::HTTP_2);
+        assert_eq!(body, "over h2");
+    }
     close(server);
 }
 #[test]

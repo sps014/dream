@@ -64,6 +64,7 @@ mod runtime_wasi_platform;
 mod runtime_weak;
 mod runtime_worker;
 mod sema_emission_tests;
+mod soak;
 mod structural_symbols;
 mod take_borrow_tests;
 mod target_spec;

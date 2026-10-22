@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `TaskPool`
 
-Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.
+Reuses a fixed number of parallel workers; local async tasks do not consume pool workers. Each worker holds at most two jobs. Further dispatches wait in submission order and go to the least-loaded worker once one finishes, so a long job holds up at most one job behind it.
 
 ```dream
 public class TaskPool

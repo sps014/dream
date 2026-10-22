@@ -14,7 +14,7 @@ public class WebApp
 
 ## `state`
 
-Values stored for this request by handlers and middleware.
+Application-wide values shared by every request; each request sees this map as `RequestContext.app_state`.
 
 ```dream
 public state: Map<string, string>
@@ -89,7 +89,7 @@ public fun wait(token: Option<CancellationToken> = Option.None): Future<void>
 
 ## `listen`
 
-Binds this app; port zero selects an ephemeral port.
+Binds this app with the default `ServerConfig` and returns the bound port; port zero selects an ephemeral port.
 
 ```dream
 public fun listen(
@@ -99,14 +99,40 @@ public fun listen(
 ): Future<Result<int, IoError>>
 ```
 
+## `listen`
+
+Binds this app with the transport settings in `config` and returns the bound port; port zero selects an ephemeral port. Negative settings fail with `EINVAL`.
+
+```dream
+public fun listen(
+    host: string,
+    port: int,
+    config: ServerConfig,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<int, IoError>>
+```
+
 ## `run`
 
-Listens and waits until shutdown or cancellation.
+Listens with the default `ServerConfig` and waits until shutdown or cancellation.
 
 ```dream
 public fun run(
     host: string,
     port: int,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Unit, IoError>>
+```
+
+## `run`
+
+Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.
+
+```dream
+public fun run(
+    host: string,
+    port: int,
+    config: ServerConfig,
     token: Option<CancellationToken> = Option.None
 ): Future<Result<Unit, IoError>>
 ```

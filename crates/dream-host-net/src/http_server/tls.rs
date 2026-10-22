@@ -21,9 +21,10 @@ pub(super) fn acceptor(cert: &str, key: &str) -> Result<Option<TlsAcceptor>, Fai
     let key = rustls_pemfile::private_key(&mut BufReader::new(key))
         .map_err(|e| error("EINVAL", e))?
         .ok_or_else(|| error("EINVAL", "no TLS private key found"))?;
-    let config = rustls::ServerConfig::builder()
+    let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|e| error("EINVAL", e))?;
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Ok(Some(TlsAcceptor::from(Arc::new(config))))
 }

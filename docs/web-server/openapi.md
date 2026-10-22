@@ -81,6 +81,6 @@ Set these on `options.swagger`, a `SwaggerOptions` value.
 | `oauth_use_pkce` | `true` | Use PKCE in Swagger's OAuth login. |
 | `oauth_redirect_url` | `""` | Redirect URL after Swagger's OAuth login. |
 
-Client secrets belong on the server, never in Swagger UI configuration. Leave OpenAPI enabled when serving Swagger or ReDoc; disabling its endpoint leaves those viewers without a document to load. The documentation URLs themselves are set on [`WebAppOptions`](configuration.md#options).
+Client secrets belong on the server, never in Swagger UI configuration. Leave OpenAPI enabled when serving Swagger or ReDoc; disabling its endpoint leaves those viewers without a document to load. The documentation URLs themselves are set on [`WebAppOptions`](configuration.md#app-options-webappoptions).
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

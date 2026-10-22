@@ -22,7 +22,7 @@ public static extern fun ref_count(borrow o: object): int
 
 ## `runtime_counter`
 
-Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0.
+Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0. Ids 11, 12 and 13 instead read the native heap's committed, live and free-listed bytes in every build by walking the heap, so each read costs time proportional to the heap size; WebAssembly builds read 0.
 
 ```dream
 public static extern fun runtime_counter(id: int): long

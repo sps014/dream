@@ -8522,32 +8522,32 @@
       },
       {
         "signature": "public static extern fun runtime_counter(id: int): long",
-        "description": "Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0.",
-        "line": 28,
+        "description": "Opt-in attribution (DREAM_RUNTIME_COUNTERS=1); ids follow `dream_ownership.h`. Ordinary builds and unknown ids read as 0. Ids 11, 12 and 13 instead read the native heap's committed, live and free-listed bytes in every build by walking the heap, so each read costs time proportional to the heap size; WebAssembly builds read 0.",
+        "line": 30,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get free_list_head(): int",
         "description": "Memory-reuse probe that changes when the allocator frees storage. Release builds do not track frees and always read 0.",
-        "line": 32,
+        "line": 34,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get heap_ptr(): int",
         "description": "Current heap address exposed for debugging.",
-        "line": 37,
+        "line": 39,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get live_objects(): long",
         "description": "Number of currently live managed allocations. Only debug builds count allocations; release builds always read 0.",
-        "line": 43,
+        "line": 45,
         "page": "reference/api/debug.md"
       },
       {
         "signature": "public static get total_allocations(): long",
         "description": "Total number of managed allocations made so far. Only debug builds count allocations; release builds always read 0.",
-        "line": 49,
+        "line": 51,
         "page": "reference/api/debug.md"
       }
     ]
@@ -14936,50 +14936,50 @@
       },
       {
         "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
-        "description": "Reads up to 16 MiB; positive-size empty success denotes peer EOF.",
-        "line": 45,
+        "description": "Reads at least one and at most `max_bytes` bytes, returning whatever has arrived. A request above 1 MiB returns at most 1 MiB per call. A positive-size empty success denotes peer EOF.",
+        "line": 46,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun read_with_timeout( max_bytes: int, timeout_ms: int, token: Option<CancellationToken> = Option.None ): Future<Result<byte[], IoError>>",
         "description": "Reads with a per-operation deadline; a concurrent read returns EBUSY.",
-        "line": 53,
+        "line": 54,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun write_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<int, IoError>",
         "description": "Writes a partial byte count; cancellation preserves completed side effects.",
-        "line": 64,
+        "line": 65,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async fun write_all_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Retries partial writes until every byte has been accepted; does not roll back failures.",
-        "line": 78,
+        "line": 79,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun flush_async( token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "TCP writes are unbuffered by this wrapper; validates openness and cancellation.",
-        "line": 102,
+        "line": 103,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun shutdown_write(): Result<Unit, IoError>",
         "description": "Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.",
-        "line": 113,
+        "line": 114,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun set_nodelay(enabled: bool): Result<Unit, IoError>",
         "description": "Enables or disables TCP_NODELAY; pending native reads may return EBUSY.",
-        "line": 118,
+        "line": 119,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun close(): Result<Unit, IoError>",
         "description": "Closes the owned socket and wakes pending operations; repeated closure succeeds.",
-        "line": 123,
+        "line": 124,
         "page": "reference/api/net-tcp-stream.md"
       }
     ]
@@ -15212,37 +15212,37 @@
       {
         "signature": "public fun send_text( text: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends one UTF-8 text message.",
-        "line": 49,
+        "line": 48,
         "page": "reference/api/net-web-socket.md"
       },
       {
         "signature": "public fun send_binary( bytes: byte[], token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends one binary message.",
-        "line": 64,
+        "line": 63,
         "page": "reference/api/net-web-socket.md"
       },
       {
         "signature": "public fun close( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends a normal closing handshake.",
-        "line": 79,
+        "line": 78,
         "page": "reference/api/net-web-socket.md"
       },
       {
         "signature": "public fun close_with( code: int, reason: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends a validated close code and UTF-8 reason.",
-        "line": 86,
+        "line": 85,
         "page": "reference/api/net-web-socket.md"
       },
       {
         "signature": "public fun receive( token: Option<CancellationToken> = Option.None ): Future<Result<WebSocketMessage, IoError>>",
         "description": "Receives one complete message. Only one receive may be pending at a time.",
-        "line": 139,
+        "line": 140,
         "page": "reference/api/net-web-socket.md"
       },
       {
         "signature": "public fun messages( token: Option<CancellationToken> = Option.None ): AsyncIterable<WebSocketMessage>",
         "description": "Iterates until Close, including the final closing message. Transport errors end iteration.",
-        "line": 180,
+        "line": 196,
         "page": "reference/api/net-web-socket.md"
       }
     ]
@@ -16778,50 +16778,50 @@
     "declarations": [
       {
         "signature": "public class TaskPool",
-        "description": "Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.",
-        "line": 5,
+        "description": "Reuses a fixed number of parallel workers; local async tasks do not consume pool workers. Each worker holds at most two jobs. Further dispatches wait in submission order and go to the least-loaded worker once one finishes, so a long job holds up at most one job behind it.",
+        "line": 7,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public constructor(size: int)",
         "description": "Creates a fixed worker set; nonpositive sizes produce InvalidSize on operations.",
-        "line": 13,
+        "line": 20,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public get size(): int",
         "description": "Number of reusable parallel workers in this pool.",
-        "line": 29,
+        "line": 38,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun dispatch<TOut: shared>( body: fun(): TOut, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches a CPU job; capture and return values follow the shared/move worker rules.",
-        "line": 34,
+        "line": 43,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun dispatch_async<TOut: shared>( body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches an async job on a pool worker and waits for its operation to settle.",
-        "line": 74,
+        "line": 91,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map<T: shared, U: shared>( items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps CPU work with at most size active dispatches and preserves input order.",
-        "line": 129,
+        "line": 203,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map_async<T: shared, U: shared>( items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps async worker jobs with bounded dispatch rather than creating one worker per input.",
-        "line": 154,
+        "line": 228,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, TaskPoolError>>",
         "description": "Stops accepting work, waits for submitted jobs, then closes workers idempotently.",
-        "line": 179,
+        "line": 253,
         "page": "reference/api/task-task-pool.md"
       }
     ]
@@ -19056,6 +19056,49 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/webapi/form_data.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-form-data.md",
+    "declarations": [
+      {
+        "signature": "public class FormData",
+        "description": "The parsed fields of a `multipart/form-data` request, returned by `HttpIncoming.form`. Text fields and file parts keep the order the client sent them in; a name can repeat.",
+        "line": 5,
+        "page": "reference/api/webapi-form-data.md"
+      },
+      {
+        "signature": "public fun get(name: string): Option<string>",
+        "description": "Returns the first text field named `name`.",
+        "line": 55,
+        "page": "reference/api/webapi-form-data.md"
+      },
+      {
+        "signature": "public fun get_all(name: string): List<string>",
+        "description": "Returns every text field named `name`, in the order they were sent.",
+        "line": 65,
+        "page": "reference/api/webapi-form-data.md"
+      },
+      {
+        "signature": "public fun file(name: string): Option<UploadedFile>",
+        "description": "Returns the first file part named `name`.",
+        "line": 76,
+        "page": "reference/api/webapi-form-data.md"
+      },
+      {
+        "signature": "public fun files(name: string): List<UploadedFile>",
+        "description": "Returns every file part named `name`, in the order they were sent.",
+        "line": 86,
+        "page": "reference/api/webapi-form-data.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Closes every uploaded file now instead of when the request finishes.",
+        "line": 97,
+        "page": "reference/api/webapi-form-data.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/webapi/get_attribute.dream",
     "package": "system.webapi",
     "page": "reference/api/webapi-get-attribute.md",
@@ -19185,33 +19228,63 @@
         "page": "reference/api/webapi-http-incoming.md"
       },
       {
+        "signature": "public client_host: string",
+        "description": "Address of the client: the connecting peer, or the `X-Forwarded-For` client when the peer is a trusted proxy (see `ServerConfig.forwarded_allow_ips`).",
+        "line": 22,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public client_port: int",
+        "description": "Port of the connecting peer, or 0 when `client_host` came from `X-Forwarded-For`.",
+        "line": 25,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public scheme: string",
+        "description": "`\"http\"` or `\"https\"`: whether the connection used TLS, or the trusted proxy's `X-Forwarded-Proto`.",
+        "line": 29,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
         "signature": "public fun query_param(name: string): Option<string>",
         "description": "Returns the first decoded query value with this name.",
-        "line": 55,
+        "line": 94,
         "page": "reference/api/webapi-http-incoming.md"
       },
       {
         "signature": "public fun header(name: string): Option<string>",
         "description": "Returns the first matching request header.",
-        "line": 64,
+        "line": 103,
         "page": "reference/api/webapi-http-incoming.md"
       },
       {
         "signature": "public fun cookie(name: string): Option<string>",
         "description": "Returns a named cookie, without decoding its value.",
-        "line": 69,
+        "line": 108,
         "page": "reference/api/webapi-http-incoming.md"
       },
       {
         "signature": "public fun read_body_bytes( token: Option<CancellationToken> = Option.None ): Future<Result<byte[], IoError>>",
-        "description": "Reads the bounded request body as bytes, with inherited cancellation.",
-        "line": 83,
+        "description": "Reads the whole request body as bytes and caches it; later calls return the same bytes. The server sets no size limit, so bound large bodies at a proxy or read them with `stream`. Fails with `ECLOSED` after `stream` was read.",
+        "line": 124,
         "page": "reference/api/webapi-http-incoming.md"
       },
       {
         "signature": "public async fun read_body_text( token: Option<CancellationToken> = Option.None ): Result<string, IoError>",
-        "description": "Reads the bounded request body as UTF-8 text.",
-        "line": 99,
+        "description": "Reads the whole request body as UTF-8 text, with the caching and limits of `read_body_bytes`.",
+        "line": 144,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun stream(): HttpRequestStream",
+        "description": "Returns the body as a stream of chunks read as they arrive, for bodies too large to hold in memory. After streaming starts, `read_body_bytes`, `read_body_text` and `form` fail with `ECLOSED`; if the body was already read, the stream replays it.",
+        "line": 154,
+        "page": "reference/api/webapi-http-incoming.md"
+      },
+      {
+        "signature": "public fun form( max_files: int = 1000, max_fields: int = 1000, max_part_size: int = 1048576, token: Option<CancellationToken> = Option.None ): Future<Result<FormData, IoError>>",
+        "description": "Parses a `multipart/form-data` body. Text fields larger than `max_part_size` bytes, more than `max_fields` text fields or more than `max_files` files fail with `EINVAL`; file parts have no size limit and spool to disk past 1 MiB. Later calls return the same `FormData`, whatever limits they pass. Fails with `ECLOSED` after `stream` was read.",
+        "line": 163,
         "page": "reference/api/webapi-http-incoming.md"
       }
     ]
@@ -19289,51 +19362,76 @@
       },
       {
         "signature": "public static fun from_body_error(error: IoError): HttpOutgoing",
-        "description": "Preserves body-limit failures as 413 while other read failures remain 400.",
-        "line": 64,
+        "description": "A 400 response for a failed body read; invalid input such as a form over its limits keeps the failure message as the detail.",
+        "line": 65,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun from_validation(errors: ValidationErrors, source: string): HttpOutgoing",
         "description": "A structured validation response, prefixed with the input source.",
-        "line": 72,
+        "line": 73,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun invalid_input( source: string, name: string, code: string, message: string ): HttpOutgoing",
         "description": "Creates a 422 validation-error response describing the invalid input and its location.",
-        "line": 86,
+        "line": 87,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun already_sent(): HttpOutgoing",
         "description": "Creates a marker indicating that the response has already been sent.",
-        "line": 98,
+        "line": 99,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun bytes(data: byte[], status: int = 200): HttpOutgoing",
         "description": "Creates a binary response from `data`, with status 200 by default.",
-        "line": 105,
+        "line": 106,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun from_status(st: HttpStatus): HttpOutgoing",
         "description": "Creates a response using the supplied status code and message.",
-        "line": 113,
+        "line": 114,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun not_found(): HttpOutgoing",
         "description": "Creates a 404 Not Found response.",
-        "line": 122,
+        "line": 123,
+        "page": "reference/api/webapi-http-outgoing.md"
+      },
+      {
+        "signature": "public static fun method_not_allowed(allowed: List<string>): HttpOutgoing",
+        "description": "Creates a 405 Method Not Allowed response whose `Allow` header lists `allowed`, the methods that the requested path accepts, separated by `, `.",
+        "line": 129,
         "page": "reference/api/webapi-http-outgoing.md"
       },
       {
         "signature": "public static fun empty(status: int = 204): HttpOutgoing",
         "description": "Creates a response without a body, with status 204 by default.",
-        "line": 127,
+        "line": 136,
         "page": "reference/api/webapi-http-outgoing.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/webapi/http_request_stream.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-http-request-stream.md",
+    "declarations": [
+      {
+        "signature": "public class HttpRequestStream: AsyncReader",
+        "description": "The body of one inbound request, read in chunks as it arrives from the client. When the body was already read with `read_body_bytes` or `read_body_text`, the stream replays those cached bytes. Once streaming starts, the whole-body readers and `HttpIncoming.form` fail with `ECLOSED`, because the bytes are no longer buffered.",
+        "line": 7,
+        "page": "reference/api/webapi-http-request-stream.md"
+      },
+      {
+        "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
+        "description": "Reads up to `max_bytes` of the body; an empty result for a positive request is the end of the body. Zero consumes nothing. The request's cancellation applies when `token` is omitted.",
+        "line": 17,
+        "page": "reference/api/webapi-http-request-stream.md"
       }
     ]
   },
@@ -19728,13 +19826,13 @@
       },
       {
         "signature": "public fun set(key: string, value: string): void",
-        "description": "Replaces the element at `index`; an out-of-range index panics.",
+        "description": "Stores `value` under `key` for the rest of this request, replacing any earlier value.",
         "line": 49,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public fun get(key: string): Option<string>",
-        "description": "Returns the element at `index`; an out-of-range index panics.",
+        "description": "Returns the value stored under `key` for this request, or `None` when nothing was stored.",
         "line": 54,
         "page": "reference/api/webapi-request-context.md"
       }
@@ -19859,50 +19957,159 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/webapi/server_config.dream",
+    "package": "system.webapi",
+    "page": "reference/api/webapi-server-config.md",
+    "declarations": [
+      {
+        "signature": "public class ServerConfig",
+        "description": "Transport settings for `WebApp.listen` and `WebApp.run`, named after Uvicorn's options. A zero limit or timeout means \"none\".",
+        "line": 5,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ssl_certfile: string",
+        "description": "Path to the PEM server certificate; leave empty to serve plain HTTP.",
+        "line": 7,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ssl_keyfile: string",
+        "description": "Path to the PEM private key for `ssl_certfile`.",
+        "line": 10,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public limit_concurrency: int",
+        "description": "When more connections are open or more requests are in flight than this, new requests receive `503 Service Unavailable`. Zero accepts everything.",
+        "line": 14,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public backlog: int",
+        "description": "Maximum number of connections the operating system queues before the server accepts them.",
+        "line": 17,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public timeout_keep_alive_ms: int",
+        "description": "Milliseconds an idle keep-alive connection, or a client still sending its request headers, may stay silent before the server closes it. Zero waits forever.",
+        "line": 21,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public timeout_graceful_shutdown_ms: int",
+        "description": "Milliseconds `shutdown` waits for in-flight requests before closing their connections. Zero waits until every request finishes.",
+        "line": 25,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public max_header_bytes: int",
+        "description": "Largest request head (request line plus headers) in bytes; larger requests are rejected with `431`. Must be at least 8192.",
+        "line": 29,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ws_max_size: int",
+        "description": "Largest WebSocket message in bytes; a larger message closes the socket with code 1009. Zero removes the limit.",
+        "line": 33,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ws_max_queue: int",
+        "description": "Inbound WebSocket messages buffered per socket before the server stops reading from it.",
+        "line": 36,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ws_ping_interval_ms: int",
+        "description": "Milliseconds between server pings on each WebSocket. Zero disables pings.",
+        "line": 39,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public ws_ping_timeout_ms: int",
+        "description": "Milliseconds the client has to answer a ping before the socket closes with code 1011.",
+        "line": 42,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public proxy_headers: bool",
+        "description": "When true, requests from a peer listed in `forwarded_allow_ips` take their client address from `X-Forwarded-For` and their scheme from `X-Forwarded-Proto`.",
+        "line": 46,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public forwarded_allow_ips: string",
+        "description": "Comma-separated addresses and CIDR networks of trusted proxies, such as `\"127.0.0.1,10.0.0.0/8\"`. `\"*\"` trusts every peer; use it only behind a proxy that overwrites these headers.",
+        "line": 51,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public h2_max_concurrent_streams: int",
+        "description": "Most requests one HTTP/2 connection may have in progress at once. Must be at least 1.",
+        "line": 54,
+        "page": "reference/api/webapi-server-config.md"
+      },
+      {
+        "signature": "public constructor( ssl_certfile: string = \"\", ssl_keyfile: string = \"\", limit_concurrency: int = 0, backlog: int = 2048, timeout_keep_alive_ms: int = 5000, timeout_graceful_shutdown_ms: int = 0, max_header_bytes: int = 16384, ws_max_size: int = 16777216, ws_max_queue: int = 32, ws_ping_interval_ms: int = 20000, ws_ping_timeout_ms: int = 20000, proxy_headers: bool = true, forwarded_allow_ips: string = \"127.0.0.1\", h2_max_concurrent_streams: int = 100 )",
+        "description": "Creates a `ServerConfig`; every default matches Uvicorn's.",
+        "line": 57,
+        "page": "reference/api/webapi-server-config.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/webapi/server_web_socket.dream",
     "package": "system.webapi",
     "page": "reference/api/webapi-server-web-socket.md",
     "declarations": [
       {
         "signature": "public class ServerWebSocket",
-        "description": "A WebSocket accepted by a native WebApp route.",
-        "line": 4,
+        "description": "A WebSocket connection offered to a `@websocket` route. The handshake stays open until the handler calls `accept`; closing the socket first, or returning without accepting it, answers the handshake with 403 Forbidden.",
+        "line": 6,
+        "page": "reference/api/webapi-server-web-socket.md"
+      },
+      {
+        "signature": "public fun accept( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Completes the WebSocket handshake with 101 Switching Protocols. Call it once, after any checks on the handshake request such as its `Origin` header; messages can be sent and received only after it succeeds. Fails when the request is not a valid WebSocket upgrade, the client disconnected, or the socket was already accepted or closed.",
+        "line": 66,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun send_text( text: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends one text message.",
-        "line": 84,
+        "line": 130,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun send_binary( bytes: byte[], token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Sends one binary message.",
-        "line": 100,
+        "line": 146,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun receive( token: Option<CancellationToken> = Option.None ): Future<Result<WebSocketMessage, IoError>>",
         "description": "Receives one complete message.",
-        "line": 116,
+        "line": 162,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun messages( token: Option<CancellationToken> = Option.None ): AsyncIterable<WebSocketMessage>",
         "description": "Iterates messages through the final Close message.",
-        "line": 164,
+        "line": 183,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun close( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends a normal closing handshake.",
-        "line": 191,
+        "description": "Sends a normal closing handshake; before `accept`, rejects the connection with 403 Forbidden like `close_with`.",
+        "line": 216,
         "page": "reference/api/webapi-server-web-socket.md"
       },
       {
         "signature": "public fun close_with( code: int, reason: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends a closing handshake with a code and reason.",
-        "line": 199,
+        "description": "Sends a closing handshake with a code and reason. Before `accept`, this rejects the connection instead: the handshake is answered with 403 Forbidden when the handler returns, and `code` and `reason` are not sent. Use code 1008 (policy violation) for that case.",
+        "line": 226,
         "page": "reference/api/webapi-server-web-socket.md"
       }
     ]
@@ -20035,33 +20242,57 @@
     "page": "reference/api/webapi-uploaded-file.md",
     "declarations": [
       {
-        "signature": "public class UploadedFile",
-        "description": "One `multipart/form-data` file part (`@file`).",
-        "line": 4,
+        "signature": "public class UploadedFile: AsyncReader",
+        "description": "One file part of a `multipart/form-data` request, bound by `@file` or returned by `HttpIncoming.form`. The contents stay in memory up to 1 MiB and then move to a temporary file, so large uploads do not fill memory. The file is deleted when it is closed, when this object is released, or when the request finishes, whichever comes first.",
+        "line": 7,
         "page": "reference/api/webapi-uploaded-file.md"
       },
       {
         "signature": "public filename: string",
-        "description": "Original filename reported with the upload.",
-        "line": 6,
+        "description": "Original filename reported by the client.",
+        "line": 11,
         "page": "reference/api/webapi-uploaded-file.md"
       },
       {
         "signature": "public content_type: string",
-        "description": "Media type of the response body.",
-        "line": 9,
+        "description": "Media type the client reported for this part; empty when none was sent.",
+        "line": 14,
         "page": "reference/api/webapi-uploaded-file.md"
       },
       {
-        "signature": "public bytes: byte[]",
-        "description": "Contents as a byte array.",
-        "line": 12,
+        "signature": "public headers: HttpHeaders",
+        "description": "Headers sent with this part, such as `Content-Disposition`.",
+        "line": 17,
         "page": "reference/api/webapi-uploaded-file.md"
       },
       {
-        "signature": "public constructor(filename: string, content_type: string, bytes: byte[])",
-        "description": "Creates a `UploadedFile` with `filename`, `content_type`, `bytes`.",
-        "line": 15,
+        "signature": "public size: long",
+        "description": "Size of the uploaded contents in bytes.",
+        "line": 20,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public fun read( size: int = -1, token: Option<CancellationToken> = Option.None ): Future<Result<byte[], IoError>>",
+        "description": "Reads up to `size` bytes from the current position; a negative `size` reads the rest of the file. An empty result means the end of the file. Fails with `ECLOSED` after `close` or once the request has finished.",
+        "line": 44,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public fun seek( offset: long, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Moves the read position to `offset` bytes from the start of the file.",
+        "line": 66,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Deletes the stored contents now; later reads fail with `ECLOSED`. Safe to call repeatedly.",
+        "line": 95,
+        "page": "reference/api/webapi-uploaded-file.md"
+      },
+      {
+        "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
+        "description": "Reads up to `max_bytes` from the current position; an empty result for a positive request is the end of the file.",
+        "line": 104,
         "page": "reference/api/webapi-uploaded-file.md"
       }
     ]
@@ -20098,74 +20329,86 @@
       },
       {
         "signature": "public state: Map<string, string>",
-        "description": "Values stored for this request by handlers and middleware.",
-        "line": 22,
+        "description": "Application-wide values shared by every request; each request sees this map as `RequestContext.app_state`.",
+        "line": 26,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates a `WebApp` with default settings.",
-        "line": 25,
+        "line": 29,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public constructor(options: WebAppOptions)",
         "description": "Creates a `WebApp` with `options`.",
-        "line": 42,
+        "line": 46,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun use(middleware: Middleware): Result<Unit, IoError>",
         "description": "Appends an outer-to-inner middleware layer before startup.",
-        "line": 67,
+        "line": 71,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun include_router(router: WebRouter, prefix: string = \"\"): Result<Unit, IoError>",
         "description": "Mounts a router with an optional additional path prefix.",
-        "line": 76,
+        "line": 80,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError>",
         "description": "Installs generated dependency replacements before startup.",
-        "line": 99,
+        "line": 103,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun lifespan( start: fun(WebApp): Future<Result<Unit, IoError>>, stop: fun(WebApp): Future<void> ): Result<Unit, IoError>",
         "description": "Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.",
-        "line": 110,
+        "line": 114,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun shutdown(): void",
         "description": "Stops accepting traffic and cancels active transport operations on this app.",
-        "line": 170,
+        "line": 174,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun wait(token: Option<CancellationToken> = Option.None): Future<void>",
         "description": "Drains this application's requests and releases its listener.",
-        "line": 178,
+        "line": 182,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun listen( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<int, IoError>>",
-        "description": "Binds this app; port zero selects an ephemeral port.",
-        "line": 349,
+        "description": "Binds this app with the default `ServerConfig` and returns the bound port; port zero selects an ephemeral port.",
+        "line": 383,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun listen( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<int, IoError>>",
+        "description": "Binds this app with the transport settings in `config` and returns the bound port; port zero selects an ephemeral port. Negative settings fail with `EINVAL`.",
+        "line": 394,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun run( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Listens and waits until shutdown or cancellation.",
-        "line": 410,
+        "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation.",
+        "line": 455,
+        "page": "reference/api/webapi-web-app.md"
+      },
+      {
+        "signature": "public fun run( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.",
+        "line": 465,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun openapi(): string",
         "description": "Produces documentation for this application's mounted routes only.",
-        "line": 430,
+        "line": 487,
         "page": "reference/api/webapi-web-app.md"
       }
     ]
@@ -20177,80 +20420,68 @@
     "declarations": [
       {
         "signature": "public class WebAppOptions",
-        "description": "API metadata, documentation endpoints and native TLS settings. Empty URLs disable endpoints.",
-        "line": 4,
+        "description": "API metadata and documentation endpoints. Empty URLs disable endpoints; transport settings, including TLS, belong to `ServerConfig`.",
+        "line": 5,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public title: string",
         "description": "Title displayed in the API documentation.",
-        "line": 6,
+        "line": 7,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public version: string",
         "description": "Version identifying this API or snapshot format.",
-        "line": 9,
+        "line": 10,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public docs_url: string",
         "description": "Path serving Swagger UI; an empty path disables it.",
-        "line": 12,
+        "line": 13,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public openapi_url: string",
         "description": "Path serving the OpenAPI document.",
-        "line": 15,
+        "line": 16,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public redoc_url: string",
         "description": "Path serving ReDoc; an empty path disables it.",
-        "line": 18,
-        "page": "reference/api/webapi-web-app-options.md"
-      },
-      {
-        "signature": "public tls_cert_path: string",
-        "description": "Path to the server certificate; leave empty to serve plain HTTP.",
-        "line": 21,
-        "page": "reference/api/webapi-web-app-options.md"
-      },
-      {
-        "signature": "public tls_key_path: string",
-        "description": "Path to the private key for the server certificate.",
-        "line": 24,
+        "line": 19,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public summary: string",
         "description": "Short summary displayed in the API documentation.",
-        "line": 27,
+        "line": 22,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public description: string",
         "description": "Description displayed in the API documentation.",
-        "line": 30,
+        "line": 25,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public terms_of_service: string",
         "description": "URL describing the API's terms of service.",
-        "line": 33,
+        "line": 28,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
         "signature": "public swagger: SwaggerOptions",
         "description": "Options controlling the interactive API documentation.",
-        "line": 36,
+        "line": 31,
         "page": "reference/api/webapi-web-app-options.md"
       },
       {
-        "signature": "public constructor( title: string = \"Dream API\", version: string = \"0.1.0\", docs_url: string = \"/docs\", openapi_url: string = \"/openapi.json\", redoc_url: string = \"/redoc\", tls_cert_path: string = \"\", tls_key_path: string = \"\", summary: string = \"\", description: string = \"\", terms_of_service: string = \"\" )",
-        "description": "Creates a `WebAppOptions` with `title`, `version`, `docs_url`, `openapi_url`, `redoc_url`, `tls_cert_path`, `tls_key_path`, `summary`, `description`, `terms_of_service`.",
-        "line": 41,
+        "signature": "public constructor( title: string = \"Dream API\", version: string = \"0.1.0\", docs_url: string = \"/docs\", openapi_url: string = \"/openapi.json\", redoc_url: string = \"/redoc\", summary: string = \"\", description: string = \"\", terms_of_service: string = \"\" )",
+        "description": "Creates a `WebAppOptions` with `title`, `version`, `docs_url`, `openapi_url`, `redoc_url`, `summary`, `description`, `terms_of_service`.",
+        "line": 35,
         "page": "reference/api/webapi-web-app-options.md"
       }
     ]

@@ -70,6 +70,9 @@ The field names match Uvicorn's options, and every default matches Uvicorn's. Du
 | `ws_max_queue` | `32` | Inbound WebSocket messages buffered per socket. When the queue is full, the server stops reading from that client until the handler catches up. |
 | `ws_ping_interval_ms` | `20000` | How often the server pings each WebSocket client. `0` disables pings. |
 | `ws_ping_timeout_ms` | `20000` | How long a client has to answer a ping. A late answer closes the socket with code `1011`. |
+| `proxy_headers` | `true` | Read the client address and scheme from `X-Forwarded-For` and `X-Forwarded-Proto` when the connecting peer is a trusted proxy. |
+| `forwarded_allow_ips` | `"127.0.0.1"` | Trusted proxies: a comma-separated list of addresses and CIDR networks such as `"127.0.0.1,10.0.0.0/8"`. `"*"` trusts every peer. An invalid entry makes `listen` fail with `EINVAL`. |
+| `h2_max_concurrent_streams` | `100` | Most requests one HTTP/2 connection may have in progress at once. Must be at least `1`. |
 
 The server has no limit on request body size, and neither do FastAPI and Uvicorn. Put a limit at your reverse proxy (see [Deploying a web server](../deploy/web-server.md)), or read large bodies with [`stream()`](streaming.md#reading-a-request-body-as-a-stream) and [`form()`](uploads.md).
 
@@ -90,6 +93,40 @@ async fun main(): void {
 ```
 
 A missing or unreadable file makes `listen` and `run` fail before the server accepts traffic.
+
+### HTTP/2
+
+The server speaks HTTP/1.1 and HTTP/2 on the same port, with no setting to turn on. Over HTTPS, a client that offers HTTP/2 during the TLS handshake gets it. Over plain HTTP, a client that opens the connection with the HTTP/2 preface ("prior knowledge", such as `curl --http2-prior-knowledge`) gets HTTP/2. Everyone else gets HTTP/1.1.
+
+Handlers see no difference between the two. Each HTTP/2 request counts against `limit_concurrency` like an HTTP/1.1 request, and `h2_max_concurrent_streams` caps how many run at once on one connection. WebSockets always use HTTP/1.1, so a WebSocket client connects over HTTP/1.1 even when the server supports HTTP/2.
+
+### Behind a reverse proxy
+
+A reverse proxy such as nginx connects to your server itself, so every request appears to come from the proxy's address. Proxies report the real client in the `X-Forwarded-For` header and the original scheme in `X-Forwarded-Proto`. Each request exposes the result on `HttpIncoming`:
+
+| Field | Value |
+| --- | --- |
+| `client_host` | The connecting peer's address, or the client named in `X-Forwarded-For` when the peer is trusted. |
+| `client_port` | The peer's port, or `0` when `client_host` came from `X-Forwarded-For`. |
+| `scheme` | `"https"` for a TLS connection, otherwise `"http"`, or the trusted proxy's `X-Forwarded-Proto`. |
+
+The server believes these headers only from peers listed in `forwarded_allow_ips`; from anyone else they are ignored, so a client cannot fake its address. When `X-Forwarded-For` lists several hops, the server reads from the right and takes the first address that is not a trusted proxy. Set `forwarded_allow_ips` to your proxy's address:
+
+```dream
+import system;
+import system.webapi;
+
+async fun main(): void {
+    let app = WebApp();
+    let config = ServerConfig(forwarded_allow_ips: "10.0.0.0/8");
+    let result = app.run("0.0.0.0", 8000, config).await;
+    if result.is_err() {
+        System.println("cannot start: " + result.unwrap_err().message());
+    }
+}
+```
+
+Set `proxy_headers: false` when no proxy sits in front of the server and you want the raw peer address on every request.
 
 ## Running the app
 

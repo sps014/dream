@@ -1,15 +1,16 @@
 use super::{
-    response,
+    forwarded, response,
     state::{self, Body, BodyState, Request, Server, error, lock, tables},
 };
 use crate::socket_operations::{Failure, Output, OwnedResource};
 use bytes::Bytes;
 use dream_host_abi::wire::{VERSION, Writer};
 use http_body_util::BodyExt;
-use hyper::{Method, Request as HttpRequest, Response, body::Incoming, http::request::Parts};
+use hyper::{Method, Request as HttpRequest, Response, body::Incoming};
 use std::{
     collections::BTreeSet,
     convert::Infallible,
+    net::SocketAddr,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -31,10 +32,18 @@ impl Drop for Slot<'_> {
     }
 }
 
+/// The connection a request arrived on.
+#[derive(Clone)]
+pub(super) struct Connection {
+    pub ids: Arc<std::sync::Mutex<BTreeSet<i32>>>,
+    pub peer: SocketAddr,
+    pub secure: bool,
+}
+
 pub(super) async fn dispatch(
     mut input: HttpRequest<Incoming>,
     incoming: mpsc::Sender<i32>,
-    connection: Arc<std::sync::Mutex<BTreeSet<i32>>>,
+    connection: Connection,
     server: Arc<Server>,
 ) -> Result<Response<Body>, Infallible> {
     let (_slot, in_flight) = Slot::take(&server.in_flight);
@@ -45,15 +54,17 @@ pub(super) async fn dispatch(
     if *server.stop.borrow() {
         return Ok(response::simple(503, b"server is shutting down"));
     }
-    let (reply, result) = oneshot::channel();
+    let (reply, mut result) = oneshot::channel();
     let (disconnected, _) = watch::channel(false);
     let upgrade = hyper::upgrade::on(&mut input);
     let (head, body) = input.into_parts();
+    let client = forwarded::resolve(&head, connection.peer, connection.secure, &server.config);
     let request = Arc::new(Request {
         head,
+        client,
         upgraded: false.into(),
         accepted: false.into(),
-        connection: connection.clone(),
+        connection: connection.ids.clone(),
         server: server.clone(),
         body: Mutex::new(BodyState::Unread(body)),
         uploads: std::sync::Mutex::new(Vec::new()),
@@ -65,19 +76,29 @@ pub(super) async fn dispatch(
     let Some(id) = lock(tables()).requests.insert(request.clone()) else {
         return Ok(response::simple(503, b"Service Unavailable"));
     };
-    lock(&connection).insert(id);
+    lock(&connection.ids).insert(id);
     lock(&server.requests).insert(id);
     let mut disconnected = request.disconnected.subscribe();
     if incoming.send(id).await.is_err() {
         state::release(id);
         return Ok(response::simple(503, b"server is shutting down"));
     }
+    let answer = |result: Result<Response<Body>, oneshot::error::RecvError>| {
+        result.unwrap_or_else(|_| response::simple(500, b"handler abandoned request"))
+    };
     // Releasing the Dream request after sending its response also signals disconnect.
-    // A queued response must win when both notifications are ready.
+    // A queued response must win when both notifications are ready, and a responder that has
+    // taken the sender but not yet sent can lose that race on another thread.
     let response = tokio::select! {
         biased;
-        result = result => result.unwrap_or_else(|_| response::simple(500, b"handler abandoned request")),
-        _ = disconnected.changed() => response::simple(503, b"request cancelled"),
+        result = &mut result => answer(result),
+        _ = disconnected.changed() => {
+            if lock(&request.reply).is_none() {
+                answer(result.await)
+            } else {
+                response::simple(503, b"request cancelled")
+            }
+        }
     };
     Ok(super::stream::guard(response, request))
 }
@@ -89,7 +110,7 @@ pub(super) fn accepted(id: i32) -> Result<Output, Failure> {
         .ok_or_else(|| error("ECLOSED", "HTTP client disconnected"))?;
     request.accepted.store(true, Ordering::Release);
     Ok(Output {
-        bytes: record(id, &request.head),
+        bytes: record(id, &request),
         child: Some(OwnedResource::new(id, state::release)),
     })
 }
@@ -108,8 +129,10 @@ const METHODS: [Method; 9] = [
 ];
 
 /// The request record decoded by the guest's `HttpIncoming`: `[version][id][method code]
-/// [method text when the code is 0][path][query][header count][name, value]...`.
-pub(super) fn record(id: i32, head: &Parts) -> Vec<u8> {
+/// [method text when the code is 0][path][query][header count][name, value]...[client host]
+/// [client port][scheme]`.
+pub(super) fn record(id: i32, request: &Request) -> Vec<u8> {
+    let head = &request.head;
     let mut writer = Writer::new();
     writer.u8(VERSION).i32(id);
     match METHODS.iter().position(|method| *method == head.method) {
@@ -125,6 +148,10 @@ pub(super) fn record(id: i32, head: &Parts) -> Vec<u8> {
             .text(name.as_str())
             .text(&String::from_utf8_lossy(value.as_bytes()));
     }
+    writer
+        .text(&request.client.host)
+        .i32(request.client.port.into())
+        .text(request.client.scheme);
     writer.finish()
 }
 

@@ -7,10 +7,14 @@ use super::{
 };
 use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
 use dream_host_abi::wire::{Header, Malformed, Reader, Writer};
-use hyper::{server::conn::http1, service::service_fn};
-use hyper_util::rt::{TokioIo, TokioTimer};
+use hyper::service::service_fn;
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo, TokioTimer},
+    server::conn::auto,
+};
 use std::{
     collections::BTreeSet,
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -154,8 +158,8 @@ async fn listen(args: &[u8]) -> Result<Output, Failure> {
                 biased;
                 _ = stopping.changed() => break,
                 accepted = listener.accept() => {
-                    let Ok((socket, _)) = accepted else { break; };
-                    connections.spawn(serve(socket, tls.clone(), incoming.clone(), server.clone()));
+                    let Ok((socket, peer)) = accepted else { break; };
+                    connections.spawn(serve(socket, peer, tls.clone(), incoming.clone(), server.clone()));
                 }
                 Some(_) = connections.join_next(), if !connections.is_empty() => {}
             }
@@ -204,44 +208,71 @@ async fn listen(args: &[u8]) -> Result<Output, Failure> {
 }
 async fn serve(
     socket: tokio::net::TcpStream,
+    peer: SocketAddr,
     tls: Option<tokio_rustls::TlsAcceptor>,
     incoming: mpsc::Sender<i32>,
     server: Arc<Server>,
 ) {
     let (_slot, _) = Slot::take(&server.connections);
     let ids = Arc::new(Mutex::new(BTreeSet::new()));
-    let connection_ids = ids.clone();
+    let connection = request::Connection {
+        ids: ids.clone(),
+        peer,
+        secure: tls.is_some(),
+    };
     let mut stopping = server.stop.subscribe();
     let config = &server.config;
-    let io: Box<dyn crate::websocket::Transport> = match tls {
+    let idle = (!config.timeout_keep_alive.is_zero()).then_some(config.timeout_keep_alive);
+    // `Some(true)` is ALPN h2, `Some(false)` any other TLS protocol, `None` plain TCP.
+    let (io, alpn_h2): (Box<dyn crate::websocket::Transport>, Option<bool>) = match tls {
         Some(tls) => {
             match tokio::time::timeout(Duration::from_secs(10), tls.accept(socket)).await {
-                Ok(Ok(stream)) => Box::new(stream),
+                Ok(Ok(stream)) => {
+                    let h2 = stream.get_ref().1.alpn_protocol() == Some(b"h2");
+                    (Box::new(stream), Some(h2))
+                }
                 _ => return,
             }
         }
-        None => Box::new(socket),
+        None => {
+            // Protocol detection reads the first bytes before hyper's header timeout starts.
+            if let Some(idle) = idle
+                && tokio::time::timeout(idle, socket.readable()).await.is_err()
+            {
+                return;
+            }
+            (Box::new(socket), None)
+        }
     };
     let service_server = server.clone();
     let service = service_fn(move |request| {
         request::dispatch(
             request,
             incoming.clone(),
-            connection_ids.clone(),
+            connection.clone(),
             service_server.clone(),
         )
     });
-    let mut builder = http1::Builder::new();
+    // Each HTTP/2 stream is one request, so `limit_concurrency` still counts requests.
+    // WebSocket upgrades exist only on HTTP/1.1 connections.
+    let mut builder = auto::Builder::new(TokioExecutor::new());
     builder
+        .http1()
         .timer(TokioTimer::new())
         .keep_alive(true)
         .max_buf_size(config.max_header_bytes)
-        .header_read_timeout(
-            (!config.timeout_keep_alive.is_zero()).then_some(config.timeout_keep_alive),
-        );
-    let connection = builder
-        .serve_connection(TokioIo::new(io), service)
-        .with_upgrades();
+        .header_read_timeout(idle);
+    builder
+        .http2()
+        .timer(TokioTimer::new())
+        .max_concurrent_streams(config.h2_max_concurrent_streams)
+        .max_header_list_size(u32::try_from(config.max_header_bytes).unwrap_or(u32::MAX));
+    let builder = match alpn_h2 {
+        Some(true) => builder.http2_only(),
+        Some(false) => builder.http1_only(),
+        None => builder,
+    };
+    let connection = builder.serve_connection_with_upgrades(TokioIo::new(io), service);
     tokio::pin!(connection);
     if !*stopping.borrow_and_update() {
         tokio::select! {

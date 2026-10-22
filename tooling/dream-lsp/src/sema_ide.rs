@@ -10,7 +10,7 @@ use dream_sema::analyzer::ide::{
     IdeRef, IdeSnapshot, IdeTarget, MemberInfo, MemberKind, TypeSummary,
 };
 
-use crate::index::{Index, SymKind, is_ident_byte};
+use crate::index::{Index, Located, SymKind, is_ident_byte};
 
 /// Finds the reference recorded for the receiver in a `receiver.<cursor>` completion at `offset`.
 ///
@@ -143,6 +143,23 @@ pub fn member_completions(
 
 /// Renders hover markdown for whatever the analyzer resolved at `offset`. Returns `None` when no
 /// reference covers the position (caller falls back to the AST-index hover).
+/// Hover for `offset`: the analyzer's concrete signature with the declaration's doc comment, or
+/// the index's declaration text where the analyzer recorded nothing (decorators, unparsed spans).
+pub fn hover(snapshot: Option<&IdeSnapshot>, idx: &Index, offset: usize) -> Option<Located> {
+    let Some((start, end, mut contents)) = snapshot.and_then(|s| hover_at(s, offset)) else {
+        return idx.hover(offset);
+    };
+    if let Some(doc) = idx.doc_at(offset) {
+        contents.push_str("\n\n---\n\n");
+        contents.push_str(doc);
+    }
+    Some(Located {
+        start,
+        end,
+        contents,
+    })
+}
+
 pub fn hover_at(snapshot: &IdeSnapshot, offset: usize) -> Option<(usize, usize, String)> {
     let r = snapshot.ref_covering(offset)?;
     let body = hover_body(snapshot, r);
@@ -152,6 +169,7 @@ pub fn hover_at(snapshot: &IdeSnapshot, offset: usize) -> Option<(usize, usize, 
 fn fn_signature(
     snapshot: &IdeSnapshot,
     key: &dream_sema::function_table::FunctionIdentity,
+    label: &str,
 ) -> Option<String> {
     let sig = snapshot.functions.get(key)?;
     let params = sig
@@ -166,7 +184,7 @@ fn fn_signature(
         format!(": {}", sig.ret)
     };
     let prefix = if sig.is_static { "static " } else { "" };
-    Some(format!("{prefix}fun {}({params}){ret}", sig.label))
+    Some(format!("{prefix}fun {label}({params}){ret}"))
 }
 
 fn type_name<'s>(snapshot: &'s IdeSnapshot, ty: dream_types::TypeId, r: &'s IdeRef) -> &'s str {
@@ -187,8 +205,8 @@ fn hover_body(snapshot: &IdeSnapshot, r: &IdeRef) -> String {
         IdeTarget::Local { name } | IdeTarget::Global { name } => {
             format!("let {name}: {}", r.result.display())
         }
-        IdeTarget::Callee { key, .. } => {
-            fn_signature(snapshot, key).unwrap_or_else(|| r.result.display().to_string())
+        IdeTarget::Callee { key, label } => {
+            fn_signature(snapshot, key, label).unwrap_or_else(|| r.result.display().to_string())
         }
         IdeTarget::Constructor { display, .. } => display.clone(),
         IdeTarget::Field { owner, name } => {

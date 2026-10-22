@@ -7,10 +7,7 @@ use super::attr_ide::{
 };
 use super::detail_belongs_to;
 use super::detail_is_static_method;
-use super::{
-    Decl, GLOBAL, Index, Located, Ref, SymKind, is_ident_byte, keywords,
-    substitute_method_type_args, substitute_type_param_t, type_base,
-};
+use super::{Decl, GLOBAL, Index, Located, Ref, SymKind, is_ident_byte, keywords, type_base};
 use crate::code_actions::imported_packages;
 use dream::driver::source_loader::find_dream_packages_dir;
 use dream::syntax::nodes::types::CONSTRUCTOR_NAME;
@@ -344,100 +341,4 @@ fn partial_ident_before(text: &str, offset: usize) -> String {
         i -= 1;
     }
     text[i..offset.min(bytes.len())].to_string()
-}
-
-/// True when a method detail declares type parameters before `(`, e.g.
-/// `async TaskPool.dispatch<TIn, TOut>(…)`.
-fn method_detail_has_type_params(detail: &str) -> bool {
-    let Some(paren) = detail.find('(') else {
-        return false;
-    };
-    detail[..paren].rfind('<').is_some()
-}
-
-/// Parses call-site method type arguments after a method name token: `dispatch<int, string>(`.
-/// `name_end` is the exclusive end offset of the method identifier.
-fn method_type_args_at(text: &str, name_end: usize) -> Option<Vec<String>> {
-    let bytes = text.as_bytes();
-    let mut i = name_end.min(bytes.len());
-    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b'\n') {
-        i += 1;
-    }
-    if i >= bytes.len() || bytes[i] != b'<' {
-        return None;
-    }
-    let start = i + 1;
-    let mut depth = 1i32;
-    let mut j = start;
-    while j < bytes.len() {
-        match bytes[j] {
-            b'<' => depth += 1,
-            b'>' => {
-                depth -= 1;
-                if depth == 0 {
-                    let inner = text[start..j].trim();
-                    if inner.is_empty() {
-                        return Some(Vec::new());
-                    }
-                    return Some(
-                        inner
-                            .split(',')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect(),
-                    );
-                }
-            }
-            b'(' if depth == 1 => return None, // malformed
-            _ => {}
-        }
-        j += 1;
-    }
-    None
-}
-
-/// Class type args in `List<float>.alloc` — the `<…>` sits before the `.`, not after the method.
-fn type_args_before_member_dot(text: &str, member_start: usize) -> Option<Vec<String>> {
-    let bytes = text.as_bytes();
-    let mut i = member_start.min(bytes.len());
-    while i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') {
-        i -= 1;
-    }
-    if i == 0 || bytes[i - 1] != b'.' {
-        return None;
-    }
-    i -= 1;
-    while i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') {
-        i -= 1;
-    }
-    if i == 0 || bytes[i - 1] != b'>' {
-        return None;
-    }
-    let gt = i - 1;
-    let mut depth = 1i32;
-    let mut j = gt;
-    while j > 0 {
-        j -= 1;
-        match bytes[j] {
-            b'>' => depth += 1,
-            b'<' => {
-                depth -= 1;
-                if depth == 0 {
-                    let inner = text[j + 1..gt].trim();
-                    if inner.is_empty() {
-                        return Some(Vec::new());
-                    }
-                    return Some(
-                        inner
-                            .split(',')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect(),
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }

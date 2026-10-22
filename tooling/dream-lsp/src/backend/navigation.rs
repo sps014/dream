@@ -19,35 +19,19 @@ impl Backend {
         let Some((idx, sema)) = self.models_for(&key, Self::file_path_of(&uri).as_deref()) else {
             return Ok(None);
         };
-        if let Some(located) = idx.hover(&text, offset) {
-            return Ok(Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: located.contents,
-                }),
-                range: Some(Range {
-                    start: map_position(line_index.position(located.start)),
-                    end: map_position(line_index.position(located.end)),
-                }),
-            }));
-        }
-        // The AST index only resolves receivers it could type heuristically; the analyzer's
-        // snapshot covers chained/call-result/tuple positions it cannot.
-        if let Some(snapshot) = &sema
-            && let Some((start, end, contents)) = crate::sema_ide::hover_at(snapshot, offset)
-        {
-            return Ok(Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: contents,
-                }),
-                range: Some(Range {
-                    start: map_position(line_index.position(start)),
-                    end: map_position(line_index.position(end)),
-                }),
-            }));
-        }
-        Ok(None)
+        let Some(located) = crate::sema_ide::hover(sema.as_deref(), &idx, offset) else {
+            return Ok(None);
+        };
+        Ok(Some(Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: located.contents,
+            }),
+            range: Some(Range {
+                start: map_position(line_index.position(located.start)),
+                end: map_position(line_index.position(located.end)),
+            }),
+        }))
     }
 
     pub(super) async fn handle_goto_definition(

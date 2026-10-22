@@ -1,62 +1,63 @@
 use super::*;
 
+enum HoverTarget<'a> {
+    Decl(usize, usize, &'a Decl),
+    Attribute(Located),
+}
+
 impl Index {
-    pub fn hover(&self, text: &str, offset: usize) -> Option<Located> {
-        let mut receiver_ty_opt = None;
+    /// The doc comment of the declaration at or referenced from `offset`.
+    pub fn doc_at(&self, offset: usize) -> Option<&str> {
+        match self.hover_target(offset)? {
+            HoverTarget::Decl(_, _, decl) => decl.doc_comment.as_deref(),
+            HoverTarget::Attribute(_) => None,
+        }
+    }
+
+    pub fn hover(&self, offset: usize) -> Option<Located> {
+        let (start, end, decl) = match self.hover_target(offset)? {
+            HoverTarget::Decl(start, end, decl) => (start, end, decl),
+            HoverTarget::Attribute(located) => return Some(located),
+        };
+        let mut contents = format!("```dream\n{}\n```", decl.detail);
+        if let Some(doc) = &decl.doc_comment {
+            contents.push_str("\n\n---\n\n");
+            contents.push_str(doc);
+        }
+        Some(Located {
+            start,
+            end,
+            contents,
+        })
+    }
+
+    fn hover_target(&self, offset: usize) -> Option<HoverTarget<'_>> {
         let (start, end, decl) = if let Some(decl) = self.decl_at(offset) {
             (decl.start, decl.end, decl)
         } else {
             let reference = self.ref_at(offset)?;
             if reference.kind == SymKind::Decorator {
                 let contents = self.declared_attribute(&reference.name)?.hover();
-                return Some(Located {
+                return Some(HoverTarget::Attribute(Located {
                     start: reference.start,
                     end: reference.end,
                     contents,
-                });
+                }));
             }
             let receiver = reference.receiver.as_deref();
             let d = match reference.kind {
                 SymKind::EnumMember => self.resolve_enum_member(receiver, &reference.name),
                 SymKind::Field | SymKind::Method => {
-                    let mut recv_ty = None;
-                    if let Some(recv) = receiver {
-                        recv_ty = self.receiver_type_name(recv, reference.scope, reference.start);
-                        receiver_ty_opt = recv_ty.clone();
-                    }
+                    let recv_ty = receiver.and_then(|recv| {
+                        self.receiver_type_name(recv, reference.scope, reference.start)
+                    });
                     self.resolve_member(recv_ty.as_deref(), &reference.name)
                 }
                 _ => self.resolve(&reference.name, reference.scope, reference.start),
             }?;
             (reference.start, reference.end, d)
         };
-
-        let mut type_args = if decl.kind == SymKind::Method {
-            method_type_args_at(text, end).unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        // `List<float>.alloc` puts class args before the `.`, not after the method name.
-        if type_args.is_empty()
-            && decl.kind == SymKind::Method
-            && let Some(args) = type_args_before_member_dot(text, start)
-        {
-            type_args = args;
-        }
-        let detail =
-            Self::apply_type_args_to_detail(&decl.detail, receiver_ty_opt.as_deref(), &type_args);
-
-        let mut contents = format!("```dream\n{}\n```", detail);
-        if let Some(doc) = &decl.doc_comment {
-            contents.push_str("\n\n---\n\n");
-            contents.push_str(doc);
-        }
-
-        Some(Located {
-            start,
-            end,
-            contents,
-        })
+        Some(HoverTarget::Decl(start, end, decl))
     }
 
     /// Resolves the declaration the cursor sits on, whether `offset` lands on the declaration's
@@ -239,18 +240,7 @@ impl Index {
             let receiver_ty_opt = self.receiver_type_name(receiver_obj, scope, recv_obj_start);
 
             if let Some(decl) = self.resolve_member(receiver_ty_opt.as_deref(), name) {
-                let mut d = decl.clone();
-                let mut type_args = method_type_args_at(text, recv_end).unwrap_or_default();
-                if type_args.is_empty()
-                    && let Some(args) = type_args_before_member_dot(text, recv_start)
-                {
-                    type_args = args;
-                }
-                d.detail = Self::apply_type_args_to_detail(
-                    &d.detail,
-                    receiver_ty_opt.as_deref(),
-                    &type_args,
-                );
+                let d = decl.clone();
                 return Some(d);
             }
         } else {

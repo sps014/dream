@@ -1,6 +1,23 @@
 use crate::common;
 
 use common::TestHarness;
+use dream_lsp::index::Located;
+use dream_lsp::sema_ide;
+
+fn sema_hover(harness: &TestHarness) -> Option<Located> {
+    sema_ide::hover(
+        harness.snapshot().as_ref(),
+        &harness.index(),
+        harness.offset,
+    )
+}
+
+fn sema_completions(harness: &TestHarness) -> Vec<sema_ide::CompletionOut> {
+    harness
+        .snapshot()
+        .and_then(|snapshot| sema_ide::member_completions(&snapshot, &harness.src, harness.offset))
+        .unwrap_or_default()
+}
 
 #[test]
 fn hover_on_function_shows_signature() {
@@ -17,9 +34,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index
-        .hover(&harness.src, harness.offset)
-        .expect("Expected hover info");
+    let hover = index.hover(harness.offset).expect("Expected hover info");
     assert!(hover.contents.contains("fun add"));
 }
 
@@ -205,7 +220,7 @@ fn js_global_hover_is_not_regex_global() {
     let harness = TestHarness::new("fun main(): void {\n    let d = js.|global.document;\n}\n");
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("hover on js.global");
     assert!(
         hover.contents.contains("js.global") && !hover.contents.contains("Regex"),
@@ -518,9 +533,7 @@ fun f(r: Result<string, IoError>): void {
 }
 "#,
     );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
+    let comps = sema_completions(&harness);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"message") && names.contains(&"code"),
@@ -544,9 +557,7 @@ fun f(o: Option<Point>): void {
 }
 "#,
     );
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
+    let comps = sema_completions(&harness);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"x") && names.contains(&"y"),
@@ -612,7 +623,7 @@ fun main(): void {
     );
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("hover on Alpha.run");
     assert!(
         hover.contents.contains("Alpha.run") && hover.contents.contains("x: int"),
@@ -663,12 +674,9 @@ async fun main(): void {
 }
 "#,
     );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on dispatch");
+    let hover = sema_hover(&harness).expect("hover on dispatch");
     assert!(
-        hover.contents.contains("TaskPool.dispatch")
+        hover.contents.contains("fun dispatch(")
             && hover.contents.contains("fun(): int")
             && hover
                 .contents
@@ -697,7 +705,7 @@ fun main(): void {
     );
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("hover on A.value");
     assert!(
         hover.contents.contains("A.value") && hover.contents.contains("int"),
@@ -828,9 +836,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
 
-    let hover = index
-        .hover(&harness.src, harness.offset)
-        .expect("Expected hover info");
+    let hover = index.hover(harness.offset).expect("Expected hover info");
     assert!(
         hover.contents.contains("int"),
         "Hover should contain field type"
@@ -856,7 +862,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover on field");
     assert!(
         hover.contents.contains("X component"),
@@ -883,7 +889,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on union variant");
     assert!(
         hover
@@ -919,7 +925,7 @@ fun area(s: Shape): int {
     let index = harness.index();
 
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on match-arm variant");
     assert!(
         hover
@@ -945,7 +951,7 @@ fun main(): void {
     let index = harness.index();
 
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on generic enum type");
     assert!(
         hover.contents.contains("enum Opt<T>"),
@@ -1028,7 +1034,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(&harness.src, harness.offset - 1)
+        .hover(harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -1052,7 +1058,7 @@ class User { age: int; }
 
     // Check hover for the reference
     let hover_ref = index
-        .hover(&harness.src, harness.offset - 1)
+        .hover(harness.offset - 1)
         .expect("Expected hover info on ref");
     assert!(
         hover_ref.contents.contains("User"),
@@ -1180,11 +1186,8 @@ fun main(): void {
 }
 ";
     let harness = TestHarness::new(src);
-    let index = harness.index();
 
-    let hover = index
-        .hover(&harness.src, harness.offset)
-        .expect("Expected hover info on builtin method");
+    let hover = sema_hover(&harness).expect("Expected hover info on builtin method");
     println!("HOVER CONTENTS: {}", hover.contents);
     // With generic substitution, it should show 'push(value: int)' instead of 'push(value: T)'
     assert!(hover.contents.contains("push(value: int)"));
@@ -1201,7 +1204,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on Math.floor");
     println!("HOVER CONTENTS MATH.FLOOR: {}", hover.contents);
 }
@@ -1599,7 +1602,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("int"),
@@ -1674,7 +1677,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("Expected hover info on `a`");
     assert!(
         hover.contents.contains("fun(int): int"),
@@ -1697,9 +1700,7 @@ fun main(): void {
 ";
     let offset = src.find("print(1)").unwrap() + 1; // inside the `print` reference
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index
-        .hover(src, offset)
-        .expect("expected hover on System.print");
+    let hover = index.hover(offset).expect("expected hover on System.print");
     assert!(
         hover.contents.contains("Prints a value to standard output"),
         "doc comment above an attribute should still appear in hover; got {}",
@@ -1725,7 +1726,7 @@ fun main(): void {
 ";
     let offset = src.find("enum Foo").unwrap() + 5; // inside `Foo`
     let index = dream_lsp::index::Index::build(None, src);
-    let hover = index.hover(src, offset).expect("expected hover on Foo");
+    let hover = index.hover(offset).expect("expected hover on Foo");
     assert!(
         hover.contents.contains("The doc comment for Foo"),
         "hover should include the directly-attached doc comment; got {}",
@@ -1749,7 +1750,7 @@ fun main(): void {
     let harness = TestHarness::new(src);
     let index = harness.index();
     let hover = index
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("expected hover on a top-level global");
     assert!(
         hover.contents.contains("FACTOR") && hover.contents.contains("const"),
@@ -2245,7 +2246,7 @@ fn hover_on_attribute_shows_docs() {
     let harness = TestHarness::new("@js|on\nclass Foo { public x: int; }\n");
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("expected hover on @json");
     assert!(
         hover.contents.contains("@json") && hover.contents.contains("JSON"),
@@ -2266,7 +2267,7 @@ class System {
     );
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("expected hover on @intrinsic");
     assert!(
         hover.contents.contains("@intrinsic") && hover.contents.contains("intrinsic"),
@@ -2657,7 +2658,7 @@ async fun main(): void {
     );
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("hover on JobGroup.dispatch");
     assert!(
         hover.contents.contains("JobGroup.dispatch"),
@@ -2754,10 +2755,7 @@ async fun main(): void {
 }
 "#,
     );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover");
+    let hover = harness.index().hover(harness.offset).expect("hover");
     assert!(
         hover.contents.contains("static async Worker.try_init"),
         "expected clean static async Owner.name form, got {}",
@@ -2784,7 +2782,7 @@ async fun main(): void {
     );
     let hover = harness
         .index()
-        .hover(&harness.src, harness.offset)
+        .hover(harness.offset)
         .expect("hover on buffer");
     assert!(
         hover.contents.contains("TestBuffer<float>"),
@@ -2804,10 +2802,7 @@ async fun main(): void {
 }
 "#,
     );
-    let hover = harness
-        .index()
-        .hover(&harness.src, harness.offset)
-        .expect("hover on read_at");
+    let hover = sema_hover(&harness).expect("hover on read_at");
     assert!(
         hover.contents.contains("float[]") && !hover.contents.contains(": T[]"),
         "expected read_at return float[], got {}",

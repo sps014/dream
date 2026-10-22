@@ -167,24 +167,10 @@ impl Builder {
                     .as_ref()
                     .map(|q| q.text.as_str())
                     .or_else(|| expected.as_deref().map(type_base));
-                let subject_args = expected
-                    .as_deref()
-                    .map(parse_angle_type_args)
-                    .unwrap_or_default();
-                let enum_params = enum_name
-                    .and_then(|n| self.enum_type_params(n))
-                    .unwrap_or_default();
                 let payload_tys = self.variant_payload_types(enum_name, &variant.text);
                 for (i, sub) in subs.iter().enumerate() {
                     let field_ty = payload_tys.get(i).cloned();
-                    let concrete = field_ty.map(|t| {
-                        if enum_params.is_empty() || subject_args.is_empty() {
-                            t
-                        } else {
-                            substitute_named_type_params(&t, &enum_params, &subject_args)
-                        }
-                    });
-                    self.walk_pattern(sub, scope, concrete);
+                    self.walk_pattern(sub, scope, field_ty);
                 }
             }
             PatternNode::Or(alts) => {
@@ -198,17 +184,6 @@ impl Builder {
                 }
             }
         }
-    }
-
-    /// Generic parameter names declared on `enum Name<…>` (`Result` → `["T","E"]`).
-    pub(crate) fn enum_type_params(&self, name: &str) -> Option<Vec<String>> {
-        let detail = self
-            .decls
-            .iter()
-            .find(|d| d.kind == SymKind::Enum && d.name == name)
-            .map(|d| d.detail.as_str())?;
-        let args = parse_angle_type_args(detail);
-        if args.is_empty() { None } else { Some(args) }
     }
 
     /// Payload field types of `Enum.Variant` in declaration order (`Result.Err` → `["E"]`).

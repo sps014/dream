@@ -121,53 +121,6 @@ impl Index {
             .find(|d| d.kind == SymKind::EnumMember && d.name == name)
     }
 
-    pub(crate) fn substitute_generic(detail: &str, receiver_ty: &str) -> String {
-        // `receiver_ty` is the human-readable type (e.g. `List<int>` / `List<float>`);
-        // pull the generic argument out of the angle brackets.
-        let mut generic_arg = None;
-        if let Some(start) = receiver_ty.find('<')
-            && let Some(end) = receiver_ty.rfind('>')
-        {
-            generic_arg = Some(&receiver_ty[start + 1..end]);
-        }
-
-        let Some(generic_arg) = generic_arg else {
-            return detail.to_string();
-        };
-
-        substitute_type_param_t(detail, generic_arg)
-    }
-
-    /// Applies call-site / receiver type arguments to a method detail that still mentions `T`
-    /// (e.g. `List.create<float>` → `List<float>`, `read_at(): T[]` → `float[]`).
-    /// Method-level params (`dispatch<TIn, TOut>`) are handled only by
-    /// [`substitute_method_type_args`] — never via class-`T` synthesis, which would turn
-    /// `TIn` into `stringIn` when args are `int, string`.
-    pub(crate) fn apply_type_args_to_detail(
-        detail: &str,
-        receiver_ty: Option<&str>,
-        call_type_args: &[String],
-    ) -> String {
-        let mut out = detail.to_string();
-        let method_has_type_params = method_detail_has_type_params(detail);
-        // Prefer an already-concrete receiver (`List<float>`).
-        if let Some(recv) = receiver_ty {
-            if recv.contains('<') {
-                out = Self::substitute_generic(&out, recv);
-            } else if !call_type_args.is_empty() && !method_has_type_params {
-                // Bare `List.create<float>(…)`: synthesize `List<float>`.
-                let synthetic = format!("{}<{}>", type_base(recv), call_type_args.join(", "));
-                out = Self::substitute_generic(&out, &synthetic);
-            }
-        } else if call_type_args.len() == 1 && !method_has_type_params {
-            out = substitute_type_param_t(&out, &call_type_args[0]);
-        }
-        if !call_type_args.is_empty() {
-            out = substitute_method_type_args(&out, call_type_args);
-        }
-        out
-    }
-
     /// Type name of a variable/parameter named `name` visible at `before` within `scope`.
     pub(crate) fn variable_type(&self, name: &str, scope: usize, before: usize) -> Option<String> {
         self.resolve(name, scope, before).and_then(|d| d.ty.clone())

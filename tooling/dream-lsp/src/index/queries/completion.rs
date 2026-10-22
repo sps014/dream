@@ -273,8 +273,12 @@ impl Index {
                     }
             })
             .map(|d| {
-                let detail = Self::substitute_generic(&d.detail, ty);
-                (d.name.clone(), d.kind, detail, d.doc_comment.clone())
+                (
+                    d.name.clone(),
+                    d.kind,
+                    d.detail.clone(),
+                    d.doc_comment.clone(),
+                )
             })
             .collect()
     }

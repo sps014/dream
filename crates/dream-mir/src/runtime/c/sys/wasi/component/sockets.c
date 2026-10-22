@@ -107,7 +107,9 @@ static dream_ptr operate(yyjson_val *request, dream_ptr bytes, int *child) {
     }
     if (!strcmp(action, "read")) {
         int64_t count = yyjson_get_sint(yyjson_obj_get(request, "count"));
-        if (count < 0 || count > 16 * 1024 * 1024) { return component_error("EINVAL", "invalid read size"); }
+        if (count < 0) { return component_error("EINVAL", "invalid read size"); }
+        /* Larger reads return short so a huge request does not preallocate its buffer. */
+        if (count > 1024 * 1024) { count = 1024 * 1024; }
         uint8_t *buffer = malloc((size_t)count + 1);
         if (!buffer) { return component_error("ELIMIT", "socket allocation failed"); }
         ssize_t n = count ? recv(fd, buffer + 1, (size_t)count, 0) : 0;
@@ -117,7 +119,6 @@ static dream_ptr operate(yyjson_val *request, dream_ptr bytes, int *child) {
     }
     if (!strcmp(action, "write")) {
         size_t count = bytes ? (size_t)dream_i32(bytes)[0] : 0;
-        if (count > 16 * 1024 * 1024) { return component_error("EINVAL", "invalid write size"); }
         ssize_t written = count ? send(fd, dream_array_bytes(bytes), count, 0) : 0;
         if (written < 0) { return component_error("EIO", "socket write failed"); }
         char result[32]; result[0] = 1;

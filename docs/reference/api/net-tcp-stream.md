@@ -59,7 +59,7 @@ public get peer_port(): int
 
 ## `read_async`
 
-Reads up to 16 MiB; positive-size empty success denotes peer EOF.
+Reads at least one and at most `max_bytes` bytes, returning whatever has arrived. A request above 1 MiB returns at most 1 MiB per call. A positive-size empty success denotes peer EOF.
 
 ```dream
 public async unique fun read_async(

@@ -1688,7 +1688,7 @@ function makeSocketHost() {
     }
     if (request.action === "read" && state.kind === "tcp") {
       const count = request.count;
-      if (!Number.isInteger(count) || count < 0 || count > 16777216) throw fail("EINVAL","invalid TCP read size");
+      if (!Number.isInteger(count) || count < 0) throw fail("EINVAL","invalid TCP read size");
       if (!count) return {bytes:new Uint8Array()};
       if (state.reading) throw fail("EBUSY","socket already has a pending read");
       state.reading = true;
@@ -1704,7 +1704,6 @@ function makeSocketHost() {
       } finally { state.reading = false; }
     }
     if (request.action === "write" && state.kind === "tcp") {
-      if (bytes.length > 16777216) throw fail("EINVAL","TCP writes may not exceed 16 MiB");
       if (state.writing) throw fail("EBUSY","socket already has a pending write");
       if (state.socket.writableEnded) throw fail("ECLOSED","socket write side is shut down");
       if (!bytes.length) return {bytes:encoder.encode("0")};

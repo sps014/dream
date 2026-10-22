@@ -41,7 +41,8 @@ public class TcpStream: AsyncReader, AsyncWriter {
         return this.state.metadata["peer_port"].as_int().unwrap_or(0);
     }
 
-    /// Reads up to 16 MiB; positive-size empty success denotes peer EOF.
+    /// Reads at least one and at most `max_bytes` bytes, returning whatever has arrived. A request
+    /// above 1 MiB returns at most 1 MiB per call. A positive-size empty success denotes peer EOF.
     public async unique fun read_async(
         max_bytes: int,
         token: Option<CancellationToken> = Option.None

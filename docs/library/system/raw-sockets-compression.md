@@ -38,7 +38,7 @@ async fun main(): void {
 }
 ```
 
-TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may be partial. Use `write_all_async` or `Streams.copy_async` to retry writes. Zero-length reads consume nothing; positive-size empty reads denote peer EOF. `shutdown_write()` sends FIN after accepted writes and retains the read side. Native and Node support half-open connections. A concurrent read or write of the same direction returns `EBUSY`; a read and write may proceed together. TCP operations accept up to 16 MiB per call. `set_nodelay` controls TCP_NODELAY.
+TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may be partial. Use `write_all_async` or `Streams.copy_async` to retry writes. Zero-length reads consume nothing; positive-size empty reads denote peer EOF. `shutdown_write()` sends FIN after accepted writes and retains the read side. Native and Node support half-open connections. A concurrent read or write of the same direction returns `EBUSY`; a read and write may proceed together. A read asking for more than 1 MiB returns at most 1 MiB; writes have no size limit and report how many bytes were accepted. `set_nodelay` controls TCP_NODELAY.
 
 `connect`, `accept`, and `read_with_timeout` expose millisecond deadlines; zero disables a deadline. Async methods inherit structured cancellation unless an explicit token is passed. Cancellation preserves completed side effects. Close wakes pending operations and is idempotent. Accepted streams remain valid after their listener closes. Node bounds queued accepted sockets to 64 and rejects excess pending connections; the native listener uses the OS backlog.
 

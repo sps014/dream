@@ -17,6 +17,8 @@ use tokio::{
 
 /// Holds the largest UDP payload over IPv4 or IPv6 without jumbograms.
 const MAX_DATAGRAM: usize = 65_536;
+/// Larger TCP reads return a short read so a huge `max_bytes` does not preallocate its buffer.
+const READ_CHUNK: u64 = 1024 * 1024;
 
 enum Socket {
     Tcp {
@@ -164,9 +166,8 @@ async fn operate(socket: &Socket, value: &Value, bytes: Vec<u8>) -> Result<Outpu
         (Socket::Tcp { read, .. }, Some("read")) => {
             let count = value["count"]
                 .as_u64()
-                .filter(|&v| v <= 16 * 1024 * 1024)
                 .ok_or_else(|| error("EINVAL", "invalid socket read size"))?
-                as usize;
+                .min(READ_CHUNK) as usize;
             let mut bytes = vec![0; count];
             if count > 0 {
                 let mut reader = read
@@ -178,9 +179,6 @@ async fn operate(socket: &Socket, value: &Value, bytes: Vec<u8>) -> Result<Outpu
             Ok(Output::bytes(bytes))
         }
         (Socket::Tcp { write, .. }, Some("write")) => {
-            if bytes.len() > 16 * 1024 * 1024 {
-                return Err(error("EINVAL", "socket writes may not exceed 16 MiB"));
-            }
             let mut writer = write
                 .try_lock()
                 .map_err(|_| error("EBUSY", "socket already has a pending write"))?;

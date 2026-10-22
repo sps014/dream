@@ -81,3 +81,35 @@ async fun raw_sockets(): void {
     Assert.eq(receive.await.unwrap_err().code(), "ECLOSED");
     first.close().unwrap();
 }
+
+async fun socket_drain(listener: TcpListener, expected: int): void {
+    let stream = listener.accept(timeout_ms: 5000).await.unwrap();
+    let total = 0;
+    while true {
+        let bytes = stream.read_async(64 * 1024 * 1024).await.unwrap();
+        if bytes.length == 0 {
+            break;
+        }
+        Assert.is_true(bytes.length <= 1024 * 1024);
+        total = total + bytes.length;
+    }
+    Assert.eq(total, expected);
+    stream.close().unwrap();
+}
+
+@test
+async fun raw_sockets_large_transfers(): void {
+    let size = 17 * 1024 * 1024;
+    let listener = TcpListener.bind("127.0.0.1", 0).await.unwrap();
+    let server = socket_drain(listener, size);
+    Promise.start(server);
+    let client = TcpStream.connect("127.0.0.1", listener.local_port, timeout_ms: 5000)
+        .await
+        .unwrap();
+    let payload = Array.alloc<byte>(size);
+    client.write_all_async(payload).await.unwrap();
+    client.shutdown_write().unwrap();
+    server.await;
+    client.close().unwrap();
+    listener.close().unwrap();
+}

@@ -1,6 +1,6 @@
 use crate::socket_operations::{self as operations, Failure, Output};
-use serde_json::{Value, json};
 use dream_host_abi::handles::HandleTable;
+use serde_json::{Value, json};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -311,10 +311,7 @@ mod tests {
         let id = listener["id"].as_i64().unwrap() as i32;
         let pending = start("accept", json!({"id":id}), &[]);
         operations::OPERATIONS.cancel(pending);
-        assert_eq!(
-            metadata_error(&complete(pending, false))["code"],
-            "ECANCELLED"
-        );
+        assert_eq!(error_code(&complete(pending, false)), "ECANCELLED");
         close(id);
         let unclaimed = start("listen", json!({"host":"127.0.0.1","port":0}), &[]);
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
@@ -325,8 +322,11 @@ mod tests {
         operations::OPERATIONS.release(unclaimed);
         assert_eq!(lock(&SOCKETS).len(), baseline);
     }
-    fn metadata_error(wire: &[u8]) -> Value {
+    fn error_code(wire: &[u8]) -> String {
         assert_eq!(wire[0], 2);
-        serde_json::from_slice(&wire[1..]).unwrap()
+        dream_host_abi::wire::Reader::new(&wire[1..])
+            .text()
+            .unwrap()
+            .to_owned()
     }
 }

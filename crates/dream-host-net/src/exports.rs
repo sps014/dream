@@ -104,10 +104,10 @@ pub unsafe extern "C" fn netSocketControl(id: i32, request: DreamPtr) -> DreamPt
 }
 
 /// # Safety
-/// Request and bytes must identify readable guest string and byte-array payloads.
+/// Request and bytes must identify readable guest byte-array payloads.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn netWsStart(request: DreamPtr, bytes: DreamPtr) -> i32 {
-    crate::websocket::start(unsafe { read_string(request) }, unsafe {
+    crate::websocket::start(unsafe { dream_host_abi::read_bytes(request) }, unsafe {
         dream_host_abi::read_bytes(bytes)
     })
 }
@@ -117,10 +117,10 @@ pub extern "C" fn netWsClose(id: i32) {
 }
 
 /// # Safety
-/// Request and bytes must identify readable guest string and byte-array payloads.
+/// Request and bytes must identify readable guest byte-array payloads.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn httpServerStart(request: DreamPtr, bytes: DreamPtr) -> i32 {
-    crate::http_server::start(unsafe { read_string(request) }, unsafe {
+    crate::http_server::start(unsafe { dream_host_abi::read_bytes(request) }, unsafe {
         dream_host_abi::read_bytes(bytes)
     })
 }

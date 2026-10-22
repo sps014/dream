@@ -11,7 +11,7 @@
 # <factory> is the host-factory function defined by <file> (`-` when the chunk has
 # none; `workers` is wired inside load.js instead). Each <field> maps a WASM import
 # field to this chunk by prefix; a leading `=` marks an exact-match field.
-always features.js abi.js guest_contract.js platform.js binary.js urls.js core.js instance.js typed.js typed_imports.js marshal.js hosts/env.js
+always features.js abi.js guest_contract.js platform.js binary.js wire.js urls.js core.js instance.js typed.js typed_imports.js marshal.js hosts/env.js
 order async js cancellation fs net crypto console_process datetime_text window gpu audio audio_media audio_capture workers
 chunk async async.js -
 chunk js hosts/js.js makeJsHost js

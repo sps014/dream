@@ -8,8 +8,10 @@ public class WebApp {
     options: WebAppOptions;
     middlewares: List<Middleware>;
     routes: List<WebEndpoint>;
+
     // Compiled from `routes` once the app is frozen.
     table: RouteNode;
+
     server_handle: int;
     frozen: bool;
     requests: Map<int, Future<void>>;
@@ -197,8 +199,11 @@ public class WebApp {
         let id = app.server_handle;
         if id > 0 {
             let cleanup = CancellationSource();
-            WebOperation.submit(WebOperation.request("wait", id), [], Option.Some(cleanup.token))
-                .await;
+            WebOperation.submit(
+                WebOperation.request(WebAction.Wait, id),
+                [],
+                Option.Some(cleanup.token)
+            ).await;
             WebApp.close_host(id);
             app.server_handle = 0;
         }
@@ -216,14 +221,12 @@ public class WebApp {
     }
 
     internal static fun response_request(
-        action: string,
+        action: WebAction,
         req_id: int,
         response: HttpOutgoing
-    ): JsonValue {
+    ): WireWriter {
         let request = WebOperation.request(action, req_id);
-        request["status"] = JsonValue.from_int(response.status);
-        let headers = response.headers.to_json();
-        request["headers"] = headers;
+        WebOperation.response_head(request, response);
         return request;
     }
 
@@ -249,7 +252,11 @@ public class WebApp {
         req: HttpIncoming,
         source: CancellationSource
     ): void {
-        WebOperation.submit(WebOperation.request("disconnect", req.req_id), [], Option.None).await;
+        WebOperation.submit(
+            WebOperation.request(WebAction.Disconnect, req.req_id),
+            [],
+            Option.None
+        ).await;
         source.cancel();
     }
 
@@ -318,7 +325,7 @@ public class WebApp {
                 bytes = Encoding.utf8_encode(response.body);
             }
             WebOperation.submit(
-                WebApp.response_request("respond", ctx.incoming.req_id, response),
+                WebApp.response_request(WebAction.Respond, ctx.incoming.req_id, response),
                 bytes,
                 ctx.cancellation_token
             ).await;
@@ -349,20 +356,21 @@ public class WebApp {
 
     static async fun serve(app: WebApp, id: int, token: Option<CancellationToken>): void {
         while true {
-            let operation = WebOperation.start(WebOperation.request("accept", id), []);
+            let operation = WebOperation.start(WebOperation.request(WebAction.Accept, id), []);
             let result = operation.wait(token).await;
             if result.is_err() {
                 app.shutdown();
                 return;
             }
-            let metadata = WebOperation.parse(result.unwrap());
-            if metadata.is_err() {
+            let metadata = WireReader(result.unwrap(), 0);
+            let version = metadata.u8();
+            let req = HttpIncoming(metadata);
+            operation.claim();
+            operation.close();
+            if version != 1 || !metadata.at_end() {
                 app.shutdown();
                 return;
             }
-            let req = HttpIncoming(metadata.unwrap());
-            operation.claim();
-            operation.close();
             let handler = WebApp.handle(app, req);
             app.requests[req.req_id] = handler;
             Promise.start(handler);
@@ -416,24 +424,20 @@ public class WebApp {
             }
             app.started_hooks++;
         }
-        let request = WebOperation.request("listen", 0);
-        request["host"] = JsonValue.from_string(host);
-        request["port"] = JsonValue.from_int(port);
-        request["config"] = config.to_json();
+        let request = WebOperation.request(WebAction.Listen, 0);
+        request.text(host);
+        request.i32(port);
+        config.write_wire(request);
         let operation = WebOperation.start(request, []);
         let result = operation.wait(effective).await;
         if result.is_err() {
             WebApp.finish_lifespan(app).await;
             return Result.Err(result.unwrap_err());
         }
-        let parsed = WebOperation.parse(result.unwrap());
-        if parsed.is_err() {
-            WebApp.finish_lifespan(app).await;
-            return Result.Err(parsed.unwrap_err());
-        }
-        let metadata = parsed.unwrap();
-        let id = metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0);
-        if id <= 0 {
+        let metadata = WireReader(result.unwrap(), 0);
+        let id = metadata.i32();
+        let bound = metadata.i32();
+        if id <= 0 || !metadata.at_end() {
             WebApp.finish_lifespan(app).await;
             return Result.Err(IoError.other("", "invalid HTTP server handle"));
         }
@@ -443,7 +447,7 @@ public class WebApp {
         let serving = WebApp.serve(app, id, effective);
         app.serving = Option.Some(serving);
         Promise.start(serving);
-        return Result.Ok(metadata.get("port").unwrap_or(JsonValue.null()).as_int().unwrap_or(0));
+        return Result.Ok(bound);
     }
 
     /// Listens with the default `ServerConfig` and waits until shutdown or cancellation.
@@ -492,12 +496,16 @@ public class WebApp {
             let components = Json.deserialize<JsonValue>(route.components)
                 .unwrap_or(JsonValue.dict());
             for (let key in components.get("schemas").unwrap_or(JsonValue.null()).keys()) {
-                schemas[key] = components.get("schemas").unwrap_or(JsonValue.null())
-                    .get(key).unwrap_or(JsonValue.null());
+                schemas[key] = components.get("schemas")
+                    .unwrap_or(JsonValue.null())
+                    .get(key)
+                    .unwrap_or(JsonValue.null());
             }
             for (let key in components.get("securitySchemes").unwrap_or(JsonValue.null()).keys()) {
-                security[key] = components.get("securitySchemes").unwrap_or(JsonValue.null())
-                    .get(key).unwrap_or(JsonValue.null());
+                security[key] = components.get("securitySchemes")
+                    .unwrap_or(JsonValue.null())
+                    .get(key)
+                    .unwrap_or(JsonValue.null());
             }
             let method = route.method.to_lower();
             let mounted = paths.get(route.path).unwrap_or(JsonValue.dict());
@@ -549,7 +557,9 @@ public class WebApp {
         settings["url"] = JsonValue.from_string(options.openapi_url);
         settings["dom_id"] = JsonValue.from_string("#swagger-ui");
         settings["deepLinking"] = JsonValue.from_bool(options.swagger.deep_linking);
-        settings["persistAuthorization"] = JsonValue.from_bool(options.swagger.persist_authorization);
+        settings["persistAuthorization"] = JsonValue.from_bool(
+            options.swagger.persist_authorization
+        );
         settings["tryItOutEnabled"] = JsonValue.from_bool(options.swagger.try_it_out_enabled);
         if !options.swagger.oauth_redirect_url.is_empty() {
             settings["oauth2RedirectUrl"] = JsonValue.from_string(

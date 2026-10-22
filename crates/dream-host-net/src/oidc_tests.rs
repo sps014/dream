@@ -84,8 +84,15 @@ async fn verifies_discovery_pkce_and_id_tokens() {
             });
         }
     });
-    let mut request = json!({"action":"oidc_begin","issuer":issuer,"client_id":"client","redirect_uri":"http://127.0.0.1/callback"});
-    let begin: Value = serde_json::from_slice(&execute(&request).await.unwrap().bytes).unwrap();
+    let request = |completion| OidcRequest {
+        issuer: &issuer,
+        client_id: "client",
+        client_secret: "",
+        redirect_uri: "http://127.0.0.1/callback",
+        completion,
+    };
+    let begin: serde_json::Value =
+        serde_json::from_slice(&execute(&request(None)).await.unwrap().bytes).unwrap();
     let url = url::Url::parse(begin["url"].as_str().unwrap()).unwrap();
     let params: std::collections::BTreeMap<_, _> = url.query_pairs().into_owned().collect();
     assert_eq!(params["code_challenge_method"], "S256");
@@ -96,23 +103,25 @@ async fn verifies_discovery_pkce_and_id_tokens() {
         "client".into(),
         false,
     );
-    request["action"] = json!("oidc_complete");
-    request["nonce"] = begin["nonce"].clone();
-    request["verifier"] = begin["verifier"].clone();
-    request["code"] = json!("code");
-    let result: Value = serde_json::from_slice(&execute(&request).await.unwrap().bytes).unwrap();
+    let nonce = begin["nonce"].as_str().unwrap();
+    let verifier = begin["verifier"].as_str().unwrap();
+    let complete = |nonce, verifier| {
+        request(Some(Completion {
+            code: "code",
+            nonce,
+            verifier,
+        }))
+    };
+    let result: serde_json::Value =
+        serde_json::from_slice(&execute(&complete(nonce, verifier)).await.unwrap().bytes).unwrap();
     assert_eq!(result["subject"], "external-user");
     assert_eq!(result["email_verified"], true);
-    request["nonce"] = json!("wrong-nonce");
-    assert!(execute(&request).await.is_err());
-    request["nonce"] = begin["nonce"].clone();
-    request["verifier"] = json!("wrong-verifier");
-    assert!(execute(&request).await.is_err());
-    request["verifier"] = begin["verifier"].clone();
+    assert!(execute(&complete("wrong-nonce", verifier)).await.is_err());
+    assert!(execute(&complete(nonce, "wrong-verifier")).await.is_err());
     expected.lock().unwrap().2 = "wrong-audience".into();
-    assert!(execute(&request).await.is_err());
+    assert!(execute(&complete(nonce, verifier)).await.is_err());
     expected.lock().unwrap().2 = "client".into();
     expected.lock().unwrap().3 = true;
-    assert!(execute(&request).await.is_err());
+    assert!(execute(&complete(nonce, verifier)).await.is_err());
     server.abort();
 }

@@ -1096,7 +1096,6 @@ name = "dream-host-abi"
 version = "0.1.0"
 dependencies = [
  "dream-abi",
- "serde_json",
  "tokio",
 ]
 

@@ -1,6 +1,10 @@
-use super::{close, start};
-use crate::{socket_operations as operations, websocket};
-use serde_json::{Value, json};
+use super::{close, listen::Action, start};
+use crate::{
+    socket_operations as operations,
+    websocket::{self, Action as Ws},
+};
+use dream_host_abi::wire::{Reader, VERSION, Writer};
+use serde_json::Value;
 use std::time::{Duration, Instant};
 
 fn wait(id: i32) -> Vec<u8> {
@@ -25,32 +29,106 @@ fn take(id: i32) -> Vec<u8> {
 fn metadata(bytes: Vec<u8>) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
-fn op(action: &str, id: i32, bytes: Vec<u8>) -> i32 {
-    start(
-        json!({"action":action,"id":id,"timeout_ms":5000}).to_string(),
-        bytes,
-    )
+fn header(action: u8, id: i32) -> Writer {
+    let mut writer = Writer::new();
+    writer.u8(VERSION).u8(action).i32(id).i32(5000);
+    writer
 }
-fn config(overrides: Value) -> Value {
-    let mut config = json!({
-        "ssl_certfile":"","ssl_keyfile":"","limit_concurrency":0,"backlog":2048,
-        "timeout_keep_alive_ms":5000,"timeout_graceful_shutdown_ms":0,"max_header_bytes":16384,
-        "ws_max_size":16777216,"ws_max_queue":32,"ws_ping_interval_ms":20000,"ws_ping_timeout_ms":20000
-    });
-    for (key, value) in overrides.as_object().unwrap() {
-        config[key] = value.clone();
+fn op(action: Action, id: i32, bytes: Vec<u8>) -> i32 {
+    start(header(action as u8, id).finish(), bytes)
+}
+fn ws(action: Ws, id: i32, bytes: Vec<u8>) -> i32 {
+    websocket::start(header(action as u8, id).finish(), bytes)
+}
+fn connect(port: u16) -> i32 {
+    let mut request = header(Ws::Connect as u8, 0);
+    request.text(&format!("ws://127.0.0.1:{port}/ws"));
+    websocket::start(request.finish(), vec![])
+}
+fn close_socket(id: i32, code: i32, reason: &str) -> i32 {
+    let mut request = header(Ws::Close as u8, id);
+    request.i32(code).text(reason);
+    websocket::start(request.finish(), vec![])
+}
+/// A receive completion as `(kind, text or bytes, close code)`.
+fn event(bytes: Vec<u8>) -> (u8, Vec<u8>, i32) {
+    let mut reader = Reader::new(&bytes);
+    let kind = reader.u8().unwrap();
+    let event = match kind {
+        1 => (kind, reader.text().unwrap().as_bytes().to_vec(), 0),
+        2 => (kind, reader.bytes().unwrap().to_vec(), 0),
+        _ => {
+            let code = reader.i32().unwrap();
+            (kind, reader.text().unwrap().as_bytes().to_vec(), code)
+        }
+    };
+    reader.finish().unwrap();
+    event
+}
+fn handle(bytes: Vec<u8>) -> i32 {
+    let mut reader = Reader::new(&bytes);
+    let id = reader.i32().unwrap();
+    reader.finish().unwrap();
+    id
+}
+struct Settings<'a> {
+    cert: &'a str,
+    key: &'a str,
+    limit_concurrency: i32,
+    keep_alive_ms: i32,
+    graceful_ms: i32,
+    max_header_bytes: i32,
+    ws_max_size: i32,
+    ping_interval_ms: i32,
+    ping_timeout_ms: i32,
+}
+impl Default for Settings<'_> {
+    fn default() -> Self {
+        Self {
+            cert: "",
+            key: "",
+            limit_concurrency: 0,
+            keep_alive_ms: 5000,
+            graceful_ms: 0,
+            max_header_bytes: 16384,
+            ws_max_size: 16777216,
+            ping_interval_ms: 20000,
+            ping_timeout_ms: 20000,
+        }
     }
-    config
 }
-fn listen_with(overrides: Value) -> (i32, u16) {
-    let meta = metadata(take(start(json!({"action":"listen","host":"127.0.0.1","port":0,"config":config(overrides),"timeout_ms":5000}).to_string(), vec![])));
-    (
-        meta["id"].as_i64().unwrap() as i32,
-        meta["port"].as_u64().unwrap() as u16,
-    )
+fn listen_operation(settings: Settings<'_>) -> i32 {
+    let mut request = header(Action::Listen as u8, 0);
+    request
+        .text("127.0.0.1")
+        .i32(0)
+        .text(settings.cert)
+        .text(settings.key)
+        .i32(settings.limit_concurrency)
+        .i32(2048)
+        .i32(settings.keep_alive_ms)
+        .i32(settings.graceful_ms)
+        .i32(settings.max_header_bytes)
+        .i32(settings.ws_max_size)
+        .i32(32)
+        .i32(settings.ping_interval_ms)
+        .i32(settings.ping_timeout_ms);
+    start(request.finish(), vec![])
+}
+fn listen_with(settings: Settings<'_>) -> (i32, u16) {
+    let bytes = take(listen_operation(settings));
+    let mut reader = Reader::new(&bytes);
+    let id = reader.i32().unwrap();
+    let port = u16::try_from(reader.i32().unwrap()).unwrap();
+    reader.finish().unwrap();
+    (id, port)
 }
 fn listen(cert: &str, key: &str) -> (i32, u16) {
-    listen_with(json!({"ssl_certfile":cert,"ssl_keyfile":key}))
+    listen_with(Settings {
+        cert,
+        key,
+        ..Settings::default()
+    })
 }
 fn client<T: Send + 'static>(
     work: impl std::future::Future<Output = T> + Send + 'static,
@@ -61,31 +139,37 @@ fn failure(operation: i32) -> String {
     let wire = wait(operation);
     assert_eq!(wire[0], 2, "{}", String::from_utf8_lossy(&wire));
     operations::OPERATIONS.release(operation);
-    serde_json::from_slice::<Value>(&wire[1..]).unwrap()["code"]
-        .as_str()
-        .unwrap()
-        .to_string()
+    Reader::new(&wire[1..]).text().unwrap().to_owned()
 }
-fn read_chunk(request: i32, max: u64) -> Vec<u8> {
-    take(start(
-        json!({"action":"body_read","id":request,"max_bytes":max,"timeout_ms":5000}).to_string(),
-        vec![],
-    ))
+fn read_chunk(request: i32, max: i32) -> Vec<u8> {
+    let mut operation = header(Action::BodyRead as u8, request);
+    operation.i32(max);
+    take(start(operation.finish(), vec![]))
 }
-fn form(request: i32, limits: Value) -> i32 {
-    let mut value = json!({"action":"form","id":request,"timeout_ms":5000,"max_files":1000,"max_fields":1000,"max_part_size":1048576});
-    for (key, limit) in limits.as_object().unwrap() {
-        value[key] = limit.clone();
-    }
-    start(value.to_string(), vec![])
+fn form(request: i32, max_files: i32, max_fields: i32, max_part_size: i32) -> i32 {
+    let mut operation = header(Action::Form as u8, request);
+    operation.i32(max_files).i32(max_fields).i32(max_part_size);
+    start(operation.finish(), vec![])
 }
+fn default_form(request: i32) -> i32 {
+    form(request, 1000, 1000, 1048576)
+}
+/// Starts the request record's id, after its version byte.
 fn accept(server: i32) -> i32 {
-    metadata(take(op("accept", server, vec![])))["id"]
-        .as_i64()
-        .unwrap() as i32
+    let record = take(op(Action::Accept, server, vec![]));
+    assert_eq!(record[0], VERSION);
+    Reader::new(&record[1..]).i32().unwrap()
 }
-fn respond(action: &str, id: i32, bytes: &[u8]) {
-    take(start(json!({"action":action,"id":id,"status":200,"headers":[["x-repeat","a"],["x-repeat","b"]],"timeout_ms":5000}).to_string(), bytes.to_vec()));
+fn respond(action: Action, id: i32, bytes: &[u8]) {
+    let mut operation = header(action as u8, id);
+    operation
+        .i32(200)
+        .i32(2)
+        .text("x-repeat")
+        .text("a")
+        .text("x-repeat")
+        .text("b");
+    take(start(operation.finish(), bytes.to_vec()));
 }
 #[test]
 fn round_trip_multipart_and_backpressured_streaming() {
@@ -99,41 +183,32 @@ fn round_trip_multipart_and_backpressured_streaming() {
     })
     });
     let request = accept(server);
-    let parts = metadata(take(form(request, json!({}))));
+    let parts = metadata(take(default_form(request)));
     assert_eq!(parts["fields"][0]["name"], "title");
     assert_eq!(parts["fields"][0]["value"], "hello");
     let file = &parts["files"][0];
     assert_eq!(file["filename"], "a.txt");
     assert_eq!(file["size"], 9);
     let upload = file["handle"].as_i64().unwrap() as i32;
-    let read = |max: i64| {
-        take(start(
-            json!({"action":"upload_read","id":upload,"max_bytes":max,"timeout_ms":5000})
-                .to_string(),
-            vec![],
-        ))
+    let read_operation = |max: i32| {
+        let mut operation = header(Action::UploadRead as u8, upload);
+        operation.i32(max);
+        start(operation.finish(), vec![])
     };
+    let read = |max: i32| take(read_operation(max));
     assert_eq!(read(4), b"file");
     assert_eq!(read(-1), b" data");
-    take(start(
-        json!({"action":"upload_seek","id":upload,"offset":5,"timeout_ms":5000}).to_string(),
-        vec![],
-    ));
+    let mut seek = header(Action::UploadSeek as u8, upload);
+    seek.i64(5);
+    take(start(seek.finish(), vec![]));
     assert_eq!(read(-1), b"data");
-    respond("stream_begin", request, b"");
-    take(op("stream_write", request, b"one".to_vec()));
-    take(op("stream_write", request, b"two".to_vec()));
-    take(op("stream_end", request, vec![]));
+    respond(Action::StreamBegin, request, b"");
+    take(op(Action::StreamWrite, request, b"one".to_vec()));
+    take(op(Action::StreamWrite, request, b"two".to_vec()));
+    take(op(Action::StreamEnd, request, vec![]));
     client.join().unwrap();
     super::release(request);
-    assert_eq!(
-        failure(start(
-            json!({"action":"upload_read","id":upload,"max_bytes":1,"timeout_ms":5000})
-                .to_string(),
-            vec![],
-        )),
-        "ECLOSED"
-    );
+    assert_eq!(failure(read_operation(1)), "ECLOSED");
     close(server);
 }
 #[test]
@@ -145,15 +220,27 @@ fn bodies_are_uncapped_cached_and_streamed_once() {
         let url = format!("http://127.0.0.1:{port}/");
         let http = reqwest::Client::new();
         let first = http.post(&url).body(sent).send().await.unwrap().status();
-        let second = http.post(&url).body("streamed").send().await.unwrap().status();
+        let second = http
+            .post(&url)
+            .body("streamed")
+            .send()
+            .await
+            .unwrap()
+            .status();
         (first, second)
     });
     let request = accept(server);
-    assert_eq!(take(op("read_body", request, vec![])).len(), large.len());
+    assert_eq!(
+        take(op(Action::ReadBody, request, vec![])).len(),
+        large.len()
+    );
     assert_eq!(read_chunk(request, 1 << 30).len(), large.len());
     assert!(read_chunk(request, 16).is_empty());
-    assert_eq!(take(op("read_body", request, vec![])).len(), large.len());
-    respond("respond", request, b"");
+    assert_eq!(
+        take(op(Action::ReadBody, request, vec![])).len(),
+        large.len()
+    );
+    respond(Action::Respond, request, b"");
     super::release(request);
     let request = accept(server);
     let mut streamed = Vec::new();
@@ -166,8 +253,8 @@ fn bodies_are_uncapped_cached_and_streamed_once() {
         streamed.extend(chunk);
     }
     assert_eq!(streamed, b"streamed");
-    assert_eq!(failure(op("read_body", request, vec![])), "ECLOSED");
-    respond("respond", request, b"");
+    assert_eq!(failure(op(Action::ReadBody, request, vec![])), "ECLOSED");
+    respond(Action::Respond, request, b"");
     super::release(request);
     let (first, second) = poster.join().unwrap();
     assert_eq!((first.as_u16(), second.as_u16()), (200, 200));
@@ -180,7 +267,9 @@ fn form_limits_reject_overflow() {
         format!("--b\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n")
     };
     let file = |name: &str| {
-        format!("--b\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{name}.bin\"\r\n\r\nx\r\n")
+        format!(
+            "--b\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{name}.bin\"\r\n\r\nx\r\n"
+        )
     };
     let bodies = vec![
         format!("{}{}--b--\r\n", field("a", "1"), field("b", "2")),
@@ -198,14 +287,15 @@ fn form_limits_reject_overflow() {
                 .unwrap();
         }
     });
-    for limits in [
-        json!({"max_fields":1}),
-        json!({"max_files":1}),
-        json!({"max_part_size":16}),
-    ] {
+    for (max_files, max_fields, max_part_size) in
+        [(1000, 1, 1048576), (1, 1000, 1048576), (1000, 1000, 16)]
+    {
         let request = accept(server);
-        assert_eq!(failure(form(request, limits)), "EINVAL");
-        respond("respond", request, b"");
+        assert_eq!(
+            failure(form(request, max_files, max_fields, max_part_size)),
+            "EINVAL"
+        );
+        respond(Action::Respond, request, b"");
         super::release(request);
     }
     poster.join().unwrap();
@@ -215,7 +305,9 @@ fn form_limits_reject_overflow() {
 fn large_file_parts_spool_to_disk_until_release() {
     let (server, port) = listen("", "");
     let poster = client(async move {
-        let mut body = b"--b\r\nContent-Disposition: form-data; name=\"f\"; filename=\"big.bin\"\r\n\r\n".to_vec();
+        let mut body =
+            b"--b\r\nContent-Disposition: form-data; name=\"f\"; filename=\"big.bin\"\r\n\r\n"
+                .to_vec();
         body.extend(std::iter::repeat_n(9u8, 3 << 20));
         body.extend_from_slice(b"\r\n--b--\r\n");
         reqwest::Client::new()
@@ -229,11 +321,11 @@ fn large_file_parts_spool_to_disk_until_release() {
             .as_u16()
     });
     let request = accept(server);
-    let parts = metadata(take(form(request, json!({}))));
+    let parts = metadata(take(default_form(request)));
     assert_eq!(parts["files"][0]["size"], 3 << 20);
     let handle = parts["files"][0]["handle"].as_i64().unwrap() as i32;
     assert!(super::state::lock(&super::state::upload(handle).unwrap()).is_rolled());
-    respond("respond", request, b"");
+    respond(Action::Respond, request, b"");
     super::release(request);
     assert!(super::state::upload(handle).is_err());
     assert_eq!(poster.join().unwrap(), 200);
@@ -242,9 +334,15 @@ fn large_file_parts_spool_to_disk_until_release() {
 #[test]
 fn websocket_ping_timeout_closes_silent_peer() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let (server, port) = listen_with(json!({"ws_ping_interval_ms":50,"ws_ping_timeout_ms":100}));
+    let (server, port) = listen_with(Settings {
+        ping_interval_ms: 50,
+        ping_timeout_ms: 100,
+        ..Settings::default()
+    });
     let peer = client(async move {
-        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
         stream.write_all(b"GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").await.unwrap();
         let mut sink = vec![0u8; 4096];
         let _ = tokio::time::timeout(Duration::from_secs(3), async {
@@ -253,14 +351,9 @@ fn websocket_ping_timeout_closes_silent_peer() {
         .await;
     });
     let request = accept(server);
-    let socket = metadata(take(op("upgrade", request, vec![])))["id"]
-        .as_i64()
-        .unwrap() as i32;
-    let message = metadata(take(websocket::start(
-        json!({"action":"receive","id":socket,"timeout_ms":5000}).to_string(),
-        vec![],
-    )));
-    assert_eq!(message["code"], 1011);
+    let socket = handle(take(op(Action::Upgrade, request, vec![])));
+    let (kind, _, code) = event(take(ws(Ws::Receive, socket, vec![])));
+    assert_eq!((kind, code), (3, 1011));
     websocket::close(socket);
     super::release(request);
     peer.join().unwrap();
@@ -268,7 +361,10 @@ fn websocket_ping_timeout_closes_silent_peer() {
 }
 #[test]
 fn concurrency_limit_answers_503() {
-    let (server, port) = listen_with(json!({"limit_concurrency":1}));
+    let (server, port) = listen_with(Settings {
+        limit_concurrency: 1,
+        ..Settings::default()
+    });
     let first = client(async move {
         reqwest::get(format!("http://127.0.0.1:{port}/slow"))
             .await
@@ -285,7 +381,7 @@ fn concurrency_limit_answers_503() {
             .as_u16()
     });
     assert_eq!(second.join().unwrap(), 503);
-    respond("respond", request, b"");
+    respond(Action::Respond, request, b"");
     super::release(request);
     assert_eq!(first.join().unwrap(), 200);
     close(server);
@@ -293,19 +389,35 @@ fn concurrency_limit_answers_503() {
 #[test]
 fn oversized_headers_and_idle_connections_are_closed() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let (server, port) = listen_with(json!({"max_header_bytes":8192,"timeout_keep_alive_ms":200}));
+    let (server, port) = listen_with(Settings {
+        max_header_bytes: 8192,
+        keep_alive_ms: 200,
+        ..Settings::default()
+    });
     let probe = client(async move {
-        let mut big = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        let request = format!("GET / HTTP/1.1\r\nHost: x\r\nX-Big: {}\r\n\r\n", "a".repeat(20000));
+        let mut big = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        let request = format!(
+            "GET / HTTP/1.1\r\nHost: x\r\nX-Big: {}\r\n\r\n",
+            "a".repeat(20000)
+        );
         let _ = big.write_all(request.as_bytes()).await;
         let mut reply = Vec::new();
         let _ = big.read_to_end(&mut reply).await;
-        let rejected = reply.is_empty() || String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 431");
-        let mut idle = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let rejected =
+            reply.is_empty() || String::from_utf8_lossy(&reply).starts_with("HTTP/1.1 431");
+        let mut idle = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
         let started = Instant::now();
         let mut byte = [0u8; 1];
         let closed = tokio::time::timeout(Duration::from_secs(5), idle.read(&mut byte)).await;
-        (rejected, matches!(closed, Ok(Ok(0)) | Ok(Err(_))), started.elapsed())
+        (
+            rejected,
+            matches!(closed, Ok(Ok(0)) | Ok(Err(_))),
+            started.elapsed(),
+        )
     });
     let (rejected, closed, elapsed) = probe.join().unwrap();
     assert!(rejected);
@@ -316,7 +428,10 @@ fn oversized_headers_and_idle_connections_are_closed() {
 #[test]
 fn graceful_shutdown_waits_and_times_out() {
     for (graceful, expect_ok) in [(0, true), (200, false)] {
-        let (server, port) = listen_with(json!({"timeout_graceful_shutdown_ms":graceful}));
+        let (server, port) = listen_with(Settings {
+            graceful_ms: graceful,
+            ..Settings::default()
+        });
         let pending = client(async move {
             reqwest::get(format!("http://127.0.0.1:{port}/"))
                 .await
@@ -324,12 +439,12 @@ fn graceful_shutdown_waits_and_times_out() {
                 .is_ok()
         });
         let request = accept(server);
-        let waiting = op("wait", server, vec![]);
-        take(op("shutdown", server, vec![]));
+        let waiting = op(Action::Wait, server, vec![]);
+        take(op(Action::Shutdown, server, vec![]));
         if expect_ok {
             std::thread::sleep(Duration::from_millis(100));
             assert_eq!(operations::OPERATIONS.result(waiting)[0], 0);
-            respond("respond", request, b"done");
+            respond(Action::Respond, request, b"done");
         }
         take(waiting);
         assert_eq!(pending.join().unwrap(), expect_ok);
@@ -339,38 +454,26 @@ fn graceful_shutdown_waits_and_times_out() {
 }
 #[test]
 fn server_websocket_limits_and_shutdown_close() {
-    let (server, port) = listen_with(json!({"ws_max_size":16}));
-    let connect = |port: u16| {
-        websocket::start(
-            json!({"action":"connect","url":format!("ws://127.0.0.1:{port}/ws"),"timeout_ms":5000})
-                .to_string(),
-            vec![],
-        )
-    };
-    let ws = |action: &str, id: i32, bytes: Vec<u8>| {
-        websocket::start(
-            json!({"action":action,"id":id,"timeout_ms":5000}).to_string(),
-            bytes,
-        )
-    };
+    let (server, port) = listen_with(Settings {
+        ws_max_size: 16,
+        ..Settings::default()
+    });
     let mut sockets = Vec::new();
     for _ in 0..2 {
         let connecting = connect(port);
         let request = accept(server);
-        let server_socket = metadata(take(op("upgrade", request, vec![])))["id"]
-            .as_i64()
-            .unwrap() as i32;
-        let client_socket = metadata(take(connecting))["id"].as_i64().unwrap() as i32;
+        let server_socket = handle(take(op(Action::Upgrade, request, vec![])));
+        let client_socket = handle(take(connecting));
         sockets.push((request, server_socket, client_socket));
     }
     let (_, big_server, big_client) = sockets[0];
-    take(ws("send_binary", big_client, vec![0; 64]));
-    let message = metadata(take(ws("receive", big_server, vec![])));
-    assert_eq!((message["kind"].as_str(), message["code"].as_u64()), (Some("close"), Some(1009)));
+    take(ws(Ws::SendBinary, big_client, vec![0; 64]));
+    let (kind, _, code) = event(take(ws(Ws::Receive, big_server, vec![])));
+    assert_eq!((kind, code), (3, 1009));
     let (_, _, restart_client) = sockets[1];
-    take(op("shutdown", server, vec![]));
-    let message = metadata(take(ws("receive", restart_client, vec![])));
-    assert_eq!((message["kind"].as_str(), message["code"].as_u64()), (Some("close"), Some(1012)));
+    take(op(Action::Shutdown, server, vec![]));
+    let (kind, _, code) = event(take(ws(Ws::Receive, restart_client, vec![])));
+    assert_eq!((kind, code), (3, 1012));
     for (request, server_socket, client_socket) in sockets {
         websocket::close(client_socket);
         websocket::close(server_socket);
@@ -402,52 +505,39 @@ fn tls_valid_certificate_and_invalid_configuration() {
         })
     });
     let request = accept(server);
-    respond("respond", request, b"secure");
+    respond(Action::Respond, request, b"secure");
     super::release(request);
     client.join().unwrap();
     close(server);
-    let wire = wait(start(json!({"action":"listen","host":"127.0.0.1","port":0,"config":config(json!({"ssl_certfile":cert_path})),"timeout_ms":5000}).to_string(), vec![]));
-    assert_eq!(wire[0], 2);
-    assert_eq!(
-        serde_json::from_slice::<Value>(&wire[1..]).unwrap()["code"],
-        "EINVAL"
-    );
+    let invalid = listen_operation(Settings {
+        cert: cert_path.to_str().unwrap(),
+        ..Settings::default()
+    });
+    assert_eq!(failure(invalid), "EINVAL");
 }
 #[test]
 fn websocket_upgrade_echo_close_and_handshake_validation() {
     let (server, port) = listen("", "");
-    let connecting = websocket::start(
-        json!({"action":"connect","url":format!("ws://127.0.0.1:{port}/ws"),"timeout_ms":5000})
-            .to_string(),
-        vec![],
-    );
+    let connecting = connect(port);
     let request = accept(server);
-    let server_socket = metadata(take(op("upgrade", request, vec![])))["id"]
-        .as_i64()
-        .unwrap() as i32;
-    let client_socket = metadata(take(connecting))["id"].as_i64().unwrap() as i32;
-    let ws = |action: &str, id, bytes| {
-        websocket::start(
-            json!({"action":action,"id":id,"code":1000,"reason":"done","timeout_ms":5000})
-                .to_string(),
-            bytes,
-        )
-    };
-    take(ws("send_text", client_socket, b"hello".to_vec()));
+    let server_socket = handle(take(op(Action::Upgrade, request, vec![])));
+    let client_socket = handle(take(connecting));
+    take(ws(Ws::SendText, client_socket, b"hello".to_vec()));
     assert_eq!(
-        metadata(take(ws("receive", server_socket, vec![])))["text"],
-        "hello"
+        event(take(ws(Ws::Receive, server_socket, vec![]))),
+        (1, b"hello".to_vec(), 0)
     );
-    take(ws("send_binary", server_socket, vec![0, 127, 255]));
+    take(ws(Ws::SendBinary, server_socket, vec![0, 127, 255]));
     assert_eq!(
-        metadata(take(ws("receive", client_socket, vec![])))["bytes"],
-        json!([0, 127, 255])
+        event(take(ws(Ws::Receive, client_socket, vec![]))),
+        (2, vec![0, 127, 255], 0)
     );
-    take(ws("close", client_socket, vec![]));
-    let message = metadata(take(ws("receive", server_socket, vec![])));
-    assert_eq!(message["kind"], "close");
-    assert_eq!(message["code"], 1000);
-    take(op("disconnect", request, vec![]));
+    take(close_socket(client_socket, 1000, "done"));
+    assert_eq!(
+        event(take(ws(Ws::Receive, server_socket, vec![]))),
+        (3, b"done".to_vec(), 1000)
+    );
+    take(op(Action::Disconnect, request, vec![]));
     websocket::close(client_socket);
     websocket::close(server_socket);
     super::release(request);
@@ -460,11 +550,11 @@ fn websocket_upgrade_echo_close_and_handshake_validation() {
         })
     });
     let request = accept(server);
-    let operation = op("upgrade", request, vec![]);
+    let operation = op(Action::Upgrade, request, vec![]);
     let wire = wait(operation);
     assert_eq!(wire[0], 2);
     operations::OPERATIONS.release(operation);
-    respond("respond", request, b"not a WebSocket");
+    respond(Action::Respond, request, b"not a WebSocket");
     assert_eq!(ordinary.join().unwrap(), 200);
     super::release(request);
     close(server);
@@ -472,17 +562,11 @@ fn websocket_upgrade_echo_close_and_handshake_validation() {
 #[test]
 fn cancellation_and_unclaimed_resource_release() {
     let (server, _) = listen("", "");
-    let operation = op("accept", server, vec![]);
+    let operation = op(Action::Accept, server, vec![]);
     operations::OPERATIONS.cancel(operation);
-    let wire = wait(operation);
-    assert_eq!(wire[0], 2);
-    assert_eq!(
-        serde_json::from_slice::<Value>(&wire[1..]).unwrap()["code"],
-        "ECANCELLED"
-    );
-    operations::OPERATIONS.release(operation);
-    let waiting = op("wait", server, vec![]);
-    take(op("shutdown", server, vec![]));
+    assert_eq!(failure(operation), "ECANCELLED");
+    let waiting = op(Action::Wait, server, vec![]);
+    take(op(Action::Shutdown, server, vec![]));
     take(waiting);
     close(server);
 }

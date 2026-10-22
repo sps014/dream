@@ -119,6 +119,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/form_data.dream"),
         ),
         (
+            "<std>/system/webapi/web_action.dream",
+            include_str!("../system/webapi/web_action.dream"),
+        ),
+        (
             "<std>/system/webapi/web_operation.dream",
             include_str!("../system/webapi/web_operation.dream"),
         ),

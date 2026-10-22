@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import { makeHttpHost } from "../runtime/src/hosts/http.js";
+import { WireReader } from "../runtime/src/wire.js";
 
 async function awaitWire(host, id) {
   let timer;
@@ -17,7 +18,10 @@ async function awaitWire(host, id) {
     return wire;
   } finally { clearTimeout(timer); }
 }
-function decode(wire) { return JSON.parse(new TextDecoder().decode(Uint8Array.from(wire.slice(1)))); }
+function decode(wire) {
+  if (wire[0] === 2) { const reader = new WireReader(wire.slice(1)); return { code: reader.text(), message: reader.text() }; }
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(wire.slice(1))));
+}
 
 test("Fetch streams, redirects, deadlines, repeated headers and operation disposal", async () => {
   const sockets = new Set();

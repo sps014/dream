@@ -1,0 +1,138 @@
+module system.core;
+
+/// Reads a little-endian record written by a native host in the `WireWriter` layout. A read
+/// past the end or a malformed length yields a zero value and clears `ok`, so callers check
+/// `ok` once after decoding every field.
+internal class WireReader {
+    bytes: byte[];
+    at: int;
+
+    /// False once any read ran past the end of the record.
+    internal ok: bool;
+
+    /// Reads `bytes` from byte offset `start`.
+    internal constructor(bytes: byte[], start: int) {
+        this.ok = start >= 0 && start <= bytes.length;
+        this.bytes = bytes;
+        this.at = start;
+    }
+
+    fun take(count: int): int {
+        if !this.ok || count < 0 || count > this.bytes.length - this.at {
+            this.ok = false;
+            return -1;
+        }
+        let at = this.at;
+        this.at = this.at + count;
+        return at;
+    }
+
+    fun get(at: int): int {
+        return (int)this.bytes[at];
+    }
+
+    /// Whether every byte of the record has been read.
+    internal fun at_end(): bool {
+        return this.ok && this.at == this.bytes.length;
+    }
+
+    /// Reads one unsigned byte.
+    internal fun u8(): int {
+        let at = this.take(1);
+        return at < 0 ? 0 : this.get(at);
+    }
+
+    /// Reads four bytes as a signed 32-bit integer.
+    internal fun i32(): int {
+        let at = this.take(4);
+        if at < 0 {
+            return 0;
+        }
+        return this.get(at) | (this.get(at + 1) << 8) | (this.get(at + 2) << 16) | (
+            this.get(at + 3) << 24
+        );
+    }
+
+    /// Reads eight bytes as a signed 64-bit integer.
+    internal fun i64(): long {
+        let low = (long)this.i32() & 4294967295L;
+        return low | ((long)this.i32() << 32);
+    }
+
+    /// Reads a 32-bit byte length and that many bytes.
+    internal fun bytes_field(): byte[] {
+        let length = this.i32();
+        let at = this.take(length);
+        if at < 0 {
+            return Buffer.alloc<byte>(0);
+        }
+        return this.bytes.slice(at, at + length);
+    }
+
+    /// Reads a 32-bit byte length and that many UTF-8 bytes as a string. Malformed sequences
+    /// become U+FFFD.
+    internal fun text(): string {
+        let length = this.i32();
+        let at = this.take(length);
+        if at < 0 {
+            return "";
+        }
+        let end = at + length;
+        let units = 0;
+        let i = at;
+        while i < end {
+            let width = WireReader.width(this.get(i));
+            units = units + (width == 4 && i + 4 <= end ? 2 : 1);
+            i = i + (i + width <= end ? width : 1);
+        }
+        let out = string.alloc(units);
+        let u = 0;
+        i = at;
+        while i < end {
+            let lead = this.get(i);
+            let width = WireReader.width(lead);
+            if i + width > end {
+                width = 1;
+                lead = 255;
+            }
+            let cp = 65533;
+            if width == 1 {
+                cp = lead < 128 ? lead : 65533;
+            } else if width == 2 {
+                cp = ((lead & 31) << 6) | (this.get(i + 1) & 63);
+            } else if width == 3 {
+                cp = ((lead & 15) << 12) | ((this.get(i + 1) & 63) << 6) | (this.get(i + 2) & 63);
+            } else {
+                cp = ((lead & 7) << 18) | ((this.get(i + 1) & 63) << 12) | (
+                    (this.get(i + 2) & 63) << 6
+                ) | (this.get(i + 3) & 63);
+            }
+            if cp >= 65536 {
+                cp = cp - 65536;
+                string.set(out, u, (char)(55296 + (cp >> 10)));
+                string.set(out, u + 1, (char)(56320 + (cp & 1023)));
+                u = u + 2;
+            } else {
+                string.set(out, u, (char)cp);
+                u = u + 1;
+            }
+            i = i + width;
+        }
+        return out;
+    }
+
+    // Byte length of the sequence a UTF-8 lead byte starts; continuation and invalid lead
+    // bytes count as one replaced byte.
+    static fun width(lead: int): int {
+        if lead < 192 {
+            return 1;
+        }
+        if lead < 224 {
+            return 2;
+        }
+        if lead < 240 {
+            return 3;
+        }
+        return lead < 248 ? 4 : 1;
+    }
+}

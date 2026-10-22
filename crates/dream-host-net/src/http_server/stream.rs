@@ -10,7 +10,6 @@ use hyper::{
     Response,
     body::{Body as HttpBody, Frame, SizeHint},
 };
-use serde_json::Value;
 use std::{
     convert::Infallible,
     pin::Pin,
@@ -51,7 +50,7 @@ pub(super) fn guard(response: Response<Body>, request: Arc<Request>) -> Response
     }
     response.map(|inner| GuardBody { inner, request }.boxed_unsync())
 }
-pub(super) fn begin(id: i32, value: &Value) -> Result<Output, Failure> {
+pub(super) fn begin(id: i32, args: &[u8]) -> Result<Output, Failure> {
     let request = state::request(id)?;
     let (sender, receiver) = mpsc::channel(8);
     let body = StreamBody::new(
@@ -59,7 +58,7 @@ pub(super) fn begin(id: i32, value: &Value) -> Result<Output, Failure> {
     )
     .boxed_unsync();
     let mut response = Response::new(body);
-    response::headers(&mut response, value)?;
+    response::head(&mut response, &mut dream_host_abi::wire::Reader::new(args))?;
     let reply = lock(&request.reply)
         .take()
         .ok_or_else(|| error("ECLOSED", "HTTP response already started"))?;

@@ -31,6 +31,13 @@ fn take(id: i32) -> Vec<u8> {
     http::release(id);
     wire
 }
+fn error_code(wire: &[u8]) -> String {
+    assert_eq!(wire[0], 2);
+    dream_host_abi::wire::Reader::new(&wire[1..])
+        .text()
+        .unwrap()
+        .to_owned()
+}
 fn json(wire: &[u8]) -> serde_json::Value {
     serde_json::from_slice(&wire[1..]).unwrap()
 }
@@ -116,13 +123,13 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
             vec![],
         ));
         assert_eq!(wire[0], 2);
-        assert_eq!(json(&wire)["code"], code);
+        assert_eq!(error_code(&wire), code);
     }
     let orphan = request(client, &server.url, "GET", 1000, 5, vec![]);
     let wire = wait(orphan);
     let body = json(&wire)["body"].as_i64().unwrap() as i32;
     http::release(orphan);
-    assert_eq!(json(&take(http::read(body, 1)))["code"], "ECLOSED");
+    assert_eq!(error_code(&take(http::read(body, 1))), "ECLOSED");
     let pending = request(
         client,
         &format!("{}/slow", server.url),
@@ -132,7 +139,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
         vec![],
     );
     http::client_close(client);
-    assert_eq!(json(&take(pending))["code"], "ECLOSED");
+    assert_eq!(error_code(&take(pending)), "ECLOSED");
     let client = http::client_create();
     let wire = take(request(
         client,
@@ -144,7 +151,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     ));
     let body = json(&wire)["body"].as_i64().unwrap() as i32;
     assert_eq!(take(http::read(body, 100)), b"\x01first");
-    assert_eq!(json(&take(http::read(body, 100)))["code"], "ETIMEOUT");
+    assert_eq!(error_code(&take(http::read(body, 100))), "ETIMEOUT");
     http::body_close(body);
     let wire = take(request(
         client,
@@ -205,7 +212,11 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     });
     let url = format!("https://localhost:{}", address.port());
     // Controlled trust stores avoid OS certificate lookup/network activity in this local fixture.
-    let resource = http::lock(http::registry()).clients.get(client).unwrap().clone();
+    let resource = http::lock(http::registry())
+        .clients
+        .get(client)
+        .unwrap()
+        .clone();
     let untrusted = {
         let _guard = crate::socket_operations::runtime().unwrap().enter();
         reqwest::Client::builder()
@@ -216,7 +227,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     http::lock(&resource.pools).insert((1000, 5), untrusted);
     let rejected = take(request(client, &url, "GET", 2000, 5, vec![]));
     assert_eq!(rejected[0], 2);
-    assert_eq!(json(&rejected)["code"], "ETRANSPORT");
+    assert_eq!(error_code(&rejected), "ETRANSPORT");
     let trusted = {
         let _guard = crate::socket_operations::runtime().unwrap().enter();
         reqwest::Client::builder()

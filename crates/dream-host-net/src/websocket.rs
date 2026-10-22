@@ -1,7 +1,9 @@
 use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
+use dream_host_abi::{
+    handles::HandleTable,
+    wire::{Header, Reader, Writer},
+};
 use futures_util::{Sink, SinkExt, StreamExt};
-use serde_json::{Value, json};
-use dream_host_abi::handles::HandleTable;
 use std::{
     pin::Pin,
     sync::{Arc, Mutex},
@@ -23,7 +25,7 @@ pub(crate) trait Transport: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Transport for T {}
 type Write = Pin<Box<dyn Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Send>>;
 struct Socket {
-    read: AsyncMutex<mpsc::Receiver<Result<Value, Failure>>>,
+    read: AsyncMutex<mpsc::Receiver<Result<Vec<u8>, Failure>>>,
     write: Arc<AsyncMutex<Write>>,
     closed: watch::Sender<bool>,
     reader: tokio::task::AbortHandle,
@@ -66,8 +68,40 @@ fn close_frame(code: u16, reason: &str) -> Message {
         reason: reason.into(),
     }))
 }
-fn closed_event(code: u16, reason: &str) -> Value {
-    json!({"kind":"close","code":code,"reason":reason})
+/// Operation codes from the guest's WebSocketAction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Action {
+    Connect = 1,
+    Receive = 2,
+    SendText = 3,
+    SendBinary = 4,
+    Close = 5,
+}
+impl Action {
+    fn decode(code: u8) -> Option<Self> {
+        [
+            Self::Connect,
+            Self::Receive,
+            Self::SendText,
+            Self::SendBinary,
+            Self::Close,
+        ]
+        .into_iter()
+        .find(|action| *action as u8 == code)
+    }
+}
+fn malformed(_: dream_host_abi::wire::Malformed) -> Failure {
+    error("EINVAL", "malformed WebSocket operation")
+}
+// Receive completions: [kind] then text (1), bytes (2), or a close code and reason (3).
+fn text_event(text: &str) -> Vec<u8> {
+    Writer::new().u8(1).text(text).finish()
+}
+fn binary_event(bytes: &[u8]) -> Vec<u8> {
+    Writer::new().u8(2).bytes(bytes).finish()
+}
+fn closed_event(code: u16, reason: &str) -> Vec<u8> {
+    Writer::new().u8(3).i32(code.into()).text(reason).finish()
 }
 fn register<S: Transport + 'static>(
     stream: WebSocketStream<S>,
@@ -119,12 +153,13 @@ fn register<S: Transport + 'static>(
                     break;
                 };
                 let output = match message {
-                    Ok(Message::Text(text)) => Ok(json!({"kind":"text","text":text.as_str()})),
-                    Ok(Message::Binary(bytes)) => {
-                        Ok(json!({"kind":"binary","bytes":bytes.to_vec()}))
-                    }
+                    Ok(Message::Text(text)) => Ok(text_event(text.as_str())),
+                    Ok(Message::Binary(bytes)) => Ok(binary_event(&bytes)),
                     Ok(Message::Close(frame)) => {
-                        let value = json!({"kind":"close","code":frame.as_ref().map(|f| u16::from(f.code)).unwrap_or(1005),"reason":frame.map(|f| f.reason.to_string()).unwrap_or_default()});
+                        let value = match frame {
+                            Some(frame) => closed_event(frame.code.into(), &frame.reason),
+                            None => closed_event(1005, ""),
+                        };
                         let _ = writer.lock().await.flush().await;
                         let _ = sender.send(Ok(value)).await;
                         break;
@@ -169,7 +204,7 @@ fn register<S: Transport + 'static>(
         .insert(socket)
         .ok_or_else(|| error("ELIMIT", "WebSocket capacity exhausted"))?;
     Ok(Output {
-        bytes: json!({"id":id}).to_string().into_bytes(),
+        bytes: Writer::new().i32(id).finish(),
         child: Some(OwnedResource::new(id, close)),
     })
 }
@@ -206,71 +241,85 @@ fn socket(id: i32) -> Result<Arc<Socket>, Failure> {
         .cloned()
         .ok_or_else(|| error("ECLOSED", "WebSocket is closed"))
 }
-pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
+pub(crate) fn start(request: Vec<u8>, bytes: Vec<u8>) -> i32 {
     operations::OPERATIONS.start(move |mut cancellation| async move {
-        let value: Value = serde_json::from_str(&request).map_err(|e| error("EINVAL", e))?;
-        let timeout = value["timeout_ms"]
-            .as_u64()
-            .filter(|&t| t <= i32::MAX as u64)
-            .ok_or_else(|| error("EINVAL", "invalid WebSocket timeout"))?;
-        let id = value["id"]
-            .as_i64()
-            .and_then(|i| i32::try_from(i).ok())
-            .unwrap_or(0);
+        let header = Reader::new(&request).header().map_err(malformed)?;
         let deadline = async {
-            if timeout == 0 {
+            if header.timeout_ms == 0 {
                 std::future::pending::<()>().await;
             } else {
-                tokio::time::sleep(Duration::from_millis(timeout)).await;
+                tokio::time::sleep(Duration::from_millis(header.timeout_ms.into())).await;
             }
         };
         if *cancellation.borrow() {
-            close(id);
+            close(header.id);
             return Err(error("ECANCELLED", "WebSocket operation cancelled"));
         }
         tokio::select! {
-            result = execute(value, bytes) => result,
-            _ = cancellation.changed() => { close(id); Err(error("ECANCELLED", "WebSocket operation cancelled")) },
-            _ = deadline => { close(id); Err(error("ETIMEOUT", "WebSocket deadline exceeded")) },
+            result = execute(header, &request[Header::LEN..], bytes) => result,
+            _ = cancellation.changed() => { close(header.id); Err(error("ECANCELLED", "WebSocket operation cancelled")) },
+            _ = deadline => { close(header.id); Err(error("ETIMEOUT", "WebSocket deadline exceeded")) },
         }
     })
 }
-async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
-    let action = value["action"].as_str().unwrap_or("");
-    if action == "connect" {
-        let url = value["url"]
-            .as_str()
-            .ok_or_else(|| error("EINVAL", "missing WebSocket URL"))?;
-        let parsed = url::Url::parse(url).map_err(|e| error("EINVAL", e))?;
-        if !matches!(parsed.scheme(), "ws" | "wss") {
-            return Err(error("EINVAL", "expected ws:// or wss:// URL"));
-        }
-        let host = match parsed
-            .host()
-            .ok_or_else(|| error("EINVAL", "missing WebSocket host"))?
-        {
-            url::Host::Domain(name) => name.to_string(),
-            url::Host::Ipv4(address) => address.to_string(),
-            url::Host::Ipv6(address) => address.to_string(),
-        };
-        let port = parsed
-            .port_or_known_default()
-            .ok_or_else(|| error("EINVAL", "missing WebSocket port"))?;
-        let tcp = tokio::net::TcpStream::connect((host.as_str(), port))
-            .await
-            .map_err(|e| error("EIO", e))?;
-        let (stream, _) =
-            tokio_tungstenite::client_async_tls(url, Box::new(tcp) as Box<dyn Transport>)
-                .await
-                .map_err(|e| error("EIO", e))?;
-        return register(stream, &Limits::CLIENT);
+async fn connect(url: &str) -> Result<Output, Failure> {
+    let parsed = url::Url::parse(url).map_err(|e| error("EINVAL", e))?;
+    if !matches!(parsed.scheme(), "ws" | "wss") {
+        return Err(error("EINVAL", "expected ws:// or wss:// URL"));
     }
-    let id = value["id"]
-        .as_i64()
-        .and_then(|i| i32::try_from(i).ok())
-        .ok_or_else(|| error("EINVAL", "invalid WebSocket id"))?;
-    let socket = socket(id)?;
-    if action == "receive" {
+    let host = match parsed
+        .host()
+        .ok_or_else(|| error("EINVAL", "missing WebSocket host"))?
+    {
+        url::Host::Domain(name) => name.to_string(),
+        url::Host::Ipv4(address) => address.to_string(),
+        url::Host::Ipv6(address) => address.to_string(),
+    };
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| error("EINVAL", "missing WebSocket port"))?;
+    let tcp = tokio::net::TcpStream::connect((host.as_str(), port))
+        .await
+        .map_err(|e| error("EIO", e))?;
+    let (stream, _) = tokio_tungstenite::client_async_tls(url, Box::new(tcp) as Box<dyn Transport>)
+        .await
+        .map_err(|e| error("EIO", e))?;
+    register(stream, &Limits::CLIENT)
+}
+async fn execute(header: Header, args: &[u8], bytes: Vec<u8>) -> Result<Output, Failure> {
+    let action =
+        Action::decode(header.action).ok_or_else(|| error("EINVAL", "unknown WebSocket action"))?;
+    let mut args = Reader::new(args);
+    if action == Action::Connect {
+        let url = args.text().map_err(malformed)?;
+        args.finish().map_err(malformed)?;
+        return connect(url).await;
+    }
+    let message = match action {
+        Action::Close => {
+            let code = u16::try_from(args.i32().map_err(malformed)?)
+                .map_err(|_| error("EINVAL", "invalid WebSocket close code"))?;
+            let reason = args.text().map_err(malformed)?;
+            let code = CloseCode::from(code);
+            if !code.is_allowed() || reason.len() > 123 {
+                return Err(error("EINVAL", "invalid WebSocket close frame"));
+            }
+            Some(Message::Close(Some(CloseFrame {
+                code,
+                reason: reason.into(),
+            })))
+        }
+        Action::SendText => Some(Message::Text(
+            String::from_utf8(bytes)
+                .map_err(|e| error("EINVAL", e))?
+                .into(),
+        )),
+        Action::SendBinary => Some(Message::Binary(bytes.into())),
+        Action::Receive | Action::Connect => None,
+    };
+    args.finish().map_err(malformed)?;
+    let socket = socket(header.id)?;
+    let Some(message) = message else {
         let mut read = socket
             .read
             .try_lock()
@@ -278,37 +327,13 @@ async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
         let message = read
             .recv()
             .await
-            .unwrap_or_else(|| Ok(json!({"kind":"close","code":1006,"reason":""})))?;
-        return Ok(Output::bytes(message.to_string().into_bytes()));
-    }
+            .unwrap_or_else(|| Ok(closed_event(1006, "")))?;
+        return Ok(Output::bytes(message));
+    };
     let mut closed = socket.closed.subscribe();
     if *closed.borrow() {
         return Err(error("ECLOSED", "WebSocket is closed"));
     }
-    let message = match action {
-        "send_text" => Message::Text(
-            String::from_utf8(bytes)
-                .map_err(|e| error("EINVAL", e))?
-                .into(),
-        ),
-        "send_binary" => Message::Binary(bytes.into()),
-        "close" => {
-            let code = value["code"]
-                .as_u64()
-                .and_then(|c| u16::try_from(c).ok())
-                .ok_or_else(|| error("EINVAL", "invalid WebSocket close code"))?;
-            let reason = value["reason"].as_str().unwrap_or("");
-            let code = CloseCode::from(code);
-            if !code.is_allowed() || reason.len() > 123 {
-                return Err(error("EINVAL", "invalid WebSocket close frame"));
-            }
-            Message::Close(Some(CloseFrame {
-                code,
-                reason: reason.into(),
-            }))
-        }
-        _ => return Err(error("EINVAL", "unknown WebSocket action")),
-    };
     let work = async {
         let mut write = socket
             .write

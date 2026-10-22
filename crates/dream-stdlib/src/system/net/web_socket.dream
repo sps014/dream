@@ -9,7 +9,7 @@ public class WebSocket {
     }
 
     @runtime("netWsStart")
-    static extern fun start_host(request: string, bytes: byte[]): int;
+    static extern fun start_host(request: byte[], bytes: byte[]): int;
 
     @runtime("netWsClose")
     static extern fun close_host(id: int): void;
@@ -31,11 +31,10 @@ public class WebSocket {
         if timeout_ms < 0 {
             return Result.Err(IoError.invalid("", "invalid WebSocket timeout"));
         }
-        let request = SocketState.request("connect", 0, timeout_ms);
-        request["url"] = JsonValue.from_string(url);
-        let operation = SocketOperation(WebSocket.start_host(Json.serialize(request), []));
-        let metadata = SocketState.parse(operation.wait(effective).await?)?;
-        let id = metadata["id"].as_int().unwrap_or(0);
+        let request = WebSocket.request(WebSocketAction.Connect, 0, timeout_ms);
+        request.text(url);
+        let operation = SocketOperation(WebSocket.start_host(request.finish(), []));
+        let id = WebSocket.handle(operation.wait(effective).await?);
         if id <= 0 {
             return Result.Err(IoError.other("", "invalid WebSocket handle"));
         }
@@ -52,7 +51,7 @@ public class WebSocket {
     ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
-            "send_text",
+            WebSocketAction.SendText,
             Encoding.utf8_encode(text),
             1000,
             "",
@@ -67,7 +66,7 @@ public class WebSocket {
     ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
-            "send_binary",
+            WebSocketAction.SendBinary,
             bytes,
             1000,
             "",
@@ -90,7 +89,7 @@ public class WebSocket {
     ): Future<Result<Unit, IoError>> {
         return WebSocket.send_owned(
             this,
-            "close",
+            WebSocketAction.Close,
             [],
             code,
             reason,
@@ -100,22 +99,24 @@ public class WebSocket {
 
     static async fun send_owned(
         socket: WebSocket,
-        action: string,
+        action: WebSocketAction,
         bytes: byte[],
         code: int,
         reason: string,
         token: Option<CancellationToken>
     ): Result<Unit, IoError> {
-        let request = SocketState.request(action, socket.id, 0);
-        request["code"] = JsonValue.from_int(code);
-        request["reason"] = JsonValue.from_string(reason);
+        let request = WebSocket.request(action, socket.id, 0);
+        if action == WebSocketAction.Close {
+            request.i32(code);
+            request.text(reason);
+        }
         WebSocket.submit(socket, request, bytes, token).await?;
         return Result.Ok(Unit());
     }
 
     static async fun submit(
         socket: WebSocket,
-        request: JsonValue,
+        request: WireWriter,
         bytes: byte[],
         token: Option<CancellationToken>
     ): Result<byte[], IoError> {
@@ -126,7 +127,7 @@ public class WebSocket {
         if socket.id <= 0 {
             return Result.Err(IoError.closed("WebSocket"));
         }
-        let operation = SocketOperation(WebSocket.start_host(Json.serialize(request), bytes));
+        let operation = SocketOperation(WebSocket.start_host(request.finish(), bytes));
         let result = operation.wait(token).await;
         operation.close();
         if result.is_err() && result.unwrap_err().code() == "ECANCELLED" {
@@ -148,32 +149,47 @@ public class WebSocket {
     ): Result<WebSocketMessage, IoError> {
         let bytes = WebSocket.submit(
             socket,
-            SocketState.request("receive", socket.id, 0),
+            WebSocket.request(WebSocketAction.Receive, socket.id, 0),
             [],
             token
         ).await?;
-        let message = SocketState.parse(bytes)?;
-        let kind = message["kind"].as_string().unwrap_or("");
-        if kind == "text" {
-            return Result.Ok(WebSocketMessage.Text(message["text"].as_string().unwrap_or("")));
+        return WebSocket.decode(bytes);
+    }
+
+    // The operation header layout and version are shared with dream_host_abi::wire::Header.
+    internal static fun request(action: WebSocketAction, id: int, timeout_ms: int): WireWriter {
+        let request = WireWriter(32);
+        request.u8(1);
+        request.u8(action);
+        request.i32(id);
+        request.i32(timeout_ms);
+        return request;
+    }
+
+    // A connect or upgrade completion: the new socket id, or zero when the record is malformed.
+    internal static fun handle(bytes: byte[]): int {
+        let reader = WireReader(bytes, 0);
+        let id = reader.i32();
+        return reader.at_end() ? id : 0;
+    }
+
+    // A receive completion: [kind] then text (1), bytes (2), or a close code and reason (3).
+    internal static fun decode(bytes: byte[]): Result<WebSocketMessage, IoError> {
+        let reader = WireReader(bytes, 0);
+        let kind = reader.u8();
+        let message = WebSocketMessage.Close(1006, "");
+        if kind == 1 {
+            message = WebSocketMessage.Text(reader.text());
+        } else if kind == 2 {
+            message = WebSocketMessage.Binary(reader.bytes_field());
+        } else if kind == 3 {
+            let code = reader.i32();
+            message = WebSocketMessage.Close(code, reader.text());
         }
-        if kind == "binary" {
-            let items = message["bytes"].as_array().unwrap_or(List<JsonValue>());
-            let output = Buffer.alloc<byte>(items.length);
-            for (let i = 0; i < output.length; i = i + 1) {
-                output[i] = (byte)items[i].as_int().unwrap_or(0);
-            }
-            return Result.Ok(WebSocketMessage.Binary(output));
+        if kind < 1 || kind > 3 || !reader.at_end() {
+            return Result.Err(IoError.other("", "invalid WebSocket message"));
         }
-        if kind == "close" {
-            return Result.Ok(
-                WebSocketMessage.Close(
-                    message["code"].as_int().unwrap_or(1006),
-                    message["reason"].as_string().unwrap_or("")
-                )
-            );
-        }
-        return Result.Err(IoError.other("", "invalid WebSocket message"));
+        return Result.Ok(message);
     }
 
     /// Iterates until Close, including the final closing message. Transport errors end iteration.

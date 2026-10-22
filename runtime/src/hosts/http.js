@@ -1,11 +1,12 @@
 import { isNode } from "../platform.js";
+import { wireFailure } from "../wire.js";
 
 const httpClients = new Map();
 const httpBodies = new Map();
 const httpOperations = new Map();
 let nextHttpHandle = 1;
 function httpError(code, message) { return { code, message }; }
-function httpWireError(error) { return [2, ...new TextEncoder().encode(JSON.stringify(error))]; }
+function httpWireError(error) { return wireFailure(error.code, error.message); }
 function httpNewOperation(work) {
   if (httpOperations.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
   const id = nextHttpHandle++;

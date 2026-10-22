@@ -17,8 +17,10 @@ public class ServerWebSocket {
     }
 
     internal static fun is_handshake(incoming: HttpIncoming): bool {
-        return incoming.method == "GET"
-            && incoming.headers.get("Upgrade").unwrap_or("").to_lower() == "websocket";
+        return incoming.method
+            == "GET" && incoming.headers.get("Upgrade")
+            .unwrap_or("")
+            .to_lower() == "websocket";
     }
 
     // The HTTP response for the handshake once the handler returns: an accepted socket has
@@ -44,7 +46,7 @@ public class ServerWebSocket {
 
     @native
     @runtime("netWsStart")
-    static extern fun start_host(request: string, bytes: byte[]): int;
+    static extern fun start_host(request: byte[], bytes: byte[]): int;
 
     @native
     @runtime("netWsClose")
@@ -75,11 +77,10 @@ public class ServerWebSocket {
             return Result.Err(IoError("", "EINVAL", "WebSocket was already accepted or closed"));
         }
         let operation = WebOperation.start(
-            WebOperation.request("upgrade", socket.incoming.req_id),
+            WebOperation.request(WebAction.Upgrade, socket.incoming.req_id),
             []
         );
-        let metadata = WebOperation.parse(operation.wait(token).await?)?;
-        socket.id = metadata.get("id").unwrap_or(JsonValue.null()).as_int().unwrap_or(0);
+        socket.id = WebSocket.handle(operation.wait(token).await?);
         operation.claim();
         operation.close();
         return Result.Ok(Unit());
@@ -87,7 +88,7 @@ public class ServerWebSocket {
 
     static async fun submit(
         socket: ServerWebSocket,
-        request: JsonValue,
+        request: WireWriter,
         bytes: byte[],
         token: Option<CancellationToken>
     ): Result<byte[], IoError> {
@@ -98,7 +99,7 @@ public class ServerWebSocket {
             ServerWebSocket.close_host(socket.id);
             return Result.Err(IoError.cancelled());
         }
-        let operation = WebOperation(ServerWebSocket.start_host(Json.serialize(request), bytes));
+        let operation = WebOperation(ServerWebSocket.start_host(request.finish(), bytes));
         let result = operation.wait(token).await;
         operation.close();
         if result.is_err() && result.unwrap_err().code() == "ECANCELLED" {
@@ -109,15 +110,17 @@ public class ServerWebSocket {
 
     static async fun send_owned(
         socket: ServerWebSocket,
-        action: string,
+        action: WebSocketAction,
         bytes: byte[],
         code: int,
         reason: string,
         token: Option<CancellationToken>
     ): Result<Unit, IoError> {
-        let request = WebOperation.request(action, socket.id);
-        request["code"] = JsonValue.from_int(code);
-        request["reason"] = JsonValue.from_string(reason);
+        let request = WebSocket.request(action, socket.id, 0);
+        if action == WebSocketAction.Close {
+            request.i32(code);
+            request.text(reason);
+        }
         ServerWebSocket.submit(socket, request, bytes, token).await?;
         return Result.Ok(Unit());
     }
@@ -130,7 +133,7 @@ public class ServerWebSocket {
     ): Future<Result<Unit, IoError>> {
         return ServerWebSocket.send_owned(
             this,
-            "send_text",
+            WebSocketAction.SendText,
             Encoding.utf8_encode(text),
             1000,
             "",
@@ -146,7 +149,7 @@ public class ServerWebSocket {
     ): Future<Result<Unit, IoError>> {
         return ServerWebSocket.send_owned(
             this,
-            "send_binary",
+            WebSocketAction.SendBinary,
             bytes,
             1000,
             "",
@@ -168,38 +171,11 @@ public class ServerWebSocket {
     ): Result<WebSocketMessage, IoError> {
         let bytes = ServerWebSocket.submit(
             socket,
-            WebOperation.request("receive", socket.id),
+            WebSocket.request(WebSocketAction.Receive, socket.id, 0),
             [],
             token
         ).await?;
-        let message = WebOperation.parse(bytes)?;
-        let kind = message.get("kind").unwrap_or(JsonValue.null()).as_string().unwrap_or("");
-        if kind == "text" {
-            return Result.Ok(
-                WebSocketMessage.Text(
-                    message.get("text").unwrap_or(JsonValue.null()).as_string().unwrap_or("")
-                )
-            );
-        }
-        if kind == "binary" {
-            let items = message.get("bytes").unwrap_or(JsonValue.null())
-                .as_array()
-                .unwrap_or(List<JsonValue>());
-            let bytes = Buffer.alloc<byte>(items.length);
-            for (let i = 0; i < bytes.length; i = i + 1) {
-                bytes[i] = (byte)items[i].as_int().unwrap_or(0);
-            }
-            return Result.Ok(WebSocketMessage.Binary(bytes));
-        }
-        if kind == "close" {
-            return Result.Ok(
-                WebSocketMessage.Close(
-                    message.get("code").unwrap_or(JsonValue.null()).as_int().unwrap_or(1006),
-                    message.get("reason").unwrap_or(JsonValue.null()).as_string().unwrap_or("")
-                )
-            );
-        }
-        return Result.Err(IoError.other("", "invalid WebSocket message"));
+        return WebSocket.decode(bytes);
     }
 
     /// Iterates messages through the final Close message.
@@ -257,7 +233,7 @@ public class ServerWebSocket {
         }
         return ServerWebSocket.send_owned(
             this,
-            "close",
+            WebSocketAction.Close,
             [],
             code,
             reason,

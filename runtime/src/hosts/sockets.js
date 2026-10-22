@@ -1,6 +1,7 @@
 import { isNode, getNodeNet } from "../platform.js";
 
 import { makeWebSocketService } from "./websocket.js";
+import { wireFailure } from "../wire.js";
 
 export function makeSocketHost() {
   const websocket = makeWebSocketService();
@@ -155,9 +156,10 @@ export function makeSocketHost() {
     }
     throw fail("EINVAL","operation does not match socket kind");
   }
-  function start(text, input, run = execute, dispose = close) {
+  function start(text, input, run = execute, dispose = close, parse = JSON.parse) {
       if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
       const bytes = Uint8Array.from(input || []);
+      const raw = typeof text === "string" ? text : Uint8Array.from(text || []);
       const id = ++nextOperation, abort = new AbortController();
       let done;
       const state = {abort,result:null,owned:0,dispose,released:false,done:new Promise(resolve=>{done=resolve;})};
@@ -165,7 +167,7 @@ export function makeSocketHost() {
       Promise.resolve().then(async () => {
         let timer;
         try {
-          const request = JSON.parse(text);
+          const request = parse(raw);
           if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw fail("EINVAL","invalid socket timeout");
           if (request.timeout_ms) timer = setTimeout(()=>abort.abort(fail("ETIMEOUT","socket operation deadline exceeded")),request.timeout_ms);
           const result = await run(request,bytes,abort.signal);
@@ -173,7 +175,7 @@ export function makeSocketHost() {
           if (abort.signal.aborted) throw abort.signal.reason || cancelled();
           state.result = [1,...result.bytes];
         } catch (error) {
-          state.result = [2,...encoder.encode(JSON.stringify({code:["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",message:error.message||"socket operation failed"}))];
+          state.result = wireFailure(["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",error.message||"socket operation failed");
         } finally {
           clearTimeout(timer);
           if (state.released && state.owned) dispose(state.owned);
@@ -184,7 +186,7 @@ export function makeSocketHost() {
   }
   return {
     netSocketStart: (text, input) => start(text, input),
-    netWsStart: (text, input) => start(text, input, websocket.execute, websocket.close),
+    netWsStart: (request, input) => start(request, input, websocket.execute, websocket.close, websocket.parse),
     netWsClose: id => websocket.close(id),
     async netSocketWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
     netSocketResult: id => operations.get(id)?.result || [0],

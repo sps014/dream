@@ -4,9 +4,10 @@ use super::{
 };
 use crate::socket_operations::{Failure, Output};
 use bytes::Bytes;
+use dream_host_abi::wire::Reader;
 use futures_util::{StreamExt, stream};
 use http_body_util::BodyDataStream;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{
     io::{Read, Seek, SeekFrom, Write},
     sync::{Arc, Mutex},
@@ -22,29 +23,33 @@ struct Limits {
     max_part_size: usize,
 }
 
-fn limit(value: &Value, name: &str) -> Result<u64, Failure> {
-    value[name]
-        .as_u64()
-        .ok_or_else(|| error("EINVAL", format!("invalid form limit {name}")))
+fn malformed(_: dream_host_abi::wire::Malformed) -> Failure {
+    error("EINVAL", "malformed form operation")
 }
 
-pub(super) async fn parse(id: i32, value: &Value) -> Result<Output, Failure> {
+fn limit(reader: &mut Reader<'_>, name: &str) -> Result<u32, Failure> {
+    u32::try_from(reader.i32().map_err(malformed)?)
+        .map_err(|_| error("EINVAL", format!("invalid form limit {name}")))
+}
+
+pub(super) async fn parse(id: i32, args: &[u8]) -> Result<Output, Failure> {
+    let mut reader = Reader::new(args);
     let limits = Limits {
-        max_files: limit(value, "max_files")?,
-        max_fields: limit(value, "max_fields")?,
-        max_part_size: usize::try_from(limit(value, "max_part_size")?)
+        max_files: limit(&mut reader, "max_files")?.into(),
+        max_fields: limit(&mut reader, "max_fields")?.into(),
+        max_part_size: usize::try_from(limit(&mut reader, "max_part_size")?)
             .map_err(|_| error("EINVAL", "invalid form limit max_part_size"))?,
     };
+    reader.finish().map_err(malformed)?;
     let request = state::request(id)?;
-    let headers = request.metadata["headers"]
-        .as_array()
-        .ok_or_else(|| error("EINVAL", "missing HTTP headers"))?;
-    let content_type = headers
-        .iter()
-        .find(|h| h[0].as_str() == Some("content-type"))
-        .and_then(|h| h[1].as_str())
-        .unwrap_or("");
-    let boundary = multer::parse_boundary(content_type).map_err(|e| error("EINVAL", e))?;
+    let content_type = request
+        .head
+        .headers
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_owned();
+    let boundary = multer::parse_boundary(&content_type).map_err(|e| error("EINVAL", e))?;
     let mut multipart = match request::take_source(id).await? {
         BodySource::Stream(body) => multer::Multipart::new(BodyDataStream::new(body), boundary),
         BodySource::Cached(bytes) => multer::Multipart::new(
@@ -136,14 +141,16 @@ pub(super) async fn parse(id: i32, value: &Value) -> Result<Output, Failure> {
     }
     lock(&request.uploads).extend(handles);
     Ok(Output::bytes(
-        json!({"fields":fields,"files":files}).to_string().into_bytes(),
+        json!({"fields":fields,"files":files})
+            .to_string()
+            .into_bytes(),
     ))
 }
 
-pub(super) async fn read(id: i32, value: &Value) -> Result<Output, Failure> {
-    let max = value["max_bytes"]
-        .as_i64()
-        .ok_or_else(|| error("EINVAL", "invalid read size"))?;
+pub(super) async fn read(id: i32, args: &[u8]) -> Result<Output, Failure> {
+    let mut reader = Reader::new(args);
+    let max = reader.i32().map_err(malformed)?;
+    reader.finish().map_err(malformed)?;
     let upload = state::upload(id)?;
     let bytes = tokio::task::spawn_blocking(move || {
         let mut file = lock(&upload);
@@ -161,17 +168,11 @@ pub(super) async fn read(id: i32, value: &Value) -> Result<Output, Failure> {
     Ok(Output::bytes(bytes))
 }
 
-pub(super) async fn seek(id: i32, value: &Value) -> Result<Output, Failure> {
-    let offset = &value["offset"];
-    let offset = offset
-        .as_u64()
-        .or_else(|| {
-            offset
-                .as_f64()
-                .filter(|n| *n >= 0.0 && n.fract() == 0.0)
-                .map(|n| n as u64)
-        })
-        .ok_or_else(|| error("EINVAL", "invalid seek offset"))?;
+pub(super) async fn seek(id: i32, args: &[u8]) -> Result<Output, Failure> {
+    let mut reader = Reader::new(args);
+    let offset = u64::try_from(reader.i64().map_err(malformed)?)
+        .map_err(|_| error("EINVAL", "invalid seek offset"))?;
+    reader.finish().map_err(malformed)?;
     let upload = state::upload(id)?;
     tokio::task::spawn_blocking(move || lock(&upload).seek(SeekFrom::Start(offset)))
         .await

@@ -1218,13 +1218,80 @@ function makeJsHost(getInstance) {
   };
 }
 
+// ----- wire.js -----
+// Little-endian records shared with the guest's `WireWriter` / `WireReader` and
+// `dream_host_abi::wire`: fixed-width integers, and strings or byte runs as a 32-bit length
+// followed by the bytes.
+
+const wireEncoder = new TextEncoder();
+const wireDecoder = new TextDecoder("utf-8", { fatal: true });
+
+/** Format version leading every operation header; must match `wire::VERSION`. */
+const WIRE_VERSION = 1;
+
+function wireMalformed() {
+  return Object.assign(new Error("malformed host operation"), { code: "EINVAL" });
+}
+
+class WireWriter {
+  constructor() { this.parts = []; this.size = 0; }
+  raw(bytes) { this.parts.push(bytes); this.size += bytes.length; return this; }
+  u8(value) { return this.raw(Uint8Array.of(value & 255)); }
+  i32(value) {
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setInt32(0, value, true);
+    return this.raw(bytes);
+  }
+  bytes(bytes) { this.i32(bytes.length); return this.raw(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes)); }
+  text(value) { return this.bytes(wireEncoder.encode(value)); }
+  finish() {
+    const out = new Uint8Array(this.size);
+    let at = 0;
+    for (const part of this.parts) { out.set(part, at); at += part.length; }
+    return out;
+  }
+}
+
+class WireReader {
+  constructor(bytes) {
+    this.bytes = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || []);
+    this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
+    this.at = 0;
+  }
+  take(count) {
+    if (!(count >= 0) || this.bytes.length - this.at < count) throw wireMalformed();
+    const at = this.at;
+    this.at += count;
+    return at;
+  }
+  u8() { return this.bytes[this.take(1)]; }
+  i32() { return this.view.getInt32(this.take(4), true); }
+  bytesField() { const length = this.i32(); const at = this.take(length); return this.bytes.subarray(at, at + length); }
+  text() {
+    try { return wireDecoder.decode(this.bytesField()); } catch (_) { throw wireMalformed(); }
+  }
+  finish() { if (this.at !== this.bytes.length) throw wireMalformed(); }
+  /** Reads `[version][action][id][timeout_ms]`; the action's arguments follow. */
+  header() {
+    if (this.u8() !== WIRE_VERSION) throw wireMalformed();
+    const action = this.u8(), id = this.i32(), timeout_ms = this.i32();
+    if (timeout_ms < 0) throw wireMalformed();
+    return { action, id, timeout_ms };
+  }
+}
+
+/** A failed completion: status 2, then the error code and message. */
+function wireFailure(code, message) {
+  return [2, ...new WireWriter().text(code).text(message).finish()];
+}
+
 // ----- hosts/http.js -----
 const httpClients = new Map();
 const httpBodies = new Map();
 const httpOperations = new Map();
 let nextHttpHandle = 1;
 function httpError(code, message) { return { code, message }; }
-function httpWireError(error) { return [2, ...new TextEncoder().encode(JSON.stringify(error))]; }
+function httpWireError(error) { return wireFailure(error.code, error.message); }
 function httpNewOperation(work) {
   if (httpOperations.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
   const id = nextHttpHandle++;
@@ -1425,12 +1492,22 @@ function makeHttpHost() {
 }
 
 // ----- hosts/websocket.js -----
+// Operation codes from the guest's `WebSocketAction`.
+const WS_CONNECT = 1, WS_RECEIVE = 2, WS_SEND_TEXT = 3, WS_SEND_BINARY = 4, WS_CLOSE = 5;
+
 function makeWebSocketService() {
   const sockets = new Map();
   const encoder = new TextEncoder();
   let next = 0;
   const fail = (code, message) => Object.assign(new Error(message), {code});
-  const encode = value => encoder.encode(JSON.stringify(value));
+  // Receive completions: `[kind]` then text (1), bytes (2), or a close code and reason (3).
+  const textEvent = text => new WireWriter().u8(1).text(text).finish();
+  const binaryEvent = bytes => new WireWriter().u8(2).bytes(bytes).finish();
+  const closeEvent = (code, reason) => new WireWriter().u8(3).i32(code).text(reason).finish();
+  function parse(request) {
+    const reader = new WireReader(request);
+    return {...reader.header(), reader};
+  }
   function close(id) {
     const state = sockets.get(id);
     if (!state) return;
@@ -1443,10 +1520,13 @@ function makeWebSocketService() {
   async function execute(request, bytes, signal) {
     if (signal.aborted) close(request.id);
     check(signal);
-    if (request.action === "connect") {
+    const args = request.reader;
+    if (request.action === WS_CONNECT) {
+      const href = args.text();
+      args.finish();
       if (typeof globalThis.WebSocket !== "function") throw fail("EUNSUPPORTED", "WebSocket requires a browser or Node 22+");
       let url;
-      try { url = new URL(request.url); } catch (_) { throw fail("EINVAL", "invalid WebSocket URL"); }
+      try { url = new URL(href); } catch (_) { throw fail("EINVAL", "invalid WebSocket URL"); }
       if (!["ws:", "wss:"].includes(url.protocol)) throw fail("EINVAL", "expected ws:// or wss:// URL");
       if (sockets.size >= 1024 || next === 2147483647) throw fail("ELIMIT", "WebSocket capacity exhausted");
       const socket = new WebSocket(url.href);
@@ -1455,10 +1535,10 @@ function makeWebSocketService() {
       sockets.set(state.id, state);
       socket.addEventListener("message", event => {
         if (state.queue.length >= 1024) { state.error = fail("ELIMIT", "WebSocket message queue exceeded"); close(state.id); return; }
-        state.queue.push(typeof event.data === "string" ? {kind:"text",text:event.data} : {kind:"binary",bytes:Array.from(new Uint8Array(event.data))});
+        state.queue.push(typeof event.data === "string" ? textEvent(event.data) : binaryEvent(new Uint8Array(event.data)));
         state.wake?.();
       });
-      socket.addEventListener("close", event => { state.closed = true; state.queue.push({kind:"close",code:event.code,reason:event.reason}); state.wake?.(); });
+      socket.addEventListener("close", event => { state.closed = true; state.queue.push(closeEvent(event.code, event.reason)); state.wake?.(); });
       socket.addEventListener("error", () => { state.error = fail("EIO", "WebSocket transport error"); state.wake?.(); });
       const abort = () => close(state.id);
       signal.addEventListener("abort", abort, {once:true});
@@ -1472,42 +1552,44 @@ function makeWebSocketService() {
           if (signal.aborted) aborted();
         });
         check(signal);
-        return {bytes:encode({id:state.id}),owned:state.id};
+        return {bytes:new WireWriter().i32(state.id).finish(),owned:state.id};
       } catch (error) { close(state.id); throw error; }
       finally { signal.removeEventListener("abort", abort); }
     }
+    let code = 0, reason = "";
+    if (request.action === WS_CLOSE) { code = args.i32(); reason = args.text(); }
+    args.finish();
     const state = sockets.get(request.id);
     if (!state) throw fail("ECLOSED", "WebSocket is closed");
     const abort = () => close(state.id);
     signal.addEventListener("abort", abort, {once:true});
     try {
-      if (request.action === "receive") {
+      if (request.action === WS_RECEIVE) {
         if (state.reading) throw fail("EBUSY", "WebSocket receive already pending");
         state.reading = true;
         try {
           while (!state.queue.length) {
             check(signal);
             if (state.error) throw state.error;
-            if (state.closed) return {bytes:encode({kind:"close",code:1006,reason:""})};
+            if (state.closed) return {bytes:closeEvent(1006, "")};
             await new Promise(resolve => { state.wake = resolve; if (signal.aborted || state.closed || state.error || state.queue.length) resolve(); });
           }
           check(signal);
-          return {bytes:encode(state.queue.shift())};
+          return {bytes:state.queue.shift()};
         } finally { state.reading = false; state.wake = null; }
       }
       check(signal);
       if (state.closed || state.socket.readyState !== WebSocket.OPEN) throw fail("ECLOSED", "WebSocket is closed");
-      if (request.action === "send_text") state.socket.send(new TextDecoder("utf-8", {fatal:true}).decode(bytes));
-      else if (request.action === "send_binary") state.socket.send(bytes);
-      else if (request.action === "close") {
-        const code = request.code, reason = request.reason;
-        if (!Number.isInteger(code) || (code !== 1000 && (code < 3000 || code > 4999)) || typeof reason !== "string" || encoder.encode(reason).length > 123) throw fail("EINVAL", "invalid WebSocket close frame");
+      if (request.action === WS_SEND_TEXT) state.socket.send(new TextDecoder("utf-8", {fatal:true}).decode(bytes));
+      else if (request.action === WS_SEND_BINARY) state.socket.send(bytes);
+      else if (request.action === WS_CLOSE) {
+        if ((code !== 1000 && (code < 3000 || code > 4999)) || encoder.encode(reason).length > 123) throw fail("EINVAL", "invalid WebSocket close frame");
         state.socket.close(code, reason);
       } else throw fail("EINVAL", "unknown WebSocket action");
       return {bytes:[]};
     } finally { signal.removeEventListener("abort", abort); }
   }
-  return {execute, close};
+  return {execute, close, parse};
 }
 
 // ----- hosts/sockets.js -----
@@ -1664,9 +1746,10 @@ function makeSocketHost() {
     }
     throw fail("EINVAL","operation does not match socket kind");
   }
-  function start(text, input, run = execute, dispose = close) {
+  function start(text, input, run = execute, dispose = close, parse = JSON.parse) {
       if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
       const bytes = Uint8Array.from(input || []);
+      const raw = typeof text === "string" ? text : Uint8Array.from(text || []);
       const id = ++nextOperation, abort = new AbortController();
       let done;
       const state = {abort,result:null,owned:0,dispose,released:false,done:new Promise(resolve=>{done=resolve;})};
@@ -1674,7 +1757,7 @@ function makeSocketHost() {
       Promise.resolve().then(async () => {
         let timer;
         try {
-          const request = JSON.parse(text);
+          const request = parse(raw);
           if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw fail("EINVAL","invalid socket timeout");
           if (request.timeout_ms) timer = setTimeout(()=>abort.abort(fail("ETIMEOUT","socket operation deadline exceeded")),request.timeout_ms);
           const result = await run(request,bytes,abort.signal);
@@ -1682,7 +1765,7 @@ function makeSocketHost() {
           if (abort.signal.aborted) throw abort.signal.reason || cancelled();
           state.result = [1,...result.bytes];
         } catch (error) {
-          state.result = [2,...encoder.encode(JSON.stringify({code:["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",message:error.message||"socket operation failed"}))];
+          state.result = wireFailure(["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",error.message||"socket operation failed");
         } finally {
           clearTimeout(timer);
           if (state.released && state.owned) dispose(state.owned);
@@ -1693,7 +1776,7 @@ function makeSocketHost() {
   }
   return {
     netSocketStart: (text, input) => start(text, input),
-    netWsStart: (text, input) => start(text, input, websocket.execute, websocket.close),
+    netWsStart: (request, input) => start(request, input, websocket.execute, websocket.close, websocket.parse),
     netWsClose: id => websocket.close(id),
     async netSocketWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
     netSocketResult: id => operations.get(id)?.result || [0],
@@ -2560,9 +2643,9 @@ function makeProcessHost() {
     },
     processOperationResult: id => {
       const op = processOperations.get(id);
-      if (!op) return [2, ...new TextEncoder().encode(JSON.stringify(processFailure("ECLOSED", "process operation closed")))];
+      if (!op) return wireFailure("ECLOSED", "process operation closed");
       if (!op.result) return [0];
-      if (op.result.error) return [2, ...new TextEncoder().encode(JSON.stringify(op.result.error))];
+      if (op.result.error) return wireFailure(op.result.error.code, op.result.error.message);
       const result = new Uint8Array(op.result.bytes.length + 1);
       result[0] = 1; result.set(op.result.bytes, 1);
       return result;

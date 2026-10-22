@@ -69,7 +69,9 @@ fn deadlines_cancellation_and_output_limits_complete() {
     let deadline = complete(start("sleep", 50, 1_000_000));
     assert_eq!(deadline[0], 2);
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&deadline[1..]).unwrap()["code"],
+        dream_host_abi::wire::Reader::new(&deadline[1..])
+            .text()
+            .unwrap(),
         "ETIMEOUT"
     );
     let id = start("sleep", 0, 1_000_000);
@@ -78,13 +80,17 @@ fn deadlines_cancellation_and_output_limits_complete() {
     let cancelled = complete(id);
     assert_eq!(cancelled[0], 2);
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&cancelled[1..]).unwrap()["code"],
+        dream_host_abi::wire::Reader::new(&cancelled[1..])
+            .text()
+            .unwrap(),
         "ECANCELLED"
     );
     let limited = complete(start("flood", 5000, 1000));
     assert_eq!(limited[0], 2);
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&limited[1..]).unwrap()["code"],
+        dream_host_abi::wire::Reader::new(&limited[1..])
+            .text()
+            .unwrap(),
         "ELIMIT"
     );
 }

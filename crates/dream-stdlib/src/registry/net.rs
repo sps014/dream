@@ -22,6 +22,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/net/web_socket.dream"),
         ),
         (
+            "<std>/system/net/web_socket_action.dream",
+            include_str!("../system/net/web_socket_action.dream"),
+        ),
+        (
             "<std>/system/net/web_socket_message.dream",
             include_str!("../system/net/web_socket_message.dream"),
         ),

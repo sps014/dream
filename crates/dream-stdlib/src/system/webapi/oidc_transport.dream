@@ -2,19 +2,34 @@ module system.webapi;
 
 /// Native OIDC exchange transport used by system.webapi.auth; completion obeys cancellation.
 internal static class OidcTransport {
-    /// Performs an OIDC begin or completion request. Honors `token` cancellation and returns an
-    /// I/O error on failure.
+    /// Starts a provider request: the issuer, client id, client secret and redirect URI, to
+    /// which a completion appends the authorization code, nonce and PKCE verifier.
+    internal static fun request(
+        complete: bool,
+        issuer: string,
+        client_id: string,
+        client_secret: string,
+        redirect_uri: string
+    ): WireWriter {
+        let action = WebAction.OidcBegin;
+        if complete {
+            action = WebAction.OidcComplete;
+        }
+        let request = WebOperation.request(action, 0, 30000);
+        request.text(issuer);
+        request.text(client_id);
+        request.text(client_secret);
+        request.text(redirect_uri);
+        return request;
+    }
+
+    /// Performs an OIDC begin or completion request built by `request`. Honors `token`
+    /// cancellation and returns an I/O error on failure.
     @native
     public static async fun exchange(
-        request: JsonValue,
+        request: WireWriter,
         token: Option<CancellationToken> = Option.None
     ): Result<JsonValue, IoError> {
-        let action = request.get("action").and_then((item: JsonValue) => item.as_string()).unwrap_or("");
-        if action != "oidc_begin" && action != "oidc_complete" {
-            return Result.Err(IoError.other("", "invalid OIDC operation"));
-        }
-        request["id"] = JsonValue.from_int(0);
-        request["timeout_ms"] = JsonValue.from_int(30000);
         return WebOperation.parse(WebOperation.submit(request, [], token).await?);
     }
 }

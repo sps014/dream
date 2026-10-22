@@ -190,6 +190,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/string_builder.dream"),
         ),
         (
+            "<std>/system/core/wire_writer.dream",
+            include_str!("../system/core/wire_writer.dream"),
+        ),
+        (
+            "<std>/system/core/wire_reader.dream",
+            include_str!("../system/core/wire_reader.dream"),
+        ),
+        (
             "<std>/system/core/weak.dream",
             include_str!("../system/core/weak.dream"),
         ),

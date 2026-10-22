@@ -1,0 +1,23 @@
+module system.webapi;
+
+// Operation codes shared with `dream-host-net`'s `http_server::Action`; the values are wire
+// format and must match it.
+internal enum WebAction {
+    Listen = 1,
+    Accept = 2,
+    Shutdown = 3,
+    Wait = 4,
+    ReadBody = 5,
+    BodyRead = 6,
+    Respond = 7,
+    StreamBegin = 8,
+    StreamWrite = 9,
+    StreamEnd = 10,
+    Upgrade = 11,
+    Form = 12,
+    UploadRead = 13,
+    UploadSeek = 14,
+    Disconnect = 15,
+    OidcBegin = 16,
+    OidcComplete = 17
+}

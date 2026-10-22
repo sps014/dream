@@ -56,8 +56,8 @@ public class UploadedFile: AsyncReader {
         if file.handle <= 0 {
             return Result.Err(IoError.closed(""));
         }
-        let request = WebOperation.request("upload_read", file.handle);
-        request["max_bytes"] = JsonValue.from_int(size);
+        let request = WebOperation.request(WebAction.UploadRead, file.handle);
+        request.i32(size);
         return WebOperation.submit(request, [], token).await;
     }
 
@@ -81,8 +81,8 @@ public class UploadedFile: AsyncReader {
         if offset < 0L {
             return Result.Err(IoError.invalid("", "negative seek offset"));
         }
-        let request = WebOperation.request("upload_seek", file.handle);
-        request["offset"] = JsonValue.from_double((double)offset);
+        let request = WebOperation.request(WebAction.UploadSeek, file.handle);
+        request.i64(offset);
         WebOperation.submit(request, [], token).await?;
         return Result.Ok(Unit());
     }

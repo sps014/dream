@@ -6,9 +6,9 @@ use super::{
     stream, tls, websocket,
 };
 use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
+use dream_host_abi::wire::{Header, Malformed, Reader, Writer};
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::{TokioIo, TokioTimer};
-use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
@@ -31,25 +31,64 @@ pub(crate) fn close(id: i32) {
         server.stop.send_replace(true);
     }
 }
-pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
+/// Operation codes from the guest's WebAction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Action {
+    Listen = 1,
+    Accept = 2,
+    Shutdown = 3,
+    Wait = 4,
+    ReadBody = 5,
+    BodyRead = 6,
+    Respond = 7,
+    StreamBegin = 8,
+    StreamWrite = 9,
+    StreamEnd = 10,
+    Upgrade = 11,
+    Form = 12,
+    UploadRead = 13,
+    UploadSeek = 14,
+    Disconnect = 15,
+    OidcBegin = 16,
+    OidcComplete = 17,
+}
+const ACTIONS: [Action; 17] = [
+    Action::Listen,
+    Action::Accept,
+    Action::Shutdown,
+    Action::Wait,
+    Action::ReadBody,
+    Action::BodyRead,
+    Action::Respond,
+    Action::StreamBegin,
+    Action::StreamWrite,
+    Action::StreamEnd,
+    Action::Upgrade,
+    Action::Form,
+    Action::UploadRead,
+    Action::UploadSeek,
+    Action::Disconnect,
+    Action::OidcBegin,
+    Action::OidcComplete,
+];
+fn malformed(_: Malformed) -> Failure {
+    error("EINVAL", "malformed HTTP server operation")
+}
+pub(crate) fn start(request: Vec<u8>, bytes: Vec<u8>) -> i32 {
     operations::OPERATIONS.start(move |mut cancellation| async move {
-        let value: Value = serde_json::from_str(&request).map_err(|e| error("EINVAL", e))?;
-        let timeout = value["timeout_ms"]
-            .as_u64()
-            .filter(|&t| t <= i32::MAX as u64)
-            .ok_or_else(|| error("EINVAL", "invalid HTTP operation timeout"))?;
+        let header = Reader::new(&request).header().map_err(malformed)?;
         let deadline = async {
-            if timeout == 0 {
+            if header.timeout_ms == 0 {
                 std::future::pending::<()>().await;
             } else {
-                tokio::time::sleep(Duration::from_millis(timeout)).await;
+                tokio::time::sleep(Duration::from_millis(header.timeout_ms.into())).await;
             }
         };
         if *cancellation.borrow() {
             return Err(error("ECANCELLED", "HTTP operation cancelled"));
         }
         tokio::select! {
-            result = execute(value, bytes) => result,
+            result = execute(header, &request[Header::LEN..], bytes) => result,
             _ = cancellation.changed() => Err(error("ECANCELLED", "HTTP operation cancelled")),
             _ = deadline => Err(error("ETIMEOUT", "HTTP operation deadline exceeded")),
         }
@@ -76,22 +115,20 @@ async fn bind(host: &str, port: u16, backlog: u32) -> Result<TcpListener, Failur
     }
     Err(last)
 }
-async fn listen(value: &Value) -> Result<Output, Failure> {
-    let host = value["host"]
-        .as_str()
-        .filter(|h| !h.is_empty())
-        .ok_or_else(|| error("EINVAL", "invalid HTTP host"))?;
-    let port = value["port"]
-        .as_u64()
-        .and_then(|p| u16::try_from(p).ok())
-        .ok_or_else(|| error("EINVAL", "invalid HTTP port"))?;
-    let settings = &value["config"];
-    let config = Config::parse(settings)?;
-    let tls = tls::acceptor(
-        settings["ssl_certfile"].as_str().unwrap_or(""),
-        settings["ssl_keyfile"].as_str().unwrap_or(""),
-    )?;
-    let listener = bind(host, port, config.backlog).await?;
+async fn listen(args: &[u8]) -> Result<Output, Failure> {
+    let mut reader = Reader::new(args);
+    let host = reader.text().map_err(malformed)?.to_owned();
+    if host.is_empty() {
+        return Err(error("EINVAL", "invalid HTTP host"));
+    }
+    let port = u16::try_from(reader.i32().map_err(malformed)?)
+        .map_err(|_| error("EINVAL", "invalid HTTP port"))?;
+    let certfile = reader.text().map_err(malformed)?;
+    let keyfile = reader.text().map_err(malformed)?;
+    let config = Config::read(&mut reader)?;
+    reader.finish().map_err(malformed)?;
+    let tls = tls::acceptor(certfile, keyfile)?;
+    let listener = bind(&host, port, config.backlog).await?;
     let local = listener.local_addr().map_err(|e| error("EIO", e))?;
     let (incoming, receiver) = mpsc::channel(256);
     let (stop, mut stopping) = watch::channel(false);
@@ -161,9 +198,7 @@ async fn listen(value: &Value) -> Result<Output, Failure> {
         server.done.send_replace(true);
     });
     Ok(Output {
-        bytes: json!({"id":id,"port":local.port()})
-            .to_string()
-            .into_bytes(),
+        bytes: Writer::new().i32(id).i32(local.port().into()).finish(),
         child: Some(OwnedResource::new(id, close)),
     })
 }
@@ -201,7 +236,9 @@ async fn serve(
         .timer(TokioTimer::new())
         .keep_alive(true)
         .max_buf_size(config.max_header_bytes)
-        .header_read_timeout((!config.timeout_keep_alive.is_zero()).then_some(config.timeout_keep_alive));
+        .header_read_timeout(
+            (!config.timeout_keep_alive.is_zero()).then_some(config.timeout_keep_alive),
+        );
     let connection = builder
         .serve_connection(TokioIo::new(io), service)
         .with_upgrades();
@@ -223,23 +260,24 @@ async fn serve(
         state::disconnect(id);
     }
 }
-fn handle(value: &Value) -> Result<i32, Failure> {
-    value["id"]
-        .as_i64()
-        .and_then(|i| i32::try_from(i).ok())
-        .ok_or_else(|| error("EINVAL", "invalid HTTP handle"))
+/// Fails unless the action takes no arguments beyond its header.
+fn bare(args: &[u8]) -> Result<(), Failure> {
+    Reader::new(args).finish().map_err(malformed)
 }
-async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
-    let action = value["action"].as_str().unwrap_or("");
-    if action == "oidc_begin" || action == "oidc_complete" {
-        return crate::oidc::execute(&value).await;
-    }
-    if action == "listen" {
-        return listen(&value).await;
-    }
-    let id = handle(&value)?;
+async fn execute(header: Header, args: &[u8], bytes: Vec<u8>) -> Result<Output, Failure> {
+    let action = ACTIONS
+        .into_iter()
+        .find(|action| *action as u8 == header.action)
+        .ok_or_else(|| error("EINVAL", "unknown HTTP server operation"))?;
+    let id = header.id;
     match action {
-        "accept" => {
+        Action::OidcBegin | Action::OidcComplete => {
+            let request = crate::oidc::OidcRequest::read(action == Action::OidcComplete, args)?;
+            crate::oidc::execute(&request).await
+        }
+        Action::Listen => listen(args).await,
+        Action::Accept => {
+            bare(args)?;
             let server = state::server(id)?;
             let mut stop = server.stop.subscribe();
             if *stop.borrow() {
@@ -251,11 +289,13 @@ async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
                 .map_err(|_| error("EBUSY", "HTTP accept already pending"))?;
             tokio::select! { result = receiver.recv() => request::accepted(result.ok_or_else(|| error("ECLOSED", "HTTP server stopped"))?), _ = stop.changed() => Err(error("ECLOSED", "HTTP server stopped")) }
         }
-        "shutdown" => {
+        Action::Shutdown => {
+            bare(args)?;
             state::server(id)?.stop.send_replace(true);
             Ok(Output::bytes(vec![]))
         }
-        "wait" => {
+        Action::Wait => {
+            bare(args)?;
             let server = state::server(id)?;
             let mut done = server.done.subscribe();
             if !*done.borrow() {
@@ -263,23 +303,36 @@ async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
             }
             Ok(Output::bytes(vec![]))
         }
-        "read_body" => Ok(Output::bytes(request::body(id).await?.to_vec())),
-        "body_read" => {
-            let max = value["max_bytes"]
-                .as_u64()
-                .and_then(|n| usize::try_from(n).ok())
-                .ok_or_else(|| error("EINVAL", "invalid read size"))?;
+        Action::ReadBody => {
+            bare(args)?;
+            Ok(Output::bytes(request::body(id).await?.to_vec()))
+        }
+        Action::BodyRead => {
+            let mut reader = Reader::new(args);
+            let max = usize::try_from(reader.i32().map_err(malformed)?)
+                .map_err(|_| error("EINVAL", "invalid read size"))?;
+            reader.finish().map_err(malformed)?;
             Ok(Output::bytes(request::read_chunk(id, max).await?.to_vec()))
         }
-        "respond" => response::send(id, &value, bytes),
-        "stream_begin" => stream::begin(id, &value),
-        "stream_write" => stream::write(id, bytes).await,
-        "stream_end" => stream::end(id),
-        "upgrade" => websocket::upgrade(id).await,
-        "form" => multipart::parse(id, &value).await,
-        "upload_read" => multipart::read(id, &value).await,
-        "upload_seek" => multipart::seek(id, &value).await,
-        "disconnect" => {
+        Action::Respond => response::send(id, args, bytes),
+        Action::StreamBegin => stream::begin(id, args),
+        Action::StreamWrite => {
+            bare(args)?;
+            stream::write(id, bytes).await
+        }
+        Action::StreamEnd => {
+            bare(args)?;
+            stream::end(id)
+        }
+        Action::Upgrade => {
+            bare(args)?;
+            websocket::upgrade(id).await
+        }
+        Action::Form => multipart::parse(id, args).await,
+        Action::UploadRead => multipart::read(id, args).await,
+        Action::UploadSeek => multipart::seek(id, args).await,
+        Action::Disconnect => {
+            bare(args)?;
             let request = state::request(id)?;
             let mut disconnected = request.disconnected.subscribe();
             if !*disconnected.borrow() {
@@ -287,6 +340,5 @@ async fn execute(value: Value, bytes: Vec<u8>) -> Result<Output, Failure> {
             }
             Ok(Output::bytes(vec![]))
         }
-        _ => Err(error("EINVAL", "unknown HTTP server operation")),
     }
 }

@@ -7,13 +7,13 @@ internal class WebOperation {
         this.id = id;
     }
 
-    internal static fun start(request: JsonValue, bytes: byte[]): WebOperation {
-        return WebOperation(WebOperation.start_host(Json.serialize(request), bytes));
+    internal static fun start(request: WireWriter, bytes: byte[]): WebOperation {
+        return WebOperation(WebOperation.start_host(request.finish(), bytes));
     }
 
     @native
     @runtime("httpServerStart")
-    static extern fun start_host(request: string, bytes: byte[]): int;
+    static extern fun start_host(request: byte[], bytes: byte[]): int;
 
     @native
     @async_host
@@ -51,14 +51,23 @@ internal class WebOperation {
         this.close();
     }
 
-    internal static fun request(action: string, id: int): JsonValue {
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string(action);
-        request["id"] = JsonValue.from_int(id);
-        request["timeout_ms"] = JsonValue.from_int(0);
+    // The header layout and version are shared with `dream_host_abi::wire::Header`.
+    internal static fun request(action: WebAction, id: int, timeout_ms: int = 0): WireWriter {
+        let request = WireWriter(32);
+        request.u8(1);
+        request.u8(action);
+        request.i32(id);
+        request.i32(timeout_ms);
         return request;
     }
 
+    /// Writes a response head: the status code and every header pair in order.
+    internal static fun response_head(request: WireWriter, response: HttpOutgoing): void {
+        request.i32(response.status);
+        response.headers.write_wire(request);
+    }
+
+    /// Decodes a JSON completion payload such as a parsed form or an OIDC result.
     internal static fun parse(bytes: byte[]): Result<JsonValue, IoError> {
         let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
         if parsed.is_err() {
@@ -86,27 +95,20 @@ internal class WebOperation {
         if wire.length == 0 {
             return Result.Err(IoError.other("", "invalid HTTP server completion"));
         }
-        let payload = Buffer.alloc<byte>(wire.length - 1);
-        for (let i = 0; i < payload.length; i = i + 1) {
-            payload[i] = wire[i + 1];
-        }
         if wire[0] == (byte)1 {
-            return Result.Ok(payload);
+            return Result.Ok(wire.slice(1, wire.length));
         }
-        let error = WebOperation.parse(payload)?;
-        return Result.Err(
-            IoError(
-                "",
-                error.get("code").unwrap_or(JsonValue.null()).as_string().unwrap_or("EIO"),
-                error.get("message").unwrap_or(JsonValue.null())
-                    .as_string()
-                    .unwrap_or("HTTP server operation failed")
-            )
-        );
+        let error = WireReader(wire, 1);
+        let code = error.text();
+        let message = error.text();
+        if !error.at_end() {
+            return Result.Err(IoError.other("", "invalid HTTP server error"));
+        }
+        return Result.Err(IoError("", code, message));
     }
 
     internal static async fun submit(
-        request: JsonValue,
+        request: WireWriter,
         bytes: byte[],
         token: Option<CancellationToken>
     ): Result<byte[], IoError> {

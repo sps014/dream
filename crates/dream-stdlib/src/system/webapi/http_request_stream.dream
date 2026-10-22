@@ -25,8 +25,8 @@ public class HttpRequestStream: AsyncReader {
         if max_bytes == 0 {
             return Result.Ok(Buffer.alloc<byte>(0));
         }
-        let request = WebOperation.request("body_read", lifetime[0].incoming.req_id);
-        request["max_bytes"] = JsonValue.from_int(max_bytes);
+        let request = WebOperation.request(WebAction.BodyRead, lifetime[0].incoming.req_id);
+        request.i32(max_bytes);
         return WebOperation.submit(request, [], lifetime[0].incoming.resolve_token(token)).await;
     }
 }

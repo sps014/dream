@@ -74,9 +74,7 @@ public class ServerConfig {
             || this.timeout_keep_alive_ms < 0
             || this.timeout_graceful_shutdown_ms < 0
             || this.ws_max_size < 0
-            || this.ws_max_queue < 0
-            || this.ws_ping_interval_ms < 0
-            || this.ws_ping_timeout_ms < 0 {
+            || this.ws_max_queue < 0 || this.ws_ping_interval_ms < 0 || this.ws_ping_timeout_ms < 0 {
             return Result.Err(IoError.invalid("", "server settings must not be negative"));
         }
         if this.max_header_bytes < 8192 {
@@ -85,21 +83,18 @@ public class ServerConfig {
         return Result.Ok(Unit());
     }
 
-    internal fun to_json(): JsonValue {
-        let value = JsonValue.dict();
-        value["ssl_certfile"] = JsonValue.from_string(this.ssl_certfile);
-        value["ssl_keyfile"] = JsonValue.from_string(this.ssl_keyfile);
-        value["limit_concurrency"] = JsonValue.from_int(this.limit_concurrency);
-        value["backlog"] = JsonValue.from_int(this.backlog);
-        value["timeout_keep_alive_ms"] = JsonValue.from_int(this.timeout_keep_alive_ms);
-        value["timeout_graceful_shutdown_ms"] = JsonValue.from_int(
-            this.timeout_graceful_shutdown_ms
-        );
-        value["max_header_bytes"] = JsonValue.from_int(this.max_header_bytes);
-        value["ws_max_size"] = JsonValue.from_int(this.ws_max_size);
-        value["ws_max_queue"] = JsonValue.from_int(this.ws_max_queue);
-        value["ws_ping_interval_ms"] = JsonValue.from_int(this.ws_ping_interval_ms);
-        value["ws_ping_timeout_ms"] = JsonValue.from_int(this.ws_ping_timeout_ms);
-        return value;
+    // Field order is the wire format read by `http_server::state::Config::read`.
+    internal fun write_wire(borrow writer: WireWriter): void {
+        writer.text(this.ssl_certfile);
+        writer.text(this.ssl_keyfile);
+        writer.i32(this.limit_concurrency);
+        writer.i32(this.backlog);
+        writer.i32(this.timeout_keep_alive_ms);
+        writer.i32(this.timeout_graceful_shutdown_ms);
+        writer.i32(this.max_header_bytes);
+        writer.i32(this.ws_max_size);
+        writer.i32(this.ws_max_queue);
+        writer.i32(this.ws_ping_interval_ms);
+        writer.i32(this.ws_ping_timeout_ms);
     }
 }

@@ -4,6 +4,7 @@ import childProcess from "node:child_process";
 import { setNodeChildProcess } from "../runtime/src/platform.js";
 import { makeProcessHost } from "../runtime/src/hosts/process_service.js";
 import { encodeProcessArgs } from "../runtime/src/hosts/process_wire.js";
+import { WireReader } from "../runtime/src/wire.js";
 setNodeChildProcess(childProcess);
 const decode = bytes => new TextDecoder().decode(Uint8Array.from(bytes));
 async function complete(host, id) {
@@ -11,7 +12,7 @@ async function complete(host, id) {
   const bytes = host.processOperationResult(id);
   host.processOperationRelease(id);
   assert.notEqual(bytes[0], 0);
-  return bytes[0] === 1 ? { value: bytes.slice(1) } : { error: JSON.parse(decode(bytes.slice(1))) };
+  return bytes[0] === 1 ? { value: bytes.slice(1) } : { error: { code: new WireReader(bytes.slice(1)).text() } };
 }
 function start(host, code, options = {}) {
   return host.processStart(JSON.stringify({ action: "run", command: process.execPath, options }), encodeProcessArgs(["-e", code]));

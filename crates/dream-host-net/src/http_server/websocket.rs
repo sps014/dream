@@ -9,21 +9,20 @@ use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 
 pub(super) async fn upgrade(id: i32) -> Result<Output, Failure> {
     let request = state::request(id)?;
-    let headers = request.metadata["headers"]
-        .as_array()
-        .ok_or_else(|| error("EINVAL", "missing HTTP headers"))?;
     let header = |name: &str| {
-        headers
+        request
+            .head
+            .headers
+            .get_all(name)
             .iter()
-            .filter(|h| h[0].as_str() == Some(name))
-            .filter_map(|h| h[1].as_str())
+            .filter_map(|value| value.to_str().ok())
             .collect::<Vec<_>>()
             .join(",")
     };
     let key = header("sec-websocket-key");
     let decoded = tokio_tungstenite::tungstenite::http::HeaderValue::from_str(&key)
         .map_err(|e| error("EINVAL", e))?;
-    if request.metadata["method"] != "GET"
+    if request.head.method != hyper::Method::GET
         || header("sec-websocket-version") != "13"
         || !header("upgrade").eq_ignore_ascii_case("websocket")
         || !header("connection")
@@ -66,13 +65,11 @@ pub(super) async fn upgrade(id: i32) -> Result<Output, Failure> {
         .send(response)
         .map_err(|_| error("ECLOSED", "HTTP client disconnected"))?;
     let upgraded = on_upgrade.await.map_err(|e| error("EIO", e))?;
-    let output = crate::websocket::from_upgraded(upgraded, &request.server.config.websocket).await?;
-    let metadata: serde_json::Value =
-        serde_json::from_slice(&output.bytes).map_err(|e| error("EIO", e))?;
-    let id = metadata["id"]
-        .as_i64()
-        .and_then(|n| i32::try_from(n).ok())
-        .ok_or_else(|| error("EIO", "invalid WebSocket handle"))?;
+    let output =
+        crate::websocket::from_upgraded(upgraded, &request.server.config.websocket).await?;
+    let id = dream_host_abi::wire::Reader::new(&output.bytes)
+        .i32()
+        .map_err(|_| error("EIO", "invalid WebSocket handle"))?;
     let mut closed = crate::websocket::disconnected(id)?;
     lock(&request.server.websockets).insert(id);
     tokio::spawn(async move {

@@ -1,9 +1,9 @@
+use dream_host_abi::handles::HandleTable;
 use reqwest::{
     Client, Response,
     header::{HeaderName, HeaderValue},
 };
 use serde::Deserialize;
-use dream_host_abi::handles::HandleTable;
 use std::{
     collections::BTreeMap,
     sync::{
@@ -333,7 +333,8 @@ pub(crate) fn poll(id: i32) -> Vec<u8> {
             let Some(id) = state.bodies.insert(body) else {
                 return error_bytes(failure("ELIMIT", "too many open response bodies"));
             };
-            let metadata = serde_json::json!({"body": id, "status": status, "url": url, "headers": headers});
+            let metadata =
+                serde_json::json!({"body": id, "status": status, "url": url, "headers": headers});
             lock(&operation).response_body = Some(id);
             let mut wire = vec![1];
             wire.extend(metadata.to_string().as_bytes());
@@ -343,11 +344,7 @@ pub(crate) fn poll(id: i32) -> Vec<u8> {
 }
 fn error_bytes(error: Failure) -> Vec<u8> {
     let mut bytes = vec![2];
-    bytes.extend(
-        serde_json::json!({"code":error.0,"message":error.1})
-            .to_string()
-            .as_bytes(),
-    );
+    bytes.extend(dream_host_abi::operations::error_record(error.0, &error.1));
     bytes
 }
 

@@ -231,17 +231,6 @@ extend AuthService {
         return response;
     }
 
-    static fun oidc_request(provider: OidcOptions, action: string): JsonValue {
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string(action);
-        request["timeout_ms"] = JsonValue.from_int(30000);
-        request["issuer"] = JsonValue.from_string(provider.issuer);
-        request["client_id"] = JsonValue.from_string(provider.client_id);
-        request["client_secret"] = JsonValue.from_string(provider.client_secret);
-        request["redirect_uri"] = JsonValue.from_string(provider.redirect_uri);
-        return request;
-    }
-
     @native
     static async fun handle_oidc(
         service: AuthService,
@@ -249,11 +238,13 @@ extend AuthService {
         provider: OidcOptions,
         complete: bool
     ): HttpOutgoing {
-        let action = "oidc_begin";
-        if complete {
-            action = "oidc_complete";
-        }
-        let request = AuthService.oidc_request(provider, action);
+        let request = OidcTransport.request(
+            complete,
+            provider.issuer,
+            provider.client_id,
+            provider.client_secret,
+            provider.redirect_uri
+        );
         if complete {
             let state = ctx.incoming.query_param("state").unwrap_or("");
             if state.is_empty() || ctx.incoming.cookie("__Host-dream_oidc").unwrap_or("") != state {
@@ -266,9 +257,9 @@ extend AuthService {
             if transaction.is_err() || transaction.unwrap().provider != provider.name {
                 return HttpOutgoing.detail("invalid login transaction", 401);
             }
-            request["code"] = JsonValue.from_string(ctx.incoming.query_param("code").unwrap_or(""));
-            request["nonce"] = JsonValue.from_string(transaction.unwrap().nonce);
-            request["verifier"] = JsonValue.from_string(transaction.unwrap().verifier);
+            request.text(ctx.incoming.query_param("code").unwrap_or(""));
+            request.text(transaction.unwrap().nonce);
+            request.text(transaction.unwrap().verifier);
         }
         let operation = OidcTransport.exchange(request, ctx.cancellation_token).await;
         if operation.is_err() {

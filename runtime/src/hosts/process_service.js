@@ -1,5 +1,6 @@
 import { isNode, getNodeChildProcess } from "../platform.js";
 import { splitProcessArgs } from "./process_wire.js";
+import { wireFailure } from "../wire.js";
 
 const processChildren = new Map();
 const processOperations = new Map();
@@ -159,9 +160,9 @@ export function makeProcessHost() {
     },
     processOperationResult: id => {
       const op = processOperations.get(id);
-      if (!op) return [2, ...new TextEncoder().encode(JSON.stringify(processFailure("ECLOSED", "process operation closed")))];
+      if (!op) return wireFailure("ECLOSED", "process operation closed");
       if (!op.result) return [0];
-      if (op.result.error) return [2, ...new TextEncoder().encode(JSON.stringify(op.result.error))];
+      if (op.result.error) return wireFailure(op.result.error.code, op.result.error.message);
       const result = new Uint8Array(op.result.bytes.length + 1);
       result[0] = 1; result.set(op.result.bytes, 1);
       return result;

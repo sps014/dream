@@ -75,16 +75,12 @@ internal class ProcessOperation {
         if wire[0] == (byte)1 {
             return Result.Ok(payload);
         }
-        let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(payload));
-        if parsed.is_err() {
+        let error = WireReader(payload, 0);
+        let code = error.text();
+        let message = error.text();
+        if !error.at_end() {
             return Result.Err(ProcessError.io("invalid process error completion"));
         }
-        let error = parsed.unwrap();
-        return Result.Err(
-            ProcessError(
-                error["code"].as_string().unwrap_or("EIO"),
-                error["message"].as_string().unwrap_or("process operation failed")
-            )
-        );
+        return Result.Err(ProcessError(code, message));
     }
 }

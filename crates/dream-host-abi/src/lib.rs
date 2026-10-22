@@ -7,6 +7,7 @@ pub mod handles;
 #[cfg(feature = "operations")]
 pub mod operations;
 pub mod window_surface;
+pub mod wire;
 
 pub use dream_abi::guest_contract::{GUEST_ABI_VERSION, GuestContext, HostStatus};
 

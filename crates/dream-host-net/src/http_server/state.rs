@@ -1,9 +1,9 @@
 use crate::socket_operations::Failure;
 use bytes::Bytes;
 use dream_host_abi::handles::HandleTable;
+use dream_host_abi::wire::Reader;
 use http_body_util::combinators::UnsyncBoxBody;
 use hyper::{Response, body::Incoming, upgrade::OnUpgrade};
-use serde_json::Value;
 use std::{
     collections::BTreeSet,
     convert::Infallible,
@@ -19,7 +19,7 @@ use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot, watch};
 pub(super) type Body = UnsyncBoxBody<Bytes, Infallible>;
 
 /// hyper rejects a read buffer smaller than this.
-const MIN_HEADER_BYTES: u64 = 8192;
+const MIN_HEADER_BYTES: u32 = 8192;
 
 /// Transport settings from the guest's `ServerConfig`; zero means "none" as in Uvicorn.
 pub(super) struct Config {
@@ -31,46 +31,51 @@ pub(super) struct Config {
     pub websocket: crate::websocket::Limits,
 }
 impl Config {
-    pub fn parse(value: &Value) -> Result<Self, Failure> {
-        let number = |name: &str| {
-            value[name]
-                .as_u64()
-                .ok_or_else(|| error("EINVAL", format!("invalid server setting {name}")))
+    /// Reads the settings the guest's `ServerConfig.write_wire` appends after the TLS paths.
+    pub fn read(reader: &mut Reader<'_>) -> Result<Self, Failure> {
+        let mut number = |name: &str| {
+            let value = reader
+                .i32()
+                .map_err(|_| error("EINVAL", "malformed server settings"))?;
+            u32::try_from(value)
+                .map_err(|_| error("EINVAL", format!("invalid server setting {name}")))
         };
-        let millis = |name: &str| number(name).map(Duration::from_millis);
-        let size = |name: &str| {
-            number(name).and_then(|n| {
-                usize::try_from(n)
-                    .map_err(|_| error("EINVAL", format!("server setting {name} is too large")))
-            })
-        };
+        let limit_concurrency = number("limit_concurrency")?;
+        let backlog = number("backlog")?;
+        let keep_alive = number("timeout_keep_alive_ms")?;
+        let graceful = number("timeout_graceful_shutdown_ms")?;
         let max_header_bytes = number("max_header_bytes")?;
+        let ws_max_size = number("ws_max_size")?;
+        let ws_max_queue = number("ws_max_queue")?;
+        let ping_interval = number("ws_ping_interval_ms")?;
+        let ping_timeout = number("ws_ping_timeout_ms")?;
         if max_header_bytes < MIN_HEADER_BYTES {
             return Err(error(
                 "EINVAL",
                 format!("max_header_bytes must be at least {MIN_HEADER_BYTES}"),
             ));
         }
-        let ping_interval = millis("ws_ping_interval_ms")?;
-        let graceful = millis("timeout_graceful_shutdown_ms")?;
+        let millis = |n: u32| Duration::from_millis(n.into());
+        let some = |n: u32| (n > 0).then_some(millis(n));
         Ok(Self {
-            limit_concurrency: size("limit_concurrency")?,
-            backlog: u32::try_from(number("backlog")?.max(1))
-                .map_err(|_| error("EINVAL", "server setting backlog is too large"))?,
-            timeout_keep_alive: millis("timeout_keep_alive_ms")?,
-            timeout_graceful_shutdown: (!graceful.is_zero()).then_some(graceful),
-            max_header_bytes: usize::try_from(max_header_bytes)
-                .map_err(|_| error("EINVAL", "server setting max_header_bytes is too large"))?,
+            limit_concurrency: n_usize(limit_concurrency),
+            backlog: backlog.max(1),
+            timeout_keep_alive: millis(keep_alive),
+            timeout_graceful_shutdown: some(graceful),
+            max_header_bytes: n_usize(max_header_bytes),
             websocket: crate::websocket::Limits {
-                max_size: Some(size("ws_max_size")?).filter(|&n| n > 0),
-                max_queue: size("ws_max_queue")?.max(1),
-                ping_interval: (!ping_interval.is_zero()).then_some(ping_interval),
-                ping_timeout: millis("ws_ping_timeout_ms")?,
+                max_size: (ws_max_size > 0).then_some(n_usize(ws_max_size)),
+                max_queue: n_usize(ws_max_queue).max(1),
+                ping_interval: some(ping_interval),
+                ping_timeout: millis(ping_timeout),
             },
         })
     }
 }
 
+fn n_usize(value: u32) -> usize {
+    usize::try_from(value).unwrap_or(usize::MAX)
+}
 pub(super) struct Server {
     pub config: Config,
     pub requests: Mutex<BTreeSet<i32>>,
@@ -93,7 +98,7 @@ pub(super) enum BodyState {
 }
 
 pub(super) struct Request {
-    pub metadata: Value,
+    pub head: hyper::http::request::Parts,
     pub upgraded: AtomicBool,
     pub accepted: AtomicBool,
     pub server: Arc<Server>,

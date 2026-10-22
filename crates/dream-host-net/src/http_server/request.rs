@@ -4,9 +4,9 @@ use super::{
 };
 use crate::socket_operations::{Failure, Output, OwnedResource};
 use bytes::Bytes;
+use dream_host_abi::wire::{VERSION, Writer};
 use http_body_util::BodyExt;
-use hyper::{Request as HttpRequest, Response, body::Incoming};
-use serde_json::json;
+use hyper::{Method, Request as HttpRequest, Response, body::Incoming, http::request::Parts};
 use std::{
     collections::BTreeSet,
     convert::Infallible,
@@ -47,15 +47,15 @@ pub(super) async fn dispatch(
     }
     let (reply, result) = oneshot::channel();
     let (disconnected, _) = watch::channel(false);
-    let metadata = json!({"method":input.method().as_str(),"path":input.uri().path(),"query":input.uri().query().unwrap_or(""),"headers":input.headers().iter().map(|(k,v)| [k.as_str().to_string(),String::from_utf8_lossy(v.as_bytes()).to_string()]).collect::<Vec<_>>()});
     let upgrade = hyper::upgrade::on(&mut input);
+    let (head, body) = input.into_parts();
     let request = Arc::new(Request {
-        metadata,
+        head,
         upgraded: false.into(),
         accepted: false.into(),
         connection: connection.clone(),
         server: server.clone(),
-        body: Mutex::new(BodyState::Unread(input.into_body())),
+        body: Mutex::new(BodyState::Unread(body)),
         uploads: std::sync::Mutex::new(Vec::new()),
         upgrade: Mutex::new(Some(upgrade)),
         reply: std::sync::Mutex::new(Some(reply)),
@@ -88,12 +88,44 @@ pub(super) fn accepted(id: i32) -> Result<Output, Failure> {
         .cloned()
         .ok_or_else(|| error("ECLOSED", "HTTP client disconnected"))?;
     request.accepted.store(true, Ordering::Release);
-    let mut metadata = request.metadata.clone();
-    metadata["id"] = json!(id);
     Ok(Output {
-        bytes: metadata.to_string().into_bytes(),
+        bytes: record(id, &request.head),
         child: Some(OwnedResource::new(id, state::release)),
     })
+}
+
+/// Method codes in the request record; anything else is sent as code 0 followed by its text.
+const METHODS: [Method; 9] = [
+    Method::GET,
+    Method::HEAD,
+    Method::POST,
+    Method::PUT,
+    Method::DELETE,
+    Method::PATCH,
+    Method::OPTIONS,
+    Method::CONNECT,
+    Method::TRACE,
+];
+
+/// The request record decoded by the guest's `HttpIncoming`: `[version][id][method code]
+/// [method text when the code is 0][path][query][header count][name, value]...`.
+pub(super) fn record(id: i32, head: &Parts) -> Vec<u8> {
+    let mut writer = Writer::new();
+    writer.u8(VERSION).i32(id);
+    match METHODS.iter().position(|method| *method == head.method) {
+        Some(index) => writer.u8(index as u8 + 1),
+        None => writer.u8(0).text(head.method.as_str()),
+    };
+    writer
+        .text(head.uri.path())
+        .text(head.uri.query().unwrap_or(""))
+        .i32(i32::try_from(head.headers.len()).unwrap_or(i32::MAX));
+    for (name, value) in &head.headers {
+        writer
+            .text(name.as_str())
+            .text(&String::from_utf8_lossy(value.as_bytes()));
+    }
+    writer.finish()
 }
 
 fn consumed() -> Failure {

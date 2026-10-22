@@ -77,6 +77,25 @@ public class HttpHeaders {
         return pairs;
     }
 
+    internal fun write_wire(borrow writer: WireWriter): void {
+        writer.i32(this.names.length);
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            writer.text(this.names[i]);
+            writer.text(this.values[i]);
+        }
+    }
+
+    // The host sends names already lowercased, so they skip `append`'s normalization.
+    internal static fun read_wire(borrow reader: WireReader): HttpHeaders {
+        let headers = HttpHeaders();
+        let count = reader.i32();
+        for (let i = 0; i < count && reader.ok; i = i + 1) {
+            headers.names.push(reader.text());
+            headers.values.push(reader.text());
+        }
+        return headers;
+    }
+
     internal static fun from_wire(pairs: JsonValue): HttpHeaders {
         let headers = HttpHeaders();
         for (let i = 0; i < pairs.length; i = i + 1) {

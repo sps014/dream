@@ -137,7 +137,7 @@ extend WebGenerator {
                 + web_quote(content_type) + ");"
         );
         out.line(
-            "let started = WebOperation.submit(WebApp.response_request(\"stream_begin\", ctx.incoming.req_id, stream_response), [], ctx.cancellation_token).await;"
+            "let started = WebOperation.submit(WebApp.response_request(WebAction.StreamBegin, ctx.incoming.req_id, stream_response), [], ctx.cancellation_token).await;"
         );
         out.line("if started.is_err() { return HttpOutgoing.already_sent(); }");
         let prefix = "for";
@@ -152,13 +152,13 @@ extend WebGenerator {
             chunk = "Encoding.utf8_encode(item)";
         }
         out.line(
-            "let written = WebOperation.submit(WebOperation.request(\"stream_write\", ctx.incoming.req_id), "
+            "let written = WebOperation.submit(WebOperation.request(WebAction.StreamWrite, ctx.incoming.req_id), "
                 + chunk + ", ctx.cancellation_token).await;"
         );
         out.line("if written.is_err() { break; }");
         out.line("}");
         out.line(
-            "WebOperation.submit(WebOperation.request(\"stream_end\", ctx.incoming.req_id), [], ctx.cancellation_token).await;"
+            "WebOperation.submit(WebOperation.request(WebAction.StreamEnd, ctx.incoming.req_id), [], ctx.cancellation_token).await;"
         );
         out.line("return HttpOutgoing.already_sent();");
     }
@@ -186,16 +186,20 @@ extend WebGenerator {
                         + ", "
                         + web_quote(
                             Json.serialize(
-                                paths.get("paths").unwrap_or(JsonValue.null())
-                                    .get(route.path).unwrap_or(JsonValue.null())
-                                    .get(route.method.to_lower()).unwrap_or(JsonValue.null())
+                                paths.get("paths")
+                                    .unwrap_or(JsonValue.null())
+                                    .get(route.path)
+                                    .unwrap_or(JsonValue.null())
+                                    .get(route.method.to_lower())
+                                    .unwrap_or(JsonValue.null())
                             )
                         )
                         + ", "
                         + route.websocket.to_string()
                         + ", "
-                        + web_quote(Json.serialize(paths.get("components").unwrap_or(JsonValue.null())))
-                        + ")); "
+                        + web_quote(
+                            Json.serialize(paths.get("components").unwrap_or(JsonValue.null()))
+                        ) + ")); "
                 );
             }
             out.line("return WebRouter(routes); }");

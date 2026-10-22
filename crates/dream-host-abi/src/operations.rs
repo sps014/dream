@@ -29,9 +29,9 @@ impl<C> Output<C> {
     }
 }
 
-/// The guest-facing `{"code","message"}` error record.
-pub fn error_json(code: &str, message: &str) -> String {
-    serde_json::json!({"code": code, "message": message}).to_string()
+/// The guest-facing error record: code then message, as `wire` strings.
+pub fn error_record(code: &str, message: &str) -> Vec<u8> {
+    crate::wire::Writer::new().text(code).text(message).finish()
 }
 
 struct Operation<C> {
@@ -119,7 +119,8 @@ impl<C: Detach> Operations<C> {
         true
     }
 
-    /// Status byte 0 (pending), 1 (bytes follow), or 2 (error JSON follows, empty if unknown).
+    /// Status byte 0 (pending), 1 (bytes follow), or 2 (an `error_record` follows, empty if the
+    /// operation is unknown).
     pub fn result(&self, id: i32) -> Vec<u8> {
         let Some(operation) = self.get(id) else {
             return vec![2];
@@ -134,7 +135,7 @@ impl<C: Detach> Operations<C> {
             }
             Some(Err((code, message))) => {
                 let mut output = vec![2];
-                output.extend_from_slice(error_json(code, message).as_bytes());
+                output.extend_from_slice(&error_record(code, message));
                 output
             }
         }

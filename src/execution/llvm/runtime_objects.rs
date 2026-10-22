@@ -41,6 +41,20 @@ fn compile_objects<T: Sync>(
     })
 }
 
+/// The per-configuration directory debug runtime objects are cached in.
+fn objects_dir(
+    config: &crate::driver::toolchain::ToolchainConfig,
+    kind: &str,
+    identity: &str,
+) -> Result<PathBuf, String> {
+    let dir = config
+        .native_rt_cache_root()
+        .join(kind)
+        .join(blake3::hash(identity.as_bytes()).to_hex().as_str());
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
 pub(super) fn store_prebuilt(dir: &Path, objects: &[PathBuf]) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let mut manifest = Vec::new();
@@ -109,11 +123,7 @@ pub(super) fn wasm(
         crate::driver::wasi::GUEST_FEATURES,
         dream_mir::runtime::WASM32_LIBC_UNITS
     );
-    let dir = config
-        .native_rt_cache_root()
-        .join("wasm-objects")
-        .join(blake3::hash(identity.as_bytes()).to_hex().as_str());
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = objects_dir(config, "wasm-objects", &identity)?;
     let include_dirs = guest_include_dirs(&config.runtime_c);
     let includes: Vec<_> = include_dirs.iter().map(PathBuf::as_path).collect();
     let namespaces = Default::default();
@@ -173,11 +183,7 @@ pub(super) fn native(
         config.fingerprint(),
         rt_stamp::content_fingerprint(vec![clang.clone()])
     );
-    let dir = config
-        .native_rt_cache_root()
-        .join("native-objects")
-        .join(blake3::hash(identity.as_bytes()).to_hex().as_str());
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = objects_dir(config, "native-objects", &identity)?;
     let (mut units, vendors) = super::runtime::bitcode_units(&config.runtime_c, need);
     units.extend(vendors);
     let mut flags = vec!["-O0", HEAP_COUNTERS_DEFINE];

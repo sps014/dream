@@ -12,13 +12,13 @@
 //! one that runs it, so the program's `-mcpu` (see `build::cpu_args`) decides for both.
 
 use super::bundle::{RtDir, prebuilt_file, rt_dir};
+use super::runtime_build::{RuntimeCache, Unit, write_signatures};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
 use dream_mir::runtime::{RUNTIME_MODULES, RuntimeNeed, core_runtime_include_dir};
-use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -31,28 +31,13 @@ pub struct LlvmRuntime {
 
 const VENDOR_ARCHIVE: &str = "libdream_rt_vendor.a";
 
-fn snapshot_runtime(
-    dir: &Path,
-    bc: PathBuf,
-    sigs: PathBuf,
-    archive: Option<PathBuf>,
-) -> Result<LlvmRuntime, String> {
-    let files: Vec<_> = [Some(bc), Some(sigs), archive]
-        .into_iter()
-        .flatten()
-        .collect();
-    let outputs = super::runtime_snapshot::publish(dir, &files)?;
+fn snapshot(cache: &RuntimeCache, outputs: &[PathBuf]) -> Result<LlvmRuntime, String> {
+    let outputs = cache.snapshot(outputs)?;
     Ok(LlvmRuntime {
         bc: outputs[0].clone(),
         sigs: outputs[1].clone(),
         archive: outputs.get(2).cloned(),
     })
-}
-
-pub(super) struct Unit {
-    path: PathBuf,
-    defines: Vec<String>,
-    include_dirs: Vec<PathBuf>,
 }
 
 pub(super) fn clang_level_flags(opt: OptLevel) -> Vec<&'static str> {
@@ -301,24 +286,13 @@ pub(super) fn build_native_runtime(
     dir: &Path,
 ) -> Result<LlvmRuntime, String> {
     let clang = tools.clang()?;
-    let io = |e: std::io::Error| format!("{}: {e}", dir.display());
-    std::fs::create_dir_all(dir).map_err(io)?;
-    let lock_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(dir.join(".lock"))
-        .map_err(io)?;
-    lock_file.lock().map_err(io)?;
-
+    let cache = RuntimeCache::open(dir)?;
     let config = &tools.config;
     let root = &config.runtime_c;
     let (bc_units, vendored) = bitcode_units(root, need);
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
     let archive = (!vendored.is_empty()).then(|| dir.join(VENDOR_ARCHIVE));
-    let stamp = dir.join(".stamp");
     let mut level = clang_level_flags(opt);
     // The same bitcode backs shared libraries, whose ELF TLS cannot use local-exec relocations.
     if !spec.is_windows() {
@@ -336,10 +310,6 @@ pub(super) fn build_native_runtime(
                 .to_path_buf(),
         );
     }
-    let dependency_file = dir.join(".dependencies.json");
-    let previous_dependencies = std::fs::read(&dependency_file)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Vec<PathBuf>>(&bytes).ok());
     let fingerprint_for = |dependencies: &[PathBuf]| {
         let mut all = inputs.clone();
         all.extend_from_slice(dependencies);
@@ -353,22 +323,13 @@ pub(super) fn build_native_runtime(
             dream_mir::backend::llvm::native_header_function_names()
         )
     };
-    let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());
-    let output_stamp = dir.join(".outputs");
+    let fingerprint = fingerprint_for(cache.previous_dependencies());
     let outputs: Vec<PathBuf> = [Some(bc.clone()), Some(sigs.clone()), archive.clone()]
         .into_iter()
         .flatten()
         .collect();
-    let fresh = rt_stamp::matches(
-        &output_stamp,
-        &rt_stamp::content_fingerprint(outputs.clone()),
-    ) && previous_dependencies.is_some()
-        && bc.exists()
-        && sigs.exists()
-        && archive.as_ref().is_none_or(|a| a.exists())
-        && rt_stamp::matches(&stamp, &fingerprint);
-    if fresh && config.compiler_environment.is_empty() {
-        return snapshot_runtime(dir, bc, sigs, archive);
+    if cache.is_fresh(&outputs, &fingerprint) && config.compiler_environment.is_empty() {
+        return snapshot(&cache, &outputs);
     }
 
     let namespaces = Default::default();
@@ -387,12 +348,14 @@ pub(super) fn build_native_runtime(
     strip_target_cpu(tools, &bc)?;
 
     let anchor = build_anchor(config, spec, &clang, dir, &bc_flags)?;
-    let merged = dir.join("sigs.bc");
-    let mut link = tools.command("llvm-link");
-    link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
-    run_captured(&mut link, "llvm-link (runtime signatures)")?;
-    let merged_ll = strip_cpu_attrs(&disassemble(tools, &merged)?);
-    std::fs::write(&sigs, reduce_disassembly(&merged_ll)).map_err(io)?;
+    write_signatures(
+        tools,
+        &bc,
+        &anchor,
+        &sigs,
+        "llvm-link (runtime signatures)",
+        strip_cpu_attrs,
+    )?;
 
     if let Some(archive) = &archive {
         let mut objs = Vec::new();
@@ -411,17 +374,11 @@ pub(super) fn build_native_runtime(
             let _ = std::fs::remove_file(o);
         }
     }
-    for p in parts.iter().chain([&anchor, &merged]) {
+    for p in &parts {
         let _ = std::fs::remove_file(p);
     }
-    std::fs::write(
-        &dependency_file,
-        serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,
-    )
-    .map_err(io)?;
-    std::fs::write(&output_stamp, rt_stamp::content_fingerprint(outputs)).map_err(io)?;
-    std::fs::write(&stamp, fingerprint_for(&dependencies)).map_err(io)?;
-    snapshot_runtime(dir, bc, sigs, archive)
+    cache.commit(&dependencies, &outputs, &fingerprint_for(&dependencies))?;
+    snapshot(&cache, &outputs)
 }
 
 pub(super) fn disassemble(tools: &LlvmTools, bc: &Path) -> Result<String, String> {

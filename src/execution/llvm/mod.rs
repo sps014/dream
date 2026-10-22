@@ -12,6 +12,7 @@ mod icon;
 pub mod pack;
 mod remarks;
 pub mod runtime;
+mod runtime_build;
 mod runtime_cache;
 mod runtime_objects;
 mod runtime_snapshot;

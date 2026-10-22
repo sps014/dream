@@ -7,7 +7,8 @@
 
 use super::build::{llc_level, pipeline, write_ir};
 use super::bundle::{ClangRt, RtDir, clang_rt, prebuilt_file, rt_dir};
-use super::runtime::{anchor_unit, disassemble, reduce_disassembly};
+use super::runtime::anchor_unit;
+use super::runtime_build::{RuntimeCache, Unit, write_signatures};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::{
@@ -16,7 +17,6 @@ use crate::driver::wasi::{
 use crate::driver::wasm_opt::OptLevel;
 use dream_mir::backend::llvm::RuntimeSigs;
 use dream_mir::runtime::RuntimeNeed;
-use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 pub struct WasmRuntime {
@@ -42,12 +42,6 @@ const KEEP_PUBLIC: &[&str] = &[
     "free",
     "dream_heap_init",
 ];
-
-pub(super) struct Unit {
-    pub path: PathBuf,
-    pub defines: Vec<String>,
-    pub include_dirs: Vec<PathBuf>,
-}
 
 pub(super) fn units(root: &Path, need: RuntimeNeed) -> Vec<Unit> {
     let mut out: Vec<Unit> = dream_mir::runtime::wasm32_runtime_c_files(root)
@@ -140,15 +134,7 @@ pub(super) fn build_wasm_runtime(
 ) -> Result<WasmRuntime, String> {
     let clang = tools.clang()?;
     let sysroot = wasi_sysroot(&clang)?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let lock_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(dir.join(".lock"))
-        .map_err(|e| e.to_string())?;
-    lock_file.lock().map_err(|e| e.to_string())?;
+    let cache = RuntimeCache::open(dir)?;
 
     let units = units(&tools.config.runtime_c, need);
     let include_dirs = guest_include_dirs(&tools.config.runtime_c);
@@ -156,7 +142,6 @@ pub(super) fn build_wasm_runtime(
     let bc = dir.join("dream_rt.bc");
     let sigs = dir.join("dream_rt.sigs");
     let objs = asm_objs(dir, &units);
-    let stamp = dir.join(".stamp");
     let mut inputs: Vec<PathBuf> = units.iter().map(|u| u.path.clone()).collect();
     for d in include_dirs
         .iter()
@@ -170,10 +155,6 @@ pub(super) fn build_wasm_runtime(
     inputs.push(tools.tool("llvm-link"));
     inputs.push(sysroot.join("include/wasm32-wasip1/string.h"));
     inputs.extend(rt_stamp::files_under(&tools.config.runtime_c));
-    let dependencies_file = dir.join(".dependencies.json");
-    let previous_dependencies = std::fs::read(&dependencies_file)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Vec<PathBuf>>(&bytes).ok());
     let fingerprint_for = |deps: &[PathBuf]| {
         let mut all = inputs.clone();
         all.extend_from_slice(deps);
@@ -185,19 +166,11 @@ pub(super) fn build_wasm_runtime(
             dream_mir::runtime::WASM32_LIBC_UNITS
         )
     };
-    let fingerprint = fingerprint_for(previous_dependencies.as_deref().unwrap_or_default());
+    let fingerprint = fingerprint_for(cache.previous_dependencies());
     let mut outputs = vec![bc.clone(), sigs.clone()];
     outputs.extend(objs.iter().cloned());
-    let integrity = dir.join(".outputs");
-    if previous_dependencies.is_some()
-        && rt_stamp::matches(&integrity, &rt_stamp::content_fingerprint(outputs.clone()))
-        && bc.exists()
-        && sigs.exists()
-        && objs.iter().all(|o| o.exists())
-        && rt_stamp::matches(&stamp, &fingerprint)
-        && tools.config.compiler_environment.is_empty()
-    {
-        return snapshot_runtime(dir, bc, sigs, objs);
+    if cache.is_fresh(&outputs, &fingerprint) && tools.config.compiler_environment.is_empty() {
+        return snapshot(&cache, &outputs);
     }
 
     let namespaces = Default::default();
@@ -297,35 +270,23 @@ pub(super) fn build_wasm_runtime(
         run_captured(cmd.arg("-w").arg("-o").arg(out).arg(src), "clang (anchor)")
     };
     let anchor = anchor_unit(dir, "dream_rt_wasm32.h", &check, &compile)?;
-    let merged = dir.join("sigs.bc");
-    let mut link = tools.command("llvm-link");
-    link.arg(&bc).arg(&anchor).arg("-o").arg(&merged);
-    run_captured(&mut link, "llvm-link (wasm32 runtime signatures)")?;
-    std::fs::write(&sigs, reduce_disassembly(&disassemble(tools, &merged)?))
-        .map_err(|e| e.to_string())?;
-    for p in parts.iter().chain([&anchor, &merged]) {
+    write_signatures(
+        tools,
+        &bc,
+        &anchor,
+        &sigs,
+        "llvm-link (wasm32 runtime signatures)",
+        str::to_string,
+    )?;
+    for p in &parts {
         let _ = std::fs::remove_file(p);
     }
-    std::fs::write(
-        &dependencies_file,
-        serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    std::fs::write(&integrity, rt_stamp::content_fingerprint(outputs))
-        .map_err(|e| e.to_string())?;
-    std::fs::write(&stamp, fingerprint_for(&dependencies)).map_err(|e| e.to_string())?;
-    snapshot_runtime(dir, bc, sigs, objs)
+    cache.commit(&dependencies, &outputs, &fingerprint_for(&dependencies))?;
+    snapshot(&cache, &outputs)
 }
 
-fn snapshot_runtime(
-    dir: &Path,
-    bc: PathBuf,
-    sigs: PathBuf,
-    objs: Vec<PathBuf>,
-) -> Result<WasmRuntime, String> {
-    let mut files = vec![bc, sigs];
-    files.extend(objs);
-    let outputs = super::runtime_snapshot::publish(dir, &files)?;
+fn snapshot(cache: &RuntimeCache, outputs: &[PathBuf]) -> Result<WasmRuntime, String> {
+    let outputs = cache.snapshot(outputs)?;
     Ok(WasmRuntime {
         bc: outputs[0].clone(),
         sigs: outputs[1].clone(),

@@ -354,12 +354,9 @@ impl Compiler {
         );
         field("entry", main_file_path.as_bytes());
         field("output", out_path.as_bytes());
-        let manifest =
-            crate::driver::project_manifest::find_project_root_from(Path::new(main_file_path))
-                .and_then(|root| {
-                    fs::read(root.join(crate::driver::project_manifest::MANIFEST_FILE_NAME)).ok()
-                })
-                .unwrap_or_default();
+        let manifest = dream_abi::project::find_project_root(Path::new(main_file_path))
+            .and_then(|root| fs::read(root.join(dream_abi::project::MANIFEST_FILE_NAME)).ok())
+            .unwrap_or_default();
         field("manifest", &manifest);
         Some(hash.finalize())
     }

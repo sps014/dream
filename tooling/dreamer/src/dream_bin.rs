@@ -80,7 +80,7 @@ pub fn locate() -> Result<PathBuf> {
         }
     }
 
-    if let Some(on_path) = find_on_path("dream") {
+    if let Ok(on_path) = which::which("dream") {
         return Ok(on_path);
     }
 
@@ -123,7 +123,7 @@ pub fn locate_dreamer() -> Result<PathBuf> {
         }
     }
 
-    if let Some(on_path) = find_on_path("dreamer") {
+    if let Ok(on_path) = which::which("dreamer") {
         return Ok(on_path);
     }
 
@@ -148,18 +148,6 @@ fn binary_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
         dir.join(name)
     };
     exe.is_file().then_some(exe)
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    let exe_name = if cfg!(windows) {
-        format!("{}.exe", name)
-    } else {
-        name.to_string()
-    };
-    std::env::split_paths(&path_var)
-        .map(|dir| dir.join(&exe_name))
-        .find(|p| p.is_file())
 }
 
 #[cfg(test)]

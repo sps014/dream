@@ -69,6 +69,7 @@ object = { version = "0.37", default-features = false, features = ["read"], opti
 wasmparser = "0.252"
 # Canonical paths without Windows' `\\?\` verbatim prefix, which clang cannot resolve includes under.
 dunce = "1"
+which = "8.0.6"
 
 [features]
 default = ["native"]

@@ -23,7 +23,7 @@ pub fn sync(project_root: &Path, assets: &[String], out_dir: &Path) -> Result<()
 
 /// The project's declared assets and its root, for a build whose entry sits inside a project.
 pub fn for_entry(entry: &Path) -> Result<Option<(PathBuf, Vec<String>)>, String> {
-    let Some(root) = super::project_manifest::find_project_root_from(entry) else {
+    let Some(root) = dream_abi::project::find_project_root(entry) else {
         return Ok(None);
     };
     let manifest = super::project_manifest::ProjectManifest::load(&root)?;

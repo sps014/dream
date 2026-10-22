@@ -2,10 +2,11 @@
 
 use super::init::{Scaffold, write_gitignore};
 use crate::manifest::{
-    Dependency, DetailedDependency, MANIFEST_FILE_NAME, Manifest, RunTarget, TestConfig,
-    import_segment, parse_target_list,
+    Dependency, DetailedDependency, Manifest, RunTarget, TestConfig, import_segment,
+    parse_target_list,
 };
 use anyhow::{Context, Result, bail};
+use dream_abi::project::MANIFEST_FILE_NAME;
 use std::path::Path;
 
 const EXAMPLE_TEST: &str = "import system;\nimport system.testing;\n\n\

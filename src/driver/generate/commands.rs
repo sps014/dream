@@ -261,7 +261,7 @@ pub fn summarize(result: &GenResult) -> String {
 /// The default `--capture` directory: `<project or entry dir>/target/obj/generators/captures/<gen>`.
 pub fn default_capture_dir(entry: &str, generator: &str) -> PathBuf {
     let entry_path = Path::new(entry);
-    let root = super::manifest::find_project_root(entry).unwrap_or_else(|| {
+    let root = dream_abi::project::find_project_root(entry_path).unwrap_or_else(|| {
         entry_path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())

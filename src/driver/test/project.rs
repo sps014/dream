@@ -1,6 +1,7 @@
 //! Which files, assets and hosts make up the test project `dream test <path>` names.
 
-use crate::driver::project_manifest::{ProjectManifest, find_project_root_from};
+use crate::driver::project_manifest::ProjectManifest;
+use dream_abi::project::find_project_root;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -52,7 +53,7 @@ impl TestProject {
         if !path.is_dir() {
             return Err(format!("path not found: '{}'", path.display()));
         }
-        let manifest_here = path.join(crate::driver::project_manifest::MANIFEST_FILE_NAME);
+        let manifest_here = path.join(dream_abi::project::MANIFEST_FILE_NAME);
         if manifest_here.is_file() {
             let manifest = ProjectManifest::load(&path)?;
             let scan = if manifest.package_type.as_deref() == Some("test") {
@@ -143,7 +144,7 @@ impl TestProject {
 }
 
 fn owning_package(dir: &Path) -> Result<Option<(PathBuf, ProjectManifest)>, String> {
-    let Some(root) = find_project_root_from(dir) else {
+    let Some(root) = find_project_root(dir) else {
         return Ok(None);
     };
     let manifest = ProjectManifest::load(&root)?;

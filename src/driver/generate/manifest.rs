@@ -3,20 +3,12 @@
 
 use std::path::{Path, PathBuf};
 
-pub use crate::driver::project_manifest::find_project_root_from;
 use crate::driver::project_manifest::{GeneratorEntry, ProjectManifest};
-
-/// Walks from `entry_file`'s directory upward looking for `dream.toml`.
-pub fn find_project_root(entry_file: &str) -> Option<PathBuf> {
-    let start = Path::new(entry_file)
-        .parent()
-        .unwrap_or_else(|| Path::new("."));
-    find_project_root_from(start)
-}
+use dream_abi::project::find_project_root;
 
 /// `[[generators]]` entries from the nearest `dream.toml`, keyed by the canonical generator path.
 pub fn load_manifest_generators(entry_file: &str) -> Vec<(String, GeneratorEntry)> {
-    let Some(dir) = find_project_root(entry_file) else {
+    let Some(dir) = find_project_root(Path::new(entry_file)) else {
         return Vec::new();
     };
     let Ok(manifest) = ProjectManifest::load(&dir) else {
@@ -60,7 +52,7 @@ pub fn package_entry_path(project_root: &Path) -> Option<PathBuf> {
 
 /// Default compile root when the CLI is given no file: nearest `dream.toml` + `[package].entry`.
 pub fn default_compile_entry(cwd: &Path) -> Option<PathBuf> {
-    let root = find_project_root_from(cwd)?;
+    let root = find_project_root(cwd)?;
     package_entry_path(&root)
 }
 

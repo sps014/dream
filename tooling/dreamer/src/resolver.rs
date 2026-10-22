@@ -12,9 +12,10 @@
 //! Path and git dependencies are resolved immediately by reading the dependency's own
 //! `dream.toml` and are treated as pinned (never subject to registry version selection).
 
-use crate::manifest::{Dependency, MANIFEST_FILE_NAME, Manifest};
+use crate::manifest::{Dependency, Manifest};
 use crate::registry::{IndexEntry, open_registry};
 use anyhow::{Context, Result, anyhow, bail};
+use dream_abi::project::MANIFEST_FILE_NAME;
 use semver::{Version, VersionReq};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -378,8 +379,9 @@ enum ResolvedKind {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{MANIFEST_FILE_NAME, Manifest};
+    use crate::manifest::Manifest;
     use crate::registry::{IndexDependency, IndexEntry};
+    use dream_abi::project::MANIFEST_FILE_NAME;
     use std::collections::BTreeMap;
 
     fn publish(registry_dir: &Path, name: &str, vers: &str, deps: &[(&str, &str)]) {

@@ -17,7 +17,7 @@ impl ProjectPaths {
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
         let start = dunce::canonicalize(start).unwrap_or_else(|_| start.to_path_buf());
-        match crate::driver::project_manifest::find_project_root_from(&start) {
+        match dream_abi::project::find_project_root(&start) {
             Some(root) => ProjectPaths {
                 root: dunce::canonicalize(&root).unwrap_or(root),
                 has_manifest: true,

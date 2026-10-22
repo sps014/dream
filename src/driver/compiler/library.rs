@@ -6,12 +6,9 @@ pub(super) fn relativize_sources(
 ) -> Result<(), CompileError> {
     let entry = dunce::canonicalize(entry)?;
     let directory = entry.parent().unwrap_or_else(|| Path::new("."));
-    let root = crate::driver::project_manifest::find_project_root_from(directory)
-        .unwrap_or_else(|| directory.to_path_buf());
-    let package = if root
-        .join(crate::driver::project_manifest::MANIFEST_FILE_NAME)
-        .is_file()
-    {
+    let root =
+        dream_abi::project::find_project_root(directory).unwrap_or_else(|| directory.to_path_buf());
+    let package = if root.join(dream_abi::project::MANIFEST_FILE_NAME).is_file() {
         crate::driver::project_manifest::ProjectManifest::load(&root)
             .map_err(CompileError::Manifest)?
             .package_name

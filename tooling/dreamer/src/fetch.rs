@@ -92,7 +92,7 @@ fn fetch_at(home: &Path, registry: &dyn RegistryClient, entry: &IndexEntry) -> R
 
 fn validate_identity(root: &Path, entry: &IndexEntry) -> Result<()> {
     let manifest =
-        crate::manifest::Manifest::load(&root.join(crate::manifest::MANIFEST_FILE_NAME))?;
+        crate::manifest::Manifest::load(&root.join(dream_abi::project::MANIFEST_FILE_NAME))?;
     let package = manifest
         .package
         .context("registry archive has no package manifest")?;
@@ -207,8 +207,8 @@ pub fn package_project(project_dir: &Path, dest_tarball: &Path) -> Result<Vec<u8
     let encoder = GzEncoder::new(file, Compression::default());
     let mut builder = tar::Builder::new(encoder);
 
-    let manifest_path = project_dir.join(crate::manifest::MANIFEST_FILE_NAME);
-    builder.append_path_with_name(&manifest_path, crate::manifest::MANIFEST_FILE_NAME)?;
+    let manifest_path = project_dir.join(dream_abi::project::MANIFEST_FILE_NAME);
+    builder.append_path_with_name(&manifest_path, dream_abi::project::MANIFEST_FILE_NAME)?;
 
     for dir in ["src", "native"] {
         let path = project_dir.join(dir);

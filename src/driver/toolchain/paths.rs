@@ -101,15 +101,8 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
 
 impl ToolchainConfig {
     pub fn find_on_path(&self, name: &str) -> Option<PathBuf> {
-        let exe = if cfg!(windows) && !name.ends_with(".exe") && !name.contains(['/', '\\']) {
-            format!("{name}.exe")
-        } else {
-            name.to_string()
-        };
-        self.path
-            .iter()
-            .map(|dir| dir.join(&exe))
-            .find(|p| p.is_file())
+        let search = std::env::join_paths(&self.path).ok()?;
+        which::which_in(name, Some(search), &self.cwd).ok()
     }
 
     pub fn program(&self, value: Option<&OsString>) -> Option<PathBuf> {

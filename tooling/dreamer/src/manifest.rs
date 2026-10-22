@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-pub const MANIFEST_FILE_NAME: &str = "dream.toml";
+use dream_abi::project::MANIFEST_FILE_NAME;
 
 /// A runnable application (`bin`), a library (`lib`), or a test project (`test`) whose `@test`
 /// functions `dreamer test` builds into one runner.
@@ -715,18 +715,6 @@ impl Manifest {
         Ok(())
     }
 
-    /// Walks upward from `start_dir` looking for the nearest `dream.toml`.
-    pub fn find_project_root(start_dir: &Path) -> Option<PathBuf> {
-        let mut dir = Some(start_dir.to_path_buf());
-        while let Some(d) = dir {
-            if d.join(MANIFEST_FILE_NAME).is_file() {
-                return Some(d);
-            }
-            dir = d.parent().map(Path::to_path_buf);
-        }
-        None
-    }
-
     /// Nearest ancestor `dream.toml` that declares `[package]`.
     pub fn find_package_root(start_dir: &Path) -> Option<PathBuf> {
         let mut dir = Some(start_dir.to_path_buf());
@@ -1094,7 +1082,7 @@ frameworks = ["Security"]
         std::fs::create_dir_all(&nested).unwrap();
 
         assert_eq!(
-            Manifest::find_project_root(&nested),
+            dream_abi::project::find_project_root(&nested),
             Some(tmp.path().to_path_buf())
         );
     }
@@ -1102,7 +1090,7 @@ frameworks = ["Security"]
     #[test]
     fn no_project_root_found_returns_none() {
         let tmp = tempfile::tempdir().unwrap();
-        assert_eq!(Manifest::find_project_root(tmp.path()), None);
+        assert_eq!(dream_abi::project::find_project_root(tmp.path()), None);
     }
 
     #[test]

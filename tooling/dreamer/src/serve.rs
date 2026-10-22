@@ -227,7 +227,7 @@ fn handle_request(root: &Path, request: Request) -> Result<()> {
 
 /// `[package].icon` from `dream.toml` when present and valid.
 fn package_icon_rel(root: &Path) -> Option<String> {
-    let manifest = root.join(crate::manifest::MANIFEST_FILE_NAME);
+    let manifest = root.join(dream_abi::project::MANIFEST_FILE_NAME);
     let m = crate::manifest::Manifest::load(&manifest).ok()?;
     let icon = m.package?.icon?;
     let path = root.join(&icon);

@@ -457,7 +457,7 @@ fn main() -> ExitCode {
         .as_deref()
         .map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let manifest = match dream::driver::project_manifest::find_project_root_from(&manifest_start) {
+    let manifest = match dream_abi::project::find_project_root(&manifest_start) {
         Some(root) => match dream::driver::project_manifest::ProjectManifest::load(&root) {
             Ok(manifest) => Some(manifest),
             Err(error) => {
@@ -1147,19 +1147,6 @@ fn collect_dream_files(path: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<(
     Ok(())
 }
 
-/// Walk upward from a file's directory looking for `dream.toml`.
-fn find_project_root(file_path: &Path) -> Option<PathBuf> {
-    let mut dir = file_path.parent().map(Path::to_path_buf)?;
-    loop {
-        if dir.join("dream.toml").is_file() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
-
 /// Derives the output `.wat` / `.ll` path under `target/`, never beside the source.
 ///
 /// Wasm always uses `target/web/` so hosts do not switch on debug vs `--release`.
@@ -1174,7 +1161,8 @@ fn get_path_from_file_path(file_path: &str, release: bool, native: bool) -> Opti
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let root = find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
+    let root =
+        dream_abi::project::find_project_root(path).unwrap_or_else(|| source_dir.to_path_buf());
     let sub = if native {
         if release { "release" } else { "debug" }
     } else {

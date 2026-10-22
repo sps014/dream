@@ -1,9 +1,9 @@
 use crate::manifest::{
-    MANIFEST_FILE_NAME, Manifest, PackageType, RunTarget, import_segment, parse_target_list,
-    validate_package_name,
+    Manifest, PackageType, RunTarget, import_segment, parse_target_list, validate_package_name,
 };
 use anyhow::{Context, Result, bail};
 use dream_abi::library::LibraryKind;
+use dream_abi::project::MANIFEST_FILE_NAME;
 use std::path::{Path, PathBuf};
 
 const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/", "generated/"];

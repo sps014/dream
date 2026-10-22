@@ -55,7 +55,7 @@ pub use exe::ensure_built;
 pub use exe::{ExePlan, GenExe, group as group_executables, plan as plan_executable};
 pub use identity::compiler_identity;
 pub use inspect::{GenInspection, InspectedGenerator, inspect};
-pub use manifest::{default_compile_entry, find_project_root, find_project_root_from};
+pub use manifest::default_compile_entry;
 pub use materialize::{header as generated_header, materialized_text};
 pub use model::{GenResult, SNAPSHOT_VERSION, Snapshot};
 pub use pass::{GenerateRequest, PassInputs, gather, run_generators};

@@ -397,7 +397,7 @@ fn pack_rejects_libs_and_packs_bin_for_host() {
     image::RgbaImage::from_pixel(256, 256, image::Rgba([30, 120, 200, 255]))
         .save(bin_dir.join("assets/icon.png"))
         .unwrap();
-    let manifest_path = bin_dir.join(dreamer::manifest::MANIFEST_FILE_NAME);
+    let manifest_path = bin_dir.join(dream_abi::project::MANIFEST_FILE_NAME);
     let mut manifest = Manifest::load(&manifest_path).unwrap();
     manifest.package_mut().unwrap().icon = Some("assets/icon.png".into());
     manifest.save(&manifest_path).unwrap();

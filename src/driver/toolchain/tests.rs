@@ -101,6 +101,12 @@ fn captured_path_is_used_for_program_resolution() {
         "dream-test-cc"
     };
     std::fs::write(root.path().join(name), []).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::Permissions::from_mode(0o755);
+        std::fs::set_permissions(root.path().join(name), mode).unwrap();
+    }
     let path = std::env::join_paths([root.path()]).unwrap();
     let c = ToolchainConfig::from_lookup(
         |key| (key == "PATH").then(|| path.clone()),

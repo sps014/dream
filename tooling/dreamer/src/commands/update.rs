@@ -45,8 +45,9 @@ fn update_shell(
     install_root: &Path,
     members: &[(std::path::PathBuf, crate::manifest::Manifest)],
 ) -> Result<Workspace> {
-    let root_manifest =
-        crate::manifest::Manifest::load(&install_root.join(crate::manifest::MANIFEST_FILE_NAME))?;
+    let root_manifest = crate::manifest::Manifest::load(
+        &install_root.join(dream_abi::project::MANIFEST_FILE_NAME),
+    )?;
     if root_manifest.is_workspace_root() {
         let (member_dir, member_manifest) = members
             .iter()

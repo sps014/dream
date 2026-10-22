@@ -11,10 +11,9 @@ use dream_syntax::nodes::{AttributeArg, AttributeNode, FunctionNode};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 
-use crate::driver::project_manifest::{
-    MANIFEST_FILE_NAME, NativeTable, ProjectManifest, find_project_root_from, import_segment,
-};
+use crate::driver::project_manifest::{NativeTable, ProjectManifest, import_segment};
 use crate::driver::source_loader::{ProgramAccumulator, find_dream_packages_dir};
+use dream_abi::project::{MANIFEST_FILE_NAME, find_project_root};
 
 pub const C_EXTENSIONS: [&str; 1] = ["c"];
 pub const CXX_EXTENSIONS: [&str; 3] = ["cpp", "cc", "cxx"];
@@ -73,7 +72,7 @@ impl NativeGraph {
     ) -> Result<Self, String> {
         let mut roots: BTreeSet<PathBuf> = BTreeSet::new();
         let entry = canonical(Path::new(entry_file));
-        if let Some(root) = entry.parent().and_then(find_project_root_from) {
+        if let Some(root) = entry.parent().and_then(find_project_root) {
             roots.insert(canonical(&root));
             if let Some(pkgs) = find_dream_packages_dir(&root)
                 && let Ok(rd) = std::fs::read_dir(&pkgs)
@@ -91,7 +90,7 @@ impl NativeGraph {
             if !path.is_absolute() || !path.is_file() {
                 continue;
             }
-            if let Some(root) = path.parent().and_then(find_project_root_from) {
+            if let Some(root) = path.parent().and_then(find_project_root) {
                 roots.insert(canonical(&root));
             }
         }
@@ -136,7 +135,7 @@ impl NativeGraph {
         let file = self.aliases.get(file).map_or(file, String::as_str);
         let root = canonical(Path::new(file))
             .parent()
-            .and_then(find_project_root_from)?;
+            .and_then(find_project_root)?;
         self.implicit.get(&canonical(&root)).map(String::as_str)
     }
 }

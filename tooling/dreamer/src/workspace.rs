@@ -7,10 +7,11 @@
 
 use crate::fetch;
 use crate::lockfile::{LOCKFILE_FILE_NAME, LockedPackage, Lockfile};
-use crate::manifest::{MANIFEST_FILE_NAME, Manifest, PackageType, import_segment};
+use crate::manifest::{Manifest, PackageType, import_segment};
 use crate::registry::open_registry;
 use crate::resolver::{ResolvedPackage, ResolvedSource};
 use anyhow::{Context, Result, bail};
+use dream_abi::project::MANIFEST_FILE_NAME;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

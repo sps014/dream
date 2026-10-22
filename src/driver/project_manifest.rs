@@ -2,9 +2,9 @@
 //! `[native.<set>]` tables. Parsed with `toml`; `dreamer`'s own `Manifest` owns validation of the
 //! package-manager keys, so unknown top-level tables are ignored here.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-pub const MANIFEST_FILE_NAME: &str = "dream.toml";
+use dream_abi::project::MANIFEST_FILE_NAME;
 
 /// Per-set native build settings (a `[native.<set>]` table or one of its OS subtables).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -338,23 +338,6 @@ fn opt_string(t: &toml::Table, key: &str, table: &str) -> Result<Option<String>,
             .as_str()
             .map(|s| Some(s.to_string()))
             .ok_or_else(|| format!("[{table}].{key} must be a string")),
-    }
-}
-
-/// Walks from `start` (a file or directory) upward looking for `dream.toml`.
-pub fn find_project_root_from(start: &Path) -> Option<PathBuf> {
-    let mut dir = if start.is_file() {
-        start.parent()?.to_path_buf()
-    } else {
-        start.to_path_buf()
-    };
-    loop {
-        if dir.join(MANIFEST_FILE_NAME).is_file() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
     }
 }
 

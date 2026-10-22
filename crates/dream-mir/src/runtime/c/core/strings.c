@@ -371,21 +371,6 @@ dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalar
     return p;
 }
 
-int32_t string_compare(dream_ptr a, dream_ptr b) {
-    int32_t na = dream_str_len(a);
-    int32_t nb = dream_str_len(b);
-    int32_t n = na < nb ? na : nb;
-    int32_t i;
-    const uint16_t *ua = dream_str_units(a);
-    const uint16_t *ub = dream_str_units(b);
-    for (i = 0; i < n; i++) {
-        if (ua[i] != ub[i]) {
-            return (int32_t)ua[i] - (int32_t)ub[i];
-        }
-    }
-    return na - nb;
-}
-
 dream_ptr dream_utf8_to_string(const char *s) {
     if (!s) {
         return dream_string_alloc(0);

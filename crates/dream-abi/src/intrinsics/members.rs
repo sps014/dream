@@ -65,7 +65,6 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("StringFromUtf8PrefixN", "string_from_utf8_prefix_n"),
     ("StringSubstringRaw", "string_substring_raw"),
     ("StringCopyUtf8", "string_copy_utf8"),
-    ("StringCompare", "string_compare"),
     ("StringViewEq", "string_view_eq"),
     ("StringViewCompare", "string_view_compare"),
     ("StringViewHash", "string_view_hash"),

@@ -180,8 +180,6 @@ pub const ATTR_STRING_FROM_UTF8_PREFIX_N: &str = "string_from_utf8_prefix_n";
 pub const ATTR_STRING_SUBSTRING: &str = "string_substring_raw";
 /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk copy UTF-8 bytes into a `byte[]`.
 pub const ATTR_STRING_COPY_UTF8: &str = "string_copy_utf8";
-/// `string.compare_raw(a, b)` — UTF-8 lexicographic compare (`$string_compare`).
-pub const ATTR_STRING_COMPARE: &str = "string_compare";
 /// `ReadOnlySpan<char>` helpers over `(string, offset, length)` views (`core/string_view.c`).
 pub const ATTR_STRING_VIEW_EQ: &str = "string_view_eq";
 pub const ATTR_STRING_VIEW_COMPARE: &str = "string_view_compare";
@@ -329,8 +327,6 @@ pub enum IntrinsicOp {
     StringSubstring,
     /// `string.copy_utf8(dst, dst_off, src, src_off, count)` — bulk UTF-8 copy into a `byte[]`.
     StringCopyUtf8,
-    /// `string.compare_raw(a, b)` — UTF-8 lexicographic compare.
-    StringCompare,
     /// Read-only `ReadOnlySpan<char>` scans and compares (`string_view_*`), and the slice header a
     /// `StringBuilder` span views its buffer through (retains only that buffer).
     StringView,
@@ -468,7 +464,6 @@ impl IntrinsicOp {
             ATTR_STRING_FROM_UTF8_PREFIX_N => IntrinsicOp::StringFromUtf8PrefixN,
             ATTR_STRING_SUBSTRING => IntrinsicOp::StringSubstring,
             ATTR_STRING_COPY_UTF8 => IntrinsicOp::StringCopyUtf8,
-            ATTR_STRING_COMPARE => IntrinsicOp::StringCompare,
             ATTR_STRING_VIEW_EQ
             | ATTR_STRING_VIEW_COMPARE
             | ATTR_STRING_VIEW_HASH

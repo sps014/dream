@@ -4,7 +4,7 @@ module system.text;
 extend string: Comparable<string>, Equatable<string> {
     /// Orders this string against `other` lexicographically.
     public fun compare(borrow other: string): int {
-        return string.compare_raw(this, other);
+        return string.view_compare(this, 0, this.length, other, 0, other.length);
     }
 
     /// True when the string has no characters.

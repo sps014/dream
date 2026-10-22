@@ -50,10 +50,6 @@ extend string {
         count: int
     ): void;
 
-    // UTF-16 lexicographic compare (code-unit order): negative / zero / positive.
-    @intrinsic(Intrinsic.StringCompare)
-    internal static extern fun compare_raw(borrow a: string, borrow b: string): int;
-
     // Unchecked UTF-16 unit load at a payload byte offset (even offsets).
     @intrinsic(Intrinsic.Utf8DecodeAt)
     internal static extern fun utf8_decode_at(borrow s: string, byte_off: int): char;

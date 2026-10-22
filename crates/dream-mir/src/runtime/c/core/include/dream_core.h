@@ -1632,7 +1632,6 @@ dream_ptr string_clone(dream_ptr ptr);
 dream_ptr string_from_utf8(dream_ptr bytes);
 dream_ptr string_from_utf8_prefix(dream_ptr bytes, int32_t len);
 dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalars);
-int32_t string_compare(dream_ptr a, dream_ptr b);
 int32_t string_view_eq(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo, int32_t bn);
 int32_t string_view_compare(dream_ptr a, int32_t ao, int32_t an, dream_ptr b, int32_t bo,
                             int32_t bn);

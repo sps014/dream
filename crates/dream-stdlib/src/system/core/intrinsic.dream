@@ -121,8 +121,6 @@ internal enum Intrinsic {
     StringSubstringRaw,
     /// Identifies the string copy utf8 operation for an `@intrinsic` declaration.
     StringCopyUtf8,
-    /// Identifies the string compare operation for an `@intrinsic` declaration.
-    StringCompare,
     /// Identifies the string view eq operation for an `@intrinsic` declaration.
     StringViewEq,
     /// Identifies the string view compare operation for an `@intrinsic` declaration.

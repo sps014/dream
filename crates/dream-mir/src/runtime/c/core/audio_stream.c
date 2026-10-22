@@ -325,7 +325,7 @@ int32_t dream_audio_stream_space(uintptr_t handle) {
 int32_t dream_audio_stream_push(uintptr_t handle, dream_ptr source) {
     audio_stream *s = (audio_stream *)handle;
     if (!s || !source || s->eof) return 0;
-    const unsigned char *bytes = (const unsigned char *)dream_p(source) + 4;
+    const unsigned char *bytes = (const unsigned char *)dream_array_bytes(source);
     size_t length = (size_t)dream_i32(source)[0];
     size_t skip = s->id3_skip < length ? (size_t)s->id3_skip : length;
     if (length - skip > stream_space(s)) return 0;
@@ -391,7 +391,7 @@ dream_ptr dream_audio_stream_read(uintptr_t handle, int32_t max_frames) {
     status = produced ? STATUS_DATA : s->status;
 result:;
     dream_ptr array = dream_array_new((int32_t)(produced + 3), 4);
-    float *words = (float *)((char *)dream_p(array) + 4);
+    float *words = (float *)dream_array_bytes(array);
     words[0] = (float)status;
     words[1] = s ? (float)s->rate : 0.0f;
     words[2] = s ? (float)s->channels : 0.0f;

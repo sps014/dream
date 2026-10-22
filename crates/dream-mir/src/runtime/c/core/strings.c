@@ -113,7 +113,7 @@ __attribute__((cold, noinline)) dream_ptr dream_array_realloc(dream_ptr arr, int
     dream_ptr p = dream_realloc(arr, array_bytes(new_len, esize), TAG_ARRAY);
     dream_i32(p)[0] = new_len;
     if (new_len > old_len) {
-        memset((char *)dream_p(p) + 4 + (size_t)old_len * (size_t)esize, 0,
+        memset((char *)dream_array_bytes(p) + (size_t)old_len * (size_t)esize, 0,
                (size_t)(new_len - old_len) * (size_t)esize);
     }
     return p;
@@ -129,7 +129,7 @@ __attribute__((cold, noinline)) dream_ptr dream_array_realloc_rc(dream_ptr arr, 
     (void)array_bytes(new_len, esize);
     if (arr && release && new_len < old_len) {
         for (int32_t i = new_len; i < old_len; i++) {
-            char *slot = (char *)dream_p(arr) + 4 + (size_t)i * (size_t)esize;
+            char *slot = (char *)dream_array_bytes(arr) + (size_t)i * (size_t)esize;
             if (inline_value) {
                 /* Clear the owning slot before destructors can reenter its container. */
                 _Alignas(8) unsigned char removed[esize];
@@ -151,7 +151,7 @@ __attribute__((cold, noinline)) dream_ptr dream_array_realloc_rc(dream_ptr arr, 
 dream_ptr dream_to_bytes(dream_ptr value, int32_t size) {
     dream_ptr p = dream_array_new(size, 1);
     if (value && size > 0) {
-        memcpy((char *)dream_p(p) + 4, dream_p(value), (size_t)size);
+        memcpy((char *)dream_array_bytes(p), dream_p(value), (size_t)size);
     }
     return p;
 }
@@ -164,7 +164,7 @@ dream_ptr dream_from_bytes(dream_ptr bytes, dream_size size, int32_t tag) {
         if (n > size) {
             n = size;
         }
-        memcpy(dream_p(p), (char *)dream_p(bytes) + 4, (size_t)n);
+        memcpy(dream_p(p), (char *)dream_array_bytes(bytes), (size_t)n);
     }
     return p;
 }
@@ -173,7 +173,7 @@ void string_copy_utf8(dream_ptr dst, int32_t dst_off, dream_ptr src, int32_t src
     if (count <= 0 || !dst || !src) {
         return;
     }
-    memcpy((char *)dream_p(dst) + 4 + dst_off, (const char *)dream_str_units(src) + src_off,
+    memcpy((char *)dream_array_bytes(dst) + dst_off, (const char *)dream_str_units(src) + src_off,
            (size_t)count);
 }
 
@@ -182,7 +182,7 @@ void array_store16(dream_ptr arr, int32_t off, int32_t u) {
     if (!arr) {
         return;
     }
-    memcpy((char *)dream_p(arr) + 4 + off, &v, 2);
+    memcpy((char *)dream_array_bytes(arr) + off, &v, 2);
 }
 
 int32_t utf8_width_at(dream_ptr s, int32_t i) {
@@ -329,7 +329,7 @@ dream_ptr string_from_utf8(dream_ptr bytes) {
         return dream_string_alloc(0);
     }
     n = dream_i32(bytes)[0];
-    return utf8_to_utf16((const uint8_t *)((char *)dream_p(bytes) + 4), n);
+    return utf8_to_utf16((const uint8_t *)dream_array_bytes(bytes), n);
 }
 
 dream_ptr string_from_utf8_prefix(dream_ptr bytes, int32_t len) {
@@ -341,7 +341,7 @@ dream_ptr string_from_utf8_prefix(dream_ptr bytes, int32_t len) {
     if (len > count) {
         len = count;
     }
-    return utf8_to_utf16((const uint8_t *)((char *)dream_p(bytes) + 4), len);
+    return utf8_to_utf16((const uint8_t *)dream_array_bytes(bytes), len);
 }
 
 dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalars) {
@@ -366,7 +366,7 @@ dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalar
         scalars = len >> 1;
     }
     p = dream_string_alloc(scalars);
-    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 4,
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_array_bytes(bytes),
            (size_t)scalars * 2u);
     return p;
 }

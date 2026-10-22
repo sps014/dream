@@ -31,7 +31,12 @@ impl OutBytes {
 
     pub fn data_mut(&mut self) -> &mut [u8] {
         if waiter::has_completion_hook() {
-            unsafe { std::slice::from_raw_parts_mut((self.ptr as *mut u8).add(dream_host_abi::ARRAY_COUNT_SIZE), self.len) }
+            unsafe {
+                std::slice::from_raw_parts_mut(
+                    (self.ptr as *mut u8).add(dream_host_abi::ARRAY_COUNT_SIZE),
+                    self.len,
+                )
+            }
         } else {
             unsafe { dream_host_abi::bytes_mut(self.ptr as *mut u8) }
         }

@@ -84,7 +84,7 @@ int dream_heap_is_live(dream_ptr ptr) {
     if (block < start || address > end) {
         return 0;
     }
-    int32_t size = i32_at((int32_t)block);
+    int32_t size = dream_i32((int32_t)block)[0];
     if (size < (int32_t)HEAP_HEADER_SIZE || (uint32_t)size > end - block) {
         return 0;
     }

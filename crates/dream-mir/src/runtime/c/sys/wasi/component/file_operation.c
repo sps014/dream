@@ -18,18 +18,20 @@ uintptr_t fileOperationStart(int32_t kind, int32_t fd, dream_ptr path, dream_ptr
     if (!op) { return 0; }
     op->kind = kind;
     op->value = -1;
-    if (kind == 0) {
+    if (kind == DREAM_FILE_OPEN) {
         char *p = dream_str_utf8(path), *m = dream_str_utf8(mode);
-        op->value = dream_file_open(p, m);
+        op->value = dream_file_operation(kind, fd, p, m, NULL, 0, 0);
         free(p); free(m);
-    } else if (kind == 3) { op->value = dream_file_seek(fd, position); }
-    else if (kind == 1) {
+    } else if (kind == DREAM_FILE_READ) {
         op->bytes = malloc(count ? (size_t)count : 1);
-        if (op->bytes) { op->value = dream_file_read(fd, op->bytes, count); }
-    } else {
+        if (op->bytes) { op->value = dream_file_operation(kind, fd, NULL, NULL, op->bytes, count, 0); }
+    } else if (kind == DREAM_FILE_WRITE) {
         int32_t length = data ? dream_i32(data)[0] : 0;
-        if (count <= length) { op->value = dream_file_write(fd, data ? (uint8_t *)dream_p(data) + 4 : NULL, count); }
-    }
+        if (count <= length) {
+            op->value = dream_file_operation(kind, fd, NULL, NULL, data ? dream_array_bytes(data) : NULL,
+                                             count, 0);
+        }
+    } else { op->value = dream_file_operation(kind, fd, NULL, NULL, NULL, 0, position); }
     return (uintptr_t)op;
 }
 
@@ -44,11 +46,7 @@ int64_t fileOperationResult(uintptr_t handle) {
 dream_ptr fileOperationBytes(uintptr_t handle) {
     FileOperation *op = (FileOperation *)handle;
     int64_t count = op && op->kind == 1 ? op->value : -1;
-    dream_ptr result = dream_array_new(count < 0 ? 1 : (int32_t)count + 1, 1);
-    uint8_t *payload = (uint8_t *)dream_p(result) + 4;
-    payload[0] = count < 0 ? 1 : 0;
-    if (count > 0) { memcpy(payload + 1, op->bytes, (size_t)count); }
-    return result;
+    return count < 0 ? dream_status_bytes(1, NULL, 0) : dream_status_bytes(0, op->bytes, (size_t)count);
 }
 
 void fileOperationRelease(uintptr_t handle) {

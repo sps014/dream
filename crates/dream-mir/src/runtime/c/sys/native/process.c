@@ -116,7 +116,7 @@ void dream_process_capture_args(int32_t argc, char **argv) {
 dream_ptr processArgs(void) {
     int32_t size = dream_captured_args ? dream_captured_args_size : 4;
     dream_ptr bytes = dream_array_new(size, 1);
-    if (dream_captured_args) { memcpy((char *)dream_p(bytes) + 4, dream_captured_args, (size_t)size); }
+    if (dream_captured_args) { memcpy((char *)dream_array_bytes(bytes), dream_captured_args, (size_t)size); }
     return bytes;
 }
 

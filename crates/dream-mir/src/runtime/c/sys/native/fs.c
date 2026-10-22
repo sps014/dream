@@ -160,7 +160,7 @@ dream_ptr fileReadBytes(dream_ptr path) {
         return 0;
     }
     out = dream_array_new((int32_t)sz, 1);
-    nread = fread((char *)dream_p(out) + 4, 1, (size_t)sz, f);
+    nread = fread((char *)dream_array_bytes(out), 1, (size_t)sz, f);
     fclose(f);
     dream_i32(out)[0] = (int32_t)nread;
     return out;
@@ -178,7 +178,7 @@ int64_t fileWriteBytes(dream_ptr path, dream_ptr data) {
     f = fopen(p, "wb");
     free(p);
     if (f) {
-        written = (int64_t)fwrite(data && n > 0 ? (char *)dream_p(data) + 4 : "", 1, (size_t)n, f);
+        written = (int64_t)fwrite(data && n > 0 ? (char *)dream_array_bytes(data) : "", 1, (size_t)n, f);
         fclose(f);
     }
     return written;

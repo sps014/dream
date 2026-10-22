@@ -1,19 +1,15 @@
 #include "dream_rt_wasm32.h"
 
-static int32_t *word(dream_ptr p) {
-    return (int32_t *)(uintptr_t)(uint32_t)p;
-}
-
 #ifndef DREAM_WASM32_THREADS
 
 /* A module without Tasks runs on one thread, so nothing can contend. The words still count:
  * a reentrant lock is always acquirable, but a semaphore at zero can only be refilled by this
  * same thread, so an acquire that would wait is a guaranteed deadlock and panics instead. */
 
-void dream_lock_acquire(dream_ptr lock_addr) { *word(lock_addr) += 1; }
+void dream_lock_acquire(dream_ptr lock_addr) { *dream_i32(lock_addr) += 1; }
 
 void dream_lock_release(dream_ptr lock_addr) {
-    int32_t *w = word(lock_addr);
+    int32_t *w = dream_i32(lock_addr);
     if (*w <= 0) {
         dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
     }
@@ -31,7 +27,7 @@ int32_t dream_lock_try_acquire_for(dream_ptr lock_addr, int32_t timeout_ms) {
 }
 
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore) {
-    int32_t *w = word(semaphore);
+    int32_t *w = dream_i32(semaphore);
     if (*w <= 0) {
         return 0;
     }
@@ -46,7 +42,7 @@ void dream_semaphore_acquire(dream_ptr semaphore) {
     }
 }
 
-void dream_semaphore_release(dream_ptr semaphore) { *word(semaphore) += 1; }
+void dream_semaphore_release(dream_ptr semaphore) { *dream_i32(semaphore) += 1; }
 
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms) {
     (void)timeout_ms;
@@ -60,7 +56,7 @@ static int32_t thread_id(void) { return dream_instance_tid(); }
 static int32_t packed(int32_t tid) { return (tid << 16) | 1; }
 
 int32_t dream_lock_try_acquire(dream_ptr lock_addr) {
-    int32_t *addr = word(lock_addr);
+    int32_t *addr = dream_i32(lock_addr);
     int32_t tid = thread_id();
     int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
     int32_t expected;
@@ -77,7 +73,7 @@ int32_t dream_lock_try_acquire(dream_ptr lock_addr) {
 }
 
 void dream_lock_acquire(dream_ptr lock_addr) {
-    int32_t *addr = word(lock_addr);
+    int32_t *addr = dream_i32(lock_addr);
     int32_t tid = thread_id();
     for (;;) {
         int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
@@ -96,7 +92,7 @@ void dream_lock_acquire(dream_ptr lock_addr) {
 }
 
 void dream_lock_release(dream_ptr lock_addr) {
-    int32_t *addr = word(lock_addr);
+    int32_t *addr = dream_i32(lock_addr);
     int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
     if ((cur & 65535) == 0 || (cur >> 16) != thread_id()) {
         dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
@@ -110,7 +106,7 @@ void dream_lock_release(dream_ptr lock_addr) {
 }
 
 int32_t dream_lock_try_acquire_for(dream_ptr lock_addr, int32_t timeout_ms) {
-    int32_t *addr = word(lock_addr);
+    int32_t *addr = dream_i32(lock_addr);
     int64_t timeout_ns;
     if (timeout_ms <= 0) {
         return dream_lock_try_acquire(lock_addr);
@@ -132,40 +128,22 @@ int32_t dream_lock_try_acquire_for(dream_ptr lock_addr, int32_t timeout_ms) {
 }
 
 void dream_semaphore_acquire(dream_ptr semaphore) {
-    int32_t *addr = word(semaphore);
-    for (;;) {
-        int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
-        int32_t expected;
-        if (cur > 0) {
-            expected = cur;
-            if (__atomic_compare_exchange_n(addr, &expected, cur - 1, 0,
-                                            __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
-                return;
-            }
-        }
+    while (!dream_permit_take(dream_i32(semaphore))) {
     }
 }
 
 void dream_semaphore_release(dream_ptr semaphore) {
-    int32_t *addr = word(semaphore);
+    int32_t *addr = dream_i32(semaphore);
     __atomic_fetch_add(addr, 1, __ATOMIC_RELEASE);
     (void)__builtin_wasm_memory_atomic_notify(addr, 1);
 }
 
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore) {
-    int32_t *addr = word(semaphore);
-    int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
-    int32_t expected;
-    if (cur <= 0) {
-        return 0;
-    }
-    expected = cur;
-    return __atomic_compare_exchange_n(addr, &expected, cur - 1, 0, __ATOMIC_ACQUIRE,
-                                       __ATOMIC_RELAXED);
+    return dream_permit_take(dream_i32(semaphore));
 }
 
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms) {
-    int32_t *addr = word(semaphore);
+    int32_t *addr = dream_i32(semaphore);
     int64_t timeout_ns;
     if (timeout_ms <= 0) {
         return dream_semaphore_try_acquire(semaphore);

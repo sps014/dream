@@ -159,18 +159,7 @@ void dream_semaphore_release(dream_ptr semaphore) {
 }
 
 int32_t dream_semaphore_try_acquire(dream_ptr semaphore) {
-    int32_t permits;
-    if (!semaphore) {
-        return 0;
-    }
-    permits = __atomic_load_n(dream_i32(semaphore), __ATOMIC_ACQUIRE);
-    while (permits > 0) {
-        if (__atomic_compare_exchange_n(
-                dream_i32(semaphore), &permits, permits - 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-            return 1;
-        }
-    }
-    return 0;
+    return semaphore ? dream_permit_take(dream_i32(semaphore)) : 0;
 }
 
 int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms) {

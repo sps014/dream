@@ -36,13 +36,11 @@ static void operation_drop(FileOperation *op) {
 static void operation_run(void *context) {
     FileOperation *op = context;
     int64_t value = -1;
-    if (op->kind == 0) { value = dream_file_open(op->path, op->mode); }
-    else if (op->fd >= 0) {
-        if (op->kind == 1) { value = dream_file_read(op->fd, op->bytes, op->count); }
-        else if (op->kind == 2) { value = dream_file_write(op->fd, op->bytes, op->count); }
-        else if (op->kind == 3) { value = dream_file_seek(op->fd, op->position); }
-        dream_file_close(op->fd);
+    if (op->kind == DREAM_FILE_OPEN || op->fd >= 0) {
+        value = dream_file_operation(op->kind, op->fd, op->path, op->mode, op->bytes, op->count,
+                                     op->position);
     }
+    if (op->fd >= 0) { dream_file_close(op->fd); }
     dream_mutex_lock(&op->mu);
     op->value = value;
     op->done = 1;
@@ -73,7 +71,7 @@ uintptr_t fileOperationStart(int32_t kind, int32_t fd, dream_ptr path, dream_ptr
         if (kind == 1 || kind == 2) {
             op->bytes = malloc(count ? (size_t)count : 1);
             if (op->bytes && kind == 2 && count) {
-                memcpy(op->bytes, (uint8_t *)dream_p(data) + 4, (size_t)count);
+                memcpy(op->bytes, dream_array_bytes(data), (size_t)count);
             }
         }
     }
@@ -115,11 +113,7 @@ dream_ptr fileOperationBytes(uintptr_t handle) {
         if (op->done && op->kind == 1) { count = op->value; }
         dream_mutex_unlock(&op->mu);
     }
-    dream_ptr bytes = dream_array_new(count < 0 ? 1 : (int32_t)count + 1, 1);
-    uint8_t *payload = (uint8_t *)dream_p(bytes) + 4;
-    payload[0] = count < 0 ? 1 : 0;
-    if (count > 0) { memcpy(payload + 1, op->bytes, (size_t)count); }
-    return bytes;
+    return count < 0 ? dream_status_bytes(1, NULL, 0) : dream_status_bytes(0, op->bytes, (size_t)count);
 }
 
 void fileOperationRelease(uintptr_t handle) { operation_drop((FileOperation *)handle); }

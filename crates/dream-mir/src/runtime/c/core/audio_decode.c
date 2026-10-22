@@ -23,7 +23,7 @@ static void audio_free(void *ptr, void *user) {
 /* Header words are sample rate and channel count, followed by interleaved f32 PCM. */
 dream_ptr dream_audio_decode(dream_ptr source, int32_t max_bytes) {
     if (!source || dream_i32(source)[0] <= 0 || max_bytes < 4) return dream_array_new(0, 4);
-    const void *bytes = (const char *)dream_p(source) + 4;
+    const void *bytes = (const char *)dream_array_bytes(source);
     size_t length = (size_t)dream_i32(source)[0];
     const unsigned char *magic = bytes;
     if (length >= 4 && magic[0] == 0x1a && magic[1] == 0x45 && magic[2] == 0xdf && magic[3] == 0xa3) {
@@ -51,10 +51,10 @@ dream_ptr dream_audio_decode(dream_ptr source, int32_t max_bytes) {
     dream_ptr result;
     if (!rate || channels < 1 || channels > 2 || frames > (uint64_t)max_bytes / (channels * 4)) {
         result = dream_array_new(1, 4);
-        *((float *)((char *)dream_p(result) + 4)) = -1;
+        *((float *)dream_array_bytes(result)) = -1;
     } else {
         result = dream_array_new((int32_t)(frames * channels + 2), 4);
-        float *out = (float *)((char *)dream_p(result) + 4);
+        float *out = (float *)dream_array_bytes(result);
         out[0] = (float)rate; out[1] = (float)channels;
         uint64_t read = is_wav ? drwav_read_pcm_frames_f32(wav, frames, out + 2)
                               : drmp3_read_pcm_frames_f32(mp3, frames, out + 2);

@@ -110,21 +110,16 @@ int32_t dream_file_close(int32_t fd) {
 /* A leading status byte keeps read errors distinct from successful EOF across the JS ABI. */
 dream_ptr fileHandleRead(int32_t fd, int32_t count) {
     if (count < 0 || count == INT32_MAX) {
-        dream_ptr error = dream_array_new(1, 1);
-        ((uint8_t *)dream_p(error))[4] = 1;
-        return error;
+        return dream_status_bytes(1, NULL, 0);
     }
-    dream_ptr bytes = dream_array_new(count + 1, 1);
-    uint8_t *payload = (uint8_t *)dream_p(bytes) + 4;
-    int64_t n = dream_file_read(fd, payload + 1, count);
-    payload[0] = n < 0 ? 1 : 0;
-    dream_i32(bytes)[0] = n < 0 ? 1 : (int32_t)n + 1;
+    dream_ptr bytes = dream_status_buffer(count);
+    dream_status_finish(bytes, dream_file_read(fd, dream_array_bytes(bytes) + 1, count));
     return bytes;
 }
 
 int64_t fileHandleWrite(int32_t fd, dream_ptr data) {
     int32_t n = data ? dream_i32(data)[0] : 0;
-    int64_t written = dream_file_write(fd, data ? (char *)dream_p(data) + 4 : "", n);
+    int64_t written = dream_file_write(fd, data ? (char *)dream_array_bytes(data) : "", n);
     return written < 0 ? -1 : (int64_t)written;
 }
 

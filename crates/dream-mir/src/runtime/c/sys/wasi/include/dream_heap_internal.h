@@ -24,14 +24,6 @@ int32_t *dream_wasm32_meta_i32(int32_t offset);
 dream_ptr dream_wasm_raw_malloc(int32_t size);
 void dream_wasm_raw_free(dream_ptr ptr);
 
-static inline int32_t i32_at(int32_t addr) {
-    return *(int32_t *)(uintptr_t)(uint32_t)addr;
-}
-
-static inline void i32_put(int32_t addr, int32_t v) {
-    *(int32_t *)(uintptr_t)(uint32_t)addr = v;
-}
-
 static inline int32_t size_class(int32_t size) {
     int32_t s = size;
     if (s < 16) {

@@ -60,7 +60,7 @@ static void environment_visit(dream_ptr p) {
     int32_t n = dream_i32(p)[0];
     for (int32_t i = 0; i < n; ++i) {
         dream_ptr child;
-        memcpy(&child, (char *)dream_p(p) + 4 + (size_t)i * sizeof(child), sizeof(child));
+        memcpy(&child, (char *)dream_array_bytes(p) + (size_t)i * sizeof(child), sizeof(child));
         dream_visit_edge(child);
     }
 }
@@ -68,7 +68,7 @@ static void environment_clear(dream_ptr p) {
     int32_t n = dream_i32(p)[0];
     for (int32_t i = 0; i < n; ++i) {
         dream_ptr child, zero = 0;
-        char *slot = (char *)dream_p(p) + 4 + (size_t)i * sizeof(child);
+        char *slot = (char *)dream_array_bytes(p) + (size_t)i * sizeof(child);
         memcpy(&child, slot, sizeof(child)); memcpy(slot, &zero, sizeof(zero));
         dream_release_object(child);
     }

@@ -95,7 +95,7 @@ int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     if (length) {
         wasi_io_streams_own_output_stream_t stream;
         if (!wasi_http_types_method_outgoing_body_write(wasi_http_types_borrow_outgoing_body(output), &stream)) { wasi_http_types_outgoing_body_drop_own(output); wasi_http_types_future_incoming_response_drop_own(pending); return 0; }
-        dream_http_p2_list_u8_t bytes = {(uint8_t *)dream_p(body) + 4, (size_t)length};
+        dream_http_p2_list_u8_t bytes = {dream_array_bytes(body), (size_t)length};
         wasi_io_streams_stream_error_t failure;
         valid = wasi_io_streams_method_output_stream_blocking_write_and_flush(wasi_io_streams_borrow_output_stream(stream), &bytes, &failure);
         wasi_io_streams_output_stream_drop_own(stream);
@@ -207,7 +207,7 @@ int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     int32_t length = body ? dream_i32(body)[0] : 0;
     size_t written = 0;
     while (written < (size_t)length) {
-        uint32_t step = wait_stream(writer, wasi_http_types_stream_u8_write(writer, (uint8_t *)dream_p(body) + 4 + written, (size_t)length - written));
+        uint32_t step = wait_stream(writer, wasi_http_types_stream_u8_write(writer, dream_array_bytes(body) + written, (size_t)length - written));
         if (DREAM_HTTP_P3_WAITABLE_STATE(step) != DREAM_HTTP_P3_WAITABLE_COMPLETED) { break; }
         written += DREAM_HTTP_P3_WAITABLE_COUNT(step);
     }

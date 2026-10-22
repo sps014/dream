@@ -118,7 +118,7 @@ static dream_ptr operate(yyjson_val *request, dream_ptr bytes, int *child) {
     if (!strcmp(action, "write")) {
         size_t count = bytes ? (size_t)dream_i32(bytes)[0] : 0;
         if (count > 16 * 1024 * 1024) { return component_error("EINVAL", "invalid write size"); }
-        ssize_t written = count ? send(fd, (uint8_t *)dream_p(bytes) + 4, count, 0) : 0;
+        ssize_t written = count ? send(fd, dream_array_bytes(bytes), count, 0) : 0;
         if (written < 0) { return component_error("EIO", "socket write failed"); }
         char result[32]; result[0] = 1;
         int n = snprintf(result + 1, sizeof(result) - 1, "%lld", (long long)written);
@@ -135,7 +135,7 @@ static dream_ptr operate(yyjson_val *request, dream_ptr bytes, int *child) {
         if (getaddrinfo(host, service, &hints, &addresses)) { return component_error("EIO", "WASI name lookup failed"); }
         ssize_t count_sent = -1;
         for (struct addrinfo *address = addresses; address; address = address->ai_next) {
-            count_sent = sendto(fd, bytes ? (uint8_t *)dream_p(bytes) + 4 : NULL, count, 0, address->ai_addr, address->ai_addrlen);
+            count_sent = sendto(fd, bytes ? dream_array_bytes(bytes) : NULL, count, 0, address->ai_addr, address->ai_addrlen);
             if (count_sent >= 0) { break; }
         }
         freeaddrinfo(addresses);

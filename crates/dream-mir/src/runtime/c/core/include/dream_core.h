@@ -120,6 +120,23 @@ DREAM_ALWAYS_INLINE int32_t *dream_i32(dream_ptr p) {
     return (int32_t *)dream_p(p);
 }
 
+/* Takes one semaphore permit if any remain, retrying when another thread changed the count. */
+DREAM_ALWAYS_INLINE int32_t dream_permit_take(int32_t *permits) {
+    int32_t available = __atomic_load_n(permits, __ATOMIC_ACQUIRE);
+    while (available > 0) {
+        if (__atomic_compare_exchange_n(permits, &available, available - 1, 0, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* An array's elements follow its int32 element count. */
+DREAM_ALWAYS_INLINE uint8_t *dream_array_bytes(dream_ptr array) {
+    return (uint8_t *)dream_p(array) + 4;
+}
+
 #ifdef DREAM_WASM32
 #define DREAM_BLOCK_HEADER HEAP_HEADER_SIZE
 #else
@@ -669,7 +686,7 @@ DREAM_ALWAYS_INLINE char *dream_array_at(dream_ptr p, int32_t i, int32_t esize,
     if (DREAM_UNLIKELY((uint32_t)i >= (uint32_t)len)) {
         dream_panic_at(panic_msg, location);
     }
-    return (char *)dream_p(p) + 4 + (size_t)(uint32_t)i * (size_t)esize;
+    return (char *)dream_array_bytes(p) + (size_t)(uint32_t)i * (size_t)esize;
 }
 
 /* Bounds-checked `char_at` / `byte_at`; the unchecked readers are only for indices the
@@ -1221,11 +1238,11 @@ DREAM_ALWAYS_INLINE void dream_v128_f32_bin(void *dest, const void *a, const voi
 DREAM_ALWAYS_INLINE int32_t simd_lane_count(void) { return 4; }
 
 DREAM_ALWAYS_INLINE dream_ptr simd_v128_load(dream_ptr arr, int32_t off) {
-    return (dream_ptr)((char *)dream_p(arr) + 4 + (size_t)off * 4);
+    return (dream_ptr)((char *)dream_array_bytes(arr) + (size_t)off * 4);
 }
 
 DREAM_ALWAYS_INLINE void simd_v128_store(dream_ptr v, dream_ptr dest, int32_t off) {
-    memcpy((char *)dream_p(dest) + 4 + (size_t)off * 4, dream_p(v), 16);
+    memcpy((char *)dream_array_bytes(dest) + (size_t)off * 4, dream_p(v), 16);
 }
 
 DREAM_ALWAYS_INLINE dream_ptr simd_v128_splat(float v) {
@@ -1322,6 +1339,27 @@ DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {
 
 dream_ptr dream_string_alloc(int32_t units);
 dream_ptr dream_array_new(int32_t len, int32_t esize);
+
+/* Host results are byte arrays whose first byte is a status (0 success, 1 failure) followed by
+   the payload. */
+static inline dream_ptr dream_status_bytes(uint8_t status, const void *payload, size_t count) {
+    dream_ptr result = dream_array_new((int32_t)count + 1, 1);
+    uint8_t *bytes = dream_array_bytes(result);
+    bytes[0] = status;
+    if (count) { memcpy(bytes + 1, payload, count); }
+    return result;
+}
+
+/* A status array with room for `capacity` payload bytes at dream_array_bytes(result) + 1;
+   dream_status_finish records how many were filled, or failure when `filled` is negative. */
+static inline dream_ptr dream_status_buffer(int32_t capacity) {
+    return dream_array_new(capacity + 1, 1);
+}
+
+static inline void dream_status_finish(dream_ptr result, int64_t filled) {
+    dream_array_bytes(result)[0] = filled < 0 ? 1 : 0;
+    dream_i32(result)[0] = filled < 0 ? 1 : (int32_t)filled + 1;
+}
 dream_ptr dream_audio_fft(dream_ptr source, int32_t size);
 dream_ptr dream_audio_decode(dream_ptr source, int32_t max_bytes);
 dream_ptr dream_audio_decode_webm(dream_ptr source, int32_t max_bytes);

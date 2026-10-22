@@ -20,11 +20,11 @@ dream_ptr dream_audio_fft(dream_ptr source, int32_t size) {
         KISS_FFT_FREE(cfg); KISS_FFT_FREE(input); KISS_FFT_FREE(output);
         return dream_array_new(0, 4);
     }
-    const float *samples = (const float *)((const char *)dream_p(source) + 4);
+    const float *samples = (const float *)dream_array_bytes(source);
     for (int32_t i = 0; i < size; ++i) input[i].r = samples[i];
     kiss_fft(cfg, input, output);
     dream_ptr result = dream_array_new(size + 2, 4);
-    float *values = (float *)((char *)dream_p(result) + 4);
+    float *values = (float *)dream_array_bytes(result);
     for (int32_t i = 0; i <= size / 2; ++i) {
         values[2 * i] = output[i].r;
         values[2 * i + 1] = output[i].i;

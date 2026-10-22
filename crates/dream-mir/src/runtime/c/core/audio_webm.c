@@ -36,7 +36,7 @@ static int64_t webm_tell(void *userdata) { return ((webm_input *)userdata)->posi
 
 /* Only mono/stereo mapping family zero is accepted; video and other tracks are skipped. */
 dream_ptr dream_audio_decode_webm(dream_ptr source, int32_t max_bytes) {
-    webm_input input = { (const unsigned char *)dream_p(source) + 4, dream_i32(source)[0], 0 };
+    webm_input input = { (const unsigned char *)dream_array_bytes(source), dream_i32(source)[0], 0 };
     nestegg_io io = { webm_read, webm_seek, webm_tell, &input };
     nestegg *context = NULL;
     OpusDecoder *decoder = NULL;
@@ -124,12 +124,12 @@ done:
     dream_ptr result;
     if (failure == 1) {
         result = dream_array_new((int32_t)count + 2, 4);
-        float *out = (float *)((char *)dream_p(result) + 4);
+        float *out = (float *)dream_array_bytes(result);
         out[0] = 48000; out[1] = (float)channels;
         if (count) memcpy(out + 2, pcm, count * sizeof(float));
     } else {
         result = dream_array_new(failure < 0 ? 1 : 0, 4);
-        if (failure < 0) *((float *)((char *)dream_p(result) + 4)) = (float)failure;
+        if (failure < 0) *((float *)dream_array_bytes(result)) = (float)failure;
     }
     dream_platform_current->deallocate(pcm);
     dream_platform_current->deallocate(frame);

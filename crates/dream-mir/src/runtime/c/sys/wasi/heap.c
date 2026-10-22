@@ -25,11 +25,11 @@ static int32_t *large_head(void) {
 }
 
 static int32_t blk_next(int32_t block) {
-    return i32_at(block + (int32_t)HEADER_TAG_OFFSET);
+    return dream_i32(block + (int32_t)HEADER_TAG_OFFSET)[0];
 }
 
 static void blk_set_next(int32_t block, int32_t next) {
-    i32_put(block + (int32_t)HEADER_TAG_OFFSET, next);
+    dream_i32(block + (int32_t)HEADER_TAG_OFFSET)[0] = next;
 }
 
 static void class_push(int32_t idx, int32_t block) {
@@ -95,8 +95,8 @@ static void large_split(int32_t block, int32_t bsize, int32_t need) {
         return;
     }
     rem = block + need;
-    i32_put(block, need);
-    i32_put(rem, bsize - need);
+    dream_i32(block)[0] = need;
+    dream_i32(rem)[0] = bsize - need;
     free_insert(rem, bsize - need);
 }
 
@@ -109,7 +109,7 @@ static int32_t take_from_large(int32_t need) {
         if (++guard > 1000000) {
             __builtin_trap();
         }
-        bsize = i32_at(curr);
+        bsize = dream_i32(curr)[0];
         if (bsize >= need) {
             large_remove(curr);
             large_split(curr, bsize, need);
@@ -179,8 +179,8 @@ static void priv_class_push(int32_t idx, int32_t block) {
 }
 
 DREAM_ALWAYS_INLINE dream_ptr activate_block(int32_t block, int32_t tag, const dream_type_info *info, int32_t account) {
-    i32_put(block + (int32_t)HEADER_TAG_OFFSET, tag);
-    i32_put(block + (int32_t)HEADER_REFCOUNT_OFFSET, dream_rc_init(tag));
+    dream_i32(block + (int32_t)HEADER_TAG_OFFSET)[0] = tag;
+    dream_i32(block + (int32_t)HEADER_REFCOUNT_OFFSET)[0] = dream_rc_init(tag);
     if (account) {
         account_alloc();
     }
@@ -204,7 +204,7 @@ static void free_large_locked(int32_t block, int32_t sz);
 static int32_t take_slab_locked(void) {
     int32_t curr = *large_head();
     while (curr) {
-        int32_t bsize = i32_at(curr);
+        int32_t bsize = dream_i32(curr)[0];
         if (bsize >= PRIV_SLAB / 2) {
             large_remove(curr);
             if (bsize > PRIV_SLAB) {
@@ -224,14 +224,14 @@ static void priv_refill(void) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     if (rest >= MIN_SPLIT) {
         int32_t tail = dream_priv_slab_get() + off;
-        i32_put(tail, rest);
+        dream_i32(tail)[0] = rest;
         free_large_locked(tail, rest);
     }
     int32_t slab = take_slab_locked();
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
     int32_t cap = PRIV_SLAB;
     if (slab) {
-        cap = i32_at(slab);
+        cap = dream_i32(slab)[0];
     } else {
         slab = dream_wasm_heap_claim(PRIV_SLAB);
     }
@@ -248,7 +248,7 @@ static int32_t priv_large_block(int32_t total) {
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
     if (!block) {
         block = dream_wasm_heap_claim(total);
-        i32_put(block, total);
+        dream_i32(block)[0] = total;
     }
     return block;
 }
@@ -283,7 +283,7 @@ static dream_ptr malloc_private_ex(int32_t size, int32_t tag, int32_t account) {
     slab = dream_priv_slab_get();
     block = slab + off;
     dream_priv_off_set(off + total);
-    i32_put(block, total);
+    dream_i32(block)[0] = total;
     return finish_block_ex(block, tag, account);
 }
 
@@ -297,7 +297,7 @@ dream_ptr dream_region_backing_malloc(int32_t size) {
 
 dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag, const dream_type_info *info) {
     int32_t address = (int32_t)(uintptr_t)block;
-    i32_put(address, total);
+    dream_i32(address)[0] = total;
     dream_ptr ptr = finish_block(address, tag);
     dream_set_type(ptr, info);
     return ptr;
@@ -337,10 +337,10 @@ static dream_ptr malloc_locked(int32_t size, int32_t tag, int account) {
 
     if (!block) {
         block = dream_wasm_heap_claim(size);
-        i32_put(block, size);
-    } else if (i32_at(block) >= size + MIN_SPLIT) {
+        dream_i32(block)[0] = size;
+    } else if (dream_i32(block)[0] >= size + MIN_SPLIT) {
         /* Split a reused block much bigger than this request. */
-        large_split(block, i32_at(block), size);
+        large_split(block, dream_i32(block)[0], size);
     }
 
     return finish_block_ex(block, tag, account);
@@ -425,7 +425,7 @@ void dream_heap_thread_exit(void) {
     dream_priv_cap_set(0);
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     if (rest >= MIN_SPLIT) {
-        i32_put(slab + off, rest);
+        dream_i32(slab + off)[0] = rest;
         free_large_locked(slab + off, rest);
     }
     if (table) {
@@ -455,14 +455,14 @@ static void free_large_locked(int32_t block, int32_t sz) {
     }
     /* Merge the following neighbor first. */
     if (curr == next_phys) {
-        sz += i32_at(curr);
+        sz += dream_i32(curr)[0];
         curr = blk_next(curr);
     }
     /* Then merge into the preceding neighbor when it ends exactly at us. The forward
      * neighbor (already folded into `sz`) must be unlinked here too — it sits between
      * `prev` and `curr` in the list, and its memory now belongs to the merged block. */
-    if (prev && prev + i32_at(prev) == block) {
-        i32_put(prev, i32_at(prev) + sz);
+    if (prev && prev + dream_i32(prev)[0] == block) {
+        dream_i32(prev)[0] = dream_i32(prev)[0] + sz;
         blk_set_next(prev, curr);
         return;
     }
@@ -472,7 +472,7 @@ static void free_large_locked(int32_t block, int32_t sz) {
         *large_head() = block;
     }
     blk_set_next(block, curr);
-    i32_put(block, sz);
+    dream_i32(block)[0] = sz;
 }
 
 static void recycle_locked(dream_ptr ptr, int account) {
@@ -483,7 +483,7 @@ static void recycle_locked(dream_ptr ptr, int account) {
         return;
     }
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    sz = i32_at(block_start);
+    sz = dream_i32(block_start)[0];
     if (sz == 0) {
         return;
     }
@@ -510,7 +510,7 @@ void dream_recycle(dream_ptr ptr) {
     }
     int32_t *table = (int32_t *)(uintptr_t)(uint32_t)dream_priv_fast_get();
     int32_t block = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    int32_t sz = i32_at(block);
+    int32_t sz = dream_i32(block)[0];
     int32_t tag = *dream_tag_word(ptr);
     /* Exact private class blocks are the powers of two from 16 bytes to PRIV_SMALL_TOTAL. */
     if (DREAM_LIKELY(table != NULL && (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) == 0
@@ -543,7 +543,7 @@ static __attribute__((noinline)) void recycle_slow(dream_ptr ptr) {
         return;
     }
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    sz = i32_at(block_start);
+    sz = dream_i32(block_start)[0];
     if (sz == 0) {
         return;
     }
@@ -575,7 +575,7 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         return dream_malloc(new_size, tag);
     }
     block_start = (int32_t)ptr - (int32_t)HEAP_HEADER_SIZE;
-    old_total = i32_at(block_start);
+    old_total = dream_i32(block_start)[0];
     new_total = round_total(new_size);
     if (new_total <= old_total) {
         return ptr;

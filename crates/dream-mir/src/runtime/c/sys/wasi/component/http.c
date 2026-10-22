@@ -7,7 +7,7 @@ static int next_operation = 1, next_client = 1;
 dream_ptr component_bytes(const void *bytes, size_t length) {
     if (length > INT32_MAX) { return 0; }
     dream_ptr result = dream_array_new((int32_t)length, 1);
-    if (length) { memcpy((uint8_t *)dream_p(result) + 4, bytes, length); }
+    if (length) { memcpy(dream_array_bytes(result), bytes, length); }
     return result;
 }
 
@@ -15,10 +15,7 @@ dream_ptr component_json(yyjson_mut_doc *doc, int status) {
     size_t length;
     char *json = yyjson_mut_write(doc, 0, &length);
     if (!json || length >= INT32_MAX) { free(json); return 0; }
-    dream_ptr result = dream_array_new((int32_t)length + 1, 1);
-    uint8_t *bytes = (uint8_t *)dream_p(result) + 4;
-    bytes[0] = (uint8_t)status;
-    memcpy(bytes + 1, json, length);
+    dream_ptr result = dream_status_bytes((uint8_t)status, json, length);
     free(json);
     return result;
 }

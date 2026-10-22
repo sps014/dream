@@ -15,13 +15,19 @@ static int shared_available[NCLASS];
  * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
  * into the top class or bump-allocated past a 4MiB mmap. */
 static dream_ptr large_freelist;
-/* Free large blocks keep their pages up to this many bytes, so buffer churn reuses resident
- * memory; past it, a freed block's interior pages go back to the OS. */
+/* Free large blocks keep their pages up to this many bytes. Past it, blocks that stayed unclaimed
+ * for LARGE_RELEASE_AGE hand their interior pages back to the OS. Wall-clock age decides, because
+ * refaulting a buffer that a loop frees and reallocates costs far more than its idle pages. */
 #define IDLE_LARGE_RETAIN ((size_t)16u << 20)
-/* A free large block's prefix word records whether its pages are resident or were released. */
+/* Ticks of 2^20 ns; 1024 ticks is about one second. */
+#define LARGE_RELEASE_AGE ((uintptr_t)1024u)
+/* A free large block's prefix word is either its free-time tick tagged LARGE_RESIDENT or the
+ * page-aligned count of released bytes tagged LARGE_RELEASED. */
 enum { LARGE_RESIDENT = 1, LARGE_RELEASED = 2 };
+#define LARGE_TICK_MASK (UINTPTR_MAX >> 2)
 static size_t idle_large_bytes;
 static uint64_t released_bytes;
+static uintptr_t large_swept_tick;
 static char *arena;
 static size_t arena_off;
 static size_t arena_len;
@@ -248,28 +254,79 @@ static void account_frees(uint32_t n) {
 /* Re-arm the inline fast path once the thread is registered and no region is open. */
 static void heap_refresh_fast(void);
 
-/* Releasing pages costs a system call and a fault on reuse, so it happens on the free path,
- * outside the heap lock, before another thread can take the block. */
-static void free_large(char *block) {
-    size_t sz = *dream_large_size(block);
-    heap_lock();
-    int resident = sz <= IDLE_LARGE_RETAIN && idle_large_bytes <= IDLE_LARGE_RETAIN - sz;
-    if (resident) {
-        idle_large_bytes += sz;
+static uintptr_t large_tick(void) {
+    return ((uintptr_t)((uint64_t)timeNowNanos() >> 20)) & LARGE_TICK_MASK;
+}
+
+/* Unlinks resident blocks idle for LARGE_RELEASE_AGE until the resident total fits the budget.
+ * They stay off the list while their pages are released, so no thread can claim one mid-release. */
+static char *take_stale_large_locked(uintptr_t now) {
+    char *stale = NULL;
+    dream_ptr prev = 0;
+    dream_ptr curr = large_freelist;
+    while (curr != 0 && idle_large_bytes > IDLE_LARGE_RETAIN) {
+        char *block = (char *)dream_p(curr);
+        dream_ptr next = (dream_ptr)block_next(block);
+        uintptr_t state = dream_block_word(block - DREAM_LARGE_PREFIX);
+        if ((state & LARGE_RESIDENT) && ((now - (state >> 2)) & LARGE_TICK_MASK) >= LARGE_RELEASE_AGE) {
+            if (prev == 0) {
+                large_freelist = next;
+            } else {
+                block_set_next((char *)dream_p(prev), dream_p(next));
+            }
+            idle_large_bytes -= *dream_large_size(block);
+            block_set_next(block, stale);
+            stale = block;
+        } else {
+            prev = curr;
+        }
+        curr = next;
     }
-    heap_unlock();
-    uintptr_t state = LARGE_RESIDENT;
+    return stale;
+}
+
+/* Releasing pages costs a system call and a fault on reuse, so it runs outside the heap lock and
+ * at most once per LARGE_RELEASE_AGE. */
+static void release_stale_large(char *stale) {
+    char *head = stale;
     size_t released = 0;
-    if (!resident) {
-        released = dream_platform_current->release(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
-        state = (uintptr_t)released | LARGE_RELEASED;
+    for (char *block = stale; block != NULL; block = block_next(block)) {
+        size_t sz = *dream_large_size(block);
+        size_t bytes = dream_platform_current->release(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
+        dream_block_set_word(block - DREAM_LARGE_PREFIX, (uintptr_t)bytes | LARGE_RELEASED);
+        released += bytes;
     }
-    dream_block_set_word(block - DREAM_LARGE_PREFIX, state);
     heap_lock();
     released_bytes += released;
+    /* First fit scans from the head, so resident blocks ahead of released ones are reused first. */
+    if (large_freelist == 0) {
+        large_freelist = (dream_ptr)head;
+    } else {
+        char *last = (char *)dream_p(large_freelist);
+        while (block_next(last) != NULL) {
+            last = block_next(last);
+        }
+        block_set_next(last, head);
+    }
+    heap_unlock();
+}
+
+static void free_large(char *block) {
+    char *stale = NULL;
+    uintptr_t now = large_tick();
+    heap_lock();
+    dream_block_set_word(block - DREAM_LARGE_PREFIX, (now << 2) | LARGE_RESIDENT);
+    idle_large_bytes += *dream_large_size(block);
     block_set_next(block, dream_p(large_freelist));
     large_freelist = (dream_ptr)block;
+    if (idle_large_bytes > IDLE_LARGE_RETAIN && ((now - large_swept_tick) & LARGE_TICK_MASK) >= LARGE_RELEASE_AGE) {
+        large_swept_tick = now;
+        stale = take_stale_large_locked(now);
+    }
     heap_unlock();
+    if (stale != NULL) {
+        release_stale_large(stale);
+    }
 }
 
 static void claim_large(char *block) {

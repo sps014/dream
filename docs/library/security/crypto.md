@@ -12,7 +12,7 @@ Use these APIs for hashes, secure random bytes, and authenticated encryption. Th
 
 **Import:** `import system.crypto;`
 
-Host-backed hashes, a secure RNG, and AES-256-GCM. Digests and the CSPRNG run on your machine (native or Node) or via Web Crypto in the browser. APIs return raw `byte[]` — format with [encoding](../text/encoding.md). Not TLS.
+SHA-2 hashes, HMAC, a secure RNG, and AES-256-GCM. SHA-256, SHA-512, and HMAC-SHA256 give identical results on every target, including the browser. The secure RNG uses the operating system (native or Node) or Web Crypto in the browser. APIs return raw `byte[]` — format with [encoding](../text/encoding.md). Not TLS.
 
 ```dream
 import system;

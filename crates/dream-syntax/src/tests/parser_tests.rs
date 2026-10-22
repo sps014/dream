@@ -1947,6 +1947,14 @@ fn test_parse_postfix_generic_call() {
 }
 
 #[test]
+fn test_parse_comparison_loop_with_shift_in_body() {
+    let code = "fun f(bits: ulong): void { let j = 0; while j < 8 { let b = bits >> (ulong)j; j = j + 1; } }";
+    let arena = bumpalo::Bump::new();
+    let (_program, diagnostics) = parse_code(code, &arena);
+    assert_eq!(diagnostics.has_errors(), false);
+}
+
+#[test]
 fn test_parse_interpolated_string_with_inner_string() {
     let code = "fun f(): string { return $\"x is {\"hi\"}\"; }";
     let arena = bumpalo::Bump::new();

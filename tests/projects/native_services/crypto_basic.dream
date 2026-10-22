@@ -42,6 +42,70 @@ fun crypto_basic(): void {
     Assert.eq((buf.length).to_string(), "16");
 }
 
+fun counting_bytes(n: int): byte[] {
+    let data = Array.alloc<byte>(n);
+    let i = 0;
+    while i < n {
+        data[i] = (byte)(i % 251);
+        i = i + 1;
+    }
+    return data;
+}
+
+fun sha256_hex(data: byte[]): string {
+    return Encoding.hex_encode(Sha256.hash(data)).to_string();
+}
+
+fun sha512_prefix(data: byte[]): string {
+    return Encoding.hex_encode(Sha512.hash(data)).to_string().substring(0, 32);
+}
+
+@test
+fun sha_padding_boundaries(): void {
+    Assert.eq(
+        sha256_hex(Encoding.utf8_encode("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+    );
+    Assert.eq(
+        Encoding.hex_encode(
+            Sha512.hash(
+                Encoding.utf8_encode(
+                    "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+                )
+            )
+        ).to_string(),
+        "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909"
+    );
+
+    Assert.eq(sha256_hex(counting_bytes(55)), "463eb28e72f82e0a96c0a4cc53690c571281131f672aa229e0d45ae59b598b59");
+    Assert.eq(sha256_hex(counting_bytes(56)), "da2ae4d6b36748f2a318f23e7ab1dfdf45acdc9d049bd80e59de82a60895f562");
+    Assert.eq(sha256_hex(counting_bytes(63)), "29af2686fd53374a36b0846694cc342177e428d1647515f078784d69cdb9e488");
+    Assert.eq(sha256_hex(counting_bytes(64)), "fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108");
+    Assert.eq(sha256_hex(counting_bytes(1000)), "4e4c294b331f7a2099a379bec34b9f9fc03dc46ab465d998f4d683da53487e6d");
+
+    Assert.eq(sha512_prefix(counting_bytes(111)), "a1a111449b198d9b1f538bad7f3fc102");
+    Assert.eq(sha512_prefix(counting_bytes(112)), "c5fbd731d19d2ae1180f001be72c2c1a");
+    Assert.eq(sha512_prefix(counting_bytes(127)), "eab89674feaa34e27aebeeff3c0a4d70");
+    Assert.eq(sha512_prefix(counting_bytes(128)), "1dffd5e3adb71d45d2245939665521ae");
+    Assert.eq(sha512_prefix(counting_bytes(1000)), "5096498d96f50f9a137c4db5b8b0cd38");
+
+    let long_key = Array.alloc<byte>(131);
+    let i = 0;
+    while i < 131 {
+        long_key[i] = (byte)170;
+        i = i + 1;
+    }
+    let message = Encoding.utf8_encode("Test Using Larger Than Block-Size Key - Hash Key First");
+    Assert.eq(
+        Encoding.hex_encode(HmacSha256.sign(long_key, message)).to_string(),
+        "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+    );
+    Assert.eq(
+        Encoding.hex_encode(HmacSha256.sign(Array.alloc<byte>(0), Array.alloc<byte>(0))).to_string(),
+        "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad"
+    );
+}
+
 @test
 @timeout(180000)
 fun aes_gcm_basic(): void {

@@ -433,8 +433,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     /// Lookahead over a balanced generic argument list whose first argument token is at peek
     /// offset `start` (i.e. the opening `<` was already seen). Returns the peek offset of the
-    /// token right after the matching close, or `None` if a `;`/end-of-file is hit first (not a
-    /// generic list). Used only to disambiguate generic calls/instantiations from `<`/`>`
+    /// token right after the matching close, or `None` if a `;`, brace, or end-of-file is hit
+    /// first (not a generic list). Used only to disambiguate generic calls/instantiations from `<`/`>`
     /// comparisons; the balanced scan itself is shared with the formatter via
     /// [`crate::token::scan::scan_generic_close`].
     fn scan_generic_args(&self, start: usize) -> Option<usize> {

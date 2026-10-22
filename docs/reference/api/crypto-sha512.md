@@ -6,7 +6,7 @@ Read the [usage guide](../../library/security/crypto.md) for examples and common
 
 ## `Sha512`
 
-SHA-512 digest (64-byte output). Host-backed via `Dream.cryptoSha512`.
+SHA-512 message digest (FIPS 180-4). The same input always produces the same 64-byte hash on every target.
 
 ```dream
 public static class Sha512
@@ -14,8 +14,8 @@ public static class Sha512
 
 ## `hash`
 
-Digests `data` and returns the 64-byte hash.
+Digests `data` and returns its 64-byte SHA-512 hash.
 
 ```dream
-public static fun hash(data: byte[]): byte[]
+public static fun hash(borrow data: byte[]): byte[]
 ```

@@ -1,12 +1,38 @@
 module system.crypto;
 
-/// HMAC-SHA256 keyed digest (32-byte output). Host-backed via `Dream.cryptoHmacSha256`.
+/// HMAC-SHA256 keyed message authentication (RFC 2104) with a 32-byte result.
 public static class HmacSha256 {
-    @runtime("cryptoHmacSha256")
-    static extern fun sign_host(borrow key: byte[], borrow data: byte[]): byte[];
-
-    /// Computes HMAC-SHA256 of `data` under `key`.
-    public static fun sign(key: byte[], data: byte[]): byte[] {
-        return HmacSha256.sign_host(key, data);
+    /// Computes HMAC-SHA256 of `data` under `key`. Keys of any length are accepted; keys longer
+    /// than 64 bytes are hashed first, as RFC 2104 specifies.
+    public static fun sign(borrow key: byte[], borrow data: byte[]): byte[] {
+        let block = 64;
+        let secret = key;
+        if key.length > block {
+            secret = Sha256.hash(key);
+        }
+        let inner = Array.alloc<byte>(block + data.length);
+        let outer = Array.alloc<byte>(block + 32);
+        let i = 0;
+        while i < block {
+            let k = 0;
+            if i < secret.length {
+                k = (int)secret[i];
+            }
+            inner[i] = (byte)(k ^ 54);
+            outer[i] = (byte)(k ^ 92);
+            i = i + 1;
+        }
+        let j = 0;
+        while j < data.length {
+            inner[block + j] = data[j];
+            j = j + 1;
+        }
+        let inner_hash = Sha256.hash(inner);
+        let m = 0;
+        while m < 32 {
+            outer[block + m] = inner_hash[m];
+            m = m + 1;
+        }
+        return Sha256.hash(outer);
     }
 }

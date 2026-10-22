@@ -1,23 +1,4 @@
-//! Cross-platform `system.crypto` hosts (sha2 / hmac / getrandom).
-
-use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256, Sha512};
-
-type HmacSha256 = Hmac<Sha256>;
-
-pub(crate) fn sha256(data: &[u8]) -> Vec<u8> {
-    Sha256::digest(data).to_vec()
-}
-
-pub(crate) fn sha512(data: &[u8]) -> Vec<u8> {
-    Sha512::digest(data).to_vec()
-}
-
-pub(crate) fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
-}
+//! Operating-system entropy for `system.crypto`.
 
 pub(crate) fn secure_random(len: i32) -> Vec<u8> {
     secure_random_from(len, getrandom::getrandom)

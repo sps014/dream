@@ -1164,10 +1164,8 @@ dependencies = [
  "dream-host-abi",
  "dream-host-core",
  "getrandom 0.2.17",
- "hmac",
  "jsonwebtoken",
  "serde_json",
- "sha2",
 ]
 
 [[package]]

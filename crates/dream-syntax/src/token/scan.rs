@@ -5,8 +5,8 @@ use super::token_kind::TokenKind;
 /// tracking nesting so multi-argument and nested generics (`Pair<Box<int>, int>`,
 /// `Box<Box<int>>`) are handled and `>>` counts as two closing `>`.
 ///
-/// Returns the index of the matching closing token, or `None` if a `;` or end-of-file is hit
-/// first (not a generic list). Shared by the parser (to disambiguate generic calls/instantiations
+/// Returns the index of the matching closing token, or `None` if a `;`, brace, or end-of-file is
+/// hit first: no type argument contains those, so `i < 8 { x >> 1 }` stays a comparison. Shared by the parser (to disambiguate generic calls/instantiations
 /// from `<`/`>` comparisons) and the formatter (to space type-argument regions correctly).
 pub fn scan_generic_close(tokens: &[SyntaxToken], open_idx: usize) -> Option<usize> {
     let mut depth: i32 = 1;
@@ -26,7 +26,10 @@ pub fn scan_generic_close(tokens: &[SyntaxToken], open_idx: usize) -> Option<usi
                     return Some(i);
                 }
             }
-            TokenKind::SemicolonToken | TokenKind::EndOfFileToken => return None,
+            TokenKind::SemicolonToken
+            | TokenKind::CurlyOpenBracketToken
+            | TokenKind::CurlyCloseBracketToken
+            | TokenKind::EndOfFileToken => return None,
             _ => {}
         }
         i += 1;

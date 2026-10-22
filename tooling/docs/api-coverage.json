@@ -8112,14 +8112,14 @@
     "declarations": [
       {
         "signature": "public static class HmacSha256",
-        "description": "HMAC-SHA256 keyed digest (32-byte output). Host-backed via `Dream.cryptoHmacSha256`.",
+        "description": "HMAC-SHA256 keyed message authentication (RFC 2104) with a 32-byte result.",
         "line": 4,
         "page": "reference/api/crypto-hmac-sha256.md"
       },
       {
-        "signature": "public static fun sign(key: byte[], data: byte[]): byte[]",
-        "description": "Computes HMAC-SHA256 of `data` under `key`.",
-        "line": 9,
+        "signature": "public static fun sign(borrow key: byte[], borrow data: byte[]): byte[]",
+        "description": "Computes HMAC-SHA256 of `data` under `key`. Keys of any length are accepted; keys longer than 64 bytes are hashed first, as RFC 2104 specifies.",
+        "line": 7,
         "page": "reference/api/crypto-hmac-sha256.md"
       }
     ]
@@ -8156,14 +8156,14 @@
     "declarations": [
       {
         "signature": "public static class Sha256",
-        "description": "SHA-256 digest (32-byte output). Host-backed via `Dream.cryptoSha256`.",
-        "line": 4,
+        "description": "SHA-256 message digest (FIPS 180-4). The same input always produces the same 32-byte hash on every target.",
+        "line": 5,
         "page": "reference/api/crypto-sha256.md"
       },
       {
-        "signature": "public static fun hash(data: byte[]): byte[]",
-        "description": "Digests `data` and returns the 32-byte hash.",
-        "line": 9,
+        "signature": "public static fun hash(borrow data: byte[]): byte[]",
+        "description": "Digests `data` and returns its 32-byte SHA-256 hash.",
+        "line": 28,
         "page": "reference/api/crypto-sha256.md"
       }
     ]
@@ -8175,14 +8175,14 @@
     "declarations": [
       {
         "signature": "public static class Sha512",
-        "description": "SHA-512 digest (64-byte output). Host-backed via `Dream.cryptoSha512`.",
-        "line": 4,
+        "description": "SHA-512 message digest (FIPS 180-4). The same input always produces the same 64-byte hash on every target.",
+        "line": 5,
         "page": "reference/api/crypto-sha512.md"
       },
       {
-        "signature": "public static fun hash(data: byte[]): byte[]",
-        "description": "Digests `data` and returns the 64-byte hash.",
-        "line": 9,
+        "signature": "public static fun hash(borrow data: byte[]): byte[]",
+        "description": "Digests `data` and returns its 64-byte SHA-512 hash.",
+        "line": 44,
         "page": "reference/api/crypto-sha512.md"
       }
     ]

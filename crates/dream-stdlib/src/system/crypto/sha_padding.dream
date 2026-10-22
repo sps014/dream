@@ -1,0 +1,26 @@
+module system.crypto;
+
+/// Message padding shared by the SHA-2 family (FIPS 180-4, section 5.1).
+internal static class ShaPadding {
+    /// Copies `data`, appends a `1` bit, zero-fills, and ends with the message length in bits as a
+    /// big-endian integer of `length_bytes` bytes, so the result is a whole number of `block`-byte
+    /// blocks.
+    internal static fun pad(borrow data: byte[], block: int, length_bytes: int): byte[] {
+        let n = data.length;
+        let total = ((n + 1 + length_bytes + block - 1) / block) * block;
+        let out = Array.alloc<byte>(total);
+        let i = 0;
+        while i < n {
+            out[i] = data[i];
+            i = i + 1;
+        }
+        out[n] = (byte)128;
+        let bits = (ulong)n * 8uL;
+        let j = 0;
+        while j < 8 {
+            out[total - 1 - j] = (byte)(bits >> (ulong)(j * 8));
+            j = j + 1;
+        }
+        return out;
+    }
+}

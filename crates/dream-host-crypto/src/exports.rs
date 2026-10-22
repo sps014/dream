@@ -77,26 +77,6 @@ pub unsafe extern "C" fn cryptoAesGcmDecrypt(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cryptoSha256(input: DreamPtr) -> DreamPtr {
-    unsafe { alloc_bytes(&crate::crypto::sha256(&read_bytes(input))) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cryptoSha512(input: DreamPtr) -> DreamPtr {
-    unsafe { alloc_bytes(&crate::crypto::sha512(&read_bytes(input))) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cryptoHmacSha256(key: DreamPtr, input: DreamPtr) -> DreamPtr {
-    unsafe {
-        alloc_bytes(&crate::crypto::hmac_sha256(
-            &read_bytes(key),
-            &read_bytes(input),
-        ))
-    }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn cryptoSecureRandomBytes(len: i32) -> DreamPtr {
     alloc_bytes(&crate::crypto::secure_random(len))
 }

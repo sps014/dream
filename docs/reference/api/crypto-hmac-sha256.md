@@ -6,7 +6,7 @@ Read the [usage guide](../../library/security/crypto.md) for examples and common
 
 ## `HmacSha256`
 
-HMAC-SHA256 keyed digest (32-byte output). Host-backed via `Dream.cryptoHmacSha256`.
+HMAC-SHA256 keyed message authentication (RFC 2104) with a 32-byte result.
 
 ```dream
 public static class HmacSha256
@@ -14,8 +14,8 @@ public static class HmacSha256
 
 ## `sign`
 
-Computes HMAC-SHA256 of `data` under `key`.
+Computes HMAC-SHA256 of `data` under `key`. Keys of any length are accepted; keys longer than 64 bytes are hashed first, as RFC 2104 specifies.
 
 ```dream
-public static fun sign(key: byte[], data: byte[]): byte[]
+public static fun sign(borrow key: byte[], borrow data: byte[]): byte[]
 ```

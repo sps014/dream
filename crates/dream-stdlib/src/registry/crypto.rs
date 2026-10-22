@@ -10,6 +10,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/crypto/crypto_error.dream"),
         ),
         (
+            "<std>/system/crypto/sha_padding.dream",
+            include_str!("../system/crypto/sha_padding.dream"),
+        ),
+        (
             "<std>/system/crypto/sha256.dream",
             include_str!("../system/crypto/sha256.dream"),
         ),

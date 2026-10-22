@@ -166,7 +166,7 @@ int64_t dream_heap_gauge(int32_t id) {
             committed += size;
         }
         dream_platform_current->unlock(DREAM_LOCK_HEAP);
-        return (int64_t)committed;
+        return (int64_t)(committed - dream_heap_released_bytes());
     }
     heap_usage usage = {0, 0};
     walk_heap(tally_usage, &usage);

@@ -15,7 +15,7 @@ The host capability crates provide Unicode, crypto, process, and timezone servic
 
 `include/dream_platform.h` defines the platform callback table. Install it with `dream_set_platform` before using the runtime. Every callback is required. Keep the table and allocation domain alive for the entire runtime lifetime; do not replace a live allocator.
 
-Mapped regions must be zeroed and aligned to 16 bytes. Heap locks and weak-reference locks are separate; weak operations may take the heap lock. `object_drop` retires system synchronization state.
+Mapped regions must be zeroed and aligned to 16 bytes. `release` returns the whole pages inside a mapped range to the operating system and reports how many bytes it released; the range must stay mapped and writable, and its contents afterwards are unspecified. The heap calls it for idle large free blocks once more than 16 MiB of them are resident; a platform that cannot release memory returns 0. Heap locks and weak-reference locks are separate; weak operations may take the heap lock. `object_drop` retires system synchronization state.
 
 Output callbacks receive UTF-8 bytes or native-endian UTF-16 units and a stream number. The abort callback must terminate without returning. Native defaults use system allocation and locks; WebAssembly defaults use the guest heap and host text writer.
 

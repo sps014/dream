@@ -1,5 +1,6 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
+#include "dream_heap_maps.h"
 #include "dream_thread.h"
 #include <assert.h>
 #include <stdio.h>
@@ -12,7 +13,7 @@ void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 const dream_platform dream_default_platform = {0};
 static int fail_allocate, fail_resize, fail_map;
-static int allocations, resizes, mappings, frees, locked[3];
+static int allocations, resizes, mappings, releases, frees, locked[3];
 static dream_mutex locks[3] = {DREAM_MUTEX_INIT, DREAM_MUTEX_INIT, DREAM_MUTEX_INIT};
 
 static DREAM_THREAD_PROC(increment_counter) {
@@ -28,6 +29,15 @@ static void *allocate(size_t size) { __atomic_fetch_add(&allocations, 1, __ATOMI
 static void *resize(void *ptr, size_t size) { __atomic_fetch_add(&resizes, 1, __ATOMIC_RELAXED); return fail_resize ? NULL : realloc(ptr, size); }
 static void deallocate(void *ptr) { __atomic_fetch_add(&frees, 1, __ATOMIC_RELAXED); free(ptr); }
 static void *map(size_t size) { __atomic_fetch_add(&mappings, 1, __ATOMIC_RELAXED); return fail_map ? NULL : calloc(1, size); }
+/* Scribbles over released pages, so a block whose contents the allocator still trusted would fail. */
+static size_t release(void *ptr, size_t size) {
+    __atomic_fetch_add(&releases, 1, __ATOMIC_RELAXED);
+    uintptr_t start = ((uintptr_t)ptr + 4095u) & ~(uintptr_t)4095u;
+    uintptr_t end = ((uintptr_t)ptr + size) & ~(uintptr_t)4095u;
+    if (end <= start) { return 0; }
+    memset((void *)start, 0xa5, end - start);
+    return end - start;
+}
 static void write_bytes(int stream, const void *bytes, size_t size, int encoding) {
     assert(stream == 2);
     if (encoding == DREAM_TEXT_UTF16) { dream_write_utf16(stream, bytes, (int32_t)size); return; }
@@ -120,7 +130,7 @@ static void check_invalid_utf8(void) {
 }
 int main(int argc, char **argv) {
     assert(argc == 2);
-    dream_platform platform = {allocate, resize, deallocate, map, terminal_abort, write_bytes,
+    dream_platform platform = {allocate, resize, deallocate, map, release, terminal_abort, write_bytes,
                                lock, unlock, object_drop};
     dream_set_platform(&platform);
     if (strcmp(argv[1], "raw-memory") == 0) {
@@ -199,6 +209,27 @@ int main(int argc, char **argv) {
         }
         assert(mappings - before_maps <= 2);
         assert(allocations - before_records <= 2);
+    }
+    if (strcmp(argv[1], "idle-release") == 0) {
+        enum { BLOCKS = 24, BYTES = 1 << 20 };
+        dream_ptr blocks[BLOCKS];
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < BLOCKS; i++) {
+                blocks[i] = dream_malloc(BYTES, 1);
+                memset(dream_p(blocks[i]), round + 1, BYTES);
+            }
+            int mapped = mappings;
+            assert(dream_heap_released_bytes() == 0);
+            for (int i = 0; i < BLOCKS; i++) {
+                assert(((unsigned char *)dream_p(blocks[i]))[BYTES - 1] == round + 1);
+                dream_recycle(blocks[i]);
+            }
+            /* 16 MiB of the 24 freed blocks stays resident; the rest goes back to the OS. */
+            assert(releases == (round + 1) * 9);
+            assert(dream_heap_released_bytes() >= (uint64_t)9 * (BYTES - 8192));
+            assert(mappings == mapped);
+        }
+        return 0;
     }
     if (strcmp(argv[1], "wide-counters") == 0) {
         dream_heap_counters *counters = dream_heap.fast;

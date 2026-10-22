@@ -63,6 +63,8 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
         .output()
         .unwrap();
     assert!(retired.status.success(), "thread retention: {retired:?}");
+    let idle = Command::new(&binary).arg("idle-release").output().unwrap();
+    assert!(idle.status.success(), "idle release: {idle:?}");
     let wide = Command::new(&binary).arg("wide-counters").output().unwrap();
     assert!(wide.status.success(), "wide counters: {:?}", wide);
     let nul = Command::new(&binary).arg("nul").output().unwrap();

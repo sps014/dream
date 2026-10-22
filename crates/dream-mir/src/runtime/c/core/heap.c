@@ -15,6 +15,13 @@ static int shared_available[NCLASS];
  * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
  * into the top class or bump-allocated past a 4MiB mmap. */
 static dream_ptr large_freelist;
+/* Free large blocks keep their pages up to this many bytes, so buffer churn reuses resident
+ * memory; past it, a freed block's interior pages go back to the OS. */
+#define IDLE_LARGE_RETAIN ((size_t)16u << 20)
+/* A free large block's prefix word records whether its pages are resident or were released. */
+enum { LARGE_RESIDENT = 1, LARGE_RELEASED = 2 };
+static size_t idle_large_bytes;
+static uint64_t released_bytes;
 static char *arena;
 static size_t arena_off;
 static size_t arena_len;
@@ -241,6 +248,48 @@ static void account_frees(uint32_t n) {
 /* Re-arm the inline fast path once the thread is registered and no region is open. */
 static void heap_refresh_fast(void);
 
+/* Releasing pages costs a system call and a fault on reuse, so it happens on the free path,
+ * outside the heap lock, before another thread can take the block. */
+static void free_large(char *block) {
+    size_t sz = *dream_large_size(block);
+    heap_lock();
+    int resident = sz <= IDLE_LARGE_RETAIN && idle_large_bytes <= IDLE_LARGE_RETAIN - sz;
+    if (resident) {
+        idle_large_bytes += sz;
+    }
+    heap_unlock();
+    uintptr_t state = LARGE_RESIDENT;
+    size_t released = 0;
+    if (!resident) {
+        released = dream_platform_current->release(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
+        state = (uintptr_t)released | LARGE_RELEASED;
+    }
+    dream_block_set_word(block - DREAM_LARGE_PREFIX, state);
+    heap_lock();
+    released_bytes += released;
+    block_set_next(block, dream_p(large_freelist));
+    large_freelist = (dream_ptr)block;
+    heap_unlock();
+}
+
+static void claim_large(char *block) {
+    char *prefix = block - DREAM_LARGE_PREFIX;
+    uintptr_t state = dream_block_word(prefix);
+    if (state & LARGE_RELEASED) {
+        released_bytes -= state & ~(uintptr_t)(LARGE_RESIDENT | LARGE_RELEASED);
+    } else {
+        idle_large_bytes -= *dream_large_size(block);
+    }
+    dream_block_set_word(prefix, 0);
+}
+
+uint64_t dream_heap_released_bytes(void) {
+    heap_lock();
+    uint64_t bytes = released_bytes;
+    heap_unlock();
+    return bytes;
+}
+
 static char *large_try_take(size_t need) {
     dream_ptr prev = 0;
     dream_ptr curr = large_freelist;
@@ -253,6 +302,7 @@ static char *large_try_take(size_t need) {
             } else {
                 block_set_next((char *)dream_p(prev), next);
             }
+            claim_large(block);
             return block;
         }
         prev = curr;
@@ -512,16 +562,15 @@ void dream_recycle_slow(dream_ptr ptr) {
     }
     DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
     account_frees(1);
-    if (shared || idx >= NCLASS) {
+    if (idx >= NCLASS) {
+        free_large(block);
+        return;
+    }
+    if (shared) {
         heap_lock();
-        if (idx >= NCLASS) {
-            block_set_next(block, dream_p(large_freelist));
-            large_freelist = (dream_ptr)block;
-        } else {
-            block_set_next(block, dream_p(freelist[idx]));
-            freelist[idx] = (dream_ptr)block;
-            __atomic_store_n(&shared_available[idx], 1, __ATOMIC_RELEASE);
-        }
+        block_set_next(block, dream_p(freelist[idx]));
+        freelist[idx] = (dream_ptr)block;
+        __atomic_store_n(&shared_available[idx], 1, __ATOMIC_RELEASE);
         heap_unlock();
         return;
     }

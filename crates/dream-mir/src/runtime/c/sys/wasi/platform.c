@@ -22,11 +22,17 @@ static void platform_unlock(unsigned domain) {
 }
 static void platform_abort(void) { __builtin_trap(); }
 static void *unused_map(size_t size) { (void)size; return NULL; }
+/* Linear memory cannot shrink; freed blocks return to the guest heap's free lists instead. */
+static size_t unused_release(void *ptr, size_t size) {
+    (void)ptr;
+    (void)size;
+    return 0;
+}
 static void *platform_resize(void *p, size_t size) {
     if (size > INT32_MAX) { return NULL; }
     return realloc(p, size);
 }
 static void platform_object_drop(void *ptr) { (void)ptr; }
 const dream_platform dream_default_platform = {
-    malloc, platform_resize, free, unused_map, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop
+    malloc, platform_resize, free, unused_map, unused_release, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop
 };

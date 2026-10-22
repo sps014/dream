@@ -7,6 +7,7 @@
 #include <windows.h>
 #else
 #include <sys/mman.h>
+#include <unistd.h>
 #endif
 #ifdef __APPLE__
 #include <os/lock.h>
@@ -28,6 +29,35 @@ static void *platform_map(size_t size) {
     return p == MAP_FAILED ? NULL : p;
 #endif
 }
+static size_t page_size(void) {
+#ifdef _WIN32
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    return (size_t)info.dwPageSize;
+#else
+    long size = sysconf(_SC_PAGESIZE);
+    return size > 0 ? (size_t)size : 4096u;
+#endif
+}
+static size_t platform_release(void *ptr, size_t size) {
+    static size_t page;
+    if (page == 0) { page = page_size(); }
+    uintptr_t start = ((uintptr_t)ptr + page - 1) & ~(uintptr_t)(page - 1);
+    uintptr_t end = ((uintptr_t)ptr + size) & ~(uintptr_t)(page - 1);
+    if (end <= start) { return 0; }
+    size_t len = (size_t)(end - start);
+#ifdef _WIN32
+    if (VirtualAlloc((void *)start, len, MEM_RESET, PAGE_READWRITE) == NULL) { return 0; }
+    /* MEM_RESET only drops the pages' contents; unlocking unlocked pages trims them from the
+     * working set, which is what returns the memory. */
+    (void)VirtualUnlock((void *)start, len);
+#elif defined(__APPLE__)
+    if (madvise((void *)start, len, MADV_FREE) != 0) { return 0; }
+#else
+    if (madvise((void *)start, len, MADV_DONTNEED) != 0) { return 0; }
+#endif
+    return len;
+}
 static void platform_write(int stream, const void *bytes, size_t size, int encoding) {
     if (encoding == DREAM_TEXT_UTF16) {
         dream_write_utf16(stream, bytes, (int32_t)size);
@@ -39,5 +69,5 @@ static void platform_write(int stream, const void *bytes, size_t size, int encod
 }
 static void platform_object_drop(void *ptr) { dream_lock_forget((dream_ptr)ptr); }
 const dream_platform dream_default_platform = {
-    malloc, realloc, free, platform_map, abort, platform_write, platform_lock, platform_unlock, platform_object_drop
+    malloc, realloc, free, platform_map, platform_release, abort, platform_write, platform_lock, platform_unlock, platform_object_drop
 };

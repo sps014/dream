@@ -1,10 +1,10 @@
 #ifndef DREAM_NODE_POOL_H
 #define DREAM_NODE_POOL_H
+/* Foreign-completion queue nodes, shared by every native scheduler under the heap lock. */
 #include "dream_platform_internal.h"
 
 typedef struct Node {
     dream_ptr f;
-    int64_t due;
     struct Node *next;
 } Node;
 
@@ -28,12 +28,8 @@ typedef struct NodeCache {
     unsigned count;
 } NodeCache;
 
-static _Thread_local NodePool timer_pool;
-#ifndef DREAM_WASM32
-static NodeCache timer_cache;
 static NodeCache foreign_cache;
 static NodePool foreign_pool;
-#endif
 
 static void node_pool_attach(NodePool *pool, NodeBlock *block) {
     block->next = pool->blocks;
@@ -51,7 +47,6 @@ static Node *node_pool_pop(NodePool *pool) {
     }
     pool->live++;
     node->f = 0;
-    node->due = 0;
     node->next = NULL;
     return node;
 }
@@ -72,7 +67,7 @@ static NodeBlock *node_pool_retire(NodePool *pool, NodeCache *cache) {
     while (pool->blocks) {
         NodeBlock *block = pool->blocks;
         pool->blocks = block->next;
-        if (cache && cache->count < NODE_CACHED_BLOCKS) {
+        if (cache->count < NODE_CACHED_BLOCKS) {
             block->next = cache->blocks;
             cache->blocks = block;
             cache->count++;
@@ -84,7 +79,6 @@ static NodeBlock *node_pool_retire(NodePool *pool, NodeCache *cache) {
     return discard;
 }
 
-#ifndef DREAM_WASM32
 static NodeBlock *node_cache_pop(NodeCache *cache) {
     NodeBlock *block = cache->blocks;
     if (block) {
@@ -93,7 +87,6 @@ static NodeBlock *node_cache_pop(NodeCache *cache) {
     }
     return block;
 }
-#endif
 
 static NodeBlock *node_block_allocate(dream_counter counter) {
     NodeBlock *block = dream_platform_current->allocate(sizeof(*block));
@@ -102,39 +95,6 @@ static NodeBlock *node_block_allocate(dream_counter counter) {
     return block;
 }
 
-static Node *timer_node_take(void) {
-    if (!timer_pool.free && (!timer_pool.blocks || timer_pool.blocks->used == NODE_BLOCK_CAPACITY)) {
-        NodeBlock *block = NULL;
-#ifndef DREAM_WASM32
-        dream_platform_current->lock(DREAM_LOCK_HEAP);
-        block = node_cache_pop(&timer_cache);
-        dream_platform_current->unlock(DREAM_LOCK_HEAP);
-#endif
-        if (!block) { block = node_block_allocate(DREAM_COUNT_TIMER_ALLOC); }
-        node_pool_attach(&timer_pool, block);
-    }
-    return node_pool_pop(&timer_pool);
-}
-
-static void timer_node_put(Node *node) {
-    node->f = 0;
-    node->next = timer_pool.free;
-    timer_pool.free = node;
-    timer_pool.live--;
-    if (!timer_pool.live) {
-        NodeBlock *discard;
-#ifndef DREAM_WASM32
-        dream_platform_current->lock(DREAM_LOCK_HEAP);
-        discard = node_pool_retire(&timer_pool, &timer_cache);
-        dream_platform_current->unlock(DREAM_LOCK_HEAP);
-#else
-        discard = node_pool_retire(&timer_pool, NULL);
-#endif
-        node_blocks_free(discard);
-    }
-}
-
-#ifndef DREAM_WASM32
 static Node *foreign_node_take(void) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     if (!foreign_pool.free && (!foreign_pool.blocks || foreign_pool.blocks->used == NODE_BLOCK_CAPACITY)) {
@@ -163,5 +123,4 @@ static void foreign_node_put(Node *node) {
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
     node_blocks_free(discard);
 }
-#endif
 #endif

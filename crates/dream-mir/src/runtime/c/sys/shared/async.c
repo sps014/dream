@@ -11,15 +11,18 @@
 #define KIND_ALL FUTURE_KIND_ALL
 #define KIND_RACE FUTURE_KIND_RACE
 
+#ifndef DREAM_WASM32
 #include "node_pool.h"
+#endif
 
 #include "ready_queue.h"
 
-static _Thread_local Node *timer_head;
 static _Thread_local dream_ptr poll_current;
 static _Thread_local int32_t poll_drop_start_retain;
 
 #include "async_frame.h"
+
+#include "timer_heap.h"
 
 void *dream_ft_get(int32_t i);
 
@@ -267,7 +270,6 @@ static int awaited_child_unshared(dream_ptr child) {
 }
 
 void dream_cancel(dream_ptr f) {
-    Node **link;
     int in_flight = 0;
     /* Scoped futures remain schedulable until every owned child has settled. */
     if (f && !status_of(f) && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
@@ -318,13 +320,7 @@ void dream_cancel(dream_ptr f) {
         }
     }
     i32_at(f, F_QUEUED)[0] = 0;
-    for (link = &timer_head; *link;) {
-        Node *node = *link;
-        if (node->f == f) {
-            *link = node->next;
-            timer_node_put(node);
-        } else { link = &node->next; }
-    }
+    timer_cancel(f);
     if (!in_flight) {
         scheduler_drop_start_retain(f);
     }
@@ -386,7 +382,7 @@ int dream_async_pending(void) {
         return 1;
     }
 #endif
-    return rq_head != NULL || timer_head != NULL;
+    return rq_head != NULL || timer_count != 0;
 }
 
 #ifdef DREAM_WASM32
@@ -436,13 +432,15 @@ void dream_run_loop(void) {
         if (rq_head) {
             continue;
         }
-        if (!timer_head && !foreign_outstanding()) {
+        if (!timer_count && !foreign_outstanding()) {
             ready_finish();
+            timer_finish();
             return;
         }
 #else
-        if (!timer_head) {
+        if (!timer_count) {
             ready_finish();
+            timer_finish();
             return;
         }
 #endif
@@ -450,15 +448,15 @@ void dream_run_loop(void) {
 #ifdef DREAM_WASM32
 #ifdef DREAM_COMPONENT
             void dream_component_wait_until(int64_t deadline);
-            dream_component_wait_until(timer_head->due);
+            dream_component_wait_until(timer_peek()->due);
             int64_t now = timeNowNanos();
 #else
-            int64_t now = timer_head->due;
+            int64_t now = timer_peek()->due;
             vclock = now;
 #endif
 #else
             int64_t now = timeNowNanos();
-            int64_t due = timer_head ? timer_head->due : 0;
+            int64_t due = timer_count ? timer_peek()->due : 0;
             if (due > now) {
                 dream_mutex_lock(&sched.mu);
                 /* Re-check under the lock: a foreign completion between the drain above and
@@ -467,7 +465,7 @@ void dream_run_loop(void) {
                     scheduler_park(due - now);
                 }
                 dream_mutex_unlock(&sched.mu);
-            } else if (!timer_head) {
+            } else if (!timer_count) {
                 /* No timers: park until a foreign completion signals. */
                 dream_mutex_lock(&sched.mu);
                 if (!sched.fq_head && !dream_callback_pending()) {
@@ -477,32 +475,21 @@ void dream_run_loop(void) {
             }
             now = timeNowNanos();
 #endif
-            while (timer_head && timer_head->due <= now) {
-                Node *n = timer_head;
-                timer_head = n->next;
-                dream_async_complete(n->f, 0);
-                timer_node_put(n);
+            while (timer_count && timer_peek()->due <= now) {
+                dream_async_complete(timer_pop(), 0);
             }
         }
     }
 }
 
-/* The timer holds `f` raw: the awaiter owns it, and `dream_cancel` unlinks the node. */
+/* The heap holds `f` raw: the awaiter owns it, and `dream_cancel` removes the entry. */
 static void timer_arm(dream_ptr f, int32_t ms) {
-    Node *n = timer_node_take();
-    Node **pp;
-    n->f = f;
 #if defined(DREAM_WASM32) && !defined(DREAM_COMPONENT)
-    n->due = vclock + (int64_t)ms * 1000000LL;
+    int64_t now = vclock;
 #else
-    n->due = timeNowNanos() + (int64_t)ms * 1000000LL;
+    int64_t now = timeNowNanos();
 #endif
-    pp = &timer_head;
-    while (*pp && (*pp)->due <= n->due) {
-        pp = &(*pp)->next;
-    }
-    n->next = *pp;
-    *pp = n;
+    timer_push(f, now + (int64_t)ms * 1000000LL);
 }
 
 dream_ptr dream_sleep(int32_t ms) {

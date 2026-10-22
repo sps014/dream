@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <sched.h>
 #include "../crates/dream-mir/src/runtime/c/sys/shared/node_pool.h"
+#include "../crates/dream-mir/src/runtime/c/sys/shared/async_frame.h"
+#include "../crates/dream-mir/src/runtime/c/sys/shared/timer_heap.h"
 
 static dream_mutex mutex = DREAM_MUTEX_INIT;
 static _Thread_local int locked;
@@ -33,26 +35,37 @@ static const dream_platform platform = {.allocate = allocate, .deallocate = deal
 const dream_platform *dream_platform_current = &platform;
 void dream_panic(dream_ptr message) { (void)message; abort(); }
 
-static void timer_burst(unsigned count) {
-    Node *nodes[4096];
-    assert(count <= 4096);
+static unsigned char frames[5000][F_SLOTS];
+static dream_ptr frame(unsigned i) { return (dream_ptr)(uintptr_t)frames[i]; }
+static unsigned frame_index(dream_ptr f) { return (unsigned)(((unsigned char *)(uintptr_t)f - frames[0]) / F_SLOTS); }
+
+/* Deadlines repeat so equal keys must fire in arming order; cancelled frames never fire. */
+static void timer_heap_order(unsigned count) {
+    uint32_t state = 12345u + count;
+    int64_t dues[5000];
     for (unsigned i = 0; i < count; i++) {
-        nodes[i] = timer_node_take();
-        assert(!nodes[i]->f && !nodes[i]->next && !nodes[i]->due);
-        nodes[i]->f = (dream_ptr)(uintptr_t)(i + 1);
-        nodes[i]->due = i;
+        state = state * 1103515245u + 12345u;
+        dues[i] = (int64_t)(state >> 16) % 97;
+        timer_push(frame(i), dues[i]);
     }
-    /* Retirement of one entry cannot invalidate another entry still active in its block. */
-    for (unsigned i = count; i > 0; i--) {
-        assert(nodes[i - 1]->f == (dream_ptr)(uintptr_t)i && nodes[i - 1]->due == i - 1);
-        timer_node_put(nodes[i - 1]);
+    for (unsigned i = 0; i < count; i += 3) { timer_cancel(frame(i)); }
+    for (unsigned i = 0; i < count; i += 3) {
+        assert(i32_at(frame(i), F_REMAINING)[0] == 0);
+        timer_cancel(frame(i));
     }
-    assert(!timer_pool.live && !timer_pool.free && !timer_pool.blocks);
-}
-static DREAM_THREAD_PROC(timer_worker) {
-    (void)arg;
-    for (unsigned i = 0; i < 100; i++) { timer_burst(256); }
-    return 0;
+    int64_t last_due = -1;
+    unsigned last_index = 0, fired = 0;
+    while (timer_peek()) {
+        dream_ptr f = timer_pop();
+        unsigned i = frame_index(f);
+        assert(i % 3 != 0 && i32_at(f, F_REMAINING)[0] == 0);
+        assert(dues[i] > last_due || (dues[i] == last_due && i > last_index));
+        last_due = dues[i];
+        last_index = i;
+        fired++;
+    }
+    assert(fired == count - (count + 2) / 3);
+    timer_finish();
 }
 static DREAM_THREAD_PROC(foreign_churn) {
     unsigned slot = (unsigned)(uintptr_t)arg;
@@ -70,7 +83,7 @@ static DREAM_THREAD_PROC(foreign_producer) {
     unsigned slot = (unsigned)(uintptr_t)arg;
     for (unsigned i = 0; i < 513; i++) {
         Node *node = foreign_node_take();
-        assert(!node->f && !node->next && !node->due);
+        assert(!node->f && !node->next);
         node->f = (dream_ptr)(uintptr_t)(slot * 513 + i + 1);
         handoff[slot][i] = node;
     }
@@ -94,15 +107,15 @@ static void foreign_burst(void) {
     assert(foreign_cache.count <= NODE_CACHED_BLOCKS);
 }
 int main(void) {
-    unsigned sizes[] = {0, 1, 63, 64, 65, 127, 128, 256, 513, 4096};
-    for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) { timer_burst(sizes[i]); }
-    timer_burst(256);
     unsigned before = allocations;
-    for (unsigned i = 0; i < 100; i++) { timer_burst(256); }
+    timer_heap_order(0);
+    timer_heap_order(1);
+    timer_heap_order(TIMER_INLINE_CAPACITY);
     assert(allocations == before);
+    unsigned sizes[] = {TIMER_INLINE_CAPACITY + 1, 65, 513, 4096, 5000};
+    for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) { timer_heap_order(sizes[i]); }
+    assert(allocations == deallocations);
     dream_thread threads[4];
-    for (unsigned i = 0; i < 4; i++) { assert(dream_thread_start(&threads[i], timer_worker, NULL) == 0); }
-    for (unsigned i = 0; i < 4; i++) { dream_thread_join(threads[i]); }
     foreign_burst();
     before = allocations;
     for (unsigned i = 0; i < 4; i++) {
@@ -115,8 +128,7 @@ int main(void) {
         foreign_node_put(node);
     }
     assert(allocations == before);
-    assert(allocations - deallocations <= 2 * NODE_CACHED_BLOCKS);
-    node_blocks_free(timer_cache.blocks);
+    assert(allocations - deallocations <= NODE_CACHED_BLOCKS);
     node_blocks_free(foreign_cache.blocks);
     assert(allocations == deallocations);
     return 0;

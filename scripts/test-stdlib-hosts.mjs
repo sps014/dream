@@ -7,6 +7,40 @@ import { makeFsHost } from "../runtime/src/hosts/fs.js";
 import { makeConsoleProcessHost } from "../runtime/src/hosts/console_process.js";
 import { splitProcessArgs } from "../runtime/src/hosts/process_wire.js";
 import { setNodeFs, setNodeChildProcess } from "../runtime/src/platform.js";
+import { makeSessionTable } from "../runtime/src/workers.js";
+
+test("worker session handles are generational and never run out", () => {
+  const table = makeSessionTable();
+  const first = table.insert("a");
+  assert.equal(table.remove(first), "a");
+  assert.equal(table.get(first), undefined);
+  assert.equal(table.remove(first), undefined);
+  const second = table.insert("b");
+  assert.notEqual(second, first);
+  assert.equal(table.get(second), "b");
+  table.remove(second);
+
+  const slot = (id) => id & 0x7fffff;
+  const batch = [table.insert(0), table.insert(1), table.insert(2)];
+  batch.forEach((id) => table.remove(id));
+  const reused = [table.insert(0), table.insert(1), table.insert(2)];
+  assert.deepEqual(reused.map(slot), batch.map(slot));
+  reused.forEach((id) => table.remove(id));
+
+  const keep = Array.from({ length: 64 }, (_, i) => table.insert(i));
+  let wrapped = false;
+  const previous = new Map();
+  for (let i = 0; i < 1_000_000; i++) {
+    const id = table.insert(i);
+    const generation = id >>> 23;
+    assert.ok(id > 0 && generation >= 1);
+    if (previous.get(slot(id)) === 255 && generation === 1) wrapped = true;
+    previous.set(slot(id), generation);
+    assert.equal(table.remove(id), i);
+  }
+  assert.ok(wrapped);
+  keep.forEach((id, i) => assert.equal(table.get(id), i));
+});
 
 for (const backend of ["memory", "node"]) {
   test(`${backend} handles distinguish failures, EOF, and closure`, () => {

@@ -343,7 +343,7 @@ jobs:
       - name: JavaScript runtime storage and generated bundle
         run: |
           node scripts/bundle-runtime.mjs --check
-          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-data-host.mjs scripts/test-cancellation-host.mjs
+          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-stdlib-hosts.mjs scripts/test-cancellation-host.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}

@@ -125,7 +125,7 @@ self.onmessage = (e) => {
  * always a positive i32 and ids never run out. Freed slots are reused oldest-first, so a stale
  * handle misses until its slot has cycled through the whole free queue 255 times.
  */
-function makeSessionTable() {
+export function makeSessionTable() {
   const GEN_SHIFT = 23;
   const SLOT_MASK = (1 << GEN_SHIFT) - 1;
   const entries = [];

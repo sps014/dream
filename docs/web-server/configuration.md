@@ -26,10 +26,7 @@ async fun main(): void {
     options.swagger = SwaggerOptions(persist_authorization: false, deep_linking: true);
     let app = WebApp(options);
 
-    let config = ServerConfig(
-        limit_concurrency: 1000,
-        timeout_graceful_shutdown_ms: 30000
-    );
+    let config = ServerConfig(limit_concurrency: 1000, timeout_graceful_shutdown_ms: 30000);
     let port = app.listen("127.0.0.1", 0, config).await.unwrap();
     System.println("Listening on " + port.to_string());
 
@@ -84,10 +81,7 @@ import system.webapi;
 
 async fun main(): void {
     let app = WebApp();
-    let config = ServerConfig(
-        ssl_certfile: "certs/server.pem",
-        ssl_keyfile: "certs/server.key"
-    );
+    let config = ServerConfig(ssl_certfile: "certs/server.pem", ssl_keyfile: "certs/server.key");
     let result = app.run("0.0.0.0", 8443, config).await;
     if result.is_err() {
         System.println("cannot start: " + result.unwrap_err().message());

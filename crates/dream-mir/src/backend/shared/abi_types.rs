@@ -234,6 +234,7 @@ fn operand_is_wide(
             ty_is_wide(cx, array_elem_ty(cx.interner, func.local_ty(*base)))
         }
         crate::Operand::Copy(crate::Place::Deref { elem_ty, .. }) => ty_is_wide(cx, *elem_ty),
+        crate::Operand::Const(crate::Const::Str(_)) => true,
         crate::Operand::Const(_) => false,
     }
 }

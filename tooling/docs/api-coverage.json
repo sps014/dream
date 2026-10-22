@@ -14544,7 +14544,7 @@
       {
         "signature": "public fun close(): Result<Unit, HttpError>",
         "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
-        "line": 81,
+        "line": 86,
         "page": "reference/api/net-http-client.md"
       }
     ]
@@ -15089,50 +15089,50 @@
     "declarations": [
       {
         "signature": "public class Url",
-        "description": "A normalized absolute URL parsed using the host URL Standard implementation. Query parameters preserve their original encoding until modified.",
-        "line": 5,
+        "description": "An absolute URL parsed and normalized as the WHATWG URL Standard describes: the scheme and host are lowercased, default ports and `.`/`..` path segments are removed, internationalized hostnames become Punycode, IPv4 and IPv6 hosts are canonicalized, and characters outside each component's allowed set are percent-encoded. Query parameters keep their original encoding until modified.",
+        "line": 8,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public static fun parse(input: string): Result<Url, ParseError>",
-        "description": "Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.",
-        "line": 18,
+        "description": "Parses and normalizes an absolute URL. Relative references and malformed input, such as an invalid host or a port above 65535, return `ParseError`.",
+        "line": 43,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public fun resolve(reference: string): Result<Url, ParseError>",
-        "description": "Resolves a relative reference against this URL; an absolute reference replaces the base. A trailing slash in the base determines whether its last path component is a directory.",
-        "line": 31,
+        "description": "Resolves a reference against this URL; an absolute reference replaces it entirely. A trailing slash in this URL's path determines whether its last segment is a directory. URLs with an opaque path, such as `mailto:`, only resolve fragment-only references.",
+        "line": 50,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public get scheme(): string",
         "description": "Lowercase scheme without the colon delimiter.",
-        "line": 36,
+        "line": 62,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public get host(): string",
         "description": "Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.",
-        "line": 41,
+        "line": 67,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public get path(): string",
         "description": "Encoded path component; percent escapes remain encoded.",
-        "line": 46,
+        "line": 72,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public get query(): UrlQuery",
         "description": "Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.",
-        "line": 51,
+        "line": 85,
         "page": "reference/api/net-url.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Serializes the normalized URL, including query edits and any fragment delimiter.",
-        "line": 56,
+        "line": 90,
         "page": "reference/api/net-url.md"
       }
     ]
@@ -15151,43 +15151,43 @@
       {
         "signature": "public get length(): int",
         "description": "Number of key/value pairs, including repeated keys and empty values.",
-        "line": 22,
+        "line": 40,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun append(key: string, value: string): void",
         "description": "Appends a decoded key/value pair after existing parameters.",
-        "line": 27,
+        "line": 45,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun get(key: string): Option<string>",
         "description": "Returns the first decoded value for `key`, or `None` if the key is absent.",
-        "line": 34,
+        "line": 52,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun get_all(key: string): string[]",
         "description": "Copies all decoded values for `key` in their original order.",
-        "line": 44,
+        "line": 62,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun set(key: string, value: string): void",
         "description": "Replaces the first occurrence in place and removes later duplicates; appends if absent.",
-        "line": 55,
+        "line": 73,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun remove(key: string): void",
         "description": "Removes every occurrence of `key`, preserving the order of remaining pairs.",
-        "line": 77,
+        "line": 95,
         "page": "reference/api/net-url-query.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all parameters and the query delimiter from the URL.",
-        "line": 91,
+        "line": 109,
         "page": "reference/api/net-url-query.md"
       }
     ]

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Url`
 
-A normalized absolute URL parsed using the host URL Standard implementation. Query parameters preserve their original encoding until modified.
+An absolute URL parsed and normalized as the WHATWG URL Standard describes: the scheme and host are lowercased, default ports and `.`/`..` path segments are removed, internationalized hostnames become Punycode, IPv4 and IPv6 hosts are canonicalized, and characters outside each component's allowed set are percent-encoded. Query parameters keep their original encoding until modified.
 
 ```dream
 public class Url
@@ -14,7 +14,7 @@ public class Url
 
 ## `parse`
 
-Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.
+Parses and normalizes an absolute URL. Relative references and malformed input, such as an invalid host or a port above 65535, return `ParseError`.
 
 ```dream
 public static fun parse(input: string): Result<Url, ParseError>
@@ -22,7 +22,7 @@ public static fun parse(input: string): Result<Url, ParseError>
 
 ## `resolve`
 
-Resolves a relative reference against this URL; an absolute reference replaces the base. A trailing slash in the base determines whether its last path component is a directory.
+Resolves a reference against this URL; an absolute reference replaces it entirely. A trailing slash in this URL's path determines whether its last segment is a directory. URLs with an opaque path, such as `mailto:`, only resolve fragment-only references.
 
 ```dream
 public fun resolve(reference: string): Result<Url, ParseError>

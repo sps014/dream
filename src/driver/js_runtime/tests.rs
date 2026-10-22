@@ -220,7 +220,7 @@ fn unreferenced_apis_inside_live_chunks_are_removed() {
     for (field, unused) in [
         ("gpuDeviceCreate", "createComputePipeline"),
         ("jsGlobal", "jsAwait"),
-        ("netUrlParse", "netClientCreate"),
+        ("netDomainToAscii", "netClientCreate"),
     ] {
         let live = vec![("Dream".into(), field.into())];
         let assembled = assemble_selective_runtime(&live, JsRuntimeTarget::Web).unwrap();
@@ -234,8 +234,8 @@ fn unreferenced_apis_inside_live_chunks_are_removed() {
         {
             let check = match field {
                 "jsGlobal" => "if (host.jsGlobal('Math') !== Math) throw Error('global lookup');",
-                "netUrlParse" => {
-                    "if (host.netUrlParse('/a?x=1', 'https://example.test')[0] !== 'https://example.test/a') throw Error('URL parsing');"
+                "netDomainToAscii" => {
+                    "if (host.netDomainToAscii('b\\u00fccher.test') !== 'xn--bcher-kva.test') throw Error('IDNA');"
                 }
                 _ => "if (typeof host.gpuDeviceCreate !== 'function') throw Error('GPU import');",
             };

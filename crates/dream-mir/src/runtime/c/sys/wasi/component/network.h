@@ -2,18 +2,12 @@
 #define DREAM_COMPONENT_NETWORK_H
 #include "dream_host_support.h"
 #include "yyjson.h"
-#include <uriparser/Uri.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 #define COMPONENT_LIMIT 1024
 
-typedef struct {
-    char *url, *scheme, *authority, *path;
-} ComponentUrl;
-int component_url_parse(const char *input, const char *base, ComponentUrl *result);
-void component_url_free(ComponentUrl *url);
 dream_ptr component_bytes(const void *bytes, size_t length);
 dream_ptr component_json(yyjson_mut_doc *doc, int status);
 dream_ptr component_error(const char *code, const char *message);

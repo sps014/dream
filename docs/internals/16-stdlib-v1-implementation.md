@@ -51,10 +51,9 @@ Native filesystem calls already executing are not interrupted. The JS async brid
 pins host futures until Promise settlement and skips result allocation for
 cancelled frames, preventing stale callbacks and discarded-result leaks.
 
-`system.net` provides `Url` and ordered `UrlQuery`, using a separate native `net`
-capability backed by `url`, plus host URL APIs on Node/browser. Parsing,
-normalization, relative resolution, repeated keys, query mutation, and serialization
-are implemented. The runtime chunk catalog supports multiple source files per
+`system.net` provides `Url` and ordered `UrlQuery`. The WHATWG basic URL parser,
+host parsing, and serialization are written in Dream; only UTS #46 domain mapping for
+non-ASCII and `xn--` labels calls the `net` capability (`netDomainToAscii`). The runtime chunk catalog supports multiple source files per
 chunk so file-operation helpers are included only with filesystem imports.
 
 Opaque paths now encode a final space before query/fragment delimiters uniformly

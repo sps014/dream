@@ -55,6 +55,68 @@ fun url_basics(): void {
 }
 
 @test
+fun url_standard_parsing(): void {
+    let parsed = [
+        "http://0x7f.1/", "http://127.0.0.1/",
+        "http://[0:0:0:0:0:0:0:1]/", "http://[::1]/",
+        "http://[::ffff:192.168.0.1]/", "http://[::ffff:c0a8:1]/",
+        "http://[1:0:0:2:0:0:0:3]/", "http://[1:0:0:2::3]/",
+        "http://user:pa ss@host/", "http://user:pa%20ss@host/",
+        "http://a@b@host/", "http://a%40b@host/",
+        "http://h:80/", "http://h/",
+        "http://h:0080/x", "http://h/x",
+        "http:\\\\h\\a\\b", "http://h/a/b",
+        "https://h/a b/{x}/^", "https://h/a%20b/%7Bx%7D/%5E",
+        "file:///C|/x", "file:///C:/x",
+        "file://localhost/etc", "file:///etc",
+        "file:c:\\x\\..\\..\\y", "file:///c:/y",
+        "foo://h/a/../b", "foo://h/b",
+        "web+demo:/.//p", "web+demo:/.//p",
+        "https://h/?a'b", "https://h/?a%27b",
+        "foo:/?a'b", "foo:/?a'b",
+        "https://h/# x", "https://h/#%20x",
+        "https://h/é", "https://h/%C3%A9",
+        " \tht\ttp://H/\n ", "http://h/",
+        "HTTP://EXAMPLE.com./", "http://example.com./",
+        "http://h/%2e%2E/a/./b/..", "http://h/a/",
+        "sc://ñ/x", "sc://%C3%B1/x",
+        "http://ex%41mple.com/", "http://example.com/",
+    ];
+    for (let i = 0; i < parsed.length; i = i + 2) {
+        Assert.eq(Url.parse(parsed[i]).unwrap().to_string(), parsed[i + 1]);
+    }
+    let resolved = [
+        "?q", "https://h/a/b?x#y", "https://h/a/b?q",
+        "#f", "https://h/a/b?x#y", "https://h/a/b?x#f",
+        "//other/x", "https://h/a/b", "https://other/x",
+        "../../../x", "https://h/a/b", "https://h/x",
+        "", "https://h/a/b?x#y", "https://h/a/b?x",
+        "/abs", "https://u:p@h:8080/a", "https://u:p@h:8080/abs",
+        "x", "file:///C:/a/b", "file:///C:/a/x",
+        "/x", "file:///C:/a/b", "file:///C:/x",
+        "#z", "mailto:a@b.c", "mailto:a@b.c#z",
+    ];
+    for (let i = 0; i < resolved.length; i = i + 3) {
+        let base = Url.parse(resolved[i + 1]).unwrap();
+        Assert.eq(base.resolve(resolved[i]).unwrap().to_string(), resolved[i + 2]);
+    }
+    let invalid = [
+        "http://1.2.3.4.5/",
+        "http://256.0.0.1/",
+        "http://h:65536/",
+        "http://a b/",
+        "http://[::1",
+        "http://@/",
+        "http://h:x/",
+        "http://%41%/",
+        "https://",
+    ];
+    for let input in invalid {
+        Assert.is_true(Url.parse(input).is_err());
+    }
+}
+
+@test
 async fun http_types(): void {
     let headers = HttpHeaders();
     headers.append("X-Role", "reader");

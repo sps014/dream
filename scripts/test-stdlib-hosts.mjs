@@ -71,17 +71,12 @@ test("System.args host preserves empty, multiline, and Unicode arguments", () =>
   } finally { process.argv = original; }
 });
 
-test("URL host preserves normalized components and ordered decoded parameters", async () => {
+test("domain host maps internationalized names with UTS #46", async () => {
   const { makeNetHost } = await import("../runtime/src/hosts/net.js");
   const host = makeNetHost();
-  assert.deepEqual(host.netUrlParse("HTTPS://ExAmPle.Com:443/a/../b?q=a+b&q=%2B#", ""),
-    ["https://example.com/b", "https", "example.com", "/b", "#", "?q=a+b&q=%2B", "q", "a b", "q", "+"]);
-  assert.equal(host.netUrlParse("../users", "https://example.com/v1/nested/")[0], "https://example.com/v1/users");
-  assert.equal(host.netUrlParse("https://bücher.example/こんにちは", "")[2], "xn--bcher-kva.example");
-  assert.equal(host.netUrlParse("https://[::1]:443/", "")[2], "[::1]");
-  assert.deepEqual(host.netUrlParse("relative", ""), []);
-  assert.deepEqual(host.netUrlParse("https://[bad", ""), []);
-  assert.deepEqual(host.netUrlParse("https://example.com/?#", "").slice(4, 6), ["#", "?"]);
+  assert.equal(host.netDomainToAscii("b\u00fccher.example"), "xn--bcher-kva.example");
+  assert.equal(host.netDomainToAscii("XN--BCHER-KVA.example"), "xn--bcher-kva.example");
+  assert.equal(host.netDomainToAscii("xn--a"), "");
 });
 
 test("Node file operations keep buffers and descriptors alive through abandonment", async () => {

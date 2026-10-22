@@ -36,7 +36,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "processClose",
         ],
         HostCapability::Net => &[
-            "netUrlParse",
+            "netDomainToAscii",
             "netWsStart",
             "netWsClose",
             "httpServerStart",

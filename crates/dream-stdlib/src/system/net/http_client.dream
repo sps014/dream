@@ -52,6 +52,11 @@ public class HttpClient {
             || options.connect_timeout_ms < 0 || options.max_redirects < (0 - 1) {
             return Result.Err(HttpError("EINVAL", "invalid HTTP options"));
         }
+        if !request.url.http_target() {
+            return Result.Err(
+                HttpError("EINVAL", "HTTP URL must use http/https without credentials")
+            );
+        }
         let operation = HttpOperation(
             HttpClient.send_host(lifetime[0].id, request.wire(options), request.body)
         );

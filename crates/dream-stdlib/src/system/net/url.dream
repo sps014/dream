@@ -1,50 +1,84 @@
 module system.net;
 
-/// A normalized absolute URL parsed using the host URL Standard implementation.
-/// Query parameters preserve their original encoding until modified.
+/// An absolute URL parsed and normalized as the WHATWG URL Standard describes: the scheme and
+/// host are lowercased, default ports and `.`/`..` path segments are removed, internationalized
+/// hostnames become Punycode, IPv4 and IPv6 hosts are canonicalized, and characters outside each
+/// component's allowed set are percent-encoded. Query parameters keep their original encoding
+/// until modified.
 public class Url {
-    parts: string[];
+    internal scheme_text: string;
+    internal username: string;
+    internal password: string;
+    internal host_text: Option<string>;
+    internal port_number: int;
+    internal segments: string[];
+    internal opaque_path: Option<string>;
     parameters: UrlQuery;
+    fragment: string;
 
-    internal constructor(parts: string[]) {
-        this.parts = parts;
-        this.parameters = UrlQuery(this.parts);
+    internal constructor(
+        scheme: string,
+        username: string,
+        password: string,
+        host: Option<string>,
+        port: int,
+        segments: string[],
+        opaque_path: Option<string>,
+        query: string,
+        fragment: string
+    ) {
+        this.scheme_text = scheme;
+        this.username = username;
+        this.password = password;
+        this.host_text = host;
+        this.port_number = port;
+        this.segments = segments;
+        this.opaque_path = opaque_path;
+        this.parameters = UrlQuery(query);
+        this.fragment = fragment;
     }
 
-    @runtime("netUrlParse")
-    static extern fun parse_host(borrow input: string, borrow base: string): string[];
-
-    /// Parses and normalizes an absolute URL; relative or malformed input returns `ParseError`.
+    /// Parses and normalizes an absolute URL. Relative references and malformed input, such as
+    /// an invalid host or a port above 65535, return `ParseError`.
     public static fun parse(input: string): Result<Url, ParseError> {
-        return Url.from_parts(Url.parse_host(input, ""));
+        return Url.checked(UrlParser.parse(input, Option.None));
     }
 
-    static fun from_parts(parts: string[]): Result<Url, ParseError> {
-        if parts.length < 6 || (parts.length - 6) % 2 != 0 {
+    /// Resolves a reference against this URL; an absolute reference replaces it entirely.
+    /// A trailing slash in this URL's path determines whether its last segment is a directory.
+    /// URLs with an opaque path, such as `mailto:`, only resolve fragment-only references.
+    public fun resolve(reference: string): Result<Url, ParseError> {
+        return Url.checked(UrlParser.parse(reference, Option.Some(this)));
+    }
+
+    static fun checked(parsed: Option<Url>): Result<Url, ParseError> {
+        if parsed.is_none() {
             return Result.Err(ParseError.invalid("invalid URL"));
         }
-        return Result.Ok(Url(parts));
-    }
-
-    /// Resolves a relative reference against this URL; an absolute reference replaces the base.
-    /// A trailing slash in the base determines whether its last path component is a directory.
-    public fun resolve(reference: string): Result<Url, ParseError> {
-        return Url.from_parts(Url.parse_host(reference, this.to_string()));
+        return Result.Ok(parsed.unwrap());
     }
 
     /// Lowercase scheme without the colon delimiter.
     public get scheme(): string {
-        return this.parts[1];
+        return this.scheme_text;
     }
 
     /// Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.
     public get host(): string {
-        return this.parts[2];
+        return this.host_text.unwrap_or("");
     }
 
     /// Encoded path component; percent escapes remain encoded.
     public get path(): string {
-        return this.parts[3];
+        if this.opaque_path.is_some() {
+            return this.opaque_path.unwrap();
+        }
+        let out = StringBuilder();
+        for let segment in this.segments {
+            out.append_char('/');
+            out.append(segment);
+        }
+        return out.build();
     }
 
     /// Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.
@@ -54,6 +88,50 @@ public class Url {
 
     /// Serializes the normalized URL, including query edits and any fragment delimiter.
     public override fun to_string(): string {
-        return this.parts[0] + this.parameters.render() + this.parts[4];
+        let out = StringBuilder();
+        out.append(this.scheme_text);
+        out.append_char(':');
+        if this.host_text.is_some() {
+            out.append("//");
+            out.append(this.userinfo());
+            out.append(this.authority());
+        } else if this.opaque_path.is_none() && this.segments.length > 1 && this.segments[0].length == 0 {
+            out.append("/.");
+        }
+        out.append(this.path);
+        out.append(this.parameters.render());
+        out.append(this.fragment);
+        return out.build();
+    }
+
+    /// Whether the URL is `http` or `https` without a username or password.
+    internal fun http_target(): bool {
+        return (this.scheme_text == "http" || this.scheme_text == "https")
+            && this.username.length == 0
+            && this.password.length == 0;
+    }
+
+    /// Host and any non-default port, as sent in an HTTP `Host` header.
+    internal fun authority(): string {
+        let host = this.host_text.unwrap_or("");
+        if this.port_number < 0 {
+            return host;
+        }
+        return host + ":" + this.port_number.to_string();
+    }
+
+    /// Path and query, as sent in an HTTP request line.
+    internal fun request_target(): string {
+        return this.path + this.parameters.render();
+    }
+
+    fun userinfo(): string {
+        if this.username.length == 0 && this.password.length == 0 {
+            return "";
+        }
+        if this.password.length == 0 {
+            return this.username + "@";
+        }
+        return this.username + ":" + this.password + "@";
     }
 }

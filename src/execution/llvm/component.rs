@@ -26,7 +26,7 @@ pub(super) fn link(
     let mut paths = dream_mir::runtime::component_runtime_c_files(&config.runtime_c);
     let transport = config.runtime_c.join("sys/wasi/component");
     paths.extend(
-        ["url.c", "http.c", "http_transport.c", "sockets.c"]
+        ["domain.c", "http.c", "http_transport.c", "sockets.c"]
             .into_iter()
             .map(|name| transport.join(name)),
     );
@@ -37,15 +37,6 @@ pub(super) fn link(
     });
     paths.push(bindings.with_extension("c"));
     paths.push(config.runtime_c.join("vendor/yyjson/src/yyjson.c"));
-    let uri = config.runtime_c.join("vendor/uriparser");
-    let mut uri_sources = std::fs::read_dir(uri.join("src"))
-        .map_err(|e| e.to_string())?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    uri_sources.retain(|path| path.extension().is_some_and(|extension| extension == "c"));
-    uri_sources.sort();
-    paths.extend(uri_sources);
     let linked = dream_mir::runtime::wasm32_linked_units(&config.runtime_c, req.need);
     paths.extend(linked.iter().map(|unit| unit.path.clone()));
     let mut inputs = crate::driver::rt_stamp::files_under(&config.runtime_c);
@@ -90,15 +81,12 @@ pub(super) fn link(
                 "-mbulk-memory",
                 "-msimd128",
             ])
-            .args(["-DURI_NO_UNICODE", "-DURI_STATIC_BUILD"])
             .args(super::runtime::clang_level_flags(req.wasm_opt));
         for include in crate::driver::wasi::guest_include_dirs(&config.runtime_c)
             .into_iter()
             .chain([
                 config.runtime_c.join("sys/native/include"),
                 config.runtime_c.join("vendor/yyjson/src"),
-                uri.join("include"),
-                uri.join("src"),
             ])
         {
             command.arg("-I").arg(include);

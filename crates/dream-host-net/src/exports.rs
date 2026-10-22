@@ -1,11 +1,12 @@
-use dream_host_abi::{DreamPtr, alloc_string_array, read_string};
+use dream_host_abi::{DreamPtr, alloc_string, read_string};
 
 /// # Safety
-/// Both arguments must be readable guest string payloads for the duration of this call.
+/// `domain` must be a readable guest string payload for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn netUrlParse(input: DreamPtr, base: DreamPtr) -> DreamPtr {
-    let (input, base) = unsafe { (read_string(input), read_string(base)) };
-    alloc_string_array(&crate::urls::parse(&input, &base).unwrap_or_default())
+pub unsafe extern "C" fn netDomainToAscii(domain: DreamPtr) -> DreamPtr {
+    alloc_string(&url::quirks::domain_to_ascii(&unsafe {
+        read_string(domain)
+    }))
 }
 
 #[unsafe(no_mangle)]

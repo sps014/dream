@@ -1,0 +1,124 @@
+module system.net;
+
+/// WHATWG URL percent-encode sets and byte helpers over UTF-8 input.
+internal static class UrlText {
+    /// Appends byte `b`, as `%XX` with uppercase hex digits when `encode` is set.
+    internal static fun append_byte(borrow out: StringBuilder, b: int, encode: bool): void {
+        if encode {
+            out.append_char('%');
+            out.append_char(UrlText.hex_digit(b / 16));
+            out.append_char(UrlText.hex_digit(b % 16));
+        } else {
+            out.append_char((char)b);
+        }
+    }
+
+    /// C0 control percent-encode set: controls and every non-ASCII byte.
+    internal static fun c0(b: int): bool {
+        return b < 0x20 || b > 0x7E;
+    }
+
+    /// Fragment percent-encode set.
+    internal static fun fragment(b: int): bool {
+        return UrlText.c0(b) || b == 0x20 || b == 0x22 || b == 0x3C || b == 0x3E || b == 0x60;
+    }
+
+    /// Query percent-encode set; special schemes also encode `'`.
+    internal static fun query(b: int, special: bool): bool {
+        return UrlText.c0(b)
+            || b == 0x20
+            || b == 0x22
+            || b == 0x23
+            || b == 0x3C
+            || b == 0x3E
+            || (special && b == 0x27);
+    }
+
+    /// Path percent-encode set.
+    internal static fun path(b: int): bool {
+        return UrlText.query(b, false)
+            || b == 0x3F
+            || b == 0x5E
+            || b == 0x60
+            || b == 0x7B
+            || b == 0x7D;
+    }
+
+    /// Userinfo percent-encode set.
+    internal static fun userinfo(b: int): bool {
+        return UrlText.path(b)
+            || b == 0x2F
+            || b == 0x3A
+            || b == 0x3B
+            || b == 0x3D
+            || b == 0x40
+            || (b >= 0x5B && b <= 0x5D)
+            || b == 0x7C;
+    }
+
+    /// Whether `b` is an ASCII letter.
+    internal static fun alpha(b: int): bool {
+        return (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A);
+    }
+
+    /// Whether `b` is an ASCII decimal digit.
+    internal static fun digit(b: int): bool {
+        return b >= 0x30 && b <= 0x39;
+    }
+
+    /// Lowercases an ASCII letter and returns any other byte unchanged.
+    internal static fun lower(b: int): int {
+        if b >= 0x41 && b <= 0x5A {
+            return b + 0x20;
+        }
+        return b;
+    }
+
+    /// Value of hexadecimal digit `b`, or `-1` when `b` is not one.
+    internal static fun hex_value(b: int): int {
+        if UrlText.digit(b) {
+            return b - 0x30;
+        }
+        let l = UrlText.lower(b);
+        if l >= 0x61 && l <= 0x66 {
+            return l - 0x61 + 10;
+        }
+        return 0 - 1;
+    }
+
+    /// Decodes each valid `%XX` escape in `bytes[start..end]`, keeping malformed ones literally.
+    /// With `plus_is_space`, `+` decodes to a space as in form-encoded queries.
+    internal static fun percent_decode(
+        borrow bytes: byte[],
+        start: int,
+        end: int,
+        plus_is_space: bool
+    ): byte[] {
+        let out = Buffer.alloc<byte>(end - start);
+        let count = 0;
+        let i = start;
+        while i < end {
+            let b = (int)bytes[i];
+            if b == 0x25
+                && i + 2 < end
+                && UrlText.hex_value((int)bytes[i + 1]) >= 0
+                && UrlText.hex_value((int)bytes[i + 2]) >= 0 {
+                b = UrlText.hex_value((int)bytes[i + 1]) * 16 + UrlText.hex_value((int)bytes[i + 2]);
+                i = i + 2;
+            } else if plus_is_space && b == 0x2B {
+                b = 0x20;
+            }
+            out[count] = (byte)b;
+            count = count + 1;
+            i = i + 1;
+        }
+        return out.slice(0, count);
+    }
+
+    static fun hex_digit(v: int): char {
+        if v < 10 {
+            return (char)(0x30 + v);
+        }
+        return (char)(0x41 + v - 10);
+    }
+}

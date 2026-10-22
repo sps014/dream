@@ -11,6 +11,18 @@ static HttpString http_string(const char *text) {
     return (HttpString){(uint8_t *)(text ? text : ""), text ? strlen(text) : 0};
 }
 
+static int request_target(yyjson_val *request, wasi_http_types_scheme_t *scheme,
+    HttpString *authority, HttpString *path) {
+    const char *name = yyjson_get_str(yyjson_obj_get(request, "scheme"));
+    const char *host = yyjson_get_str(yyjson_obj_get(request, "authority"));
+    const char *target = yyjson_get_str(yyjson_obj_get(request, "target"));
+    if (!name || !host || !target) { return 0; }
+    scheme->tag = !strcmp(name, "https") ? WASI_HTTP_TYPES_SCHEME_HTTPS : WASI_HTTP_TYPES_SCHEME_HTTP;
+    *authority = http_string(host);
+    *path = http_string(target);
+    return 1;
+}
+
 static wasi_http_types_own_fields_t request_headers(yyjson_val *request) {
     wasi_http_types_own_fields_t fields = wasi_http_types_constructor_fields();
     yyjson_val *headers = yyjson_obj_get(request, "headers"), *item;
@@ -50,23 +62,22 @@ static int next_body = 1;
 
 int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     yyjson_mut_doc *metadata, yyjson_mut_val *headers) {
-    ComponentUrl url = {0};
-    if (!component_url_parse(yyjson_get_str(yyjson_obj_get(request, "url")), "", &url)) { return 0; }
+    wasi_http_types_scheme_t scheme;
+    HttpString authority, path;
+    if (!request_target(request, &scheme, &authority, &path)) { return 0; }
     wasi_http_types_own_fields_t fields = request_headers(request);
-    if (fields.__handle < 0) { component_url_free(&url); return 0; }
+    if (fields.__handle < 0) { return 0; }
     wasi_http_types_own_outgoing_request_t outgoing = wasi_http_types_constructor_outgoing_request(fields);
     wasi_http_types_borrow_outgoing_request_t borrow = wasi_http_types_borrow_outgoing_request(outgoing);
     wasi_http_types_method_t method = {.tag = WASI_HTTP_TYPES_METHOD_OTHER};
     method.val.other = http_string(yyjson_get_str(yyjson_obj_get(request, "method")));
-    wasi_http_types_scheme_t scheme = {.tag = !strcmp(url.scheme, "https") ? WASI_HTTP_TYPES_SCHEME_HTTPS : WASI_HTTP_TYPES_SCHEME_HTTP};
-    HttpString authority = http_string(url.authority), path = http_string(url.path);
     int valid = wasi_http_types_method_outgoing_request_set_method(borrow, &method)
         && wasi_http_types_method_outgoing_request_set_scheme(borrow, &scheme)
         && wasi_http_types_method_outgoing_request_set_authority(borrow, &authority)
         && wasi_http_types_method_outgoing_request_set_path_with_query(borrow, &path);
     wasi_http_types_own_outgoing_body_t output;
     if (!valid || !wasi_http_types_method_outgoing_request_body(borrow, &output)) {
-        wasi_http_types_outgoing_request_drop_own(outgoing); component_url_free(&url); return 0;
+        wasi_http_types_outgoing_request_drop_own(outgoing); return 0;
     }
     wasi_http_types_own_request_options_t options = wasi_http_types_constructor_request_options();
     uint64_t timeout = yyjson_get_uint(yyjson_obj_get(request, "timeout_ms")) * 1000000;
@@ -79,7 +90,6 @@ int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     wasi_http_types_own_future_incoming_response_t pending;
     wasi_http_types_error_code_t error;
     int sent = wasi_http_outgoing_handler_handle(outgoing, &options, &pending, &error);
-    component_url_free(&url);
     if (!sent) { wasi_http_types_outgoing_body_drop_own(output); wasi_http_types_error_code_free(&error); return 0; }
     int32_t length = body ? dream_i32(body)[0] : 0;
     if (length) {
@@ -161,10 +171,11 @@ static uint32_t wait_stream(uint32_t handle, uint32_t status) {
 
 int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     yyjson_mut_doc *metadata, yyjson_mut_val *headers) {
-    ComponentUrl url = {0};
-    if (!component_url_parse(yyjson_get_str(yyjson_obj_get(request, "url")), "", &url)) { return 0; }
+    wasi_http_types_scheme_t scheme;
+    HttpString authority, path;
+    if (!request_target(request, &scheme, &authority, &path)) { return 0; }
     wasi_http_types_own_fields_t fields = request_headers(request);
-    if (fields.__handle < 0) { component_url_free(&url); return 0; }
+    if (fields.__handle < 0) { return 0; }
     wasi_http_types_stream_u8_writer_t writer;
     wasi_http_types_stream_u8_t contents = wasi_http_types_stream_u8_new(&writer);
     wasi_http_types_future_result_option_own_trailers_error_code_writer_t trailers_writer;
@@ -185,13 +196,10 @@ int component_http_send(yyjson_val *request, dream_ptr body, int *status,
     wasi_http_types_borrow_request_t borrow = wasi_http_types_borrow_request(outgoing.f0);
     wasi_http_types_method_t method = {.tag = WASI_HTTP_TYPES_METHOD_OTHER};
     method.val.other = http_string(yyjson_get_str(yyjson_obj_get(request, "method")));
-    wasi_http_types_scheme_t scheme = {.tag = !strcmp(url.scheme, "https") ? WASI_HTTP_TYPES_SCHEME_HTTPS : WASI_HTTP_TYPES_SCHEME_HTTP};
-    HttpString authority = http_string(url.authority), path = http_string(url.path);
     int valid = wasi_http_types_method_request_set_method(borrow, &method)
         && wasi_http_types_method_request_set_scheme(borrow, &scheme)
         && wasi_http_types_method_request_set_authority(borrow, &authority)
         && wasi_http_types_method_request_set_path_with_query(borrow, &path);
-    component_url_free(&url);
     if (!valid) { wasi_http_types_request_drop_own(outgoing.f0); wasi_http_types_stream_u8_drop_writable(writer); wasi_http_types_future_result_void_error_code_drop_readable(outgoing.f1); return 0; }
     wasi_http_client_result_own_response_error_code_t response;
     uint32_t task = wasi_http_client_send(outgoing.f0, &response);

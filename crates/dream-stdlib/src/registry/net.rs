@@ -90,6 +90,22 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/net/http_body.dream"),
         ),
         (
+            "<std>/system/net/url_text.dream",
+            include_str!("../system/net/url_text.dream"),
+        ),
+        (
+            "<std>/system/net/url_host.dream",
+            include_str!("../system/net/url_host.dream"),
+        ),
+        (
+            "<std>/system/net/url_parse_state.dream",
+            include_str!("../system/net/url_parse_state.dream"),
+        ),
+        (
+            "<std>/system/net/url_parser.dream",
+            include_str!("../system/net/url_parser.dream"),
+        ),
+        (
             "<std>/system/net/url.dream",
             include_str!("../system/net/url.dream"),
         ),

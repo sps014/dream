@@ -75,7 +75,7 @@ pub fn component_host_supported(module: &str, field: &str) -> bool {
             | "consoleReadLine"
             | "consoleReadKey"
             | "consoleExit"
-            | "netUrlParse"
+            | "netDomainToAscii"
             | "netClientCreate"
             | "netClientClose"
             | "netHttpStart"

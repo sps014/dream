@@ -1,0 +1,355 @@
+module system.net;
+
+/// WHATWG host parsing and serialization: domains, IPv4 and IPv6 addresses, and opaque hosts.
+internal static class UrlHost {
+    // UTS #46 mapping and Punycode need Unicode IDNA tables, so only non-ASCII and `xn--`
+    // labels reach the host, never with forbidden ASCII characters. It returns an empty string
+    // when the domain is invalid.
+    @runtime("netDomainToAscii")
+    static extern fun domain_to_ascii_host(borrow domain: string): string;
+
+    /// Parses `input[start..end]` as the host of a special URL when `special` is set, or as an
+    /// opaque host otherwise. Returns the serialized host, or `None` when it is invalid.
+    internal static fun parse(
+        borrow input: byte[],
+        start: int,
+        end: int,
+        special: bool
+    ): Option<string> {
+        if start < end && (int)input[start] == 0x5B {
+            if (int)input[end - 1] != 0x5D {
+                return Option.None;
+            }
+            return UrlHost.ipv6(input, start + 1, end - 1);
+        }
+        if !special {
+            return UrlHost.opaque(input, start, end);
+        }
+        let decoded = UrlText.percent_decode(input, start, end, false);
+        for (let i = 0; i < decoded.length; i = i + 1) {
+            if UrlHost.forbidden_domain((int)decoded[i]) && (int)decoded[i] < 0x80 {
+                return Option.None;
+            }
+        }
+        let ascii = UrlHost.domain_to_ascii(decoded);
+        if ascii.length == 0 {
+            return Option.None;
+        }
+        for (let i = 0; i < ascii.length; i = i + 1) {
+            if UrlHost.forbidden_domain((int)ascii.char_at(i)) {
+                return Option.None;
+            }
+        }
+        if UrlHost.ends_in_number(ascii) {
+            return UrlHost.ipv4(ascii);
+        }
+        return Option.Some(ascii);
+    }
+
+    static fun forbidden_host(b: int): bool {
+        return b == 0x00
+            || b == 0x09
+            || b == 0x0A
+            || b == 0x0D
+            || b == 0x20
+            || b == 0x23
+            || b == 0x2F
+            || b == 0x3A
+            || b == 0x3C
+            || b == 0x3E
+            || b == 0x3F
+            || b == 0x40
+            || b == 0x5B
+            || b == 0x5C
+            || b == 0x5D
+            || b == 0x5E
+            || b == 0x7C;
+    }
+
+    static fun forbidden_domain(b: int): bool {
+        return UrlHost.forbidden_host(b) || b <= 0x1F || b == 0x25 || b >= 0x7F;
+    }
+
+    static fun opaque(borrow input: byte[], start: int, end: int): Option<string> {
+        let out = StringBuilder();
+        for (let i = start; i < end; i = i + 1) {
+            let b = (int)input[i];
+            if UrlHost.forbidden_host(b) {
+                return Option.None;
+            }
+            UrlText.append_byte(out, b, UrlText.c0(b));
+        }
+        return Option.Some(out.build());
+    }
+
+    static fun domain_to_ascii(borrow domain: byte[]): string {
+        let out = StringBuilder();
+        let label_start = true;
+        for (let i = 0; i < domain.length; i = i + 1) {
+            let b = (int)domain[i];
+            if b >= 0x80 {
+                return UrlHost.domain_to_ascii_host(Encoding.utf8_decode(domain));
+            }
+            if label_start
+                && i + 3 < domain.length
+                && UrlText.lower(b) == 0x78
+                && UrlText.lower((int)domain[i + 1]) == 0x6E
+                && (int)domain[i + 2] == 0x2D
+                && (int)domain[i + 3] == 0x2D {
+                return UrlHost.domain_to_ascii_host(Encoding.utf8_decode(domain));
+            }
+            label_start = b == 0x2E;
+            out.append_char((char)UrlText.lower(b));
+        }
+        return out.build();
+    }
+
+    static fun ends_in_number(borrow domain: string): bool {
+        let parts = domain.split('.');
+        let last = parts.length - 1;
+        if parts[last].length == 0 {
+            if parts.length == 1 {
+                return false;
+            }
+            last = last - 1;
+        }
+        let part = parts[last];
+        if part.length == 0 {
+            return false;
+        }
+        let all_digits = true;
+        for (let i = 0; i < part.length; i = i + 1) {
+            if !UrlText.digit((int)part.char_at(i)) {
+                all_digits = false;
+            }
+        }
+        if all_digits {
+            return true;
+        }
+        if part.length < 2 || part.char_at(0) != '0' || (part.char_at(1) != 'x' && part.char_at(1) != 'X') {
+            return false;
+        }
+        for (let i = 2; i < part.length; i = i + 1) {
+            if UrlText.hex_value((int)part.char_at(i)) < 0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static fun ipv4(borrow domain: string): Option<string> {
+        let parts = List<string>();
+        for let part in domain.split('.') {
+            parts.push(part);
+        }
+        if parts[parts.length - 1].length == 0 && parts.length > 1 {
+            parts.remove_at(parts.length - 1);
+        }
+        if parts.length > 4 {
+            return Option.None;
+        }
+        let address = 0L;
+        for (let i = 0; i < parts.length; i = i + 1) {
+            let n = UrlHost.ipv4_number(parts[i]);
+            if n < 0L {
+                return Option.None;
+            }
+            if i < parts.length - 1 {
+                if n > 255L {
+                    return Option.None;
+                }
+                address = address + n * (1L << (8 * (3 - i)));
+            } else {
+                if n >= (1L << (8 * (5 - parts.length))) {
+                    return Option.None;
+                }
+                address = address + n;
+            }
+        }
+        let out = StringBuilder();
+        for (let shift = 24; shift >= 0; shift = shift - 8) {
+            out.append_long((address >> shift) & 255L);
+            if shift > 0 {
+                out.append_char('.');
+            }
+        }
+        return Option.Some(out.build());
+    }
+
+    // Values beyond 2^32 saturate there so that range checks still fail them.
+    static fun ipv4_number(borrow part: string): long {
+        if part.length == 0 {
+            return 0L - 1L;
+        }
+        let radix = 10;
+        let i = 0;
+        if part.length >= 2 && part.char_at(0) == '0' && (part.char_at(1) == 'x' || part.char_at(1) == 'X') {
+            radix = 16;
+            i = 2;
+        } else if part.length >= 2 && part.char_at(0) == '0' {
+            radix = 8;
+            i = 1;
+        }
+        let value = 0L;
+        while i < part.length {
+            let d = UrlText.hex_value((int)part.char_at(i));
+            if d < 0 || d >= radix {
+                return 0L - 1L;
+            }
+            value = value * (long)radix + (long)d;
+            if value > 4294967296L {
+                value = 4294967296L;
+            }
+            i = i + 1;
+        }
+        return value;
+    }
+
+    static fun ipv6(borrow input: byte[], start: int, end: int): Option<string> {
+        let address = Buffer.alloc<int>(8);
+        let piece = 0;
+        let compress = 0 - 1;
+        let p = start;
+        if p < end && (int)input[p] == 0x3A {
+            if p + 1 >= end || (int)input[p + 1] != 0x3A {
+                return Option.None;
+            }
+            p = p + 2;
+            piece = 1;
+            compress = 1;
+        }
+        while p < end {
+            if piece == 8 {
+                return Option.None;
+            }
+            if (int)input[p] == 0x3A {
+                if compress >= 0 {
+                    return Option.None;
+                }
+                p = p + 1;
+                piece = piece + 1;
+                compress = piece;
+                continue;
+            }
+            let value = 0;
+            let length = 0;
+            while length < 4 && p < end && UrlText.hex_value((int)input[p]) >= 0 {
+                value = value * 16 + UrlText.hex_value((int)input[p]);
+                p = p + 1;
+                length = length + 1;
+            }
+            if p < end && (int)input[p] == 0x2E {
+                if length == 0 || piece > 6 {
+                    return Option.None;
+                }
+                p = p - length;
+                let seen = 0;
+                while p < end {
+                    if seen > 0 {
+                        if (int)input[p] != 0x2E || seen >= 4 {
+                            return Option.None;
+                        }
+                        p = p + 1;
+                    }
+                    if p >= end || !UrlText.digit((int)input[p]) {
+                        return Option.None;
+                    }
+                    let octet = 0 - 1;
+                    while p < end && UrlText.digit((int)input[p]) {
+                        let digit = (int)input[p] - 0x30;
+                        if octet == 0 {
+                            return Option.None;
+                        }
+                        octet = octet < 0 ? digit : octet * 10 + digit;
+                        if octet > 255 {
+                            return Option.None;
+                        }
+                        p = p + 1;
+                    }
+                    address[piece] = address[piece] * 0x100 + octet;
+                    seen = seen + 1;
+                    if seen == 2 || seen == 4 {
+                        piece = piece + 1;
+                    }
+                }
+                if seen != 4 {
+                    return Option.None;
+                }
+                break;
+            }
+            if p < end && (int)input[p] == 0x3A {
+                p = p + 1;
+                if p >= end {
+                    return Option.None;
+                }
+            } else if p < end {
+                return Option.None;
+            }
+            address[piece] = value;
+            piece = piece + 1;
+        }
+        if compress >= 0 {
+            let swaps = piece - compress;
+            piece = 7;
+            while piece != 0 && swaps > 0 {
+                let other = compress + swaps - 1;
+                let saved = address[piece];
+                address[piece] = address[other];
+                address[other] = saved;
+                piece = piece - 1;
+                swaps = swaps - 1;
+            }
+        } else if piece != 8 {
+            return Option.None;
+        }
+        return Option.Some(UrlHost.ipv6_text(address));
+    }
+
+    static fun ipv6_text(borrow address: int[]): string {
+        let compress = 0 - 1;
+        let best = 1;
+        let i = 0;
+        while i < 8 {
+            let run = 0;
+            while i + run < 8 && address[i + run] == 0 {
+                run = run + 1;
+            }
+            if run > best {
+                best = run;
+                compress = i;
+            }
+            i = i + (run > 0 ? run : 1);
+        }
+        let out = StringBuilder();
+        out.append_char('[');
+        let skipping = false;
+        for (let k = 0; k < 8; k = k + 1) {
+            if skipping && address[k] == 0 {
+                continue;
+            }
+            skipping = false;
+            if compress == k {
+                out.append(k == 0 ? "::" : ":");
+                skipping = true;
+                continue;
+            }
+            UrlHost.append_hex(out, address[k]);
+            if k != 7 {
+                out.append_char(':');
+            }
+        }
+        out.append_char(']');
+        return out.build();
+    }
+
+    static fun append_hex(borrow out: StringBuilder, value: int): void {
+        let started = false;
+        for (let shift = 12; shift >= 0; shift = shift - 4) {
+            let d = (value >> shift) & 15;
+            if d != 0 || started || shift == 0 {
+                started = true;
+                out.append_char((char)(d < 10 ? 0x30 + d : 0x61 + d - 10));
+            }
+        }
+    }
+}

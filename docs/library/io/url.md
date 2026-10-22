@@ -7,9 +7,9 @@ api: reference/api/system-net.md
 
 # URLs and query parameters
 
-Import `system.net` for URL parsing and relative resolution. Native programs use
-Rust's `url` library; Node and browser programs use the host URL API. Parsing
-requires an absolute URL and returns `Result<Url, ParseError>`.
+Import `system.net` for URL parsing and relative resolution. Parsing follows the
+WHATWG URL Standard, the same rules browsers use, and behaves identically on every
+target. It requires an absolute URL and returns `Result<Url, ParseError>`.
 
 ```dream
 import system;
@@ -26,8 +26,11 @@ fun main(): Result<Unit, ParseError> {
 ```
 
 The example prints `https://example.com/v1/users?role=admin&role=editor`.
-Normalization includes scheme/host casing, default ports, dot segments, Unicode
-hostnames, and path encoding. Relative resolution follows URL Standard rules:
+Normalization lowercases the scheme and host, removes default ports and `.`/`..`
+path segments, canonicalizes IPv4 and IPv6 hosts (`http://0x7f.1/` becomes`
+http://127.0.0.1/`), converts backslashes to slashes in `http`, `https`, `ws`,`
+wss`, `ftp`, and `file` URLs, and percent-encodes characters such as spaces and`
+non-ASCII text in the path, query, and fragment. Relative resolution follows URL Standard rules:
 `/v1/` is a directory base, while `/v1` has a final component replaced by a
 relative reference. An absolute reference replaces the entire base.
 
@@ -64,8 +67,17 @@ decoded, and repeated keys stay distinct.
 Existing query encoding is preserved until mutation. Mutations serialize decoded
 pairs using form encoding: spaces become `+`, literal plus signs become `%2b`,
 and empty values retain `=`. URI-component codecs in `system.encoding` have
-different plus-sign rules. URL parsing follows the host URL Standard's recovery
-rules; it does not impose strict UTF-8 decoding on query values.
+different plus-sign rules. Malformed percent escapes in a query are kept literally,
+and invalid UTF-8 in decoded values becomes U+FFFD instead of failing the parse.
 
 Opaque paths preserve spaces inside the path. A final path space before a query
-or fragment is serialized as `%20` consistently across native and JavaScript hosts.
+or fragment is serialized as `%20`.
+
+## Internationalized hostnames
+
+Hostnames with non-ASCII letters are converted to their ASCII (Punycode) form, so`
+https://bücher.example/` has the host `xn--bcher-kva.example`. Native, Node, and
+browser programs perform this conversion with the platform's IDNA support.
+Standalone WASI components (`wasm32-wasip2` and `wasm32-wasip3`) have none, so`
+Url.parse` returns `ParseError` for a non-ASCII hostname there; write such hosts in
+their `xn--` form instead.

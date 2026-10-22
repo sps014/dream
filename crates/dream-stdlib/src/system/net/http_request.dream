@@ -31,6 +31,9 @@ public class HttpRequest {
         let json = JsonValue.dict();
         json["method"] = JsonValue.from_string(this.method.wire());
         json["url"] = JsonValue.from_string(this.url.to_string());
+        json["scheme"] = JsonValue.from_string(this.url.scheme);
+        json["authority"] = JsonValue.from_string(this.url.authority());
+        json["target"] = JsonValue.from_string(this.url.request_target());
         json["headers"] = this.headers.to_json();
         json["timeout_ms"] = JsonValue.from_int(options.timeout_ms);
         json["connect_timeout_ms"] = JsonValue.from_int(options.connect_timeout_ms);

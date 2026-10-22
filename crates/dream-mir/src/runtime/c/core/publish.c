@@ -116,17 +116,26 @@ static void publish_edge(dream_ptr child, void *context) {
 DREAM_WASM_EXPORT("dream_publish")
 #endif
 void dream_publish(dream_ptr ptr) {
-    /* TAG_SHARED is ownership, not visitation: shared roots can contain new private children. */
+    /* Once anything is shared, interior stores with no known owner must publish too. */
+    __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     PublishGraph graph = {0};
     publish_enqueue(&graph, ptr);
     while (graph.pending != NULL) {
         PublishEntry *entry = graph.pending;
         graph.pending = entry->pending_next;
         int32_t *tag = dream_tag_word(entry->ptr);
-        int32_t kind = __atomic_load_n(tag, __ATOMIC_RELAXED) & TAG_VALUE_MASK;
+        int32_t word = __atomic_load_n(tag, __ATOMIC_RELAXED);
+        int32_t kind = word & TAG_VALUE_MASK;
         if (kind == 0) {
             continue;
         }
+        /* Barriered stores keep every owned child of a shared object shared, so its subgraph is
+         * already published. Future frames are the exception: their locals and runtime-written
+         * slots bypass the barrier. The root is rescanned because the runtime fills it directly. */
+        if ((word & TAG_SHARED) && entry->ptr != ptr && kind != TAG_FUTURE) {
+            continue;
+        }
+        dream_count(DREAM_COUNT_PUBLISH_VISIT, 1);
         __atomic_fetch_or(tag, TAG_SHARED, __ATOMIC_RELAXED);
         int32_t *rc = dream_rc_word(entry->ptr);
         int32_t count = __atomic_load_n(rc, __ATOMIC_RELAXED);

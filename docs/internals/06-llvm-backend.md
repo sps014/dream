@@ -302,6 +302,10 @@ that validated table. A missing entry rejects the stale runtime cache before any
   Raw/ref interiors and globals have no safe owning header, so their children are conservatively
   published once workers exist. Before the first worker, its initial graph handoff supplies the
   publication. This does not change MIR's retain/release or move decisions.
+  Because of these barriers, a shared object's owned children are already shared, and
+  `dream_publish` stops at them. It still rescans its root and every future frame, since frame
+  locals and runtime-written slots bypass the barrier. A request handoff therefore walks only
+  the objects created since the last one, not everything the application can reach.
 - **String literals** are interned into `constant` heap-object blocks (`__ds<n>_blk`: header plus
   UTF-16 payload). The runtime never writes an immortal block, so `constant` is sound.
 - **Runtime units** are C under `crates/dream-mir/src/runtime/c/` (`core/` for portable logic,

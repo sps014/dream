@@ -52,8 +52,10 @@ typedef struct {
     dream_ptr right;
 } Node;
 static dream_ptr nested_publication;
+static size_t node_visits;
 
 static void node_visit(dream_ptr p) {
+    node_visits++;
     if (nested_publication) {
         dream_ptr nested = nested_publication;
         nested_publication = 0;
@@ -208,6 +210,10 @@ int main(void) {
     for (size_t i = 0; i < 20; i++) { dream_publish(nodes[0]); }
     size_t repeated_after = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
     assert(repeated_after - repeated_before <= 20 * 8);
+    /* Barriers keep a shared object's children shared, so a republish stops below the root. */
+    node_visits = 0;
+    dream_publish(nodes[0]);
+    assert(node_visits == 1);
     handoff_and_free();
 
     make_nodes(10000);

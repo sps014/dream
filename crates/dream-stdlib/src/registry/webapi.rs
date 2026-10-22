@@ -83,6 +83,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/webapi/web_routing.dream"),
         ),
         (
+            "<std>/system/webapi/route_node.dream",
+            include_str!("../system/webapi/route_node.dream"),
+        ),
+        (
             "<std>/system/webapi/server_web_socket.dream",
             include_str!("../system/webapi/server_web_socket.dream"),
         ),

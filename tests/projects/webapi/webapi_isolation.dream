@@ -20,6 +20,89 @@ class HiddenRoutes {
     }
 }
 
+@router("")
+class PrecedenceRoutes {
+    @get("/items/{id}")
+    public static fun item(@path id: string): string {
+        return "item " + id;
+    }
+
+    @get("/items/me")
+    public static fun item_me(): string {
+        return "items me";
+    }
+
+    @get("/users/me")
+    public static fun user_me(): string {
+        return "users me";
+    }
+
+    @get("/users/{id}")
+    public static fun user(@path id: string): string {
+        return "user " + id;
+    }
+
+    @post("/things/{id}")
+    public static fun create_thing(@path id: string): string {
+        return "posted " + id;
+    }
+
+    @get("/things/new")
+    public static fun new_thing(): string {
+        return "new thing";
+    }
+
+    @get("/{a}/{b}/end")
+    public static fun pair(@path a: string, @path b: string): string {
+        return "pair " + a + " " + b;
+    }
+
+    @get("/")
+    public static fun root(): string {
+        return "root";
+    }
+}
+
+async fun webapi_allow(client: HttpClient, method: HttpMethod, url: string): string {
+    let response = client.send(HttpRequest(method, Url.parse(url).unwrap())).await.unwrap();
+    Assert.eq(response.status, 405);
+    let allow = response.headers.get("Allow").unwrap();
+    response.close();
+    return allow;
+}
+
+@test
+@timeout(10000)
+async fun webapi_route_precedence(): void {
+    let app = WebApp();
+    app.include_router(PrecedenceRoutes.router()).unwrap();
+    let port = app.listen("127.0.0.1", 0).await.unwrap();
+    let base = "http://127.0.0.1:" + port.to_string();
+    let client = HttpClient();
+
+    Assert.eq(webapi_get(client, base, "/items/me", 200).await, "item me");
+    Assert.eq(webapi_get(client, base, "/items/42", 200).await, "item 42");
+    Assert.eq(webapi_get(client, base, "/users/me", 200).await, "users me");
+    Assert.eq(webapi_get(client, base, "/users/7", 200).await, "user 7");
+    Assert.eq(webapi_get(client, base, "//users//me/", 200).await, "users me");
+    Assert.eq(webapi_get(client, base, "/users/a%20b", 200).await, "user a b");
+    Assert.eq(webapi_get(client, base, "/things/new", 200).await, "new thing");
+    Assert.eq(webapi_get(client, base, "/x/users/end", 200).await, "pair x users");
+    Assert.eq(webapi_get(client, base, "/", 200).await, "root");
+
+    webapi_get(client, base, "/users", 404).await;
+    webapi_get(client, base, "/users/7/extra", 404).await;
+    Assert.eq(webapi_allow(client, HttpMethod.Get, base + "/things/old").await, "POST");
+    Assert.eq(
+        webapi_allow(client, HttpMethod.Delete, base + "/things/new").await,
+        "POST, GET, HEAD"
+    );
+
+    app.shutdown();
+    app.wait().await;
+    client.close().unwrap();
+}
+
 @test
 @timeout(10000)
 async fun webapi_isolation(): void {

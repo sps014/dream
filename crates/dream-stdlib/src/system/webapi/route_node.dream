@@ -1,0 +1,70 @@
+module system.webapi;
+
+/// One path segment level of the route table a `WebApp` compiles when it starts listening.
+// Nodes only point at children, so the table is a tree that its root releases in full.
+@allow_cycle
+internal class RouteNode {
+    // Children for literal segments, keyed by the raw segment text.
+    statics: Map<string, RouteNode>;
+    // Child shared by every `{name}` segment at this depth.
+    param: Option<RouteNode>;
+    // Registration indices, in ascending order, of routes whose pattern ends here.
+    ends: List<int>;
+
+    internal constructor() {
+        this.statics = Map<string, RouteNode>();
+        this.param = Option.None;
+        this.ends = List<int>();
+    }
+
+    /// Builds the table for `routes`, where a route's index is its registration order.
+    internal static fun build(borrow routes: List<WebEndpoint>): RouteNode {
+        let root = RouteNode();
+        let index = 0;
+        for (let route in routes) {
+            root.insert(route.path, index);
+            index = index + 1;
+        }
+        return root;
+    }
+
+    fun insert(borrow pattern: string, index: int): void {
+        let node = this;
+        let i = WebRouting.skip_slash(pattern, 0);
+        while i < pattern.length {
+            let end = WebRouting.find_slash(pattern, i);
+            if WebRouting.is_param(pattern, i, end) {
+                if node.param.is_none() {
+                    node.param = Option.Some(RouteNode());
+                }
+                node = node.param.unwrap();
+            } else {
+                let segment = pattern.substring(i, end);
+                node = node.statics.get_or_insert(segment, () => RouteNode());
+            }
+            i = WebRouting.skip_slash(pattern, end);
+        }
+        node.ends.push(index);
+    }
+
+    /// Appends the index of every route whose pattern matches `path` to `out`, in no
+    /// particular order. Literal and `{name}` children are both explored because the first
+    /// registered match wins regardless of which kind of segment it used.
+    internal fun collect(borrow path: string, start: int, borrow out: List<int>): void {
+        let i = WebRouting.skip_slash(path, start);
+        if i >= path.length {
+            for (let index in this.ends) {
+                out.push(index);
+            }
+            return;
+        }
+        let end = WebRouting.find_slash(path, i);
+        let literal = this.statics.get(path.span(i, end));
+        if literal.is_some() {
+            literal.unwrap().collect(path, end, out);
+        }
+        if this.param.is_some() {
+            this.param.unwrap().collect(path, end, out);
+        }
+    }
+}

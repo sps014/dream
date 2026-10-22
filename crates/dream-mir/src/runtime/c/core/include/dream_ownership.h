@@ -33,6 +33,7 @@ typedef enum dream_counter {
     DREAM_COUNT_TIMER_ALLOC,
     DREAM_COUNT_FOREIGN_ALLOC,
     DREAM_COUNT_WORKER_JOB_ALLOC,
+    DREAM_COUNT_PUBLISH_VISIT,
     DREAM_COUNT_LIMIT
 } dream_counter;
 extern uint64_t dream_runtime_counters[DREAM_COUNT_LIMIT];

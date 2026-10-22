@@ -8,6 +8,8 @@ public class WebApp {
     options: WebAppOptions;
     middlewares: List<Middleware>;
     routes: List<WebEndpoint>;
+    // Compiled from `routes` once the app is frozen.
+    table: RouteNode;
     server_handle: int;
     frozen: bool;
     requests: Map<int, Future<void>>;
@@ -26,6 +28,7 @@ public class WebApp {
         this.options = WebAppOptions();
         this.middlewares = List<Middleware>();
         this.routes = List<WebEndpoint>();
+        this.table = RouteNode();
         this.overrides = Map<string, string>();
         this.startup = List<fun(WebApp): Future<Result<Unit, IoError>>>();
         this.shutdown_hooks = List<fun(WebApp): Future<void>>();
@@ -42,6 +45,7 @@ public class WebApp {
         this.options = options.copy();
         this.middlewares = List<Middleware>();
         this.routes = List<WebEndpoint>();
+        this.table = RouteNode();
         this.overrides = Map<string, string>();
         this.startup = List<fun(WebApp): Future<Result<Unit, IoError>>>();
         this.shutdown_hooks = List<fun(WebApp): Future<void>>();
@@ -249,22 +253,34 @@ public class WebApp {
         source.cancel();
     }
 
-    // Starlette semantics: the first registered route whose path and method match wins, a GET
+    // Starlette semantics: the first registered route whose path and method match wins (the table
+    // returns every path match, so the lowest index decides), a GET
     // route also answers HEAD (hyper drops the body but keeps the GET headers), and a path that
     // matches only under other methods answers 405 with those methods in `Allow`.
     static async fun dispatch(app: WebApp, ctx: RequestContext): HttpOutgoing {
         let method = ctx.incoming.method;
         let path = ctx.incoming.path;
-        let allowed = List<string>();
-        for (let route in app.routes) {
-            if !WebRouting.path_matches(route.path, path) {
-                continue;
-            }
+        let candidates = List<int>();
+        app.table.collect(path, 0, candidates);
+        let winner = -1;
+        for (let index in candidates) {
+            let route = app.routes[index];
             let serves_head = route.method == "GET" && !route.websocket;
-            if route.method == method || (method == "HEAD" && serves_head) {
-                let handler = route.handler;
-                return handler(ctx, WebRouting.path_params(route.path, path)).await;
+            if (winner < 0 || index < winner)
+                && (route.method == method || (method == "HEAD" && serves_head)) {
+                winner = index;
             }
+        }
+        if winner >= 0 {
+            let route = app.routes[winner];
+            let handler = route.handler;
+            return handler(ctx, WebRouting.path_params(route.path, path)).await;
+        }
+        candidates.sort();
+        let allowed = List<string>();
+        for (let index in candidates) {
+            let route = app.routes[index];
+            let serves_head = route.method == "GET" && !route.websocket;
             if !allowed.contains(route.method) {
                 allowed.push(route.method);
             }
@@ -391,6 +407,7 @@ public class WebApp {
         app.validate_configuration()?;
         config.validate()?;
         app.frozen = true;
+        app.table = RouteNode.build(app.routes);
         for (let start in app.startup) {
             let result = start(app).await;
             if result.is_err() {

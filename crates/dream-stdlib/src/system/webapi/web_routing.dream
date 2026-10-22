@@ -1,29 +1,7 @@
 module system.webapi;
 
 internal class WebRouting {
-    /// Whether `path` has the segments of `pattern`, where `{name}` matches any one segment.
-    internal static fun path_matches(borrow pattern: string, borrow path: string): bool {
-        let pi = WebRouting.skip_slash(pattern, 0);
-        let si = WebRouting.skip_slash(path, 0);
-        let pn = pattern.length;
-        let sn = path.length;
-        while pi < pn || si < sn {
-            if pi >= pn || si >= sn {
-                return false;
-            }
-            let pe = WebRouting.find_slash(pattern, pi);
-            let se = WebRouting.find_slash(path, si);
-            if !WebRouting.is_param(pattern, pi, pe)
-                && !WebRouting.region_eq(pattern, pi, pe, path, si, se) {
-                return false;
-            }
-            pi = WebRouting.skip_slash(pattern, pe);
-            si = WebRouting.skip_slash(path, se);
-        }
-        return true;
-    }
-
-    /// The percent-decoded `{name}` segments of a `path` that `path_matches` accepted.
+    /// The percent-decoded `{name}` segments of a `path` the route table matched to `pattern`.
     internal static fun path_params(
         borrow pattern: string,
         borrow path: string
@@ -45,7 +23,7 @@ internal class WebRouting {
         return params;
     }
 
-    static fun is_param(borrow pattern: string, start: int, end: int): bool {
+    internal static fun is_param(borrow pattern: string, start: int, end: int): bool {
         return (end - start) >= 3 && pattern.char_at(start) == '{'
             && pattern.char_at(end - 1) == '}';
     }
@@ -88,14 +66,14 @@ internal class WebRouting {
         return none;
     }
 
-    static fun skip_slash(borrow s: string, i: int): int {
+    internal static fun skip_slash(borrow s: string, i: int): int {
         while i < s.length && s.char_at(i) == '/' {
             i = i + 1;
         }
         return i;
     }
 
-    static fun find_slash(borrow s: string, i: int): int {
+    internal static fun find_slash(borrow s: string, i: int): int {
         while i < s.length && s.char_at(i) != '/' {
             i = i + 1;
         }

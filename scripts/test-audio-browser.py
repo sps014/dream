@@ -60,7 +60,7 @@ try {
   let output = '';
   const instance = await run('/audio-playback.wasm', {stdout: value => output += value});
   if (instance.exitCode) throw new Error('audio runner exited: ' + instance.exitCode);
-  for (const check of ['capture: true', 'sink: true', 'mute: true', 'pause: true', 'ended: true', 'restart: true']) {
+  for (const check of ['decode: true', 'capture: true', 'sink: true', 'mute: true', 'pause: true', 'ended: true', 'restart: true']) {
     if (!output.includes(check)) throw new Error('playback check failed: ' + output);
   }
   const stream = await import('/audio-stream.web.runtime.js');

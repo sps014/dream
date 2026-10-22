@@ -1,85 +1,128 @@
 module system.audio;
 
-@intrinsic(Intrinsic.DreamAudioStreamOpen)
-static extern fun dream_audio_stream_open(capacity: int): usize;
-
-@intrinsic(Intrinsic.DreamAudioStreamSpace)
-static extern fun dream_audio_stream_space(handle: usize): int;
-
-@intrinsic(Intrinsic.DreamAudioStreamPush)
-static extern fun dream_audio_stream_push(handle: usize, borrow bytes: byte[]): int;
-
-@intrinsic(Intrinsic.DreamAudioStreamFinish)
-static extern fun dream_audio_stream_finish(handle: usize): void;
-
-@intrinsic(Intrinsic.DreamAudioStreamRead)
-static extern fun dream_audio_stream_read(handle: usize, max_frames: int): float[];
-
-@intrinsic(Intrinsic.DreamAudioStreamDuration)
-static extern fun dream_audio_stream_duration(handle: usize): double;
-
-@intrinsic(Intrinsic.DreamAudioStreamSeekOffset)
-static extern fun dream_audio_stream_seek_offset(handle: usize, frame: long): long;
-
-@intrinsic(Intrinsic.DreamAudioStreamReposition)
-static extern fun dream_audio_stream_reposition(handle: usize, frame: long): int;
-
-@intrinsic(Intrinsic.DreamAudioStreamClose)
-static extern fun dream_audio_stream_close(handle: usize): void;
-
-// Detects the format from the first bytes and decodes as encoded input arrives.
+// Detects the format from the first bytes and decodes as encoded input arrives. Decoding runs
+// on a background thread or decode worker, which decodes the next chunk ahead after each read.
+// Input, space, duration and seek positions stay synchronous: the host queues encoded bytes
+// and keeps snapshots that each background decode refreshes.
 // Read results start with status, sample rate and channels; status 0 requests more
 // input, 1 carries PCM, 2 is the end, and negative values are terminal failures.
 internal class AudioStreamDecoder {
     handle: usize;
 
     internal constructor(capacity: int) {
-        this.handle = dream_audio_stream_open(capacity);
+        this.handle = AudioStreamDecoder.open_host(capacity);
     }
 
     del() {
         this.close();
     }
 
+    @runtime("audioDecodeStreamOpen")
+    static extern fun open_host(capacity: int): usize;
+
+    @runtime("audioDecodeStreamSpace")
+    static extern fun space_host(handle: usize): int;
+
+    @runtime("audioDecodeStreamPush")
+    static extern fun push_host(handle: usize, borrow bytes: byte[]): int;
+
+    @runtime("audioDecodeStreamFinish")
+    static extern fun finish_host(handle: usize): void;
+
+    @runtime("audioDecodeStreamRead")
+    static extern fun read_host(handle: usize, max_frames: int): int;
+
+    @runtime("audioDecodeStreamReposition")
+    static extern fun reposition_host(handle: usize, frame: long): int;
+
+    @async_host
+    @runtime("audioDecodeStreamWait")
+    static extern async fun wait_host(handle: usize): int;
+
+    @runtime("audioDecodeStreamResult")
+    static extern fun result_host(handle: usize): float[];
+
+    @runtime("audioDecodeStreamDuration")
+    static extern fun duration_host(handle: usize): double;
+
+    @runtime("audioDecodeStreamSeekOffset")
+    static extern fun seek_offset_host(handle: usize, frame: long): long;
+
+    @runtime("audioDecodeStreamClose")
+    static extern fun close_host(handle: usize): void;
+
     internal fun is_open(): bool {
         return this.handle != 0;
     }
 
     internal fun space(): int {
-        return dream_audio_stream_space(this.handle);
+        return AudioStreamDecoder.space_host(this.handle);
     }
 
     internal fun push(borrow bytes: byte[]): bool {
-        return dream_audio_stream_push(this.handle, bytes) != 0;
+        return AudioStreamDecoder.push_host(this.handle, bytes) != 0;
     }
 
     internal fun finish(): void {
-        dream_audio_stream_finish(this.handle);
+        AudioStreamDecoder.finish_host(this.handle);
     }
 
-    internal fun read(max_frames: int): float[] {
-        return dream_audio_stream_read(this.handle, max_frames);
+    internal async fun read(
+        max_frames: int,
+        token: CancellationToken
+    ): Result<float[], AudioError> {
+        if AudioStreamDecoder.read_host(this.handle, max_frames) == 0 {
+            return Result.Err(AudioError("EBUSY", "audio decoder is unavailable or saturated"));
+        }
+        let waited = this.wait(token).await;
+        if waited.is_err() {
+            return Result.Err(waited.unwrap_err());
+        }
+        return Result.Ok(AudioStreamDecoder.result_host(this.handle));
     }
 
+    /// Seconds when the container declares a length, known once the first read has opened the format.
     internal fun duration(): Option<double> {
-        let seconds = dream_audio_stream_duration(this.handle);
+        let seconds = AudioStreamDecoder.duration_host(this.handle);
         if seconds < 0.0d {
             return Option.None;
         }
         return Option.Some(seconds);
     }
 
+    /// Byte offset of an independently decodable frame, or -1 when the format cannot seek.
     internal fun seek_offset(frame: long): long {
-        return dream_audio_stream_seek_offset(this.handle, frame);
+        return AudioStreamDecoder.seek_offset_host(this.handle, frame);
     }
 
-    internal fun reposition(frame: long): bool {
-        return dream_audio_stream_reposition(this.handle, frame) != 0;
+    /// Restarts decoding at a frame after the caller switched input to its seek offset.
+    /// Queued input and any chunk decoded ahead are discarded.
+    internal async fun reposition(frame: long, token: CancellationToken): Result<bool, AudioError> {
+        if AudioStreamDecoder.reposition_host(this.handle, frame) == 0 {
+            return Result.Err(AudioError("EBUSY", "audio decoder is unavailable or saturated"));
+        }
+        let waited = this.wait(token).await;
+        if waited.is_err() {
+            return Result.Err(waited.unwrap_err());
+        }
+        let result = AudioStreamDecoder.result_host(this.handle);
+        return Result.Ok(result.length == 1 && result[0] == 1.0f);
+    }
+
+    async fun wait(token: CancellationToken): Result<Unit, AudioError> {
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        let pending = AudioStreamDecoder.wait_host(lifetime[0].handle);
+        let result = token.wait(pending).await;
+        if result.is_err() {
+            return Result.Err(AudioError("ECANCELLED", "audio decoding was cancelled"));
+        }
+        return Result.Ok(Unit());
     }
 
     internal fun close(): void {
         if this.handle != 0 {
-            dream_audio_stream_close(this.handle);
+            AudioStreamDecoder.close_host(this.handle);
             this.handle = 0;
         }
     }

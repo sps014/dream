@@ -1,7 +1,13 @@
 import system;
 import system.audio;
+import system.encoding;
 
 async fun main(): void {
+    let wav = Encoding.base64_decode(
+        "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAMD/fw=="
+    ).unwrap();
+    let decoded = AudioBuffer.decode(wav).await;
+    System.println("decode: " + (decoded.is_ok() && decoded.unwrap().frame_count == 4).to_string());
     let pcm = Array.alloc<float>(48000);
     for (let i = 0; i < pcm.length; i = i + 1) {
         pcm[i] = (float)(0.5d * Math.sin(6.283185307179586d * 440.0d * (double)i / 48000.0d));

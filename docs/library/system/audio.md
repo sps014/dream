@@ -91,8 +91,11 @@ known duration reports `EINVAL`.
 The browser controls URL buffering independently of `AudioOptions`. Encoded bytes,
 local file sources, and offline `AudioBuffer.decode` still use the portable decoders.
 
-On the web, decoding runs on the program's own thread rather than a background
-worker, so a busy program can cause underruns.
+Decoding never runs on the program's own thread. Native programs decode on a
+background thread; browser and Node programs decode in a dedicated worker that
+needs no cross-origin isolation headers. A streamed source decodes the next chunk
+ahead while the current one plays, so a busy program does not starve the speaker
+as long as it keeps awaiting.
 
 ```dream
 import system.audio;
@@ -196,8 +199,43 @@ all bins except DC and Nyquist. A unit, bin-centered sine therefore has amplitud
 one. `magnitudes_db` uses `20 * log10(amplitude)`, floored at -120 dBFS. Peak and RMS
 use the unweighted, padded waveform.
 
-`AudioBuffer.from_pcm` copies supplied PCM. `AudioBuffer.decode` detects encoded
-bytes without a device. `read_pcm(start_frame, frame_count)` returns a checked copy.
+`AudioBuffer.from_pcm` copies supplied PCM. `read_pcm(start_frame, frame_count)`
+returns a checked copy.
+
+`AudioBuffer.decode(bytes).await` detects WAV, MP3, or WebM/Opus content without
+opening a device. It copies the input and decodes on a background thread (a worker
+on the web), so timers and input keep running during a long decode. `max_bytes`
+(default 256 MiB) limits the decoded PCM; pass a `CancellationToken` to stop
+waiting:
+
+```dream
+import system;
+import system.audio;
+import system.io;
+
+async fun main(): void {
+    let bytes = File.read_bytes("clip.wav").await;
+    if bytes.is_err() {
+        System.println("could not read clip.wav");
+        return;
+    }
+
+    let decoded = AudioBuffer.decode(bytes.unwrap()).await;
+    if decoded.is_err() {
+        System.println(decoded.unwrap_err().code() + ": " + decoded.unwrap_err().message());
+        return;
+    }
+
+    let buffer = decoded.unwrap();
+    System.println("Decoded " + buffer.duration + " seconds");
+}
+```
+
+Unsupported or invalid input returns `EFORMAT`, audio over the limit or with more
+than two channels returns `ELIMIT`, an exhausted decoder returns `ENOMEM`, an
+unavailable decoder thread returns `EBUSY`, and a cancelled wait returns
+`ECANCELLED`. A cancelled decode finishes in the background and its result is
+discarded.
 
 `audio.capture(frame_count)` lazily enables a bounded tap after this player's
 gain and mute and before mixing with other players. It returns stereo PCM at the

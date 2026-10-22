@@ -2,6 +2,7 @@
 #define NDEBUG 1
 #include "dream_core.h"
 #include "dream_platform_internal.h"
+#include "dream_audio.h"
 #include <math.h>
 #include <string.h>
 #include "vendor/dr_libs/dr_wav.h"
@@ -322,11 +323,9 @@ int32_t dream_audio_stream_space(uintptr_t handle) {
     return space > INT32_MAX ? INT32_MAX : (int32_t)space;
 }
 
-int32_t dream_audio_stream_push(uintptr_t handle, dream_ptr source) {
+int32_t dream_audio_stream_push(uintptr_t handle, const unsigned char *bytes, size_t length) {
     audio_stream *s = (audio_stream *)handle;
-    if (!s || !source || s->eof) return 0;
-    const unsigned char *bytes = (const unsigned char *)dream_array_bytes(source);
-    size_t length = (size_t)dream_i32(source)[0];
+    if (!s || (!bytes && length) || s->eof) return 0;
     size_t skip = s->id3_skip < length ? (size_t)s->id3_skip : length;
     if (length - skip > stream_space(s)) return 0;
     bytes += skip;
@@ -355,8 +354,8 @@ void dream_audio_stream_finish(uintptr_t handle) {
     stream_check_id3(s);
 }
 
-/* Result words: status, sample rate, channels, then up to max_frames interleaved frames. */
-dream_ptr dream_audio_stream_read(uintptr_t handle, int32_t max_frames) {
+/* The chunk borrows decoder memory until the next decode or close. */
+dream_audio_chunk dream_audio_stream_decode(uintptr_t handle, int32_t max_frames) {
     audio_stream *s = (audio_stream *)handle;
     size_t produced = 0;
     int status = STATUS_FORMAT;
@@ -390,13 +389,9 @@ dream_ptr dream_audio_stream_read(uintptr_t handle, int32_t max_frames) {
     }
     status = produced ? STATUS_DATA : s->status;
 result:;
-    dream_ptr array = dream_array_new((int32_t)(produced + 3), 4);
-    float *words = (float *)dream_array_bytes(array);
-    words[0] = (float)status;
-    words[1] = s ? (float)s->rate : 0.0f;
-    words[2] = s ? (float)s->channels : 0.0f;
-    if (produced) memcpy(words + 3, s->out, produced * sizeof(float));
-    return array;
+    dream_audio_chunk chunk = {status, s ? (int32_t)s->rate : 0, s ? s->channels : 0,
+                               produced ? s->out : NULL, produced};
+    return chunk;
 }
 
 /* Seconds when the container declares a length; negative when unknown. */
@@ -408,21 +403,27 @@ double dream_audio_stream_duration(uintptr_t handle) {
 /* dr_wav supplies the validated data chunk and frame alignment. Compressed WAV
  * needs codec checkpoints; accepting only independently decodable frames avoids
  * a seek that appears successful but reconstructs the wrong predictor state. */
-int64_t dream_audio_stream_seek_offset(uintptr_t handle, int64_t frame) {
+dream_audio_layout dream_audio_stream_layout(uintptr_t handle) {
     audio_stream *s = (audio_stream *)handle;
-    if (!s || !s->wav || frame < 0 || (uint64_t)frame > s->wav->totalPCMFrameCount ||
-        (s->wav->translatedFormatTag != DR_WAVE_FORMAT_PCM &&
-         s->wav->translatedFormatTag != DR_WAVE_FORMAT_IEEE_FLOAT) ||
-        !s->wav->fmt.blockAlign || s->wav->dataChunkDataPos > INT64_MAX ||
-        (uint64_t)frame > (INT64_MAX - s->wav->dataChunkDataPos) / s->wav->fmt.blockAlign) return -1;
-    uint64_t offset = s->wav->dataChunkDataPos + (uint64_t)frame * s->wav->fmt.blockAlign;
-    if (offset > INT64_MAX) return -1;
-    return (int64_t)offset;
+    dream_audio_layout layout = {0, 0, 0};
+    if (!s || !s->wav || (s->wav->translatedFormatTag != DR_WAVE_FORMAT_PCM &&
+                          s->wav->translatedFormatTag != DR_WAVE_FORMAT_IEEE_FLOAT) ||
+        !s->wav->fmt.blockAlign || s->wav->dataChunkDataPos > INT64_MAX) return layout;
+    layout.data_position = s->wav->dataChunkDataPos;
+    layout.block_align = s->wav->fmt.blockAlign;
+    layout.frames = s->wav->totalPCMFrameCount;
+    return layout;
+}
+
+int64_t dream_audio_layout_offset(dream_audio_layout layout, int64_t frame) {
+    if (!layout.block_align || frame < 0 || (uint64_t)frame > layout.frames ||
+        (uint64_t)frame > (INT64_MAX - layout.data_position) / layout.block_align) return -1;
+    return (int64_t)(layout.data_position + (uint64_t)frame * layout.block_align);
 }
 
 int32_t dream_audio_stream_reposition(uintptr_t handle, int64_t frame) {
     audio_stream *s = (audio_stream *)handle;
-    int64_t offset = dream_audio_stream_seek_offset(handle, frame);
+    int64_t offset = dream_audio_layout_offset(dream_audio_stream_layout(handle), frame);
     if (offset < 0) return 0;
     s->base = s->cursor = (uint64_t)offset;
     s->length = 0;

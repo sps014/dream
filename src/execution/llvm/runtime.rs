@@ -161,7 +161,12 @@ pub(super) fn bitcode_units(root: &Path, need: RuntimeNeed) -> (Vec<Unit>, Vec<U
             }
         }
         let defines: Vec<String> = m.native_defines.iter().map(|s| (*s).to_string()).collect();
-        let shared: Vec<PathBuf> = m.shared_c.iter().map(|r| c.join(r)).collect();
+        let shared: Vec<PathBuf> = m
+            .shared_c
+            .iter()
+            .chain(m.native_runtime_c)
+            .map(|r| c.join(r))
+            .collect();
         for u in dream_mir::runtime::native_runtime_units(root, m.need) {
             let unit = Unit {
                 path: u.path,
@@ -310,17 +315,24 @@ pub(super) fn build_native_runtime(
                 .to_path_buf(),
         );
     }
+    let layout: Vec<_> = bc_units
+        .iter()
+        .map(|u| u.path.as_path())
+        .chain([Path::new("|")])
+        .chain(vendored.iter().map(|u| u.path.as_path()))
+        .collect();
     let fingerprint_for = |dependencies: &[PathBuf]| {
         let mut all = inputs.clone();
         all.extend_from_slice(dependencies);
         format!(
-            "{}{}\n{}\n{}|{}|{:?}\n",
+            "{}{}\n{}\n{}|{}|{:?}|{:?}\n",
             rt_stamp::content_fingerprint(all),
             bc_flags.join(" "),
             native_target_arg(spec),
             sysroot_args(config, spec).join(" "),
             config.fingerprint(),
-            dream_mir::backend::llvm::native_header_function_names()
+            dream_mir::backend::llvm::native_header_function_names(),
+            layout
         )
     };
     let fingerprint = fingerprint_for(cache.previous_dependencies());

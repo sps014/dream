@@ -1,6 +1,7 @@
 #define NDEBUG 1
 #include "dream_core.h"
 #include "dream_platform_internal.h"
+#include "dream_audio.h"
 #include <stdlib.h>
 #include <math.h>
 #include "vendor/opus/include/opus.h"
@@ -35,8 +36,9 @@ static int webm_seek(int64_t offset, int whence, void *userdata) {
 static int64_t webm_tell(void *userdata) { return ((webm_input *)userdata)->position; }
 
 /* Only mono/stereo mapping family zero is accepted; video and other tracks are skipped. */
-dream_ptr dream_audio_decode_webm(dream_ptr source, int32_t max_bytes) {
-    webm_input input = { (const unsigned char *)dream_array_bytes(source), dream_i32(source)[0], 0 };
+float *dream_audio_decode_webm_words(const unsigned char *bytes, size_t size, int32_t max_bytes,
+                                     size_t *count_out) {
+    webm_input input = { bytes, (int64_t)size, 0 };
     nestegg_io io = { webm_read, webm_seek, webm_tell, &input };
     nestegg *context = NULL;
     OpusDecoder *decoder = NULL;
@@ -121,17 +123,21 @@ done:
     if (packet) nestegg_free_packet(packet);
     if (decoder) opus_decoder_destroy(decoder);
     if (context) nestegg_destroy(context);
-    dream_ptr result;
+    float *words = NULL;
+    *count_out = 0;
     if (failure == 1) {
-        result = dream_array_new((int32_t)count + 2, 4);
-        float *out = (float *)dream_array_bytes(result);
-        out[0] = 48000; out[1] = (float)channels;
-        if (count) memcpy(out + 2, pcm, count * sizeof(float));
-    } else {
-        result = dream_array_new(failure < 0 ? 1 : 0, 4);
-        if (failure < 0) *((float *)dream_array_bytes(result)) = (float)failure;
+        words = dream_platform_current->allocate((count + 2) * sizeof(float));
+        if (words) {
+            words[0] = 48000; words[1] = (float)channels;
+            if (count) memcpy(words + 2, pcm, count * sizeof(float));
+            *count_out = count + 2;
+        } else {
+            words = dream_audio_words_status(-2, count_out);
+        }
+    } else if (failure < 0) {
+        words = dream_audio_words_status((float)failure, count_out);
     }
     dream_platform_current->deallocate(pcm);
     dream_platform_current->deallocate(frame);
-    return result;
+    return words;
 }

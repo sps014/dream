@@ -172,6 +172,42 @@ fn optimized_audio_decoder_keeps_vendor_allocator_reference() {
 }
 
 #[test]
+fn optimized_wasm_audio_decoder_exports_worker_entry_points() {
+    if !llvm_available() {
+        return;
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let source =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/compiler/audio_offline.dream");
+    let output = temporary.path().join("audio.wasm");
+    let built = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        .args(["--wasm", "--release", "-o"])
+        .arg(&output)
+        .arg(source)
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let bytes = fs::read(&output).unwrap();
+    let mut exports = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&bytes) {
+        if let wasmparser::Payload::ExportSection(section) = payload.unwrap() {
+            for export in section {
+                exports.push(export.unwrap().name.to_string());
+            }
+        }
+    }
+    for name in dream_mir::runtime::modules::worker_exports(
+        dream_mir::runtime::RuntimeNeed::AUDIO_DECODE,
+    ) {
+        assert!(exports.iter().any(|export| export == name), "missing {name}: {exports:?}");
+    }
+}
+
+#[test]
 fn cli_optimization_remarks_are_first_pass_artifacts() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("remarks.dream");

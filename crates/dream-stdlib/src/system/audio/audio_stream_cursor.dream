@@ -236,7 +236,18 @@ internal class AudioStreamCursor {
             client.close();
             return Result.Err(AudioError("ECANCELLED", "audio seek was cancelled"));
         }
-        if this.decoder.reposition(frame) == false {
+        let repositioned = this.decoder.reposition(frame, token).await;
+        if repositioned.is_err() || this.released {
+            response.close();
+            client.close();
+            if this.released {
+                return Result.Err(AudioError("ECANCELLED", "audio seek was cancelled"));
+            }
+            // The decoder may already expect input from the new offset, so the old body is unusable.
+            this.close();
+            return Result.Err(repositioned.unwrap_err());
+        }
+        if repositioned.unwrap() == false {
             response.close();
             client.close();
             return Result.Err(AudioError("ESEEK", "decoder could not reposition"));
@@ -315,7 +326,14 @@ internal class AudioStreamCursor {
 
     async fun pull(frame_count: int, token: CancellationToken): Result<float[], AudioError> {
         while this.released == false {
-            let result = this.decoder.read(frame_count);
+            let read = this.decoder.read(frame_count, token).await;
+            if read.is_err() {
+                return Result.Err(read.unwrap_err());
+            }
+            if this.released {
+                break;
+            }
+            let result = read.unwrap();
             let status = (int)result[0];
             if status > 0 {
                 this.rate = (int)result[1];

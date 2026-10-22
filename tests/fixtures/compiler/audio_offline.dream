@@ -2,11 +2,11 @@ import system;
 import system.audio;
 import system.encoding;
 
-fun main(): void {
+async fun main(): void {
     let wav = Encoding.base64_decode(
         "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAMD/fw=="
     ).unwrap();
-    let buffer = AudioBuffer.decode(wav).unwrap();
+    let buffer = AudioBuffer.decode(wav).await.unwrap();
     if buffer.sample_rate != 48000 || buffer.channels != 1 || buffer.frame_count != 4 {
         System.panic("unexpected decoded audio metadata");
     }

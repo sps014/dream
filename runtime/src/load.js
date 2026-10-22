@@ -11,6 +11,7 @@ import { isNode, setNodeFs, setNodeCrypto, setNodeChildProcess, setNodeNet } fro
 import { defaultEnv } from "./hosts/env.js";
 import { defaultDreamModule } from "./hosts.js";
 import { makeWorkerModule } from "./workers.js";
+import { makeAudioDecoderModule } from "./hosts/audio_decoder.js";
 import { readEmbeddedAbi, replaceArtifactExt } from "./urls.js";
 
 export { TAGS, HEAP_HEADER_SIZE, DreamInstance };
@@ -132,17 +133,17 @@ function memoryIsShared(memory) {
   );
 }
 
-function makeLinearMemory(wasmModule, wasmBytes) {
+function linearMemoryDescriptor(wasmModule, wasmBytes) {
   const memoryImport = WebAssembly.Module.imports(wasmModule).find(
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
   const desc = memoryImport && memoryImport.type;
-  return new WebAssembly.Memory({
+  return {
     initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
     maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
     shared:
       moduleWantsSharedMemory(wasmModule, desc) || memoryImportIsShared(wasmBytes),
-  });
+  };
 }
 
 // Node core modules behind each host family, keyed by the `Dream` import-field prefixes of
@@ -192,7 +193,8 @@ export async function load(source, options = {}) {
   };
 
   const importObject = { env: defaultEnv(getInstance, options) };
-  const sharedMemory = options.memory ?? makeLinearMemory(wasmModule, wasmBytes);
+  const memoryDescriptor = linearMemoryDescriptor(wasmModule, wasmBytes);
+  const sharedMemory = options.memory ?? new WebAssembly.Memory(memoryDescriptor);
   importObject.env.memory = sharedMemory;
   const stackGate =
     options.stackGate ??
@@ -209,6 +211,9 @@ export async function load(source, options = {}) {
     ...composeHosts(getInstance),
     ...(typeof makeWorkerModule === "function"
       ? makeWorkerModule(wasmBytes, abi, () => sharedMemory, stackGate, getInstance)
+      : {}),
+    ...(typeof makeAudioDecoderModule === "function"
+      ? makeAudioDecoderModule(wasmModule, memoryDescriptor)
       : {}),
   };
   const wrapFor = (fn, sig, user = false) => {

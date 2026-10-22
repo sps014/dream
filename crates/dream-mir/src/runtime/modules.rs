@@ -58,7 +58,12 @@ pub struct RuntimeModule {
     pub id: &'static str,
     pub need: RuntimeNeed,
     pub shared_c: &'static [&'static str],
+    /// Native-only runtime units optimized together with the runtime bitcode, like `shared_c`.
+    pub native_runtime_c: &'static [&'static str],
+    /// Native-only vendor units linked from the vendor archive.
     pub native_extra_c: &'static [&'static str],
+    /// wasm32 units, guarded per environment (`DREAM_COMPONENT`) inside each file.
+    pub wasm_extra_c: &'static [&'static str],
     /// Path relative to `runtime/c` of a vendor file list (`pcre2/SOURCES`).
     pub vendor_sources: Option<&'static str>,
     /// Runtime symbols referenced from vendor objects outside the optimized bitcode module.
@@ -68,14 +73,38 @@ pub struct RuntimeModule {
     pub include_dirs: &'static [&'static str],
     pub exports: &'static [&'static str],
     pub intrinsic_keys: &'static [&'static str],
+    /// `@runtime` host fields whose native and component implementations live in this module.
+    pub host_fields: &'static [&'static str],
+    /// Guest functions a JS host calls on a private instance of a browser/Node module.
+    pub worker_exports: &'static [&'static str],
 }
+
+const AUDIO_DECODE_HOSTS: &[&str] = &[
+    "audioDecodeStart",
+    "audioDecodeWait",
+    "audioDecodeResult",
+    "audioDecodeRelease",
+    "audioDecodeStreamOpen",
+    "audioDecodeStreamSpace",
+    "audioDecodeStreamPush",
+    "audioDecodeStreamFinish",
+    "audioDecodeStreamRead",
+    "audioDecodeStreamReposition",
+    "audioDecodeStreamWait",
+    "audioDecodeStreamResult",
+    "audioDecodeStreamDuration",
+    "audioDecodeStreamSeekOffset",
+    "audioDecodeStreamClose",
+];
 
 pub const RUNTIME_MODULES: &[RuntimeModule] = &[
     RuntimeModule {
         id: "audio_fft",
         need: RuntimeNeed::AUDIO_FFT,
         shared_c: &["core/audio_fft.c"],
+        native_runtime_c: &[],
         native_extra_c: &[],
+        wasm_extra_c: &[],
         vendor_sources: None,
         vendor_runtime_exports: &[],
         wasm_defines: &["DREAM_WASM32"],
@@ -83,6 +112,8 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         include_dirs: &["core/include"],
         exports: &["dream_audio_fft"],
         intrinsic_keys: &["dream_audio_fft"],
+        host_fields: &[],
+        worker_exports: &[],
     },
     RuntimeModule {
         id: "audio_decode",
@@ -92,7 +123,9 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "core/audio_webm.c",
             "core/audio_stream.c",
         ],
+        native_runtime_c: &["sys/native/audio_jobs.c"],
         native_extra_c: &[],
+        wasm_extra_c: &["sys/wasi/audio_worker.c", "sys/wasi/component/audio_jobs.c"],
         vendor_sources: Some("core/vendor/opus/SOURCES"),
         vendor_runtime_exports: &["dream_platform_current"],
         wasm_defines: &["DREAM_WASM32", "HAVE_CONFIG_H", "NDEBUG"],
@@ -106,36 +139,26 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "core/vendor/opus/silk/float",
             "core/vendor/nestegg/include",
         ],
-        exports: &[
-            "dream_audio_decode",
-            "dream_audio_stream_open",
-            "dream_audio_stream_space",
-            "dream_audio_stream_push",
-            "dream_audio_stream_finish",
-            "dream_audio_stream_read",
-            "dream_audio_stream_duration",
-            "dream_audio_stream_seek_offset",
-            "dream_audio_stream_reposition",
-            "dream_audio_stream_close",
-        ],
-        intrinsic_keys: &[
-            "dream_audio_decode",
-            "dream_audio_stream_open",
-            "dream_audio_stream_space",
-            "dream_audio_stream_push",
-            "dream_audio_stream_finish",
-            "dream_audio_stream_read",
-            "dream_audio_stream_duration",
-            "dream_audio_stream_seek_offset",
-            "dream_audio_stream_reposition",
-            "dream_audio_stream_close",
+        exports: AUDIO_DECODE_HOSTS,
+        intrinsic_keys: &[],
+        host_fields: AUDIO_DECODE_HOSTS,
+        worker_exports: &[
+            "dream_audio_worker_alloc",
+            "dream_audio_worker_free",
+            "dream_audio_worker_decode",
+            "dream_audio_worker_stream_open",
+            "dream_audio_worker_stream_read",
+            "dream_audio_worker_stream_reposition",
+            "dream_audio_worker_stream_close",
         ],
     },
     RuntimeModule {
         id: "regex",
         need: RuntimeNeed::REGEX,
         shared_c: &["regex.c"],
+        native_runtime_c: &[],
         native_extra_c: &["pcre2/pcre2_jit_compile.c"],
+        wasm_extra_c: &[],
         vendor_sources: Some("pcre2/SOURCES"),
         vendor_runtime_exports: &[],
         wasm_defines: &[
@@ -172,6 +195,8 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             ATTR_REGEX_NAME_AT,
             ATTR_REGEX_NAME_NUMBER,
         ],
+        host_fields: &[],
+        worker_exports: &[],
     },
 ];
 
@@ -342,7 +367,7 @@ pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUn
             }
         }
         let defines: Vec<String> = m.wasm_defines.iter().map(|s| (*s).to_string()).collect();
-        for rel in m.shared_c {
+        for rel in m.shared_c.iter().chain(m.wasm_extra_c) {
             units.push(Wasm32LinkedUnit {
                 path: c.join(rel),
                 defines: defines.clone(),
@@ -386,6 +411,14 @@ pub fn vendor_runtime_exports(need: RuntimeNeed) -> impl Iterator<Item = &'stati
         .flat_map(|module| module.vendor_runtime_exports.iter().copied())
 }
 
+pub fn worker_exports(need: RuntimeNeed) -> impl Iterator<Item = &'static str> {
+    RUNTIME_MODULES
+        .iter()
+        .filter(move |module| need.contains(module.need))
+        .flat_map(|module| module.worker_exports.iter().copied())
+}
+
+/// Matches intrinsic keys and `@runtime` host fields alike.
 pub fn runtime_need_from_keys<'a, I>(keys: I) -> RuntimeNeed
 where
     I: IntoIterator<Item = &'a str>,
@@ -393,7 +426,7 @@ where
     let mut need = RuntimeNeed::CORE;
     for key in keys {
         for m in RUNTIME_MODULES {
-            if m.intrinsic_keys.contains(&key) {
+            if m.intrinsic_keys.contains(&key) || m.host_fields.contains(&key) {
                 need.insert(m.need);
             }
         }
@@ -402,7 +435,12 @@ where
 }
 
 pub fn runtime_need_from_mir(mir: &crate::Mir) -> RuntimeNeed {
-    runtime_need_from_keys(mir.intrinsics.iter().map(|(_, k)| k.as_str()))
+    runtime_need_from_keys(
+        mir.intrinsics
+            .iter()
+            .map(|(_, k)| k.as_str())
+            .chain(mir.imports.iter().map(|import| import.field.as_str())),
+    )
 }
 
 pub fn runtime_need_from_module_text(src: &str) -> RuntimeNeed {
@@ -472,7 +510,7 @@ pub fn native_runtime_units(root: &Path, need: RuntimeNeed) -> Vec<NativeCompile
         if !need.contains(m.need) {
             continue;
         }
-        for rel in m.shared_c {
+        for rel in m.shared_c.iter().chain(m.native_runtime_c) {
             push_unit(root, &mut units, c.join(rel), m);
         }
         if let Some(list) = m.vendor_sources {
@@ -497,7 +535,13 @@ mod tests {
         let c = PathBuf::from(SOURCE_RUNTIME_C_DIR);
         assert!(!RUNTIME_MODULES.is_empty());
         for m in RUNTIME_MODULES {
-            for rel in m.shared_c.iter().chain(m.native_extra_c) {
+            for rel in m
+                .shared_c
+                .iter()
+                .chain(m.native_runtime_c)
+                .chain(m.native_extra_c)
+                .chain(m.wasm_extra_c)
+            {
                 assert!(c.join(rel).is_file(), "{}", rel);
             }
             if let Some(list) = m.vendor_sources {
@@ -531,6 +575,15 @@ mod tests {
         let core = runtime_need_from_keys(["print"]);
         assert!(core.contains(RuntimeNeed::CORE));
         assert!(!core.contains(RuntimeNeed::REGEX));
+    }
+
+    #[test]
+    fn audio_decode_need_from_host_fields() {
+        let need = runtime_need_from_keys(["audioDecodeStart"]);
+        assert!(need.contains(RuntimeNeed::AUDIO_DECODE));
+        assert!(!runtime_need_from_keys(["audioOutputStart"]).contains(RuntimeNeed::AUDIO_DECODE));
+        assert!(worker_exports(need).any(|name| name == "dream_audio_worker_decode"));
+        assert_eq!(worker_exports(RuntimeNeed::CORE).count(), 0);
     }
 
     fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {

@@ -336,6 +336,7 @@ pub fn link_wasm(
     let mut public: Vec<String> = KEEP_PUBLIC.iter().map(|s| s.to_string()).collect();
     public.extend(sigs.exports.iter().cloned());
     public.extend(dream_mir::runtime::modules::vendor_runtime_exports(need).map(str::to_owned));
+    public.extend(dream_mir::runtime::modules::worker_exports(need).map(str::to_owned));
     public.extend(module_exports(&src).map(str::to_string));
     public.extend(packages.public);
     public.sort();
@@ -469,6 +470,9 @@ pub fn link_wasm(
     let runtime_inputs =
         super::tools::input_response(&runtime_objects).map_err(|error| error.to_string())?;
     let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
+    for name in dream_mir::runtime::modules::worker_exports(need) {
+        cmd.arg(format!("--export={name}"));
+    }
     if !packages.libraries.is_empty() {
         cmd.arg("--fatal-warnings");
     }

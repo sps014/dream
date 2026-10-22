@@ -240,6 +240,8 @@ export class DreamInstance {
     if (elem === "byte") {
       // Bulk copy for the common byte-array case.
       this.bytes.set(Uint8Array.from(arr), ptr + 4);
+    } else if (elem === "float" && arr instanceof Float32Array) {
+      new Float32Array(this.memory.buffer, ptr + 4, count).set(arr);
     } else {
       for (let i = 0; i < count; i++) {
         this._writeElement(ptr + 4 + i * size, elem, arr[i]);
@@ -255,6 +257,9 @@ export class DreamInstance {
   readArray(ptr, elemType = "int") {
     if (!ptr) return [];
     const count = this.i32(ptr);
+    if (elemType === "byte") {
+      return Array.from(new Uint8Array(this.memory.buffer, ptr + 4, count));
+    }
     const size = elementSize(elemType);
     const out = new Array(count);
     for (let i = 0; i < count; i++) {

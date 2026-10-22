@@ -1,3 +1,4 @@
+import system;
 import system.encoding;
 import system.audio;
 import system.testing;
@@ -40,7 +41,7 @@ fun audio_fft_silence_dc_and_stereo(): void {
     Assert.is_true(analyzer.analyze([], 0, 1).is_err());
 }
 
-fun audio_pcm_snapshot_and_ranges(): void {
+async fun audio_pcm_snapshot_and_ranges(): void {
     let samples = [0.25f, -0.5f, 0.75f, -1.0f];
     let buffer = AudioBuffer.from_pcm(samples, 48000, 2).unwrap();
     samples[0] = 1.0f;
@@ -50,7 +51,9 @@ fun audio_pcm_snapshot_and_ranges(): void {
     Assert.is_true(buffer.read_pcm(-1, 1).is_err());
     Assert.is_true(buffer.read_pcm(1, 2).is_err());
     Assert.is_true(AudioBuffer.from_pcm([1.0f], 48000, 2).is_err());
-    Assert.is_true(AudioBuffer.decode([(byte)1, (byte)2, (byte)3]).is_err());
+    let invalid = AudioBuffer.decode([(byte)1, (byte)2, (byte)3]).await;
+    Assert.eq(invalid.unwrap_err().code(), "EFORMAT");
+    Assert.eq(AudioBuffer.decode([], 2).await.unwrap_err().code(), "EINVAL");
 }
 
 async fun audio_controls_and_events_without_device(): void {
@@ -216,16 +219,16 @@ fun audio_fixture_webm(): byte[] {
     ).unwrap();
 }
 
-fun audio_content_detection_and_webm_opus(): void {
-    let wav = AudioBuffer.decode(audio_fixture_wav()).unwrap();
+async fun audio_content_detection_and_webm_opus(): void {
+    let wav = AudioBuffer.decode(audio_fixture_wav()).await.unwrap();
     Assert.eq(wav.sample_rate, 48000);
     Assert.eq(wav.channels, 1);
     Assert.eq(wav.frame_count, 4);
     Assert.is_true(((double)wav.read_pcm(1, 1).unwrap()[0] - 0.25d).abs() < 0.00001d);
-    let mp3 = AudioBuffer.decode(audio_fixture_mp3()).unwrap();
+    let mp3 = AudioBuffer.decode(audio_fixture_mp3()).await.unwrap();
     Assert.eq(mp3.sample_rate, 44100);
     Assert.is_true(mp3.frame_count > 1000);
-    let webm = AudioBuffer.decode(audio_fixture_webm()).unwrap();
+    let webm = AudioBuffer.decode(audio_fixture_webm()).await.unwrap();
     Assert.eq(webm.sample_rate, 48000);
     Assert.is_true(webm.duration > 0.2d && webm.duration < 0.5d);
     let spectrum = AudioAnalyzer()
@@ -238,16 +241,59 @@ fun audio_content_detection_and_webm_opus(): void {
         }
     }
     Assert.eq(peak_bin, 19);
-    Assert.is_true(AudioBuffer.decode(audio_fixture_webm(), 4).is_err());
-    Assert.is_true(AudioBuffer.decode(audio_fixture_wav(), 4).is_err());
+    Assert.eq(AudioBuffer.decode(audio_fixture_webm(), 4).await.unwrap_err().code(), "ELIMIT");
+    Assert.eq(AudioBuffer.decode(audio_fixture_wav(), 4).await.unwrap_err().code(), "ELIMIT");
+}
+
+fun audio_large_wav(frames: int): byte[] {
+    let data_bytes = frames * 2;
+    let bytes = Array.alloc<byte>(44 + data_bytes);
+    let header = Encoding.base64_decode(audio_wav_header_base64()).unwrap();
+    for (let i = 0; i < header.length; i = i + 1) {
+        bytes[i] = header[i];
+    }
+    let riff = 36 + data_bytes;
+    for (let i = 0; i < 4; i = i + 1) {
+        bytes[4 + i] = (byte)((riff >>(i * 8)) & 255);
+        bytes[40 + i] = (byte)((data_bytes >>(i * 8)) & 255);
+    }
+    for (let i = 0; i < frames; i = i + 1) {
+        bytes[44 + i * 2 + 1] = (byte)((i >> 4) & 63);
+    }
+    return bytes;
+}
+
+fun audio_wav_header_base64(): string {
+    return "UklGRgAAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQAAAAA=";
+}
+
+async fun audio_decode_into(bytes: byte[], frames: int[]): void {
+    frames[0] = AudioBuffer.decode(bytes, 134217728).await.unwrap().frame_count;
+}
+
+async fun audio_decode_runs_off_the_scheduler(): void {
+    let frames = [0];
+    let decoding = audio_decode_into(audio_large_wav(8000000), frames);
+    Promise.start(decoding);
+    Time.sleep(0).await;
+    Assert.eq(frames[0], 0);
+    decoding.await;
+    Assert.eq(frames[0], 8000000);
+
+    let source = CancellationSource();
+    source.cancel();
+    let cancelled = AudioBuffer.decode(audio_fixture_wav(), 268435456, Option.Some(source.token))
+        .await;
+    Assert.eq(cancelled.unwrap_err().code(), "ECANCELLED");
 }
 
 @test
 async fun audio_analysis(): void {
     audio_fft_sine_and_levels();
     audio_fft_silence_dc_and_stereo();
-    audio_pcm_snapshot_and_ranges();
+    audio_pcm_snapshot_and_ranges().await;
     audio_controls_and_events_without_device().await;
     audio_event_queue_is_bounded();
-    audio_content_detection_and_webm_opus();
+    audio_content_detection_and_webm_opus().await;
+    audio_decode_runs_off_the_scheduler().await;
 }

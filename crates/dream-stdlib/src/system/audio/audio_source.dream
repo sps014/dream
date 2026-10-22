@@ -18,7 +18,7 @@ internal static class AudioSource {
             if token.is_cancelled {
                 return Result.Err(AudioError("ECANCELLED", "audio loading was cancelled"));
             }
-            return AudioBuffer.decode(copied, limit);
+            return AudioBuffer.decode(copied, limit, Option.Some(token)).await;
         };
     }
 

@@ -26,7 +26,7 @@ def main():
         "analysis": "import system.audio; fun main(): void { let analyzer = AudioAnalyzer(); analyzer.analyze([0.0f], 48000, 1); }",
         "PCM playback": "import system.audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.close(); }",
         "capture": "import system.audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.capture(2048); audio.close(); }",
-        "decode": "import system.audio; fun main(): void { AudioBuffer.decode([(byte)1]); }",
+        "decode": "import system.audio; async fun main(): void { AudioBuffer.decode([(byte)1]).await; }",
         "rebuilt without audio": "async fun main(): void {}",
     }
     for label, text in (() if args.native_only else cases.items()):
@@ -47,9 +47,12 @@ def main():
         abi = json.loads(artifacts["abi.json"])
         if label != "decode":
             assert "drwav_" not in wat and "drmp3_" not in wat, f"{label} retained decoders"
-        for name in ("dream_audio_stream_", "nestegg_", "opus_decode"):
-            if label != "decode" or name == "dream_audio_stream_":
+        if label != "decode":
+            for name in ("dream_audio_stream_", "dream_audio_worker_", "nestegg_", "opus_decode"):
                 assert name not in wat, f"{label} retained {name}"
+            assert "audioDecode" not in runtime, f"{label} retained the decode worker"
+        else:
+            assert "dream_audio_worker_decode" in wat, "decode lost its worker entry point"
         if label != "analysis":
             assert "kiss_fft" not in wat, f"{label} retained FFT"
         if label != "capture":

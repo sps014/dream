@@ -58,6 +58,46 @@ ring of absolute frame counters. An underrun emits silence without advancing the
 read index and raises a starved flag that `synchronize()` turns into
 `Waiting`/`Playing`. Control 3 flushes and rebases, 6 marks end of stream.
 
+## Off-thread decoding
+
+Codec code never runs on the guest scheduler. The raw codec API in
+`core/include/dream_audio.h` (`dream_audio_decode_words` and the
+`dream_audio_stream_*` decoder) touches only its inputs and the platform
+allocator, so any thread may call it. Dream reaches it through `@runtime`
+`audioDecode*` hosts that the `audio_decode` catalog module implements per
+environment:
+
+- Native, `sys/native/audio_jobs.c` (a `native_runtime_c` unit, so it is
+  optimized with the runtime bitcode): a one-shot decode copies its input and runs
+  on the blocking pool, following the `FileOperation` shape of start, wait,
+  result, and release with a reference held by the pool. Each stream owns one
+  serial job. Encoded input queues beside it, and space, duration, and the WAV
+  seek layout are snapshots that every job refreshes, so `push`, `space`,
+  `duration`, and `seek_offset` stay synchronous. After a chunk is claimed, the
+  next one is decoded ahead. A read that returns "need input" is re-run before
+  publishing when input or end of input arrived meanwhile. A reposition discards
+  the in-flight result and queued input. Dream arrays are built only on the
+  scheduler thread.
+- Browser and Node, `runtime/src/hosts/audio_decoder.js` (the `audio_decoder`
+  chunk, wired in `load.js`): two lazily started workers, one for one-shot
+  decodes and one for all streams, so a long file decode never delays a playing
+  stream. Each worker instantiates the program's compiled module again with a
+  private memory of the same shape, stub imports that throw, and only
+  `dream_heap_init` plus TLS setup. It never runs `__runtime_init` or the program.
+  It calls the `dream_audio_worker_*` exports from `sys/wasi/audio_worker.c`,
+  which `link_wasm` keeps exported through the module's `worker_exports`. Input
+  and PCM cross as transferred buffers, so no `SharedArrayBuffer` or COOP/COEP is
+  needed. The main thread mirrors the native stream state machine.
+- WASI components, `sys/wasi/component/audio_jobs.c`: components have no
+  threads, so the same hosts decode inline and complete the wait immediately.
+
+The stdlib side is `AudioDecodeJob` (one-shot) and `AudioStreamDecoder`
+(streams). `AudioBuffer.decode`, `AudioStreamDecoder.read`, and
+`reposition` are async; a cancelled wait returns `ECANCELLED` while the
+job finishes unobserved, and a later wait completes any earlier abandoned
+waiter so its scheduler credit is returned. FFT stays inline because one
+transform costs microseconds.
+
 Streaming operations are reachable only through closures installed by string-source
 constructors, so PCM-only programs never reference the stream decoder. Byte
 constructors snapshot their input and decode completely. FFT-only programs retain
@@ -70,8 +110,6 @@ libraries only after the last sibling manifest releases them.
 
 ## Outstanding work from the approved plan
 
-- Browser URL decoding runs in the browser media stack. Portable decoding for
-  byte sources and filesystem streams still executes on the guest scheduler.
 - Native remote MP3 and WebM index seeking remains unsupported; HTTP seeking is
   limited to independently decodable PCM and float WAV. A second pending seek
   reports EBUSY.
@@ -95,11 +133,13 @@ libraries only after the last sibling manifest releases them.
 
 `tests/projects/core/audio_analysis.dream` covers PCM ownership and bounds,
 content detection, WebM/Opus tone analysis, FFT normalization, control errors,
-closure, and ordered event overflow. `scripts/test-audio-host.mjs` covers output
+closure, ordered event overflow, a large decode that must leave a timer turn
+free, and a cancelled decode. `optimized_wasm_audio_decoder_exports_worker_entry_points`
+checks that optimized WASM keeps the decode-worker exports. `scripts/test-audio-host.mjs` covers output
 sharing, failed sink preservation, cancellation during context startup, and
 browser picker error distinctions. `scripts/test-audio-browser.py` runs a real
-Chromium playback and capture check, plus streamed HTTP progress, capture, and
-seek. `scripts/test-audio-trimming.py --native`
+Chromium decode-worker, playback, and capture check, plus streamed HTTP progress,
+capture, and seek. `scripts/test-audio-trimming.py --native`
 compares deployment bytes and verifies codec, FFT, capture, and output exclusion,
 including rebuilding a native deployment without audio.
 

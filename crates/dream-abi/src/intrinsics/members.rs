@@ -1,21 +1,5 @@
 /// The source enum and the compiler's binding table are checked for exact agreement.
 pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
-    ("DreamAudioDecode", "dream_audio_decode"),
-    ("DreamAudioStreamOpen", "dream_audio_stream_open"),
-    ("DreamAudioStreamSpace", "dream_audio_stream_space"),
-    ("DreamAudioStreamPush", "dream_audio_stream_push"),
-    ("DreamAudioStreamFinish", "dream_audio_stream_finish"),
-    ("DreamAudioStreamRead", "dream_audio_stream_read"),
-    ("DreamAudioStreamDuration", "dream_audio_stream_duration"),
-    (
-        "DreamAudioStreamSeekOffset",
-        "dream_audio_stream_seek_offset",
-    ),
-    (
-        "DreamAudioStreamReposition",
-        "dream_audio_stream_reposition",
-    ),
-    ("DreamAudioStreamClose", "dream_audio_stream_close"),
     ("DreamAudioFft", "dream_audio_fft"),
     ("ConsoleRead", "dream_console_read"),
     ("ConsoleWrite", "dream_console_write"),

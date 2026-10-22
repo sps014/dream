@@ -34,6 +34,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/audio/audio_buffer.dream"),
         ),
         (
+            "<std>/system/audio/audio_decode_job.dream",
+            include_str!("../system/audio/audio_decode_job.dream"),
+        ),
+        (
             "<std>/system/audio/audio_device.dream",
             include_str!("../system/audio/audio_device.dream"),
         ),

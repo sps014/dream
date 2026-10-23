@@ -108,6 +108,42 @@ fn serve(mut stream: TcpStream) {
             continue;
         }
         let (status, extra, payload) = match path {
+            "/cookies/set" => (
+                200,
+                "Set-Cookie: session=stored; Path=/cookies\r\n".to_string(),
+                Vec::new(),
+            ),
+            "/cookies/delete" => (
+                200,
+                "Set-Cookie: session=; Path=/cookies; Max-Age=0\r\n".to_string(),
+                Vec::new(),
+            ),
+            "/cookies/redirect" => (
+                302,
+                "Set-Cookie: redirect=stored; Path=/cookies\r\nLocation: /cookies/echo\r\n"
+                    .to_string(),
+                Vec::new(),
+            ),
+            "/cookies/cross" => (
+                302,
+                format!(
+                    "Location: http://localhost:{}/cookies/echo\r\n",
+                    stream.local_addr().unwrap().port()
+                ),
+                Vec::new(),
+            ),
+            "/cookies/echo" => (
+                200,
+                String::new(),
+                text.lines()
+                    .filter_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("cookie").then(|| value.trim())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+                    .into_bytes(),
+            ),
             "/redirect" => (302, "Location: /stream\r\n".to_string(), Vec::new()),
             "/loop" => (302, "Location: /loop\r\n".to_string(), Vec::new()),
             "/echo" => (404, format!("X-Method: {method}\r\n"), body),

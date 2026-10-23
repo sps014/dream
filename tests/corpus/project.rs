@@ -10,6 +10,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("yield_iterators", "collections", true),
     Case::project("yield_async_iterators", "async_tasks", true),
     Case::project("raw_sockets", "native_services", true),
+    Case::project("http_cookie_jar", "native_services", true),
     Case::project("compression_streams", "native_services", true),
     Case::project("application_utilities", "native_services", true),
     Case::project("arc_param", "ownership", true),

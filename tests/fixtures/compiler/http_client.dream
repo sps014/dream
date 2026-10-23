@@ -70,3 +70,60 @@ async fun http_client(): void {
     client.close().unwrap();
     Assert.eq(client.send(HttpRequest(HttpMethod.Get, base)).await.unwrap_err().code(), "ECLOSED");
 }
+
+@test
+async fun http_cookies(): void {
+    let base = Url.parse("__BASE__/cookies/").unwrap();
+    let jar = CookieJar();
+    if !HttpCapabilities.cookie_jars {
+        Assert.eq(jar.store(base, "seed=1").unwrap_err().code(), "ENOTSUP");
+        let unsupported = HttpClient(cookies: Option.Some(jar));
+        Assert.eq(
+            unsupported.send(HttpRequest(HttpMethod.Get, base)).await.unwrap_err().code(),
+            "ENOTSUP"
+        );
+        unsupported.close().unwrap();
+        return;
+    }
+    let defaults = HttpClient();
+    Assert.is_true(defaults.cookies.is_some());
+    let set = defaults.send(HttpRequest(HttpMethod.Get, base.resolve("set").unwrap()))
+        .await
+        .unwrap();
+    set.close().unwrap();
+    Assert.eq(defaults.cookies.unwrap().header(base).unwrap(), "session=stored");
+    defaults.close().unwrap();
+
+    jar.store(base, "seed=1; Path=/cookies").unwrap();
+    let client = HttpClient(cookies: Option.Some(jar));
+    let second_client = HttpClient(cookies: Option.Some(jar));
+    let response = client.send(HttpRequest(HttpMethod.Get, base.resolve("set").unwrap()))
+        .await
+        .unwrap();
+    response.close().unwrap();
+    let echo = second_client.send(HttpRequest(HttpMethod.Get, base.resolve("echo").unwrap()))
+        .await
+        .unwrap();
+    let text = echo.read_text().await.unwrap();
+    Assert.is_true(text.contains("seed=1"));
+    Assert.is_true(text.contains("session=stored"));
+    echo.close().unwrap();
+
+    let request = HttpRequest(HttpMethod.Get, base.resolve("echo").unwrap());
+    request.headers.set("Cookie", "manual=1");
+    let manual = client.send(request).await.unwrap();
+    Assert.eq(manual.read_text().await.unwrap(), "manual=1");
+    manual.close().unwrap();
+    jar.clear().unwrap();
+    Assert.eq(second_client.cookies.unwrap().header(base).unwrap(), "");
+
+    let disabled = HttpClient(use_cookies: false, cookies: Option.Some(jar));
+    let ignored = disabled.send(HttpRequest(HttpMethod.Get, base.resolve("set").unwrap()))
+        .await
+        .unwrap();
+    ignored.close().unwrap();
+    Assert.eq(jar.header(base).unwrap(), "");
+    disabled.close().unwrap();
+    client.close().unwrap();
+    second_client.close().unwrap();
+}

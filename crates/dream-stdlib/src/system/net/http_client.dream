@@ -4,10 +4,29 @@ module system.net;
 /// Received responses own their bodies independently and must also be closed.
 public class HttpClient {
     id: int;
+    cookie_values: Option<CookieJar>;
+    use_cookies: bool;
 
-    /// Creates a client; allocation failures are reported by `send`.
-    public constructor() {
-        this.id = HttpClient.create_host();
+    /// Creates a client with automatic cookies on native hosts by default; pass false to disable them.
+    /// `cookies` seeds or shares a jar. Without a supplied jar, Node/browser/WASI clients remain stateless.
+    /// Supplying a jar on an unsupported host makes send return ENOTSUP. Allocation failures surface from send.
+    public constructor(use_cookies: bool = true, cookies: Option<CookieJar> = Option.None) {
+        this.use_cookies = use_cookies;
+        this.cookie_values = cookies;
+        if use_cookies && HttpCapabilities.cookie_jars && this.cookie_values.is_none() {
+            this.cookie_values = Option.Some(CookieJar());
+        }
+        let jar_id = 0 - 1;
+        if use_cookies && this.cookie_values.is_some() {
+            jar_id = this.cookie_values.unwrap().id;
+        }
+        this.id = HttpClient.create_host(jar_id);
+    }
+
+    /// The client jar, or None when automatic cookies are disabled or unavailable and no jar was supplied.
+    /// A supplied jar remains accessible when use_cookies is false, but is not used for requests or responses.
+    public get cookies(): Option<CookieJar> {
+        return this.cookie_values;
     }
 
     del() {
@@ -15,7 +34,7 @@ public class HttpClient {
     }
 
     @runtime("netClientCreate")
-    static extern fun create_host(): int;
+    static extern fun create_host(cookie_jar: int): int;
 
     @runtime("netClientClose")
     static extern fun close_host(id: int): void;
@@ -47,6 +66,16 @@ public class HttpClient {
         }
         if lifetime[0].id <= 0 {
             return Result.Err(HttpError("ECLOSED", "HTTP client is closed or unavailable"));
+        }
+        if lifetime[0].use_cookies && lifetime[0].cookie_values.is_some() {
+            if !HttpCapabilities.cookie_jars {
+                return Result.Err(
+                    HttpError("ENOTSUP", "managed cookie jars are unavailable on this host")
+                );
+            }
+            if lifetime[0].cookie_values.unwrap().id <= 0 {
+                return Result.Err(HttpError("ELIMIT", "cookie jar is unavailable"));
+            }
         }
         if options.timeout_ms < 0
             || options.connect_timeout_ms < 0 || options.max_redirects < (0 - 1) {

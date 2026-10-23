@@ -39,6 +39,9 @@ function httpRestricted(name) {
 export function makeHttpHost() {
   return {
     netCapabilities: () => isNode ? 14 : 0,
+    netCookieJarCreate: () => 0,
+    netCookieJarClose: () => {},
+    netCookieJarControl: () => JSON.stringify({ code: "ENOTSUP", message: "managed cookie jars are unavailable on this host" }),
     netClientCreate: () => {
       if (httpClients.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
       const id = nextHttpHandle++;

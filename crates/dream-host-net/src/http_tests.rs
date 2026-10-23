@@ -53,8 +53,9 @@ fn request(
 }
 #[test]
 fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
+    cookie_sessions();
     let server = fixture::HttpFixture::start();
-    let client = http::client_create();
+    let client = http::client_create(-1);
     for method in ["POST", "PUT", "PATCH", "DELETE"] {
         let wire = take(request(
             client,
@@ -140,7 +141,7 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     );
     http::client_close(client);
     assert_eq!(error_code(&take(pending)), "ECLOSED");
-    let client = http::client_create();
+    let client = http::client_create(-1);
     let wire = take(request(
         client,
         &format!("{}/slow-body", server.url),
@@ -247,4 +248,74 @@ fn pooled_http_transport_cancellation_streaming_deadlines_and_tls_rejection() {
     assert!(resources.clients.is_empty());
     assert!(resources.bodies.is_empty());
     assert!(resources.operations.is_empty());
+}
+
+fn cookie_sessions() {
+    let server = fixture::HttpFixture::start();
+    let jar = crate::cookies::create();
+    let client = http::client_create(jar);
+    let shared = http::client_create(jar);
+    let isolated = http::client_create(0);
+    let disabled = http::client_create(-1);
+    let read = |client, path: &str, headers| {
+        let wire = take(http::send(
+            client,
+            &serde_json::json!({
+                "url": format!("{}{path}", server.url), "method": "GET", "headers": headers,
+                "timeout_ms": 2000, "connect_timeout_ms": 0, "max_redirects": 5
+            })
+            .to_string(),
+            vec![],
+        ));
+        assert_eq!(wire[0], 1, "{}", String::from_utf8_lossy(&wire));
+        let body = json(&wire)["body"].as_i64().unwrap() as i32;
+        let wire = take(http::read(body, 4096));
+        assert_eq!(wire[0], 1);
+        http::body_close(body);
+        String::from_utf8(wire[1..].to_vec()).unwrap()
+    };
+    let empty: Vec<(String, String)> = vec![];
+    read(client, "/cookies/set", empty.clone());
+    assert_eq!(
+        read(shared, "/cookies/echo", empty.clone()),
+        "session=stored"
+    );
+    assert_eq!(read(isolated, "/cookies/echo", empty.clone()), "");
+    read(disabled, "/cookies/set", empty.clone());
+    assert_eq!(read(disabled, "/cookies/echo", empty.clone()), "");
+    assert_eq!(
+        read(
+            client,
+            "/cookies/echo",
+            vec![("Cookie".into(), "manual=1".into())]
+        ),
+        "manual=1"
+    );
+    let redirected = read(client, "/cookies/redirect", empty.clone());
+    assert!(redirected.contains("redirect=stored"));
+    assert!(redirected.contains("session=stored"));
+    assert_eq!(
+        read(
+            client,
+            "/cookies/cross",
+            vec![("Cookie".into(), "manual=1".into())]
+        ),
+        ""
+    );
+    read(client, "/cookies/delete", empty.clone());
+    assert_eq!(
+        read(shared, "/cookies/echo", empty.clone()),
+        "redirect=stored"
+    );
+    assert_eq!(
+        crate::cookies::control(jar, r#"{"action":"clear"}"#),
+        r#"{"value":""}"#
+    );
+    assert_eq!(read(shared, "/cookies/echo", empty.clone()), "");
+    crate::cookies::close(jar);
+    read(client, "/cookies/set", empty.clone());
+    assert_eq!(read(shared, "/cookies/echo", empty), "session=stored");
+    for id in [client, shared, isolated, disabled] {
+        http::client_close(id);
+    }
 }

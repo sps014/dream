@@ -38,12 +38,19 @@ static int operation(dream_ptr result, int child) {
     return id;
 }
 
-int32_t netClientCreate(void) {
+int32_t netClientCreate(int32_t cookie_jar) {
+    if (cookie_jar > 0) { return 0; }
     if (next_client == COMPONENT_LIMIT) { return 0; }
     int id = next_client++; clients[id] = 1; return id;
 }
 void netClientClose(int32_t id) { if (id > 0 && id < COMPONENT_LIMIT) { clients[id] = 0; } }
 int32_t netCapabilities(void) { return 13; }
+int32_t netCookieJarCreate(void) { return 0; }
+void netCookieJarClose(int32_t id) { (void)id; }
+dream_ptr netCookieJarControl(int32_t id, dream_ptr request) {
+    (void)id; (void)request;
+    return dream_str_from_utf8("{\"code\":\"ENOTSUP\",\"message\":\"managed cookie jars are unavailable on this host\"}");
+}
 
 int32_t netHttpStart(int32_t client, dream_ptr request, dream_ptr body) {
     if (client <= 0 || client >= COMPONENT_LIMIT || !clients[client]) { return operation(component_error("ECLOSED", "HTTP client is closed"), 0); }

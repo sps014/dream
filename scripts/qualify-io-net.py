@@ -27,7 +27,7 @@ def main():
          "scripts/test-stdlib-hosts.mjs", "scripts/test-bundle-runtime.mjs"],
     ]
     for optimized in [False, True]:
-        for case in ["async_cancellation", "file_handle_stream", "url_basics"]:
+        for case in ["async_cancellation", "file_handle_stream", "url_basics", "http_cookie_jar"]:
             commands.append([sys.executable, "scripts/test_corpus.py", "--both",
                              *(["--release"] if optimized else []), case])
     report = {

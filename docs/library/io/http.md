@@ -38,12 +38,67 @@ transport responses; inspect `status` yourself.
 
 | Member | Returns | Effect |
 |---|---|---|
-| `HttpClient()` | `HttpClient` | Creates a client; allocation failures surface from `send`. |
+| `HttpClient(use_cookies: true, cookies: None)` | `HttpClient` | Creates a client with an isolated cookie jar on native hosts; allocation failures surface from `send`. |
+| `cookies` | `Option<CookieJar>` | The default or supplied jar, when available. |
 | `send(request, token)` | `async Result<HttpResponse, HttpError>` | Sends with default `HttpOptions()`. |
 | `send(request, options, token)` | `async Result<HttpResponse, HttpError>` | Sends with explicit options; completes when headers arrive. |
 | `close()` | `Result<Unit, HttpError>` | Cancels pending sends and releases pools; idempotent. |
 
 `token` is an optional `Option<CancellationToken>` and defaults to `None`.
+
+## Cookies
+
+Native clients automatically retain cookies received in `Set-Cookie` headers
+and send matching cookies on later requests, including redirects. Each default
+client has its own in-memory jar. Cookies are never persisted to disk.
+Use `HttpClient(use_cookies: false)` to disable both automatic storage and sending.
+
+Supply a `CookieJar` to seed cookies or share a session between clients:
+
+```dream
+import system;
+import system.net;
+
+async fun main(): Result<Unit, HttpError> {
+    let url = Url.parse("https://example.com/").unwrap();
+    if !HttpCapabilities.cookie_jars {
+        return Result.Err(HttpError("ENOTSUP", "this example requires native cookie support"));
+    }
+
+    let jar = CookieJar();
+    jar.store(url, "language=en; Path=/; Secure")?;
+    let client = HttpClient(cookies: Option.Some(jar));
+    let response = client.send(HttpRequest(HttpMethod.Get, url)).await?;
+    let body = response.read_text().await;
+    response.close()?;
+    client.close()?;
+    System.println(body?);
+
+    jar.clear()?;
+    return Result.Ok(Unit());
+}
+```
+
+`store(url, set_cookie)` processes one cookie as received from that URL, including
+replacement, `Max-Age`, and `Expires`. Syntactically invalid cookies and cookies
+with unrelated or public-suffix domains are ignored; invalid header bytes or non-HTTP URLs return
+`EINVAL`. Store separate `Set-Cookie` values separately rather than combining them
+with commas. `header(url)` returns the selected request header, or an empty string.
+Selection respects host/domain, path, expiry, and `Secure` restrictions.
+Cookies with longer paths precede broader paths; equal paths retain creation
+order, including when a cookie is replaced. `__Secure-` cookies require HTTPS and
+`Secure`; `__Host-` additionally requires an explicit root path and no Domain.
+
+An explicit request `Cookie` header takes precedence over automatic selection.
+Response cookies are still stored. Cross-origin redirects strip explicit cookies
+and authorization; jar cookies are selected for the destination. Clearing a
+shared jar affects all its clients, but later responses can store new cookies.
+Closing one client does not clear a jar shared with another client.
+
+Node, browser, and WASI component hosts do not currently expose managed jars.
+Default clients on these hosts remain stateless; explicitly supplying an enabled
+jar makes `send` return `ENOTSUP`. Jar operations also return `ENOTSUP` there.
+Supplying a jar with `use_cookies: false` leaves it accessible but unused.
 
 ## Requests
 
@@ -172,6 +227,7 @@ Inspect `HttpCapabilities` before sending to see which controls the host enforce
 | `connection_timeouts` | A nonzero `connect_timeout_ms` is supported (native). |
 | `redirect_limits` | Explicit redirect limits and redirect responses are observable (native, Node). |
 | `unrestricted_headers` | Browser forbidden-header rules do not apply. |
+| `cookie_jars` | Managed in-memory cookie jars are supported (native). |
 
 Fetch hosts reject nonzero `connect_timeout_ms`, since Fetch exposes no separate
 connection timeout. Browser hosts also require `max_redirects: -1`; the browser

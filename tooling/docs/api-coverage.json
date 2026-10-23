@@ -14457,6 +14457,43 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/net/cookie_jar.dream",
+    "package": "system.net",
+    "page": "reference/api/net-cookie-jar.md",
+    "declarations": [
+      {
+        "signature": "public class CookieJar",
+        "description": "In-memory HTTP cookies shared by one or more native clients. Cookies are never saved to disk. Node, browsers, and WASI components do not expose managed jars; operations return ENOTSUP there.",
+        "line": 5,
+        "page": "reference/api/net-cookie-jar.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty jar. Resource exhaustion is reported by its operations and client sends.",
+        "line": 9,
+        "page": "reference/api/net-cookie-jar.md"
+      },
+      {
+        "signature": "public fun store(url: Url, set_cookie: string): Result<Unit, HttpError>",
+        "description": "Processes one Set-Cookie value as received from `url`, including replacement and expiry. Invalid cookies, unrelated/public-suffix domains, and invalid secure prefixes are ignored. Invalid header bytes or URLs return EINVAL.",
+        "line": 29,
+        "page": "reference/api/net-cookie-jar.md"
+      },
+      {
+        "signature": "public fun header(url: Url): Result<string, HttpError>",
+        "description": "Returns the Cookie header for `url`, or an empty string when no unexpired cookies match. Selection respects host/domain, path, and Secure; HTTP URLs containing credentials return EINVAL. Longer paths come first; equal paths retain creation order when cookies are replaced.",
+        "line": 40,
+        "page": "reference/api/net-cookie-jar.md"
+      },
+      {
+        "signature": "public fun clear(): Result<Unit, HttpError>",
+        "description": "Removes all cookies, including session cookies, for every client sharing this jar. Responses arriving after this call can store new cookies.",
+        "line": 46,
+        "page": "reference/api/net-cookie-jar.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/net/http_body.dream",
     "package": "system.net",
     "page": "reference/api/net-http-body.md",
@@ -14493,21 +14530,27 @@
         "page": "reference/api/net-http-capabilities.md"
       },
       {
+        "signature": "public static get cookie_jars(): bool",
+        "description": "Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).",
+        "line": 9,
+        "page": "reference/api/net-http-capabilities.md"
+      },
+      {
         "signature": "public static get connection_timeouts(): bool",
         "description": "Whether a separate connection-establishment timeout can be configured (native hosts).",
-        "line": 9,
+        "line": 14,
         "page": "reference/api/net-http-capabilities.md"
       },
       {
         "signature": "public static get redirect_limits(): bool",
         "description": "Whether explicit redirect limits and redirect responses are observable (native and Node).",
-        "line": 14,
+        "line": 19,
         "page": "reference/api/net-http-capabilities.md"
       },
       {
         "signature": "public static get unrestricted_headers(): bool",
         "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
-        "line": 19,
+        "line": 24,
         "page": "reference/api/net-http-capabilities.md"
       }
     ]
@@ -14524,27 +14567,33 @@
         "page": "reference/api/net-http-client.md"
       },
       {
-        "signature": "public constructor()",
-        "description": "Creates a client; allocation failures are reported by `send`.",
-        "line": 9,
+        "signature": "public constructor(use_cookies: bool = true, cookies: Option<CookieJar> = Option.None)",
+        "description": "Creates a client with automatic cookies on native hosts by default; pass false to disable them. `cookies` seeds or shares a jar. Without a supplied jar, Node/browser/WASI clients remain stateless. Supplying a jar on an unsupported host makes send return ENOTSUP. Allocation failures surface from send.",
+        "line": 13,
+        "page": "reference/api/net-http-client.md"
+      },
+      {
+        "signature": "public get cookies(): Option<CookieJar>",
+        "description": "The client jar, or None when automatic cookies are disabled or unavailable and no jar was supplied. A supplied jar remains accessible when use_cookies is false, but is not used for requests or responses.",
+        "line": 28,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async fun send( request: HttpRequest, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
         "description": "Sends with default options: a 30-second total deadline and the host redirect policy.",
-        "line": 27,
+        "line": 46,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public async fun send( request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
         "description": "Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.",
-        "line": 38,
+        "line": 57,
         "page": "reference/api/net-http-client.md"
       },
       {
         "signature": "public fun close(): Result<Unit, HttpError>",
         "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
-        "line": 86,
+        "line": 115,
         "page": "reference/api/net-http-client.md"
       }
     ]

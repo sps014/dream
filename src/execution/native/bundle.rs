@@ -101,7 +101,11 @@ mod tests {
             &mut command,
             Path::new("/toolchain"),
             None,
-            &[HostCapability::Core, HostCapability::Crypto],
+            &[
+                HostCapability::Core,
+                HostCapability::Crypto,
+                HostCapability::Net,
+            ],
             &dream_abi::target::TargetSpec::host(),
             false,
         );
@@ -109,7 +113,11 @@ mod tests {
             .get_args()
             .map(|arg| arg.to_string_lossy())
             .collect();
-        for capability in [HostCapability::Core, HostCapability::Crypto] {
+        for capability in [
+            HostCapability::Core,
+            HostCapability::Crypto,
+            HostCapability::Net,
+        ] {
             let symbol = capability.abi_marker();
             let required = if cfg!(windows) {
                 format!("-Wl,/include:{symbol}")

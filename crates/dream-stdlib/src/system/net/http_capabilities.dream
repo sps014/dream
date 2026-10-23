@@ -5,6 +5,11 @@ public static class HttpCapabilities {
     @runtime("netCapabilities")
     static extern fun flags_host(): int;
 
+    /// Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).
+    public static get cookie_jars(): bool {
+        return (HttpCapabilities.flags_host() & 16) != 0;
+    }
+
     /// Whether a separate connection-establishment timeout can be configured (native hosts).
     public static get connection_timeouts(): bool {
         return (HttpCapabilities.flags_host() & 1) != 0;

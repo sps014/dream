@@ -12,6 +12,14 @@ Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send 
 public static class HttpCapabilities
 ```
 
+## `cookie_jars`
+
+Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).
+
+```dream
+public static get cookie_jars(): bool
+```
+
 ## `connection_timeouts`
 
 Whether a separate connection-establishment timeout can be configured (native hosts).

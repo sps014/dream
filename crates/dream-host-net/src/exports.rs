@@ -10,8 +10,24 @@ pub unsafe extern "C" fn netDomainToAscii(domain: DreamPtr) -> DreamPtr {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn netClientCreate() -> i32 {
-    crate::http::client_create()
+pub extern "C" fn netClientCreate(cookie_jar: i32) -> i32 {
+    crate::http::client_create(cookie_jar)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netCookieJarCreate() -> i32 {
+    crate::cookies::create()
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn netCookieJarClose(id: i32) {
+    crate::cookies::close(id);
+}
+/// # Safety
+/// `request` must identify a readable guest string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn netCookieJarControl(id: i32, request: DreamPtr) -> DreamPtr {
+    alloc_string(&crate::cookies::control(id, &unsafe {
+        read_string(request)
+    }))
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn netClientClose(id: i32) {
@@ -48,7 +64,7 @@ pub extern "C" fn netOperationClaim(id: i32) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn netCapabilities() -> i32 {
-    15
+    31
 }
 
 #[unsafe(no_mangle)]

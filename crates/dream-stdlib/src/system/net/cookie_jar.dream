@@ -1,0 +1,92 @@
+module system.net;
+
+/// In-memory HTTP cookies shared by one or more native clients. Cookies are never saved to disk.
+/// Node, browsers, and WASI components do not expose managed jars; operations return ENOTSUP there.
+public class CookieJar {
+    internal id: int;
+
+    /// Creates an empty jar. Resource exhaustion is reported by its operations and client sends.
+    public constructor() {
+        this.id = CookieJar.create_host();
+    }
+
+    del() {
+        CookieJar.close_host(this.id);
+    }
+
+    @runtime("netCookieJarCreate")
+    static extern fun create_host(): int;
+
+    @runtime("netCookieJarClose")
+    static extern fun close_host(id: int): void;
+
+    @runtime("netCookieJarControl")
+    static extern fun control_host(id: int, borrow request: string): string;
+
+    /// Processes one Set-Cookie value as received from `url`, including replacement and expiry.
+    /// Invalid cookies, unrelated/public-suffix domains, and invalid secure prefixes are ignored.
+    /// Invalid header bytes or URLs return EINVAL.
+    public fun store(url: Url, set_cookie: string): Result<Unit, HttpError> {
+        let result = this.control("store", url.to_string(), set_cookie);
+        if result.is_err() {
+            return Result.Err(result.unwrap_err());
+        }
+        return Result.Ok(Unit());
+    }
+
+    /// Returns the Cookie header for `url`, or an empty string when no unexpired cookies match.
+    /// Selection respects host/domain, path, and Secure; HTTP URLs containing credentials return EINVAL.
+    /// Longer paths come first; equal paths retain creation order when cookies are replaced.
+    public fun header(url: Url): Result<string, HttpError> {
+        return this.control("header", url.to_string(), "");
+    }
+
+    /// Removes all cookies, including session cookies, for every client sharing this jar.
+    /// Responses arriving after this call can store new cookies.
+    public fun clear(): Result<Unit, HttpError> {
+        let result = this.control("clear", "", "");
+        if result.is_err() {
+            return Result.Err(result.unwrap_err());
+        }
+        return Result.Ok(Unit());
+    }
+
+    fun control(action: string, url: string, cookie: string): Result<string, HttpError> {
+        if !HttpCapabilities.cookie_jars {
+            return Result.Err(
+                HttpError("ENOTSUP", "managed cookie jars are unavailable on this host")
+            );
+        }
+        if this.id <= 0 {
+            return Result.Err(HttpError("ELIMIT", "cookie jar is unavailable"));
+        }
+        let request = JsonValue.dict();
+        request["action"] = JsonValue.from_string(action);
+        request["url"] = JsonValue.from_string(url);
+        request["cookie"] = JsonValue.from_string(cookie);
+        let parsed = Json.deserialize<JsonValue>(
+            CookieJar.control_host(this.id, Json.serialize(request))
+        );
+        if parsed.is_err() {
+            return Result.Err(HttpError("EIO", "invalid cookie jar response"));
+        }
+        let response = parsed.unwrap();
+        let code = response.get("code").unwrap_or(JsonValue.null()).as_string();
+        if code.is_some() {
+            return Result.Err(
+                HttpError(
+                    code.unwrap(),
+                    response.get("message")
+                        .unwrap_or(JsonValue.null())
+                        .as_string()
+                        .unwrap_or("cookie jar failed")
+                )
+            );
+        }
+        let value = response.get("value").unwrap_or(JsonValue.null()).as_string();
+        if value.is_none() {
+            return Result.Err(HttpError("EIO", "invalid cookie jar response"));
+        }
+        return Result.Ok(value.unwrap());
+    }
+}

@@ -14,6 +14,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/net/cookie_jar.dream",
+            include_str!("../system/net/cookie_jar.dream"),
+        ),
+        (
             "<std>/system/net/http_method.dream",
             include_str!("../system/net/http_method.dream"),
         ),

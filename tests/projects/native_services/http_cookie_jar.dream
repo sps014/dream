@@ -1,0 +1,40 @@
+import system;
+import system.net;
+import system.testing;
+
+@test
+fun http_cookie_jar(): void {
+    let jar = CookieJar();
+    let origin = Url.parse("https://example.test/private/page").unwrap();
+    if !HttpCapabilities.cookie_jars {
+        Assert.eq(jar.store(origin, "name=value").unwrap_err().code(), "ENOTSUP");
+        Assert.eq(jar.header(origin).unwrap_err().code(), "ENOTSUP");
+        Assert.eq(jar.clear().unwrap_err().code(), "ENOTSUP");
+        Assert.is_true(HttpClient().cookies.is_none());
+        return;
+    }
+
+    jar.store(origin, "name=old; Path=/private; Secure").unwrap();
+    jar.store(origin, "name=value; Path=/private; Secure").unwrap();
+    Assert.eq(jar.header(origin).unwrap(), "name=value");
+    Assert.eq(jar.header(Url.parse("https://example.test/public").unwrap()).unwrap(), "");
+    Assert.eq(jar.header(Url.parse("https://example.test/private-other").unwrap()).unwrap(), "");
+    Assert.eq(jar.header(Url.parse("http://example.test/private").unwrap()).unwrap(), "");
+    Assert.eq(jar.header(Url.parse("https://other.test/private").unwrap()).unwrap(), "");
+    jar.store(origin, "name=; Path=/private; Max-Age=0").unwrap();
+    Assert.eq(jar.header(origin).unwrap(), "");
+
+    jar.store(origin, "domain=1; Domain=example.test; Path=/").unwrap();
+    Assert.eq(jar.header(Url.parse("https://child.example.test/").unwrap()).unwrap(), "domain=1");
+    Assert.eq(jar.header(Url.parse("file:///tmp/example").unwrap()).unwrap_err().code(), "EINVAL");
+    Assert.eq(jar.store(origin, "bad=1\r\nInjected: 1").unwrap_err().code(), "EINVAL");
+
+    let client = HttpClient(cookies: Option.Some(jar));
+    Assert.eq(client.cookies.unwrap().header(origin).unwrap(), "domain=1");
+    jar.clear().unwrap();
+    Assert.eq(client.cookies.unwrap().header(origin).unwrap(), "");
+    client.close().unwrap();
+    let disabled = HttpClient(use_cookies: false);
+    Assert.is_true(disabled.cookies.is_none());
+    disabled.close().unwrap();
+}

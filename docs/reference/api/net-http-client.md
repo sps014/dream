@@ -14,10 +14,18 @@ public class HttpClient
 
 ## `constructor`
 
-Creates a client; allocation failures are reported by `send`.
+Creates a client with automatic cookies on native hosts by default; pass false to disable them. `cookies` seeds or shares a jar. Without a supplied jar, Node/browser/WASI clients remain stateless. Supplying a jar on an unsupported host makes send return ENOTSUP. Allocation failures surface from send.
 
 ```dream
-public constructor()
+public constructor(use_cookies: bool = true, cookies: Option<CookieJar> = Option.None)
+```
+
+## `cookies`
+
+The client jar, or None when automatic cookies are disabled or unavailable and no jar was supplied. A supplied jar remains accessible when use_cookies is false, but is not used for requests or responses.
+
+```dream
+public get cookies(): Option<CookieJar>
 ```
 
 ## `send`

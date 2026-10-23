@@ -3,6 +3,7 @@
 For usage and target behavior, read the [URL guide](../../library/io/url.md) and
 [HTTP guide](../../library/io/http.md).
 
+- [CookieJar](net-cookie-jar.md)
 - [HttpBody](net-http-body.md)
 - [HttpCapabilities](net-http-capabilities.md)
 - [HttpClient](net-http-client.md)

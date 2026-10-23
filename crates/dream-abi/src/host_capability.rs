@@ -59,7 +59,7 @@ impl HostCapability {
     }
 
     pub fn abi_marker(self) -> String {
-        let version = 3;
+        let version = if self == Self::Net { 4 } else { 3 };
         format!("dream_host_{}_abi_v{version}", self.name())
     }
 
@@ -155,6 +155,12 @@ impl HostManifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_cookie_api_requires_its_updated_marker() {
+        assert_eq!(HostCapability::Net.abi_marker(), "dream_host_net_abi_v4");
+        assert_eq!(HostCapability::Core.abi_marker(), "dream_host_core_abi_v3");
+    }
 
     #[test]
     fn manifest_requires_inventory_and_canonicalizes_order() {

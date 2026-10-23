@@ -21,6 +21,7 @@ use crate::socket_operations::{Failure, runtime};
 type ClientPools = BTreeMap<(u64, i32), Client>;
 struct ClientState {
     pools: Mutex<ClientPools>,
+    cookies: Option<Arc<crate::cookies::CookieJar>>,
     closed: watch::Sender<bool>,
 }
 struct BodyState {
@@ -106,16 +107,30 @@ impl ClientState {
         if request.connect_timeout_ms > 0 {
             builder = builder.connect_timeout(Duration::from_millis(request.connect_timeout_ms));
         }
+        if let Some(cookies) = &self.cookies {
+            builder = builder.cookie_provider(cookies.clone());
+        }
         let client = builder.build().map_err(transport)?;
         pools.insert(key, client.clone());
         Ok(client)
     }
 }
-pub(crate) fn client_create() -> i32 {
+pub(crate) fn client_create(cookie_jar: i32) -> i32 {
+    let cookies = if cookie_jar < 0 {
+        None
+    } else if cookie_jar == 0 {
+        Some(Arc::new(crate::cookies::CookieJar::default()))
+    } else {
+        let Some(jar) = crate::cookies::get(cookie_jar) else {
+            return 0;
+        };
+        Some(jar)
+    };
     lock(registry())
         .clients
         .insert(Arc::new(ClientState {
             pools: Mutex::default(),
+            cookies,
             closed: watch::channel(false).0,
         }))
         .unwrap_or(0)

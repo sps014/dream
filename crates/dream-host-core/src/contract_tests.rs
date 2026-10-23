@@ -139,6 +139,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/audio.js"),
     include_str!("../../../runtime/src/hosts/audio_media.js"),
     include_str!("../../../runtime/src/hosts/audio_capture.js"),
+    include_str!("../../../runtime/src/hosts/audio_decoder.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
 

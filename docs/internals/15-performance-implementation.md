@@ -109,7 +109,8 @@ dispatch ABI. A scope retains one cancellation token instead of constructing and
 token on every access. Native and JS worker hosts use the same session/dispatch declarations.
 
 Parked native worker threads use individual condition-variable mutexes; the pool mutex protects
-only idle-list membership, so waking workers do not compete with the rest of a submission burst.
+idle-list membership, the run queue and the running count, so waking workers do not compete with
+the rest of a submission burst.
 Foreign completion queues wake their owner on the empty-to-nonempty transition and detach queued
 batches under one scheduler lock. Completion claiming, publication and scheduler retains keep
 their existing synchronization and ownership rules.
@@ -235,8 +236,8 @@ Measured and rejected:
 - **Batched submission.** Each child owns a thread and its own condition variable, so batching
   saves only uncontended pool-lock operations, which never appeared in profiles. The remaining
   cost is one wake syscall per child. A single empty child round-trips in about 23 µs; 16 empty
-  children take about 133 µs per batch. Fewer wakes need a bounded shared queue, which conflicts
-  with the per-session thread contract, or spinning, which stays forbidden by default.
+  children take about 133 µs per batch. The shared run queue in the task handoff round below
+  removes most of those wakes once the CPU limit is reached; spinning stays forbidden by default.
 
 ### Task handoff round
 
@@ -271,10 +272,30 @@ Measured and rejected:
   four spinners) gained about 10% with all CPUs available but made 16-job batches 2–3x slower on
   four CPUs, where spinning threads hold cores that runnable jobs need.
 
-The remaining gap on narrow machines is structural: every child is handed to its own pool thread,
-which must be woken and scheduled, while .NET keeps about one thread per core draining a shared
-queue without parking between items. Closing it needs the bounded shared queue noted under
-batched submission, with a policy for jobs that block on each other.
+The remaining gap on narrow machines came from handing every child its own pool thread, which
+must be woken and scheduled, while .NET keeps about one thread per core draining a shared queue
+without parking between items. The shared run queue closes most of it:
+
+- **Bounded running threads.** Unblocked pool threads are limited to the CPUs in the process
+  affinity mask. Below the limit a session still gets an idle or new thread at once; at the limit
+  it joins a FIFO run queue, and a finishing thread takes the next queued session without parking.
+  Isolated-thread mode bypasses the queue, and terminating a queued session unlinks it without
+  waiting for a thread.
+- **Blocking lends the slot.** Pool threads install a thread-local hook that scheduler parks,
+  `Lock` and `Semaphore` waits, session-stop waits and callback waits call on entry and exit.
+  A blocked thread leaves the running count and starts queued work, so jobs that wait on queued
+  jobs through those primitives cannot deadlock the pool. A resumed thread may exceed the limit
+  briefly; it retires instead of taking more queued work.
+- **Starvation monitor.** Jobs that spin on each other through plain memory are invisible to the
+  hook. A lazily started monitor admits one more thread whenever the queue is saturated and made
+  no progress for 50 ms; the extra capacity is withdrawn once the queue drains.
+
+Paired against the pre-publication-round runtime, 16-job empty batches drop to 0.87x on all CPUs
+and 0.51–0.65x on four, `task_fanout_64/256` to 0.72–0.75x on all CPUs and 0.33–0.47x on four,
+and spawn and pool round trips to 0.77–0.92x. Against .NET, `task_parallel` moves from 0.89x to
+0.76x on all CPUs and from 1.40–1.50x to 1.10–1.19x on four. Run-to-run variance on four CPUs is
+dominated by machine power states: a single process moves between plateaus 2–3x apart, so these
+rows need interleaved rounds rather than a single median.
 
 Suspension-aware `RcElision` stays a design, not an implementation. Each owning local live across
 an `Await` is a frame slot the scheduler may drop through the future's drop function on

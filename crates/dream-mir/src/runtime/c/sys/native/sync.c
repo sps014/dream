@@ -5,6 +5,13 @@
 #include <stdlib.h>
 
 static dream_mutex locks_mu = DREAM_MUTEX_INIT;
+static _Thread_local void (*blocking_hook)(int entering);
+
+void dream_thread_set_blocking_hook(void (*hook)(int entering)) { blocking_hook = hook; }
+
+void dream_thread_blocking(int entering) {
+    if (blocking_hook) { blocking_hook(entering); }
+}
 
 #define lock_failure(message) do { \
     dream_mutex_unlock(&locks_mu); \
@@ -79,10 +86,14 @@ void dream_lock_acquire(dream_ptr target) {
     dream_thread_id self = dream_thread_self();
     dream_mutex_lock(&locks_mu);
     LockState *state = lock_state(target);
-    while (state->depth && !dream_thread_id_eq(state->owner, self)) {
-        state->waiters += 1;
-        dream_cond_wait(&state->changed, &locks_mu);
-        state->waiters -= 1;
+    if (state->depth && !dream_thread_id_eq(state->owner, self)) {
+        dream_thread_blocking(1);
+        while (state->depth && !dream_thread_id_eq(state->owner, self)) {
+            state->waiters += 1;
+            dream_cond_wait(&state->changed, &locks_mu);
+            state->waiters -= 1;
+        }
+        dream_thread_blocking(0);
     }
     lock_take(state, self);
     dream_mutex_unlock(&locks_mu);
@@ -131,25 +142,37 @@ int32_t dream_lock_try_acquire_for(dream_ptr target, int32_t timeout_ms) {
     dream_thread_id self = dream_thread_self();
     dream_mutex_lock(&locks_mu);
     LockState *state = lock_state(target);
+    int waited = 0;
     while (state->depth && !dream_thread_id_eq(state->owner, self)) {
         int64_t remaining = deadline - dream_monotonic_ns();
         if (remaining <= 0) {
+            if (waited) { dream_thread_blocking(0); }
             dream_mutex_unlock(&locks_mu);
             return 0;
+        }
+        if (!waited) {
+            waited = 1;
+            dream_thread_blocking(1);
         }
         state->waiters += 1;
         dream_cond_wait_ns(&state->changed, &locks_mu, remaining);
         state->waiters -= 1;
     }
+    if (waited) { dream_thread_blocking(0); }
     lock_take(state, self);
     dream_mutex_unlock(&locks_mu);
     return 1;
 }
 
 void dream_semaphore_acquire(dream_ptr semaphore) {
+    if (dream_semaphore_try_acquire(semaphore)) {
+        return;
+    }
+    dream_thread_blocking(1);
     while (!dream_semaphore_try_acquire(semaphore)) {
         dream_thread_yield();
     }
+    dream_thread_blocking(0);
 }
 
 void dream_semaphore_release(dream_ptr semaphore) {
@@ -167,14 +190,21 @@ int32_t dream_semaphore_try_acquire_for(dream_ptr semaphore, int32_t timeout_ms)
     if (timeout_ms <= 0) {
         return dream_semaphore_try_acquire(semaphore);
     }
+    if (dream_semaphore_try_acquire(semaphore)) {
+        return 1;
+    }
     deadline = monotonic_ms() + timeout_ms;
+    dream_thread_blocking(1);
+    int acquired = 1;
     while (!dream_semaphore_try_acquire(semaphore)) {
         if (monotonic_ms() >= deadline) {
-            return 0;
+            acquired = 0;
+            break;
         }
         dream_thread_yield();
     }
-    return 1;
+    dream_thread_blocking(0);
+    return acquired;
 }
 
 int32_t dream_js_call(int32_t target, int32_t via, dream_ptr method, int32_t argc) {

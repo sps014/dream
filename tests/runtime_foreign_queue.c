@@ -17,6 +17,7 @@ static void foreign_node_put(Node *n) { __atomic_fetch_sub(&node_live, 1, __ATOM
 void dream_free(dream_ptr ptr) { (void)ptr; abort(); }
 int dream_rc_last_observed(dream_ptr ptr) { (void)ptr; abort(); }
 void dream_panic(dream_ptr message) { (void)message; abort(); }
+void dream_thread_blocking(int entering) { (void)entering; }
 void dream_publish(dream_ptr f) {
     assert(f);
     __atomic_fetch_or(dream_tag_word(f), TAG_SHARED, __ATOMIC_RELAXED);

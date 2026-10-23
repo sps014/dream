@@ -6,6 +6,11 @@
 
 #include <stdint.h>
 
+/* Brackets a wait on work another thread produces (dream_thread_blocking(1) before, (0) after),
+ * so a Task pool thread can lend its CPU slot to queued sessions. A no-op on other threads. */
+void dream_thread_blocking(int entering);
+void dream_thread_set_blocking_hook(void (*hook)(int entering));
+
 #if defined(_WIN32)
 
 #ifndef WIN32_LEAN_AND_MEAN

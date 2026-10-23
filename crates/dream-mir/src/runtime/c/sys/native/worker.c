@@ -1,8 +1,15 @@
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
 #include "dream_core.h"
 #include "dream_thread.h"
 
 #include <limits.h>
 #include <stdlib.h>
+#if !defined(_WIN32)
+#include <sched.h>
+#include <unistd.h>
+#endif
 
 extern dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg);
 static dream_mutex reg_mu = DREAM_MUTEX_INIT;
@@ -39,6 +46,10 @@ typedef struct Worker {
     /* A session holds a pool thread only while it has work or thread-bound callbacks, so
      * stopping an idle session never waits on a wake-up and join. */
     int bound;
+    /* Bound but waiting in the pool's run queue for a thread; guarded by pool_mu. */
+    int queued;
+    struct Worker *run_prev;
+    struct Worker *run_next;
 } Worker;
 
 /* Pool threads outlive sessions: thread creation dominated short Task fan-outs, so a thread
@@ -54,6 +65,9 @@ typedef struct PoolThread {
 enum { POOL_IDLE, POOL_ASSIGNED, POOL_PARKED };
 
 #define POOL_IDLE_MAX 64u
+/* A saturated run queue that dequeues nothing for this long admits one more thread, so jobs
+ * that spin on each other without an instrumented wait still make progress. */
+#define POOL_STARVATION_NS 50000000LL
 /* Dream code keeps no thread-local state a later session could observe, but C linked into the
  * program may (errno included), and every Task starts on a thread of its own. Set before the
  * first worker starts. */
@@ -72,9 +86,19 @@ static WorkerSlot *slots;
 static uint32_t slot_count, slot_capacity;
 static uint32_t *free_ring;
 static uint32_t free_head, free_len;
+/* Sessions run on at most `pool_limit` (the usable CPU count) unblocked threads, plus threads the
+ * starvation monitor admitted. Below the limit a session gets a thread at once; at the limit it
+ * waits in a FIFO run queue that finishing threads drain without parking. A thread blocked in an
+ * instrumented wait (scheduler park, lock, semaphore, session stop) gives up its slot, so jobs
+ * waiting on queued jobs cannot deadlock the pool. Isolated threads bypass all of this. */
 static dream_mutex pool_mu = DREAM_MUTEX_INIT;
 static PoolThread *idle_threads;
 static unsigned idle_count;
+static unsigned pool_running, pool_limit, pool_injected;
+static Worker *run_head, *run_tail;
+static uint64_t run_dequeues;
+static dream_cond monitor_cv = DREAM_COND_INIT;
+static int monitor_started, monitor_watching;
 static void destroy_worker(Worker *w);
 
 static void release_worker(Worker *w) {
@@ -207,7 +231,9 @@ static WorkerCompletion run_worker(Worker *w) {
                 break;
             }
             w->parked = 1;
+            dream_thread_blocking(1);
             dream_cond_wait(&w->cv, &w->mu);
+            dream_thread_blocking(0);
             w->parked = 0;
         }
         if (!w->head || w->dead) {
@@ -271,13 +297,187 @@ static WorkerCompletion run_worker(Worker *w) {
     return completed;
 }
 
+static unsigned pool_cpu_count(void) {
+#if defined(_WIN32)
+    DWORD_PTR process_mask, system_mask;
+    if (GetProcessAffinityMask(GetCurrentProcess(), &process_mask, &system_mask) && process_mask) {
+        return (unsigned)__builtin_popcountll((unsigned long long)process_mask);
+    }
+    DWORD active = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    return active ? (unsigned)active : 1u;
+#else
+#if defined(__linux__) && defined(CPU_COUNT)
+    cpu_set_t set;
+    if (sched_getaffinity(0, sizeof(set), &set) == 0 && CPU_COUNT(&set) > 0) {
+        return (unsigned)CPU_COUNT(&set);
+    }
+#endif
+    long online = sysconf(_SC_NPROCESSORS_ONLN);
+    return online > 0 ? (unsigned)online : 1u;
+#endif
+}
+
+/* Caller holds pool_mu. */
+static unsigned pool_capacity_locked(void) {
+    if (!pool_limit) { pool_limit = pool_cpu_count(); }
+    return pool_limit + pool_injected;
+}
+
+static void run_push_locked(Worker *w) {
+    w->queued = 1;
+    w->run_next = NULL;
+    w->run_prev = run_tail;
+    if (run_tail) { run_tail->run_next = w; } else { run_head = w; }
+    run_tail = w;
+}
+
+static void run_unlink_locked(Worker *w) {
+    if (w->run_prev) { w->run_prev->run_next = w->run_next; } else { run_head = w->run_next; }
+    if (w->run_next) { w->run_next->run_prev = w->run_prev; } else { run_tail = w->run_prev; }
+    w->run_prev = w->run_next = NULL;
+    w->queued = 0;
+}
+
+static Worker *run_pop_locked(void) {
+    Worker *w = run_head;
+    if (w) {
+        run_unlink_locked(w);
+        run_dequeues++;
+    }
+    return w;
+}
+
+static DREAM_THREAD_PROC(worker_main);
+
+/* Starts w on an idle or new thread; the caller has already counted it in pool_running unless
+ * threads are isolated. Thread creation never takes pool_mu, so callers may hold it. */
+static int start_thread(Worker *w, int idle_ok) {
+    PoolThread *pt = idle_ok ? idle_threads : NULL;
+    if (pt) {
+        idle_threads = pt->next;
+        idle_count--;
+        /* A removed idle thread is reachable only from here, so the release exchange
+         * publishes `assigned` to it. The thread may run and exit before the wake; futex and
+         * WaitOnAddress only hash the address, so waking a freed word is harmless. */
+        pt->assigned = w;
+        if (__atomic_exchange_n(&pt->state, POOL_ASSIGNED, __ATOMIC_RELEASE) == POOL_PARKED) {
+            dream_word_wake_one(&pt->state);
+        }
+        return 0;
+    }
+    pt = calloc(1, sizeof(*pt));
+    if (!pt) {
+        return -1;
+    }
+    pt->assigned = w;
+    pt->state = POOL_ASSIGNED;
+    dream_thread th;
+    if (dream_thread_start(&th, worker_main, pt) != 0) {
+        free(pt);
+        return -1;
+    }
+    dream_thread_release(th);
+    return 0;
+}
+
+/* Caller holds pool_mu and has made room under the capacity. A failed start leaves the session
+ * at the queue head for the next finishing thread or monitor pass. */
+static void start_queued_locked(void) {
+    Worker *w = run_pop_locked();
+    if (!w) { return; }
+    pool_running++;
+    if (start_thread(w, 1) != 0) {
+        pool_running--;
+        run_dequeues--;
+        w->queued = 1;
+        w->run_prev = NULL;
+        w->run_next = run_head;
+        if (run_head) { run_head->run_prev = w; } else { run_tail = w; }
+        run_head = w;
+    }
+}
+
+static int monitor_needed_locked(void) {
+    return run_head != NULL && pool_running >= pool_capacity_locked();
+}
+
+static DREAM_THREAD_PROC(pool_monitor) {
+    (void)arg;
+    dream_mutex_lock(&pool_mu);
+    for (;;) {
+        while (!monitor_needed_locked()) {
+            monitor_watching = 0;
+            dream_cond_wait(&monitor_cv, &pool_mu);
+        }
+        monitor_watching = 1;
+        uint64_t seen = run_dequeues;
+        dream_cond_wait_ns(&monitor_cv, &pool_mu, POOL_STARVATION_NS);
+        if (monitor_needed_locked() && run_dequeues == seen) {
+            pool_injected++;
+            start_queued_locked();
+        }
+    }
+    return 0;
+}
+
+/* Caller holds pool_mu after queueing a session at capacity. Only the transition into watching
+ * signals, so a saturated burst costs the monitor one wake. Without a monitor thread the pool
+ * still drains; it only loses protection against jobs spinning on each other. */
+static void monitor_watch_locked(void) {
+    if (!monitor_started) {
+        dream_thread th;
+        if (dream_thread_start(&th, pool_monitor, NULL) == 0) {
+            dream_thread_release(th);
+            monitor_started = 1;
+            monitor_watching = 1;
+        }
+        return;
+    }
+    if (!monitor_watching) {
+        monitor_watching = 1;
+        dream_cond_signal(&monitor_cv);
+    }
+}
+
+static void pool_blocking(int entering) {
+    dream_mutex_lock(&pool_mu);
+    if (entering) {
+        pool_running--;
+        if (run_head && pool_running < pool_capacity_locked()) {
+            start_queued_locked();
+        }
+    } else {
+        pool_running++;
+    }
+    dream_mutex_unlock(&pool_mu);
+}
+
 static DREAM_THREAD_PROC(worker_main) {
     PoolThread *pt = arg;
+    if (!isolate_threads) {
+        dream_thread_set_blocking_hook(pool_blocking);
+    }
     for (;;) {
         Worker *w = pt->assigned;
         WorkerCompletion completed = run_worker(w);
         dream_mutex_lock(&pool_mu);
-        if (isolate_threads || idle_count >= POOL_IDLE_MAX) {
+        if (isolate_threads) {
+            dream_mutex_unlock(&pool_mu);
+            dream_complete_foreign_owned(completed.future, completed.reply);
+            break;
+        }
+        /* A thread over capacity (after a blocked thread resumed) leaves queued work to others. */
+        if (run_head && pool_running <= pool_capacity_locked()) {
+            pt->assigned = run_pop_locked();
+            dream_mutex_unlock(&pool_mu);
+            dream_complete_foreign_owned(completed.future, completed.reply);
+            continue;
+        }
+        pool_running--;
+        if (!run_head) {
+            pool_injected = 0;
+        }
+        if (idle_count >= POOL_IDLE_MAX) {
             dream_mutex_unlock(&pool_mu);
             dream_complete_foreign_owned(completed.future, completed.reply);
             break;
@@ -301,41 +501,47 @@ static DREAM_THREAD_PROC(worker_main) {
             state = __atomic_load_n(&pt->state, __ATOMIC_ACQUIRE);
         }
     }
+    dream_thread_set_blocking_hook(NULL);
     free(pt);
     dream_heap_thread_exit();
     return 0;
 }
 
 static int assign_thread(Worker *w) {
+    if (isolate_threads) {
+        return start_thread(w, 0);
+    }
     dream_mutex_lock(&pool_mu);
-    PoolThread *pt = idle_threads;
-    if (pt) {
-        idle_threads = pt->next;
-        idle_count--;
+    if (pool_running >= pool_capacity_locked()) {
+        run_push_locked(w);
+        monitor_watch_locked();
         dream_mutex_unlock(&pool_mu);
-        /* A removed idle thread is reachable only from here, so the release exchange
-         * publishes `assigned` to it. The thread may run and exit before the wake; futex and
-         * WaitOnAddress only hash the address, so waking a freed word is harmless. */
-        pt->assigned = w;
-        if (__atomic_exchange_n(&pt->state, POOL_ASSIGNED, __ATOMIC_RELEASE) == POOL_PARKED) {
-            dream_word_wake_one(&pt->state);
-        }
         return 0;
     }
+    pool_running++;
+    int started = start_thread(w, 1);
+    if (started != 0) {
+        pool_running--;
+        /* Running threads will reach the queue; only an empty pool has to report failure. */
+        if (pool_running > 0) {
+            run_push_locked(w);
+            started = 0;
+        }
+    }
     dream_mutex_unlock(&pool_mu);
-    pt = calloc(1, sizeof(*pt));
-    if (!pt) {
-        return -1;
+    return started;
+}
+
+/* Takes a session that is still waiting for a thread out of the queue, so stopping it never
+ * waits behind busy threads. Returns whether the caller now owns the thread reference. */
+static int unqueue_worker(Worker *w) {
+    dream_mutex_lock(&pool_mu);
+    int queued = w->queued;
+    if (queued) {
+        run_unlink_locked(w);
     }
-    pt->assigned = w;
-    pt->state = POOL_ASSIGNED;
-    dream_thread th;
-    if (dream_thread_start(&th, worker_main, pt) != 0) {
-        free(pt);
-        return -1;
-    }
-    dream_thread_release(th);
-    return 0;
+    dream_mutex_unlock(&pool_mu);
+    return queued;
 }
 
 int32_t workerSpawn(int32_t one_shot) {
@@ -495,9 +701,19 @@ void workerTerminate(int32_t id) {
         return;
     }
     stop_worker(w);
+    if (unqueue_worker(w)) {
+        dream_mutex_lock(&w->mu);
+        w->bound = 0;
+        dream_mutex_unlock(&w->mu);
+        release_worker(w);
+    }
     dream_mutex_lock(&w->mu);
-    while (!w->detached && w->bound) {
-        dream_cond_wait(&w->cv, &w->mu);
+    if (!w->detached && w->bound) {
+        dream_thread_blocking(1);
+        while (!w->detached && w->bound) {
+            dream_cond_wait(&w->cv, &w->mu);
+        }
+        dream_thread_blocking(0);
     }
     dream_mutex_unlock(&w->mu);
     release_worker(w);

@@ -78,15 +78,19 @@ static void scheduler_park(int64_t timeout_ns) {
         void (*park)(int64_t, void *) = sched.park;
         void *context = sched.park_context;
         dream_mutex_unlock(&sched.mu);
+        dream_thread_blocking(1);
         park(timeout_ns, context);
+        dream_thread_blocking(0);
         dream_mutex_lock(&sched.mu);
     } else {
         sched.parked = 1;
+        dream_thread_blocking(1);
         if (timeout_ns < 0) {
             dream_cond_wait(&sched.cv, &sched.mu);
         } else {
             dream_cond_wait_ns(&sched.cv, &sched.mu, timeout_ns);
         }
+        dream_thread_blocking(0);
         sched.parked = 0;
     }
 }

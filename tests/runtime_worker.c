@@ -103,6 +103,8 @@ static dream_mutex test_mu = DREAM_MUTEX_INIT;
 static dream_cond test_cv = DREAM_COND_INIT;
 static int entered, proceed;
 static int32_t self_id;
+static int32_t permits;
+static int spin_flag;
 
 static int32_t paused_id;
 static void pause_acquired(void *worker) {
@@ -124,6 +126,14 @@ dream_ptr dream_worker_invoke(int32_t fn, dream_ptr env, dream_ptr arg) {
         dream_mutex_unlock(&test_mu);
     } else if (fn == 9) {
         workerTerminate(self_id);
+    } else if (fn == 10) {
+        dream_semaphore_acquire((dream_ptr)&permits);
+    } else if (fn == 11) {
+        dream_semaphore_release((dream_ptr)&permits);
+    } else if (fn == 12) {
+        while (!__atomic_load_n(&spin_flag, __ATOMIC_ACQUIRE)) { dream_thread_yield(); }
+    } else if (fn == 13) {
+        __atomic_store_n(&spin_flag, 1, __ATOMIC_RELEASE);
     } else { assert(fn == 7); }
     if (env) { assert(dream_str_len(env) == 3); }
     return arg;
@@ -426,6 +436,91 @@ static void generational_ids(void) {
     assert(live_workers() == 0);
 }
 
+static void assert_pool_drained(void) {
+    dream_mutex_lock(&pool_mu);
+    assert(pool_running == 0 && !run_head && pool_injected == 0);
+    dream_mutex_unlock(&pool_mu);
+}
+
+static void post_pair(int32_t first_fn, int32_t second_fn) {
+    TestCompletion first, second;
+    int32_t first_id = workerSpawn(1), second_id = workerSpawn(1);
+    post_job(&first, first_id, first_fn, 0, 0);
+    post_job(&second, second_id, second_fn, 0, 0);
+    assert(completion_wait(&first) == 0);
+    assert(completion_wait(&second) == 0);
+    workerTerminate(first_id);
+    workerTerminate(second_id);
+    assert_pool_drained();
+}
+
+/* One CPU slot: queued bursts drain, an instrumented wait lends its slot to the job it waits on,
+ * a queued session terminates without waiting for the busy thread, and the monitor rescues jobs
+ * that spin on each other. The first three run with no monitor, so only the hook can progress. */
+static void pool_saturation(void) {
+    dream_mutex_lock(&pool_mu);
+    assert(!monitor_started);
+    pool_limit = 1;
+    monitor_started = 1;
+    dream_mutex_unlock(&pool_mu);
+
+    TestCompletion burst[20];
+    dream_ptr messages[20];
+    int32_t ids[20];
+    for (int i = 0; i < 20; ++i) {
+        messages[i] = dream_utf8_to_string("burst");
+        ids[i] = workerSpawn(1);
+        post_job(&burst[i], ids[i], 7, 0, messages[i]);
+    }
+    for (int i = 0; i < 20; ++i) {
+        dream_ptr reply = completion_wait(&burst[i]);
+        assert(reply == messages[i]);
+        dream_release(reply);
+        dream_release(messages[i]);
+        workerTerminate(ids[i]);
+    }
+    assert_pool_drained();
+
+    post_pair(10, 11);
+
+    entered = proceed = 0;
+    int32_t busy = workerSpawn(0), waiting = workerSpawn(0);
+    Worker *pin = acquire_worker(waiting);
+    TestCompletion busy_done, waiting_done;
+    post_job(&busy_done, busy, 8, 0, 0);
+    dream_mutex_lock(&test_mu);
+    while (!entered) { dream_cond_wait(&test_cv, &test_mu); }
+    dream_mutex_unlock(&test_mu);
+    post_job(&waiting_done, waiting, 7, 0, 0);
+    dream_mutex_lock(&pool_mu);
+    assert(pin->queued && run_head == pin);
+    dream_mutex_unlock(&pool_mu);
+    workerTerminate(waiting);
+    assert(completion_wait(&waiting_done) == 0);
+    dream_mutex_lock(&pool_mu);
+    assert(!pin->queued && !run_head);
+    dream_mutex_unlock(&pool_mu);
+    assert(__atomic_load_n(&pin->refs, __ATOMIC_ACQUIRE) == 1);
+    release_worker(pin);
+    dream_mutex_lock(&test_mu);
+    proceed = 1; dream_cond_broadcast(&test_cv);
+    dream_mutex_unlock(&test_mu);
+    assert(completion_wait(&busy_done) == 0);
+    workerTerminate(busy);
+    assert_pool_drained();
+
+    dream_mutex_lock(&pool_mu);
+    monitor_started = 0;
+    dream_mutex_unlock(&pool_mu);
+    post_pair(12, 13);
+    dream_mutex_lock(&pool_mu);
+    assert(monitor_started);
+    pool_limit = 0;
+    dream_mutex_unlock(&pool_mu);
+    assert(live_workers() == 0);
+    assert(debug_get_live_objects() == 0);
+}
+
 int main(int argc, char **argv) {
     dream_thread guard;
     assert(dream_thread_start(&guard, watchdog, NULL) == 0);
@@ -440,6 +535,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    pool_saturation();
     for (int round = 0; round < 3; ++round) {
         int32_t ids[100];
         TestCompletion completions[100];

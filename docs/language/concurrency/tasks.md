@@ -43,6 +43,8 @@ async fun main(): void {
 
 For CPU parallelism, `scope.spawn_parallel(body)` uses the shared runtime workers. A fixed `TaskPool` bounds concurrency, and `scope.spawn_on(pool, body)` retains structured ownership of its CPU jobs. Worker captures must satisfy Dream's [shared/move constraints](sharing.md); local async children do not cross that boundary.
 
+Native shared workers run about one job per CPU the process may use; further jobs start in submission order as earlier ones finish. A job waiting on a `Lock` or a `Semaphore` gives its CPU to a waiting job, so jobs may wait on each other through those types. Avoid jobs that loop until another job changes a plain value: when every CPU is busy, the runtime starts an extra worker only after about 50 ms without progress.
+
 ## `Task` functions
 
 | Function | Returns | Runs |

@@ -65,7 +65,9 @@ pub fn run_with(
         if let Some(f) = &filter {
             cmd.arg("--filter").arg(f);
         }
-        cmd.arg(&suite.dir).current_dir(&suite.dir);
+        // Node cannot resolve Windows verbatim paths produced by workspace canonicalization.
+        let directory = dunce::simplified(&suite.dir);
+        cmd.arg(directory).current_dir(directory);
         cmd
     };
 

@@ -410,7 +410,37 @@ fn try_symlink_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn try_symlink_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_dir(src, dest)
+    // Junctions do not require Developer Mode; relative targets are relative to the link.
+    let target = if src.is_absolute() {
+        src.to_path_buf()
+    } else {
+        dest.parent().unwrap_or_else(|| Path::new(".")).join(src)
+    };
+    junction::create(target, dest)
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn member_views_resolve_relative_targets_without_symlink_privileges() {
+        let root = tempfile::tempdir().unwrap();
+        let cache = root.path().join("dream_packages");
+        let member = root.path().join("member");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::create_dir_all(&member).unwrap();
+        let view = member.join("dream_packages");
+        try_symlink_dir(Path::new("../dream_packages"), &view).unwrap();
+        assert_eq!(view.canonicalize().unwrap(), cache.canonicalize().unwrap());
+        std::fs::write(cache.join("source.dream"), "updated").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(view.join("source.dream")).unwrap(),
+            "updated"
+        );
+        crate::package_fs::remove_entry(&view).unwrap();
+        assert!(cache.join("source.dream").exists());
+    }
 }
 
 #[cfg(not(any(unix, windows)))]

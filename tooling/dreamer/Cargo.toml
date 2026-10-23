@@ -36,9 +36,10 @@ tempfile = "3"
 # Locates the host C++ compiler that builds dream-slang-layout during `toolchain install slang`.
 cc = "1"
 which = "8.0.6"
+dunce = "1"
 
 [dev-dependencies]
 object = { version = "0.37", default-features = false, features = ["read"] }
 
-[target.'cfg(windows)'.dev-dependencies]
+[target.'cfg(windows)'.dependencies]
 junction = "2.1"

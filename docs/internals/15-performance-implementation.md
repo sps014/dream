@@ -238,6 +238,44 @@ Measured and rejected:
   children take about 133 µs per batch. Fewer wakes need a bounded shared queue, which conflicts
   with the per-session thread contract, or spinning, which stays forbidden by default.
 
+### Task handoff round
+
+Measured on Windows x86-64 (i9-13900K, 24 cores/32 threads) against .NET 10 running the same
+`task_parallel` kernel through `Task.Run`, with the process restricted to 4 physical cores or 4
+logical CPUs to approximate a CI runner. With the full 20,000-iteration kernel, Dream matches or
+beats .NET (0.91x on all CPUs, 0.97–1.12x on four), because the kernel dominates. With empty jobs
+the comparison isolates scheduling: a batch of 16 costs Dream 42 µs on all CPUs and 82 µs on four,
+against 4–6 µs for .NET. Cycle-counter probes put each job's main-thread cost at about 8,000
+cycles: publication of the job environment, message and future, one pool-thread wake syscall,
+and the Dream-level handle, futures, closures and decode. Workers spent another 3,800 cycles
+handing completions back.
+
+Accepted:
+
+- **Inline publication scratch.** A publish tracks its first 32 nodes on the stack with a linear
+  membership scan and spills to the uthash table and cached blocks only beyond that. Task graphs
+  no longer take the heap lock for scratch or allocate a hash table per publish.
+- **Heap-map hit cache.** `dream_heap_is_live` remembers, per thread, the mapping that last
+  matched. Heap mappings are never removed, so a cached range stays valid and the common lookup
+  takes no lock.
+
+Paired against the previous runtime (8–16 interleaved rounds), every worker row improves: a
+16-job empty batch 0.71x, `task_fanout_8/64/256` 0.66–0.69x, `Task.spawn` and pool dispatch round
+trips 0.78–0.83x on all CPUs, and 0.76–0.94x on four CPUs. Macro and micro suites are neutral
+except `binary_trees`/`binary_trees_reclaim` at about +5%, whose optimized IR is identical to the
+baseline's; only function placement changed.
+
+Measured and rejected:
+
+- **Spin before parking.** Letting an idle pool thread spin up to 5–50 µs before parking (at most
+  four spinners) gained about 10% with all CPUs available but made 16-job batches 2–3x slower on
+  four CPUs, where spinning threads hold cores that runnable jobs need.
+
+The remaining gap on narrow machines is structural: every child is handed to its own pool thread,
+which must be woken and scheduled, while .NET keeps about one thread per core draining a shared
+queue without parking between items. Closing it needs the bounded shared queue noted under
+batched submission, with a policy for jobs that block on each other.
+
 Suspension-aware `RcElision` stays a design, not an implementation. Each owning local live across
 an `Await` is a frame slot the scheduler may drop through the future's drop function on
 cancellation. Elision may pair a retain and release only within one suspension-free region (no
@@ -289,8 +327,9 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 - Prove completion/cancellation lifetime so result publication can leave the global claim critical
   section safely. Queueing and the owner wake already run outside it. Measure multiple schedulers
   and keep exactly-once claiming and owner resumption.
-- Extend publication scratch reuse to remaining hash bookkeeping, preserving reentrancy and bounded
-  retention. Remove heap validation only where provenance is actually proven.
+- Graphs over 32 nodes still allocate hash bookkeeping per publish; reuse it while preserving
+  reentrancy and bounded retention. Remove heap validation only where provenance is actually
+  proven.
 - Improve larger recurring worker bursts and batching within current APIs. Preserve callback/TLS
   contracts; no default busy spin, automatic migration or unproven work stealing.
 - Complete service-level requirements and runtime-unit dependency selection, explain retained

@@ -54,6 +54,9 @@ typedef struct {
     size_t arena_off;
     size_t arena_len;
     int region_active;
+    /* The mapping that last answered native_block_in_heap; valid forever since maps only grow. */
+    uintptr_t hit_base;
+    size_t hit_len;
 } heap_thread;
 static _Thread_local heap_thread th;
 
@@ -181,9 +184,19 @@ static void note_heap_map(char *p, size_t n) {
 }
 
 static int native_block_in_heap(char *block) {
+    uintptr_t offset = (uintptr_t)block - th.hit_base;
+    if (offset < th.hit_len && NATIVE_HEAP_HEADER_SIZE <= th.hit_len - offset) {
+        return 1;
+    }
+    uintptr_t base;
+    size_t len;
     heap_lock();
-    int found = dream_heap_map_contains_locked(block, NATIVE_HEAP_HEADER_SIZE);
+    int found = dream_heap_map_contains_locked(block, NATIVE_HEAP_HEADER_SIZE, &base, &len);
     heap_unlock();
+    if (found) {
+        th.hit_base = base;
+        th.hit_len = len;
+    }
     return found;
 }
 

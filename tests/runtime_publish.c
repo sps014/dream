@@ -194,6 +194,21 @@ int main(void) {
     }
     free(nodes);
 
+    make_nodes(4);
+    ((Node *)dream_p(nodes[0]))->left = nodes[1];
+    ((Node *)dream_p(nodes[0]))->right = nodes[2];
+    ((Node *)dream_p(nodes[1]))->left = nodes[3];
+    ((Node *)dream_p(nodes[2]))->left = nodes[3];
+    ((Node *)dream_p(nodes[3]))->left = nodes[0];
+    /* A Task-sized graph publishes without scratch allocations, visiting each node once. */
+    size_t small_before = __atomic_load_n(&raw_allocations, __ATOMIC_RELAXED);
+    node_visits = 0;
+    dream_publish(nodes[0]);
+    assert(node_visits == 4);
+    assert(__atomic_load_n(&raw_allocations, __ATOMIC_RELAXED) == small_before);
+    ((Node *)dream_p(nodes[3]))->left = 0;
+    handoff_and_free();
+
     make_nodes(2);
     /* Ref interiors may point into a heap object: no header is available at the ref address. */
     dream_publish_child(0, nodes[1]);
@@ -260,9 +275,13 @@ int main(void) {
     }
     /* Each allocation needs its own >4 MiB map, exceeding both old registry caps. */
     make_sized_nodes(130, (1 << 22) + 16);
-    assert(dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 16));
-    assert(!dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 17));
-    assert(!dream_heap_map_contains_locked(NULL, 16));
+    uintptr_t map_base;
+    size_t map_len;
+    assert(dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 16, &map_base, &map_len));
+    assert(map_base <= (uintptr_t)dream_p(nodes[0]));
+    assert((uintptr_t)dream_p(nodes[0]) + (1 << 22) + 16 <= map_base + map_len);
+    assert(!dream_heap_map_contains_locked(dream_p(nodes[0]), (1 << 22) + 17, &map_base, &map_len));
+    assert(!dream_heap_map_contains_locked(NULL, 16, &map_base, &map_len));
     for (size_t i = 0; i + 1 < node_count; ++i) {
         ((Node *)dream_p(nodes[i]))->left = nodes[i + 1];
     }

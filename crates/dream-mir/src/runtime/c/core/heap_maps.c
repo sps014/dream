@@ -51,7 +51,8 @@ void dream_heap_map_add_locked(void *base, size_t size) {
     utarray_insert(&heap_maps, &map, position);
 }
 
-int dream_heap_map_contains_locked(const void *address, size_t size) {
+int dream_heap_map_contains_locked(const void *address, size_t size, uintptr_t *base,
+                                   size_t *len) {
     if (utarray_len(&heap_maps) == 0) {
         return 0;
     }
@@ -59,8 +60,13 @@ int dream_heap_map_contains_locked(const void *address, size_t size) {
     size_t low = 0, high = utarray_len(&heap_maps);
     while (low < high) {
         size_t middle = low + (high - low) / 2;
-        int order = compare_address(&request, utarray_eltptr(&heap_maps, middle));
-        if (order == 0) { return 1; }
+        HeapMap *map = (HeapMap *)utarray_eltptr(&heap_maps, middle);
+        int order = compare_address(&request, map);
+        if (order == 0) {
+            *base = map->base;
+            *len = map->size;
+            return 1;
+        }
         if (order < 0) { high = middle; } else { low = middle + 1; }
     }
     return 0;

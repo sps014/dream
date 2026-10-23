@@ -25,10 +25,18 @@ typedef struct PublishBlock {
     PublishEntry entries[];
 } PublishBlock;
 
+/* Task handoffs publish a few nodes at a time, from the caller and every completing worker. The
+ * first entries live on the stack with a linear membership scan, so those graphs take no heap
+ * lock for scratch and allocate no hash table; larger graphs spill into the hash. */
+#define PUBLISH_INLINE 32
+
 typedef struct {
     PublishEntry *seen;
     PublishEntry *pending;
     PublishBlock *blocks;
+    size_t count;
+    int hashed;
+    PublishEntry inline_entries[PUBLISH_INLINE];
 } PublishGraph;
 
 #define PUBLISH_CACHED_BLOCKS 16
@@ -78,6 +86,10 @@ static void publish_block_put(PublishBlock *block) {
 }
 
 static PublishEntry *publish_entry(PublishGraph *graph) {
+    if (graph->count < PUBLISH_INLINE) {
+        return &graph->inline_entries[graph->count++];
+    }
+    graph->count++;
     PublishBlock *block = graph->blocks;
     if (block == NULL || block->used == block->capacity) {
         size_t capacity = block == NULL ? 16 : block->capacity * 2;
@@ -97,13 +109,28 @@ static void publish_enqueue(PublishGraph *graph, dream_ptr ptr) {
     if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == 0) {
         DREAM_PANIC_LITERAL(u"panic: publication of a dying object");
     }
-    HASH_FIND(hh, graph->seen, &ptr, sizeof(ptr), entry);
-    if (entry != NULL) {
-        return;
+    if (!graph->hashed && graph->count < PUBLISH_INLINE) {
+        for (size_t i = 0; i < graph->count; i++) {
+            if (graph->inline_entries[i].ptr == ptr) { return; }
+        }
+    } else {
+        if (!graph->hashed) {
+            graph->hashed = 1;
+            for (size_t i = 0; i < PUBLISH_INLINE; i++) {
+                PublishEntry *inline_entry = &graph->inline_entries[i];
+                HASH_ADD(hh, graph->seen, ptr, sizeof(inline_entry->ptr), inline_entry);
+            }
+        }
+        HASH_FIND(hh, graph->seen, &ptr, sizeof(ptr), entry);
+        if (entry != NULL) {
+            return;
+        }
     }
     entry = publish_entry(graph);
     entry->ptr = ptr;
-    HASH_ADD(hh, graph->seen, ptr, sizeof(ptr), entry);
+    if (graph->hashed) {
+        HASH_ADD(hh, graph->seen, ptr, sizeof(ptr), entry);
+    }
     entry->pending_next = graph->pending;
     graph->pending = entry;
 }
@@ -118,7 +145,12 @@ DREAM_WASM_EXPORT("dream_publish")
 void dream_publish(dream_ptr ptr) {
     /* Once anything is shared, interior stores with no known owner must publish too. */
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
-    PublishGraph graph = {0};
+    PublishGraph graph;
+    graph.seen = NULL;
+    graph.pending = NULL;
+    graph.blocks = NULL;
+    graph.count = 0;
+    graph.hashed = 0;
     publish_enqueue(&graph, ptr);
     while (graph.pending != NULL) {
         PublishEntry *entry = graph.pending;

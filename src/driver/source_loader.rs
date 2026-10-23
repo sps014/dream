@@ -27,6 +27,8 @@ mod graph;
 /// correctly.
 #[derive(Default)]
 pub struct ProgramAccumulator<'a> {
+    /// Entry directory retained before following dependency cache symlinks.
+    pub(crate) package_base: Option<std::path::PathBuf>,
     pub parsed_files: indexmap::IndexMap<String, ProgramNode<'a>>,
     pub resolution_inputs: indexmap::IndexSet<std::path::PathBuf>,
     pub import_edges: indexmap::IndexMap<String, Vec<String>>,
@@ -72,6 +74,15 @@ pub struct ProgramAccumulator<'a> {
 /// `dreamer` produces; it never reads `dream.toml` itself, keeping the compiler's import
 /// resolution independent of the package manager's manifest format.
 pub fn resolve_import_path(base_dir: &Path, module_name: &str) -> std::path::PathBuf {
+    let packages_dir = find_dream_packages_dir(base_dir);
+    resolve_import(base_dir, module_name, packages_dir.as_deref())
+}
+
+fn resolve_import(
+    base_dir: &Path,
+    module_name: &str,
+    packages_dir: Option<&Path>,
+) -> std::path::PathBuf {
     let mut import_path = base_dir.join(module_name);
     if import_path.extension().is_none() {
         import_path.set_extension("dream");
@@ -79,19 +90,20 @@ pub fn resolve_import_path(base_dir: &Path, module_name: &str) -> std::path::Pat
     if import_path.exists() {
         return import_path;
     }
-    resolve_package_import(base_dir, module_name).unwrap_or(import_path)
+    packages_dir
+        .and_then(|dir| resolve_package_import(dir, module_name))
+        .unwrap_or(import_path)
 }
 
-/// Resolves `module_name` (`<pkg>` or `<pkg>/<rest>`) against the nearest ancestor
-/// `dream_packages/` directory. A bare `import pkg;` looks for `dream_packages/pkg/src/pkg.dream`
+/// Resolves `module_name` (`<pkg>` or `<pkg>/<rest>`) against the entry's installed
+/// packages directory. A bare `import pkg;` looks for `dream_packages/pkg/src/pkg.dream`
 /// (a package's self-named entry file, mirroring the top-level convention of a file's logical
 /// entry sharing its own name); `import pkg.rest;` looks for `dream_packages/pkg/src/rest.dream`.
-fn resolve_package_import(base_dir: &Path, module_name: &str) -> Option<std::path::PathBuf> {
+fn resolve_package_import(packages_dir: &Path, module_name: &str) -> Option<std::path::PathBuf> {
     let mut parts = module_name.splitn(2, '/');
     let package_name = parts.next().filter(|s| !s.is_empty())?;
     let rest = parts.next();
 
-    let packages_dir = find_dream_packages_dir(base_dir)?;
     let package_src = packages_dir.join(package_name).join("src");
 
     let mut candidate = match rest {
@@ -195,6 +207,11 @@ pub fn parse_file_recursive<'a>(
     arena: &'a Bump,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
+    if acc.package_base.is_none() {
+        acc.package_base = std::path::absolute(file_path)?
+            .parent()
+            .map(Path::to_path_buf);
+    }
     let path = dunce::canonicalize(file_path)?;
     let path_str = path
         .to_str()
@@ -254,6 +271,9 @@ pub fn parse_source_recursive<'a>(
             .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
     }
     let parent_dir = path.parent().unwrap_or_else(|| Path::new(""));
+    if acc.package_base.is_none() {
+        acc.package_base = Some(std::path::absolute(parent_dir)?);
+    }
 
     for import in &program.imports {
         if let Some(alias) = &import.alias {
@@ -302,7 +322,11 @@ pub fn parse_source_recursive<'a>(
                 break;
             }
         }
-        let import_path = resolve_import_path(parent_dir, module_name);
+        let packages_dir = acc
+            .package_base
+            .as_deref()
+            .and_then(find_dream_packages_dir);
+        let import_path = resolve_import(parent_dir, module_name, packages_dir.as_deref());
         acc.resolution_inputs.insert(import_path.clone());
 
         let import_path_str = match import_path.to_str() {
@@ -364,5 +388,39 @@ mod tests {
         let path = file.to_string_lossy().to_string();
         let err = parse_file_recursive(&path, &mut acc, &arena, &mut diagnostics).unwrap_err();
         assert!(err.to_string().contains("utf16.dream"), "{err}");
+    }
+
+    #[test]
+    fn cached_package_imports_use_entry_project_dependencies() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("consumer");
+        let cache = temp.path().join("cache/package/src");
+        let dependency = project.join("dream_packages/dependency/src");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::create_dir_all(&dependency).unwrap();
+        std::fs::write(project.join("main.dream"), "module consumer;").unwrap();
+        std::fs::write(
+            cache.join("package.dream"),
+            "module package; import helper; import dependency;",
+        )
+        .unwrap();
+        std::fs::write(cache.join("helper.dream"), "module package;").unwrap();
+        std::fs::write(dependency.join("dependency.dream"), "module dependency;").unwrap();
+        let arena = Bump::new();
+        let mut acc = ProgramAccumulator::default();
+        let mut diagnostics = DiagnosticBag::new(None);
+        // A registry junction resolves to this cache path before recursive parsing.
+        for file in [project.join("main.dream"), cache.join("package.dream")] {
+            parse_file_recursive(
+                &file.to_string_lossy().into_owned(),
+                &mut acc,
+                &arena,
+                &mut diagnostics,
+            )
+            .unwrap();
+        }
+        assert!(!diagnostics.has_errors());
+        assert_eq!(acc.parsed_files.len(), 4);
+        assert_eq!(acc.package_base, Some(project));
     }
 }

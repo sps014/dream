@@ -126,3 +126,37 @@ fn owning_mutated_escaping_and_observed_records_keep_their_tokens() {
         );
     }
 }
+
+#[test]
+fn returned_alias_keeps_the_owning_retain_on_its_copy() {
+    let (mut mir, types) = fixture(false, false, false, false);
+    let f = &mut mir.functions[0];
+    f.ret = types.string();
+    let source = Local(2);
+    let token = Local(f.locals.len() as u32);
+    f.locals.push(f.locals[source.0 as usize].clone());
+    let block = &mut f.blocks[0];
+    block
+        .stmts
+        .retain(|s| !matches!(s, Statement::Retain(_) | Statement::Release(_)));
+    block.stmts.extend([
+        Statement::Assign(
+            Place::Local(token),
+            Rvalue::Use(Operand::Copy(Place::Local(source))),
+        ),
+        Statement::Retain(Operand::Copy(Place::Local(token))),
+    ]);
+    // Global propagation may return the source instead of the local carrying its ABI token.
+    block.terminator = Terminator::Return(Some(Operand::Copy(Place::Local(source))));
+
+    assert!(run(&mut mir, &types));
+    let f = &mir.functions[0];
+    assert!(f.locals[1].borrows_refs);
+    assert!(!f.locals[token.0 as usize].is_cursor);
+    assert!(
+        f.blocks[0]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::Retain(Operand::Copy(Place::Local(l))) if *l == token))
+    );
+}

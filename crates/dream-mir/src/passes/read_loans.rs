@@ -2,6 +2,7 @@
 //! Local value copies can borrow those references even across iterator envelopes.
 
 use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
+use crate::analysis::escape::{LocalEscape, ParamSummaries};
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_abi::names::THIS_NAME;
 use dream_hir::LayoutTable;
@@ -228,13 +229,25 @@ fn function(
         .copied()
         .filter(|l| !f.params.contains(l) && i.is_reference(f.local_ty(*l)))
         .collect();
+    let aliases = LocalEscape::analyze(f, i, &ParamSummaries::default());
     loop {
         let old = (views.len(), references.len());
         let rejected: Vec<_> = views
             .iter()
             .chain(&references)
             .copied()
-            .filter(|&l| escapes(f, l, &views, &references))
+            .filter(|&l| {
+                if references.contains(&l) {
+                    // Copy propagation can return a borrowed alias while leaving its
+                    // owning ABI retain on another local in the same alias class.
+                    aliases
+                        .class(l)
+                        .into_iter()
+                        .any(|alias| escapes(f, alias, &views, &references))
+                } else {
+                    escapes(f, l, &views, &references)
+                }
+            })
             .collect();
         for l in rejected {
             views.remove(&l);

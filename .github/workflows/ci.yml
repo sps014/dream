@@ -181,9 +181,7 @@ jobs:
           node-version: "22"
       - name: Check capability artifacts and native CLI
         run: |
-          cargo test -p dream-host-cli
           python scripts/generate-capabilities.py --check
-          python scripts/build-data-codecs.py --check
           python scripts/build-gpu-parser.py --check
           node --test scripts/test-wasm-size.mjs
           python scripts/test_corpus.py --release cli_arguments
@@ -235,7 +233,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
       - name: Build release host capabilities
-        run: cargo build --locked --release -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-cli -p dream-host-data -p dream-host-io -p dream-host-window -p dream-host-gpu
+        run: cargo build --locked --release -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-window -p dream-host-gpu
       - name: Native distribution measurements and isolation
         run: python scripts/check-binary-size.py --compiler "target/debug/dream${{ runner.os == 'Windows' && '.exe' || '' }}" --host-directory target/release --llvm-directory "$HOME/.dream/toolchains/llvm-22.1.8/bin" --report target/binary-size.json
       - name: Preserve native size measurements

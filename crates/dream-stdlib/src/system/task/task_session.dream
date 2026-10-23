@@ -27,6 +27,18 @@ internal class TaskSession {
         return Task.dispatch_host(this.id, this.funcidx, this.env, "");
     }
 
+    // Valid after `receive` settles and before the session drops, which clears the record.
+    internal fun crashed(): bool {
+        return Task.failure_host(this.id).length > 0;
+    }
+
+    internal fun panic_if_failed(): void {
+        let failure = Task.failure_host(this.id);
+        if failure.length > 0 {
+            System.panic("Task worker crashed before replying: " + failure);
+        }
+    }
+
     del() {
         Task.terminate_host(this.id);
     }

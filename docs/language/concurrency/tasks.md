@@ -75,8 +75,41 @@ Spawning on a scope that is already cancelled or finished returns a handle whose
 | `Failed(E)` | A child or the scope body returned an application error |
 | `Cancelled` | The parent or caller requested cancellation |
 | `TimedOut` | The scope deadline expired before all work completed |
-| `WorkerFailed(TaskPoolError)` | A worker pool rejected a submitted job |
+| `WorkerFailed(TaskPoolError)` | A worker rejected a submitted job, or crashed before replying (`TaskPoolError.WorkerCrashed`) |
 | `InvalidOperation` | An invalid limit, such as a `concurrency` of `0` or less or a negative `timeout_ms` |
+
+## Worker crashes
+
+On the web and on Node, a worker can stop before it replies. Its job may trap (a failed `unwrap`, an out-of-range index, an explicit `System.panic`), the worker thread may exit, a message may fail to reach it, or the worker may not start within 10 seconds. The program keeps running, and the crash becomes an ordinary error:
+
+- `pool.dispatch` and `pool.dispatch_async` return `Err(TaskPoolError.WorkerCrashed)`. A job queued on the same worker gets the same error. The pool then starts a replacement worker, so later dispatches run normally.
+- `scope.spawn_parallel` and `scope.spawn_on` children finish with `Err(TaskFailure.WorkerFailed(TaskPoolError.WorkerCrashed))`, and the scope is cancelled as for any other worker failure.
+- `Task.spawn` and `Task.spawn_async` return the value directly, so they have no error to return. They panic with the worker's failure message instead.
+
+```dream
+import system;
+import system.task;
+
+fun checked_square(value: int): int {
+    if value < 0 {
+        System.panic("negative input");
+    }
+    return value * value;
+}
+
+async fun main(): void {
+    let pool = TaskPool(2);
+    let result = pool.dispatch(() => checked_square(-1)).await;
+    if result.is_err() {
+        System.println(result.unwrap_err().message());
+    }
+    pool.close().await.unwrap();
+}
+```
+
+This prints `task worker crashed before replying`. The crashed job's result is lost, and objects it held when it stopped stay allocated.
+
+On native targets, workers are threads inside your process, so a trapping job ends the whole program, just as a trap on the main thread does.
 
 ## Low-level workers
 

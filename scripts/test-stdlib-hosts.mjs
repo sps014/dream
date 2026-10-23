@@ -7,7 +7,78 @@ import { makeFsHost } from "../runtime/src/hosts/fs.js";
 import { makeConsoleProcessHost } from "../runtime/src/hosts/console_process.js";
 import { splitProcessArgs } from "../runtime/src/hosts/process_wire.js";
 import { setNodeFs, setNodeChildProcess } from "../runtime/src/platform.js";
-import { makeSessionTable } from "../runtime/src/workers.js";
+import { makeSessionTable, makeWorkerModule } from "../runtime/src/workers.js";
+
+/** Records messages; a test drives replies through `emit` and can make posting throw. */
+function fakeWorkers() {
+  const spawned = [];
+  class FakeWorker {
+    constructor() {
+      this.listeners = {};
+      this.posted = [];
+      this.throwOn = null;
+      spawned.push(this);
+    }
+    on(event, listener) { this.listeners[event] = listener; }
+    emit(event, value) { this.listeners[event]?.(value); }
+    postMessage(message) {
+      if (message.t === this.throwOn) throw new Error(`cannot post ${message.t}`);
+      this.posted.push(message);
+    }
+    terminate() { return Promise.resolve(0); }
+    ref() {}
+    unref() {}
+  }
+  const host = makeWorkerModule(new Uint8Array(), null, () => null, 0, () => null, FakeWorker);
+  return { host, spawned };
+}
+
+test("a crashed worker settles its dispatches and reports a typed failure", async () => {
+  const { host, spawned } = fakeWorkers();
+  const id = host.workerSpawn(false);
+  spawned[0].emit("message", { t: "ready", stack: 0 });
+  const first = host.workerDispatch(id, 1, 0, "");
+  const queued = host.workerDispatch(id, 1, 0, "");
+  assert.equal(host.workerFailure(id), "");
+  spawned[0].emit("message", { t: "error", phase: "dispatch", message: "RuntimeError: unreachable" });
+  assert.equal(await first, "");
+  assert.equal(await queued, "");
+  assert.match(host.workerFailure(id), /unreachable/);
+  assert.equal(await host.workerDispatch(id, 1, 0, ""), "");
+  host.workerTerminate(id);
+  assert.equal(host.workerFailure(id), "");
+  await host.__drainWorkers();
+});
+
+test("a dispatched worker that never boots fails after the boot timeout", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { host } = fakeWorkers();
+  const id = host.workerSpawn(false);
+  const pending = host.workerDispatch(id, 1, 0, "");
+  t.mock.timers.tick(9999);
+  assert.equal(host.workerFailure(id), "");
+  t.mock.timers.tick(1);
+  assert.equal(await pending, "");
+  assert.match(host.workerFailure(id), /bootstrap timed out/);
+  host.workerTerminate(id);
+});
+
+test("a postMessage that throws fails the worker instead of escaping", async () => {
+  const { host, spawned } = fakeWorkers();
+  const id = host.workerSpawn(false);
+  spawned[0].throwOn = "dispatch";
+  const pending = host.workerDispatch(id, 1, 0, "");
+  spawned[0].emit("message", { t: "ready", stack: 0 });
+  assert.equal(await pending, "");
+  assert.match(host.workerFailure(id), /cannot post dispatch/);
+  host.workerTerminate(id);
+
+  const fresh = host.workerSpawn(false);
+  spawned[1].emit("message", { t: "ready", stack: 0 });
+  spawned[1].throwOn = "term";
+  host.workerTerminate(fresh);
+  await host.__drainWorkers();
+});
 
 test("worker session handles are generational and never run out", () => {
   const table = makeSessionTable();

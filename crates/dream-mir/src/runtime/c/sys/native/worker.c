@@ -483,6 +483,12 @@ void workerShutdown(int32_t id) {
     release_worker(w);
 }
 
+/* Native sessions share the process, so a job that panics ends it; no session outlives a crash. */
+dream_ptr workerFailure(int32_t id) {
+    (void)id;
+    return dream_utf8_to_string("");
+}
+
 void workerTerminate(int32_t id) {
     Worker *w = take_worker(id);
     if (!w) {

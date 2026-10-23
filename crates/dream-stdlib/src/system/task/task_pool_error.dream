@@ -8,14 +8,23 @@ public enum TaskPoolError {
     Closed,
     /// Cancellation was requested; any submitted work has settled before this is returned.
     Cancelled,
+    /// The worker running the job stopped before replying: the job trapped, the worker thread
+    /// exited, a message could not be delivered, or the worker did not start within 10 seconds.
+    /// The job's result is lost, and objects it held when it stopped stay allocated. The pool
+    /// replaces the worker, so later dispatches still run.
+    /// Only the JavaScript hosts report this; on native, a trapping job ends the process.
+    WorkerCrashed,
 
-    /// Returns `EINVAL`, `ECLOSED`, or `ECANCELED` for the variant.
+    /// Returns `EINVAL`, `ECLOSED`, `ECANCELED`, or `EWORKER` for the variant.
     public fun code(): string {
         if this == TaskPoolError.InvalidSize {
             return "EINVAL";
         }
         if this == TaskPoolError.Closed {
             return "ECLOSED";
+        }
+        if this == TaskPoolError.WorkerCrashed {
+            return "EWORKER";
         }
         return "ECANCELED";
     }
@@ -27,6 +36,9 @@ public enum TaskPoolError {
         }
         if this == TaskPoolError.Closed {
             return "task pool is closed";
+        }
+        if this == TaskPoolError.WorkerCrashed {
+            return "task worker crashed before replying";
         }
         return "task pool work was cancelled";
     }

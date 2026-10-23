@@ -174,15 +174,17 @@ export function makeSessionTable() {
  * Each slot runs a separate instance with shared memory; one-shot sessions retire before
  * their reply resumes Dream. Dispatch returns a Promise bridged into Dream's scheduler.
  *
- * A worker that fails (bootstrap rejection, crash, exit, undeliverable message) settles every
- * call it owed exactly once and records the failure as the instance's fatal host error, so the
- * awaiting program traps instead of decoding an empty reply as a result.
+ * A worker that fails (bootstrap rejection or timeout, crash, exit, undeliverable message)
+ * settles every call it owed exactly once and records the failure against its session id;
+ * `workerFailure` reports it so Dream returns a typed error instead of decoding the empty reply.
  */
-function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance) {
+export function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstance, NodeWorker = null) {
   const sessions = makeSessionTable();
   const stopping = new Set();
-  /** Lazily resolved Node `worker_threads.Worker` constructor (null until first Node spawn). */
-  let NodeWorkerCtor = null;
+  /** Session id -> failure description, kept until Dream terminates the session. */
+  const failures = new Map();
+  /** Node `worker_threads.Worker`, imported on the first Node spawn unless supplied. */
+  let NodeWorkerCtor = NodeWorker;
   /**
    * Idle workers kept for the next session. Instantiating the module per Task dominated short
    * fan-outs, and each instance's stack stays carved out of shared memory until its worker has
@@ -191,7 +193,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
    */
   const idle = [];
   const IDLE_MAX = 64;
-  /** A worker retired before `ready` that still has not booted after this long is wedged. */
+  /** A worker that has not reported `ready` this long after spawning is wedged. */
   const BOOT_TIMEOUT_MS = 10000;
 
   const instanceOrNull = () => {
@@ -272,8 +274,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     slot.state = null;
     if (state && !slot.retired) {
       sessions.remove(state.id);
-      const inst = instanceOrNull();
-      if (inst) inst._hostError ??= new Error(`Dream task worker failed (${describeFailure(err)})`);
+      failures.set(state.id, describeFailure(err) || "worker failed");
       const pending = state.pending;
       state.pending = [];
       for (const p of pending) p("");
@@ -281,11 +282,22 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     killSlot(slot).then(() => finishSlot(slot));
   };
 
+  /** postMessage throws synchronously on uncloneable data or a dead port; that fails the slot. */
+  const send = (slot, message) => {
+    try {
+      slot.worker.postMessage(message);
+      return true;
+    } catch (err) {
+      failSlot(slot, err);
+      return false;
+    }
+  };
+
   // A slot is one worker; `slot.state` is the session it currently serves.
   const postJob = (state, job) => {
     const slot = state.slot;
     state.inflight++;
-    if (slot.ready) slot.worker.postMessage(job);
+    if (slot.ready) send(slot, job);
     else slot.queued.push(job);
   };
 
@@ -301,8 +313,11 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         slot.terminateWhenReady();
         return;
       }
-      for (const q of slot.queued) slot.worker.postMessage(q);
+      const queued = slot.queued;
       slot.queued = [];
+      for (const q of queued) {
+        if (!send(slot, q)) break;
+      }
     } else if (m.t === "closed") {
       slot.closed?.();
     } else if (m.t === "reply") {
@@ -368,7 +383,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     const finishSpawn = (worker) => {
       slot.worker = worker;
       attachHandlers(worker, slot);
-      worker.postMessage({
+      send(slot, {
         t: "init",
         bytes: wasmBytes,
         abi,
@@ -376,6 +391,14 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
         stackGate,
       });
     };
+
+    // Armed from spawn, not only on retirement, so dispatches queued behind a worker that
+    // never boots fail instead of waiting forever.
+    slot.bootTimer = setTimeout(
+      () => failSlot(slot, new Error("worker bootstrap timed out")),
+      BOOT_TIMEOUT_MS,
+    );
+    if (typeof slot.bootTimer?.unref === "function") slot.bootTimer.unref();
 
     const spawnOrFail = (create) => {
       let worker;
@@ -438,7 +461,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       reused.state = state;
       state.slot = reused;
       if (typeof reused.worker.ref === "function") reused.worker.ref();
-      reused.worker.postMessage({ t: "reset" });
+      send(reused, { t: "reset" });
     } else {
       state.slot = startWorker(state);
     }
@@ -446,6 +469,7 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
   };
 
   const terminateWorker = (id) => {
+    failures.delete(id);
     const s = sessions.remove(id);
     if (!s) return;
     const owed = s.pending;
@@ -469,18 +493,13 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
       const stop = () => killSlot(slot).then(() => finishSlot(slot));
       // A booting worker may hold the shared bootstrap gate, and killing it there would leave
       // every later worker waiting on that gate forever. It retires once it reports ready, or
-      // fails once the boot timeout shows it never will.
+      // fails once the boot timeout armed at spawn shows it never will.
       // Finished bodies retire gracefully; a busy body still needs immediate termination.
       if (!slot.ready) {
         slot.terminateWhenReady = stop;
-        slot.bootTimer = setTimeout(
-          () => failSlot(slot, new Error("worker bootstrap timed out")),
-          BOOT_TIMEOUT_MS,
-        );
-        if (typeof slot.bootTimer?.unref === "function") slot.bootTimer.unref();
       } else if (s.inflight === 0) {
         slot.closed = stop;
-        slot.worker.postMessage({ t: "term" });
+        send(slot, { t: "term" });
       } else {
         stop();
       }
@@ -505,5 +524,6 @@ function makeWorkerModule(wasmBytes, abi, getSharedMemory, stackGate, getInstanc
     },
     workerShutdown: () => {},
     workerTerminate: terminateWorker,
+    workerFailure: (id) => failures.get(id) ?? "",
   };
 }

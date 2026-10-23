@@ -8,7 +8,7 @@ public enum TaskFailure<E> {
     Cancelled,
     /// The scope deadline expired before all work completed.
     TimedOut,
-    /// A worker pool rejected a submitted job.
+    /// A worker rejected a submitted job or crashed before replying; the error says which.
     WorkerFailed(TaskPoolError),
     /// A concurrency limit or scope operation was invalid.
     InvalidOperation,

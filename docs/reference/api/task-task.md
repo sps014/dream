@@ -26,7 +26,7 @@ public static async fun scope<T, E>(
 
 ## `spawn`
 
-Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
+Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs. Panics when the worker crashes before replying; `TaskPool.dispatch` and scope children report that as `TaskPoolError.WorkerCrashed` instead.
 
 ```dream
 public static async fun spawn<TOut: shared>(
@@ -37,7 +37,7 @@ public static async fun spawn<TOut: shared>(
 
 ## `spawn_async`
 
-Runs an async function on a separate worker; local async scope children need no worker.
+Runs an async function on a separate worker; local async scope children need no worker. Panics when the worker crashes before replying.
 
 ```dream
 public static async fun spawn_async<TOut: shared>(

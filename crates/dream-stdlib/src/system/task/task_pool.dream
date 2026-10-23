@@ -73,14 +73,14 @@ public class TaskPool {
             pool.finish(worker);
             return Result.Err(TaskPoolError.Cancelled);
         }
-        let wire = Task.dispatch_host(
-            pool.ids[worker],
-            Task.funcidx(wrapped),
-            Task.env(wrapped),
-            ""
-        ).await;
+        let id = pool.ids[worker];
+        let wire = Task.dispatch_host(id, Task.funcidx(wrapped), Task.env(wrapped), "").await;
         TaskPool.keep_alive(wrapped);
+        let crashed = pool.crashed(worker, id);
         pool.finish(worker);
+        if crashed {
+            return Result.Err(TaskPoolError.WorkerCrashed);
+        }
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(token) {
             return Result.Err(TaskPoolError.Cancelled);
         }
@@ -128,14 +128,19 @@ public class TaskPool {
             pool.finish(worker);
             return Result.Err(TaskPoolError.Cancelled);
         }
+        let id = pool.ids[worker];
         let wire = Task.dispatch_host(
-            pool.ids[worker],
+            id,
             Task.funcidx_async(wrapped),
             Task.env_async(wrapped),
             ""
         ).await;
         TaskPool.keep_alive(wrapped);
+        let crashed = pool.crashed(worker, id);
         pool.finish(worker);
+        if crashed {
+            return Result.Err(TaskPoolError.WorkerCrashed);
+        }
         if guard.is_cancelled || CancellationToken.is_cancelled_opt(completion_token) {
             return Result.Err(TaskPoolError.Cancelled);
         }
@@ -177,6 +182,21 @@ public class TaskPool {
         }
         this.loads[worker] = this.loads[worker] + 1;
         return worker;
+    }
+
+    // Whether the session `id` that ran a job on `worker` crashed. The first job to see the crash
+    // swaps in a fresh session, so another job queued on the same crashed session sees the
+    // changed id rather than the failure record that terminating the old session cleared.
+    fun crashed(worker: int, id: int): bool {
+        if this.ids[worker] != id {
+            return true;
+        }
+        if Task.failure_host(id).length == 0 {
+            return false;
+        }
+        Task.terminate_host(id);
+        this.ids[worker] = Task.spawn_host(false);
+        return true;
     }
 
     fun finish(worker: int): void {

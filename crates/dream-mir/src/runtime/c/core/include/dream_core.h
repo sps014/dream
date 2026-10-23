@@ -1753,6 +1753,7 @@ int32_t workerSpawn(int32_t one_shot);
 int32_t workerDispatchAsync(dream_ptr future, int32_t id, int32_t fn, dream_ptr env, dream_ptr msg);
 void workerShutdown(int32_t id);
 void workerTerminate(int32_t id);
+dream_ptr workerFailure(int32_t id);
 
 #endif /* !DREAM_WASM32 */
 

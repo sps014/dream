@@ -38,7 +38,7 @@ TimedOut
 
 ## `WorkerFailed`
 
-A worker pool rejected a submitted job.
+A worker rejected a submitted job or crashed before replying; the error says which.
 
 ```dream
 WorkerFailed(TaskPoolError)

@@ -36,9 +36,17 @@ Cancellation was requested; any submitted work has settled before this is return
 Cancelled
 ```
 
+## `WorkerCrashed`
+
+The worker running the job stopped before replying: the job trapped, the worker thread exited, a message could not be delivered, or the worker did not start within 10 seconds. The job's result is lost, and objects it held when it stopped stay allocated. The pool replaces the worker, so later dispatches still run. Only the JavaScript hosts report this; on native, a trapping job ends the process.
+
+```dream
+WorkerCrashed
+```
+
 ## `code`
 
-Returns `EINVAL`, `ECLOSED`, or `ECANCELED` for the variant.
+Returns `EINVAL`, `ECLOSED`, `ECANCELED`, or `EWORKER` for the variant.
 
 ```dream
 public fun code(): string

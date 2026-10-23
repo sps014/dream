@@ -16685,26 +16685,26 @@
       },
       {
         "signature": "public static async fun spawn<TOut: shared>( body: fun(): TOut, token: Option<CancellationToken> = Option.None ): TOut",
-        "description": "Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.",
-        "line": 101,
+        "description": "Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs. Panics when the worker crashes before replying; `TaskPool.dispatch` and scope children report that as `TaskPoolError.WorkerCrashed` instead.",
+        "line": 107,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn_async<TOut: shared>( body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None ): TOut",
-        "description": "Runs an async function on a separate worker; local async scope children need no worker.",
-        "line": 122,
+        "description": "Runs an async function on a separate worker; local async scope children need no worker. Panics when the worker crashes before replying.",
+        "line": 130,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun map<T, U, E>( items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None ): Result<U[], TaskFailure<E>>",
         "description": "Maps with bounded local async concurrency and returns values in input order.",
-        "line": 140,
+        "line": 149,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun for_each<T, U, E>( items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None ): Result<Unit, TaskFailure<E>>",
         "description": "Applies an async operation with bounded concurrency; successful child values are discarded.",
-        "line": 160,
+        "line": 169,
         "page": "reference/api/task-task.md"
       }
     ]
@@ -16740,7 +16740,7 @@
       },
       {
         "signature": "WorkerFailed(TaskPoolError)",
-        "description": "A worker pool rejected a submitted job.",
+        "description": "A worker rejected a submitted job or crashed before replying; the error says which.",
         "line": 12,
         "page": "reference/api/task-task-failure.md"
       },
@@ -16809,19 +16809,19 @@
       {
         "signature": "public fun map<T: shared, U: shared>( items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps CPU work with at most size active dispatches and preserves input order.",
-        "line": 203,
+        "line": 223,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map_async<T: shared, U: shared>( items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps async worker jobs with bounded dispatch rather than creating one worker per input.",
-        "line": 228,
+        "line": 248,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, TaskPoolError>>",
         "description": "Stops accepting work, waits for submitted jobs, then closes workers idempotently.",
-        "line": 253,
+        "line": 273,
         "page": "reference/api/task-task-pool.md"
       }
     ]
@@ -16856,15 +16856,21 @@
         "page": "reference/api/task-task-pool-error.md"
       },
       {
+        "signature": "WorkerCrashed",
+        "description": "The worker running the job stopped before replying: the job trapped, the worker thread exited, a message could not be delivered, or the worker did not start within 10 seconds. The job's result is lost, and objects it held when it stopped stay allocated. The pool replaces the worker, so later dispatches still run. Only the JavaScript hosts report this; on native, a trapping job ends the process.",
+        "line": 16,
+        "page": "reference/api/task-task-pool-error.md"
+      },
+      {
         "signature": "public fun code(): string",
-        "description": "Returns `EINVAL`, `ECLOSED`, or `ECANCELED` for the variant.",
-        "line": 13,
+        "description": "Returns `EINVAL`, `ECLOSED`, `ECANCELED`, or `EWORKER` for the variant.",
+        "line": 19,
         "page": "reference/api/task-task-pool-error.md"
       },
       {
         "signature": "public fun message(): string",
         "description": "Returns a readable description of the failure.",
-        "line": 24,
+        "line": 33,
         "page": "reference/api/task-task-pool-error.md"
       }
     ]

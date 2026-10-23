@@ -97,7 +97,13 @@ public class Task {
     @runtime("workerTerminate")
     static extern fun terminate_host(id: int): void;
 
+    // Why the session's worker failed, or empty while it is healthy; cleared by terminate_host.
+    @runtime("workerFailure")
+    internal static extern fun failure_host(id: int): string;
+
     /// Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs.
+    /// Panics when the worker crashes before replying; `TaskPool.dispatch` and scope children
+    /// report that as `TaskPoolError.WorkerCrashed` instead.
     public static async fun spawn<TOut: shared>(
         body: fun(): TOut,
         token: Option<CancellationToken> = Option.None
@@ -106,6 +112,7 @@ public class Task {
         let session = Task.start<TOut>(body);
         let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
+        session.panic_if_failed();
         let result = Bytes.from_wire<TOut>(wire);
         session.hold();
         return result;
@@ -119,6 +126,7 @@ public class Task {
     }
 
     /// Runs an async function on a separate worker; local async scope children need no worker.
+    /// Panics when the worker crashes before replying.
     public static async fun spawn_async<TOut: shared>(
         body: fun(): Future<TOut>,
         token: Option<CancellationToken> = Option.None
@@ -131,6 +139,7 @@ public class Task {
         let session = TaskSession(id, wrapped);
         let wire = session.receive().await;
         CancellationToken.throw_if_opt(token);
+        session.panic_if_failed();
         let result = Bytes.from_wire<TOut>(wire);
         session.hold();
         return result;

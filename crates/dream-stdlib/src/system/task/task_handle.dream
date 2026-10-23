@@ -42,12 +42,20 @@ public class TaskHandle<T, E> {
         // The scope owns this wait: cancellation must settle the worker before exposing results.
         let session = Task.start<T>(body);
         let wire = session.receive().await;
-        let value = Bytes.from_wire<T>(wire);
-        session.hold();
-        let outcome: Result<T, TaskFailure<E>> = Result.Ok(value);
+        let initial: TaskFailure<E> = TaskFailure.Cancelled;
+        let outcome: Result<T, TaskFailure<E>> = Result.Err(initial);
         if scope.token.is_cancelled {
-            let failure: TaskFailure<E> = TaskFailure.Cancelled;
+            session.hold();
+        } else if session.crashed() {
+            session.hold();
+            scope.worker_failure = Option.Some(TaskPoolError.WorkerCrashed);
+            scope.cancel();
+            let failure: TaskFailure<E> = TaskFailure.WorkerFailed(TaskPoolError.WorkerCrashed);
             outcome = Result.Err(failure);
+        } else {
+            let value = Bytes.from_wire<T>(wire);
+            session.hold();
+            outcome = Result.Ok(value);
         }
         handle.value = Option.Some(outcome);
         if handle.completed.is_some() {

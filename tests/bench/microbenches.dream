@@ -989,7 +989,6 @@ fun iface_dispatch_rounds(ops: List<BenchOp>, rounds: int): int {
 // =====================================================================
 // ARC / allocator reality at scale.
 // =====================================================================
-@allow_cycle
 class TreeNode {
     public left: Option<TreeNode>;
     public right: Option<TreeNode>;
@@ -1049,7 +1048,6 @@ fun bench_binary_trees(iters: int, reclaim: bool = false): void {
     sink_int(acc);
 }
 
-@allow_cycle
 class LinkNode {
     public value: int;
     public next: Option<LinkNode>;
@@ -1097,7 +1095,6 @@ fun bench_linked_walk(iters: int): void {
     sink_int(acc);
 }
 
-@allow_cycle
 class WeakTreeNode {
     public left: Option<WeakTreeNode>;
     public right: Option<WeakTreeNode>;

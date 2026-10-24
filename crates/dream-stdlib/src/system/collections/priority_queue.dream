@@ -2,7 +2,6 @@ module system.collections;
 
 /// Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator
 /// (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).
-@allow_cycle
 public class PriorityQueue<T>: Collection<T> {
     items: T[];
     count: int;

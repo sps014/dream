@@ -1,7 +1,6 @@
 module system.csv;
 
 /// CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.
-@allow_cycle
 public class CsvWriter {
     destination: Writer;
     delimiter: char;

@@ -1,7 +1,6 @@
 module system.core;
 
 /// A synchronous cursor over values from a yielding producer.
-@allow_cycle
 internal class YieldCursor<T>: Iterator<T> {
     channel: YieldChannel<T>;
     producer: Option<Future<void>>;

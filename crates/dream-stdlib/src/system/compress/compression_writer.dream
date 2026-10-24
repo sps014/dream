@@ -1,7 +1,6 @@
 module system.compress;
 
 /// Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
-@allow_cycle
 public class CompressionWriter: Writer {
     destination: Writer;
     deflater: Deflater;

@@ -1,7 +1,6 @@
 module system.task;
 
 // Owns the spawn-time funcbox and terminates the thread when dropped (after `.await` or Future cancel).
-@allow_cycle
 internal class TaskSession {
     id: int;
     funcidx: int;

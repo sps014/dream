@@ -1,7 +1,6 @@
 module system.collections;
 
 /// Cursor produced by `Queue.iterator()`.
-@allow_cycle
 public class QueueIterator<T>: Iterator<T> {
     queue: Queue<T>;
     offset: int;

@@ -19,10 +19,6 @@ impl<'a> Analyzer<'a> {
         // Built before the borrow-immutable `SemanticInfo` literal below, since lowering field types
         // needs `&mut self.type_ctx`.
         let layouts = self.hir_build_layouts();
-        self.validate_cycle_capability(node, &layouts, diagnostics);
-        if diagnostics.has_errors() {
-            return Err(SemanticError::AnalysisFailed);
-        }
         let primitives: Vec<_> = self
             .type_ctx
             .interner
@@ -65,6 +61,17 @@ impl<'a> Analyzer<'a> {
         let interfaces = self.hir_build_interfaces();
         let mut hir_functions = std::mem::take(&mut self.hir.functions);
         self.hir_bind_entry_args(&mut hir_functions, diagnostics);
+        if diagnostics.has_errors() {
+            return Err(SemanticError::AnalysisFailed);
+        }
+        self.validate_cycles(
+            node,
+            &layouts,
+            &hir_functions,
+            &self.hir.global_decls,
+            &interfaces,
+            diagnostics,
+        );
         if diagnostics.has_errors() {
             return Err(SemanticError::AnalysisFailed);
         }

@@ -1,7 +1,6 @@
 module system.task;
 
 // The owner scheduler advances next only between await points, so workers need no lock.
-@allow_cycle
 internal class TaskMapState<T, U, E> {
     items: T[];
     body: fun(T): Future<Result<U, E>>;

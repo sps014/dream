@@ -1,7 +1,6 @@
 module system.testing;
 
 /// Owns one fixture and runs its cleanup on explicit close, scope exit, or async-frame cancellation.
-@allow_cycle
 public class TestFixture<T, E> {
     value: T;
     cleanup: fun(T): Result<Unit, E>;

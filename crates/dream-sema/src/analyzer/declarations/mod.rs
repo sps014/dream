@@ -12,8 +12,7 @@
 //!   monomorphization, the runtime interface table, and `validate_implements`.
 //! - [`register_methods`]: struct-method and `extend`-block method registration plus object-protocol
 //!   override validation.
-//! - [`ownership_fields`]: `weak`/`unowned` field validation and the compile-time class
-//!   reference-cycle check.
+//! - [`ownership_fields`]: `weak`/`unowned` field validation.
 //! - [`ref_struct_rules`]: the `ref struct` escape rules (fields, generic arguments, array
 //!   elements, `async` parameters).
 //! - [`imports`]: resolves every aliased `import a.b.c as x;` against the function table once
@@ -25,7 +24,6 @@ use super::*;
 
 mod array_interfaces;
 mod c_boundary;
-mod cycle_capability;
 mod enums;
 pub(in crate::analyzer) mod functions;
 mod globals;

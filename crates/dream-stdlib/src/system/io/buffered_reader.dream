@@ -2,7 +2,6 @@ module system.io;
 
 /// Reads ahead from a borrowed reader without closing it; use this wrapper for positioning
 /// while buffered bytes remain, or recover them before accessing the source directly.
-@allow_cycle
 public class BufferedReader: Reader {
     source: Reader;
     capacity: int;

@@ -6,7 +6,6 @@ module system.collections;
 // what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
 /// A growable, ordered sequence with zero-based indexed access. Adding elements may increase
 /// its capacity.
-@allow_cycle
 @slot_walk("length", "at_unchecked", "")
 public class List<T>: IndexedCollection<T> {
     items: T[];

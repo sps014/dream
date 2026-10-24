@@ -1,7 +1,6 @@
 module system.compress;
 
 /// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
-@allow_cycle
 public class CompressionReader: Reader {
     inflater: Inflater;
     finished: bool;

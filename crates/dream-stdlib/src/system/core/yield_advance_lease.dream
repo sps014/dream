@@ -1,7 +1,6 @@
 module system.core;
 
 /// Releases a producer's pending advancement when the consumer's scope ends.
-@allow_cycle
 internal class YieldAdvanceLease<T> {
     cursor: YieldAsyncCursor<T>;
     complete_: bool;

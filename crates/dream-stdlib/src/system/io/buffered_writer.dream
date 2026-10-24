@@ -2,7 +2,6 @@ module system.io;
 
 /// Buffers output to a borrowed writer without closing it. Call `finish()` explicitly
 /// to report flush failures; destruction does not flush pending bytes.
-@allow_cycle
 public class BufferedWriter: Writer {
     destination: Writer;
     capacity: int;

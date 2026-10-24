@@ -2,7 +2,6 @@ module system;
 
 // Cancelling a timer frame must also release the scheduler/host timer that owns its wakeup.
 // The guarded host/timer future cannot capture its owner.
-@allow_cycle
 internal class TimerGuard {
     pending: Future<void>;
 

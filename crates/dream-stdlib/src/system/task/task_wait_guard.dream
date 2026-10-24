@@ -1,7 +1,6 @@
 module system.task;
 
 // Scope watchers own their awaited helpers, which must be cancelled when the watcher drops.
-@allow_cycle
 internal class TaskWaitGuard<T> {
     pending: Future<T>;
 

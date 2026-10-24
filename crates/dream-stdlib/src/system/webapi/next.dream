@@ -1,7 +1,6 @@
 module system.webapi;
 
 /// Continues the middleware onion toward the route handler.
-@allow_cycle
 public class Next {
     step: fun(): Future<HttpOutgoing>;
 

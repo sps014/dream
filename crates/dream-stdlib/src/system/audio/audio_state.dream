@@ -2,7 +2,6 @@ module system.audio;
 
 // Async operations retain this state and compare generation before publishing results.
 // Source closures capture immutable inputs only; callers cannot install a closure capturing the player.
-@allow_cycle
 internal class AudioState {
     internal loader: fun(CancellationToken): Future<Result<AudioBuffer, AudioError>>;
     internal opener: Option<fun(CancellationToken): Future<Result<AudioFeed, AudioError>>>;

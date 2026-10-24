@@ -1,7 +1,6 @@
 module system.webapi.auth;
 
 /// Local and OIDC authentication with application-owned accounts and atomic session storage.
-@allow_cycle
 public class AuthService {
     internal dummy_hash: string;
     internal jwt: JwtOptions;

@@ -2,7 +2,6 @@ module system.webapi;
 
 /// One path segment level of the route table a `WebApp` compiles when it starts listening.
 // Nodes only point at children, so the table is a tree that its root releases in full.
-@allow_cycle
 internal class RouteNode {
     // Children for literal segments, keyed by the raw segment text.
     statics: Map<string, RouteNode>;

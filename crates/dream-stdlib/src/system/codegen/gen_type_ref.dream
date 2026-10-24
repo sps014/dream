@@ -5,7 +5,6 @@ import system.collections;
 import system.json;
 
 /// A resolved type with structured arguments and declaration identity.
-@allow_cycle
 public class GenTypeRef {
     /// Shape of the type: primitive, named, array, tuple, function, type parameter, or unknown.
     public kind: TypeRefKind;

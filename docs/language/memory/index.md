@@ -34,7 +34,7 @@ Dream's type system and compiler enforce the following in safe code — no `unsa
 | No use-after-free | Values remain valid while they are still in use |
 | No double-free | Automatic cleanup frees each object once |
 | No out-of-bounds read | Bounds-checked indexing panics with a clear message |
-| Cycle ownership checked | Cycle-capable classes require `@allow_cycle`; weak/unowned back-links or explicit teardown prevent leaks |
+| Cycle ownership checked | Stores that would form a strong reference cycle are compile errors; use weak/unowned back-links, or `@allow_cycle` for cycles the program breaks itself |
 | Constructor side effects preserved | Constructor bodies always run at allocation sites |
 | Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
 
@@ -74,7 +74,7 @@ The following are documented limitations, not silent unsoundness — each degrad
 
 | Boundary | Status |
 |---|---|
-| Owning `object` fields | Require `@allow_cycle` because the erased ownership graph cannot be proven acyclic; strong cycles still leak |
+| Owning `object` fields | A store whose erased contents the compiler cannot prove acyclic is reported as a cycle; strong cycles in `@allow_cycle` classes still leak unless the program breaks them |
 | JS↔Dream cross-collector cycles | Interop boundary is weak-by-convention; use id-based protocols |
 | Data races across threads | Use `Lock` on a `shared class`. Dream does not yet reject races for you |
 

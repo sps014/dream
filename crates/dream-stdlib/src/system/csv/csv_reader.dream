@@ -1,7 +1,6 @@
 module system.csv;
 
 /// Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.
-@allow_cycle
 public class CsvReader {
     source: Reader;
     delimiter: char;

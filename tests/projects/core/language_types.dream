@@ -2,8 +2,6 @@ import system.testing;
 import system;
 import system.json;
 
-// `next` is a self-reference, so the structural cycle check needs an explicit opt-in.
-@allow_cycle
 class c130_Node {
     public value: int;
     public next: Option<c130_Node>;

@@ -3,6 +3,8 @@ module system.webapi;
 import system.task;
 
 /// An isolated native HTTP application with explicitly mounted routers.
+// The serving loop and in-flight request futures hold the app while it holds them; `wait`
+// breaks those cycles by clearing `serving` and `requests`.
 @allow_cycle
 public class WebApp {
     options: WebAppOptions;

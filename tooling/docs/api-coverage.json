@@ -44,199 +44,199 @@
       {
         "signature": "public class Audio",
         "description": "A web-style audio player. Constructors configure sources; load and play perform I/O.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates an empty player. Assign src before calling play.",
-        "line": 10,
+        "line": 9,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor(src: string)",
         "description": "Creates a streaming player for a path or HTTP URL without starting I/O.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor(src: string, options: AudioOptions)",
         "description": "Creates a streaming player for a path or URL with snapshotted buffering limits.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor(bytes: byte[])",
         "description": "Snapshots encoded bytes; detection and decoding begin when loading starts.",
-        "line": 40,
+        "line": 39,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor(bytes: byte[], options: AudioOptions)",
         "description": "Snapshots encoded bytes with a configurable decoded-data limit.",
-        "line": 50,
+        "line": 49,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public constructor(buffer: AudioBuffer)",
         "description": "Creates a player from already decoded PCM without including encoded-format decoders.",
-        "line": 60,
+        "line": 59,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public async fun load(): Result<Unit, AudioError>",
         "description": "Cancels prior loading and prepares the current source; returns an I/O or decoding error.",
-        "line": 74,
+        "line": 73,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public async fun play(): Result<Unit, AudioError>",
         "description": "Loads if necessary and starts or resumes playback. Browser activation may be required.",
-        "line": 132,
+        "line": 131,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public fun pause(): Result<Unit, AudioError>",
         "description": "Pauses without changing position; repeating pause emits no duplicate event.",
-        "line": 297,
+        "line": 296,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Cancels loading and releases output. Queued events remain available after closure.",
-        "line": 313,
+        "line": 312,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public fun poll_events(): AudioEvent[]",
         "description": "Drains ordered typed notifications, including after close.",
-        "line": 323,
+        "line": 322,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get src(): string",
         "description": "Current string source; empty for PCM and encoded-byte constructors.",
-        "line": 329,
+        "line": 328,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public set src(value: string)",
         "description": "Replaces the source, cancelling prior playback and pending loads.",
-        "line": 334,
+        "line": 333,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get current_time(): double",
         "description": "Current position in seconds.",
-        "line": 345,
+        "line": 344,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public set current_time(value: double)",
         "description": "Requests an absolute seek in seconds; invalid requests preserve the current position.",
-        "line": 351,
+        "line": 350,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get duration(): Option<double>",
         "description": "Source duration in seconds, absent until metadata is loaded and for streams that do not declare one, such as streamed MP3.",
-        "line": 398,
+        "line": 397,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get volume(): float",
         "description": "Linear gain from zero to one; mute does not change this value.",
-        "line": 409,
+        "line": 408,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public set volume(value: float)",
         "description": "Sets finite gain from zero to one, preserving the previous value on error.",
-        "line": 414,
+        "line": 413,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get muted(): bool",
         "description": "Whether this player is muted.",
-        "line": 430,
+        "line": 429,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public set muted(value: bool)",
         "description": "Toggles mute without changing the stored volume.",
-        "line": 435,
+        "line": 434,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get loop(): bool",
         "description": "Whether natural completion restarts playback.",
-        "line": 454,
+        "line": 453,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public set loop(value: bool)",
         "description": "Enables repetition of a seekable source.",
-        "line": 459,
+        "line": 458,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get paused(): bool",
         "description": "Whether playback is paused, including before the first play call.",
-        "line": 473,
+        "line": 472,
         "page": "reference/api/audio-audio-1.md"
       },
       {
         "signature": "public get ended(): bool",
         "description": "Whether the source reached natural completion without looping.",
-        "line": 479,
+        "line": 478,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public get seeking(): bool",
         "description": "Whether a seek is pending.",
-        "line": 485,
+        "line": 484,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public get ready_state(): AudioReadyState",
         "description": "How much source data has been prepared for playback.",
-        "line": 490,
+        "line": 489,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public get error(): Option<AudioError>",
         "description": "Most recent operation failure, cleared when the source is reset.",
-        "line": 513,
+        "line": 512,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public get sink_id(): string",
         "description": "Opaque selected output ID; empty selects the system default.",
-        "line": 518,
+        "line": 517,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public static async fun devices(): Result<AudioDevice[], AudioError>",
         "description": "Enumerates output devices visible to the application.",
-        "line": 523,
+        "line": 522,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public static async fun request_device(): Result<AudioDevice, AudioError>",
         "description": "Prompts for browser output permission; native applications use devices instead.",
-        "line": 528,
+        "line": 527,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public async fun set_sink_id(id: string): Result<Unit, AudioError>",
         "description": "Selects this player's output asynchronously; failure preserves the previous output.",
-        "line": 542,
+        "line": 541,
         "page": "reference/api/audio-audio-2.md"
       },
       {
         "signature": "public fun capture(frame_count: int): Result<AudioSnapshot, AudioError>",
         "description": "Enables an output tap and copies up to 32768 recent rendered frames. Initial calls may return no samples while capture starts. Output is stereo at the device rate.",
-        "line": 606,
+        "line": 605,
         "page": "reference/api/audio-audio-2.md"
       }
     ]
@@ -813,73 +813,73 @@
       {
         "signature": "public class Command",
         "description": "Declarative CLI definition. Parsing consumes arguments without an executable name and never exits.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public constructor(name: string)",
         "description": "Creates a command; invalid names or conflicting definitions return errors from parse.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun version(value: string): Command",
         "description": "Sets version output and enables --version/-V for this command and its descendants.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun description(value: string): Command",
         "description": "Sets text included in automatically generated help.",
-        "line": 33,
+        "line": 32,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun require_subcommand(required: bool = true): Command",
         "description": "Requires one of the declared subcommands; --help and --version still return normal outcomes.",
-        "line": 39,
+        "line": 38,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun positional( name: string, required: bool = false, multiple: bool = false, description: string = \"\" ): Command",
         "description": "Adds an ordered string positional; only the last positional can collect multiple arguments.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun string_option( name: string, short: string = \"\", default_value: string = \"\", required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a string option. Optional values default to empty; repeated occurrences are collected, with the last returned by get_string.",
-        "line": 57,
+        "line": 56,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun int_option( name: string, short: string = \"\", default_value: int = 0, required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a decimal 32-bit integer option. Optional values default to zero; required options ignore defaults.",
-        "line": 72,
+        "line": 71,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun flag(name: string, short: string = \"\", description: string = \"\"): Command",
         "description": "Adds a boolean option defaulting to false; repeated occurrences remain true.",
-        "line": 87,
+        "line": 86,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun choices(name: string, values: string[]): Command",
         "description": "Restricts a previously declared string, positional, or integer argument to these exact values.",
-        "line": 93,
+        "line": 92,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun subcommand(command: Command): Command",
         "description": "Snapshots a child definition. Later edits to the child do not mutate its attached copy.",
-        "line": 105,
+        "line": 104,
         "page": "reference/api/cli-command.md"
       },
       {
         "signature": "public fun parse(arguments: string[]): Result<ParsedArguments, CliError>",
         "description": "Parses explicit arguments; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.",
-        "line": 116,
+        "line": 115,
         "page": "reference/api/cli-command.md"
       }
     ]
@@ -892,91 +892,91 @@
       {
         "signature": "public class ParsedArguments",
         "description": "Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get is_help(): bool",
         "description": "True when --help or -h was requested, including for a subcommand.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get is_version(): bool",
         "description": "True when --version or -V was requested.",
-        "line": 50,
+        "line": 49,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get help_text(): string",
         "description": "Deterministic generated help when is_help is true; otherwise empty.",
-        "line": 55,
+        "line": 54,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get version_text(): string",
         "description": "Generated version text when is_version is true; otherwise empty.",
-        "line": 60,
+        "line": 59,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get command_name(): string",
         "description": "Command name for successful value outcomes; empty for help/version outcomes.",
-        "line": 65,
+        "line": 64,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public get subcommand(): Option<ParsedArguments>",
         "description": "Selected child scope, or None when no subcommand was invoked.",
-        "line": 70,
+        "line": 69,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun is_present(name: string): bool",
         "description": "True only for arguments explicitly supplied on the command line, excluding defaults.",
-        "line": 75,
+        "line": 74,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_string(name: string): Result<string, CliError>",
         "description": "Returns a string positional or the last occurrence of a string option; missing values and wrong getter types return errors.",
-        "line": 81,
+        "line": 80,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_strings(name: string): Result<string[], CliError>",
         "description": "Copies all string values in order, including an optional default when no value was supplied.",
-        "line": 90,
+        "line": 89,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_int(name: string): Result<int, CliError>",
         "description": "Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.",
-        "line": 96,
+        "line": 95,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_ints(name: string): Result<int[], CliError>",
         "description": "Copies every parsed integer occurrence in order.",
-        "line": 105,
+        "line": 104,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun get_bool(name: string): Result<bool, CliError>",
         "description": "Returns the declared boolean flag, false when omitted; wrong getter types return errors.",
-        "line": 115,
+        "line": 114,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun config_keys(): string[]",
         "description": "Copies declared names in declaration order for typed configuration merging; is_present distinguishes explicit values.",
-        "line": 121,
+        "line": 120,
         "page": "reference/api/cli-parsed-arguments.md"
       },
       {
         "signature": "public fun config_value(name: string): Result<string, CliError>",
         "description": "Returns the final scalar value for configuration merging, including typed options.",
-        "line": 130,
+        "line": 129,
         "page": "reference/api/cli-parsed-arguments.md"
       }
     ]
@@ -2125,115 +2125,115 @@
       {
         "signature": "public class GenExpr",
         "description": "An expression that a source generator can inspect.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public id: string",
         "description": "Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public kind: ExprKind",
         "description": "Syntactic shape of the expression (call, literal, binary operation, ...).",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public statement_kind: StmtKind",
         "description": "Category of the containing statement.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public span: GenSpan",
         "description": "Source range occupied by this node.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public constant: Option<GenConstant>",
         "description": "Constant value of the expression, when known.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public text: string",
         "description": "Source text of the expression as written.",
-        "line": 26,
+        "line": 25,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public op: string",
         "description": "Operator spelling used by the expression.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public literal: string",
         "description": "Source spelling of the literal.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public literal_kind: GenValueKind",
         "description": "Category of the literal, such as a number or string.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public ty: GenTypeRef",
         "description": "Type of this declaration or expression.",
-        "line": 38,
+        "line": 37,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public symbol: string",
         "description": "Identifier of the referenced symbol.",
-        "line": 41,
+        "line": 40,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public symbol_kind: GenSymbolKind",
         "description": "Category of the referenced symbol.",
-        "line": 44,
+        "line": 43,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public overload: string",
         "description": "Identifier distinguishing this function's overload.",
-        "line": 47,
+        "line": 46,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public type_args: List<GenTypeRef>",
         "description": "Concrete type arguments, in parameter order.",
-        "line": 50,
+        "line": 49,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public types: List<GenTypeRef>",
         "description": "Type references associated with this expression.",
-        "line": 53,
+        "line": 52,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public constructor(borrow v: JsonValue)",
         "description": "Decodes a `GenExpr` from its object in the generation snapshot.",
-        "line": 58,
+        "line": 57,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public fun children(): List<GenExpr>",
         "description": "Returns child nodes in source order.",
-        "line": 90,
+        "line": 89,
         "page": "reference/api/codegen-gen-expr.md"
       },
       {
         "signature": "public fun is_kind(kind: ExprKind): bool",
         "description": "Tests the node kind.",
-        "line": 95,
+        "line": 94,
         "page": "reference/api/codegen-gen-expr.md"
       }
     ]
@@ -3350,109 +3350,109 @@
       {
         "signature": "public class GenTypeRef",
         "description": "A resolved type with structured arguments and declaration identity.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public kind: TypeRefKind",
         "description": "Shape of the type: primitive, named, array, tuple, function, type parameter, or unknown.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public name: string",
         "description": "`int`, `List`, `T`, or empty for arrays/tuples/functions.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public display: string",
         "description": "Display spelling, including canonical module qualification for resolved names.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public mangled: string",
         "description": "Unique type spelling that distinguishes concrete generic instantiations; useful for generated names.",
-        "line": 21,
+        "line": 20,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public decl: string",
         "description": "Identity of the named declaration (`::User`, `system.collections::List`), or empty.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public args: List<GenTypeRef>",
         "description": "Type arguments; the element of an array; tuple members; function params then return.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public constructor( kind: TypeRefKind, name: string, display: string, mangled: string, decl: string, args: List<GenTypeRef> )",
         "description": "Creates a `GenTypeRef` from its parts. Generators normally receive these from `GenContext` rather than constructing them.",
-        "line": 31,
+        "line": 30,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public static fun unknown(): GenTypeRef",
         "description": "A type of kind Unknown with no name or arguments, used where a type could not be inferred.",
-        "line": 48,
+        "line": 47,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun primitive(): Primitive",
         "description": "The scalar this type is, or `Primitive.NotPrimitive`.",
-        "line": 53,
+        "line": 52,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun is_primitive(p: Primitive): bool",
         "description": "Whether this type is the primitive scalar `p`.",
-        "line": 61,
+        "line": 60,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun collection(): CollectionKind",
         "description": "The standard collection this type is, or `CollectionKind.NotCollection`.",
-        "line": 66,
+        "line": 65,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun is_option(): bool",
         "description": "Whether this type is `Option<T>` for some `T`.",
-        "line": 89,
+        "line": 88,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun is_param(): bool",
         "description": "Whether this type is a generic type parameter such as `T`.",
-        "line": 95,
+        "line": 94,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun is_decl(decl_id: string): bool",
         "description": "True when this names the declaration `decl_id` (see `declof`).",
-        "line": 100,
+        "line": 99,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun arg(i: int): GenTypeRef",
         "description": "Type argument `i`, or an unknown type when there is none.",
-        "line": 105,
+        "line": 104,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public fun source_name(): string",
         "description": "Renders a type using local declaration names in a scope that imports those declarations.",
-        "line": 113,
+        "line": 112,
         "page": "reference/api/codegen-gen-type-ref.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "The `display` spelling of the type.",
-        "line": 161,
+        "line": 160,
         "page": "reference/api/codegen-gen-type-ref.md"
       }
     ]
@@ -4134,205 +4134,205 @@
       {
         "signature": "public class List<T>: IndexedCollection<T>",
         "description": "A growable, ordered sequence with zero-based indexed access. Adding elements may increase its capacity.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty list with an initial backing buffer capacity (defaults to 8).",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 28,
+        "line": 27,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the list has no elements.",
-        "line": 34,
+        "line": 33,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 40,
+        "line": 39,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves room for additional elements without changing length or existing values.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 65,
+        "line": 64,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items` in order.",
-        "line": 76,
+        "line": 75,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public constructor(borrow items: T[])",
         "description": "Creates a list containing the elements of `items` in order. List literals such as `[1, 2, 3]` create lists in the same way.",
-        "line": 92,
+        "line": 91,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Returns the elements as an array and leaves the list empty. The returned array has exactly the previous list length.",
-        "line": 102,
+        "line": 101,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Returns the element at `index`. Panics if `index` is out of range.",
-        "line": 127,
+        "line": 126,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 135,
+        "line": 134,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 143,
+        "line": 142,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 154,
+        "line": 153,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 166,
+        "line": 165,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 178,
+        "line": 177,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 190,
+        "line": 189,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "Returns a new list holding the elements from `start` (inclusive) to `end` (exclusive). Panics unless `0 <= start <= end <= length`.",
-        "line": 202,
+        "line": 201,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 216,
+        "line": 215,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 232,
+        "line": 231,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 238,
+        "line": 237,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 256,
+        "line": 255,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 271,
+        "line": 270,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
-        "line": 277,
+        "line": 276,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T: unmanaged",
         "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
-        "line": 296,
+        "line": 295,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 315,
+        "line": 314,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 331,
+        "line": 330,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 339,
+        "line": 338,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 346,
+        "line": 345,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 351,
+        "line": 350,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 364,
+        "line": 363,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T: Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 418,
+        "line": 417,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 426,
+        "line": 425,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 445,
+        "line": 444,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -4345,13 +4345,13 @@
       {
         "signature": "public class ListIterator<T>: Iterator<T>",
         "description": "Cursor produced by `List.iterator()`.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-list-iterator.md"
       },
       {
         "signature": "public fun next(): Option<T>",
         "description": "Returns the next element, or `None` if exhausted.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/collections-list-iterator.md"
       }
     ]
@@ -4364,145 +4364,145 @@
       {
         "signature": "public class Map<K, V>: Collection<KeyValuePair<K, V>>",
         "description": "A generic open-addressing hash map. Slots are packed `{key, value, state}` records.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Creates an empty map, reserving space based on `capacity` (8 by default).",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 58,
+        "line": 57,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Number of elements that fit before storage must grow.",
-        "line": 64,
+        "line": 63,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
-        "line": 197,
+        "line": 196,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "Returns whether `key` is present.",
-        "line": 221,
+        "line": 220,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "Inserts corresponding entries from `keys` and `values`; the arrays must have equal lengths.",
-        "line": 227,
+        "line": 226,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public constructor(borrow keys: K[], borrow values: V[])",
         "description": "Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.",
-        "line": 240,
+        "line": 239,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 253,
+        "line": 252,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 263,
+        "line": 262,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey",
         "description": "Returns whether `key` is present.",
-        "line": 272,
+        "line": 271,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 278,
+        "line": 277,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V",
         "description": "Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.",
-        "line": 288,
+        "line": 287,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "Copies entries from `other`, replacing values with matching keys.",
-        "line": 299,
+        "line": 298,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "Returns a new list of key/value pairs.",
-        "line": 306,
+        "line": 305,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes `key` and its value; returns whether the key was present.",
-        "line": 319,
+        "line": 318,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "Returns whether there are no elements.",
-        "line": 335,
+        "line": 334,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 341,
+        "line": 340,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void where K: unmanaged, V: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 361,
+        "line": 360,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun keys(): List<K>",
         "description": "Returns a new list of the keys, in the map's iteration order.",
-        "line": 368,
+        "line": 367,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun values(): List<V>",
         "description": "Returns a new list of the values, in the map's iteration order.",
-        "line": 381,
+        "line": 380,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "Creates a cursor over the sequence. Close it when iteration ends early.",
-        "line": 394,
+        "line": 393,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 419,
+        "line": 418,
         "page": "reference/api/collections-map.md"
       }
     ]
@@ -4515,13 +4515,13 @@
       {
         "signature": "public class MapIterator<K, V>: Iterator<KeyValuePair<K, V>>",
         "description": "Cursor produced by `Map.iterator()` — walks occupied slots in place (no snapshot).",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-map-iterator.md"
       },
       {
         "signature": "public fun next(): Option<KeyValuePair<K, V>>",
         "description": "Returns the next key/value pair, or `None` if exhausted.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/collections-map-iterator.md"
       }
     ]
@@ -4534,67 +4534,67 @@
       {
         "signature": "public class PriorityQueue<T>: Collection<T>",
         "description": "Four-child min-heap: `pop`/`peek` always return the smallest element by the active comparator (natural ascending order via `Comparable<T>` by default, or a custom `fun(T, T): int`).",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public constructor()where T: Comparable<T>",
         "description": "Empty queue ordered by `T`'s natural `Comparable` order.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public constructor(cmp: fun(T, T): int)",
         "description": "Empty queue ordered by a custom comparator (same contract as `List.sort_by`: negative when `a` should come out first, positive when `b` should).",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 34,
+        "line": 33,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the queue has no elements.",
-        "line": 39,
+        "line": 38,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later pushes overwrite them.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 57,
+        "line": 56,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Adds a value to the priority queue.",
-        "line": 103,
+        "line": 102,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes the highest-priority value, or returns `None` when empty.",
-        "line": 137,
+        "line": 136,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the smallest element without removing it, or `None` when empty. O(1).",
-        "line": 186,
+        "line": 185,
         "page": "reference/api/collections-priority-queue.md"
       },
       {
         "signature": "public fun iterator(): PriorityQueueIterator<T>",
         "description": "Iterates elements in ascending order under the active comparator, over a snapshot taken now, so later pushes/pops do not affect the cursor.",
-        "line": 195,
+        "line": 194,
         "page": "reference/api/collections-priority-queue.md"
       }
     ]
@@ -4607,13 +4607,13 @@
       {
         "signature": "public class PriorityQueueIterator<T>: Iterator<T>",
         "description": "Cursor produced by `PriorityQueue.iterator()`. Yields elements in ascending order under the active comparator). Iteration is destructive-free: it drains into a snapshot first, so the queue can be mutated while the cursor is alive.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/collections-priority-queue-iterator.md"
       },
       {
         "signature": "public fun next(): Option<T>",
         "description": "Returns the next element, or `None` if exhausted.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/collections-priority-queue-iterator.md"
       }
     ]
@@ -4626,67 +4626,67 @@
       {
         "signature": "public class Queue<T>: Collection<T>",
         "description": "FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates an empty queue.",
-        "line": 15,
+        "line": 14,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 22,
+        "line": 21,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current element capacity of the ring buffer.",
-        "line": 27,
+        "line": 26,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves room for additional elements while preserving FIFO order and length.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun enqueue(value: T): void",
         "description": "Appends `value` at the back of the queue.",
-        "line": 67,
+        "line": 66,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun dequeue(): Option<T>",
         "description": "Removes and returns the front element, or `None` when empty. The vacated slot is zeroed so managed elements release immediately instead of staying retained until overwritten.",
-        "line": 78,
+        "line": 77,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the front element without removing it, or `None` when empty.",
-        "line": 89,
+        "line": 88,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live ring slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later enqueues overwrite them; the ring is reset to front-aligned empty.",
-        "line": 99,
+        "line": 98,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 112,
+        "line": 111,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun iterator(): QueueIterator<T>",
         "description": "Iterates elements from front to back.",
-        "line": 118,
+        "line": 117,
         "page": "reference/api/collections-queue.md"
       }
     ]
@@ -4699,13 +4699,13 @@
       {
         "signature": "public class QueueIterator<T>: Iterator<T>",
         "description": "Cursor produced by `Queue.iterator()`.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-queue-iterator.md"
       },
       {
         "signature": "public fun next(): Option<T>",
         "description": "Returns the next element, or `None` if exhausted.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/collections-queue-iterator.md"
       }
     ]
@@ -4731,91 +4731,91 @@
       {
         "signature": "public class Seq<T>: Iterable<T>",
         "description": "A repeatable query sequence whose filters and transformations run during traversal.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public borrow fun iterator(): Iterator<T>",
         "description": "Creates an independent cursor. Closing it also closes every upstream cursor.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun filter(borrow p: fun(T): bool): Seq<T>",
         "description": "Lazily keeps the elements for which `p` returns true.",
-        "line": 19,
+        "line": 18,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun take(n: int): Seq<T>",
         "description": "Lazily keeps at most `n` elements; nonpositive counts produce an empty sequence.",
-        "line": 32,
+        "line": 31,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun skip(n: int): Seq<T>",
         "description": "Lazily skips the first `n` elements; nonpositive counts skip nothing.",
-        "line": 51,
+        "line": 50,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun to_list(): List<T>",
         "description": "Collects the surviving elements into a fresh list.",
-        "line": 67,
+        "line": 66,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun count(): int",
         "description": "Counts the surviving elements without building a list.",
-        "line": 76,
+        "line": 75,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun distinct(): Seq<T>",
         "description": "Lazily removes duplicates while preserving first-seen order.",
-        "line": 85,
+        "line": 84,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): Seq<T>",
         "description": "Immediately collects and sorts the sequence with `cmp`.",
-        "line": 100,
+        "line": 99,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun flat_map<U>(borrow f: fun(T): List<U>): Seq<U>",
         "description": "Lazily maps each element to a list and visits each result in order.",
-        "line": 107,
+        "line": 106,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun map<U>(borrow f: fun(T): U): Seq<U>",
         "description": "Lazily transforms each element through `f`.",
-        "line": 120,
+        "line": 119,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun reduce<A>(init: A, borrow f: fun(A, T): A): A",
         "description": "Combines elements in order, starting with `init`; returns `init` when empty.",
-        "line": 131,
+        "line": 130,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun collect_set(): Set<T>",
         "description": "Collects the elements into a new set, removing duplicates.",
-        "line": 140,
+        "line": 139,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun min(): Option<T> where T: Comparable<T>",
         "description": "Returns the smallest element by `compare`, or `None` when empty.",
-        "line": 149,
+        "line": 148,
         "page": "reference/api/collections-seq.md"
       },
       {
         "signature": "public fun max(): Option<T> where T: Comparable<T>",
         "description": "Returns the largest element by `compare`, or `None` when empty.",
-        "line": 167,
+        "line": 166,
         "page": "reference/api/collections-seq.md"
       }
     ]
@@ -4828,139 +4828,139 @@
       {
         "signature": "public class Set<T>: Collection<T>",
         "description": "A generic open-addressing hash set.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).",
-        "line": 15,
+        "line": 14,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
-        "line": 26,
+        "line": 25,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 56,
+        "line": 55,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 61,
+        "line": 60,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 183,
+        "line": 182,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 195,
+        "line": 194,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: ReadOnlySpan<char>): bool where T: StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 201,
+        "line": 200,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add_all(borrow items: T[]): void",
         "description": "Adds every element of `items`, ignoring duplicates.",
-        "line": 227,
+        "line": 226,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public constructor(borrow items: T[])",
         "description": "Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2, 3}` create sets in the same way.",
-        "line": 239,
+        "line": 238,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 251,
+        "line": 250,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool where T: unmanaged",
         "description": "Removes `value`; returns whether it was present.",
-        "line": 264,
+        "line": 263,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 275,
+        "line": 274,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 281,
+        "line": 280,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 298,
+        "line": 297,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 305,
+        "line": 304,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 320,
+        "line": 319,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 336,
+        "line": 335,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 351,
+        "line": 350,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 366,
+        "line": 365,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 380,
+        "line": 379,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 394,
+        "line": 393,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 409,
+        "line": 408,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -4973,13 +4973,13 @@
       {
         "signature": "public class SetIterator<T>: Iterator<T>",
         "description": "An iterator for traversing a `Set` — walks occupied slots in place (no snapshot).",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-set-iterator.md"
       },
       {
         "signature": "public fun next(): Option<T>",
         "description": "Returns the next element, or `None` if exhausted.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/collections-set-iterator.md"
       }
     ]
@@ -4992,103 +4992,103 @@
       {
         "signature": "public class SortedMap<K: Comparable<K>, V>",
         "description": "An ordered map backed by parallel sorted arrays (binary search + shift on insert/remove). O(log n) lookup, O(n) insert/remove, ascending-key iteration. Prefer `Map<K, V>` when key order doesn't matter — it has O(1) average insert/lookup.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty sorted map with an initial capacity (defaults to 8).",
-        "line": 13,
+        "line": 12,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of key/value pairs currently stored.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the map is empty.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every entry, keeping capacity. Live slots are overwritten with a zero value so reference keys/values release immediately.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "Inserts or updates the value for a key. O(log n) to locate, O(n) worst case to shift.",
-        "line": 76,
+        "line": 75,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when the key is absent.",
-        "line": 98,
+        "line": 97,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `sm[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 108,
+        "line": 107,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "True if the map contains the key.",
-        "line": 117,
+        "line": 116,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes a key and returns true if it was present.",
-        "line": 122,
+        "line": 121,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun first_key(): Option<K>",
         "description": "The smallest key, or `None` when empty.",
-        "line": 140,
+        "line": 139,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun last_key(): Option<K>",
         "description": "The largest key, or `None` when empty.",
-        "line": 148,
+        "line": 147,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun ceiling_key(borrow key: K): Option<K>",
         "description": "The smallest key `>= key`, or `None` if every key is smaller.",
-        "line": 156,
+        "line": 155,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun floor_key(borrow key: K): Option<K>",
         "description": "The largest key `<= key`, or `None` if every key is larger.",
-        "line": 169,
+        "line": 168,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun keys(): List<K>",
         "description": "Returns a new list of the keys in ascending order.",
-        "line": 182,
+        "line": 181,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun values(): List<V>",
         "description": "Returns a new list of the values, ordered by ascending key.",
-        "line": 193,
+        "line": 192,
         "page": "reference/api/collections-sorted-map.md"
       },
       {
         "signature": "public fun iterator(): SortedMapIterator<K, V>",
         "description": "Gets an iterator over entries in ascending key order.",
-        "line": 204,
+        "line": 203,
         "page": "reference/api/collections-sorted-map.md"
       }
     ]
@@ -5101,13 +5101,13 @@
       {
         "signature": "public class SortedMapIterator<K: Comparable<K>, V>: Iterator<KeyValuePair<K, V>>",
         "description": "Cursor produced by `SortedMap.iterator()` — walks entries in ascending key order.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-sorted-map-iterator.md"
       },
       {
         "signature": "public fun next(): Option<KeyValuePair<K, V>>",
         "description": "Returns the next key/value pair in ascending key order, or `None` if exhausted.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/collections-sorted-map-iterator.md"
       }
     ]
@@ -5120,49 +5120,49 @@
       {
         "signature": "public class Stack<T>: Collection<T>",
         "description": "LIFO stack backed by `List<T>`.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates an empty stack.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Pushes `value` onto the top of the stack.",
-        "line": 19,
+        "line": 18,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the top element, or `None` when empty.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the top element without removing it, or `None` when empty.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element.",
-        "line": 37,
+        "line": 36,
         "page": "reference/api/collections-stack.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Iterates elements from bottom to top.",
-        "line": 42,
+        "line": 41,
         "page": "reference/api/collections-stack.md"
       }
     ]
@@ -5225,19 +5225,19 @@
       {
         "signature": "public class CompressionReader: Reader",
         "description": "Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/compress-compression-reader.md"
       },
       {
         "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
         "description": "Returns up to `max_bytes` (at most 64 KiB) decoded bytes, or an empty array once the stream is complete. Malformed, truncated, oversized, or concatenated input returns an `ECOMPRESS` error, and source read failures are returned unchanged; either closes the reader.",
-        "line": 19,
+        "line": 18,
         "page": "reference/api/compress-compression-reader.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Stops decoding without closing the borrowed source; later reads fail.",
-        "line": 46,
+        "line": 45,
         "page": "reference/api/compress-compression-reader.md"
       }
     ]
@@ -5250,31 +5250,31 @@
       {
         "signature": "public class CompressionWriter: Writer",
         "description": "Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun write(bytes: byte[]): Result<int, IoError>",
         "description": "Accepts up to 64 KiB and returns how many bytes were taken. Completed compressed output is written to the destination as blocks fill; exceeding the output limit returns an `ECOMPRESS` error and closes the writer.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun flush(): Result<Unit, IoError>",
         "description": "Emits a synchronization boundary and flushes the borrowed destination without ending the stream.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun finish(): Result<Unit, IoError>",
         "description": "Finishes the trailer, releases encoder state, and flushes the borrowed destination.",
-        "line": 45,
+        "line": 44,
         "page": "reference/api/compress-compression-writer.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Abandons the stream without finishing or closing the borrowed destination; later writes fail.",
-        "line": 55,
+        "line": 54,
         "page": "reference/api/compress-compression-writer.md"
       }
     ]
@@ -5324,55 +5324,55 @@
       {
         "signature": "public class ConfigBuilder",
         "description": "Merges defaults, JSON files, environment variables, and explicit CLI values in that order.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates an empty builder; source precedence is independent of method call order.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun default_value(key: string, value: string): ConfigBuilder",
         "description": "Registers a known setting and its lowest-precedence default.",
-        "line": 24,
+        "line": 23,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun require(key: string): ConfigBuilder",
         "description": "Adds a required known setting with no default.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun json_file(path: string): ConfigBuilder",
         "description": "Adds a JSON object file; later files override earlier files.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun environment(prefix: string = \"\"): ConfigBuilder",
         "description": "Reads known settings from prefix plus the uppercase key, with hyphens replaced by underscores.",
-        "line": 42,
+        "line": 41,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun cli(arguments: ParsedArguments): ConfigBuilder",
         "description": "Uses explicitly supplied command-line arguments, excluding parser defaults.",
-        "line": 48,
+        "line": 47,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun validate(key: string, predicate: fun(string): bool): ConfigBuilder",
         "description": "Adds a value predicate; false returns a provenance-aware validation error.",
-        "line": 54,
+        "line": 53,
         "page": "reference/api/config-config-builder.md"
       },
       {
         "signature": "public fun build(): Result<Config, ConfigError>",
         "description": "Loads and validates a snapshot; failures never change a previously built configuration.",
-        "line": 60,
+        "line": 59,
         "page": "reference/api/config-config-builder.md"
       }
     ]
@@ -5536,7 +5536,7 @@
     "declarations": [
       {
         "signature": "public struct AllowCycleAttribute",
-        "description": "Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.",
+        "description": "Accepts strong reference cycles that pass through objects of this class. The compiler otherwise rejects stores that close a strong cycle. ARC does not collect cycles, so the program must break them itself, for example by clearing an owning field.",
         "line": 5,
         "page": "reference/api/core-allow-cycle-attribute.md"
       }
@@ -5667,13 +5667,13 @@
       {
         "signature": "public class ArrayIterator<T>: Iterator<T>",
         "description": "Cursor produced by `T[].iterator()` when an array participates as `Collection` / `IndexedCollection`. Concrete `for (let x in arr)` still uses the native index loop.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/core-array-iterator.md"
       },
       {
         "signature": "public fun next(): Option<T>",
         "description": "Returns the next element, or `None` if exhausted.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/core-array-iterator.md"
       }
     ]
@@ -8238,19 +8238,19 @@
       {
         "signature": "public class CsvReader",
         "description": "Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/csv-csv-reader.md"
       },
       {
         "signature": "public constructor(source: Reader, delimiter: char = ',', max_record_bytes: int = 1048576)",
         "description": "Borrows source; record limits count encoded bytes including embedded newlines.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/csv-csv-reader.md"
       },
       {
         "signature": "public fun read_record(): Result<Option<string[]>, CsvError>",
         "description": "Returns a record or None at EOF; malformed input permanently fails this reader.",
-        "line": 59,
+        "line": 58,
         "page": "reference/api/csv-csv-reader.md"
       }
     ]
@@ -8263,25 +8263,25 @@
       {
         "signature": "public class CsvWriter",
         "description": "CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/csv-csv-writer.md"
       },
       {
         "signature": "public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576)",
         "description": "Borrows destination; callers retain responsibility for closure and explicit flushing.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/csv-csv-writer.md"
       },
       {
         "signature": "public fun write_record(fields: string[]): Result<Unit, CsvError>",
         "description": "Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.",
-        "line": 18,
+        "line": 17,
         "page": "reference/api/csv-csv-writer.md"
       },
       {
         "signature": "public fun flush(): Result<Unit, CsvError>",
         "description": "Flushes the borrowed destination and reports underlying failures.",
-        "line": 42,
+        "line": 41,
         "page": "reference/api/csv-csv-writer.md"
       }
     ]
@@ -12847,43 +12847,43 @@
       {
         "signature": "public class BufferedReader: Reader",
         "description": "Reads ahead from a borrowed reader without closing it; use this wrapper for positioning while buffered bytes remain, or recover them before accessing the source directly.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public constructor(source: Reader, buffer_size: int = 8192)",
         "description": "Wraps `source` with an 8 KiB default buffer; nonpositive sizes fail on reads.",
-        "line": 13,
+        "line": 12,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public fun read(max_bytes: int): Result<byte[], IoError>",
         "description": "Returns up to `max_bytes` from buffered input, refilling as needed; may return fewer. Zero is a no-op, negative sizes are invalid, and empty success for positive sizes is EOF.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public fun read_line(max_bytes: int = 1048576): Result<Option<string>, IoError>",
         "description": "Returns a line without LF or CRLF, preserving standalone CR and final unterminated lines. Returns `None` at EOF; `ELIMIT` consumes the prefix and exceeding byte when the pre-LF byte count exceeds `max_bytes` (default 1 MiB, including any CR).",
-        "line": 56,
+        "line": 55,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public fun seek(position: long): Result<Unit, IoError>",
         "description": "Seeks the source and discards buffered input only after success. Unsupported or failed seeks preserve unread buffered bytes.",
-        "line": 86,
+        "line": 85,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public fun tell(): Result<long, IoError>",
         "description": "Returns the source position minus unread buffered bytes; propagates positioning errors.",
-        "line": 94,
+        "line": 93,
         "page": "reference/api/io-buffered-reader.md"
       },
       {
         "signature": "public fun take_buffered(): byte[]",
         "description": "Copies and removes unread buffered bytes without repositioning the source. Recover these bytes before bypassing this wrapper to access the source directly.",
-        "line": 100,
+        "line": 99,
         "page": "reference/api/io-buffered-reader.md"
       }
     ]
@@ -12896,31 +12896,31 @@
       {
         "signature": "public class BufferedWriter: Writer",
         "description": "Buffers output to a borrowed writer without closing it. Call `finish()` explicitly to report flush failures; destruction does not flush pending bytes.",
-        "line": 6,
+        "line": 5,
         "page": "reference/api/io-buffered-writer.md"
       },
       {
         "signature": "public constructor(destination: Writer, buffer_size: int = 8192)",
         "description": "Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/io-buffered-writer.md"
       },
       {
         "signature": "public fun write(data: byte[]): Result<int, IoError>",
         "description": "Accepts as many bytes as fit, flushing a previously full buffer first. May return partial progress; operations after successful finish return `ECLOSED`.",
-        "line": 28,
+        "line": 27,
         "page": "reference/api/io-buffered-writer.md"
       },
       {
         "signature": "public fun flush(): Result<Unit, IoError>",
         "description": "Writes pending bytes and flushes the destination; retains any unwritten suffix on failure. Already completed writes persist, and a finished writer returns `ECLOSED`.",
-        "line": 51,
+        "line": 50,
         "page": "reference/api/io-buffered-writer.md"
       },
       {
         "signature": "public fun finish(): Result<Unit, IoError>",
         "description": "Flushes and marks the wrapper finished only on success; repeated success is idempotent. Leaves the underlying writer open and permits retry after a flush failure.",
-        "line": 74,
+        "line": 73,
         "page": "reference/api/io-buffered-writer.md"
       }
     ]
@@ -14017,175 +14017,175 @@
       {
         "signature": "public class JsonValue",
         "description": "A JSON value: null, boolean, number, string, array, or object. Arrays and objects can contain nested values. Object properties retain insertion order when serialized.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun null(): JsonValue",
         "description": "Creates a JSON `null`.",
-        "line": 57,
+        "line": 56,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_bool(b: bool): JsonValue",
         "description": "Creates a JSON boolean holding `b`.",
-        "line": 62,
+        "line": 61,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_double(n: double): JsonValue",
         "description": "Creates a JSON number holding `n`. Integral values serialize without a decimal point.",
-        "line": 67,
+        "line": 66,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_int(n: int): JsonValue",
         "description": "Creates a JSON number holding `n`; every `int` is represented exactly.",
-        "line": 72,
+        "line": 71,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun from_string(s: string): JsonValue",
         "description": "Creates a JSON string holding `s`.",
-        "line": 77,
+        "line": 76,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun array(): JsonValue",
         "description": "Creates an empty JSON array; add elements with `push`.",
-        "line": 82,
+        "line": 81,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public static fun dict(): JsonValue",
         "description": "Creates an empty JSON object; add properties with `value[key] = item`. Properties serialize in insertion order.",
-        "line": 100,
+        "line": 99,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun kind(): JsonKind",
         "description": "The kind of JSON value, for `switch (v.kind()) { case JsonKind.Object: … }`.",
-        "line": 115,
+        "line": 114,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_null(): bool",
         "description": "True if the value is null.",
-        "line": 135,
+        "line": 134,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_array(): bool",
         "description": "True if the value is an array.",
-        "line": 140,
+        "line": 139,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun is_object(): bool",
         "description": "True if the value is an object.",
-        "line": 145,
+        "line": 144,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_bool(): Option<bool>",
         "description": "Returns the value as a bool when this is a JSON boolean.",
-        "line": 150,
+        "line": 149,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_double(): Option<double>",
         "description": "Returns the value as a double when this is a JSON number.",
-        "line": 158,
+        "line": 157,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_int(): Option<int>",
         "description": "Returns the value as an integer when this is a JSON number.",
-        "line": 166,
+        "line": 165,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_string(): Option<string>",
         "description": "Returns the value as a string when this is a JSON string.",
-        "line": 174,
+        "line": 173,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_array(): Option<List<JsonValue>>",
         "description": "Returns the elements when this is an array, otherwise `None`.",
-        "line": 183,
+        "line": 182,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun as_map(): Option<Map<string, JsonValue>>",
         "description": "Returns the entries when this is an object, otherwise `None`.",
-        "line": 192,
+        "line": 191,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun remove(borrow key: string): bool",
         "description": "Removes the named object property; returns whether it existed.",
-        "line": 200,
+        "line": 199,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun contains(borrow key: string): bool",
         "description": "Returns whether this is an object with a property named `key`. Always `false` for arrays and scalars.",
-        "line": 227,
+        "line": 226,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun get(borrow key: string): Option<JsonValue>",
         "description": "Returns the property named `key`, or `None` when this is not an object or the property is absent. Chain `as_string`, `as_int`, and similar readers through `and_then` to read a typed property.",
-        "line": 237,
+        "line": 236,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun this[borrow key: string]: JsonValue",
         "description": "Returns the property named `key`. Panics when this is not an object or the property is absent; use `get` when absence is expected.",
-        "line": 246,
+        "line": 245,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun this[key: string] = value: JsonValue",
         "description": "Sets the value for `key` (objects only).",
-        "line": 255,
+        "line": 254,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun key_at(index: int): Option<string>",
         "description": "The object key at `index`, or `None`.",
-        "line": 286,
+        "line": 285,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun value_at(index: int): Option<JsonValue>",
         "description": "The object value at insertion index `index`, or `None`.",
-        "line": 301,
+        "line": 300,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun keys(): List<string>",
         "description": "The keys of the object (empty list when not an object).",
-        "line": 316,
+        "line": 315,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun at(index: int): Option<JsonValue>",
         "description": "The array element at `index`, or `None`.",
-        "line": 321,
+        "line": 320,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun push(value: JsonValue): void",
         "description": "Appends a value to the array.",
-        "line": 336,
+        "line": 335,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Element count for arrays/objects (0 for scalars).",
-        "line": 346,
+        "line": 345,
         "page": "reference/api/json-json-value-2.md"
       }
     ]
@@ -14372,67 +14372,67 @@
       {
         "signature": "public class Logger",
         "description": "A named logger with a minimum severity and configurable output handlers.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public constructor(name: string)",
         "description": "Creates a `Logger` with `name`.",
-        "line": 13,
+        "line": 12,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public static fun get(name: string): Logger",
         "description": "Returns the named logger, creating it on first use.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public get level(): LogLevel",
         "description": "Minimum severity emitted by this logger.",
-        "line": 31,
+        "line": 30,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public set level(level: LogLevel)",
         "description": "Minimum severity emitted by this logger.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun add_handler(h: LogHandler): void",
         "description": "Registers an additional handler.",
-        "line": 41,
+        "line": 40,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun trace(msg: string): void",
         "description": "Logs at Trace.",
-        "line": 59,
+        "line": 58,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun debug(msg: string): void",
         "description": "Logs at Debug.",
-        "line": 64,
+        "line": 63,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun info(msg: string): void",
         "description": "Logs at Info.",
-        "line": 69,
+        "line": 68,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun warn(msg: string): void",
         "description": "Logs at Warn.",
-        "line": 74,
+        "line": 73,
         "page": "reference/api/logging-logger.md"
       },
       {
         "signature": "public fun error(msg: string): void",
         "description": "Logs at Error.",
-        "line": 79,
+        "line": 78,
         "page": "reference/api/logging-logger.md"
       }
     ]
@@ -14445,13 +14445,13 @@
       {
         "signature": "public class NativeCallback<F>",
         "description": "A Dream `fun` (capturing or not) handed to a `@c` extern as a `(fn, void* user_data)` pair. C may call it for as long as this object is alive: keep it in a field while C holds the pointer. Calls from threads Dream did not start trap.",
-        "line": 8,
+        "line": 7,
         "page": "reference/api/native-callback.md"
       },
       {
         "signature": "public constructor(f: F)",
         "description": "Creates a `NativeCallback` with `f`.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/native-callback.md"
       }
     ]
@@ -14950,85 +14950,85 @@
       {
         "signature": "public class TcpStream: AsyncReader, AsyncWriter",
         "description": "An owned TCP byte stream supporting one simultaneous read and one simultaneous write.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public static async fun connect( host: string, port: int, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<TcpStream, IoError>",
         "description": "Connects with a deadline in milliseconds; zero disables the deadline.",
-        "line": 13,
+        "line": 12,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get local_host(): string",
         "description": "Numeric local interface address selected for this connection.",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get local_port(): int",
         "description": "Actual bound local port.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get peer_host(): string",
         "description": "Numeric remote address of the peer.",
-        "line": 35,
+        "line": 34,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get peer_port(): int",
         "description": "Remote TCP port of the peer.",
-        "line": 40,
+        "line": 39,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
         "description": "Reads at least one and at most `max_bytes` bytes, returning whatever has arrived. A request above 1 MiB returns at most 1 MiB per call. A positive-size empty success denotes peer EOF.",
-        "line": 46,
+        "line": 45,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun read_with_timeout( max_bytes: int, timeout_ms: int, token: Option<CancellationToken> = Option.None ): Future<Result<byte[], IoError>>",
         "description": "Reads with a per-operation deadline; a concurrent read returns EBUSY.",
-        "line": 54,
+        "line": 53,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun write_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<int, IoError>",
         "description": "Writes a partial byte count; cancellation preserves completed side effects.",
-        "line": 65,
+        "line": 64,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async fun write_all_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Retries partial writes until every byte has been accepted; does not roll back failures.",
-        "line": 79,
+        "line": 78,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun flush_async( token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "TCP writes are unbuffered by this wrapper; validates openness and cancellation.",
-        "line": 103,
+        "line": 102,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun shutdown_write(): Result<Unit, IoError>",
         "description": "Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.",
-        "line": 114,
+        "line": 113,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun set_nodelay(enabled: bool): Result<Unit, IoError>",
         "description": "Enables or disables TCP_NODELAY; pending native reads may return EBUSY.",
-        "line": 119,
+        "line": 118,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun close(): Result<Unit, IoError>",
         "description": "Closes the owned socket and wakes pending operations; repeated closure succeeds.",
-        "line": 124,
+        "line": 123,
         "page": "reference/api/net-tcp-stream.md"
       }
     ]
@@ -16562,25 +16562,25 @@
       {
         "signature": "public class Receiver<T>",
         "description": "An independently closable consumer endpoint for a local async channel.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/task-receiver.md"
       },
       {
         "signature": "public fun try_receive(): Result<Option<T>, ChannelError>",
         "description": "Returns a queued item, drained EOF, or an explicit Empty/Closed error without suspension.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/task-receiver.md"
       },
       {
         "signature": "public fun receive( token: Option<CancellationToken> = Option.None ): Future<Result<Option<T>, ChannelError>>",
         "description": "Waits for an item; None means that all senders closed and the queue has drained.",
-        "line": 33,
+        "line": 32,
         "page": "reference/api/task-receiver.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Closes this endpoint; dropping the last receiver rejects and wakes pending sends.",
-        "line": 70,
+        "line": 69,
         "page": "reference/api/task-receiver.md"
       }
     ]
@@ -16593,25 +16593,25 @@
       {
         "signature": "public class Sender<T>",
         "description": "An independently closable producer endpoint for a local async channel.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/task-sender.md"
       },
       {
         "signature": "public fun try_send(value: T): Result<Unit, ChannelError>",
         "description": "Attempts a send without suspension; Full and Closed are distinct errors.",
-        "line": 16,
+        "line": 15,
         "page": "reference/api/task-sender.md"
       },
       {
         "signature": "public fun send( value: T, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, ChannelError>>",
         "description": "Suspends for capacity and observes the inherited scope token unless explicitly overridden.",
-        "line": 29,
+        "line": 28,
         "page": "reference/api/task-sender.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Closes this endpoint idempotently; the last sender lets receivers drain then finish.",
-        "line": 68,
+        "line": 67,
         "page": "reference/api/task-sender.md"
       }
     ]
@@ -16809,13 +16809,13 @@
       {
         "signature": "public class TaskHandle<T, E>",
         "description": "A child result whose execution is owned by a scope, independent of this handle's lifetime.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/task-task-handle.md"
       },
       {
         "signature": "public fun join(): Future<Result<T, TaskFailure<E>>>",
         "description": "Waits for completion without cancelling or transferring ownership of the child.",
-        "line": 15,
+        "line": 14,
         "page": "reference/api/task-task-handle.md"
       }
     ]
@@ -16828,49 +16828,49 @@
       {
         "signature": "public class TaskPool",
         "description": "Reuses a fixed number of parallel workers; local async tasks do not consume pool workers. Each worker holds at most two jobs. Further dispatches wait in submission order and go to the least-loaded worker once one finishes, so a long job holds up at most one job behind it.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public constructor(size: int)",
         "description": "Creates a fixed worker set; nonpositive sizes produce InvalidSize on operations.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public get size(): int",
         "description": "Number of reusable parallel workers in this pool.",
-        "line": 38,
+        "line": 37,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun dispatch<TOut: shared>( body: fun(): TOut, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches a CPU job; capture and return values follow the shared/move worker rules.",
-        "line": 43,
+        "line": 42,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun dispatch_async<TOut: shared>( body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches an async job on a pool worker and waits for its operation to settle.",
-        "line": 91,
+        "line": 90,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map<T: shared, U: shared>( items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps CPU work with at most size active dispatches and preserves input order.",
-        "line": 223,
+        "line": 222,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map_async<T: shared, U: shared>( items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps async worker jobs with bounded dispatch rather than creating one worker per input.",
-        "line": 248,
+        "line": 247,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, TaskPoolError>>",
         "description": "Stops accepting work, waits for submitted jobs, then closes workers idempotently.",
-        "line": 273,
+        "line": 272,
         "page": "reference/api/task-task-pool.md"
       }
     ]
@@ -16932,37 +16932,37 @@
       {
         "signature": "public class TaskScope<E>",
         "description": "Owns async and parallel children; its enclosing Task.scope joins every child before returning.",
-        "line": 5,
+        "line": 6,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public get token(): CancellationToken",
         "description": "The inherited cancellation token for this scope and its children.",
-        "line": 25,
+        "line": 26,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun cancel(): void",
         "description": "Requests cooperative cancellation; completion still waits for child cleanup.",
-        "line": 30,
+        "line": 31,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn<T>(body: fun(): Future<Result<T, E>>): TaskHandle<T, E>",
         "description": "Schedules a child immediately and retains it even if its result handle is discarded.",
-        "line": 35,
+        "line": 36,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on the runtime's shared worker threads and retains structured ownership.",
-        "line": 50,
+        "line": 51,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on an explicit reusable pool while retaining structured ownership.",
-        "line": 65,
+        "line": 66,
         "page": "reference/api/task-task-scope.md"
       }
     ]
@@ -17117,25 +17117,25 @@
       {
         "signature": "public class TestFixture<T, E>",
         "description": "Owns one fixture and runs its cleanup on explicit close, scope exit, or async-frame cancellation.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/testing-test-fixture.md"
       },
       {
         "signature": "public constructor(value: T, cleanup: fun(T): Result<Unit, E>)",
         "description": "Registers deterministic cleanup before the fixture is exposed to test code.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/testing-test-fixture.md"
       },
       {
         "signature": "public get resource(): T",
         "description": "Borrows the fixture value while this owner remains alive.",
-        "line": 18,
+        "line": 17,
         "page": "reference/api/testing-test-fixture.md"
       },
       {
         "signature": "public fun close(): Result<Unit, E>",
         "description": "Executes cleanup once and returns the same outcome to repeated callers.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/testing-test-fixture.md"
       }
     ]
@@ -18364,55 +18364,55 @@
       {
         "signature": "public class AuthService",
         "description": "Local and OIDC authentication with application-owned accounts and atomic session storage.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public constructor( jwt: JwtOptions, accounts: AuthAccounts, store: AuthSessionStore, prefix: string = \"/auth\", access_seconds: int = 900, refresh_seconds: int = 604800, browser_sessions: bool = false, browser_origin: string = \"\" )",
         "description": "Creates a `AuthService` with `jwt`, `accounts`, `store`, `prefix`, `access_seconds`, `refresh_seconds`, `browser_sessions`, `browser_origin`.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun add_provider(options: OidcOptions): Result<Unit, AuthError>",
         "description": "Registers an identity provider, returning an error if its configuration is invalid.",
-        "line": 50,
+        "line": 49,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun login(login: string, password: string): Future<Result<AuthTokens, AuthError>>",
         "description": "Verifies local credentials and creates access and refresh tokens. Invalid credentials return `AuthError`.",
-        "line": 69,
+        "line": 68,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun refresh(token: string): Future<Result<AuthTokens, AuthError>>",
         "description": "Consumes a refresh token and returns replacement tokens. Invalid, expired, or replayed tokens return `AuthError`.",
-        "line": 142,
+        "line": 141,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun logout(token: string): Future<Result<Unit, AuthError>>",
         "description": "Revokes the session family associated with the refresh token. Invalid tokens return `AuthError`.",
-        "line": 175,
+        "line": 174,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun verify(token: string): Future<Result<AuthPrincipal, AuthError>>",
         "description": "Verifies an access token and its active session, returning the principal or an authentication error.",
-        "line": 188,
+        "line": 187,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public fun middleware(): Middleware",
         "description": "Installs verified identity into request state. Invalid credentials always short-circuit.",
-        "line": 212,
+        "line": 211,
         "page": "reference/api/webapi-auth-auth-service.md"
       },
       {
         "signature": "public static fun current_user(ctx: RequestContext): Result<AuthPrincipal, HttpStatus>",
         "description": "Returns the identity that `AuthService.middleware()` verified for this request. Use it as a dependency, `@dep(AuthService.current_user)`. Fails with 401 when the request is not authenticated and 403 when it lacks a scope required by `@requires_scopes`.",
-        "line": 268,
+        "line": 267,
         "page": "reference/api/webapi-auth-auth-service.md"
       }
     ]
@@ -19049,25 +19049,25 @@
       {
         "signature": "public class DependencyResource<T>",
         "description": "A dependency value and its asynchronous release operation.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-dependency-resource.md"
       },
       {
         "signature": "public value: T",
         "description": "The dependency value passed to the handler.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/webapi-dependency-resource.md"
       },
       {
         "signature": "public cleanup: fun(CancellationToken): Future<void>",
         "description": "Asynchronous cleanup action, given the cancellation token.",
-        "line": 10,
+        "line": 9,
         "page": "reference/api/webapi-dependency-resource.md"
       },
       {
         "signature": "public constructor(value: T, cleanup: fun(CancellationToken): Future<void>)",
         "description": "Creates a `DependencyResource` with `value`, `cleanup`.",
-        "line": 13,
+        "line": 12,
         "page": "reference/api/webapi-dependency-resource.md"
       }
     ]
@@ -19577,19 +19577,19 @@
       {
         "signature": "public class Middleware",
         "description": "One onion layer: `invoke` may short-circuit or `next.call().await`.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public constructor(handler: fun(RequestContext, Next): Future<HttpOutgoing>)",
         "description": "Creates a `Middleware` with `handler`.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/webapi-middleware.md"
       },
       {
         "signature": "public fun invoke(borrow ctx: RequestContext, borrow next: Next): Future<HttpOutgoing>",
         "description": "Runs this middleware for `ctx`, using `next` to continue the request pipeline.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/webapi-middleware.md"
       }
     ]
@@ -19602,19 +19602,19 @@
       {
         "signature": "public class Next",
         "description": "Continues the middleware onion toward the route handler.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-next.md"
       },
       {
         "signature": "public constructor(step: fun(): Future<HttpOutgoing>)",
         "description": "Creates a `Next` with `step`.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/webapi-next.md"
       },
       {
         "signature": "public fun call(): Future<HttpOutgoing>",
         "description": "Runs the next step in the middleware pipeline.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/webapi-next.md"
       }
     ]
@@ -19840,55 +19840,55 @@
       {
         "signature": "public class RequestContext",
         "description": "Per-request bag shared by middleware and `@dep` functions.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public incoming: HttpIncoming",
         "description": "Request received from the client.",
-        "line": 11,
+        "line": 10,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public app_state: Map<string, string>",
         "description": "Application values shared by requests.",
-        "line": 14,
+        "line": 13,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public state: Map<string, string>",
         "description": "Values stored for this request by handlers and middleware.",
-        "line": 17,
+        "line": 16,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public cancellation_token: Option<CancellationToken>",
         "description": "Cancellation signal for the current request, when available.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public constructor(incoming: HttpIncoming)",
         "description": "Creates a `RequestContext` with `incoming`.",
-        "line": 23,
+        "line": 22,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public fun add_cleanup(cleanup: fun(CancellationToken): Future<void>): void",
         "description": "Registers request cleanup, run once in reverse acquisition order outside request cancellation.",
-        "line": 34,
+        "line": 33,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public fun set(key: string, value: string): void",
         "description": "Stores `value` under `key` for the rest of this request, replacing any earlier value.",
-        "line": 49,
+        "line": 48,
         "page": "reference/api/webapi-request-context.md"
       },
       {
         "signature": "public fun get(key: string): Option<string>",
         "description": "Returns the value stored under `key` for this request, or `None` when nothing was stored.",
-        "line": 54,
+        "line": 53,
         "page": "reference/api/webapi-request-context.md"
       }
     ]
@@ -20379,91 +20379,91 @@
       {
         "signature": "public class WebApp",
         "description": "An isolated native HTTP application with explicitly mounted routers.",
-        "line": 7,
+        "line": 9,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public state: Map<string, string>",
         "description": "Application-wide values shared by every request; each request sees this map as `RequestContext.app_state`.",
-        "line": 26,
+        "line": 28,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates a `WebApp` with default settings.",
-        "line": 29,
+        "line": 31,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public constructor(options: WebAppOptions)",
         "description": "Creates a `WebApp` with `options`.",
-        "line": 46,
+        "line": 48,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun use(middleware: Middleware): Result<Unit, IoError>",
         "description": "Appends an outer-to-inner middleware layer before startup.",
-        "line": 71,
+        "line": 73,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun include_router(router: WebRouter, prefix: string = \"\"): Result<Unit, IoError>",
         "description": "Mounts a router with an optional additional path prefix.",
-        "line": 80,
+        "line": 82,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError>",
         "description": "Installs generated dependency replacements before startup.",
-        "line": 103,
+        "line": 105,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun lifespan( start: fun(WebApp): Future<Result<Unit, IoError>>, stop: fun(WebApp): Future<void> ): Result<Unit, IoError>",
         "description": "Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.",
-        "line": 114,
+        "line": 116,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun shutdown(): void",
         "description": "Stops accepting traffic and cancels active transport operations on this app.",
-        "line": 174,
+        "line": 176,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun wait(token: Option<CancellationToken> = Option.None): Future<void>",
         "description": "Drains this application's requests and releases its listener.",
-        "line": 182,
+        "line": 184,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun listen( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<int, IoError>>",
         "description": "Binds this app with the default `ServerConfig` and returns the bound port; port zero selects an ephemeral port.",
-        "line": 383,
+        "line": 385,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun listen( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<int, IoError>>",
         "description": "Binds this app with the transport settings in `config` and returns the bound port; port zero selects an ephemeral port. Negative settings fail with `EINVAL`.",
-        "line": 394,
+        "line": 396,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun run( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation.",
-        "line": 455,
+        "line": 457,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun run( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
         "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.",
-        "line": 465,
+        "line": 467,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun openapi(): string",
         "description": "Produces documentation for this application's mounted routes only.",
-        "line": 487,
+        "line": 489,
         "page": "reference/api/webapi-web-app.md"
       }
     ]
@@ -20549,7 +20549,7 @@
       {
         "signature": "public class WebEndpoint",
         "description": "A compiled handler, path and its generated documentation.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-web-endpoint.md"
       }
     ]
@@ -20562,13 +20562,13 @@
       {
         "signature": "public class WebRouter",
         "description": "Immutable generated route group; mount it explicitly on an application.",
-        "line": 5,
+        "line": 4,
         "page": "reference/api/webapi-web-router.md"
       },
       {
         "signature": "public constructor(routes: List<WebEndpoint>)",
         "description": "Creates a `WebRouter` with `routes`.",
-        "line": 9,
+        "line": 8,
         "page": "reference/api/webapi-web-router.md"
       }
     ]

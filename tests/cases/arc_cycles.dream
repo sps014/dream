@@ -1,5 +1,6 @@
 import system;
 
+// Each test closes a strong cycle and then breaks it by clearing `next`.
 @allow_cycle
 class CycleNode {
     public id: int;

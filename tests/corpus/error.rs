@@ -53,7 +53,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "cycle_errors",
-        "class 'Node' can form a strong ownership cycle\nclass 'Owner' can form a strong ownership cycle\nclass 'HandlerImpl' can form a strong ownership cycle\nclass 'Data' can form a strong ownership cycle\nclass 'C' can form a strong ownership cycle",
+        "reference cycle: Node<int>.next -> Node<int>\nmake 'Node.next' weak or unowned\nreference cycle: Owner.handler -> Handler -> HandlerImpl.owner -> Owner\nreference cycle: Data.r -> (Data, int) -> Data\nreference cycle: Back.back -> C.h -> Holder.d -> Back\nreference cycle: Button.on_click -> closure fun(): void -> Button\nreference cycle: Peer.friend -> Peer\ncycle_errors.dream:112",
         true,
     ),
     Case::error(

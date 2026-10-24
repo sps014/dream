@@ -4,7 +4,6 @@ module system.audio;
 // the source into a second cursor and adopts it only after that cursor reaches the
 // target, so a failed seek leaves this cursor and its position untouched.
 // The release closure captures only the file or HTTP objects, never the cursor.
-@allow_cycle
 internal class AudioStreamCursor {
     internal rate: int;
     internal channels: int;

@@ -103,55 +103,46 @@ This works through field chains (`this.items.iterator()`), local aliases, and cr
 
 ## Reference-cycle detection
 
-Classes whose strong field layouts can form cycles require `@allow_cycle`. The annotation accepts possible leaks; ARC does not collect cycles.
+ARC does not collect strong cycles, so the compiler rejects any store that can link an object back to itself through strong references. Recursive classes are allowed; only the stores that would close a cycle are errors. The check runs in Debug and Release and follows fields, containers, tuples, inline structs, interface values, closure captures and calls.
 
-### Direct and indirect field cycles
+### Reported cycles
 
 ```dream
-// Direct self-reference
-class Node {
-    next: Option<Node>;
-} // ✗ cycle
-
-// Indirect via two classes
 class A {
-    b: B;
+    public b: Option<B>;
+
+    public constructor() {
+        this.b = Option.None;
+    }
 }
 
 class B {
-    a: A;
-} // ✗ cycle
+    public a: Option<A>;
 
-// Via tuples
-class Data {
-    r: (Data, int);
-} // ✗ cycle
-
-// Via reference-holding value structs
-struct Holder {
-    d: Data;
+    public constructor() {
+        this.a = Option.None;
+    }
 }
 
-class C {
-    h: Holder;
-} // ✗ detected
+fun connect(a: A, b: B) {
+    a.b = Option.Some(b);
+    b.a = Option.Some(a); // ✗ reference cycle: B.a -> A.b -> B
+}
 ```
 
-### Interface-typed fields (conservative)
-
-Owning interface, erased `object` and closure fields require `@allow_cycle` because runtime targets can point back to their owner. Use non-owning back-links or explicit teardown to prevent leaks.
+The error names each link of the cycle and the store that closes it, and suggests which field to make non-owning.
 
 ### Breaking cycles
 
 Mark one direction as non-owning:
 
 ```dream
-class Node {
-    weak next: Option<Node>; // weak: does not keep target alive
+class B {
+    public weak a: Option<A>; // weak: does not keep its target alive
 }
 ```
 
-Use `@allow_cycle` when a strong recursive layout is intentional, then break runtime cycles explicitly to avoid leaks.
+When a class keeps strong cycles on purpose and the program breaks them itself, mark the class `@allow_cycle`. Cycles through its objects are accepted; cycles that bypass them are still reported. See [reference cycles](cycles.md#program-managed-cycles).
 
 ## Closure capture safety
 

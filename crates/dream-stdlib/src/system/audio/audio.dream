@@ -2,7 +2,6 @@ module system.audio;
 
 /// A web-style audio player. Constructors configure sources; load and play perform I/O.
 // Source closures capture immutable inputs only; callers cannot install a closure capturing the player.
-@allow_cycle
 public class Audio {
     state: AudioState;
 

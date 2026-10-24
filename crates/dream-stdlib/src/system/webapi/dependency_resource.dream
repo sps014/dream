@@ -1,7 +1,6 @@
 module system.webapi;
 
 /// A dependency value and its asynchronous release operation.
-@allow_cycle
 public class DependencyResource<T> {
     /// The dependency value passed to the handler.
     public value: T;

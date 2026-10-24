@@ -1,7 +1,6 @@
 module system.config;
 
 /// Merges defaults, JSON files, environment variables, and explicit CLI values in that order.
-@allow_cycle
 public class ConfigBuilder {
     defaults: Map<string, string>;
     files: List<string>;

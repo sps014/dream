@@ -1,44 +1,212 @@
-// Strong ownership cycles need `@allow_cycle`, whether the back edge goes through a generic
-// argument, an interface, a tuple, or an inline value struct.
+// Stores that close a strong ownership cycle are rejected, whether the back edge goes through a
+// generic argument, an interface, a tuple, an inline value struct, a closure capture, a helper
+// function that links its parameters, a collection element, a detached child relinked under its
+// parent, or a weak back pointer. A cycle through an `@allow_cycle` class is accepted, but a
+// cycle that bypasses it is not.
+
+import system.collections;
 
 class Node<T> {
     public next: Option<Node<T>>;
-    public constructor() { this.next = Option.None; }
+
+    public constructor() {
+        this.next = Option.None;
+    }
 }
 
 interface Handler {
     borrow fun handle(): void;
 }
 
-// An interface-typed field could hold a back-reference: Owner -> Handler -> HandlerImpl -> Owner.
 class Owner {
-    handler: Option<Handler>;
-    public constructor() { this.handler = Option.None; }
+    public handler: Option<Handler>;
+
+    public constructor() {
+        this.handler = Option.None;
+    }
 }
 
-class HandlerImpl : Handler {
-    owner: Option<Owner>;
-    public constructor() { this.owner = Option.None; }
-    public fun handle(): void {}
+class HandlerImpl: Handler {
+    public owner: Owner;
+
+    public constructor(owner: Owner) {
+        this.owner = owner;
+    }
+
+    public fun handle(): void {
+    }
 }
 
 class Data {
-    r: (Data, int);
+    public r: Option<(Data, int)>;
+
+    public constructor() {
+        this.r = Option.None;
+    }
 }
 
-// C -> Holder -> Back -> C, even though Holder is an inline value type.
 struct Holder {
-    d: Back;
+    public d: Back;
+
+    public constructor(d: Back) {
+        this.d = d;
+    }
 }
 
 class Back {
-    back: Option<C>;
+    public back: Option<C>;
+
+    public constructor() {
+        this.back = Option.None;
+    }
 }
 
 class C {
-    h: Holder;
+    public h: Holder;
+
+    public constructor(b: Back) {
+        this.h = Holder(b);
+    }
+}
+
+class Button {
+    public on_click: Option<fun(): void>;
+    public label: string;
+
+    public constructor() {
+        this.on_click = Option.None;
+        this.label = "ok";
+    }
+}
+
+class Peer {
+    public friend: Option<Peer>;
+
+    public constructor() {
+        this.friend = Option.None;
+    }
+}
+
+fun befriend(a: Peer, b: Peer): void {
+    a.friend = Option.Some(b);
+}
+
+class Item {
+    public kids: List<Item>;
+    public other: Option<Item>;
+
+    public constructor() {
+        this.kids = List<Item>();
+        this.other = Option.None;
+    }
+}
+
+fun adopt_first(p: Item): void {
+    let s = Item();
+    p.kids.push(s);
+    let first = p.kids[0];
+    first.other = Option.Some(s);
+}
+
+class Link {
+    public next: Option<Link>;
+
+    public constructor() {
+        this.next = Option.None;
+    }
+}
+
+fun relink(p: Link, v: Link): void {
+    let d = p.next.unwrap();
+    p.next = Option.None;
+    d.next = Option.Some(v);
+    p.next = Option.Some(d);
+}
+
+class TreeNode {
+    public kid: Option<TreeNode>;
+    public weak parent: Option<TreeNode>;
+
+    public constructor() {
+        this.kid = Option.None;
+        this.parent = Option.None;
+    }
+}
+
+fun attach_to_parent(child: TreeNode): void {
+    switch (child.parent) {
+        Some(p) => {
+            p.kid = Option.Some(child);
+        }
+        None => {}
+    }
+}
+
+@allow_cycle
+class Hub {
+    public members: List<Member>;
+
+    public constructor() {
+        this.members = List<Member>();
+    }
+}
+
+class Member {
+    public hub: Hub;
+    public partner: Option<Member>;
+
+    public constructor(hub: Hub) {
+        this.hub = hub;
+        this.partner = Option.None;
+    }
+}
+
+fun pair(a: Member, b: Member): void {
+    a.partner = Option.Some(b);
 }
 
 fun main(): void {
     let node = Node<int>();
+    node.next = Option.Some(node);
+
+    let owner = Owner();
+    owner.handler = Option.Some(HandlerImpl(owner));
+
+    let data = Data();
+    data.r = Option.Some((data, 1));
+
+    let back = Back();
+    let c = C(back);
+    back.back = Option.Some(c);
+
+    let button = Button();
+    button.on_click = Option.Some(() => {
+        let label = button.label;
+    });
+
+    let a = Peer();
+    let b = Peer();
+    befriend(a, b);
+    befriend(b, a);
+
+    let root = Item();
+    adopt_first(root);
+
+    let head = Link();
+    head.next = Option.Some(Link());
+    relink(head, head);
+
+    let parent = TreeNode();
+    let child = TreeNode();
+    child.parent = Option.Some(parent);
+    attach_to_parent(child);
+    child.kid = Option.Some(parent);
+
+    let hub = Hub();
+    let left = Member(hub);
+    let right = Member(hub);
+    hub.members.push(left);
+    hub.members.push(right);
+    pair(left, right);
+    pair(right, left);
 }

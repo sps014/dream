@@ -92,7 +92,6 @@ fun weak_get_optional(): void {
 
 let weak_callback_drops: int = 0;
 
-@allow_cycle
 class WeakCallbackOwner {
     public callback: fun(): int;
     public value: int;
@@ -144,7 +143,6 @@ fun weak_storage_uses_builtin_identity(): void {
     Assert.eq(observer.unwrap().value, 18);
 }
 
-@allow_cycle
 class c25_ForestNode {
     public left: Option<c25_ForestNode>;
     public right: Option<c25_ForestNode>;

@@ -4,7 +4,6 @@ module system.collections;
 ///
 /// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
 /// `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
-@allow_cycle
 @slot_walk("length", "at_offset", "")
 public class Queue<T>: Collection<T> {
     items: T[];

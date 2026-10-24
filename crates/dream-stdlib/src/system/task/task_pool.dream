@@ -3,7 +3,6 @@ module system.task;
 /// Reuses a fixed number of parallel workers; local async tasks do not consume pool workers.
 /// Each worker holds at most two jobs. Further dispatches wait in submission order and go to the
 /// least-loaded worker once one finishes, so a long job holds up at most one job behind it.
-@allow_cycle
 public class TaskPool {
     ids: int[];
     // Jobs running on each worker; a worker below 1 is free.

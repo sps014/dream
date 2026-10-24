@@ -6,7 +6,6 @@ import system.codegen;
 
 // One body node: the generator model splits statements (`GenStmt`) from expressions and nested
 // statements (`GenExpr`); every shader pass walks this single shape instead.
-@allow_cycle
 internal class ShaderNode {
     internal id: string;
     internal is_stmt: bool;

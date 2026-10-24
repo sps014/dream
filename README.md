@@ -103,7 +103,7 @@ Dream manages heap values with automatic reference counting (ARC). Objects are f
 - **Cheap counts where it matters.** Counts are plain, non-atomic integers unless a type is declared `shared` for tasks. Interned strings never change their count, and objects that never escape a function can be split into local values with no heap allocation.
 - **Zero-cost generics.** Generic code is specialized for each concrete type, so there is no runtime type dispatch.
 
-Classes share identity; structs copy as values and live inline. Ordinary code cannot read freed memory, out-of-bounds indexing stops with a clear error instead of reading past the end, and classes that can form reference cycles must be marked `@allow_cycle`, which makes leaks visible. Read about [ownership](docs/language/memory/ownership.md), [memory management](docs/language/memory/index.md), and [reference cycles](docs/language/memory/cycles.md).
+Classes share identity; structs copy as values and live inline. Ordinary code cannot read freed memory, out-of-bounds indexing stops with a clear error instead of reading past the end, and the compiler rejects stores that would form a strong reference cycle unless the class is marked `@allow_cycle`, which makes leaks visible. Read about [ownership](docs/language/memory/ownership.md), [memory management](docs/language/memory/index.md), and [reference cycles](docs/language/memory/cycles.md).
 
 ### Call C, C++, and JavaScript directly.
 

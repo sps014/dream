@@ -1,7 +1,6 @@
 module system.task;
 
 /// A child result whose execution is owned by a scope, independent of this handle's lifetime.
-@allow_cycle
 public class TaskHandle<T, E> {
     internal value: Option<Result<T, TaskFailure<E>>>;
     internal completed: Option<CancellationSource>;

@@ -2,7 +2,6 @@ module system.cli;
 
 /// Declarative CLI definition. Parsing consumes arguments without an executable name and never exits.
 // `subcommand` stores copies, so a command tree never refers back to an ancestor.
-@allow_cycle
 public class Command {
     internal name: string;
     internal about: string;

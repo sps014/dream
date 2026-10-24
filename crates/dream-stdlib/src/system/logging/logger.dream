@@ -3,7 +3,6 @@ module system.logging;
 // Named logger with a minimum level and zero or more handlers.
 
 /// A named logger with a minimum severity and configurable output handlers.
-@allow_cycle
 public class Logger {
     name: string;
     _level: LogLevel;

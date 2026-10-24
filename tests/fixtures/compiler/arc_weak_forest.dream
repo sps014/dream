@@ -1,6 +1,5 @@
 import system;
 
-@allow_cycle
 class ForestNode {
     public left: Option<ForestNode>;
     public right: Option<ForestNode>;

@@ -40,7 +40,8 @@ pub fn owned_result(attributes: &[AttributeNode]) -> OwnedResult<'_> {
     }
 }
 
-/// Explicit acceptance of possible strong-cycle leaks; it never changes runtime ARC.
+/// The class's objects may sit on strong cycles the program breaks itself, so the cycle
+/// analysis accepts stores whose every cycle passes through one. It never changes runtime ARC.
 pub fn allows_cycle(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, ALLOW_CYCLE)
 }

@@ -49,11 +49,12 @@ registration, component metadata, candidate queue, or strong-edge barrier. Nativ
 headers are 16 bytes, with packed type/size-class information. Private references use
 the local count fast path; published references use atomic counts.
 
-The compiler follows strong field ownership after concrete type discovery. Classes that
-can form cycles require `@allow_cycle`, including classes with owning erased `object`,
-interface, or closure fields. Arrays, tuples, containers and active union payloads
-participate. Weak and unowned edges do not. The annotation acknowledges possible leaks;
-it does not enable collection or change emitted ARC operations. Infinitely sized inline
+The cycle analysis (`dream-sema` `analyzer/cycles/`) prefilters on the strong type graph,
+then walks function bodies flow-sensitively with bottom-up call summaries and rejects
+stores that can close a strong cycle. Arrays, tuples, containers, erased `object`,
+interface and closure edges and active union payloads participate. Weak and unowned edges
+do not. `@allow_cycle` accepts cycles through objects of the annotated class; it does not
+enable collection or change emitted ARC operations. Infinitely sized inline
 values remain invalid regardless of the annotation.
 
 Use weak/unowned back-links or explicit teardown to break cycles. All-strong cycles

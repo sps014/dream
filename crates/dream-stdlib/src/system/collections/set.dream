@@ -1,7 +1,6 @@
 module system.collections;
 
 /// A generic open-addressing hash set.
-@allow_cycle
 @slot_walk("capacity", "slot_key", "slot_occupied")
 public class Set<T>: Collection<T> {
     keys: T[];
@@ -147,7 +146,7 @@ public class Set<T>: Collection<T> {
     }
 
     // When `old_keys` is uniquely owned, `hash_code` cannot observe it through `this`
-    // (already replaced), so entries move with `exchange` instead of per-key retains.
+    // (already replaced), so entries move with `take` instead of per-key retains.
     fun rehash(new_cap: int): void {
         let old_keys = this.keys;
         let old_states = this.states;
@@ -167,7 +166,7 @@ public class Set<T>: Collection<T> {
                     while this.states[target] == this.epoch {
                         target = (target + 1) & (new_cap - 1);
                     }
-                    CollectionStorage.exchange<T>(old_keys, i, this.keys, target);
+                    this.keys[target] = CollectionStorage.take<T>(old_keys, i);
                     this.states[target] = this.epoch;
                     this.count = this.count + 1;
                     this.used = this.used + 1;

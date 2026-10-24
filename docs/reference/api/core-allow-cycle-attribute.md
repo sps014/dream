@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `AllowCycleAttribute`
 
-Acknowledges that this class can form strong ownership cycles. ARC does not collect cycles; use weak/unowned back-links or explicit teardown to avoid leaks.
+Accepts strong reference cycles that pass through objects of this class. The compiler otherwise rejects stores that close a strong cycle. ARC does not collect cycles, so the program must break them itself, for example by clearing an owning field.
 
 ```dream
 public struct AllowCycleAttribute

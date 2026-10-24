@@ -1,6 +1,7 @@
 module system.task;
 
 /// Owns async and parallel children; its enclosing Task.scope joins every child before returning.
+// Each child's future holds this scope until it finishes; `drain` clears `jobs` after joining.
 @allow_cycle
 public class TaskScope<E> {
     source: CancellationSource;

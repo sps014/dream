@@ -54,6 +54,7 @@ fun iso_arc_discarded_result(): void {
 
 // --- arc_private_graph_region: private graphs are reclaimed whether discarded, kept, or cycled. ---
 
+// iso_graph_cycled links a node to itself and clears the link before returning.
 @allow_cycle
 class iso_GraphNode {
     public left: Option<iso_GraphNode>;
@@ -123,7 +124,6 @@ fun iso_arc_private_graph_region(): void {
 
 // --- arc_private_initialization: constructors with side effects still finalize. ---
 
-@allow_cycle
 class iso_PrivateTree {
     public left: Option<iso_PrivateTree>;
     public right: Option<iso_PrivateTree>;
@@ -156,6 +156,7 @@ fun iso_private_escaped(): int {
     return iso_private_count(keep[0]);
 }
 
+// iso_private_callback links a node to itself and clears the link before returning.
 @allow_cycle
 class iso_CallbackTree {
     public next: Option<iso_CallbackTree>;
@@ -344,7 +345,6 @@ fun iso_destructor_typed_generic(): void {
 
 // --- param_modes_borrow: inferred borrowed sink parameters keep ARC destruction timing. ---
 
-@allow_cycle
 class iso_ModeNode {
     public value: int;
     public next: Option<iso_ModeNode>;
@@ -484,7 +484,6 @@ fun iso_effect_snapshot(borrow op: iso_Mutator, borrow holder: iso_EffectHolder)
     return previous.length;
 }
 
-@allow_cycle
 class iso_EffectOnDrop {
     op: iso_Mutator;
     holder: iso_EffectHolder;
@@ -711,7 +710,6 @@ fun iso_frame_alloc_arg_object(): void {
 // Each walk frees part of the chain mid-walk and then allocates same-sized nodes, so a dangling
 // cursor would read recycled memory.
 
-@allow_cycle
 class iso_ChainNode {
     public value: int;
     public next: Option<iso_ChainNode>;

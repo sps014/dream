@@ -1,7 +1,6 @@
 module system.collections;
 
 /// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
-@allow_cycle
 @slot_walk("capacity", "slot_entry", "slot_occupied")
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
@@ -162,7 +161,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     // When `old` is uniquely owned, `hash_code` cannot observe it through `this` (already
-    // replaced), so slots move with `exchange` instead of key/value retains.
+    // replaced), so slots move with `take` instead of key/value retains.
     fun rehash(new_cap: int): void {
         let old = this.slots;
         let old_cap = this.cap;
@@ -180,7 +179,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
                     while this.slots[target].state == this.epoch {
                         target = (target + 1) & (new_cap - 1);
                     }
-                    CollectionStorage.exchange<MapSlot<K, V>>(old, i, this.slots, target);
+                    this.slots[target] = CollectionStorage.take<MapSlot<K, V>>(old, i);
                     this.count = this.count + 1;
                     this.used = this.used + 1;
                 } else {

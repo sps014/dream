@@ -1,7 +1,6 @@
 module system.task;
 
 /// An independently closable consumer endpoint for a local async channel.
-@allow_cycle
 public class Receiver<T> {
     state: ChannelState<T>;
     closed: bool;

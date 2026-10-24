@@ -1,7 +1,6 @@
 module system.webapi;
 
 /// A compiled handler, path and its generated documentation.
-@allow_cycle
 public class WebEndpoint {
     internal method: string;
     internal path: string;

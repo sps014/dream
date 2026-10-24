@@ -26,7 +26,6 @@ extern fun ticker_label(t: CPtr, tick: int): Option<string>;
 @c
 extern fun checksum(data: byte[], len: usize): int;
 
-@allow_cycle
 public class Ticker {
     handle: CPtr;
 

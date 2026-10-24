@@ -1,7 +1,6 @@
 module system.webapi;
 
 /// Immutable generated route group; mount it explicitly on an application.
-@allow_cycle
 public class WebRouter {
     internal routes: List<WebEndpoint>;
 

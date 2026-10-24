@@ -204,7 +204,6 @@ interface cbc_Sized {
     fun size(): int;
 }
 
-@allow_cycle
 class cbc_Holder<T>: cbc_Sized {
     public items: List<T>;
 

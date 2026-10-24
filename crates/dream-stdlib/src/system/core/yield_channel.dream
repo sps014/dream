@@ -1,7 +1,6 @@
 module system.core;
 
 /// A single-value channel coordinating a yielding producer and consumer.
-@allow_cycle
 internal class YieldChannel<T> {
     /// Next value waiting for the consumer, or `None` when no value is ready.
     public value: Option<T>;

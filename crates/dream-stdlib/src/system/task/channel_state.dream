@@ -1,6 +1,5 @@
 module system.task;
 
-@allow_cycle
 internal class ChannelState<T> {
     internal queue: Queue<T>;
     internal capacity: int;

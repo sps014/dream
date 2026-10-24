@@ -3,7 +3,6 @@ module system.compress;
 /// Streaming DEFLATE decoder (RFC 1951) inside gzip (RFC 1952) or zlib (RFC 1950) framing. Input is
 /// pulled from the source on demand, and decoding pauses between symbols when the output fills.
 // The source is a borrowed caller stream; the decoder never hands itself back to it.
-@allow_cycle
 internal class Inflater {
     source: Reader;
     gzip: bool;

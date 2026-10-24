@@ -3,7 +3,6 @@ module system.audio;
 // Streaming operations are closures installed by string-source constructors, so
 // players built from bytes or PCM never reference the incremental decoders.
 // The closures capture only a cursor, which never refers back to its feed.
-@allow_cycle
 internal class AudioFeed {
     internal rate: int;
     internal channels: int;

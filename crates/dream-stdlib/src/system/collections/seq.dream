@@ -2,7 +2,6 @@ module system.collections;
 
 /// A repeatable query sequence whose filters and transformations run during traversal.
 // Stages retain only upstream sequences; the open Iterable interface obscures that DAG.
-@allow_cycle
 public class Seq<T>: Iterable<T> {
     items: Iterable<T>;
 

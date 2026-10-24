@@ -2,7 +2,6 @@ module system.cli;
 
 /// Immutable parsing outcome for one command scope, including explicit-value provenance and child matches.
 // Results are built bottom-up from fresh child scopes and never refer back to a parent.
-@allow_cycle
 public class ParsedArguments {
     help: bool;
     version: bool;

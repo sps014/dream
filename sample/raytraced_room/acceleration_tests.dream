@@ -1,0 +1,228 @@
+import system;
+import system.gpu;
+import system.testing;
+import room_scene;
+import room_shading;
+import room_shaders;
+import room_acceleration;
+
+public struct CheckRay {
+    public origin: GpuVec4;
+    public direction: GpuVec4;
+}
+
+// Keep the exhaustive oracle independent of the hierarchy and its traversal order.
+fun reference_hit(
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    origin: GpuVec3,
+    ray: GpuVec3,
+    limit: float,
+    shadow: bool,
+    count: int
+): RoomHit {
+    let hit = RoomHit();
+    hit.distance = limit;
+    hit.index = -1;
+    for (let i in 0..count) {
+        let triangle = triangles[i];
+        let edge1 = triangle.b.xyz - triangle.a.xyz;
+        let edge2 = triangle.c.xyz - triangle.a.xyz;
+        let p = ray.cross(edge2);
+        let determinant = edge1.dot(p);
+        if GpuMath.abs(determinant) > 0.0000001f {
+            let inverse = 1.0f / determinant;
+            let offset = origin - triangle.a.xyz;
+            let u = offset.dot(p) * inverse;
+            let q = offset.cross(edge1);
+            let v = ray.dot(q) * inverse;
+            let distance = edge2.dot(q) * inverse;
+            if u >= 0.0f
+                && v >= 0.0f && u + v <= 1.0f && distance > 0.001f && distance < hit.distance {
+                hit.distance = distance;
+                hit.index = i;
+                if shadow {
+                    break;
+                }
+            }
+        }
+    }
+    return hit;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@compute(64, 1, 1)
+fun compare_acceleration(
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    @readonly nodes: GpuBuffer<RoomBvhNode>,
+    @readonly rays: GpuBuffer<CheckRay>,
+    failures: GpuBuffer<int>,
+    counts: GpuVec4
+): void {
+    let i = global_id().x;
+    if i >= (int)counts.x {
+        return;
+    }
+    let ray = rays[i];
+    let limit = ray.direction.w;
+    let fast = portable_hit(
+        triangles,
+        nodes,
+        ray.origin.xyz,
+        ray.direction.xyz,
+        limit,
+        false,
+        (int)counts.z
+    );
+    let reference = reference_hit(
+        triangles,
+        ray.origin.xyz,
+        ray.direction.xyz,
+        limit,
+        false,
+        (int)counts.y
+    );
+    let flags = 0;
+    if fast.index != reference.index {
+        flags = flags + 1;
+    }
+    if fast.distance != reference.distance {
+        flags = flags + 2;
+    }
+    let shadow = portable_hit(
+        triangles,
+        nodes,
+        ray.origin.xyz,
+        ray.direction.xyz,
+        limit,
+        true,
+        (int)counts.z
+    );
+    if (shadow.index < 0) != (reference.index < 0) {
+        flags = flags + 4;
+    }
+    failures[i] = flags;
+}
+
+fun check_ray(origin: GpuVec3, direction: GpuVec3, limit: float): CheckRay {
+    let ray = CheckRay();
+    ray.origin = GpuVec4(origin.x, origin.y, origin.z, 0.0f);
+    ray.direction = GpuVec4(direction.x, direction.y, direction.z, limit);
+    return ray;
+}
+
+@test
+fun acceleration_structure_invariants(): void {
+    Assert.eq(room_bvh(List<RoomTriangle>()).length, 0);
+    let mesh = room_mesh();
+    let nodes = room_bvh(mesh.triangles);
+    Assert.eq((int)nodes[0].low.w, nodes.length);
+    let coverage = Array.alloc<int>(mesh.triangles.length);
+    for (let i in 0..nodes.length) {
+        let node = nodes[i];
+        Assert.is_true((int)node.low.w > i && (int)node.low.w <= nodes.length);
+        Assert.is_true(node.high.w >= 0.0f && node.high.w <= 4.0f);
+        let ids = [node.indices.x, node.indices.y, node.indices.z, node.indices.w];
+        for (let j in 0..(int)node.high.w) {
+            let id = (int)ids[j];
+            Assert.is_true(id >= 0 && id < mesh.triangles.length);
+            coverage[id] = coverage[id] + 1;
+            let triangle = mesh.triangles[id];
+            for (let point in [triangle.a, triangle.b, triangle.c]) {
+                Assert.is_true(point.x >= node.low.x && point.x <= node.high.x);
+                Assert.is_true(point.y >= node.low.y && point.y <= node.high.y);
+                Assert.is_true(point.z >= node.low.z && point.z <= node.high.z);
+            }
+        }
+    }
+    for (let count in coverage) {
+        Assert.eq(count, 1);
+    }
+}
+
+@test
+@timeout(180000)
+async fun acceleration_matches_exhaustive_rays(): void {
+    let mesh = room_mesh();
+    let hierarchy = room_bvh(mesh.triangles);
+    let random = Random(92845u);
+    let rays = List<CheckRay>();
+    for (let i in 0..4096) {
+        let origin = GpuVec3(
+            (float)(random.next_double() * 60.0 - 30.0),
+            (float)(random.next_double() * 60.0 - 5.0),
+            (float)(random.next_double() * 90.0 - 60.0)
+        );
+        let direction = GpuVec3(
+            (float)(random.next_double() * 2.0 - 1.0),
+            (float)(random.next_double() * 2.0 - 1.0),
+            (float)(random.next_double() * 2.0 - 1.0)
+        ).normalize();
+        let limit = 200.0f;
+        if i % 4 == 0 {
+            limit = 2.0f;
+        }
+        rays.push(check_ray(origin, direction, limit));
+        if i % 16 == 0 {
+            for (let axis in [
+                GpuVec3(1.0f, 0.0f, 0.0f),
+                GpuVec3(-1.0f, 0.0f, 0.0f),
+                GpuVec3(0.0f, 1.0f, 0.0f),
+                GpuVec3(0.0f, -1.0f, 0.0f),
+                GpuVec3(0.0f, 0.0f, 1.0f),
+                GpuVec3(0.0f, 0.0f, -1.0f),
+                GpuVec3(0.0000001f, 0.0f, 1.0f),
+                GpuVec3(0.0f)
+            ]) {
+                rays.push(check_ray(origin, axis, 200.0f));
+            }
+        }
+    }
+    for (let triangle in mesh.triangles) {
+        let center = (triangle.a.xyz + triangle.b.xyz + triangle.c.xyz) / 3.0f;
+        rays.push(check_ray(center + triangle.normal.xyz * 0.003f, -triangle.normal.xyz, 200.0f));
+        rays.push(check_ray(center, triangle.normal.xyz, 0.001f));
+        rays.push(check_ray(triangle.a.xyz, -triangle.normal.xyz, 200.0f));
+    }
+    let inputs = rays.take_array();
+    let triangle_count = mesh.triangles.length;
+    let triangle_data = mesh.triangles.take_array();
+    let checked = 0;
+    for (let backend in GpuShaders.backends()) {
+        let opened = GpuDevice.create(backend).await;
+        if opened.is_err() {
+            System.println("SKIP " + backend.to_string() + ": " + opened.unwrap_err().message());
+            continue;
+        }
+        let device = opened.unwrap();
+        checked = checked + 1;
+        let triangles = device.buffer_from(triangle_data).unwrap();
+        let nodes = device.buffer_from(hierarchy).unwrap();
+        let ray_buffer = device.buffer_from(inputs).unwrap();
+        let failures = device.buffer_alloc<int>(inputs.length).unwrap();
+        GpuShaders.compare_acceleration.dispatch(
+            device,
+            GpuDispatch.threads_1d(inputs.length),
+            triangles,
+            nodes,
+            ray_buffer,
+            failures,
+            GpuVec4((float)inputs.length, (float)triangle_count, (float)hierarchy.length, 0.0f)
+        ).await.unwrap();
+        let flags = failures.read().await.unwrap();
+        for (let i in 0..flags.length) {
+            if flags[i] != 0 {
+                Assert.fail(
+                    backend.to_string()
+                        + " ray " + i.to_string() + " mismatch flags " + flags[i]
+                        .to_string()
+                );
+            }
+        }
+        System.println(
+            backend.to_string()
+                + ": "
+                + inputs.length.to_string() + " accelerated rays match exhaustive hits and shadows"
+        );
+    }
+    Assert.is_true(checked > 0);
+}

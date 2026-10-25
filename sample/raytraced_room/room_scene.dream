@@ -1,0 +1,169 @@
+import system;
+import system.gpu;
+
+// Vec4-only records keep CPU, WGSL and native shader layouts identical.
+public struct RoomTriangle {
+    public a: GpuVec4;
+    public b: GpuVec4;
+    public c: GpuVec4;
+    public normal: GpuVec4;
+    public uv: GpuVec4;
+}
+
+public class RoomMesh {
+    public triangles: List<RoomTriangle>;
+    public positions: List<GpuVec3>;
+
+    public constructor() {
+        this.triangles = List<RoomTriangle>();
+        this.positions = List<GpuVec3>();
+    }
+
+    fun triangle(a: GpuVec3, b: GpuVec3, c: GpuVec3, material: int): void {
+        let t = RoomTriangle();
+        t.a = GpuVec4(a.x, a.y, a.z, 0.0f);
+        t.b = GpuVec4(b.x, b.y, b.z, 0.0f);
+        t.c = GpuVec4(c.x, c.y, c.z, 0.0f);
+        let normal = (b - a).cross(c - a).normalize();
+        t.normal = GpuVec4(normal.x, normal.y, normal.z, (float)material);
+        this.triangles.push(t);
+        this.positions.push_all([a, b, c]);
+    }
+
+    public fun quad(a: GpuVec3, b: GpuVec3, c: GpuVec3, d: GpuVec3, material: int): void {
+        this.triangle(a, b, c, material);
+        this.triangle(a, c, d, material);
+    }
+
+    public fun box(low: GpuVec3, high: GpuVec3, material: int): void {
+        let a = GpuVec3(low.x, low.y, low.z);
+        let b = GpuVec3(high.x, low.y, low.z);
+        let c = GpuVec3(high.x, high.y, low.z);
+        let d = GpuVec3(low.x, high.y, low.z);
+        let e = GpuVec3(low.x, low.y, high.z);
+        let f = GpuVec3(high.x, low.y, high.z);
+        let g = GpuVec3(high.x, high.y, high.z);
+        let h = GpuVec3(low.x, high.y, high.z);
+        this.quad(a, d, c, b, material);
+        this.quad(e, f, g, h, material);
+        this.quad(a, e, h, d, material);
+        this.quad(b, c, g, f, material);
+        this.quad(a, b, f, e, material);
+        this.quad(d, h, g, c, material);
+    }
+
+    public fun wheel(x: float, z: float): void {
+        let center = GpuVec3(x, 0.42f, z);
+        for (let i in 0..8) {
+            let a = (float)i * 0.78539816f;
+            let b = (float)(i + 1) * 0.78539816f;
+            this.triangle(
+                center,
+                center + GpuVec3(0.0f, (float)Math.cos(a) * 0.4f, (float)Math.sin(a) * 0.4f),
+                center + GpuVec3(0.0f, (float)Math.cos(b) * 0.4f, (float)Math.sin(b) * 0.4f),
+                9
+            );
+        }
+    }
+
+    public fun sign(
+        x: float,
+        y: float,
+        z: float,
+        width: float,
+        height: float,
+        material: int
+    ): void {
+        this.quad(
+            GpuVec3(x, y, z),
+            GpuVec3(x + width, y, z),
+            GpuVec3(x + width, y + height, z),
+            GpuVec3(x, y + height, z),
+            material
+        );
+        for (let i in this.triangles.length - 2..this.triangles.length) {
+            let t = this.triangles[i];
+            t.uv = GpuVec4(1.0f / width, -1.0f / height, -x / width, (y + height) / height);
+            this.triangles[i] = t;
+        }
+    }
+}
+
+public fun room_mesh(): RoomMesh {
+    let mesh = RoomMesh();
+    // Facade detail is shaded in world space; the acceleration geometry stays compact.
+    mesh.quad(
+        GpuVec3(-25.0f, 0.0f, -60.0f),
+        GpuVec3(25.0f, 0.0f, -60.0f),
+        GpuVec3(25.0f, 0.0f, 18.0f),
+        GpuVec3(-25.0f, 0.0f, 18.0f),
+        1
+    );
+    mesh.box(GpuVec3(-13.0f, 0.0f, -45.0f), GpuVec3(-5.8f, 0.18f, 15.0f), 2);
+    mesh.box(GpuVec3(7.0f, 0.0f, -45.0f), GpuVec3(15.0f, 0.18f, 15.0f), 2);
+    mesh.box(GpuVec3(-15.0f, 0.18f, -13.0f), GpuVec3(-8.0f, 33.0f, -5.0f), 0);
+    mesh.box(GpuVec3(-14.0f, 0.18f, -27.0f), GpuVec3(-6.2f, 47.0f, -17.0f), 0);
+    mesh.box(GpuVec3(-18.0f, 0.18f, -43.0f), GpuVec3(-7.5f, 27.0f, -32.0f), 0);
+    mesh.box(GpuVec3(9.0f, 0.18f, -18.0f), GpuVec3(17.0f, 42.0f, -7.0f), 0);
+    mesh.box(GpuVec3(7.0f, 0.18f, -32.0f), GpuVec3(14.0f, 28.0f, -23.0f), 0);
+    mesh.box(GpuVec3(10.0f, 0.18f, -48.0f), GpuVec3(20.0f, 52.0f, -38.0f), 0);
+    mesh.box(GpuVec3(-3.5f, 0.0f, -56.0f), GpuVec3(4.0f, 39.0f, -50.0f), 0);
+    mesh.box(GpuVec3(-20.0f, 0.0f, 2.0f), GpuVec3(-9.0f, 24.0f, 11.0f), 0);
+    // A low coupe: sloping hood and rear deck, then a separate glass canopy.
+    let a = GpuVec3(1.8f, 0.38f, 0.1f);
+    let b = GpuVec3(4.1f, 0.38f, 0.1f);
+    let c = GpuVec3(4.1f, 0.38f, 4.7f);
+    let d = GpuVec3(1.8f, 0.38f, 4.7f);
+    let e = GpuVec3(1.9f, 0.86f, 0.3f);
+    let f = GpuVec3(4.0f, 0.86f, 0.3f);
+    let g = GpuVec3(4.0f, 0.78f, 4.6f);
+    let h = GpuVec3(1.9f, 0.78f, 4.6f);
+    mesh.quad(a, b, f, e, 7);
+    mesh.quad(d, h, g, c, 7);
+    mesh.quad(a, e, h, d, 7);
+    mesh.quad(b, c, g, f, 7);
+    mesh.quad(e, f, g, h, 7);
+    let roof_a = GpuVec3(2.25f, 1.3f, 1.9f);
+    let roof_b = GpuVec3(3.65f, 1.3f, 1.9f);
+    let roof_c = GpuVec3(3.65f, 1.3f, 2.7f);
+    let roof_d = GpuVec3(2.25f, 1.3f, 2.7f);
+    let sill_a = GpuVec3(2.0f, 0.87f, 1.0f);
+    let sill_b = GpuVec3(3.9f, 0.87f, 1.0f);
+    let sill_c = GpuVec3(3.9f, 0.83f, 3.6f);
+    let sill_d = GpuVec3(2.0f, 0.83f, 3.6f);
+    mesh.quad(roof_a, roof_b, roof_c, roof_d, 7);
+    mesh.quad(sill_a, sill_b, roof_b, roof_a, 8);
+    mesh.quad(sill_d, roof_d, roof_c, sill_c, 8);
+    mesh.quad(sill_a, roof_a, roof_d, sill_d, 8);
+    mesh.quad(sill_b, sill_c, roof_c, roof_b, 8);
+    mesh.wheel(1.79f, 1.0f);
+    mesh.wheel(4.11f, 1.0f);
+    mesh.wheel(1.79f, 3.8f);
+    mesh.wheel(4.11f, 3.8f);
+    mesh.sign(1.95f, 0.65f, 4.62f, 2.0f, 0.055f, 4);
+    mesh.sign(1.95f, 0.56f, 4.63f, 0.06f, 0.22f, 4);
+    mesh.sign(3.89f, 0.56f, 4.63f, 0.06f, 0.22f, 4);
+    // Different setbacks and sign heights create overlapping silhouettes down the street.
+    mesh.sign(-14.5f, 14.5f, -4.97f, 6.1f, 2.6f, 10);
+    mesh.sign(-13.5f, 7.4f, -4.95f, 5.2f, 2.0f, 11);
+    mesh.sign(-7.9f, 20.0f, -16.96f, 1.7f, 10.0f, 12);
+    mesh.sign(-12.7f, 3.4f, -4.94f, 4.1f, 1.35f, 13);
+    mesh.sign(-11.5f, 23.0f, -4.96f, 3.2f, 4.5f, 14);
+    mesh.sign(9.02f, 11.0f, -6.96f, 5.8f, 2.4f, 15);
+    mesh.sign(7.1f, 5.0f, -22.96f, 4.6f, 2.2f, 16);
+    mesh.sign(-2.9f, 17.0f, -49.96f, 6.3f, 2.8f, 17);
+    mesh.box(GpuVec3(-8.0f, 6.1f, -12.0f), GpuVec3(9.0f, 6.35f, -11.75f), 2);
+    mesh.sign(-7.7f, 6.36f, -11.73f, 6.0f, 1.0f, 16);
+    mesh.sign(-8.04f, 1.0f, -4.93f, 0.05f, 30.0f, 4);
+    mesh.sign(9.03f, 0.6f, -6.93f, 0.065f, 36.0f, 6);
+    mesh.sign(-6.15f, 0.6f, -16.93f, 0.05f, 43.0f, 4);
+    mesh.sign(7.05f, 0.6f, -22.93f, 0.06f, 25.0f, 4);
+    mesh.quad(
+        GpuVec3(-6.2f, 0.2f, -44.0f),
+        GpuVec3(-6.15f, 0.2f, -44.0f),
+        GpuVec3(-6.15f, 0.2f, 14.0f),
+        GpuVec3(-6.2f, 0.2f, 14.0f),
+        6
+    );
+    return mesh;
+}

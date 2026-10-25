@@ -1,0 +1,226 @@
+import system.gpu;
+import room_scene;
+
+public struct RoomPixel {
+    @builtin("position")
+    public position: GpuVec4;
+
+    @location(0)
+    public uv: GpuVec2;
+}
+
+public struct RoomView {
+    public origin: GpuVec4;
+    public forward: GpuVec4;
+    public right: GpuVec4;
+    public up: GpuVec4;
+    public resolution: GpuVec4;
+
+    // Triangle count, animation seconds, sRGB attachment flag, BVH node count.
+    public settings: GpuVec4;
+}
+
+public struct RoomHit {
+    public distance: float;
+    public index: int;
+}
+
+public fun city_hash(p: GpuVec2): float {
+    return GpuMath.fract(GpuMath.sin(p.dot(GpuVec2(127.1f, 311.7f))) * 43758.5453f);
+}
+
+public fun city_plane(point: GpuVec3, normal: GpuVec3): GpuVec2 {
+    if GpuMath.abs(normal.y) > 0.5f {
+        return GpuVec2(point.x, point.z);
+    }
+    if GpuMath.abs(normal.x) > 0.5f {
+        return GpuVec2(point.z, point.y);
+    }
+    return point.xy;
+}
+
+public fun room_base(material: int, point: GpuVec3, normal: GpuVec3): GpuVec3 {
+    if material == 1 {
+        let grain = city_hash(GpuMath.floor(GpuVec2(point.x, point.z) * 45.0f));
+        let color = GpuVec3(0.025f, 0.032f, 0.038f) * (0.7f + grain * 0.6f);
+        if GpuMath.abs(point.x + 0.4f) < 0.055f && GpuMath.fract(point.z * 0.15f) < 0.65f {
+            color = GpuVec3(0.5f, 0.29f, 0.07f);
+        }
+        return color;
+    }
+    if material == 9 {
+        return GpuVec3(0.006f);
+    }
+    if material == 7 {
+        return GpuVec3(0.018f, 0.026f, 0.029f);
+    }
+    if material == 8 {
+        return GpuVec3(0.008f, 0.015f, 0.02f);
+    }
+    let uv = city_plane(point, normal);
+    let panel = GpuMath.fract(uv * GpuVec2(0.6f, 0.45f));
+    let seam = GpuMath.step(0.025f, panel.x) * GpuMath.step(0.025f, panel.y);
+    let ribs = 0.65f + 0.35f * GpuMath.step(0.06f, GpuMath.fract(uv.x * 3.5f));
+    return GpuVec3(0.028f, 0.038f, 0.045f) * (0.3f + seam * 0.7f) * ribs;
+}
+
+public fun city_sign_color(index: int): GpuVec3 {
+    if index == 0 || index == 4 || index == 6 {
+        return GpuVec3(0.1f, 2.0f, 2.7f);
+    }
+    if index == 1 || index == 5 {
+        return GpuVec3(2.4f, 0.24f, 1.1f);
+    }
+    return GpuVec3(3.1f, 0.38f, 0.08f);
+}
+
+public fun city_sign(@readonly font: GpuBuffer<uint>, uv: GpuVec2, index: int): GpuVec3 {
+    let border = GpuMath.step(0.025f, uv.x)
+        * GpuMath.step(uv.x, 0.975f) * GpuMath.step(0.04f, uv.y) * GpuMath.step(uv.y, 0.96f);
+    let local = GpuVec2((uv.x - 0.04f) / 0.92f, (uv.y - 0.25f) / 0.42f);
+    let ink = 0.0f;
+    if local.x >= 0.0f && local.x < 1.0f && local.y >= 0.0f && local.y < 1.0f {
+        let cell = (int)(local.x * 12.0f);
+        let code = (int)font[1280 + index * 12 + cell];
+        let x = (uint)(GpuMath.fract(local.x * 12.0f) * 16.0f);
+        let y = (int)(local.y * 20.0f);
+        ink = (float)((font[code * 20 + y] >> x) & 1u);
+    }
+    let scan = GpuMath.step(0.4f, GpuMath.fract(uv.y * 90.0f));
+    let small = GpuMath.step(0.83f, uv.y)
+        * GpuMath.step(uv.y, 0.87f) * GpuMath.step(0.3f, GpuMath.fract(uv.x * 28.0f));
+    return city_sign_color(index)
+        * (ink * 2.4f + (1.0f - border) * 1.4f + small * 0.3f)
+        + GpuVec3(0.012f, 0.025f, 0.03f) * (0.8f + scan * 0.2f);
+}
+
+public fun room_emission(
+    material: int,
+    point: GpuVec3,
+    normal: GpuVec3,
+    mapping: GpuVec4,
+    time: float,
+    @readonly font: GpuBuffer<uint>
+): GpuVec3 {
+    if material >= 10 {
+        let uv = point.xy * mapping.xy + GpuVec2(mapping.z, mapping.w);
+        let flicker = 0.96f + 0.04f * GpuMath.sin(time * 7.0f + (float)material);
+        return city_sign(font, uv, material - 10) * flicker;
+    }
+    if material == 4 {
+        return GpuVec3(5.0f, 0.025f, 0.006f);
+    }
+    if material == 6 {
+        return GpuVec3(0.03f, 2.0f, 2.7f);
+    }
+    if material == 0 && GpuMath.abs(normal.y) < 0.5f {
+        let uv = city_plane(point, normal) * GpuVec2(1.2f, 0.7f);
+        let cell = GpuMath.floor(uv);
+        let pane = GpuMath.fract(uv);
+        let random = city_hash(cell);
+        let lit = GpuMath.step(0.68f, random)
+            * GpuMath.step(0.16f, pane.x)
+            * GpuMath.step(pane.x, 0.65f)
+            * GpuMath.step(0.13f, pane.y) * GpuMath.step(pane.y, 0.68f);
+        return GpuMath.mix(
+            GpuVec3(0.12f, 0.4f, 0.52f),
+            GpuVec3(0.85f, 0.54f, 0.27f),
+            GpuVec3(random)
+        ) * lit;
+    }
+    return GpuVec3(0.0f);
+}
+
+public fun room_reflectivity(material: int): float {
+    if material == 1 {
+        return 0.72f;
+    }
+    if material == 8 {
+        return 0.82f;
+    }
+    if material == 7 {
+        return 0.52f;
+    }
+    return 0.035f;
+}
+
+public fun city_normal(point: GpuVec3, normal: GpuVec3, material: int): GpuVec3 {
+    if material == 1 {
+        let wave = GpuMath.sin(point.x * 18.0f + GpuMath.sin(point.z * 14.0f));
+        let ripple = GpuMath.sin(point.z * 23.0f + GpuMath.cos(point.x * 11.0f));
+        normal = (normal + GpuVec3(wave * 0.006f, 0.0f, ripple * 0.006f)).normalize();
+    }
+    return normal;
+}
+
+public fun room_light(time: float): GpuVec3 {
+    return GpuVec3(-3.0f + GpuMath.sin(time * 0.3f), 8.5f, -7.0f);
+}
+
+public fun city_fill(point: GpuVec3, normal: GpuVec3, center: GpuVec3, color: GpuVec3): GpuVec3 {
+    let delta = center - point;
+    let d2 = delta.dot(delta);
+    let diffuse = GpuMath.max(normal.dot(delta.normalize()), 0.0f);
+    return color * ((0.15f + diffuse) * 18.0f / (d2 + 12.0f));
+}
+
+public fun room_lighting(
+    base: GpuVec3,
+    point: GpuVec3,
+    normal: GpuVec3,
+    ray: GpuVec3,
+    light_direction: GpuVec3,
+    distance: float,
+    visible: float
+): GpuVec3 {
+    let diffuse = GpuMath.max(normal.dot(light_direction), 0.0f);
+    let half_vector = (light_direction - ray).normalize();
+    let specular = GpuMath.pow(GpuMath.max(normal.dot(half_vector), 0.0f), 96.0f);
+    let fill = city_fill(point, normal, GpuVec3(-10.0f, 9.0f, -4.5f), GpuVec3(2.0f, 0.12f, 0.7f))
+        + city_fill(point, normal, GpuVec3(9.0f, 12.0f, -6.5f), GpuVec3(0.1f, 1.2f, 1.8f));
+    return base
+        * (GpuVec3(0.2f, 0.3f, 0.38f) + fill)
+        + (base * diffuse + GpuVec3(specular * 0.65f))
+        * GpuVec3(1.1f, 0.65f, 0.36f) * (50.0f / (8.0f + distance * distance) * visible);
+}
+
+public fun city_sky(ray: GpuVec3): GpuVec3 {
+    return GpuMath.mix(
+        GpuVec3(0.012f, 0.032f, 0.04f),
+        GpuVec3(0.004f, 0.01f, 0.016f),
+        GpuVec3(GpuMath.max(ray.y, 0.0f))
+    );
+}
+
+public fun city_glow(origin: GpuVec3, ray: GpuVec3, limit: float): GpuVec3 {
+    let a = GpuVec3(-10.5f, 8.5f, -4.6f) - origin;
+    let b = GpuVec3(11.0f, 12.0f, -6.6f) - origin;
+    let ta = GpuMath.clamp(a.dot(ray), 0.0f, limit);
+    let tb = GpuMath.clamp(b.dot(ray), 0.0f, limit);
+    let da = a - ray * ta;
+    let db = b - ray * tb;
+    return GpuVec3(0.16f, 0.008f, 0.055f)
+        * GpuMath.exp(-da.dot(da) * 0.08f)
+        + GpuVec3(0.004f, 0.08f, 0.13f) * GpuMath.exp(-db.dot(db) * 0.08f);
+}
+
+public fun room_encode(channel: float): float {
+    if channel <= 0.0031308f {
+        return channel * 12.92f;
+    }
+    return 1.055f * GpuMath.pow(channel, 1.0f / 2.4f) - 0.055f;
+}
+
+public fun room_output(radiance: GpuVec3, target_srgb: int, uv: GpuVec2): GpuVec4 {
+    let x = radiance * 1.35f;
+    let color = GpuMath.clamp(
+        (x * (x * 2.51f + GpuVec3(0.03f))) / (x * (x * 2.43f + GpuVec3(0.59f)) + GpuVec3(0.14f)),
+        GpuVec3(0.0f),
+        GpuVec3(1.0f)
+    );
+    color = color * (1.0f - 0.17f * GpuMath.min(uv.dot(uv) * 0.35f, 1.0f));
+    if target_srgb == 0 {
+        color = GpuVec3(room_encode(color.x), room_encode(color.y), room_encode(color.z));
+    }
+    return GpuVec4(color.x, color.y, color.z, 1.0f);
+}

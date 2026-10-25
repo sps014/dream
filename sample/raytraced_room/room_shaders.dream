@@ -1,0 +1,343 @@
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+module room_shaders;
+
+import system.gpu;
+import room_scene;
+import room_shading;
+import room_acceleration;
+
+@vertex
+public fun room_vertex(): RoomPixel {
+    let x = -1.0f;
+    let y = -1.0f;
+    if vertex_id() == 1 {
+        x = 3.0f;
+    }
+    if vertex_id() == 2 {
+        y = 3.0f;
+    }
+    let pixel = RoomPixel();
+    pixel.position = GpuVec4(x, y, 0.0f, 1.0f);
+    pixel.uv = GpuVec2(x, y);
+    return pixel;
+}
+
+fun room_bounds_hit(
+    node: RoomBvhNode,
+    origin: GpuVec3,
+    ray: GpuVec3,
+    inverse: GpuVec3,
+    limit: float
+): bool {
+    let a = (node.low.xyz - origin) * inverse;
+    let b = (node.high.xyz - origin) * inverse;
+    let near = GpuMath.min(a, b);
+    let far = GpuMath.max(a, b);
+    // Parallel rays must not depend on infinity or zero-times-infinity behavior in WGSL.
+    if ray.x == 0.0f {
+        if origin.x < node.low.x || origin.x > node.high.x {
+            return false;
+        }
+        near.x = 0.001f;
+        far.x = limit;
+    }
+    if ray.y == 0.0f {
+        if origin.y < node.low.y || origin.y > node.high.y {
+            return false;
+        }
+        near.y = 0.001f;
+        far.y = limit;
+    }
+    if ray.z == 0.0f {
+        if origin.z < node.low.z || origin.z > node.high.z {
+            return false;
+        }
+        near.z = 0.001f;
+        far.z = limit;
+    }
+    return GpuMath.max(0.001f, GpuMath.max(near.x, GpuMath.max(near.y, near.z))) <= GpuMath.min(
+        limit,
+        GpuMath.min(far.x, GpuMath.min(far.y, far.z))
+    );
+}
+
+public fun portable_hit(
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    @readonly nodes: GpuBuffer<RoomBvhNode>,
+    origin: GpuVec3,
+    ray: GpuVec3,
+    limit: float,
+    shadow: bool,
+    node_count: int
+): RoomHit {
+    let hit = RoomHit();
+    hit.distance = limit;
+    hit.index = -1;
+    let inverse = GpuVec3(0.0f);
+    if ray.x != 0.0f {
+        inverse.x = 1.0f / ray.x;
+    }
+    if ray.y != 0.0f {
+        inverse.y = 1.0f / ray.y;
+    }
+    if ray.z != 0.0f {
+        inverse.z = 1.0f / ray.z;
+    }
+    let cursor = 0;
+    while cursor < node_count {
+        let node = nodes[cursor];
+        if !room_bounds_hit(node, origin, ray, inverse, hit.distance) {
+            cursor = (int)node.low.w;
+            continue;
+        }
+        for (let j in 0..(int)node.high.w) {
+            let i = (int)node.indices.x;
+            if j == 1 {
+                i = (int)node.indices.y;
+            } else if j == 2 {
+                i = (int)node.indices.z;
+            } else if j == 3 {
+                i = (int)node.indices.w;
+            }
+            let triangle = triangles[i];
+            let edge1 = triangle.b.xyz - triangle.a.xyz;
+            let edge2 = triangle.c.xyz - triangle.a.xyz;
+            let p = ray.cross(edge2);
+            let determinant = edge1.dot(p);
+            if GpuMath.abs(determinant) > 0.0000001f {
+                let reciprocal = 1.0f / determinant;
+                let offset = origin - triangle.a.xyz;
+                let u = offset.dot(p) * reciprocal;
+                let q = offset.cross(edge1);
+                let v = ray.dot(q) * reciprocal;
+                let distance = edge2.dot(q) * reciprocal;
+                // Preserve the original triangle-order tie break despite spatial traversal.
+                let nearer = distance < hit.distance
+                    || (distance == hit.distance && hit.index >= 0 && i < hit.index);
+                if u >= 0.0f && v >= 0.0f && u + v <= 1.0f && distance > 0.001f && nearer {
+                    hit.distance = distance;
+                    hit.index = i;
+                    if shadow {
+                        return hit;
+                    }
+                }
+            }
+        }
+        cursor = cursor + 1;
+    }
+    return hit;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal)
+fun hardware_hit(
+    scene: GpuAccelerationStructure,
+    origin: GpuVec3,
+    ray: GpuVec3,
+    limit: float
+): RoomHit {
+    let query = GpuRayQuery(GpuRayFlags.ForceOpaque);
+    query.trace(scene, 255u, GpuRay(origin, ray, 0.001f, limit));
+    while query.proceed() {
+        query.commit_triangle();
+    }
+    let hit = RoomHit();
+    hit.distance = limit;
+    hit.index = -1;
+    if query.has_hit() {
+        hit.distance = query.hit_distance();
+        hit.index = query.hit_primitive_index();
+    }
+    return hit;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal)
+fun hardware_occluded(
+    scene: GpuAccelerationStructure,
+    origin: GpuVec3,
+    ray: GpuVec3,
+    limit: float
+): bool {
+    // The scene geometry is already opaque; a shadow ray can stop at its first hit.
+    let query = GpuRayQuery(GpuRayFlags.AcceptFirstHitAndEndSearch);
+    query.trace(scene, 255u, GpuRay(origin, ray, 0.001f, limit));
+    while query.proceed() {
+        query.commit_triangle();
+    }
+    return query.has_hit();
+}
+
+fun trace_portable(
+    pixel: RoomPixel,
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    @readonly nodes: GpuBuffer<RoomBvhNode>,
+    @readonly font: GpuBuffer<uint>,
+    view: RoomView
+): GpuVec3 {
+    let uv = GpuVec2(pixel.uv.x * view.resolution.x / view.resolution.y, pixel.uv.y);
+    let ray = (view.forward.xyz + view.right.xyz * (uv.x * 0.65f) + view.up.xyz * (uv.y * 0.65f))
+        .normalize();
+    let origin = view.origin.xyz;
+    let radiance = GpuVec3(0.0f);
+    let throughput = GpuVec3(1.0f);
+    // Three surface hits allow two reflected segments without recursive shaders.
+    for (let bounce in 0..3) {
+        let hit = portable_hit(triangles, nodes, origin, ray, 200.0f, false, (int)view.settings.w);
+        if hit.index < 0 {
+            radiance = radiance + throughput * (city_sky(ray) + city_glow(origin, ray, 150.0f));
+            break;
+        }
+        let triangle = triangles[hit.index];
+        let point = origin + ray * hit.distance;
+        let normal = triangle.normal.xyz;
+        if normal.dot(ray) > 0.0f {
+            normal = -normal;
+        }
+        let material = (int)triangle.normal.w;
+        normal = city_normal(point, normal, material);
+        let fog = GpuMath.exp(-hit.distance * 0.018f);
+        radiance = radiance
+            + throughput * (city_sky(ray) * (1.0f - fog) + city_glow(origin, ray, hit.distance));
+        throughput = throughput * fog;
+        let emission = room_emission(material, point, normal, triangle.uv, view.settings.y, font);
+        if material == 4 || material == 6 || material >= 10 {
+            radiance = radiance + throughput * emission;
+            break;
+        }
+        let offset = point + normal * 0.003f;
+        let light_delta = room_light(view.settings.y) - offset;
+        let distance = light_delta.length();
+        let light_direction = light_delta / distance;
+        let visible = 0.0f;
+        if normal.dot(light_direction) > 0.0f {
+            let blocker = portable_hit(
+                triangles,
+                nodes,
+                offset,
+                light_direction,
+                distance - 0.004f,
+                true,
+                (int)view.settings.w
+            );
+            if blocker.index < 0 {
+                visible = 1.0f;
+            }
+        }
+        let base = room_base(material, point, normal);
+        let facing = 1.0f - GpuMath.max(normal.dot(-ray), 0.0f);
+        let reflection = room_reflectivity(material) * (0.4f + 0.6f * GpuMath.pow(facing, 3.0f));
+        let shaded = room_lighting(base, point, normal, ray, light_direction, distance, visible);
+        radiance = radiance + throughput * (emission + shaded * (1.0f - reflection));
+        throughput = throughput * GpuVec3(reflection);
+        origin = offset;
+        ray = GpuMath.reflect(ray, normal).normalize();
+    }
+    return radiance;
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal)
+fun trace_hardware(
+    pixel: RoomPixel,
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    scene: GpuAccelerationStructure,
+    @readonly font: GpuBuffer<uint>,
+    view: RoomView
+): GpuVec3 {
+    let uv = GpuVec2(pixel.uv.x * view.resolution.x / view.resolution.y, pixel.uv.y);
+    let ray = (view.forward.xyz + view.right.xyz * (uv.x * 0.65f) + view.up.xyz * (uv.y * 0.65f))
+        .normalize();
+    let origin = view.origin.xyz;
+    let radiance = GpuVec3(0.0f);
+    let throughput = GpuVec3(1.0f);
+    // Three surface hits allow two reflected segments without recursive shaders.
+    for (let bounce in 0..3) {
+        let hit = hardware_hit(scene, origin, ray, 200.0f);
+        if hit.index < 0 {
+            radiance = radiance + throughput * (city_sky(ray) + city_glow(origin, ray, 150.0f));
+            break;
+        }
+        let triangle = triangles[hit.index];
+        let point = origin + ray * hit.distance;
+        let normal = triangle.normal.xyz;
+        if normal.dot(ray) > 0.0f {
+            normal = -normal;
+        }
+        let material = (int)triangle.normal.w;
+        normal = city_normal(point, normal, material);
+        let fog = GpuMath.exp(-hit.distance * 0.018f);
+        radiance = radiance
+            + throughput * (city_sky(ray) * (1.0f - fog) + city_glow(origin, ray, hit.distance));
+        throughput = throughput * fog;
+        let emission = room_emission(material, point, normal, triangle.uv, view.settings.y, font);
+        if material == 4 || material == 6 || material >= 10 {
+            radiance = radiance + throughput * emission;
+            break;
+        }
+        let offset = point + normal * 0.003f;
+        let light_delta = room_light(view.settings.y) - offset;
+        let distance = light_delta.length();
+        let light_direction = light_delta / distance;
+        let visible = 0.0f;
+        if normal.dot(light_direction) > 0.0f {
+            if !hardware_occluded(scene, offset, light_direction, distance - 0.004f) {
+                visible = 1.0f;
+            }
+        }
+        let base = room_base(material, point, normal);
+        let facing = 1.0f - GpuMath.max(normal.dot(-ray), 0.0f);
+        let reflection = room_reflectivity(material) * (0.4f + 0.6f * GpuMath.pow(facing, 3.0f));
+        let shaded = room_lighting(base, point, normal, ray, light_direction, distance, visible);
+        radiance = radiance + throughput * (emission + shaded * (1.0f - reflection));
+        throughput = throughput * GpuVec3(reflection);
+        origin = offset;
+        ray = GpuMath.reflect(ray, normal).normalize();
+    }
+    return radiance;
+}
+
+@fragment
+public fun room_portable(
+    pixel: RoomPixel,
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    @readonly nodes: GpuBuffer<RoomBvhNode>,
+    @readonly font: GpuBuffer<uint>,
+    view: RoomView
+): GpuVec4 {
+    let radiance = GpuVec3(0.0f);
+    for (let y in 0..2) {
+        for (let x in 0..2) {
+            let sample = pixel;
+            sample.uv = pixel.uv
+                + GpuVec2(
+                    ((float)x - 0.5f) / view.resolution.x,
+                    ((float)y - 0.5f) / view.resolution.y
+                );
+            radiance = radiance + trace_portable(sample, triangles, nodes, font, view);
+        }
+    }
+    return room_output(radiance * 0.25f, (int)view.settings.z, pixel.uv);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Vulkan, GpuTarget.Metal)
+
+@fragment
+public fun room_hardware(
+    pixel: RoomPixel,
+    @readonly triangles: GpuBuffer<RoomTriangle>,
+    scene: GpuAccelerationStructure,
+    @readonly font: GpuBuffer<uint>,
+    view: RoomView
+): GpuVec4 {
+    let radiance = GpuVec3(0.0f);
+    for (let y in 0..2) {
+        for (let x in 0..2) {
+            let sample = pixel;
+            sample.uv = pixel.uv
+                + GpuVec2(
+                    ((float)x - 0.5f) / view.resolution.x,
+                    ((float)y - 0.5f) / view.resolution.y
+                );
+            radiance = radiance + trace_hardware(sample, triangles, scene, font, view);
+        }
+    }
+    return room_output(radiance * 0.25f, (int)view.settings.z, pixel.uv);
+}

@@ -1,0 +1,255 @@
+import system;
+import system.gpu;
+import system.window;
+import room_scene;
+import room_shading;
+import room_shaders;
+import room_signs;
+import room_acceleration;
+
+async fun room_device(): Result<GpuDevice, GpuError> {
+    let portable: Option<GpuDevice> = Option.None;
+    for (let backend in GpuShaders.backends()) {
+        switch (GpuDevice.create(backend).await) {
+            Ok(device) => {
+                if device.supports(GpuFeature.RayQuery) && backend != GpuBackend.WebGpu {
+                    return Result.Ok(device);
+                }
+                if portable.is_none() {
+                    portable = Option.Some(device);
+                }
+            }
+            Err(error) => {
+                System.println(
+                    "Backend unavailable: " + backend.to_string() + " | " + error.message()
+                );
+            }
+        }
+    }
+    switch (portable) {
+        Some(device) => {
+            return Result.Ok(device);
+        }
+        None => {
+            return GpuDevice.create(GpuBackend.Auto).await;
+        }
+    }
+}
+
+fun room_mode(device: GpuDevice, hardware: bool): void {
+    let mode = "portable GPU triangles";
+    if hardware {
+        mode = "hardware ray queries";
+    }
+    System.println("Tracing mode: " + device.backend.to_string() + " | " + mode);
+}
+
+async fun run_room(window: Window): Result<Unit, GpuError> {
+    let device = room_device().await?;
+    let mesh = room_mesh();
+    System.println("Scene triangles: " + mesh.triangles.length.to_string());
+    let nodes = device.buffer_from(room_bvh(mesh.triangles))?;
+    let triangles = device.buffer_from(mesh.triangles.take_array())?;
+    let font = device.buffer_from(sign_font())?;
+    let surface = device.create_surface(window)?;
+    let portable = device.render_pipeline(
+        GpuShaders.room_vertex,
+        GpuShaders.room_portable,
+        GpuRenderPipelineDesc.defaults(surface.color_format)
+    )?;
+    let acceleration: Option<GpuAccelerationStructure> = Option.None;
+    let accelerated: Option<GpuRenderPipeline> = Option.None;
+    let hardware = device.supports(GpuFeature.RayQuery) && device.backend != GpuBackend.WebGpu;
+    if hardware {
+        let positions = device.buffer_from(mesh.positions.take_array())?;
+        let bottom = device.build_bottom_level(GpuGeometry.triangles(positions)).await?;
+        acceleration = Option.Some(
+            device.build_top_level([GpuInstance(bottom, GpuMat4.identity())]).await?
+        );
+        accelerated = Option.Some(
+            device.render_pipeline(
+                GpuShaders.room_vertex,
+                GpuShaders.room_hardware,
+                GpuRenderPipelineDesc.defaults(surface.color_format)
+            )?
+        );
+    }
+    let view = RoomView();
+    let target_srgb = 0;
+    if surface.color_format
+        == GpuTextureFormat.Rgba8UnormSrgb
+        || surface.color_format == GpuTextureFormat.Bgra8UnormSrgb {
+        target_srgb = 1;
+    }
+    let position = GpuVec3(5.4f, 1.65f, 8.5f);
+    let yaw = -0.40f;
+    let pitch = 0.18f;
+    let paused = false;
+    let time = 0.0f;
+    let report_seconds = 0.0f;
+    let report_frames = 0;
+    room_mode(device, hardware);
+    System.println(
+        "Room ready | drag/arrows: look | WASD: move | Q/E: height | Shift: fast | Space: pause | H: tracing | R: reset | Esc: close"
+    );
+    while window.is_open {
+        let input = window.poll();
+        for (let event in input.events) {
+            switch (event) {
+                WindowEvent.Resized(size) => {
+                    if size.width > 0 && size.height > 0 {
+                        surface.resize(size.width, size.height)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if input.keyboard.pressed(KeyCode.Escape) {
+            window.close();
+        }
+        if !window.is_open {
+            break;
+        }
+        let dt = (float)input.delta_seconds.min(0.05f);
+        if input.keyboard.pressed(KeyCode.Space) {
+            paused = !paused;
+        }
+        if input.keyboard.pressed(KeyCode.H) {
+            if accelerated.is_some() {
+                hardware = !hardware;
+                room_mode(device, hardware);
+            } else {
+                System.println(
+                    "Hardware ray queries unavailable on this device; using portable GPU triangles."
+                );
+            }
+        }
+        if !paused {
+            time = time + dt;
+        }
+        if input.mouse.is_down(MouseButton.Left) {
+            yaw = yaw + (float)input.mouse.delta.x * 0.004f;
+            pitch = pitch - (float)input.mouse.delta.y * 0.004f;
+        }
+        if input.keyboard.is_down(KeyCode.ArrowLeft) {
+            yaw = yaw - dt;
+        }
+        if input.keyboard.is_down(KeyCode.ArrowRight) {
+            yaw = yaw + dt;
+        }
+        if input.keyboard.is_down(KeyCode.ArrowUp) {
+            pitch = pitch + dt;
+        }
+        if input.keyboard.is_down(KeyCode.ArrowDown) {
+            pitch = pitch - dt;
+        }
+        pitch = (float)pitch.max(-1.3f).min(1.3f);
+        let forward = GpuVec3((float)Math.sin(yaw), 0.0f, -(float)Math.cos(yaw));
+        let right = GpuVec3((float)Math.cos(yaw), 0.0f, (float)Math.sin(yaw));
+        let movement = GpuVec3(0.0f);
+        if input.keyboard.is_down(KeyCode.W) {
+            movement = movement + forward;
+        }
+        if input.keyboard.is_down(KeyCode.S) {
+            movement = movement - forward;
+        }
+        if input.keyboard.is_down(KeyCode.D) {
+            movement = movement + right;
+        }
+        if input.keyboard.is_down(KeyCode.A) {
+            movement = movement - right;
+        }
+        if input.keyboard.is_down(KeyCode.E) {
+            movement.y = movement.y + 1.0f;
+        }
+        if input.keyboard.is_down(KeyCode.Q) {
+            movement.y = movement.y - 1.0f;
+        }
+        let speed = 2.5f;
+        if input.keyboard.is_down(KeyCode.ShiftLeft) || input.keyboard.is_down(KeyCode.ShiftRight) {
+            speed = 6.0f;
+        }
+        if movement.length() > 0.0f {
+            position = position + movement.normalize() * (speed * dt);
+        }
+        position.x = (float)position.x.max(-20.0f).min(20.0f);
+        position.y = (float)position.y.max(0.3f).min(35.0f);
+        position.z = (float)position.z.max(-48.0f).min(14.0f);
+        if input.keyboard.pressed(KeyCode.R) {
+            position = GpuVec3(5.4f, 1.65f, 8.5f);
+            yaw = -0.40f;
+            pitch = 0.18f;
+            time = 0.0f;
+            paused = false;
+        }
+        let size = window.pixel_size;
+        if size.width <= 0 || size.height <= 0 {
+            Time.delay(50).await;
+            continue;
+        }
+        view.origin = GpuVec4(position.x, position.y, position.z, 1.0f);
+        view.forward = GpuVec4(
+            (float)(Math.sin(yaw) * Math.cos(pitch)),
+            (float)Math.sin(pitch),
+            -(float)(Math.cos(yaw) * Math.cos(pitch)),
+            0.0f
+        );
+        view.right = GpuVec4(right.x, right.y, right.z, 0.0f);
+        let up = right.cross(view.forward.xyz).normalize();
+        view.up = GpuVec4(up.x, up.y, up.z, 0.0f);
+        view.resolution = GpuVec4((float)size.width, (float)size.height, 0.0f, 0.0f);
+        view.settings = GpuVec4(
+            (float)triangles.length,
+            time,
+            (float)target_srgb,
+            (float)nodes.length
+        );
+        let frame = surface.begin_frame(GpuVec4(0.0f)).await?;
+        let pass = frame.pass;
+        if hardware {
+            pass.set_pipeline(accelerated.unwrap());
+            pass.bind_buffer(GpuShaders.room_hardware.triangles, triangles);
+            pass.bind(GpuShaders.room_hardware.scene, acceleration.unwrap());
+            pass.bind_buffer(GpuShaders.room_hardware.font, font);
+            pass.bind_value(GpuShaders.room_hardware.view, view);
+        } else {
+            pass.set_pipeline(portable);
+            pass.bind_buffer(GpuShaders.room_portable.triangles, triangles);
+            pass.bind_buffer(GpuShaders.room_portable.nodes, nodes);
+            pass.bind_buffer(GpuShaders.room_portable.font, font);
+            pass.bind_value(GpuShaders.room_portable.view, view);
+        }
+        pass.draw(3);
+        frame.present().await?;
+        report_frames = report_frames + 1;
+        report_seconds = report_seconds + (float)input.delta_seconds;
+        if report_seconds >= 3.0f {
+            System.println(
+                "Performance: "
+                    + ((int)((float)report_frames / report_seconds))
+                    .to_string()
+                    + " FPS | " + size.width.to_string() + "x" + size.height.to_string()
+            );
+            report_frames = 0;
+            report_seconds = 0.0f;
+        }
+    }
+    return Result.Ok(Unit());
+}
+
+async fun main(): void {
+    switch (Window.open(WindowDesc("ION | Neon district", 960, 600).resizable(true).vsync(true))) {
+        Ok(window) => {
+            switch (run_room(window).await) {
+                Ok(_) => {}
+                Err(error) => {
+                    System.println("GPU error: " + error.message());
+                }
+            }
+            window.close();
+        }
+        Err(error) => {
+            System.println("Window error: " + error.message());
+        }
+    }
+}

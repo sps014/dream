@@ -1,0 +1,118 @@
+import system;
+import system.gpu;
+import room_scene;
+
+// Escape links let the shader skip a whole subtree without a private traversal stack.
+public struct RoomBvhNode {
+    public low: GpuVec4;
+    public high: GpuVec4;
+    public indices: GpuVec4;
+}
+
+struct RoomPrimitive {
+    public low: GpuVec3;
+    public high: GpuVec3;
+    public center: GpuVec4;
+}
+
+fun room_min(a: GpuVec3, b: GpuVec3): GpuVec3 {
+    return GpuVec3((float)a.x.min(b.x), (float)a.y.min(b.y), (float)a.z.min(b.z));
+}
+
+fun room_max(a: GpuVec3, b: GpuVec3): GpuVec3 {
+    return GpuVec3((float)a.x.max(b.x), (float)a.y.max(b.y), (float)a.z.max(b.z));
+}
+
+fun room_primitive_order(a: RoomPrimitive, b: RoomPrimitive, axis: int): int {
+    let x = a.center.x;
+    let y = b.center.x;
+    if axis == 1 {
+        x = a.center.y;
+        y = b.center.y;
+    } else if axis == 2 {
+        x = a.center.z;
+        y = b.center.z;
+    }
+    if x < y {
+        return -1;
+    }
+    if x > y {
+        return 1;
+    }
+    return (int)a.center.w - (int)b.center.w;
+}
+
+fun room_bvh_branch(nodes: List<RoomBvhNode>, primitives: List<RoomPrimitive>): void {
+    let low = primitives[0].low;
+    let high = primitives[0].high;
+    let centers_low = primitives[0].center.xyz;
+    let centers_high = centers_low;
+    for (let primitive in primitives) {
+        low = room_min(low, primitive.low);
+        high = room_max(high, primitive.high);
+        centers_low = room_min(centers_low, primitive.center.xyz);
+        centers_high = room_max(centers_high, primitive.center.xyz);
+    }
+    let index = nodes.length;
+    let node = RoomBvhNode();
+    // Flat sign/wheel bounds need thickness, and slab roundoff must never cull a real hit.
+    node.low = GpuVec4(low.x - 0.0005f, low.y - 0.0005f, low.z - 0.0005f, 0.0f);
+    node.high = GpuVec4(high.x + 0.0005f, high.y + 0.0005f, high.z + 0.0005f, 0.0f);
+    node.indices = GpuVec4(-1.0f);
+    nodes.push(node);
+    if primitives.length <= 4 {
+        node.high.w = (float)primitives.length;
+        node.indices.x = primitives[0].center.w;
+        if primitives.length > 1 {
+            node.indices.y = primitives[1].center.w;
+        }
+        if primitives.length > 2 {
+            node.indices.z = primitives[2].center.w;
+        }
+        if primitives.length > 3 {
+            node.indices.w = primitives[3].center.w;
+        }
+    } else {
+        let extent = centers_high - centers_low;
+        let axis = 0;
+        if extent.y > extent.x {
+            axis = 1;
+        }
+        if extent.z > extent.x && extent.z > extent.y {
+            axis = 2;
+        }
+        primitives.sort_by((a, b) => room_primitive_order(a, b, axis));
+        let left = List<RoomPrimitive>();
+        let right = List<RoomPrimitive>();
+        let middle = primitives.length / 2;
+        for (let i in 0..primitives.length) {
+            if i < middle {
+                left.push(primitives[i]);
+            } else {
+                right.push(primitives[i]);
+            }
+        }
+        room_bvh_branch(nodes, left);
+        room_bvh_branch(nodes, right);
+    }
+    node.low.w = (float)nodes.length;
+    nodes[index] = node;
+}
+
+public fun room_bvh(triangles: List<RoomTriangle>): RoomBvhNode[] {
+    let primitives = List<RoomPrimitive>();
+    for (let i in 0..triangles.length) {
+        let triangle = triangles[i];
+        let primitive = RoomPrimitive();
+        primitive.low = room_min(triangle.a.xyz, room_min(triangle.b.xyz, triangle.c.xyz));
+        primitive.high = room_max(triangle.a.xyz, room_max(triangle.b.xyz, triangle.c.xyz));
+        let center = (primitive.low + primitive.high) * 0.5f;
+        primitive.center = GpuVec4(center.x, center.y, center.z, (float)i);
+        primitives.push(primitive);
+    }
+    let nodes = List<RoomBvhNode>();
+    if !primitives.is_empty() {
+        room_bvh_branch(nodes, primitives);
+    }
+    return nodes.take_array();
+}

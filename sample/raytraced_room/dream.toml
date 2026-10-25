@@ -1,0 +1,7 @@
+[package]
+name = "raytraced_room"
+version = "0.1.0"
+type = "bin"
+entry = "main.dream"
+targets = ["native", "web"]
+description = "Interactive neon district with native ray queries and portable GPU triangle tracing"

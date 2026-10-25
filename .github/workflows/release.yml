@@ -115,7 +115,7 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
-          for capability in core crypto process timezone net cli data io gpu window; do
+          for capability in core crypto process timezone net io gpu window audio; do
             case "$RUNNER_OS" in
               Windows) library="dream_host_${capability}.dll" ;;
               macOS) library="libdream_host_${capability}.dylib" ;;

@@ -437,9 +437,16 @@ static void generational_ids(void) {
 }
 
 static void assert_pool_drained(void) {
-    dream_mutex_lock(&pool_mu);
-    assert(pool_running == 0 && !run_head && pool_injected == 0);
-    dream_mutex_unlock(&pool_mu);
+    /* Session termination releases bound before its thread updates pool accounting. */
+    int64_t deadline = dream_monotonic_ns() + 5000000000LL;
+    for (;;) {
+        dream_mutex_lock(&pool_mu);
+        int drained = pool_running == 0 && !run_head && pool_injected == 0;
+        dream_mutex_unlock(&pool_mu);
+        if (drained) { return; }
+        assert(dream_monotonic_ns() < deadline && "worker pool did not drain");
+        dream_thread_yield();
+    }
 }
 
 static void post_pair(int32_t first_fn, int32_t second_fn) {

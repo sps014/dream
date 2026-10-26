@@ -2,6 +2,7 @@
 // generic arguments; `internal` members are reachable module-wide; `public` declarations from a
 // module-less file are usable from another file.
 import system;
+import system.testing;
 import helpers.module_receiver_a;
 import helpers.module_receiver_b;
 import helpers.module_users_a;
@@ -11,6 +12,8 @@ import helpers.module_internal_member_partner;
 import helpers.vis_lib;
 
 fun main(): void {
+    Assert.eq(first_result().unwrap().value, 23);
+    Assert.eq(second_result().unwrap().value, "qualified");
     System.println(first_counter());
     System.println(second_counter());
     System.println(first_user_value());

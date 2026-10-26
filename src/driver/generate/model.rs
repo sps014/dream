@@ -38,6 +38,48 @@ pub struct Snapshot {
     pub calls: Vec<CallSite>,
 }
 
+impl Snapshot {
+    pub fn decode(json: &str) -> Result<Self, serde_json::Error> {
+        // Syntax snapshots contain source-shaped expression trees, whose valid depth can
+        // exceed JSON's default limit (for example generated HTML entity tables).
+        let mut decoder = serde_json::Deserializer::from_str(json);
+        decoder.disable_recursion_limit();
+        let snapshot = Self::deserialize(serde_stacker::Deserializer::new(&mut decoder))?;
+        decoder.end()?;
+        Ok(snapshot)
+    }
+}
+
+#[cfg(test)]
+mod snapshot_decode_tests {
+    use super::{Body, BodyNode, Function, Snapshot};
+
+    #[test]
+    fn accepts_deep_source_expressions_and_rejects_trailing_input() {
+        let mut node = BodyNode::default();
+        for _ in 0..180 {
+            node = BodyNode {
+                kind: "binary".into(),
+                children: vec![node],
+                ..Default::default()
+            };
+        }
+        let snapshot = Snapshot {
+            functions: vec![Function {
+                body: Some(Body {
+                    statements: vec![node],
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert!(serde_json::from_str::<Snapshot>(&json).is_err());
+        assert_eq!(Snapshot::decode(&json).unwrap(), snapshot);
+        assert!(Snapshot::decode(&(json + " null")).is_err());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AdditionalFile {
     pub path: String,

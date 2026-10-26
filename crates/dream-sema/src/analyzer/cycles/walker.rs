@@ -7,9 +7,7 @@
 use super::program::Program;
 use super::state::State;
 use super::summary::{Finding, MAX_WRITES, Origin, PRECISE_WRITES, Summary};
-use super::value::{
-    Atom, Atoms, PathId, Paths, Slot, frame_slot, insert, one, result_slot, union,
-};
+use super::value::{Atom, Atoms, PathId, Paths, Slot, frame_slot, insert, one, result_slot, union};
 use dream_hir::{HExpr, HFunction, HGlobal, ParamMode};
 use dream_types::{TyKind, TypeId};
 use indexmap::{IndexMap, IndexSet};
@@ -150,7 +148,10 @@ impl<'p, 'a> Walker<'p, 'a> {
             }
             w.summary.ret = one(Atom::Fresh(future));
         }
-        let mut summary = std::mem::take(&mut w.summary).finish(&exit, coarse);
+        let mut summary = std::mem::take(&mut w.summary).finish(&exit, coarse, |ty| {
+            matches!(prog.graph.interner().kind(ty),
+                TyKind::Struct(def, _) if prog.managed.contains(def))
+        });
         let mut findings: Vec<Finding> = w.findings.into_iter().collect();
         if coarse || summary.writes.len() > PRECISE_WRITES {
             summary.coarsen();
@@ -338,8 +339,13 @@ impl<'p, 'a> Walker<'p, 'a> {
     pub(super) fn suspend(&mut self) {
         self.wrote_all();
         self.state.reattach(|_| true);
-        self.state
-            .alias(&self.prog.graph, self.paths, None, &[Atom::Old], &[Atom::Old]);
+        self.state.alias(
+            &self.prog.graph,
+            self.paths,
+            None,
+            &[Atom::Old],
+            &[Atom::Old],
+        );
         for site in &mut self.state.sites {
             if site.escaped {
                 site.lost = true;

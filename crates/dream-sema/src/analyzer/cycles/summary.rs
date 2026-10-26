@@ -61,7 +61,7 @@ pub(super) struct FreshGroup {
 
 pub(super) const PRIVATE: usize = 0;
 pub(super) const SHARED: usize = 1;
-/// Bounds the caller sites one call creates.
+/// Holder-sensitive groups per call; additional groups retain types without holder precision.
 pub(super) const MAX_GROUPS: usize = 64;
 
 #[derive(Clone, Default, PartialEq, Debug)]
@@ -87,7 +87,12 @@ impl Summary {
     /// Renames the walk's allocation sites to the groups callers see. `coarse` groups only by
     /// escape and return, which keeps the groups of a recursive fixpoint from trading objects
     /// every round.
-    pub(super) fn finish(mut self, exit: &State, coarse: bool) -> Summary {
+    pub(super) fn finish(
+        mut self,
+        exit: &State,
+        coarse: bool,
+        managed: impl Fn(TypeId) -> bool,
+    ) -> Summary {
         // Objects stored into different caller objects (say the new storage of two maps) stay
         // apart, so callers do not see one caller object holding the other's contents.
         let mut holders: Vec<Atoms> = vec![Atoms::new(); exit.sites.len()];
@@ -116,16 +121,30 @@ impl Summary {
                     return base;
                 }
                 let returned = self.ret.contains(&Atom::Fresh(id as u32));
-                let types: &[TypeId] = if coarse { &[] } else { site.types.as_slice() };
-                let key = (escaped, returned, types, holders[id].as_slice());
+                // Managed objects are barriers in reachability proofs. Merging them with
+                // arbitrary overflow allocations erases that barrier and invents cycles.
+                let managed = !site.types.is_empty() && site.types.iter().all(|&ty| managed(ty));
+                let types: &[TypeId] = if coarse && !managed {
+                    &[]
+                } else {
+                    site.types.as_slice()
+                };
+                // Once the holder budget is exhausted, retain type identity. Folding all
+                // overflow objects into PRIVATE/SHARED invents edges between unrelated
+                // allocations, including a server's request storage and its futures.
+                let holder_set = if keys.len() + 2 < MAX_GROUPS {
+                    holders[id].as_slice()
+                } else {
+                    &[]
+                };
+                let key = (escaped, returned, types, holder_set);
                 let next = keys.len() + 2;
                 match keys.get(&key) {
                     Some(&at) => at,
-                    None if next < MAX_GROUPS => {
+                    None => {
                         keys.insert(key, next);
                         next
                     }
-                    None => base,
                 }
             })
             .collect();
@@ -307,4 +326,51 @@ pub(super) struct Finding {
     pub(super) origin: Origin,
     pub(super) file: Option<String>,
     pub(super) line: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overflowing_holder_budget_keeps_allocation_types_distinct() {
+        let mut state = State::default();
+        for id in 0..100 {
+            let site = state.site_mut(id);
+            site.live = true;
+            site.set_types(true, &[TypeId(id)]);
+        }
+        let summary = Summary {
+            ret: super::super::value::one(Atom::Fresh(99)),
+            ..Default::default()
+        }
+        .finish(&state, false, |_| false);
+        assert!(
+            summary
+                .fresh
+                .iter()
+                .all(|group| !group.allocates || (group.typed && group.types.len() == 1))
+        );
+        let Atom::Fresh(last) = summary.ret[0] else {
+            panic!("expected allocation");
+        };
+        assert_eq!(summary.fresh[last as usize].types.as_slice(), &[TypeId(99)]);
+    }
+
+    #[test]
+    fn coarse_summaries_preserve_managed_type_barriers() {
+        let mut state = State::default();
+        for id in 0..3 {
+            let site = state.site_mut(id);
+            site.live = true;
+            site.set_types(true, &[TypeId(id)]);
+        }
+        let summary = Summary::default().finish(&state, true, |ty| ty == TypeId(2));
+        assert!(
+            summary
+                .fresh
+                .iter()
+                .any(|group| group.typed && group.types.as_slice() == [TypeId(2)])
+        );
+    }
 }

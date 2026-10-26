@@ -72,7 +72,8 @@ fn is_marshalable_rec(cx: &Cx<'_>, ty: TypeId, stack: &mut Vec<TypeId>) -> bool 
     let ok = match cx.interner.kind(ty) {
         TyKind::Prim(_) | TyKind::Enum(_) | TyKind::Js => true,
         TyKind::Array(elem) => is_marshalable_rec(cx, *elem, stack),
-        TyKind::Struct(..) => true,
+        // Synthetic Future types have no object layout and cannot cross the JS boundary.
+        TyKind::Struct(..) => cx.nstruct(ty).is_some(),
         TyKind::Union(..) => cx.nunion(ty).is_some_and(|u| {
             u.variants
                 .iter()
@@ -139,4 +140,37 @@ pub(crate) fn unbox_prim(p: PrimTy) -> (&'static str, bool) {
         JsBridgeClass::of(p).as_bridge(),
         p.is_float() && p != PrimTy::Double,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Mir;
+    use crate::backend::shared::target::Target;
+    use crate::build::FunctionBuilder;
+    use dream_hir::TypeLayout;
+    use dream_types::{DefKind, TypeCtx};
+
+    #[test]
+    fn arrays_of_synthetic_futures_do_not_get_js_marshalers() {
+        let mut ctx = TypeCtx::new();
+        let future_def = ctx.register(DefKind::Struct, "Future", vec![]);
+        let future = ctx.interner.struct_ty(future_def, vec![ctx.interner.int()]);
+        let item_def = ctx.register(DefKind::Struct, "Item", vec![]);
+        let item = ctx.interner.struct_ty(item_def, vec![]);
+        let futures = ctx.interner.array(future);
+        let items = ctx.interner.array(item);
+        let mut builder = FunctionBuilder::new("arrays", ctx.interner.void());
+        builder.new_param(futures, None);
+        builder.new_param(items, None);
+        let mut mir = Mir::default();
+        mir.layouts
+            .insert(item, TypeLayout::from_fields(&ctx.interner, "Item", []));
+        mir.functions.push(builder.finish());
+        let cx = Cx::new(&mir, &ctx.interner, Target::wasm32());
+        assert!(!is_marshalable(&cx, future));
+        assert!(!is_marshalable(&cx, futures));
+        assert!(is_marshalable(&cx, items));
+        assert_eq!(array_elems(&cx), vec![item]);
+    }
 }

@@ -197,6 +197,15 @@ impl<'a> Analyzer<'a> {
             }
         };
 
+        // Expected arguments are written in the caller's lexical scope. Preserve nominal
+        // identities before resolving the template's payload in its own module.
+        let concrete_args: Vec<Type> = concrete_args
+            .iter()
+            .map(|arg| {
+                let ty = self.type_ctx.lower(arg);
+                self.type_ctx.syntax_type(ty)
+            })
+            .collect();
         let bindings = generic_bindings(
             template.generic_parameters.as_deref().unwrap_or(&[]),
             &concrete_args,

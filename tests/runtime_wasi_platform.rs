@@ -4,6 +4,47 @@ use std::fs;
 use std::process::Command;
 
 #[test]
+fn browser_diagnostics_decode_shared_memory_through_owned_bytes() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let script = r#"
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const source = fs.readFileSync(process.argv[1], 'utf8').split('\n').slice(1).join('\n');
+class BrowserDecoder extends TextDecoder {
+  decode(input, options) {
+    if (input && input.buffer instanceof SharedArrayBuffer) throw new TypeError('shared input');
+    return super.decode(input, options);
+  }
+}
+const factory = new Function('getNodeFs', 'TextDecoder', source + '; return defaultEnv;')(() => null, BrowserDecoder);
+const bytes = new Uint8Array(new SharedArrayBuffer(64));
+const out = [], err = [];
+const env = factory(() => ({bytes}), {stdout: text => out.push(text), stderr: text => err.push(text)});
+bytes.set(new TextEncoder().encode('hello'));
+env.write_text(1, 0, 5, 0);
+bytes.set([0xAC, 0x20]);
+env.write_text(2, 0, 1, 1);
+bytes.set([0xF0, 0x9F, 0x8E, 0xB5]);
+assert.equal(env.console_write_bytes(1, 0, 2), 2);
+assert.equal(env.console_write_bytes(1, 2, 2), 2);
+env.console_flush_stream(1);
+assert.equal(out.join(''), 'hello🎵');
+assert.equal(err.join(''), '€');
+"#;
+    let output = Command::new("node")
+        .arg("-e")
+        .arg(script)
+        .arg(root.join("runtime/src/hosts/env.js"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn release_guest_resolves_synthesized_libc_calls_internally() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("weak.dream");

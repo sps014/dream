@@ -1021,7 +1021,7 @@ function defaultEnv(getInstance, options) {
       try {
         if (!callback && fs) return fs.writeSync(stream, bytes, 0, count);
         const decoder = stream === 2 ? stderrBytes : stdoutBytes;
-        const text = decoder.decode(bytes, { stream: true });
+        const text = decoder.decode(bytes.slice(), { stream: true });
         if (text) (stream === 2 ? writeErrRaw : writeOutRaw)(text);
         return count;
       } catch (_) { return -1; }
@@ -1037,7 +1037,8 @@ function defaultEnv(getInstance, options) {
     write_text: (stream, ptr, size, encoding) => {
       const start = ptr >>> 0;
       const length = (size >>> 0) * (encoding === 1 ? 2 : 1);
-      const text = (encoding === 1 ? utf16 : utf8).decode(getInstance().bytes.subarray(start, start + length));
+      // Browser TextDecoder rejects views backed by shared WASM memory.
+      const text = (encoding === 1 ? utf16 : utf8).decode(getInstance().bytes.slice(start, start + length));
       (stream === 2 ? writeErr : writeOut)(text);
     },
     print_string: (ptr) => writeOut(getInstance().readString(ptr)),

@@ -16,7 +16,7 @@ pub(super) fn run(
     root: &std::path::Path,
 ) -> Result<GenResult, String> {
     let mut snapshot: super::model::Snapshot =
-        serde_json::from_str(json).map_err(|e| e.to_string())?;
+        super::model::Snapshot::decode(json).map_err(|e| e.to_string())?;
     let mut aggregate = GenResult {
         version: snapshot.version,
         generator: snapshot.generator_id.clone(),

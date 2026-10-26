@@ -8,6 +8,10 @@ public sealed class Counter {
 
 public enum Payload { Value(Counter), Empty }
 
+public fun first_result(): Result<Counter, string> {
+    return Result.Ok(Counter(23));
+}
+
 public fun first_counter(): int {
     let payload = Payload.Value(Counter(10));
     switch (payload) {

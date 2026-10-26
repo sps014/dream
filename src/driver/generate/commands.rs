@@ -345,7 +345,7 @@ pub fn replay(config: &Arc<ToolchainConfig>, dir: &Path) -> Result<String, Strin
         bin: meta.bin.clone(),
     };
     let decoded: super::model::Snapshot =
-        serde_json::from_str(&snapshot).map_err(|e| e.to_string())?;
+        super::model::Snapshot::decode(&snapshot).map_err(|e| e.to_string())?;
     let declared: Vec<_> = decoded.tools.iter().map(|t| t.name.clone()).collect();
     let result = super::phases::run(
         config,

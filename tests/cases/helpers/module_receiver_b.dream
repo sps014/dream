@@ -1,5 +1,9 @@
 module receivers.b;
 
+public fun second_result(): Result<Counter, string> {
+    return Result.Ok(Counter("qualified"));
+}
+
 public class Counter {
     public value: string;
     public constructor(value: string) { this.value = value; }

@@ -568,6 +568,101 @@ fn rc_golden_noninline_string_reader_has_no_rc() {
 }
 
 #[test]
+fn rc_golden_closed_callback_forwarding_keeps_the_reader_borrowed() {
+    use dream::driver::compiler::Compiler;
+    use dream_mir::backend::Target;
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("callback.dream");
+    let output = directory.path().join("callback.ll");
+    let code = include_str!("fixtures/compiler/arc_callback_forwarding.dream");
+    for observes in [false, true] {
+        let code = if observes {
+            code.replace(
+                "import system;",
+                "import system;\nlet watched: string = \"\";",
+            )
+            .replace(
+                "return value + 1;",
+                "return value + Debug.ref_count(watched);",
+            )
+            .replace(
+                "let callback: fun(int): int = increment;",
+                "watched = value;\nlet callback: fun(int): int = increment;",
+            )
+        } else {
+            code.to_owned()
+        };
+        std::fs::write(&source, code).unwrap();
+        Compiler::new(Target::native())
+            .with_release(true)
+            .compile(&source.display().to_string(), output.to_str().unwrap())
+            .unwrap();
+        let ir = std::fs::read_to_string(&output).unwrap();
+        let functions = ir_func_defs(&ir);
+        for name in ["reader", "relay", "dispatch"] {
+            let body = &functions
+                .iter()
+                .filter(|f| f.name.ends_with(name))
+                .max_by_key(|f| f.body.len())
+                .expect(name)
+                .body;
+            assert_eq!(count_in(body, "@dream_retain("), 0, "{name}: {body}");
+            assert_eq!(
+                count_in(body, "@dream_release("),
+                usize::from(observes && name == "reader"),
+                "{name}: {body}"
+            );
+            assert!(
+                !body
+                    .lines()
+                    .any(|line| line.contains("call ") && !line.contains('@')),
+                "{name}: {body}"
+            );
+        }
+        let audit = functions
+            .iter()
+            .find(|f| f.name.ends_with("audit") && !f.name.starts_with("__"))
+            .expect("audit");
+        assert_eq!(
+            count_in(&audit.body, "@dream_retain("),
+            if observes { 2 } else { 0 },
+            "{}",
+            audit.body
+        );
+    }
+}
+
+#[test]
+fn rc_golden_disjoint_element_store_keeps_only_the_store_token() {
+    let ir = emit_arc_release(
+        r#"
+        @export fun disjoint_slot(borrow values: string[], borrow replacement: string): int {
+            let snapshot = values[0];
+            values[1] = replacement;
+            return snapshot.length;
+        }
+        @export fun same_slot(borrow values: string[], borrow replacement: string): int {
+            let snapshot = values[0];
+            values[0] = replacement;
+            return snapshot.length;
+        }
+    "#,
+    );
+    let functions = ir_func_defs(&ir);
+    let body = |name: &str| -> &str {
+        &functions
+            .iter()
+            .find(|f| f.name.contains(name) && !f.name.starts_with("__"))
+            .expect("implementation")
+            .body
+    };
+    let disjoint = body("disjoint_5fslot");
+    let overlapping = body("same_5fslot");
+    assert_eq!(count_in(disjoint, "@dream_retain("), 1, "{disjoint}");
+    assert_eq!(count_in(overlapping, "@dream_retain("), 2, "{overlapping}");
+}
+
+#[test]
 fn rc_golden_parameter_borrowing_is_independent_of_returned_aliases() {
     let code = r#"
         @noinline fun select(read: string, kept: string): string {

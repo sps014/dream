@@ -89,7 +89,7 @@ MIR annotations are semantic contracts rather than cached CFG analyses:
 
 ```mermaid
 flowchart LR
-    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> modes[scalar-array param modes] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + bounded scalar recursion + Inliner\nrounds + prune] --> ur[UniqueRegion] --> held[rc-held-by-owner] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> vb[value-borrow] --> late[frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
+    prune1[prune_module] --> expand[ExpandSimpleCtors] --> fbox[FuncboxAbi] --> modes[parameter borrow proofs] --> args[ownership-args] --> rc[RcInsertion\n+ token verification] --> inline[Devirt + bounded scalar recursion + Inliner\nrounds + prune] --> ur[UniqueRegion] --> held[rc-held-by-owner + rc-proven-elision] --> sm[SroaManaged] --> perfn[per-function\nPassManager] --> vb[value-borrow + late RC proofs] --> late[frame-alloc] --> verify[final verification\ndebug or DREAM_VERIFY_MIR=1]
 ```
 
 `driver/compiler.rs` calls three entry points in order: `optimize_module_opts` (everything up to `SroaManaged`), `run_function_pipelines` (the per-function fixpoint), and `run_late_module_passes`. Every stage reports to the `--emit-mir` sink under its name (see [04-mir.md](04-mir.md#pretty-printing-and-emit-mir-cratesdream-mirsrcprettyrs-passesdumprs)).
@@ -97,18 +97,62 @@ flowchart LR
 - `prune_module` tree-shakes unreachable functions.
 - `ExpandSimpleCtors` runs **before** `RcInsertion` so field stores (including strings) get retain/move at the call site. Expanding after RC left `New` args as fake sinks and UAFed take-ctors like `JsonParser`.
 - `FuncboxAbi` moves parameter retains of address-taken functions into the callee so funcbox call sites pass at +0.
-- Parameter modes start as typed HIR facts (`Borrow`, `Share`, `Sink`, `Ref`). In release builds, `param-modes` can turn sink scalar-array parameters into borrows only within a closed scalar call graph. It rejects callbacks, opaque calls, managed elements, global/field writes, exports, async functions and debug hooks. Recursive components are admitted only if every reachable function passes those checks; all direct call-site modes are rewritten before ownership insertion. This narrow proof does not infer ownership for general managed programs.
+- `function-targets` preserves that borrowed callback ABI when resolving indirect calls. In release builds, a dependency worklist propagates callback targets through direct forwarding helpers and recursive cycles. A parameter moves from pending to one concrete target, then to unknown if any caller disagrees. Unseeded cycles become unknown and propagate that loss before rewriting. Exported/address-taken entries, reassigned or by-reference callback parameters and exposed function shapes cannot seed a proof. Debug retains caller-local inference. Captured environments still come from the actual function box at each call.
+- Parameter modes start as typed HIR facts (`Borrow`, `Share`, `Sink`, `Ref`). In release builds, `param-modes` proves parameters independently over reaching definitions and a fixed point of returned parameter dependencies. Strings, arrays, transparent records/classes, tuples and recursive strong layouts qualify. Reassigning a local alias kills its old dependency; joins retain every incoming dependency. Unrelated local types and known callees that cannot observe ownership need not qualify themselves. Returned/stored parameters, ownership observations, relevant cleanup, opaque calls, fixed ABIs and suspension keep their ownership requirements. Every direct caller is rewritten before ownership insertion.
 - `RcInsertion` runs **before** inlining. Callee scope-exit `Release`s stay on the original bodies (and keep inliner size budgets honest). Inserting after inlining on a fused `generated_dispatch` is too expensive. It reads a module `ModRefTable` (`rc/modref.rs`: which `(type, field)` / element / global slots each function may overwrite, closed over calls) to keep snapshot cursors and loop-carried cursor families (`rc/cursor_family.rs`) retain-free.
 - `Devirt` + `Inliner` alternate for up to 8 rounds with pruning in between. `Devirt` turns an interface call direct when every implementor maps the slot to one method, or when a forward dataflow proves the receiver's exact class (so factories exposed by inlining devirtualize on the next round). Receivers with up to four known implementors stay interface calls in MIR; the backend emits a tag switch to direct calls for them (policy in `backend/shared/iface_guard.rs`).
 - The inliner preserves the owning return ABI with explicit `Move` and source nulling, including container destinations. It does not rely on a subsequent RC repair sweep.
 - `UniqueRegion` wraps a fresh, unobserved `x = f(); … Release x` graph in a TLS bump region when `f` only allocates `del`-free, non-escaping classes. The root must remain in local slots; an ordinary release alone does not prove object uniqueness.
 - `rc-held-by-owner` (`rc/held.rs`) removes retain/release pairs on container snapshots whose owner is live and unmodified (per `ModRefTable`) wherever the snapshot is read — the post-inline counterpart of the conservative pre-inline cursors.
+- Release `rc-proven-elision` reuses the held-owner proof and ordinary CFG pair cancellation after inlining and during late cleanup. A still-live local owner can cover a surplus copy across a summarized call. Elision certificates record the candidate, owner/slot, forwarding class and removed operation sites; verifier-enabled builds revalidate them against the unchanged statement snapshot before rewriting it.
 - `SroaManaged` scalar-replaces non-escaping objects that the per-function `Sroa` cannot (several aliases, reference fields), spelling out the container-store RC rule from `rc_store.rs`.
 - The per-function `PassManager` then cleans up the merged bodies (`RcElision` / `HopElision` only — never a second `RcInsertion`).
 - `ownership-args` canonicalizes taken projections; lowering already materializes discarded owning results. The explicit-token verifier runs immediately after RC insertion, before inlining/elision erase those transfers.
 - `run_late_module_passes`: `value-borrow` marks value-struct families (spans) whose reference fields only ever hold frame-stable values — `borrow` parameters, literals, loads back out of the family — as `LocalDecl::borrows_refs`, so their field stores skip RC and their copy/drop glue goes. Then `frame-alloc` builds instances that never outlive their frame in a stack buffer (`dream_frame_object`, immortal count). Final MIR verification runs in debug builds or with `DREAM_VERIFY_MIR=1`.
 
 Escape levels (`analysis/escape.rs`: alias classes, `No` / `Arg` / `Global`, callee parameter summaries over SCCs) and static object counts (`analysis/object_life.rs`) are shared analyses; `SroaManaged` and `frame-alloc` consume them.
+
+### Provenance and proof lifetime
+
+`analysis/ownership.rs` tracks reference origins at program points: entry parameters,
+allocation sites and unknown values. Block entries join origins; sparse local-definition
+events preserve reassignment without storing every local at every statement. Distinct
+parameters may alias. Different allocation sites are distinct, while repeated instances
+of one site remain potentially aliased. Heap projections remain unknown: disjoint
+containers may share a child. Functions with ref locals use unknown provenance.
+
+Field effects retain direct parameter roots, substituted through direct-call edges in
+the existing dependency worklist. Coarse type/field queries project the same summaries.
+Missing bindings, constructor/interface edges without actual bindings, raw memory and
+unresolved calls remain conservative. Constant element indices can distinguish slots
+within one array; dynamic indices overlap.
+
+The same dependency worklist closes ownership-observation and cleanup flags independently
+of unknown writes. A typed scalar store through a pointer cannot discharge managed fields.
+The internal `CollectionOwnerCount` intrinsic selects equivalent collection move/copy paths;
+it shares the runtime count reader with `Debug.ref_count` but does not make dead temporary
+tokens observable. Public debug observations and weak/unowned loads remain barriers.
+
+Release cursor inference can discharge a broad overwrite rejection when every relevant
+write is outside the snapshot's live interval or provably disjoint. Forwarding aliases
+participate in that interval. RC observations remain function-wide barriers because the
+pre-insertion token's cleanup is still implicit. Post-insertion proofs also preserve
+observations between the final value read and the explicit release.
+Destructor-bearing snapshots additionally require owner and slot coverage through their
+original explicit release; pre-insertion live-interval relaxation is limited to graphs
+without user destructors, where cleanup cannot be observed early.
+
+`object_life` joins sets of possible holder/count states. Alias selects can add
+alternatives, but each release must have one consistent role across all incoming states.
+A mixed final/nonfinal release is rejected rather than adding a runtime ownership test.
+Every return must discharge the allocation, and each repeated allocation requires its
+previous instance to be dead. The existing count and frame-size limits remain in force.
+
+Fresh, private arrays and default-constructed strong objects can cover local view families
+using their existing owner lifetime. Early release, publication, replacement, observing
+calls and suspension reject that proof. Value-parameter forwarding closes to a fixed
+point in release builds. Read loans also admit writes to private fresh scratch arrays;
+they retain ordinary aggregate glue when a complete family cannot be proved safe.
 
 Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion and pruning still run (they are correctness-relevant), but devirt/inlining is off so each user function keeps its own body and call frame for the debugger.
 

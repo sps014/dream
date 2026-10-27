@@ -1,0 +1,247 @@
+{
+  "date": "2026-10-27",
+  "baseline_revision": "4ef78d4d8dca82611de628ea41c4f3f0b241df90",
+  "callback_comparison": "Before and after converged callback forwarding, both including the shared ownership proofs.",
+  "platform": "Windows 11 x86_64; LLVM 22.1.8; Node v25.6.1",
+  "proof": {
+    "source_sha256": "763d663bf9b6e9bfc834bfffddf4cb16991d0d17aafabcca9c2e94891b2b4f33",
+    "compiler_sha256": {
+      "before": "55e1d67628a6435a682f3469714d180a1f0fe5b7c54a808a90f92968e36008fb",
+      "after": "2bb19d15756b7d907bdeae2c3f6336068e5d12614929312df4cbe637cd7576f1"
+    },
+    "counts": {
+      "native": {
+        "dispatch": {
+          "before": {
+            "retain": 0,
+            "release": 0
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "relay": {
+          "before": {
+            "retain": 0,
+            "release": 0
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "reader": {
+          "before": {
+            "retain": 0,
+            "release": 1
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "audit": {
+          "before": {
+            "retain": 1,
+            "release": 1
+          },
+          "after": {
+            "retain": 0,
+            "release": 1
+          }
+        }
+      },
+      "wasm32": {
+        "dispatch": {
+          "before": {
+            "retain": 0,
+            "release": 0
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "relay": {
+          "before": {
+            "retain": 0,
+            "release": 0
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "reader": {
+          "before": {
+            "retain": 0,
+            "release": 1
+          },
+          "after": {
+            "retain": 0,
+            "release": 0
+          }
+        },
+        "audit": {
+          "before": {
+            "retain": 1,
+            "release": 1
+          },
+          "after": {
+            "retain": 0,
+            "release": 1
+          }
+        }
+      }
+    },
+    "determinism": {
+      "native": {
+        ".opt.ll": true
+      },
+      "wasm32": {
+        ".opt.ll": true,
+        ".wasm": true,
+        ".wat": true
+      }
+    }
+  },
+  "callback_benchmark": {
+    "native": {
+      "rounds": 10,
+      "passes_per_process": 5,
+      "measurement": "Alternating uninstrumented timing; independent instrumented counter runs; 50000 calls per measured pass.",
+      "timing": {
+        "baseline": {
+          "median": 4.346,
+          "ci_low": 4.338,
+          "ci_high": 4.354,
+          "processes": 10,
+          "samples": 50,
+          "checksum": 600000,
+          "process_medians": [
+            4.348,
+            4.34,
+            4.35,
+            4.228,
+            4.346,
+            4.36,
+            4.37,
+            4.34,
+            4.336,
+            4.346
+          ]
+        },
+        "current": {
+          "median": 2.976,
+          "ci_low": 2.902,
+          "ci_high": 2.978,
+          "processes": 10,
+          "samples": 50,
+          "checksum": 600000,
+          "process_medians": [
+            2.978,
+            2.824,
+            2.964,
+            2.978,
+            2.902,
+            2.98,
+            2.976,
+            2.976,
+            2.9,
+            2.978
+          ]
+        },
+        "comparisons": {
+          "baseline": {
+            "ratio": 0.6824327744384688,
+            "ci_low": 0.6688191881918818,
+            "ci_high": 0.685313444605073,
+            "decision": "pass",
+            "improvement": true
+          }
+        }
+      },
+      "counters_before": {
+        "allocs": 50010,
+        "retain": 50005,
+        "release": 100015
+      },
+      "counters_after": {
+        "allocs": 50010,
+        "retain": 5,
+        "release": 50015
+      }
+    },
+    "wasm": {
+      "rounds": 10,
+      "passes_per_process": 5,
+      "measurement": "Alternating uninstrumented timing; independent instrumented counter runs; 50000 calls per measured pass.",
+      "timing": {
+        "baseline": {
+          "median": 6.013999999999999,
+          "ci_low": 5.976,
+          "ci_high": 6.083,
+          "processes": 10,
+          "samples": 50,
+          "checksum": 600000,
+          "process_medians": [
+            6.034,
+            6.074,
+            6.208,
+            5.98,
+            5.994,
+            5.896,
+            6.13,
+            5.992,
+            5.96,
+            6.036
+          ]
+        },
+        "current": {
+          "median": 4.942,
+          "ci_low": 4.804,
+          "ci_high": 4.962,
+          "processes": 10,
+          "samples": 50,
+          "checksum": 600000,
+          "process_medians": [
+            4.964,
+            4.964,
+            4.932,
+            4.716,
+            4.962,
+            4.764,
+            4.956,
+            4.928,
+            4.804,
+            4.952
+          ]
+        },
+        "comparisons": {
+          "baseline": {
+            "ratio": 0.8128683700376166,
+            "ci_low": 0.8012320951475053,
+            "ci_high": 0.822429906542056,
+            "decision": "pass",
+            "improvement": true
+          }
+        }
+      },
+      "counters_before": {
+        "allocs": 50010,
+        "retain": 50005,
+        "release": 100015
+      },
+      "counters_after": {
+        "allocs": 50010,
+        "retain": 5,
+        "release": 50015
+      }
+    }
+  },
+  "limits": [
+    "Unknown cooperative-yield callbacks remain ownership barriers; the collections sequence workload retains its previously recorded additional 59400 retain/release pairs per measured pass.",
+    "The supplemental full-release Unicode WASM stress run was stopped during LLVM code generation after over eight minutes and about 10 GB; the standard corpus and optimized ownership suites are separate gates."
+  ]
+}

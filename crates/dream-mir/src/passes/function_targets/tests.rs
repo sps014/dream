@@ -167,6 +167,151 @@ fn callback_parameter_requires_every_direct_caller_to_agree() {
     }
 }
 
+fn forwarded_callback(depth: u32, cycle: bool) -> (Mir, TypeInterner) {
+    let (mut mir, i) = module(true, false);
+    mir.profile = dream_abi::profile::CompileProfile::Release;
+    let sig = mir.functions[0].local_ty(Local(1));
+    mir.functions[0].blocks[0].stmts[3] = Statement::Assign(
+        Place::Local(Local(3)),
+        Rvalue::Call {
+            callee: callee(100, i.int()),
+            args: vec![local(Local(1))],
+        },
+    );
+    for index in (0..depth).rev() {
+        let mut b = FunctionBuilder::new("relay", i.int());
+        b.set_def(DefId::root(100 + index), vec![]);
+        let parameter = b.new_param(sig, None);
+        let copied = b.new_temp(sig);
+        b.assign(Place::Local(copied), Rvalue::Use(local(parameter)));
+        let result = b.new_temp(i.int());
+        if index + 1 == depth {
+            let code = b.new_temp(i.int());
+            b.assign(
+                Place::Local(code),
+                Rvalue::Call {
+                    callee: callee(3, i.int()),
+                    args: vec![local(copied)],
+                },
+            );
+            b.assign(
+                Place::Local(result),
+                Rvalue::IndirectCall {
+                    target: local(code),
+                    args: vec![Operand::Const(Const::Int(42))],
+                    sig,
+                },
+            );
+            if cycle {
+                b.push(Statement::Call {
+                    callee: callee(100, i.int()),
+                    args: vec![local(copied)],
+                });
+            }
+        } else {
+            b.assign(
+                Place::Local(result),
+                Rvalue::Call {
+                    callee: callee(101 + index, i.int()),
+                    args: vec![local(copied)],
+                },
+            );
+        }
+        b.terminate(Terminator::Return(Some(local(result))));
+        mir.functions.push(b.finish());
+    }
+    (mir, i)
+}
+
+#[test]
+fn callback_targets_close_over_long_and_recursive_forwarding() {
+    for depth in [1, 32] {
+        for cycle in [false, true] {
+            let (mut mir, i) = forwarded_callback(depth, cycle);
+            assert!(run(&mut mir, &i));
+            assert!(
+                !mir.functions
+                    .iter()
+                    .flat_map(|f| &f.blocks)
+                    .flat_map(|b| &b.stmts)
+                    .any(|s| matches!(s, Statement::Assign(_, Rvalue::IndirectCall { .. })))
+            );
+            assert!(!run(&mut mir, &i));
+        }
+    }
+}
+
+#[test]
+fn debug_does_not_propagate_callback_parameters_through_helpers() {
+    let (mut mir, i) = forwarded_callback(3, false);
+    mir.profile = dream_abi::profile::CompileProfile::Debug;
+    assert!(!run(&mut mir, &i));
+}
+
+#[test]
+fn forwarding_rejects_unknown_conflicting_and_unseeded_entries() {
+    for entry in [
+        "unknown",
+        "conflicting",
+        "unseeded",
+        "unseeded_incoming",
+        "reassigned",
+    ] {
+        let (mut mir, i) = forwarded_callback(12, true);
+        let sig = mir.functions[0].local_ty(Local(1));
+        match entry {
+            "unknown" => {
+                let mut b = FunctionBuilder::new("exported", i.int());
+                b.set_def(DefId::root(900), vec![]);
+                let callback = b.new_param(sig, None);
+                b.push(Statement::Call {
+                    callee: callee(100, i.int()),
+                    args: vec![local(callback)],
+                });
+                b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+                mir.exports.push((DefId::root(900), "entry".into()));
+                mir.functions.push(b.finish());
+            }
+            "conflicting" => {
+                let mut other = module(false, false).0.functions.remove(0);
+                other.def = DefId::root(901);
+                other.blocks[0].stmts[0] =
+                    Statement::Assign(Place::Local(Local(0)), Rvalue::FuncRef(callee(9, i.int())));
+                other.blocks[0].stmts[3] = Statement::Assign(
+                    Place::Local(Local(3)),
+                    Rvalue::Call {
+                        callee: callee(100, i.int()),
+                        args: vec![local(Local(1))],
+                    },
+                );
+                mir.functions.push(other);
+            }
+            "unseeded" => {
+                mir.functions.remove(0);
+            }
+            "unseeded_incoming" => {
+                let mut b = FunctionBuilder::new("unseeded", i.int());
+                b.set_def(DefId::root(950), vec![]);
+                let callback = b.new_param(sig, None);
+                for target in [950, 100] {
+                    b.push(Statement::Call {
+                        callee: callee(target, i.int()),
+                        args: vec![local(callback)],
+                    });
+                }
+                b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+                mir.functions.push(b.finish());
+            }
+            "reassigned" => mir.functions[2].blocks[0].stmts.push(Statement::Assign(
+                Place::Local(Local(0)),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            )),
+            _ => unreachable!(),
+        }
+        assert!(!run(&mut mir, &i), "{entry}");
+    }
+}
+
 #[test]
 fn passing_a_box_by_reference_invalidates_its_target() {
     let (mut mir, i) = module(false, false);

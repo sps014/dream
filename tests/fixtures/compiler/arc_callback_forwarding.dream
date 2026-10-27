@@ -1,0 +1,27 @@
+import system;
+
+@noinline
+fun increment(value: int): int {
+    return value + 1;
+}
+
+@noinline
+fun dispatch(borrow callback: fun(int): int, value: int): int {
+    return callback(value);
+}
+
+@noinline
+fun relay(borrow callback: fun(int): int, value: int): int {
+    return dispatch(callback, value);
+}
+
+@noinline
+fun reader(value: string, borrow callback: fun(int): int): int {
+    return relay(callback, value.length);
+}
+
+@export
+fun audit(borrow value: string): int {
+    let callback: fun(int): int = increment;
+    return reader(value, callback);
+}

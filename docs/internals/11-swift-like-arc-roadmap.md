@@ -25,9 +25,12 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   fixed point. Strings, arrays and nested classes/records with transparent strong fields
   qualify; a returned alias or forwarding to an owning parameter keeps that parameter owning
   without disqualifying unrelated parameters. Parameter reassignment, destructors, weak/unowned
-  fields, recursive layouts, ownership observations, managed slot writes, global writes,
+  fields, ownership observations, invalidating managed slot writes, global writes,
   opaque calls, constructor/foreign/exported ABIs and suspension remain outside the proof. Scalar array
   element and scalar field mutations need no ownership transfer and may qualify.
+  Recursive strong layouts close over a finite type graph; a weak/unowned field, opaque
+  descendant or destructor rejects the affected layout. Reaching local definitions and
+  returned-parameter summaries avoid keeping dependencies after an alias is overwritten.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 16-byte header ending in `[tag][ref_count]` (wasm32 leads with `[size][type info]`;
   native leads with one word holding the type info and the size class, and blocks over 64 KiB keep
@@ -112,6 +115,37 @@ levers (no SSO / `@stack` class / value collections):
 8. **Allocator fast path** — native size classes are 16-byte steps to 256 then 8 per power of two
    up to 64 KiB; the freelist pop/push is inline, alloc counters are per thread, and destroy glue
    is iterative so long chains cannot overflow the C stack.
+
+Release ownership proofs share program-point provenance (`analysis/ownership.rs`) with
+parameter-rooted field effects in `analysis/effects/`. Snapshot tokens can disappear
+across writes to another proven-fresh object, a different constant array slot, or a
+direct-call relay whose actual arguments are disjoint. Dynamic indices and loaded child
+references stay potentially aliased. Writes after a snapshot's final use need not block
+cursor inference; ownership observations still do.
+
+The post-inline and late `rc-proven-elision` stages also remove surplus copies covered by
+an existing live local owner. Verifier-enabled builds check ephemeral elision certificates
+before modifying statements. View families can borrow fresh arrays and default-constructed
+strong owners without extending cleanup. Static allocation lifetimes preserve alternative
+holder states at CFG joins but reject releases whose destruction role differs by path.
+Opaque cooperative-yield callbacks remain observation barriers. Snapshots spanning those
+callbacks or unresolved cleanup keep ordinary ARC; zero-RC iterator claims require closed
+callback effects as well as a live owner.
+Synchronous callback targets can propagate through closed direct forwarding helpers and
+recursive cycles in release builds. This exposes the concrete callee's existing effects
+to borrowing and elision. Conflicting or unknown entries keep indirect calls; resolving
+a callback that observes ownership still preserves the reader's owning token.
+
+The [2026-10-27 callback measurements](ownership-proof-measurements.json) compare rebuilt
+compilers before and after converged forwarding on Windows with LLVM 22.1.8. In the
+50,000-call fixture, forwarding removes 50,000 retain/release pairs on native and Node.
+Ten alternating timing rounds with five passes per process measured current/baseline
+ratios of 0.68 on native and 0.81 on Node; these are local workload results, not a general
+speedup claim. The fixture's reader and both forwarding helpers have zero explicit MIR
+retain/release operations, while the caller still releases its function box. Same-path
+recompiles produced identical native LLVM IR and WASM LLVM IR, WASM and WAT. The JSON also
+records the remaining cooperative-yield traffic and the unfinished supplemental release
+Unicode WASM stress run.
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.

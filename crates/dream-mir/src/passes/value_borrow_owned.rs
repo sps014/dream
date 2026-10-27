@@ -1,9 +1,14 @@
 //! A local owner's existing lifetime can cover a view without extending either lifetime.
 
 use super::*;
-use crate::analysis::effects::{Effect, ModRefTable, stmt_effects};
+use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
+use crate::analysis::ownership::OwnershipFacts;
 use crate::passes::rc::liveness;
+#[path = "value_borrow_cleanup.rs"]
+mod cleanup;
+#[path = "value_borrow_cover.rs"]
+mod cover;
 
 pub(super) fn source_stays_alive(
     f: &MirFunction,
@@ -15,62 +20,58 @@ pub(super) fn source_stays_alive(
     panics: &BTreeSet<DefId>,
 ) -> bool {
     let owner_ty = f.local_ty(owner);
+    let unobserved = |summary: ModRef| match summary {
+        ModRef::Known(k) => !k.observes_ownership() && (!k.may_destroy || modref.del().is_quiet()),
+        ModRef::Top => false,
+    };
     if !interner.is_reference(owner_ty)
         || interner.is_value_type(owner_ty)
         || interner.is_shared_type(owner_ty)
         || modref.may_run_del(owner_ty, interner, layouts)
-        || f.params.contains(&owner)
-        || f.locals[owner.0 as usize].is_cursor
     {
         return false;
     }
-    let mut definitions = 0;
+    let Some(coverage) = cover::Coverage::find(f, owner, interner, layouts, modref) else {
+        return false;
+    };
+    if f.blocks
+        .iter()
+        .flat_map(|b| &b.stmts)
+        .any(|s| matches!(s, Statement::Assign(_, Rvalue::ArrayRealloc { .. })))
+    {
+        // Reallocation consumes a backing block even for scalar element types, which
+        // have no managed-slot effects. Existing owner tokens cannot pin that block.
+        return false;
+    }
+    let root = coverage.root;
     for s in f.blocks.iter().flat_map(|b| &b.stmts) {
         match s {
-            Statement::Assign(Place::Local(d), rv) if *d == owner => {
-                if !matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
-                    // Empty concatenation operands can return an existing, published string.
-                    // A nonempty literal makes the result fresh or that immortal literal.
-                    if !matches!(rv, Rvalue::Concat(args) if args.len() >= 2
-                        && args.iter().any(|op| matches!(op,
-                            Operand::Const(Const::Str(s)) if !s.is_empty())))
-                        && !matches!(rv, Rvalue::ConcatInt { .. })
-                        && !matches!(
-                            rv,
-                            Rvalue::ArrayNew {
-                                closure_env: false,
-                                ..
-                            } | Rvalue::ArrayLit { .. }
-                        )
-                        && !matches!(rv, Rvalue::New { ty, ctor: None, .. }
-                            if layouts.get(*ty).is_some_and(|l| !l.fields.iter().any(|f| f.is_weak || f.is_unowned)))
-                    {
-                        return false;
-                    }
-                    definitions += 1;
-                }
-            }
             // A transferred token no longer protects the source. Local copies can hide such
             // transfers; let the ordinary frame-stable alias proof handle those instead.
-            Statement::Assign(Place::Local(_), Rvalue::Use(op)) if local_of(op) == Some(owner) => {
+            Statement::Assign(Place::Local(_), Rvalue::Use(op))
+                if local_of(op).is_some_and(|l| coverage.locals.contains(&l)) =>
+            {
                 return false;
             }
-            Statement::Assign(_, Rvalue::Move { src, .. }) if *src == owner => return false,
+            Statement::Assign(_, Rvalue::Move { src, .. }) if coverage.locals.contains(src) => {
+                return false;
+            }
             Statement::Call { callee, args }
             | Statement::Assign(_, Rvalue::Call { callee, args }) => {
                 if args.iter().enumerate().any(|(i, op)| {
-                    local_of(op) == Some(owner)
+                    local_of(op).is_some_and(|l| coverage.locals.contains(&l))
                         && callee.take_params.get(i).copied().unwrap_or(false)
                 }) {
                     return false;
                 }
             }
-            Statement::ForceFree(op) if local_of(op) == Some(owner) => return false,
+            Statement::ForceFree(op)
+                if local_of(op).is_some_and(|l| coverage.locals.contains(&l)) =>
+            {
+                return false;
+            }
             _ => {}
         }
-    }
-    if definitions != 1 {
-        return false;
     }
     let mut aliases = BTreeSet::from([owner]);
     let mut dependent = BTreeSet::new();
@@ -125,6 +126,13 @@ pub(super) fn source_stays_alive(
         return false;
     }
     let dependent_read = |l: Local| member(l) || (l != owner && aliases.contains(&l));
+    let protect_cleanup =
+        crate::analysis::ownership::observes_ownership(f, interner, layouts, modref);
+    let active_cleanup = if protect_cleanup {
+        cleanup::active_cleanup(f, &member)
+    } else {
+        BTreeSet::new()
+    };
     let mut reads = MirFunction {
         borrowed_result: f.borrowed_result,
         def: f.def,
@@ -141,12 +149,17 @@ pub(super) fn source_stays_alive(
         file: None,
         inline: dream_hir::InlineHint::Default,
     };
-    for b in &mut reads.blocks {
-        b.stmts.retain(|s| {
-            !matches!(s,
-            Statement::ValueRetain(l) | Statement::ValueDrop(l) | Statement::ValueKill(l)
-                if member(*l))
-        });
+    for (bi, b) in reads.blocks.iter_mut().enumerate() {
+        for (si, s) in b.stmts.iter_mut().enumerate() {
+            let keep = active_cleanup.contains(&(bi, si))
+                || !matches!(s,
+                Statement::ValueRetain(l) | Statement::ValueDrop(l) | Statement::ValueKill(l)
+                    if member(*l));
+            // Slot facts refer to the original statement positions throughout this proof.
+            if !keep {
+                *s = Statement::Nop;
+            }
+        }
     }
     let live_out = liveness::live_out(&reads);
     let mut private = reads.blocks.clone();
@@ -178,7 +191,11 @@ pub(super) fn source_stays_alive(
         });
     }
     let escape = LocalEscape::analyze(&reads, interner, &ParamSummaries::default());
-    let private_source = aliases.iter().all(|&l| escape.of(l) == Escape::No)
+    let private_source = coverage
+        .locals
+        .iter()
+        .chain(&aliases)
+        .all(|&l| escape.of(l) == Escape::No)
         && (0..family.len())
             .all(|i| !member(Local(i as u32)) || escape.of(Local(i as u32)) == Escape::No);
     std::mem::swap(&mut reads.blocks, &mut private);
@@ -204,15 +221,16 @@ pub(super) fn source_stays_alive(
     // release on even one predecessor fail, including back edges and partial initialization.
     let mut incoming = vec![0u8; f.blocks.len()];
     incoming[f.entry.0 as usize] = 1;
+    let facts = OwnershipFacts::compute(f, interner);
     let step = |state: u8, s: &Statement| match s {
-        Statement::Assign(Place::Local(d), rv) if *d == owner => {
+        Statement::Assign(Place::Local(d), rv) if *d == root => {
             if matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
                 4
             } else {
                 2
             }
         }
-        Statement::Release(op) if local_of(op) == Some(owner) => 4,
+        Statement::Release(op) if local_of(op) == Some(root) => 4,
         _ => state,
     };
     loop {
@@ -246,9 +264,13 @@ pub(super) fn source_stays_alive(
             if uses || in_flight[bi][si] {
                 // A back edge can execute the same definition again. An alive new token
                 // cannot protect a view of the previous allocation after release/replacement.
-                if matches!(s, Statement::Release(op) if local_of(op) == Some(owner))
+                if matches!(s, Statement::Release(op) if local_of(op).is_some_and(|l| coverage.locals.contains(&l)))
                     || (state & 2 != 0
-                        && matches!(s, Statement::Assign(Place::Local(d), _) if *d == owner))
+                        && matches!(s, Statement::Assign(Place::Local(d), _) if coverage.locals.contains(d)))
+                    || coverage
+                        .slots
+                        .iter()
+                        .any(|&location| facts.invalidates(f, interner, modref, (bi, si), location))
                 {
                     return false;
                 }
@@ -258,9 +280,12 @@ pub(super) fn source_stays_alive(
                         Effect::Top | Effect::ObserveOwnership => false,
                         // Panic hooks cannot access this fresh, unpublished string or its views.
                         // The normal owner remains alive, and panic never returns to cleanup.
-                        Effect::Call(c) => panics.contains(&c.def) || modref.call(c).is_quiet(),
-                        Effect::Iface(id, slot) => modref.iface(id, slot).is_quiet(),
-                        Effect::Ctor(def) => modref.ctor(def).is_quiet(),
+                        Effect::Call(c) => {
+                            (coverage.slots.is_empty() && panics.contains(&c.def))
+                                || unobserved(modref.call(c))
+                        }
+                        Effect::Iface(id, slot) => unobserved(modref.iface(id, slot)),
+                        Effect::Ctor(def) => unobserved(modref.ctor(def)),
                         _ => true,
                     }
                 });

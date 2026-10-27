@@ -177,6 +177,41 @@ fn local_string_owner_covers_its_views_without_extending_cleanup() {
 }
 
 #[test]
+fn scalar_array_reallocation_cannot_keep_a_view_on_the_previous_block() {
+    let (mut mir, mut types) = owned_view(false, false, false);
+    let array = types.array(types.int());
+    let f = &mut mir.functions[0];
+    f.locals[0].ty = array;
+    f.locals[2].ty = array;
+    let view = f.locals[1].ty;
+    let mut layout = mir.layouts.get(view).unwrap().clone();
+    layout.fields[0].ty = array;
+    mir.layouts.insert(view, layout);
+    f.blocks[0].stmts[0] = Statement::Assign(
+        Place::Local(Local(0)),
+        Rvalue::ArrayLit {
+            elem_ty: types.int(),
+            elems: vec![Operand::Const(Const::Int(42))],
+        },
+    );
+    let result = Local(f.locals.len() as u32);
+    f.locals.push(f.locals[0].clone());
+    f.blocks[0].stmts.insert(
+        3,
+        Statement::Assign(
+            Place::Local(result),
+            Rvalue::ArrayRealloc {
+                elem_ty: types.int(),
+                array: Operand::Copy(Place::Local(Local(0))),
+                new_len: Operand::Const(Const::Int(32)),
+            },
+        ),
+    );
+    run(&mut mir, &types);
+    assert!(!mir.functions[0].locals[1].borrows_refs);
+}
+
+#[test]
 fn owned_array_views_require_the_original_owner_on_every_path() {
     for early_release in [false, true] {
         let (mut mir, mut types) = owned_view(early_release, false, false);
@@ -198,6 +233,251 @@ fn owned_array_views_require_the_original_owner_on_every_path() {
         run(&mut mir, &types);
         assert_eq!(mir.functions[0].locals[1].borrows_refs, !early_release);
     }
+}
+
+#[test]
+fn a_nonobserving_helper_can_write_an_unrelated_managed_field_around_a_view() {
+    for observe in [false, true] {
+        let (mut mir, mut types) = owned_view(false, false, false);
+        let boxed = types.struct_ty(DefId::root(792), vec![]);
+        mir.layouts.insert(
+            boxed,
+            dream_hir::TypeLayout::from_fields(
+                &types,
+                "Other",
+                [("text".into(), types.string(), false, false)],
+            ),
+        );
+        let mut helper = FunctionBuilder::new("write_other", types.void());
+        helper.set_def(DefId::root(793), vec![]);
+        let p = helper.new_param(boxed, None);
+        helper.assign(
+            Place::Field { base: p, field: 0 },
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        if observe {
+            let count = helper.new_local(types.int(), None);
+            helper.assign(
+                Place::Local(count),
+                Rvalue::ObservedLoad(Operand::Copy(Place::Local(p))),
+            );
+        }
+        helper.terminate(Terminator::Return(None));
+        mir.functions.push(helper.finish());
+        let f = &mut mir.functions[0];
+        let other = Local(f.locals.len() as u32);
+        let mut decl = f.locals[0].clone();
+        decl.ty = boxed;
+        f.locals.push(decl);
+        f.params.push(other);
+        f.blocks[0].stmts.insert(
+            3,
+            Statement::Call {
+                callee: Callee {
+                    def: DefId::root(793),
+                    args: vec![],
+                    ret: types.void(),
+                    take_params: vec![false],
+                    borrowed_result: false,
+                },
+                args: vec![Operand::Copy(Place::Local(other))],
+            },
+        );
+        run(&mut mir, &types);
+        assert_eq!(mir.functions[0].locals[1].borrows_refs, !observe);
+    }
+}
+
+#[test]
+fn owned_strong_paths_cover_views_until_a_link_or_root_is_invalidated() {
+    for mutation in 0..5 {
+        let (mut mir, mut types) = owned_view(false, false, false);
+        let root_ty = types.struct_ty(DefId::root(794), vec![]);
+        let mut layout = dream_hir::TypeLayout::from_fields(
+            &types,
+            "Root",
+            [("text".into(), types.string(), false, false)],
+        );
+        if mutation == 4 {
+            layout.fields[0].is_weak = true;
+        }
+        mir.layouts.insert(root_ty, layout);
+        let f = &mut mir.functions[0];
+        let root = Local(f.locals.len() as u32);
+        let mut decl = f.locals[0].clone();
+        decl.ty = root_ty;
+        f.locals.push(decl);
+        f.locals[0].is_cursor = true;
+        let source = Local(0);
+        f.blocks[0].stmts.splice(
+            0..1,
+            [
+                Statement::Assign(
+                    Place::Local(root),
+                    Rvalue::New {
+                        def: DefId::root(794),
+                        ty: root_ty,
+                        ctor: None,
+                        args: vec![],
+                    },
+                ),
+                Statement::Assign(
+                    Place::Field {
+                        base: root,
+                        field: 0,
+                    },
+                    Rvalue::Use(Operand::Const(Const::Str("kept".into()))),
+                ),
+                Statement::Assign(
+                    Place::Local(source),
+                    Rvalue::Use(Operand::Copy(Place::Field {
+                        base: root,
+                        field: 0,
+                    })),
+                ),
+            ],
+        );
+        for stmt in &mut f.blocks[0].stmts {
+            if matches!(stmt, Statement::Release(_)) {
+                *stmt = Statement::Release(Operand::Copy(Place::Local(root)));
+            }
+        }
+        let read = f.blocks[0]
+            .stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(Place::Local(Local(2)), _)))
+            .unwrap();
+        if mutation == 1 || mutation == 3 {
+            f.blocks[0].stmts.insert(
+                read + usize::from(mutation == 3),
+                Statement::Assign(
+                    Place::Field {
+                        base: root,
+                        field: 0,
+                    },
+                    Rvalue::Use(Operand::Const(Const::Null)),
+                ),
+            );
+        }
+        if mutation == 2 {
+            f.blocks[0]
+                .stmts
+                .insert(read, Statement::Release(Operand::Copy(Place::Local(root))));
+        }
+        run(&mut mir, &types);
+        assert_eq!(
+            mir.functions[0].locals[1].borrows_refs,
+            matches!(mutation, 0 | 3),
+            "mutation={mutation}"
+        );
+    }
+}
+
+#[test]
+fn array_owner_paths_protect_only_the_selected_element() {
+    for index in [0, 1] {
+        let (mut mir, mut types) = owned_view(false, false, false);
+        let array = types.array(types.string());
+        let f = &mut mir.functions[0];
+        let root = Local(f.locals.len() as u32);
+        let mut decl = f.locals[0].clone();
+        decl.ty = array;
+        f.locals.push(decl);
+        f.locals[0].is_cursor = true;
+        f.blocks[0].stmts.splice(
+            0..1,
+            [
+                Statement::Assign(
+                    Place::Local(root),
+                    Rvalue::ArrayLit {
+                        elem_ty: types.string(),
+                        elems: vec![
+                            Operand::Const(Const::Str("kept".into())),
+                            Operand::Const(Const::Str("other".into())),
+                        ],
+                    },
+                ),
+                Statement::Assign(
+                    Place::Local(Local(0)),
+                    Rvalue::Use(Operand::Copy(Place::index(
+                        root,
+                        Operand::Const(Const::Int(0)),
+                    ))),
+                ),
+            ],
+        );
+        for stmt in &mut f.blocks[0].stmts {
+            if matches!(stmt, Statement::Release(_)) {
+                *stmt = Statement::Release(Operand::Copy(Place::Local(root)));
+            }
+        }
+        let read = f.blocks[0]
+            .stmts
+            .iter()
+            .position(|s| matches!(s, Statement::Assign(Place::Local(Local(2)), _)))
+            .unwrap();
+        f.blocks[0].stmts.insert(
+            read,
+            Statement::Assign(
+                Place::index(root, Operand::Const(Const::Int(index))),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+        );
+        run(&mut mir, &types);
+        assert_eq!(mir.functions[0].locals[1].borrows_refs, index == 1);
+    }
+}
+
+#[test]
+fn empty_cleanup_after_a_kill_does_not_extend_the_view_lifetime() {
+    let (mut mir, types) = owned_view(false, false, false);
+    let f = &mut mir.functions[0];
+    let at = f.blocks[0]
+        .stmts
+        .iter()
+        .position(|s| matches!(s, Statement::ValueDrop(_)))
+        .unwrap();
+    f.blocks[0]
+        .stmts
+        .insert(at + 1, Statement::ValueKill(Local(1)));
+    f.blocks[0].stmts.push(Statement::ValueDrop(Local(1)));
+    let count = Local(f.locals.len() as u32);
+    let mut decl = f.locals[0].clone();
+    decl.ty = types.int();
+    f.locals.push(decl);
+    f.blocks[0].stmts.insert(
+        0,
+        Statement::Assign(
+            Place::Local(count),
+            Rvalue::ObservedLoad(Operand::Const(Const::Null)),
+        ),
+    );
+    run(&mut mir, &types);
+    assert!(mir.functions[0].locals[1].borrows_refs);
+}
+
+#[test]
+fn an_observation_after_the_final_read_still_protects_the_original_view_token() {
+    let (mut mir, types) = owned_view(false, false, false);
+    let f = &mut mir.functions[0];
+    let at = f.blocks[0]
+        .stmts
+        .iter()
+        .position(|s| matches!(s, Statement::ValueDrop(_)))
+        .unwrap();
+    let count = Local(f.locals.len() as u32);
+    let mut decl = f.locals[0].clone();
+    decl.ty = types.int();
+    f.locals.push(decl);
+    f.blocks[0].stmts.insert(
+        at,
+        Statement::Assign(
+            Place::Local(count),
+            Rvalue::ObservedLoad(Operand::Copy(Place::Local(Local(0)))),
+        ),
+    );
+    run(&mut mir, &types);
+    assert!(!mir.functions[0].locals[1].borrows_refs);
 }
 
 #[test]

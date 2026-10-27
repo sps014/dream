@@ -2,12 +2,15 @@
 //! Local value copies can borrow those references even across iterator envelopes.
 
 use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
-use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
+use crate::analysis::escape::{LocalEscape, ParamSummaries};
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_abi::names::THIS_NAME;
 use dream_hir::LayoutTable;
 use dream_types::{TypeId, TypeInterner};
 use std::collections::BTreeSet;
+
+mod protection;
+use protection::Protection;
 
 pub(super) const STAGE: &str = "read-loans";
 
@@ -105,49 +108,23 @@ fn function(
         .into_iter()
         .filter_map(|(l, (n, new))| (n == 1 && new).then_some(l))
         .collect();
-    let private = LocalEscape::analyze(f, i, &ParamSummaries::default());
-    let managed_field = |ty: TypeId, index: usize| {
-        layouts
-            .get(ty)
-            .and_then(|l| l.fields.get(index))
-            .is_none_or(|f| i.is_rc_tracked(f.ty) || i.is_value_type(f.ty))
-    };
     let quiet = |m: &ModRef| match m {
-        ModRef::Known(k) => {
-            !k.observes_ownership()
-                && !k.any_slot
-                && k.slots.is_empty()
-                && (!k.may_destroy || effects.del().is_quiet())
-                && k.fields.iter().all(|&(ty, field)| {
-                    k.field_params
-                        .get(&(ty, field))
-                        .is_some_and(|roots| roots.as_ref().is_some_and(BTreeSet::is_empty))
-                        || (!i.is_value_type(ty) && !managed_field(ty, field as usize))
-                })
-        }
+        ModRef::Known(k) => !k.observes_ownership() && (!k.may_destroy || effects.del().is_quiet()),
         ModRef::Top => false,
     };
     for s in f.blocks.iter().flat_map(|b| &b.stmts) {
         let mut ok = true;
         stmt_effects(s, f, i, |e| {
             ok &= match e {
-                Effect::None => true,
-                Effect::Store(base, field) => {
-                    (fresh.contains(&base) && !f.locals[base.0 as usize].is_ref)
-                        || (!i.is_value_type(f.local_ty(base))
-                            && !managed_field(f.local_ty(base), field as usize))
-                }
+                Effect::None
+                | Effect::Store(..)
+                | Effect::SlotStore(_)
+                | Effect::GlobalStore(_) => true,
                 Effect::Call(c) => {
                     !ref_calls.contains(&(c.def, c.args.clone())) && quiet(&effects.call(c))
                 }
-                Effect::SlotStore(_) => matches!(s,
-                    Statement::Assign(Place::Index { base, .. }, _)
-                        if fresh.contains(base) && private.of(*base) == Escape::No),
                 Effect::Ctor(d) => quiet(&effects.ctor(d)),
-                Effect::Iface(..)
-                | Effect::Top
-                | Effect::ObserveOwnership
-                | Effect::GlobalStore(_) => false,
+                Effect::Iface(..) | Effect::Top | Effect::ObserveOwnership => false,
             }
         });
         if !ok {
@@ -165,6 +142,7 @@ fn function(
     }) {
         return false;
     }
+    let protection = Protection::compute(f, i, effects);
     let mut stable: BTreeSet<Local> = (0..f.locals.len()).map(|n| Local(n as u32)).collect();
     loop {
         let rejected: Vec<_> = stable
@@ -185,16 +163,18 @@ fn function(
                         Statement::Assign(Place::Local(d), rv) if *d == l && !null(rv) => {
                             defined = true;
                             let good = match rv {
-                                Rvalue::Use(o) => operand(o, f, i, layouts, &stable, &fresh),
+                                Rvalue::Use(o) => {
+                                    operand(o, f, i, layouts, &stable, &fresh, &protection)
+                                }
                                 Rvalue::Move { src, .. } => stable.contains(src),
                                 Rvalue::UnionField { base, .. } => {
-                                    operand(base, f, i, layouts, &stable, &fresh)
+                                    operand(base, f, i, layouts, &stable, &fresh, &protection)
                                 }
                                 Rvalue::UnionNew { args, .. } => {
                                     i.is_value_type(f.local_ty(l))
-                                        && args
-                                            .iter()
-                                            .all(|a| operand(a, f, i, layouts, &stable, &fresh))
+                                        && args.iter().all(|a| {
+                                            operand(a, f, i, layouts, &stable, &fresh, &protection)
+                                        })
                                 }
                                 Rvalue::New {
                                     ctor: None, args, ..
@@ -208,11 +188,14 @@ fn function(
                         Statement::Assign(Place::Field { base, .. }, rv)
                             if *base == l && i.is_value_type(f.local_ty(l)) =>
                         {
-                            let good = match rv {
-                                Rvalue::Use(o) => operand(o, f, i, layouts, &stable, &fresh),
-                                Rvalue::Move { src, .. } => stable.contains(src),
-                                _ => false,
-                            };
+                            let good = fresh.contains(&l)
+                                && match rv {
+                                    Rvalue::Use(o) => {
+                                        operand(o, f, i, layouts, &stable, &fresh, &protection)
+                                    }
+                                    Rvalue::Move { src, .. } => stable.contains(src),
+                                    _ => false,
+                                };
                             if !good {
                                 return true;
                             }
@@ -318,6 +301,7 @@ fn operand(
     layouts: &LayoutTable,
     stable: &BTreeSet<Local>,
     fresh: &BTreeSet<Local>,
+    protection: &Protection,
 ) -> bool {
     match o {
         Operand::Const(_) => true,
@@ -325,7 +309,9 @@ fn operand(
             stable.contains(l)
                 || !(i.is_rc_tracked(f.local_ty(*l)) || i.is_value_type(f.local_ty(*l)))
         }
-        Operand::Copy(Place::Index { base, .. }) => stable.contains(base),
+        Operand::Copy(Place::Index { base, .. }) => {
+            stable.contains(base) && protection.covers(o, f, i)
+        }
         Operand::Copy(Place::Field { base, field }) => {
             let Some(layout) = layouts
                 .get(f.local_ty(*base))
@@ -334,6 +320,9 @@ fn operand(
                 return false;
             };
             if layout.is_weak || layout.is_unowned || i.is_shared_type(f.local_ty(*base)) {
+                return false;
+            }
+            if !protection.covers(o, f, i) {
                 return false;
             }
             if stable.contains(base) {

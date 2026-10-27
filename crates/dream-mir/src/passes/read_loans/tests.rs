@@ -128,6 +128,145 @@ fn owning_mutated_escaping_and_observed_records_keep_their_tokens() {
 }
 
 #[test]
+fn nested_records_borrow_only_when_the_whole_aggregate_stays_private() {
+    for escape in [false, true] {
+        let (mut mir, mut types) = fixture(false, false, false, false);
+        let record = mir.functions[0].locals[1].ty;
+        let def = DefId::root(810);
+        types.mark_value_def(def);
+        let envelope = types.struct_ty(def, vec![]);
+        mir.layouts.insert(
+            envelope,
+            TypeLayout {
+                name: "Envelope".into(),
+                size: mir.layouts.get(record).unwrap().size,
+                align: mir.layouts.get(record).unwrap().align,
+                fields: vec![FieldLayout {
+                    name: "record".into(),
+                    ty: record,
+                    offset: 0,
+                    is_weak: false,
+                    is_unowned: false,
+                }],
+                ..Default::default()
+            },
+        );
+        let f = &mut mir.functions[0];
+        let outer = Local(f.locals.len() as u32);
+        let mut decl = f.locals[1].clone();
+        decl.ty = envelope;
+        f.locals.push(decl);
+        f.blocks[0].stmts.splice(
+            2..2,
+            [
+                Statement::Assign(
+                    Place::Local(outer),
+                    Rvalue::New {
+                        def,
+                        ty: envelope,
+                        ctor: None,
+                        args: vec![],
+                    },
+                ),
+                Statement::Assign(
+                    Place::Field {
+                        base: outer,
+                        field: 0,
+                    },
+                    Rvalue::Use(Operand::Copy(Place::Local(Local(1)))),
+                ),
+                Statement::ValueRetain(outer),
+            ],
+        );
+        if escape {
+            f.ret = envelope;
+            f.blocks[0].terminator = Terminator::Return(Some(Operand::Copy(Place::Local(outer))));
+        } else {
+            f.blocks[0].stmts.push(Statement::ValueDrop(outer));
+        }
+        run(&mut mir, &types);
+        assert_eq!(
+            mir.functions[0].locals[outer.0 as usize].borrows_refs,
+            !escape
+        );
+        assert_eq!(mir.functions[0].locals[1].borrows_refs, !escape);
+    }
+}
+
+#[test]
+fn writes_before_loan_creation_and_after_its_drop_do_not_invalidate_it() {
+    for before in [false, true] {
+        let (mut mir, types) = fixture(false, false, false, false);
+        let block = &mut mir.functions[0].blocks[0];
+        let at = if before { 0 } else { block.stmts.len() };
+        block.stmts.insert(
+            at,
+            Statement::Assign(
+                Place::index(Local(0), Operand::Const(Const::Int(0))),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+        );
+        assert!(run(&mut mir, &types));
+        assert!(mir.functions[0].locals[1].borrows_refs);
+    }
+}
+
+#[test]
+fn a_write_only_rejects_the_loan_of_the_affected_constant_slot() {
+    for written in [Some(0), Some(1), None] {
+        let (mut mir, types) = fixture(false, false, false, false);
+        let f = &mut mir.functions[0];
+        let dynamic = Local(f.locals.len() as u32);
+        let mut decl = f.locals[0].clone();
+        decl.ty = types.int();
+        f.locals.push(decl);
+        f.params.push(dynamic);
+        f.blocks[0].stmts.insert(
+            2,
+            Statement::Assign(
+                Place::index(
+                    Local(0),
+                    written.map_or_else(
+                        || Operand::Copy(Place::Local(dynamic)),
+                        |n| Operand::Const(Const::Int(n)),
+                    ),
+                ),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+        );
+        run(&mut mir, &types);
+        assert_eq!(mir.functions[0].locals[1].borrows_refs, written == Some(1));
+    }
+}
+
+#[test]
+fn a_mutated_family_does_not_disqualify_an_independent_reader_family() {
+    let (mut mir, types) = fixture(false, false, false, false);
+    let f = &mut mir.functions[0];
+    let other = Local(f.locals.len() as u32);
+    f.locals.push(f.locals[1].clone());
+    let source = f.blocks[0].stmts[0].clone();
+    let Statement::Assign(_, rv) = source else {
+        unreachable!()
+    };
+    f.blocks[0].stmts.extend([
+        Statement::Assign(Place::Local(other), rv),
+        Statement::ValueRetain(other),
+        Statement::Assign(
+            Place::Field {
+                base: other,
+                field: 1,
+            },
+            Rvalue::Use(Operand::Const(Const::Int(1))),
+        ),
+        Statement::ValueDrop(other),
+    ]);
+    assert!(run(&mut mir, &types));
+    assert!(mir.functions[0].locals[1].borrows_refs);
+    assert!(!mir.functions[0].locals[other.0 as usize].borrows_refs);
+}
+
+#[test]
 fn private_array_mutation_does_not_disable_an_unrelated_record_loan() {
     let (mut mir, mut types) = fixture(false, false, false, false);
     let array = types.array(types.string());

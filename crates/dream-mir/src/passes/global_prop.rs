@@ -116,6 +116,14 @@ fn meet(preds: &[crate::BlockId], exit: &[Facts]) -> Facts {
 /// local. (`Operand` deliberately has no `PartialEq`, so we compare the cases we rely on.)
 pub(super) fn operand_eq(a: &Operand, b: &Operand) -> bool {
     match (a, b) {
+        // Facts describe exact constants, including NaN payloads and signed zero.
+        // Floating-point value equality is not reflexive and cannot close a fixpoint.
+        (Operand::Const(crate::Const::Float(x)), Operand::Const(crate::Const::Float(y))) => {
+            x.to_bits() == y.to_bits()
+        }
+        (Operand::Const(crate::Const::F32(x)), Operand::Const(crate::Const::F32(y))) => {
+            x.to_bits() == y.to_bits()
+        }
         (Operand::Const(x), Operand::Const(y)) => x == y,
         (Operand::Copy(Place::Local(x)), Operand::Copy(Place::Local(y))) => x == y,
         _ => false,
@@ -133,6 +141,44 @@ mod tests {
     use super::*;
     use crate::build::FunctionBuilder;
     use crate::{Const, Operand, Place, Rvalue, Terminator};
+
+    #[test]
+    fn float_facts_compare_bits_including_nan_and_signed_zero() {
+        for (nan, zero, negative_zero) in [
+            (
+                Const::Float(f64::NAN),
+                Const::Float(0.0),
+                Const::Float(-0.0),
+            ),
+            (Const::F32(f32::NAN), Const::F32(0.0), Const::F32(-0.0)),
+        ] {
+            let nan = Operand::Const(nan);
+            assert!(operand_eq(&nan, &nan));
+            assert!(!operand_eq(
+                &Operand::Const(zero),
+                &Operand::Const(negative_zero)
+            ));
+        }
+    }
+
+    #[test]
+    fn propagates_nan_across_blocks_to_a_fixpoint() {
+        let i = TypeInterner::new();
+        let mut b = FunctionBuilder::new("nan", i.double());
+        let x = b.new_temp(i.double());
+        let next = b.new_block();
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Const(Const::Float(f64::NAN))),
+        );
+        b.terminate(Terminator::Goto(next));
+        b.switch_to(next);
+        b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(x)))));
+        let mut f = b.finish();
+        assert!(GlobalProp.run(&mut f, &i));
+        assert!(matches!(&f.blocks[1].terminator,
+            Terminator::Return(Some(Operand::Const(Const::Float(value)))) if value.is_nan()));
+    }
 
     #[test]
     fn propagates_const_across_blocks() {

@@ -3,13 +3,15 @@
 //! Given the alias class of `o = New …` (see [`super::escape`]), every definition of a member must
 //! be that `New`, a copy of a member, or null, so each member either holds the object, holds
 //! null, or is a stale alias of an instance already dead. A forward dataflow then tracks the
-//! object's count through the members' `Retain`  , requiring every
-//! path into a block to agree on the count and on which members hold it. The statements that drop the last count are the object's deaths;
+//! object's count through the members' `Retain`, preserving alternative holder states at joins.
+//! A release must have the same destruction role in every incoming state. The statements that
+//! drop the last count are the object's deaths;
 //! a fresh `New` is only allowed once the previous instance is dead, and every return must leave
 //! it dead. Handing a member to a `take` parameter moves a count out of sight and is refused.
 
 use crate::{Local, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use indexmap::IndexMap as HashMap;
+use std::collections::BTreeSet;
 
 /// Where one allocation's counts go.
 pub(crate) struct Lifetime {
@@ -19,14 +21,14 @@ pub(crate) struct Lifetime {
     pub rc_ops: Vec<(usize, usize)>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Hold {
     Null,
     Obj,
     Stale,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct State {
     count: u32,
     hold: Vec<Hold>,
@@ -35,6 +37,7 @@ struct State {
 /// Counts beyond this are treated as unbounded (a retain inside a loop).
 const MAX_COUNT: u32 = 64;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Rc {
     Other,
     Death(Local),
@@ -76,29 +79,28 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
     }
 
     let n = f.blocks.len();
-    let mut entry_state: Vec<Option<State>> = vec![None; n];
-    entry_state[f.entry.0 as usize] = Some(State {
+    let mut entry_state = vec![BTreeSet::new(); n];
+    entry_state[f.entry.0 as usize].insert(State {
         count: 0,
         hold: vec![Hold::Null; members.len()],
     });
     let mut work = vec![f.entry.0 as usize];
     while let Some(bi) = work.pop() {
-        let mut st = entry_state[bi].clone().expect("queued with a state");
+        let mut states = entry_state[bi].clone();
         for s in &f.blocks[bi].stmts {
-            step(s, &pos, &mut st)?;
+            states = advance(s, &pos, &states)?.0;
         }
         let term = &f.blocks[bi].terminator;
-        if matches!(term, Terminator::Return(_) | Terminator::AsyncComplete(_)) && st.count != 0 {
+        if matches!(term, Terminator::Return(_) | Terminator::AsyncComplete(_))
+            && states.iter().any(|st| st.count != 0)
+        {
             return None;
         }
         for succ in term.successors() {
             let si = succ.0 as usize;
-            let joined = match &entry_state[si] {
-                None => st.clone(),
-                Some(prev) => join(prev, &st)?,
-            };
-            if entry_state[si].as_ref() != Some(&joined) {
-                entry_state[si] = Some(joined);
+            let before = entry_state[si].len();
+            entry_state[si].extend(states.iter().cloned());
+            if entry_state[si].len() != before {
                 work.push(si);
             }
         }
@@ -109,16 +111,19 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
         rc_ops: Vec::new(),
     };
     for (bi, b) in f.blocks.iter().enumerate() {
-        let Some(mut st) = entry_state[bi].clone() else {
+        let mut states = entry_state[bi].clone();
+        if states.is_empty() {
             for (si, s) in b.stmts.iter().enumerate() {
                 if rc_member(s, &pos).is_some() {
                     out.rc_ops.push((bi, si));
                 }
             }
             continue;
-        };
+        }
         for (si, s) in b.stmts.iter().enumerate() {
-            match step(s, &pos, &mut st).expect("replays the accepted fixpoint") {
+            let (next, role) = advance(s, &pos, &states)?;
+            states = next;
+            match role {
                 Rc::Other => {}
                 Rc::Death(m) => out.deaths.push((bi, si, m)),
                 Rc::Op => out.rc_ops.push((bi, si)),
@@ -128,26 +133,39 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
     Some(out)
 }
 
-/// Paths must agree on the count and on who holds the object; a null and a stale alias join
-/// as stale (no RC statement may touch it).
-fn join(a: &State, b: &State) -> Option<State> {
-    if a.count != b.count {
-        return None;
+fn advance(
+    stmt: &Statement,
+    pos: &HashMap<Local, usize>,
+    states: &BTreeSet<State>,
+) -> Option<(BTreeSet<State>, Rc)> {
+    let mut next = BTreeSet::new();
+    let mut role = None;
+    for state in states {
+        let alternatives = match stmt {
+            Statement::Assign(
+                place @ Place::Local(d),
+                Rvalue::Select {
+                    then_val, else_val, ..
+                },
+            ) if pos.contains_key(d) => vec![
+                Statement::Assign(place.clone(), Rvalue::Use(then_val.clone())),
+                Statement::Assign(place.clone(), Rvalue::Use(else_val.clone())),
+            ],
+            _ => vec![stmt.clone()],
+        };
+        for alternative in alternatives {
+            let mut state = state.clone();
+            let current = step(&alternative, pos, &mut state)?;
+            // Cleanup is unconditional at this MIR site; choosing a runtime branch here
+            // would replace the ownership proof with a new runtime ownership test.
+            if role.is_some_and(|previous| previous != current) {
+                return None;
+            }
+            role = Some(current);
+            next.insert(state);
+        }
     }
-    let hold = a
-        .hold
-        .iter()
-        .zip(&b.hold)
-        .map(|(&x, &y)| match (x, y) {
-            _ if x == y => Some(x),
-            (Hold::Null, Hold::Stale) | (Hold::Stale, Hold::Null) => Some(Hold::Stale),
-            _ => None,
-        })
-        .collect::<Option<Vec<_>>>()?;
-    Some(State {
-        count: a.count,
-        hold,
-    })
+    Some((next, role.unwrap_or(Rc::Other)))
 }
 
 fn member_of(op: &Operand, pos: &HashMap<Local, usize>) -> Option<Local> {
@@ -241,7 +259,6 @@ fn gives_count_away(s: &Statement, pos: &HashMap<Local, usize>) -> bool {
                 ..
             },
         ) => taken(&c.take_params, args),
-        Statement::Assign(Place::Local(d), Rvalue::Select { .. }) => pos.contains_key(d),
         _ => false,
     }
 }

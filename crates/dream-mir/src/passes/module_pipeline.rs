@@ -75,6 +75,8 @@ pub(super) fn optimize_module_rounds(
     dump.module(UniqueRegion.name(), mir, interner);
     let _ = rc::held::run(mir, interner);
     dump.module(rc::held::STAGE, mir, interner);
+    let _ = rc::elide_proven(mir, interner);
+    dump.module("rc-proven-elision", mir, interner);
     let _ = SroaManaged.run(mir, interner);
     dump.module(SroaManaged.name(), mir, interner);
     let _ = slice_measure::run(mir, interner);
@@ -189,6 +191,8 @@ pub fn run_late_module_passes(mir: &mut Mir, interner: &TypeInterner, dump: &mut
     dump.module("borrowed-fields", mir, interner);
     loop_fields::run(mir, interner);
     dump.module("loop-fields", mir, interner);
+    let _ = rc::elide_proven(mir, interner);
+    dump.module("rc-proven-elision", mir, interner);
     let _ = frame_alloc::run(mir, interner);
     dump.module(frame_alloc::STAGE, mir, interner);
     construction::run(mir, interner);

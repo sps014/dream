@@ -1,0 +1,138 @@
+import system;
+import system.testing;
+
+let proof_drop_count = 0;
+
+class ProofDropLeaf {
+    public value: int;
+
+    public constructor() {
+        this.value = 7;
+    }
+
+    del() {
+        proof_drop_count = proof_drop_count + 1;
+    }
+}
+
+class ProofDropOwner {
+    public leaf: ProofDropLeaf;
+
+    public constructor(leaf: ProofDropLeaf) {
+        this.leaf = leaf;
+    }
+}
+
+@noinline
+fun proof_read_drop(borrow leaf: ProofDropLeaf): int {
+    return leaf.value;
+}
+
+@noinline
+fun proof_drop_timing(borrow owner: ProofDropOwner): int {
+    let snapshot = owner.leaf;
+    let value = proof_read_drop(snapshot);
+    owner.leaf = ProofDropLeaf();
+    return proof_drop_count + value - 7;
+}
+
+@test
+fun arc_proofs_preserve_snapshot_destruction_time(): void {
+    let owner = ProofDropOwner(ProofDropLeaf());
+    let before = proof_drop_count;
+    let observed = proof_drop_timing(owner);
+    Assert.eq(observed, before);
+    Assert.eq(proof_drop_count, before + 1);
+}
+
+class ProofLeaf {
+    public text: string;
+
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+class ProofOwner {
+    public leaf: ProofLeaf;
+
+    public constructor(leaf: ProofLeaf) {
+        this.leaf = leaf;
+    }
+}
+
+@noinline
+fun proof_replace(borrow leaf: ProofLeaf): void {
+    leaf.text = "replacement";
+}
+
+@noinline
+fun proof_relay(borrow leaf: ProofLeaf): void {
+    proof_replace(leaf);
+}
+
+@noinline
+fun proof_disjoint_owner(borrow leaf: ProofLeaf): int {
+    let snapshot = leaf.text;
+    let other = ProofLeaf("other");
+    proof_relay(other);
+    return snapshot.length + other.text.length;
+}
+
+@noinline
+fun proof_shared_child(borrow left: ProofOwner, borrow right: ProofOwner): string {
+    let snapshot = left.leaf.text;
+    proof_relay(right.leaf);
+    return snapshot;
+}
+
+@test
+fun arc_proofs_keep_aliasing_children_alive(): void {
+    let leaf = ProofLeaf("original" + 1);
+    Assert.eq(proof_disjoint_owner(leaf), 20);
+    let left = ProofOwner(leaf);
+    let right = ProofOwner(leaf);
+    Assert.eq(proof_shared_child(left, right), "original1");
+    Assert.eq(leaf.text, "replacement");
+}
+
+@test
+fun arc_proofs_distinguish_array_slots(): void {
+    let values = ["first" + 1, "second" + 2];
+    let first = values[0];
+    values[1] = "different";
+    Assert.eq(first, "first1");
+    let second = values[1];
+    values[1] = "overwritten";
+    Assert.eq(second, "different");
+    Assert.eq(values[1], "overwritten");
+}
+
+@noinline
+fun proof_callback_recursive(borrow callback: fun(int): int, depth: int, value: int): int {
+    if depth > 0 {
+        return proof_callback_recursive(callback, depth - 1, value);
+    }
+    return callback(value);
+}
+
+@noinline
+fun proof_callback_forward(borrow callback: fun(int): int, value: int): int {
+    return proof_callback_recursive(callback, 3, value);
+}
+
+@noinline
+fun proof_callback_read(value: string, borrow callback: fun(int): int): int {
+    return proof_callback_forward(callback, value.length);
+}
+
+@test
+fun arc_proofs_keep_forwarded_callback_environments_alive(): void {
+    let captured = [7];
+    let callback: fun(int): int = (value: int) => value + captured[0];
+    captured[0] = 9;
+    Assert.eq(proof_callback_read("value" + 1, callback), 15);
+    captured[0] = 11;
+    Assert.eq(proof_callback_read("ab", callback), 13);
+    Assert.eq(captured[0], 11);
+}

@@ -117,6 +117,235 @@ fn snapshot_read_under_a_quiet_call_drops_its_pair() {
 }
 
 #[test]
+fn observing_counts_after_the_last_real_read_keeps_the_snapshot_token() {
+    let t = types();
+    let mut s = snapshot(&t, |_, _| {});
+    let count = crate::Local(s.func.locals.len() as u32);
+    let mut decl = s.func.locals[s.x.0 as usize].clone();
+    decl.ty = t.i.int();
+    s.func.locals.push(decl);
+    let at = s.func.blocks[0].stmts.len() - 1;
+    s.func.blocks[0].stmts.insert(
+        at,
+        Statement::Assign(
+            Place::Local(count),
+            Rvalue::ObservedLoad(Operand::Copy(Place::Local(s.x))),
+        ),
+    );
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 2);
+}
+
+#[test]
+fn observations_outside_the_original_snapshot_lifetime_do_not_block_elision() {
+    for before in [true, false] {
+        let t = types();
+        let mut s = snapshot(&t, |_, _| {});
+        let result = Local(s.func.locals.len() as u32);
+        let mut decl = s.func.locals[s.x.0 as usize].clone();
+        decl.ty = t.i.int();
+        s.func.locals.push(decl);
+        let observation = Statement::Assign(
+            Place::Local(result),
+            Rvalue::ObservedLoad(Operand::Copy(Place::Local(s.func.params[0]))),
+        );
+        let statements = &mut s.func.blocks[0].stmts;
+        let at = if before { 0 } else { statements.len() };
+        statements.insert(at, observation);
+        run(&t, &mut s, false);
+        assert_eq!(rc_ops(&s.func, s.x), 0);
+    }
+}
+
+#[test]
+fn destructor_snapshots_require_coverage_through_the_original_release() {
+    for overwrite in [false, true] {
+        let mut t = types();
+        let child = t.i.struct_ty(DefId::root(470), vec![]);
+        let mut parent = t.layouts.get(t.boxed).unwrap().clone();
+        parent.fields[0].ty = child;
+        t.layouts.insert(t.boxed, parent);
+        let mut child_layout =
+            TypeLayout::from_fields(&t.i, "Child", [("value".into(), t.i.int(), false, false)]);
+        child_layout.destructor = Some(DefId::root(471));
+        t.layouts.insert(child, child_layout);
+        let mut reader = FunctionBuilder::new("read", t.i.void());
+        reader.set_def(PEEK, vec![]);
+        reader.new_param(child, None);
+        reader.terminate(Terminator::Return(None));
+        let mut destructor = FunctionBuilder::new("drop", t.i.void());
+        destructor.set_def(DefId::root(471), vec![]);
+        destructor.new_param(child, None);
+        destructor.terminate(Terminator::Return(None));
+        let mut b = FunctionBuilder::new("snapshot", t.i.void());
+        let base = b.new_param(t.boxed, None);
+        let x = b.new_local(child, None);
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Copy(Place::Field { base, field: 0 })),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        b.push(peek_call(&t, x));
+        if overwrite {
+            b.assign(
+                Place::Field { base, field: 0 },
+                Rvalue::Use(Operand::Const(Const::Null)),
+            );
+        }
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut f = b.finish();
+        let effects = ModRefTable::compute(
+            &Mir {
+                functions: vec![reader.finish(), destructor.finish()],
+                layouts: t.layouts.clone(),
+                ..Mir::default()
+            },
+            &t.i,
+        );
+        run_function(&mut f, &t.i, &t.layouts, &effects);
+        assert_eq!(rc_ops(&f, x), if overwrite { 2 } else { 0 });
+    }
+}
+
+#[test]
+fn writing_a_fresh_object_does_not_invalidate_an_input_snapshot() {
+    let t = types();
+    let mut s = snapshot(&t, |b, _| {
+        let other = b.new_local(t.boxed, None);
+        b.assign(
+            Place::Local(other),
+            Rvalue::New {
+                def: DefId::root(7),
+                ty: t.boxed,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Field {
+                base: other,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+    });
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 0);
+}
+
+#[test]
+fn writing_through_a_local_alias_keeps_the_snapshot() {
+    let t = types();
+    let mut s = snapshot(&t, |b, base| {
+        let other = b.new_local(t.boxed, None);
+        b.assign(
+            Place::Local(other),
+            Rvalue::Use(Operand::Copy(Place::Local(base))),
+        );
+        b.assign(
+            Place::Field {
+                base: other,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+    });
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 2);
+}
+
+#[test]
+fn direct_call_field_roots_are_substituted_through_a_relay() {
+    for aliases in [false, true] {
+        let t = types();
+        let mut mutate = FunctionBuilder::new("mutate", t.i.void());
+        mutate.set_def(DefId::root(430), vec![]);
+        let p = mutate.new_param(t.boxed, None);
+        mutate.assign(
+            Place::Field { base: p, field: 0 },
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        mutate.terminate(Terminator::Return(None));
+        let mut relay = FunctionBuilder::new("relay", t.i.void());
+        relay.set_def(DefId::root(431), vec![]);
+        let p = relay.new_param(t.boxed, None);
+        let mut call = peek_call(&t, p);
+        if let Statement::Call { callee, .. } = &mut call {
+            callee.def = DefId::root(430);
+        }
+        relay.push(call);
+        relay.terminate(Terminator::Return(None));
+        let mut s = snapshot(&t, |b, base| {
+            let other = b.new_local(t.boxed, None);
+            b.assign(
+                Place::Local(other),
+                if aliases {
+                    Rvalue::Use(Operand::Copy(Place::Local(base)))
+                } else {
+                    Rvalue::New {
+                        def: DefId::root(7),
+                        ty: t.boxed,
+                        ctor: None,
+                        args: vec![],
+                    }
+                },
+            );
+            let mut call = peek_call(&t, other);
+            if let Statement::Call { callee, .. } = &mut call {
+                callee.def = DefId::root(431);
+            }
+            b.push(call);
+        });
+        let mir = Mir {
+            functions: vec![mutate.finish(), relay.finish(), peek_fn(&t, false)],
+            layouts: t.layouts.clone(),
+            profile: dream_abi::profile::CompileProfile::Release,
+            ..Mir::default()
+        };
+        let effects = ModRefTable::compute(&mir, &t.i);
+        run_function(&mut s.func, &t.i, &t.layouts, &effects);
+        assert_eq!(rc_ops(&s.func, s.x), if aliases { 2 } else { 0 });
+    }
+}
+
+#[test]
+fn constant_element_writes_only_invalidate_overlapping_slots() {
+    for written in [Some(0), Some(1), None] {
+        let mut t = types();
+        let array = t.i.array(t.i.string());
+        let mut b = FunctionBuilder::new("element", t.i.void());
+        let base = b.new_param(array, None);
+        let dynamic = b.new_param(t.i.int(), None);
+        let x = b.new_local(t.i.string(), None);
+        b.assign(
+            Place::Local(x),
+            Rvalue::Use(Operand::Copy(Place::index(
+                base,
+                Operand::Const(Const::Int(0)),
+            ))),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+        let index = written.map_or(Operand::Copy(Place::Local(dynamic)), |n| {
+            Operand::Const(Const::Int(n))
+        });
+        b.assign(
+            Place::index(base, index),
+            Rvalue::Use(Operand::Const(Const::Null)),
+        );
+        b.push(peek_call(&t, x));
+        b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+        b.terminate(Terminator::Return(None));
+        let mut s = Snap {
+            func: b.finish(),
+            x,
+        };
+        run(&t, &mut s, false);
+        assert_eq!(rc_ops(&s.func, x), if written == Some(1) { 0 } else { 2 });
+    }
+}
+
+#[test]
 fn destructor_effects_only_apply_to_calls_that_can_run_cleanup() {
     for cleanup in [false, true] {
         let mut t = types();
@@ -292,6 +521,50 @@ fn copy_of_a_borrowed_param_drops_its_pair() {
     let mut s = param_copy(&t, false);
     run(&t, &mut s, false);
     assert_eq!(rc_ops(&s.func, s.x), 0);
+}
+
+#[test]
+fn a_live_local_owner_covers_a_surplus_copy_across_a_quiet_call() {
+    for opaque in [false, true] {
+        let t = types();
+        let mut b = FunctionBuilder::new("local_owner", t.i.void());
+        let owner = b.new_local(t.boxed, None);
+        let copy = b.new_local(t.boxed, None);
+        b.assign(
+            Place::Local(owner),
+            Rvalue::New {
+                def: DefId::root(7),
+                ty: t.boxed,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        b.assign(
+            Place::Local(copy),
+            Rvalue::Use(Operand::Copy(Place::Local(owner))),
+        );
+        b.push(Statement::Retain(Operand::Copy(Place::Local(copy))));
+        let mut call = peek_call(&t, copy);
+        if opaque && let Statement::Call { callee, .. } = &mut call {
+            callee.def = DefId::root(999);
+        }
+        b.push(call);
+        b.push(Statement::Release(Operand::Copy(Place::Local(copy))));
+        b.push(Statement::Release(Operand::Copy(Place::Local(owner))));
+        b.terminate(Terminator::Return(None));
+        let mut f = b.finish();
+        let effects = ModRefTable::compute(
+            &Mir {
+                functions: vec![peek_fn(&t, false)],
+                layouts: t.layouts.clone(),
+                ..Mir::default()
+            },
+            &t.i,
+        );
+        run_function(&mut f, &t.i, &t.layouts, &effects);
+        assert_eq!(rc_ops(&f, copy), if opaque { 2 } else { 0 });
+        assert_eq!(rc_ops(&f, owner), 1);
+    }
 }
 
 #[test]

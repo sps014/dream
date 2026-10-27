@@ -1,17 +1,21 @@
 //! Local statements contribute stores, call edges and ownership obligations.
 
 use super::{Known, ModRef};
+use crate::analysis::ownership::OwnershipFacts;
 use crate::{Callee, Global, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
+use std::collections::BTreeSet;
 
 pub(super) enum Edge {
-    Call(DefId, Vec<TypeId>),
+    Call(DefId, Vec<TypeId>, Vec<Option<BTreeSet<usize>>>),
     Iface(usize, usize),
     Ctor(DefId),
 }
 
 pub(super) struct LocalSummary {
+    pub(super) observes_rc: bool,
+    pub(super) may_destroy: bool,
     pub(super) own: ModRef,
     pub(super) own_fresh: ModRef,
     pub(super) edges: Vec<Edge>,
@@ -23,9 +27,12 @@ impl LocalSummary {
         interner: &TypeInterner,
         globals: &IndexMap<Global, TypeId>,
         may_destroy: bool,
+        precise: bool,
     ) -> Self {
         let this = f.params.first().copied();
         let mut s = LocalSummary {
+            observes_rc: false,
+            may_destroy,
             own: ModRef::Known(Known {
                 may_destroy,
                 ..Known::default()
@@ -37,13 +44,25 @@ impl LocalSummary {
             edges: Vec::new(),
         };
         if f.is_async {
+            s.observes_rc = true;
+            s.may_destroy = true;
             s.own = ModRef::Top;
             s.own_fresh = ModRef::Top;
             return s;
         }
-        let record = |s: &mut LocalSummary, e: Effect<'_>| match e {
+        let facts = if precise {
+            OwnershipFacts::compute(f, interner)
+        } else {
+            OwnershipFacts::unknown()
+        };
+        let record = |s: &mut LocalSummary,
+                      e: Effect<'_>,
+                      bi: usize,
+                      si: usize,
+                      arguments: &[Operand]| match e {
             Effect::None => {}
             Effect::ObserveOwnership => {
+                s.observes_rc = true;
                 for effect in [&mut s.own, &mut s.own_fresh] {
                     if let Some(known) = effect.known_mut() {
                         known.observes_rc = true;
@@ -57,12 +76,12 @@ impl LocalSummary {
             Effect::Store(base, field) => {
                 let key = (f.local_ty(base), field);
                 if let Some(k) = s.own.known_mut() {
-                    k.fields.insert(key);
+                    k.record_field(key, facts.parameter_origins(bi, si, base));
                 }
                 if Some(base) != this
                     && let Some(k) = s.own_fresh.known_mut()
                 {
-                    k.fields.insert(key);
+                    k.record_field(key, facts.parameter_origins(bi, si, base));
                 }
             }
             Effect::SlotStore(ty) => {
@@ -86,21 +105,52 @@ impl LocalSummary {
                     s.own_fresh = ModRef::Top;
                 }
             },
-            Effect::Call(callee) => s.edges.push(Edge::Call(callee.def, callee.args.clone())),
+            Effect::Call(callee) => s.edges.push(Edge::Call(
+                callee.def,
+                callee.args.clone(),
+                arguments
+                    .iter()
+                    .map(|op| match op {
+                        Operand::Copy(Place::Local(l)) => facts.parameter_origins(bi, si, *l),
+                        _ => None,
+                    })
+                    .collect(),
+            )),
             Effect::Iface(id, slot) => s.edges.push(Edge::Iface(id, slot)),
             Effect::Ctor(def) => s.edges.push(Edge::Ctor(def)),
         };
-        for block in &f.blocks {
-            for stmt in &block.stmts {
+        for (bi, block) in f.blocks.iter().enumerate() {
+            for (si, stmt) in block.stmts.iter().enumerate() {
+                // A store through a raw address has unknown writes, but does not itself
+                // inspect ownership. Its RHS effects and possible cleanup are separate.
+                let raw_write = matches!(stmt, Statement::RawStore { .. })
+                    || matches!(stmt, Statement::Assign(Place::Deref { .. }, rv)
+                        if !matches!(rv, Rvalue::RawLoad { .. } | Rvalue::IndirectCall { .. }
+                            | Rvalue::JsCall { .. } | Rvalue::ToString(_) | Rvalue::HashCode(_)));
+                s.observes_rc |= matches!(stmt, Statement::DebugLine(_));
+                let arguments = match stmt {
+                    Statement::Call { args, .. }
+                    | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
+                    _ => &[],
+                };
                 let mut effects = Vec::new();
                 stmt_effects(stmt, f, interner, |e| effects.push(e));
                 for e in effects {
-                    record(&mut s, e);
+                    if matches!(e, Effect::Top) && !raw_write {
+                        s.observes_rc = true;
+                    }
+                    record(&mut s, e, bi, si, arguments);
                 }
             }
             match &block.terminator {
-                Terminator::TailCall { callee, .. } => record(&mut s, Effect::Call(callee)),
-                Terminator::Await { .. } => record(&mut s, Effect::Top),
+                Terminator::TailCall { callee, args } => {
+                    record(&mut s, Effect::Call(callee), bi, block.stmts.len(), args)
+                }
+                Terminator::Await { .. } => {
+                    s.observes_rc = true;
+                    s.may_destroy = true;
+                    record(&mut s, Effect::Top, bi, block.stmts.len(), &[]);
+                }
                 _ => {}
             }
         }

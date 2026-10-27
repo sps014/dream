@@ -64,7 +64,8 @@ pub(super) fn panic_defs(mir: &Mir) -> BTreeSet<DefId> {
 }
 
 fn signatures(mir: &Mir, interner: &TypeInterner) -> Signatures {
-    mir.functions
+    let mut signatures: Signatures = mir
+        .functions
         .iter()
         .map(|f| {
             let uses = f
@@ -75,12 +76,30 @@ fn signatures(mir: &Mir, interner: &TypeInterner) -> Signatures {
                     borrows_caller(f, p)
                         && interner.is_value_type(d.ty)
                         && !stores_ref_field_of(f, d.ty, interner)
-                        && !passes_along(f, p)
+                        && !f.is_async
+                        && (!mir.profile.is_debug() || !passes_along(f, p, &Signatures::new()))
                 })
                 .collect();
             ((f.def, f.instance.clone()), uses)
         })
-        .collect()
+        .collect();
+    loop {
+        let mut rejected = Vec::new();
+        for f in &mir.functions {
+            let key = (f.def, f.instance.clone());
+            for (index, &p) in f.params.iter().enumerate() {
+                if signatures[&key][index] && passes_along(f, p, &signatures) {
+                    rejected.push((key.clone(), index));
+                }
+            }
+        }
+        if rejected.is_empty() {
+            return signatures;
+        }
+        for (key, index) in rejected {
+            signatures.get_mut(&key).expect("function signature")[index] = false;
+        }
+    }
 }
 
 fn borrows_caller(f: &MirFunction, p: Local) -> bool {
@@ -106,7 +125,7 @@ fn scalar_rvalue(f: &MirFunction, interner: &TypeInterner, rv: &Rvalue) -> bool 
 
 /// A borrowed parameter's whole-value copies must not escape or be forwarded through an
 /// opaque call. Checking the original parameter alone misses escapes through named copies.
-fn passes_along(f: &MirFunction, p: Local) -> bool {
+fn passes_along(f: &MirFunction, p: Local, signatures: &Signatures) -> bool {
     let mut aliases = BTreeSet::from([p]);
     loop {
         let mut changed = false;
@@ -146,6 +165,18 @@ fn passes_along(f: &MirFunction, p: Local) -> bool {
                 _ => {}
             }
             let mut s = s.clone();
+            if let Statement::Call { callee, args }
+            | Statement::Assign(_, Rvalue::Call { callee, args }) = &mut s
+            {
+                let modes = signatures.get(&(callee.def, callee.args.clone()));
+                for (index, arg) in args.iter_mut().enumerate() {
+                    if matches!(arg, Operand::Copy(Place::Local(l)) if aliases.contains(l))
+                        && modes.and_then(|m| m.get(index)).copied().unwrap_or(false)
+                    {
+                        *arg = Operand::Copy(Place::Local(hidden));
+                    }
+                }
+            }
             stmt_operands_mut(&mut s, &mut |o| {
                 if matches!(o, Operand::Copy(Place::Field { base, .. }) if aliases.contains(base)) {
                     *o = Operand::Copy(Place::Local(hidden));

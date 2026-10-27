@@ -2,6 +2,7 @@
 //! call graph without observable cleanup can pass a nonescaping parameter at +0; returned
 //! aliases and ownership transfers keep their +1 independently of other parameters.
 
+mod aliases;
 mod proof;
 
 use crate::analysis::function_key::FunctionKeyRef;
@@ -24,13 +25,14 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         return false;
     }
     let effects = crate::analysis::effects::ModRefTable::compute(mir, interner);
+    let returns = aliases::returns(mir, interner);
     let proofs: IndexMap<Key, _> = mir
         .functions
         .iter()
         .map(|f| {
             (
                 (f.def, f.instance.clone()),
-                proof::Proof::of(f, interner, &mir.layouts, &effects),
+                proof::Proof::of(f, interner, &mir.layouts, &effects, &returns),
             )
         })
         .collect();
@@ -47,37 +49,22 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             _ => None,
         })
         .collect();
-    // Reject unsafe components before changing any ABI, including recursive backedges.
-    let mut closed: IndexSet<_> = proofs
-        .iter()
-        .filter(|(_, p)| p.safe)
-        .map(|(k, _)| k.clone())
-        .collect();
-    loop {
-        let rejected: Vec<_> = proofs
-            .iter()
-            .filter(|(k, p)| {
-                closed.contains(*k) && p.calls.iter().any(|c| !closed.contains(&key(&c.callee)))
-            })
-            .map(|(k, _)| k.clone())
-            .collect();
-        if rejected.is_empty() {
-            break;
-        }
-        for k in rejected {
-            closed.shift_remove(&k);
-        }
-    }
     let mut borrowed: IndexMap<Key, Vec<bool>> = proofs
         .iter()
         .map(|(k, p)| {
             let fixed_abi =
                 constructors.contains(&k.0) || mir.exports.iter().any(|(def, _)| *def == k.0);
+            // An unrelated callee need not qualify for an ABI rewrite itself. Its closed
+            // effects still have to exclude observations and unmodeled cleanup.
+            let calls_safe = p.calls.iter().all(|call| {
+                matches!(effects.call(&call.callee), crate::analysis::effects::ModRef::Known(ref known)
+                    if !known.observes_rc && (!known.may_destroy || effects.del().is_quiet()))
+            });
             (
                 k.clone(),
                 p.parameters
                     .iter()
-                    .map(|&yes| yes && closed.contains(k) && !fixed_abi)
+                    .map(|&yes| yes && p.safe && calls_safe && !fixed_abi)
                     .collect(),
             )
         })
@@ -117,6 +104,8 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         for (index, p) in f.params.iter().enumerate() {
             let d = &mut f.locals[p.0 as usize];
             if d.is_take && borrowed[&k][index] {
+                tracing::debug!(pass = STAGE, function = %f.name, parameter = index,
+                    decision = "borrowed", reason = "non-escaping-transparent-parameter");
                 d.is_take = false;
                 changed = true;
             }

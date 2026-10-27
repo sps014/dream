@@ -14,6 +14,10 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Module-wide summaries. A lookup that misses (an empty table in unit tests, a pruned callee)
 /// answers [`ModRef::Top`].
 pub(crate) struct ModRefTable {
+    pub(super) observers: IndexMap<(DefId, Vec<TypeId>), bool>,
+    pub(super) cleanup: IndexMap<(DefId, Vec<TypeId>), bool>,
+    pub(crate) del_observes: bool,
+    pub(crate) release_proofs: bool,
     pub(super) fns: IndexMap<(DefId, Vec<TypeId>), ModRef>,
     globals: IndexMap<Global, TypeId>,
     /// Summary of `New { ctor }`: the constructor body minus its direct stores into the fresh
@@ -33,6 +37,10 @@ pub(crate) struct ModRefTable {
 impl Default for ModRefTable {
     fn default() -> Self {
         Self {
+            observers: IndexMap::new(),
+            cleanup: IndexMap::new(),
+            del_observes: true,
+            release_proofs: false,
             fns: IndexMap::new(),
             globals: IndexMap::new(),
             ctors: IndexMap::new(),
@@ -61,6 +69,10 @@ impl ModRefTable {
             .collect();
         let globals: IndexMap<Global, TypeId> = mir.globals.iter().map(|g| (g.id, g.ty)).collect();
         let mut table = ModRefTable {
+            observers: IndexMap::new(),
+            cleanup: IndexMap::new(),
+            del_observes: false,
+            release_proofs: !mir.profile.is_debug(),
             fns: IndexMap::new(),
             globals: globals.clone(),
             ctors: IndexMap::new(),
@@ -122,7 +134,7 @@ impl ModRefTable {
                         || f.blocks.iter().flat_map(|block| &block.stmts).any(|stmt| {
                             table.statement_may_destroy(f, stmt, interner, &mir.layouts)
                         });
-                    LocalSummary::of(f, interner, &globals, may_destroy)
+                    LocalSummary::of(f, interner, &globals, may_destroy, table.release_proofs)
                 })
                 .collect();
         for (f, s) in mir.functions.iter().zip(&locals) {
@@ -149,10 +161,12 @@ impl ModRefTable {
             if destructor_defs.contains(&f.def) {
                 seen_destructors.insert(f.def);
                 del.join(&table.call_def(f.def, &f.instance));
+                table.del_observes |= table.observes_def(f.def, &f.instance);
             }
         }
         for def in destructor_defs.difference(&seen_destructors) {
             del.join(&table.call_def(*def, &[]));
+            table.del_observes |= table.observes_def(*def, &[]);
         }
         table.del = del;
         table
@@ -163,6 +177,23 @@ impl ModRefTable {
             return s.clone();
         }
         self.intrinsics.get(&def).cloned().unwrap_or(ModRef::Top)
+    }
+
+    pub(crate) fn observes_def(&self, def: DefId, args: &[TypeId]) -> bool {
+        self.observers
+            .get(&FunctionKeyRef { def, args })
+            .copied()
+            .unwrap_or_else(|| match self.intrinsics.get(&def) {
+                Some(ModRef::Known(k)) => k.observes_rc,
+                _ => true,
+            })
+    }
+
+    pub(crate) fn call_may_destroy(&self, def: DefId, args: &[TypeId]) -> bool {
+        self.cleanup
+            .get(&FunctionKeyRef { def, args })
+            .copied()
+            .unwrap_or_else(|| self.call_def(def, args).may_destroy())
     }
 
     pub(crate) fn call(&self, callee: &Callee) -> ModRef {
@@ -211,7 +242,7 @@ impl ModRefTable {
                 TyKind::Array(elem) => Some(*elem),
                 _ => None,
             },
-            Place::Deref { .. } => None,
+            Place::Deref { elem_ty, .. } => Some(*elem_ty),
         };
         let may_drop =
             |ty: Option<TypeId>| ty.is_none_or(|ty| self.may_run_del(ty, interner, layouts));

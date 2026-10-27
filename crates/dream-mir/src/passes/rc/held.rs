@@ -22,20 +22,34 @@
 //! copied). Then every `Retain(x)` / `Release(x)` goes and `x` becomes a cursor, which makes the
 //! backend retain `x` at any container store.
 
-use super::liveness::{self, add_terminator_reads, transfer_stmt};
+use super::liveness;
 use super::tokens::{assigns_local, sink_call_args};
-use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
+use crate::analysis::effects::ModRefTable;
+use crate::analysis::ownership::OwnershipFacts;
 use crate::{Const, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_hir::LayoutTable;
-use dream_types::{TyKind, TypeId, TypeInterner};
+use dream_types::{TypeId, TypeInterner};
 use indexmap::{IndexMap, IndexSet};
 use std::collections::{BTreeMap, BTreeSet};
+
+#[path = "held_candidates.rs"]
+mod candidates;
+#[path = "held_check.rs"]
+mod check;
+use candidates::candidates;
+use check::Check;
+
+#[path = "held_proof.rs"]
+mod proof;
 
 /// `--emit-mir` stage name.
 pub(crate) const STAGE: &str = "rc-held-by-owner";
 
 /// Runs over every synchronous function; returns whether anything changed.
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
+    if mir.profile.is_debug() {
+        return false;
+    }
     let modref = ModRefTable::compute(mir, interner);
     let layouts = mir.layouts.clone();
     let mut changed = false;
@@ -63,6 +77,7 @@ enum Slot {
 struct Snapshot {
     base: u32,
     slot: Slot,
+    index: Option<i64>,
 }
 
 pub(crate) fn run_function(
@@ -95,11 +110,16 @@ pub(crate) fn run_function(
             ignored.extend(c.class.iter().copied());
         }
         let live_out = liveness::live_out(&without_rc_on(f, &ignored));
+        let token_live = liveness::live_out(f);
+        let facts = OwnershipFacts::compute(f, interner);
+        let observes = crate::analysis::ownership::observes_ownership(f, interner, layouts, modref);
         let accepted: Vec<u32> = ready
             .iter()
             .copied()
             .filter(|&x| {
-                Check {
+                let accepted = Check {
+                    observes,
+                    token_live: &token_live,
                     f,
                     interner,
                     layouts,
@@ -108,26 +128,60 @@ pub(crate) fn run_function(
                     snap: pending[&x].snap,
                     class: &pending[&x].class,
                     ignored: &ignored,
+                    facts: &facts,
                 }
-                .holds(&live_out)
+                .holds(&live_out);
+                if !accepted {
+                    tracing::debug!(pass = STAGE, function = %f.name, local = x,
+                        decision = "rejected", reason = "owner-or-slot-not-covered");
+                }
+                accepted
             })
             .collect();
         let classes: Vec<BTreeSet<u32>> = accepted
             .iter()
             .map(|&x| pending[&x].class.clone())
             .collect();
+        if crate::verify::enabled() {
+            let current = candidates(f, interner, layouts);
+            for &x in &accepted {
+                let proof = proof::Proof::record(f, x, &pending[&x], &ignored);
+                let context = Check {
+                    token_live: &token_live,
+                    f,
+                    interner,
+                    layouts,
+                    modref,
+                    x,
+                    snap: pending[&x].snap,
+                    class: &pending[&x].class,
+                    ignored: &ignored,
+                    facts: &facts,
+                    observes,
+                };
+                assert!(
+                    proof.validate_with(&context, &live_out, &current),
+                    "invalid RC elision certificate"
+                );
+            }
+        }
         for x in &ready {
             pending.remove(x);
         }
         for class in &classes {
+            let mut removed = 0;
             for b in &mut f.blocks {
+                let before = b.stmts.len();
                 b.stmts
                     .retain(|s| rc_target(s).is_none_or(|l| !class.contains(&l)));
+                removed += before - b.stmts.len();
             }
             for &m in class {
                 f.locals[m as usize].is_cursor = true;
             }
             changed = true;
+            tracing::debug!(pass = STAGE, function = %f.name, operations = removed,
+                decision = "eliminated", reason = "covered-by-live-owner");
         }
     }
     changed
@@ -138,270 +192,6 @@ pub(crate) fn run_function(
 struct Candidate {
     snap: Snapshot,
     class: BTreeSet<u32>,
-}
-
-/// Owned RC locals whose every definition is a load through the same base and slot followed by
-/// its own `Retain`, with no other retain and no hand-off of the count by it or an alias.
-fn candidates(
-    f: &MirFunction,
-    interner: &TypeInterner,
-    layouts: &LayoutTable,
-) -> BTreeMap<u32, Candidate> {
-    let params: IndexSet<u32> = f.params.iter().map(|p| p.0).collect();
-    let eligible = |x: u32| {
-        let d = &f.locals[x as usize];
-        !params.contains(&x)
-            && !d.is_cursor
-            && interner.is_reference(d.ty)
-            && !interner.is_shared_type(d.ty)
-    };
-    let mut snaps: IndexMap<u32, Snapshot> = IndexMap::new();
-    let mut bad_snapshot: IndexSet<u32> = IndexSet::new();
-    let mut given_away: IndexSet<u32> = IndexSet::new();
-    let mut defs: IndexMap<u32, usize> = IndexMap::new();
-    let mut rc_ops: IndexMap<u32, (usize, usize)> = IndexMap::new();
-    // Local-to-local copies `dest = src` not followed by a retain of `dest`.
-    let mut alias_defs: IndexMap<u32, Vec<u32>> = IndexMap::new();
-    // `dest = move src` between locals: the count changes hands within the frame, so it only
-    // escapes when `dest` ends up outside the snapshot's class.
-    let mut local_moves: Vec<(u32, u32)> = Vec::new();
-    let mut other_defs: IndexSet<u32> = IndexSet::new();
-    let mut nonnull_defs = params.clone();
-    for block in &f.blocks {
-        for (si, stmt) in block.stmts.iter().enumerate() {
-            match stmt {
-                Statement::Assign(Place::Local(d), rv)
-                    if !matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) =>
-                {
-                    nonnull_defs.insert(d.0);
-                    let retained = retained_after(&block.stmts[si + 1..], d.0);
-                    // `d = s; ... s = null` with no release of `s` hands `s`'s count to `d`
-                    // even when `d` later retains again for some other use.
-                    if let Rvalue::Use(op) | Rvalue::Cast(op, _, _) = rv
-                        && let Some(s) = local_of(op).filter(|&s| s != d.0)
-                        && retained
-                        && nulled_after(&block.stmts[si + 1..], s)
-                    {
-                        local_moves.push((d.0, s));
-                    }
-                    match rv {
-                        Rvalue::Use(op) | Rvalue::Cast(op, _, _)
-                            if local_of(op).is_some_and(|s| s != d.0) && !retained =>
-                        {
-                            alias_defs
-                                .entry(d.0)
-                                .or_default()
-                                .push(local_of(op).expect("some"));
-                        }
-                        Rvalue::Move { src, .. } if src.0 != d.0 && !retained => {
-                            alias_defs.entry(d.0).or_default().push(src.0);
-                            local_moves.push((d.0, src.0));
-                        }
-                        Rvalue::UnionField { base, .. }
-                            if local_of(base).is_some_and(|s| {
-                                interner.is_niche_union(f.locals[s as usize].ty)
-                            }) && !retained =>
-                        {
-                            alias_defs
-                                .entry(d.0)
-                                .or_default()
-                                .push(local_of(base).expect("local"));
-                        }
-                        _ => {
-                            other_defs.insert(d.0);
-                        }
-                    }
-                    if eligible(d.0) {
-                        *defs.entry(d.0).or_default() += 1;
-                        let ok = retained
-                            && load_of(f, rv, layouts).is_some_and(|s| {
-                                s.base != d.0 && *snaps.entry(d.0).or_insert(s) == s
-                            });
-                        if !ok {
-                            bad_snapshot.insert(d.0);
-                        }
-                    }
-                }
-                Statement::Retain(Operand::Copy(Place::Local(l))) => {
-                    rc_ops.entry(l.0).or_default().0 += 1;
-                }
-                Statement::Release(Operand::Copy(Place::Local(l))) => {
-                    rc_ops.entry(l.0).or_default().1 += 1;
-                }
-                _ => {}
-            }
-            let alias_move = matches!(stmt, Statement::Assign(Place::Local(d), Rvalue::Move { src, .. })
-                if local_moves.last() == Some(&(d.0, src.0)));
-            if !alias_move {
-                for_each_given_away(stmt, |l| {
-                    given_away.insert(l);
-                });
-            }
-        }
-        if let Some(l) = terminator_hands_on(&block.terminator) {
-            given_away.insert(l);
-        }
-    }
-    let mut out = BTreeMap::new();
-    for (x, snap) in snaps {
-        if bad_snapshot.contains(&x) || rc_ops.get(&x).map(|r| r.0) != defs.get(&x).copied() {
-            continue;
-        }
-        // Copies of a parameter are interchangeable, so after copy propagation a retain of one
-        // copy can be the count another copy returns or sinks (`_c = p; retain _c; return p`).
-        if snap.slot == Slot::Param && param_handed_on(f, snap.base, &given_away) {
-            continue;
-        }
-        let mut class: BTreeSet<u32> = BTreeSet::from([x]);
-        let mut ok = true;
-        let mut grew = true;
-        while grew && ok {
-            grew = false;
-            for (&y, srcs) in &alias_defs {
-                if class.contains(&y) || !srcs.iter().any(|s| class.contains(s)) {
-                    continue;
-                }
-                // An alias that retained for itself holds a second count. A release with no
-                // retain is the snapshot's count, moved into the alias (`op = elem`).
-                let own_retain = rc_ops.get(&y).is_some_and(|r| r.0 != 0);
-                if params.contains(&y)
-                    || other_defs.contains(&y)
-                    || own_retain
-                    || !srcs
-                        .iter()
-                        .all(|s| class.contains(s) || !nonnull_defs.contains(s))
-                {
-                    ok = false;
-                    break;
-                }
-                class.insert(y);
-                grew = true;
-            }
-        }
-        let moved_out = local_moves
-            .iter()
-            .any(|(d, s)| class.contains(s) && !class.contains(d));
-        if ok && !moved_out && !class.iter().any(|m| given_away.contains(m)) {
-            out.insert(x, Candidate { snap, class });
-        }
-    }
-    out
-}
-
-/// Whether `p` or any local copied from it (transitively) gives a count away.
-fn param_handed_on(f: &MirFunction, p: u32, given_away: &IndexSet<u32>) -> bool {
-    let mut copies: IndexSet<u32> = IndexSet::from([p]);
-    let mut grew = true;
-    while grew {
-        grew = false;
-        for block in &f.blocks {
-            for stmt in &block.stmts {
-                let Statement::Assign(Place::Local(d), rv) = stmt else {
-                    continue;
-                };
-                let src = match rv {
-                    Rvalue::Use(op) | Rvalue::Cast(op, _, _) => local_of(op),
-                    Rvalue::Move { src, .. } => Some(src.0),
-                    _ => None,
-                };
-                if src.is_some_and(|s| copies.contains(&s)) && copies.insert(d.0) {
-                    grew = true;
-                }
-            }
-        }
-    }
-    copies.iter().any(|c| given_away.contains(c))
-}
-
-fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapshot> {
-    load_of_inner(f, rv, layouts, &mut IndexSet::new())
-}
-
-fn load_of_inner(
-    f: &MirFunction,
-    rv: &Rvalue,
-    layouts: &LayoutTable,
-    seen: &mut IndexSet<u32>,
-) -> Option<Snapshot> {
-    match rv {
-        Rvalue::Use(Operand::Copy(Place::Field { base, field })) => {
-            let ty = f.local_ty(*base);
-            let fl = layouts.get(ty)?.fields.get(*field)?;
-            if fl.is_weak || fl.is_unowned {
-                return None;
-            }
-            if f.locals[base.0 as usize].is_ref {
-                let mut array = None;
-                for s in f.blocks.iter().flat_map(|b| &b.stmts) {
-                    if let Statement::Assign(Place::Local(d), rv) = s
-                        && d == base
-                    {
-                        let Rvalue::Use(Operand::Copy(Place::Index { base: a, .. })) = rv else {
-                            return None;
-                        };
-                        if array.is_some_and(|old| old != a.0) {
-                            return None;
-                        }
-                        array = Some(a.0);
-                    }
-                }
-                let array = array?;
-                return Some(Snapshot {
-                    base: array,
-                    slot: Slot::ElemField(f.locals[array as usize].ty, *field as u32),
-                });
-            }
-            Some(Snapshot {
-                base: base.0,
-                slot: Slot::Field(ty, *field as u32),
-            })
-        }
-        Rvalue::Use(Operand::Copy(Place::Index { base, .. })) => Some(Snapshot {
-            base: base.0,
-            slot: Slot::Elem(f.local_ty(*base)),
-        }),
-        Rvalue::UnionField {
-            base: Operand::Copy(Place::Local(b)),
-            ..
-        } => Some(Snapshot {
-            base: b.0,
-            slot: Slot::Payload,
-        }),
-        Rvalue::Use(Operand::Copy(Place::Local(p)))
-            if f.params.contains(p)
-                && !f.locals[p.0 as usize].is_take
-                && !f.locals[p.0 as usize].is_ref =>
-        {
-            Some(Snapshot {
-                base: p.0,
-                slot: Slot::Param,
-            })
-        }
-        Rvalue::Use(Operand::Copy(Place::Local(p)))
-            if f.locals[p.0 as usize].is_cursor && seen.insert(p.0) =>
-        {
-            let mut snapshot = None;
-            for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
-                if let Statement::Assign(Place::Local(d), rv) = stmt
-                    && d == p
-                    && !matches!(rv, Rvalue::Use(Operand::Const(Const::Null)))
-                {
-                    let next = load_of_inner(f, rv, layouts, &mut seen.clone())?;
-                    // Field and element snapshots can outlive the slot contents they loaded.
-                    // Only a caller-pinned parameter survives forwarding without a time proof.
-                    if next.slot != Slot::Param {
-                        return None;
-                    }
-                    if snapshot.is_some_and(|prior| prior != next) {
-                        return None;
-                    }
-                    snapshot = Some(next);
-                }
-            }
-            snapshot
-        }
-        _ => None,
-    }
 }
 
 /// `Retain(x)` follows the definition before anything else touches `x`.
@@ -443,6 +233,13 @@ fn rc_target(s: &Statement) -> Option<u32> {
 fn local_of(op: &Operand) -> Option<u32> {
     match op {
         Operand::Copy(Place::Local(l)) => Some(l.0),
+        _ => None,
+    }
+}
+
+fn constant_index(op: &Operand) -> Option<i64> {
+    match op {
+        Operand::Const(Const::Int(n)) => Some(*n),
         _ => None,
     }
 }
@@ -508,292 +305,4 @@ fn without_rc_on(f: &MirFunction, locals: &IndexSet<u32>) -> MirFunction {
             .retain(|s| !rc_target(s).is_some_and(|l| locals.contains(&l)));
     }
     g
-}
-
-struct Check<'a> {
-    f: &'a MirFunction,
-    interner: &'a TypeInterner,
-    layouts: &'a LayoutTable,
-    modref: &'a ModRefTable,
-    x: u32,
-    snap: Snapshot,
-    class: &'a BTreeSet<u32>,
-    /// Pending snapshots, whose RC ops do not count as reads.
-    ignored: &'a IndexSet<u32>,
-}
-
-impl Check<'_> {
-    fn holds(&self, live_out: &[IndexSet<u32>]) -> bool {
-        let base = self.snap.base;
-        let pinned =
-            self.f.params.iter().any(|p| p.0 == base) && !self.f.locals[base as usize].is_take;
-        let pins = self.owner_pins();
-        let owner_pinned = pins.iter().any(|&owner| {
-            self.f.params.iter().any(|p| p.0 == owner) && !self.f.locals[owner as usize].is_take
-        });
-        let base_ok = |live: &IndexSet<u32>| {
-            !self.class.iter().any(|m| live.contains(m))
-                || pinned
-                || live.contains(&base)
-                || owner_pinned
-                || pins.iter().any(|owner| live.contains(owner))
-        };
-        for (bi, block) in self.f.blocks.iter().enumerate() {
-            let mut live = live_out[bi].clone();
-            if !base_ok(&live) {
-                return false;
-            }
-            add_terminator_reads(&block.terminator, &mut live);
-            if !base_ok(&live) {
-                return false;
-            }
-            for stmt in block.stmts.iter().rev() {
-                let ignored_rc = rc_target(stmt).is_some_and(|l| self.ignored.contains(&l));
-                let in_flight = self.class.iter().any(|&m| {
-                    live.contains(&m) || (!ignored_rc && super::stmt_reads_local(stmt, m))
-                });
-                if in_flight && !self.stmt_ok(stmt) {
-                    return false;
-                }
-                if !ignored_rc {
-                    transfer_stmt(stmt, &mut live);
-                }
-                if !base_ok(&live) {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-
-    /// `stmt` runs while `x` is in use.
-    fn stmt_ok(&self, stmt: &Statement) -> bool {
-        let base = self.snap.base;
-        let pins = self.owner_pins();
-        let mut base_given = false;
-        for_each_given_away(stmt, |l| base_given |= l == base || pins.contains(&l));
-        let base_dropped = match stmt {
-            // Reloading the array pointer from the same field does not free the buffer.
-            Statement::Assign(Place::Local(d), rv) if d.0 == base => {
-                !self.field_pin().is_some_and(|(owner, field)| {
-                    matches!(
-                        rv,
-                        Rvalue::Use(Operand::Copy(Place::Field { base: o, field: f }))
-                            if o.0 == owner && *f as u32 == field
-                    )
-                })
-            }
-            Statement::Assign(Place::Local(d), _) => pins.contains(&d.0),
-            Statement::Release(op) => local_of(op).is_some_and(|l| l == base || pins.contains(&l)),
-            Statement::ValueDrop(l) | Statement::ValueKill(l) => l.0 == base || pins.contains(&l.0),
-            _ => false,
-        };
-        if base_given || base_dropped || matches!(stmt, Statement::RegionLeave) {
-            return false;
-        }
-        let may_del = |l: u32| {
-            self.modref
-                .may_run_del(self.f.locals[l as usize].ty, self.interner, self.layouts)
-        };
-        let drops = match stmt {
-            Statement::Release(op) => local_of(op).is_none_or(|l| l != self.x && may_del(l)),
-            Statement::ValueDrop(l) => may_del(l.0),
-            Statement::DeferLeave(_) => true,
-            _ => false,
-        };
-        if drops && self.summary_hits(self.modref.del()) {
-            return false;
-        }
-        let mut ok = true;
-        stmt_effects(stmt, self.f, self.interner, |e| {
-            ok &= match e {
-                Effect::None | Effect::GlobalStore(_) => true,
-                Effect::Top | Effect::ObserveOwnership => false,
-                Effect::Store(b, field) => {
-                    self.snap.slot != Slot::Field(self.f.local_ty(b), field)
-                        && !matches!(self.snap.slot, Slot::ElemField(arr, f)
-                            if self.interner.kind(arr) == &TyKind::Array(self.f.local_ty(b)) && f == field)
-                        && !self.pin_fields().contains(&(self.f.local_ty(b), field))
-                }
-                Effect::SlotStore(ty) => !self.hits_elem(ty),
-                Effect::Call(c) => !self.call_hits(&self.modref.call(c)),
-                Effect::Iface(id, slot) => !self.call_hits(&self.modref.iface(id, slot)),
-                Effect::Ctor(def) => !self.call_hits(&self.modref.ctor(def)),
-            };
-        });
-        ok
-    }
-
-    fn call_hits(&self, summary: &ModRef) -> bool {
-        // Unrelated destructors cannot invalidate a snapshot across a call with no cleanup.
-        self.summary_hits(summary)
-            || (summary.may_destroy() && self.summary_hits(self.modref.del()))
-    }
-
-    /// The field-load owner and every local it is copied from. Any one of them being live keeps
-    /// the object alive; the immediate owner is often dead at a block edge that only forwards
-    /// the loaded element.
-    fn owner_pins(&self) -> Vec<u32> {
-        let Some((owner, _)) = self.field_pin() else {
-            return Vec::new();
-        };
-        let mut out = vec![owner];
-        let mut cur = owner;
-        for _ in 0..self.f.locals.len() {
-            let Some((src, _)) = self.owner_source(cur) else {
-                break;
-            };
-            if out.contains(&src) {
-                break;
-            }
-            out.push(src);
-            cur = src;
-        }
-        out
-    }
-
-    fn copy_src(&self, local: u32) -> Option<u32> {
-        let mut src = None;
-        let mut saw = false;
-        for block in &self.f.blocks {
-            for stmt in &block.stmts {
-                let Statement::Assign(Place::Local(d), rv) = stmt else {
-                    continue;
-                };
-                if d.0 != local || matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
-                    continue;
-                }
-                let Rvalue::Use(Operand::Copy(Place::Local(s))) = rv else {
-                    return None;
-                };
-                if src.is_some_and(|p| p != s.0) {
-                    return None;
-                }
-                src = Some(s.0);
-                saw = true;
-            }
-        }
-        if saw { src } else { None }
-    }
-
-    fn owner_source(&self, local: u32) -> Option<(u32, Option<u32>)> {
-        if let Some(src) = self.copy_src(local) {
-            return Some((src, None));
-        }
-        if !self.f.locals[local as usize].is_cursor {
-            return None;
-        }
-        let mut source = None;
-        for stmt in self.f.blocks.iter().flat_map(|b| &b.stmts) {
-            if let Statement::Assign(Place::Local(d), rv) = stmt
-                && d.0 == local
-                && !matches!(rv, Rvalue::Use(Operand::Const(Const::Null)))
-            {
-                let Rvalue::Use(Operand::Copy(Place::Field { base, field })) = rv else {
-                    return None;
-                };
-                if !self.interner.is_reference(self.f.local_ty(*base)) {
-                    return None;
-                }
-                let layout = self
-                    .layouts
-                    .get(self.f.local_ty(*base))?
-                    .fields
-                    .get(*field)?;
-                if layout.is_weak || layout.is_unowned {
-                    return None;
-                }
-                let next = (base.0, Some(*field as u32));
-                if source.is_some_and(|prior| prior != next) {
-                    return None;
-                }
-                source = Some(next);
-            }
-        }
-        source
-    }
-
-    fn pin_fields(&self) -> Vec<(TypeId, u32)> {
-        let mut fields = Vec::new();
-        if let Some((owner, field)) = self.field_pin() {
-            fields.push((self.f.locals[owner as usize].ty, field));
-        }
-        for owner in self.owner_pins() {
-            if let Some((base, Some(field))) = self.owner_source(owner) {
-                fields.push((self.f.locals[base as usize].ty, field));
-            }
-        }
-        fields
-    }
-
-    /// Array pointer loaded only from one field of one object. The element stays alive while
-    /// that object does, even when the pointer local itself is dead between reloads.
-    fn field_pin(&self) -> Option<(u32, u32)> {
-        if !matches!(self.snap.slot, Slot::Elem(_) | Slot::ElemField(..)) {
-            return None;
-        }
-        let base = self.snap.base;
-        let mut pin: Option<(u32, u32)> = None;
-        let mut saw = false;
-        for block in &self.f.blocks {
-            for stmt in &block.stmts {
-                let Statement::Assign(Place::Local(d), rv) = stmt else {
-                    continue;
-                };
-                if d.0 != base {
-                    continue;
-                }
-                if matches!(rv, Rvalue::Use(Operand::Const(Const::Null))) {
-                    continue;
-                }
-                let Rvalue::Use(Operand::Copy(Place::Field { base: owner, field })) = rv else {
-                    return None;
-                };
-                let pair = (owner.0, *field as u32);
-                if pin.is_some_and(|p| p != pair) {
-                    return None;
-                }
-                pin = Some(pair);
-                saw = true;
-            }
-        }
-        if saw { pin } else { None }
-    }
-
-    fn hits_elem(&self, elem: TypeId) -> bool {
-        match self.snap.slot {
-            Slot::Elem(arr) | Slot::ElemField(arr, _) => match self.interner.kind(arr) {
-                TyKind::Array(e) => *e == elem,
-                _ => true,
-            },
-            _ => false,
-        }
-    }
-
-    fn summary_hits(&self, m: &ModRef) -> bool {
-        let ModRef::Known(k) = m else {
-            return true;
-        };
-        if k.observes_rc {
-            return true;
-        }
-        if self
-            .pin_fields()
-            .iter()
-            .any(|field| k.fields.contains(field))
-        {
-            return true;
-        }
-        match self.snap.slot {
-            Slot::Field(ty, field) => k.fields.contains(&(ty, field)),
-            Slot::Elem(_) => k.any_slot || k.slots.iter().any(|&t| self.hits_elem(t)),
-            Slot::ElemField(arr, field) => {
-                k.any_slot
-                    || k.slots.iter().any(|&t| self.hits_elem(t))
-                    || matches!(self.interner.kind(arr), TyKind::Array(elem)
-                        if k.fields.contains(&(*elem, field)))
-            }
-            Slot::Payload | Slot::Param => false,
-        }
-    }
 }

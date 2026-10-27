@@ -71,7 +71,7 @@ impl ModRefTable {
         for (index, node) in nodes.iter().enumerate() {
             let mut depend_on = |edge: &Edge| {
                 let target = match edge {
-                    Edge::Call(def, args) => functions.get(&(*def, args.as_slice())),
+                    Edge::Call(def, args, _) => functions.get(&(*def, args.as_slice())),
                     Edge::Ctor(def) => constructors.get(def),
                     Edge::Iface(id, slot) => interfaces.get(&(*id, *slot)),
                 };
@@ -108,9 +108,54 @@ impl ModRefTable {
         let mut queue: VecDeque<_> = (0..nodes.len()).collect();
         let mut evaluations = 0;
         let mut updates = 0;
+        let mut ownership = vec![(false, false); nodes.len()];
         while let Some(index) = queue.pop_front() {
             evaluations += 1;
             queued[index] = false;
+            let join = |a: (bool, bool), b: (bool, bool)| (a.0 || b.0, a.1 || b.1);
+            let ownership_edge = |edge: &Edge| {
+                let target = match edge {
+                    Edge::Call(def, args, _) => functions.get(&(*def, args.as_slice())),
+                    Edge::Ctor(def) => constructors.get(def),
+                    Edge::Iface(id, slot) => interfaces.get(&(*id, *slot)),
+                };
+                target.map_or_else(
+                    || match edge {
+                        Edge::Call(def, args, _) => match self.call_def(*def, args) {
+                            ModRef::Known(k) => (k.observes_rc, k.may_destroy),
+                            _ => (true, true),
+                        },
+                        _ => (true, true),
+                    },
+                    |&target| ownership[target],
+                )
+            };
+            let ownership_body = |f: usize| {
+                let own = (
+                    locals[f].observes_rc
+                        || matches!(&locals[f].own, ModRef::Known(k) if k.observes_rc),
+                    locals[f].may_destroy,
+                );
+                locals[f].edges.iter().map(ownership_edge).fold(own, join)
+            };
+            let next = match &nodes[index] {
+                Node::Function(f) => ownership_body(*f),
+                Node::Constructor(_, fs) => fs
+                    .iter()
+                    .map(|&f| ownership_body(f))
+                    .fold((false, false), join),
+                Node::Interface(_, _, targets) => {
+                    targets.as_ref().map_or((true, true), |targets| {
+                        targets
+                            .iter()
+                            .map(|&target| ownership[target])
+                            .fold((false, false), join)
+                    })
+                }
+            };
+            let next = join(ownership[index], next);
+            let observation_changed = next != ownership[index];
+            ownership[index] = next;
             let changed = match &nodes[index] {
                 Node::Function(f) => {
                     let summary = self.summarize(&locals[*f], false);
@@ -149,7 +194,7 @@ impl ModRefTable {
                         .join(&summary)
                 }
             };
-            if changed {
+            if changed || observation_changed {
                 updates += 1;
                 for &user in &users[index] {
                     if !queued[user] {
@@ -159,6 +204,18 @@ impl ModRefTable {
                 }
             }
         }
+        self.observers = mir
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(index, f)| ((f.def, f.instance.clone()), ownership[index].0))
+            .collect();
+        self.cleanup = mir
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(index, f)| ((f.def, f.instance.clone()), ownership[index].1))
+            .collect();
         tracing::info!(
             nodes = nodes.len(),
             evaluations,
@@ -176,9 +233,9 @@ impl ModRefTable {
         };
         for edge in &local.edges {
             summary.join(&match edge {
-                Edge::Call(def, args) => self.call_def(*def, args),
-                Edge::Ctor(def) => self.ctor(*def),
-                Edge::Iface(id, slot) => self.iface(*id, *slot),
+                Edge::Call(def, args, parameters) => self.call_def(*def, args).mapped(parameters),
+                Edge::Ctor(def) => self.ctor(*def).mapped(&[]),
+                Edge::Iface(id, slot) => self.iface(*id, *slot).mapped(&[]),
             });
         }
         summary

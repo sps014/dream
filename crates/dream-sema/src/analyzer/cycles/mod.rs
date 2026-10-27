@@ -101,6 +101,7 @@ fn only_inspects(op: dream_abi::intrinsics::IntrinsicOp) -> bool {
     matches!(
         op,
         Op::DebugRefCount
+            | Op::CollectionOwnerCount
             | Op::DebugFreeList
             | Op::DebugHeapPtr
             | Op::DebugLiveObjects

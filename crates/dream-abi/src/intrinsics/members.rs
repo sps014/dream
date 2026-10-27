@@ -62,6 +62,7 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("DebugGetLiveObjects", "debug_get_live_objects"),
     ("DebugGetTotalAllocations", "debug_get_total_allocations"),
     ("DebugGetRefCount", "debug_get_ref_count"),
+    ("CollectionOwnerCount", "collection_owner_count"),
     ("DebugGetRuntimeCounter", "debug_get_runtime_counter"),
     ("ToBytes", "to_bytes"),
     ("FromBytes", "from_bytes"),

@@ -2,7 +2,7 @@
 //! Local value copies can borrow those references even across iterator envelopes.
 
 use crate::analysis::effects::{Effect, ModRef, ModRefTable, stmt_effects};
-use crate::analysis::escape::{LocalEscape, ParamSummaries};
+use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::{Const, Local, Mir, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_abi::names::THIS_NAME;
 use dream_hir::LayoutTable;
@@ -90,13 +90,22 @@ fn function(
         {
             let def = definitions.entry(*d).or_insert((0, true));
             def.0 += 1;
-            def.1 &= matches!(rv, Rvalue::New { ctor: None, .. });
+            def.1 &= matches!(
+                rv,
+                Rvalue::New { ctor: None, .. }
+                    | Rvalue::ArrayNew {
+                        closure_env: false,
+                        ..
+                    }
+                    | Rvalue::ArrayLit { .. }
+            );
         }
     }
     let fresh: BTreeSet<_> = definitions
         .into_iter()
         .filter_map(|(l, (n, new))| (n == 1 && new).then_some(l))
         .collect();
+    let private = LocalEscape::analyze(f, i, &ParamSummaries::default());
     let managed_field = |ty: TypeId, index: usize| {
         layouts
             .get(ty)
@@ -108,9 +117,13 @@ fn function(
             !k.observes_rc
                 && !k.any_slot
                 && k.slots.is_empty()
-                && k.fields
-                    .iter()
-                    .all(|&(ty, field)| !i.is_value_type(ty) && !managed_field(ty, field as usize))
+                && (!k.may_destroy || effects.del().is_quiet())
+                && k.fields.iter().all(|&(ty, field)| {
+                    k.field_params
+                        .get(&(ty, field))
+                        .is_some_and(|roots| roots.as_ref().is_some_and(BTreeSet::is_empty))
+                        || (!i.is_value_type(ty) && !managed_field(ty, field as usize))
+                })
         }
         ModRef::Top => false,
     };
@@ -127,18 +140,20 @@ fn function(
                 Effect::Call(c) => {
                     !ref_calls.contains(&(c.def, c.args.clone())) && quiet(&effects.call(c))
                 }
+                Effect::SlotStore(_) => matches!(s,
+                    Statement::Assign(Place::Index { base, .. }, _)
+                        if fresh.contains(base) && private.of(*base) == Escape::No),
                 Effect::Ctor(d) => quiet(&effects.ctor(d)),
                 Effect::Iface(..)
                 | Effect::Top
                 | Effect::ObserveOwnership
-                | Effect::SlotStore(_)
                 | Effect::GlobalStore(_) => false,
             }
         });
         if !ok {
             return false;
         }
-        if matches!(s, Statement::Release(_) | Statement::ValueDrop(_)) && !quiet(effects.del()) {
+        if effects.statement_may_destroy(f, s, i, layouts) && !quiet(effects.del()) {
             return false;
         }
     }

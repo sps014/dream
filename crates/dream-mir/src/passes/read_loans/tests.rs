@@ -1,7 +1,7 @@
 use super::*;
 use crate::build::FunctionBuilder;
 use dream_hir::{FieldLayout, TypeLayout};
-use dream_types::{DefKind, TypeCtx};
+use dream_types::{DefId, DefKind, TypeCtx};
 
 fn fixture(take: bool, mutation: bool, escape: bool, observe: bool) -> (Mir, TypeInterner) {
     let mut ctx = TypeCtx::new();
@@ -125,6 +125,90 @@ fn owning_mutated_escaping_and_observed_records_keep_their_tokens() {
                 .any(|s| matches!(s, Statement::ValueDrop(_)))
         );
     }
+}
+
+#[test]
+fn private_array_mutation_does_not_disable_an_unrelated_record_loan() {
+    let (mut mir, mut types) = fixture(false, false, false, false);
+    let array = types.array(types.string());
+    let f = &mut mir.functions[0];
+    let scratch = Local(f.locals.len() as u32);
+    let mut decl = f.locals[0].clone();
+    decl.ty = array;
+    f.locals.push(decl);
+    f.blocks[0].stmts.splice(
+        0..0,
+        [
+            Statement::Assign(
+                Place::Local(scratch),
+                Rvalue::ArrayLit {
+                    elem_ty: types.string(),
+                    elems: vec![Operand::Const(Const::Str("scratch".into()))],
+                },
+            ),
+            Statement::Assign(
+                Place::index(scratch, Operand::Const(Const::Int(0))),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            ),
+        ],
+    );
+    f.blocks[0]
+        .stmts
+        .push(Statement::Release(Operand::Copy(Place::Local(scratch))));
+    assert!(run(&mut mir, &types));
+    assert!(mir.functions[0].locals[1].borrows_refs);
+}
+
+#[test]
+fn a_helper_mutating_only_its_fresh_objects_preserves_record_loans() {
+    let (mut mir, mut types) = fixture(false, false, false, false);
+    let boxed_def = DefId::root(480);
+    let boxed = types.struct_ty(boxed_def, vec![]);
+    mir.layouts.insert(
+        boxed,
+        TypeLayout::from_fields(
+            &types,
+            "Scratch",
+            [("text".into(), types.string(), false, false)],
+        ),
+    );
+    let mut b = FunctionBuilder::new("private_work", types.void());
+    b.set_def(DefId::root(481), vec![]);
+    let object = b.new_local(boxed, None);
+    b.assign(
+        Place::Local(object),
+        Rvalue::New {
+            def: boxed_def,
+            ty: boxed,
+            ctor: None,
+            args: vec![],
+        },
+    );
+    b.assign(
+        Place::Field {
+            base: object,
+            field: 0,
+        },
+        Rvalue::Use(Operand::Const(Const::Str("scratch".into()))),
+    );
+    b.push(Statement::Release(Operand::Copy(Place::Local(object))));
+    b.terminate(Terminator::Return(None));
+    mir.functions.push(b.finish());
+    mir.functions[0].blocks[0].stmts.insert(
+        0,
+        Statement::Call {
+            callee: crate::Callee {
+                def: DefId::root(481),
+                args: vec![],
+                ret: types.void(),
+                take_params: vec![],
+                borrowed_result: false,
+            },
+            args: vec![],
+        },
+    );
+    assert!(run(&mut mir, &types));
+    assert!(mir.functions[0].locals[1].borrows_refs);
 }
 
 #[test]

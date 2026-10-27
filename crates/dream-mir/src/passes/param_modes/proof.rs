@@ -20,8 +20,8 @@ fn scalar(ty: TypeId, i: &TypeInterner) -> bool {
         || matches!(i.kind(ty), TyKind::Prim(_)) && !i.is_rc_tracked(ty)
 }
 
-// Removing a count must not alter a user destructor or weak/unowned observation, even when
-// the argument's last use is the call. Recursive layouts stay outside this finite proof.
+// A repeated layout closes an edge in the finite strong-field graph. Every node still
+// checks its own observer/destructor restrictions before the DFS completes.
 fn transparent(
     ty: TypeId,
     i: &TypeInterner,
@@ -31,8 +31,11 @@ fn transparent(
     if scalar(ty, i) || ty == i.string() {
         return true;
     }
-    if !visiting.insert(ty) {
+    if i.is_shared_type(ty) {
         return false;
+    }
+    if !visiting.insert(ty) {
+        return true;
     }
     let yes = match i.kind(ty) {
         TyKind::Array(elem) => transparent(*elem, i, layouts, visiting),
@@ -44,13 +47,22 @@ fn transparent(
                         && transparent(field.ty, i, layouts, visiting)
                 })
         }),
+        TyKind::Tuple(fields) => fields.iter().all(|&t| transparent(t, i, layouts, visiting)),
+        TyKind::Union(..) => layouts.union(ty).is_some_and(|l| {
+            !l.has_destructor()
+                && l.variants.iter().flat_map(|v| &v.fields).all(|field| {
+                    !field.is_weak
+                        && !field.is_unowned
+                        && transparent(field.ty, i, layouts, visiting)
+                })
+        }),
         _ => false,
     };
     visiting.shift_remove(&ty);
     yes
 }
 
-fn roots(
+pub(super) fn roots(
     op: &Operand,
     aliases: &[IndexSet<usize>],
     f: &MirFunction,
@@ -83,20 +95,39 @@ fn roots(
     }
 }
 
-fn sources(
+pub(super) fn sources(
     rv: &Rvalue,
     aliases: &[IndexSet<usize>],
     f: &MirFunction,
     i: &TypeInterner,
     layouts: &LayoutTable,
+    returns: &super::aliases::ReturnSummaries,
 ) -> IndexSet<usize> {
     let ops: Vec<_> = match rv {
         Rvalue::Use(op) | Rvalue::Cast(op, ..) => vec![op],
         Rvalue::Select {
             then_val, else_val, ..
         } => vec![then_val, else_val],
-        // A managed call result may alias any argument. Scalar results carry no ownership.
-        Rvalue::Call { args, .. } => args.iter().collect(),
+        // Closed return summaries select the contributing arguments; missing bodies
+        // preserve every possible dependency. Scalar results carry no ownership.
+        Rvalue::Call { callee, args } => args
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                returns
+                    .get(&super::key(callee))
+                    .is_none_or(|roots| roots.contains(index))
+            })
+            .map(|(_, op)| op)
+            .collect(),
+        Rvalue::New { args, .. }
+        | Rvalue::UnionNew { args, .. }
+        | Rvalue::ArrayLit { elems: args, .. }
+        | Rvalue::Tuple { elems: args, .. } => args.iter().collect(),
+        Rvalue::Concat(args) => args.iter().collect(),
+        Rvalue::ConcatInt { prefix, suffix, .. } => vec![prefix, suffix],
+        Rvalue::ToString(op) => vec![op],
+        Rvalue::UnionField { base, .. } => vec![base],
         _ => vec![],
     };
     ops.into_iter()
@@ -107,6 +138,11 @@ fn sources(
 fn permitted(stmt: &Statement, f: &MirFunction, i: &TypeInterner, layouts: &LayoutTable) -> bool {
     match stmt {
         Statement::Assign(place, rv) => {
+            if let Rvalue::New { ty, .. } = rv
+                && !transparent(*ty, i, layouts, &mut IndexSet::new())
+            {
+                return false;
+            }
             let store = match place {
                 Place::Local(_) => true,
                 Place::Index { base, .. } => {
@@ -143,8 +179,21 @@ fn permitted(stmt: &Statement, f: &MirFunction, i: &TypeInterner, layouts: &Layo
                             closure_env: false,
                             ..
                         }
+                        | Rvalue::New { ctor: None, .. }
+                        | Rvalue::UnionNew { .. }
+                        | Rvalue::UnionField { .. }
+                        | Rvalue::Tuple { .. }
+                        | Rvalue::ArrayLit { .. }
+                        | Rvalue::Concat(_)
+                        | Rvalue::ConcatInt { .. }
+                        | Rvalue::ToString(_)
+                        | Rvalue::HashCode(_)
+                        | Rvalue::IsType(..)
+                        | Rvalue::TypeName(_)
+                        | Rvalue::Discriminant { .. }
                 )
         }
+        Statement::Print { ty, .. } => matches!(i.kind(*ty), TyKind::Prim(_)),
         Statement::Call { .. } | Statement::Nop | Statement::SourceLine(_) => true,
         _ => false,
     }
@@ -176,11 +225,10 @@ impl Proof {
         i: &TypeInterner,
         layouts: &LayoutTable,
         effects: &ModRefTable,
+        returns: &super::aliases::ReturnSummaries,
     ) -> Self {
         let safe = !f.is_async
-            && f.locals
-                .iter()
-                .all(|d| !d.is_ref && transparent(d.ty, i, layouts, &mut IndexSet::new()))
+            && f.locals.iter().all(|d| !d.is_ref)
             && f.blocks.iter().all(|b| {
                 b.stmts.iter().all(|s| permitted(s, f, i, layouts))
                     && matches!(
@@ -195,40 +243,26 @@ impl Proof {
         let mut parameters: Vec<_> = f
             .params
             .iter()
-            .map(|p| safe && !scalar(f.local_ty(*p), i))
+            .map(|p| {
+                safe && !scalar(f.local_ty(*p), i)
+                    && transparent(f.local_ty(*p), i, layouts, &mut IndexSet::new())
+            })
             .collect();
-        if !safe {
+        if !safe || !parameters.iter().any(|&yes| yes) {
             return Self {
                 safe,
                 parameters,
                 calls: Vec::new(),
             };
         }
-        let mut aliases = vec![IndexSet::new(); f.locals.len()];
-        for (index, p) in f.params.iter().enumerate() {
-            aliases[p.0 as usize].insert(index);
-        }
-        // Union over every reaching assignment handles joins, loops and backedges. Keeping killed
-        // aliases is conservative: it can reject an optimization but cannot hide an escape.
-        loop {
-            let mut changed = false;
-            for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
-                if let Statement::Assign(Place::Local(dst), rv) = stmt
-                    && !scalar(f.local_ty(*dst), i)
-                {
-                    let incoming = sources(rv, &aliases, f, i, layouts);
-                    let before = aliases[dst.0 as usize].len();
-                    aliases[dst.0 as usize].extend(incoming);
-                    changed |= aliases[dst.0 as usize].len() != before;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
+        let states = super::aliases::compute(f, i, layouts, returns);
         // Releasing an overwritten occupant can invalidate an argument of its type, or any
         // reference reachable through it. Missing summaries keep the owning ABI.
         let summary = effects.call_def(f.def, &f.instance);
+        let cleanup_safe = !summary.may_destroy() || effects.del().is_quiet();
+        if !cleanup_safe {
+            parameters.fill(false);
+        }
         let released: Option<Vec<TypeId>> = match &summary {
             ModRef::Top => None,
             ModRef::Known(known) if known.any_slot => None,
@@ -255,7 +289,8 @@ impl Proof {
             }
         }
         let mut calls = Vec::new();
-        for block in &f.blocks {
+        for (bi, block) in f.blocks.iter().enumerate() {
+            let mut aliases = states[bi].clone();
             for stmt in &block.stmts {
                 if let Statement::Assign(Place::Local(dst), _) = stmt
                     && let Some(index) = f.params.iter().position(|p| p == dst)
@@ -264,7 +299,7 @@ impl Proof {
                     parameters[index] = false;
                 }
                 if let Statement::Assign(Place::Field { .. } | Place::Index { .. }, rv) = stmt {
-                    for index in sources(rv, &aliases, f, i, layouts) {
+                    for index in sources(rv, &aliases, f, i, layouts, returns) {
                         parameters[index] = false;
                     }
                 }
@@ -281,6 +316,9 @@ impl Proof {
                             .map(|op| roots(op, &aliases, f, i, layouts))
                             .collect(),
                     });
+                }
+                if let Statement::Assign(Place::Local(dst), rv) = stmt {
+                    aliases[dst.0 as usize] = sources(rv, &aliases, f, i, layouts, returns);
                 }
             }
             if let Terminator::Return(Some(op)) = &block.terminator {

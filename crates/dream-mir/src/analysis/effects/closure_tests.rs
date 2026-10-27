@@ -43,9 +43,11 @@ fn rescan(table: &mut ModRefTable, mir: &Mir, locals: &[LocalSummary]) {
             let mut fresh = local.own_fresh.clone();
             for edge in &local.edges {
                 let effect = match edge {
-                    Edge::Call(def, args) => table.call_def(*def, args),
-                    Edge::Ctor(def) => table.ctor(*def),
-                    Edge::Iface(id, slot) => table.iface(*id, *slot),
+                    Edge::Call(def, args, parameters) => {
+                        table.call_def(*def, args).mapped(parameters)
+                    }
+                    Edge::Ctor(def) => table.ctor(*def).mapped(&[]),
+                    Edge::Iface(id, slot) => table.iface(*id, *slot).mapped(&[]),
                 };
                 normal.join(&effect);
                 fresh.join(&effect);
@@ -126,11 +128,13 @@ fn dependency_closure_matches_rescans_on_recursive_and_erased_graphs() {
                 edges.push(match next() % 4 {
                     0 => Edge::Iface(next() % 2, next() % 4),
                     1 => Edge::Ctor(target.def),
-                    2 => Edge::Call(DefId::root(100), vec![]),
-                    _ => Edge::Call(target.def, target.instance.clone()),
+                    2 => Edge::Call(DefId::root(100), vec![], vec![]),
+                    _ => Edge::Call(target.def, target.instance.clone(), vec![]),
                 });
             }
             locals.push(LocalSummary {
+                observes_rc: false,
+                may_destroy: false,
                 own: ModRef::Known(known),
                 own_fresh: ModRef::default(),
                 edges,
@@ -161,9 +165,11 @@ fn reversed_call_chains_require_linear_summary_evaluations() {
                 known.fields.insert((ctx.interner.object(), 0));
                 vec![]
             } else {
-                vec![Edge::Call(DefId::root((index + 1) as u32), vec![])]
+                vec![Edge::Call(DefId::root((index + 1) as u32), vec![], vec![])]
             };
             locals.push(LocalSummary {
+                observes_rc: false,
+                may_destroy: false,
                 own: ModRef::Known(known),
                 own_fresh: ModRef::default(),
                 edges,

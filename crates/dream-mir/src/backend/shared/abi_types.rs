@@ -319,6 +319,9 @@ pub(crate) fn array_elem_ty(interner: &TypeInterner, arr_ty: TypeId) -> TypeId {
 
 pub(crate) fn runtime_c_name(sym: &str) -> String {
     match sym {
+        dream_abi::intrinsics::ATTR_COLLECTION_OWNER_COUNT => {
+            dream_abi::intrinsics::ATTR_DEBUG_REF_COUNT.into()
+        }
         "string_alloc" => "dream_string_alloc".into(),
         dream_abi::intrinsics::ATTR_STRING_SUBSTRING => "dream_substring".into(),
         dream_abi::intrinsics::ATTR_STRING_BUILDER_BUFFER => "dream_sb_buffer".into(),

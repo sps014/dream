@@ -31,6 +31,7 @@ const MODULE_STAGES: &[&str] = &[
     "inline",
     "unique-region",
     super::rc::held::STAGE,
+    "rc-proven-elision",
     "sroa-managed",
     super::slice_measure::STAGE,
     STAGE_FIXPOINT,

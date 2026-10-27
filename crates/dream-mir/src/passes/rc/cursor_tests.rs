@@ -622,6 +622,11 @@ fn index_store_escapes_load_through_copy() {
         },
         Rvalue::Use(Operand::Copy(Place::Local(w))),
     );
+    let used = b.new_temp(ctx.interner.bool());
+    b.assign(
+        Place::Local(used),
+        Rvalue::IsType(Operand::Copy(Place::Local(x)), wty),
+    );
     b.terminate(Terminator::Return(None));
     let mut func = b.finish();
     RcInsertion.run(&mut func, &ctx.interner);
@@ -778,7 +783,7 @@ fn indexed_cursor_invalidates_only_matching_element_slots() {
             ))),
         );
         b.assign(
-            Place::index(alias, Operand::Const(Const::Int(1))),
+            Place::index(alias, Operand::Const(Const::Int(0))),
             Rvalue::Use(Operand::Const(Const::Null)),
         );
         b.assign(

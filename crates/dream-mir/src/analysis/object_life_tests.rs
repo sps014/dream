@@ -118,3 +118,73 @@ fn a_stale_alias_joins_null_at_a_loop_header() {
     assert_eq!(life.deaths, vec![(body.0 as usize, 2, o)]);
     assert!(life.rc_ops.is_empty());
 }
+
+#[test]
+fn branch_dependent_holders_preserve_one_unconditional_death() {
+    let life = run(|b, i, o, a| {
+        let yes = b.new_block();
+        let no = b.new_block();
+        let join = b.new_block();
+        let c = b.new_param(i.bool(), None);
+        b.terminate(Terminator::If {
+            cond: copy(c),
+            then_blk: yes,
+            else_blk: no,
+        });
+        b.switch_to(yes);
+        b.assign(Place::Local(a), Rvalue::Use(Operand::Const(Const::Null)));
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(no);
+        b.terminate(Terminator::Goto(join));
+        b.switch_to(join);
+        b.push(Statement::Release(copy(o)));
+        b.terminate(Terminator::Return(None));
+    })
+    .expect("the alias can be null or live while the owner has one token");
+    assert_eq!(life.deaths.len(), 1);
+}
+
+#[test]
+fn select_can_hold_an_alias_or_null_without_taking_a_token() {
+    let life = run(|b, i, o, a| {
+        let c = b.new_param(i.bool(), None);
+        b.assign(
+            Place::Local(a),
+            Rvalue::Select {
+                cond: copy(c),
+                then_val: copy(o),
+                else_val: Operand::Const(Const::Null),
+            },
+        );
+        b.push(Statement::Release(copy(o)));
+        b.terminate(Terminator::Return(None));
+    })
+    .expect("select does not change the allocation's token");
+    assert_eq!(life.deaths.len(), 1);
+}
+
+#[test]
+fn a_release_that_is_final_on_only_one_path_is_refused() {
+    assert!(
+        run(|b, i, o, a| {
+            let yes = b.new_block();
+            let no = b.new_block();
+            let join = b.new_block();
+            let c = b.new_param(i.bool(), None);
+            b.terminate(Terminator::If {
+                cond: copy(c),
+                then_blk: yes,
+                else_blk: no,
+            });
+            b.switch_to(yes);
+            b.push(Statement::Retain(copy(a)));
+            b.terminate(Terminator::Goto(join));
+            b.switch_to(no);
+            b.terminate(Terminator::Goto(join));
+            b.switch_to(join);
+            b.push(Statement::Release(copy(o)));
+            b.terminate(Terminator::Unreachable);
+        })
+        .is_none()
+    );
+}

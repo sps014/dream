@@ -14,7 +14,11 @@ pub(super) fn source_stays_alive(
     modref: &ModRefTable,
     panics: &BTreeSet<DefId>,
 ) -> bool {
-    if f.local_ty(owner) != interner.string()
+    let owner_ty = f.local_ty(owner);
+    if !interner.is_reference(owner_ty)
+        || interner.is_value_type(owner_ty)
+        || interner.is_shared_type(owner_ty)
+        || modref.may_run_del(owner_ty, interner, layouts)
         || f.params.contains(&owner)
         || f.locals[owner.0 as usize].is_cursor
     {
@@ -31,6 +35,15 @@ pub(super) fn source_stays_alive(
                         && args.iter().any(|op| matches!(op,
                             Operand::Const(Const::Str(s)) if !s.is_empty())))
                         && !matches!(rv, Rvalue::ConcatInt { .. })
+                        && !matches!(
+                            rv,
+                            Rvalue::ArrayNew {
+                                closure_env: false,
+                                ..
+                            } | Rvalue::ArrayLit { .. }
+                        )
+                        && !matches!(rv, Rvalue::New { ty, ctor: None, .. }
+                            if layouts.get(*ty).is_some_and(|l| !l.fields.iter().any(|f| f.is_weak || f.is_unowned)))
                     {
                         return false;
                     }
@@ -70,7 +83,7 @@ pub(super) fn source_stays_alive(
                         if family[base.0 as usize].is_some_and(|r| dependent.contains(&r)));
                 if from_owner {
                     match place {
-                        Place::Local(d) if f.local_ty(*d) == interner.string() => {
+                        Place::Local(d) if f.local_ty(*d) == owner_ty => {
                             aliases.insert(*d);
                         }
                         Place::Field { base, .. } => {

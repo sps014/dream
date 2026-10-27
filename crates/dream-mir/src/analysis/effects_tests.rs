@@ -4,6 +4,48 @@ use dream_hir::{InterfaceImpl, InterfaceInfo, TypeLayout};
 use dream_types::{DefKind, TypeCtx};
 
 #[test]
+fn unknown_writes_do_not_imply_ownership_observation_or_scalar_cleanup() {
+    use crate::build::FunctionBuilder;
+    use crate::{Const, Operand, Place, Rvalue, Statement, Terminator};
+    use dream_types::{DefId, TypeInterner};
+    let mut i = TypeInterner::new();
+    let array = i.array(i.int());
+    let mut b = FunctionBuilder::new("scalar_store", i.void());
+    b.set_def(DefId::root(460), vec![]);
+    let pointer = b.new_param(array, None);
+    b.assign(
+        Place::Deref {
+            ptr: pointer,
+            elem_ty: i.int(),
+        },
+        Rvalue::Use(Operand::Const(Const::Int(42))),
+    );
+    b.terminate(Terminator::Return(None));
+    let mut mir = Mir {
+        functions: vec![b.finish()],
+        ..Mir::default()
+    };
+    let effects = ModRefTable::compute(&mir, &i);
+    assert!(matches!(
+        effects.call_def(DefId::root(460), &[]),
+        super::effects::ModRef::Top
+    ));
+    assert!(!effects.observes_def(DefId::root(460), &[]));
+    assert!(!effects.call_may_destroy(DefId::root(460), &[]));
+    let scalar = crate::Local(mir.functions[0].locals.len() as u32);
+    let mut decl = mir.functions[0].locals[0].clone();
+    decl.ty = i.int();
+    mir.functions[0].locals.push(decl);
+    mir.functions[0].blocks[0].stmts.push(Statement::Assign(
+        Place::Local(scalar),
+        Rvalue::ObservedLoad(Operand::Copy(Place::Local(pointer))),
+    ));
+    let effects = ModRefTable::compute(&mir, &i);
+    assert!(effects.observes_def(DefId::root(460), &[]));
+    assert!(effects.observes_def(DefId::root(999), &[]));
+}
+
+#[test]
 fn interface_cleanup_uses_the_complete_concrete_implementation_set() {
     let mut ctx = TypeCtx::new();
     let interface = ctx.register(DefKind::Interface, "I", vec![]);

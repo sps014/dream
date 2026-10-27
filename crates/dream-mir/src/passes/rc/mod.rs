@@ -17,6 +17,7 @@ mod insertion;
 pub(crate) mod lifetime;
 pub(crate) mod liveness;
 mod sink;
+mod slot_proof;
 mod tokens;
 mod uniqueness;
 mod value;
@@ -31,6 +32,7 @@ mod held_tests;
 mod unique_tests;
 
 pub use elision::RcElision;
+pub(crate) use elision::run_module as elide_proven;
 pub use hop::HopElision;
 pub use insertion::RcInsertion;
 pub(crate) use liveness::stmt_reads_local;

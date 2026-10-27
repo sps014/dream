@@ -15,9 +15,12 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::DebugRefCount
             | I::DebugRuntimeCounter
     );
+    // Collection owner counts only select equivalent copy/move implementations. Unlike
+    // Debug.ref_count, they must not keep an otherwise dead snapshot token observable.
     let quiet = matches!(
         op,
         I::FuncboxFuncidx
+            | I::CollectionOwnerCount
             | I::FuncboxEnv
             | I::ArrayNew
             | I::StringAlloc
@@ -69,5 +72,12 @@ mod tests {
             assert!(intrinsic_summary(op).is_some_and(|effects| effects.is_quiet()));
         }
         assert!(intrinsic_summary(IntrinsicOp::FuncboxNew).is_none());
+    }
+
+    #[test]
+    fn implementation_owner_probes_do_not_expose_debug_counts() {
+        assert!(intrinsic_summary(IntrinsicOp::CollectionOwnerCount).is_some_and(|s| s.is_quiet()));
+        assert!(matches!(intrinsic_summary(IntrinsicOp::DebugRefCount),
+            Some(ModRef::Known(k)) if k.observes_rc));
     }
 }

@@ -219,6 +219,162 @@ fn returned_alias_does_not_block_unrelated_parameter() {
 }
 
 #[test]
+fn an_overwritten_alias_does_not_escape_its_previous_parameter() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("replace_alias", i.string());
+    b.set_def(DefId::root(420), vec![]);
+    let read = b.new_take_param(i.string(), None);
+    let alias = b.new_local(i.string(), None);
+    b.assign(
+        Place::Local(alias),
+        Rvalue::Use(Operand::Copy(Place::Local(read))),
+    );
+    b.assign(
+        Place::Local(alias),
+        Rvalue::Use(Operand::Const(Const::Str("replacement".into()))),
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(alias)))));
+    let mut mir = module(b.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[read.0 as usize].is_take);
+}
+
+#[test]
+fn recursive_strong_layouts_can_be_borrowed_without_observers() {
+    use dream_hir::TypeLayout;
+    let mut i = TypeInterner::new();
+    let node = i.struct_ty(DefId::root(421), vec![]);
+    let mut b = FunctionBuilder::new("node_reader", i.void());
+    b.set_def(DefId::root(422), vec![]);
+    let p = b.new_take_param(node, None);
+    b.terminate(Terminator::Return(None));
+    let mut mir = module(b.finish());
+    mir.layouts.insert(
+        node,
+        TypeLayout::from_fields(&i, "Node", [("next".into(), node, false, false)]),
+    );
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[p.0 as usize].is_take);
+}
+
+#[test]
+fn an_unrelated_local_type_does_not_disable_a_string_reader() {
+    let mut i = TypeInterner::new();
+    let opaque = i.struct_ty(DefId::root(423), vec![]);
+    let mut b = FunctionBuilder::new("reader", i.int());
+    b.set_def(DefId::root(424), vec![]);
+    let p = b.new_take_param(i.string(), None);
+    let _uninitialized = b.new_local(opaque, None);
+    let n = b.new_local(i.int(), None);
+    b.assign(
+        Place::Local(n),
+        Rvalue::StrLen(Operand::Copy(Place::Local(p))),
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
+    let mut mir = module(b.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[p.0 as usize].is_take);
+}
+
+#[test]
+fn unrelated_string_allocation_and_output_do_not_require_an_owning_input() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("reader_with_work", i.int());
+    b.set_def(DefId::root(475), vec![]);
+    let input = b.new_take_param(i.string(), None);
+    let report = b.new_local(i.string(), None);
+    let length = b.new_local(i.int(), None);
+    b.assign(
+        Place::Local(report),
+        Rvalue::Concat(vec![
+            Operand::Const(Const::Str("private".into())),
+            Operand::Const(Const::Str("work".into())),
+        ]),
+    );
+    b.push(Statement::Print {
+        arg: Operand::Copy(Place::Local(report)),
+        ty: i.string(),
+        newline: true,
+    });
+    b.assign(
+        Place::Local(length),
+        Rvalue::StrLen(Operand::Copy(Place::Local(input))),
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        length,
+    )))));
+    let mut mir = module(b.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[input.0 as usize].is_take);
+}
+
+#[test]
+fn a_fresh_call_result_does_not_alias_every_argument() {
+    let i = TypeInterner::new();
+    let mut helper = FunctionBuilder::new("fresh_result", i.string());
+    helper.set_def(DefId::root(440), vec![]);
+    helper.new_param(i.string(), None);
+    helper.terminate(Terminator::Return(Some(Operand::Const(Const::Str(
+        "fresh".into(),
+    )))));
+    let mut b = FunctionBuilder::new("return_fresh", i.string());
+    b.set_def(DefId::root(441), vec![]);
+    let p = b.new_take_param(i.string(), None);
+    let result = b.new_temp(i.string());
+    b.assign(
+        Place::Local(result),
+        Rvalue::Call {
+            callee: Callee {
+                def: DefId::root(440),
+                args: vec![],
+                ret: i.string(),
+                take_params: vec![false],
+                borrowed_result: false,
+            },
+            args: vec![Operand::Copy(Place::Local(p))],
+        },
+    );
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(
+        result,
+    )))));
+    let mut mir = module(b.finish());
+    mir.functions.push(helper.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[p.0 as usize].is_take);
+}
+
+#[test]
+fn a_known_unrelated_callee_need_not_qualify_for_borrow_inference() {
+    let i = TypeInterner::new();
+    let mut helper = FunctionBuilder::new("scalar_output", i.void());
+    helper.set_def(DefId::root(442), vec![]);
+    helper.push(Statement::Print {
+        arg: Operand::Const(Const::Int(42)),
+        ty: i.int(),
+        newline: true,
+    });
+    helper.terminate(Terminator::Return(None));
+    let mut b = FunctionBuilder::new("reader", i.void());
+    b.set_def(DefId::root(443), vec![]);
+    let p = b.new_take_param(i.string(), None);
+    b.push(Statement::Call {
+        callee: Callee {
+            def: DefId::root(442),
+            args: vec![],
+            ret: i.void(),
+            take_params: vec![],
+            borrowed_result: false,
+        },
+        args: vec![],
+    });
+    b.terminate(Terminator::Return(None));
+    let mut mir = module(b.finish());
+    mir.functions.push(helper.finish());
+    assert!(param_modes::run(&mut mir, &i));
+    assert!(!mir.functions[0].locals[p.0 as usize].is_take);
+}
+
+#[test]
 fn sink_dependency_rejects_only_the_forwarded_parameter() {
     let i = TypeInterner::new();
     let mut sink = FunctionBuilder::new("identity", i.string());

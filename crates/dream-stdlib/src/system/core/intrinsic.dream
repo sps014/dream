@@ -127,6 +127,8 @@ internal enum Intrinsic {
     DebugGetTotalAllocations,
     /// Identifies the debug get ref count operation for an `@intrinsic` declaration.
     DebugGetRefCount,
+    /// Reads ownership only to choose equivalent collection move and copy paths.
+    CollectionOwnerCount,
     /// Identifies the debug get runtime counter operation for an `@intrinsic` declaration.
     DebugGetRuntimeCounter,
     /// Identifies the to bytes operation for an `@intrinsic` declaration.

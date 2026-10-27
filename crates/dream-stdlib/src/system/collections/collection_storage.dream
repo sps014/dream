@@ -13,7 +13,8 @@ internal static class CollectionStorage {
         right: int
     ): void;
 
-    @intrinsic(Intrinsic.DebugGetRefCount)
+    @intrinsic(Intrinsic.CollectionOwnerCount)
+    /// Selects equivalent storage move/copy paths; dead snapshot tokens may be elided.
     internal static extern fun owners(borrow array: object): int;
 
     @intrinsic(Intrinsic.BufferZero)

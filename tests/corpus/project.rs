@@ -14,6 +14,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("compression_streams", "native_services", true),
     Case::project("application_utilities", "native_services", true),
     Case::project("arc_param", "ownership", true),
+    Case::project("arc_proofs", "ownership", true),
     Case::project("arc_slot_walk", "ownership", true),
     Case::project("audio_analysis", "core", true),
     Case::project("array_alloc", "collections", true),

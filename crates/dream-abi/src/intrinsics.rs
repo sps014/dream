@@ -199,6 +199,8 @@ pub const ATTR_DEBUG_LIVE_OBJECTS: &str = "debug_get_live_objects";
 pub const ATTR_DEBUG_TOTAL_ALLOCATIONS: &str = "debug_get_total_allocations";
 /// `Debug.ref_count(o)` — live reference count of a heap value.
 pub const ATTR_DEBUG_REF_COUNT: &str = "debug_get_ref_count";
+/// Collection move/copy selection; dead snapshot tokens need not affect this probe.
+pub const ATTR_COLLECTION_OWNER_COUNT: &str = "collection_owner_count";
 /// `Debug.runtime_counter(id)` — monotonic ownership-runtime event count (benchmark attribution).
 pub const ATTR_DEBUG_RUNTIME_COUNTER: &str = "debug_get_runtime_counter";
 /// `Bytes.of<T>(v)` — raw-copy a blittable value's bytes into a fresh `byte[]` buffer.
@@ -342,6 +344,8 @@ pub enum IntrinsicOp {
     DebugTotalAllocations,
     /// `Debug.ref_count(o)` — live reference count of a heap value.
     DebugRefCount,
+    /// Implementation-only count used to choose equivalent collection move/copy paths.
+    CollectionOwnerCount,
     /// `Debug.runtime_counter(id)` — ownership-runtime event count.
     DebugRuntimeCounter,
     CallbackRegister,
@@ -475,6 +479,7 @@ impl IntrinsicOp {
             ATTR_DEBUG_LIVE_OBJECTS => IntrinsicOp::DebugLiveObjects,
             ATTR_DEBUG_TOTAL_ALLOCATIONS => IntrinsicOp::DebugTotalAllocations,
             ATTR_DEBUG_REF_COUNT => IntrinsicOp::DebugRefCount,
+            ATTR_COLLECTION_OWNER_COUNT => IntrinsicOp::CollectionOwnerCount,
             ATTR_DEBUG_RUNTIME_COUNTER => IntrinsicOp::DebugRuntimeCounter,
             ATTR_CALLBACK_REGISTER => IntrinsicOp::CallbackRegister,
             ATTR_CALLBACK_UNREGISTER => IntrinsicOp::CallbackUnregister,

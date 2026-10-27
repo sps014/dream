@@ -149,10 +149,10 @@ pub(crate) fn infer_cursors(
         func,
         &effects,
         interner,
+        &super::slot_proof::SlotProof::new(func, interner, layouts, modref),
         &super::cursor_borrowed::Context::new(interner, layouts, modref),
         &mut candidates,
-        &mut escaped,
-        &mut overwrite_escaped,
+        (&mut escaped, &mut overwrite_escaped),
     );
     let mut outlive_escaped: IndexSet<u32> = IndexSet::new();
     escape_cursors_outliving_base(
@@ -396,11 +396,12 @@ fn escape_slot_overwrite_readers(
     func: &MirFunction,
     effects: &crate::analysis::effects::ModRef,
     interner: &TypeInterner,
+    proof: &super::slot_proof::SlotProof<'_>,
     borrowed: &super::cursor_borrowed::Context<'_>,
     candidates: &mut IndexSet<u32>,
-    escaped: &mut IndexSet<u32>,
-    overwrite_escaped: &mut IndexSet<u32>,
+    escapes: (&mut IndexSet<u32>, &mut IndexSet<u32>),
 ) {
+    let (escaped, overwrite_escaped) = escapes;
     let external_values = super::cursor_aliases::external_value_references(func);
     let mut stored_fields = std::collections::BTreeSet::new();
     let mut stored_reference_fields = std::collections::BTreeSet::new();
@@ -439,19 +440,19 @@ fn escape_slot_overwrite_readers(
         .map(|(i, _)| i as u32)
         .collect();
 
-    let sources: Vec<(u32, SourceSlot)> = func
+    let sources: Vec<(u32, SourceSlot, &Rvalue)> = func
         .blocks
         .iter()
         .flat_map(|block| &block.stmts)
         .filter_map(|stmt| match stmt {
             Statement::Assign(Place::Local(dest), rvalue) if candidates.contains(&dest.0) => {
-                cursor_source_slot(rvalue).map(|slot| (dest.0, slot))
+                cursor_source_slot(rvalue).map(|slot| (dest.0, slot, rvalue))
             }
             _ => None,
         })
         .collect();
 
-    for (id, slot) in sources {
+    for (id, slot, rv) in sources {
         let overwritten = match slot {
             SourceSlot::Field(base, field) => {
                 let field = (func.local_ty(crate::Local(base)), field);
@@ -472,7 +473,9 @@ fn escape_slot_overwrite_readers(
             // A union local's whole value is its slot: any rebind frees the old payload.
             SourceSlot::UnionBase(base) => overwritten_bases.contains(&base),
         };
-        if overwritten {
+        let interval_safe = matches!(slot, SourceSlot::Field(..) | SourceSlot::IndexBase(_))
+            && proof.stable(id, rv);
+        if overwritten && !interval_safe {
             candidates.swap_remove(&id);
             escaped.insert(id);
             overwrite_escaped.insert(id);

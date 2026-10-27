@@ -177,6 +177,30 @@ fn local_string_owner_covers_its_views_without_extending_cleanup() {
 }
 
 #[test]
+fn owned_array_views_require_the_original_owner_on_every_path() {
+    for early_release in [false, true] {
+        let (mut mir, mut types) = owned_view(early_release, false, false);
+        let array = types.array(types.int());
+        let f = &mut mir.functions[0];
+        f.locals[0].ty = array;
+        f.locals[2].ty = array;
+        let view = f.locals[1].ty;
+        let mut layout = mir.layouts.get(view).expect("view layout").clone();
+        layout.fields[0].ty = array;
+        mir.layouts.insert(view, layout);
+        f.blocks[0].stmts[0] = Statement::Assign(
+            Place::Local(Local(0)),
+            Rvalue::ArrayLit {
+                elem_ty: types.int(),
+                elems: vec![Operand::Const(Const::Int(42))],
+            },
+        );
+        run(&mut mir, &types);
+        assert_eq!(mir.functions[0].locals[1].borrows_refs, !early_release);
+    }
+}
+
+#[test]
 fn early_release_opaque_observers_and_transferred_owners_keep_view_arc() {
     for (early, opaque, escape) in [
         (true, false, false),
@@ -319,4 +343,31 @@ fn named_copies_cannot_hide_opaque_forwarding() {
     let f = &mir.functions[0];
     assert!(!signatures(&mir, &types)[&(f.def, f.instance.clone())][0]);
     assert!(!run(&mut mir, &types));
+}
+
+#[test]
+fn value_parameter_forwarding_requires_every_callee_to_borrow() {
+    for mutation in [false, true] {
+        let (mut mir, types) = fixture(false, mutation, false);
+        mir.profile = dream_abi::profile::CompileProfile::Release;
+        mir.functions[0].def = DefId::root(450);
+        let ty = mir.functions[0].local_ty(mir.functions[0].params[0]);
+        let mut b = FunctionBuilder::new("relay", types.void());
+        b.set_def(DefId::root(451), vec![]);
+        let p = b.new_param(ty, None);
+        b.push(Statement::Call {
+            callee: Callee {
+                def: DefId::root(450),
+                args: vec![],
+                ret: types.void(),
+                take_params: vec![false],
+                borrowed_result: false,
+            },
+            args: vec![Operand::Copy(Place::Local(p))],
+        });
+        b.terminate(Terminator::Return(None));
+        mir.functions.push(b.finish());
+        let sigs = signatures(&mir, &types);
+        assert_eq!(sigs[&(DefId::root(451), vec![])][0], !mutation);
+    }
 }

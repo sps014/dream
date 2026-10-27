@@ -7,6 +7,47 @@ use crate::{Local, Operand, Place, Rvalue, Terminator};
 use dream_types::TypeInterner;
 
 #[test]
+fn branch_assignments_cannot_change_a_pending_pair_identity() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("branch_rebind", i.void());
+    let x = b.new_param(i.string(), None);
+    let y = b.new_param(i.string(), None);
+    let c = b.new_param(i.bool(), None);
+    let yes = b.new_block();
+    let no = b.new_block();
+    let join = b.new_block();
+    b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(c)),
+        then_blk: yes,
+        else_blk: no,
+    });
+    b.switch_to(yes);
+    b.assign(Place::Local(x), Rvalue::Use(Operand::Copy(Place::Local(y))));
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(no);
+    b.terminate(Terminator::Goto(join));
+    b.switch_to(join);
+    b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+    b.terminate(Terminator::Return(None));
+    assert!(!RcElision.run(&mut b.finish(), &i));
+}
+
+#[test]
+fn postdom_pairs_keep_their_value_identity_across_rebinding() {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("rebind", i.void());
+    let x = b.new_param(i.string(), None);
+    let y = b.new_param(i.string(), None);
+    b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+    b.assign(Place::Local(x), Rvalue::Use(Operand::Copy(Place::Local(y))));
+    b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+    b.terminate(Terminator::Return(None));
+    let mut f = b.finish();
+    assert!(!RcElision.run(&mut f, &i));
+}
+
+#[test]
 fn elides_adjacent_retain_release() {
     let i = TypeInterner::new();
     let mut b = FunctionBuilder::new("f", i.void());

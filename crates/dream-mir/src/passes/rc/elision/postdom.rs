@@ -12,6 +12,29 @@ pub(super) fn elide_postdom_transparent(
     func: &mut MirFunction,
     analyses: &mut crate::passes::FunctionAnalyses,
 ) -> bool {
+    elide_postdom_by(func, analyses, |func, key, dom, pdom, rb, rs, eb, es| {
+        region_all(func, dom, pdom, (rb, rs, eb, es), |_, _, stmt| {
+            is_transparent_stmt(stmt)
+                && !matches!(stmt,
+                Statement::Assign(crate::Place::Local(dest), _) if key == RcKey::Local(*dest))
+        })
+    })
+}
+
+pub(super) fn elide_postdom_by(
+    func: &mut MirFunction,
+    analyses: &mut crate::passes::FunctionAnalyses,
+    safe: impl Fn(
+        &MirFunction,
+        RcKey,
+        &cfg::DomTree,
+        &cfg::PostDomTree,
+        BlockId,
+        usize,
+        BlockId,
+        usize,
+    ) -> bool,
+) -> bool {
     let dom = analyses.dominators(func);
     let pdom = analyses.postdominators(func);
     let n = func.blocks.len();
@@ -56,7 +79,7 @@ pub(super) fn elide_postdom_transparent(
             if !dom.dominates(rb, eb) || !pdom.postdominates(eb, rb) {
                 continue;
             }
-            if !region_transparent(func, &dom, &pdom, rb, rs, eb, es) {
+            if !region_runs_once(func, rb, eb) || !safe(func, rk, &dom, &pdom, rb, rs, eb, es) {
                 continue;
             }
             match best {
@@ -69,6 +92,12 @@ pub(super) fn elide_postdom_transparent(
             }
         }
         if let Some((eb, es)) = best {
+            if crate::verify::enabled() {
+                assert!(
+                    safe(func, rk, &dom, &pdom, rb, rs, eb, es),
+                    "invalid CFG RC elision proof"
+                );
+            }
             drop_retain.insert((rb, rs));
             drop_release.insert((eb, es));
         }
@@ -97,14 +126,12 @@ pub(super) fn retain_release_ordered(rb: BlockId, rs: usize, eb: BlockId, es: us
     }
 }
 
-pub(super) fn region_transparent(
+pub(super) fn region_all(
     func: &MirFunction,
     dom: &cfg::DomTree,
     pdom: &cfg::PostDomTree,
-    rb: BlockId,
-    rs: usize,
-    eb: BlockId,
-    es: usize,
+    (rb, rs, eb, es): (BlockId, usize, BlockId, usize),
+    mut safe: impl FnMut(usize, usize, &Statement) -> bool,
 ) -> bool {
     let n = func.blocks.len();
     for bi in 0..n {
@@ -114,23 +141,57 @@ pub(super) fn region_transparent(
         }
         let stmts = &func.blocks[bi].stmts;
         if b == rb && b == eb {
-            return stmts[rs + 1..es].iter().all(is_transparent_stmt);
+            return stmts[rs + 1..es]
+                .iter()
+                .enumerate()
+                .all(|(offset, stmt)| safe(bi, rs + 1 + offset, stmt));
         }
         if b == rb {
-            if !stmts[rs + 1..].iter().all(is_transparent_stmt) {
+            if !stmts[rs + 1..]
+                .iter()
+                .enumerate()
+                .all(|(offset, stmt)| safe(bi, rs + 1 + offset, stmt))
+            {
                 return false;
             }
             continue;
         }
         if b == eb {
-            if !stmts[..es].iter().all(is_transparent_stmt) {
+            if !stmts[..es]
+                .iter()
+                .enumerate()
+                .all(|(si, stmt)| safe(bi, si, stmt))
+            {
                 return false;
             }
             continue;
         }
-        if !stmts.iter().all(is_transparent_stmt) {
+        if !stmts
+            .iter()
+            .enumerate()
+            .all(|(si, stmt)| safe(bi, si, stmt))
+        {
             return false;
         }
+    }
+    true
+}
+
+/// The same retain cannot execute again before its proposed matching release.
+fn region_runs_once(func: &MirFunction, retain: BlockId, release: BlockId) -> bool {
+    if retain == release {
+        return true;
+    }
+    let mut seen = BTreeSet::new();
+    let mut pending = func.blocks[retain.0 as usize].terminator.successors();
+    while let Some(block) = pending.pop() {
+        if block == retain {
+            return false;
+        }
+        if block == release || !seen.insert(block) {
+            continue;
+        }
+        pending.extend(func.blocks[block.0 as usize].terminator.successors());
     }
     true
 }

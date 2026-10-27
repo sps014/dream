@@ -6,6 +6,7 @@ use super::chains::goto_chain_ending_at;
 use crate::BlockId;
 use crate::MirFunction;
 use crate::Terminator;
+use crate::{Local, Operand, Place, Statement};
 use std::collections::BTreeSet;
 
 pub(super) fn elide_transparent_diamonds(
@@ -55,6 +56,9 @@ pub(super) fn elide_transparent_diamonds(
         if !chains_transparent(func, &then_chain) || !chains_transparent(func, &else_chain) {
             continue;
         }
+        if rebinds_retained(func, &[head], then_chain.iter().chain(&else_chain).copied()) {
+            continue;
+        }
         // Head + join form the elision region (arms are transparent and contribute no RC ops).
         if elide_region(func, &[head, join]) {
             changed = true;
@@ -99,6 +103,9 @@ pub(super) fn elide_around_transparent_loops(
         let exit = *exits.iter().next().expect("len == 1");
         // Include the Goto-chain that ends at the preheader so a Retain earlier in that chain matches.
         let mut region = goto_chain_ending_at(func, &preds, ph);
+        if rebinds_retained(func, &region, lp.body.iter().copied()) {
+            continue;
+        }
         if !region.contains(&exit) {
             region.push(exit);
         }
@@ -107,4 +114,21 @@ pub(super) fn elide_around_transparent_loops(
         }
     }
     changed
+}
+
+fn rebinds_retained(
+    f: &MirFunction,
+    starts: &[BlockId],
+    body: impl Iterator<Item = BlockId>,
+) -> bool {
+    let retained: BTreeSet<Local> = starts
+        .iter()
+        .flat_map(|b| &f.blocks[b.0 as usize].stmts)
+        .filter_map(|s| match s {
+            Statement::Retain(Operand::Copy(Place::Local(l))) => Some(*l),
+            _ => None,
+        })
+        .collect();
+    body.flat_map(|b| &f.blocks[b.0 as usize].stmts)
+        .any(|s| matches!(s, Statement::Assign(Place::Local(l), _) if retained.contains(l)))
 }

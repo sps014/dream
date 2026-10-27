@@ -2,6 +2,7 @@
 
 mod branches;
 mod chains;
+mod effects;
 mod pipeline;
 mod postdom;
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub(crate) fn run_module(mir: &mut crate::Mir, interner: &dream_types::TypeInter
             continue;
         }
         changed |= super::held::run_function(f, interner, &mir.layouts, &effects);
+        changed |= effects::run(f, interner, &mir.layouts, &effects);
         changed |= RcElision.run_with_layouts(f, interner, &mir.layouts);
     }
     changed

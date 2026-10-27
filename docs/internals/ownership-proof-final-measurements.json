@@ -1,0 +1,627 @@
+{
+  "date": "2026-10-27",
+  "baseline_revision": "9ee943323b9a4b77a46a820dfd250ebea3bc1daa",
+  "scope": "Additional array, interface, value-family, surplus-token and nullable-holder proofs relative to the previous implementation batch. Earlier callback gains against the original work-start revision are recorded separately.",
+  "compiler_sha256": {
+    "before": "e215e082f9637a3aaa7470de0401038b6efe147d3960b0f8054a4bd006151f8e",
+    "after": "ac17ab265439aa15c68119e9b9213607af821cb72ef2cca161cc8b4e998bd73b"
+  },
+  "host": "Windows 11 x86_64; LLVM 22.1.8",
+  "checks": {
+    "build": {
+      "exit_code": 0,
+      "seconds": 16.05
+    },
+    "clippy": {
+      "exit_code": 0,
+      "seconds": 8.53
+    },
+    "tests": {
+      "exit_code": 0,
+      "seconds": 218.73
+    },
+    "corpus": {
+      "exit_code": 0,
+      "seconds": 323.14
+    },
+    "release-build": {
+      "exit_code": 0,
+      "seconds": 2.63
+    },
+    "ownership-asan": {
+      "exit_code": 0,
+      "seconds": 13.3
+    },
+    "ownership-node": {
+      "exit_code": 0,
+      "seconds": 9.17
+    },
+    "serialization-asan": {
+      "exit_code": 0,
+      "seconds": 178.19
+    },
+    "serialization-node": {
+      "exit_code": 0,
+      "seconds": 219.3
+    },
+    "collections-asan": {
+      "exit_code": 0,
+      "seconds": 16.6
+    },
+    "collections-node": {
+      "exit_code": 0,
+      "seconds": 25.87
+    }
+  },
+  "mir_tests": 499,
+  "root_integration_tests": 252,
+  "docs": {
+    "tests": 33,
+    "api_declarations": 3180,
+    "strict_build": "passed"
+  },
+  "static_rc_operations": {
+    "native": {
+      "writeone": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "relayone": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "writezero": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "readother": {
+        "before": {
+          "retain": 1,
+          "release": 1
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "readsame": {
+        "before": {
+          "retain": 1,
+          "release": 1
+        },
+        "after": {
+          "retain": 1,
+          "release": 1
+        }
+      }
+    },
+    "wasm32": {
+      "writeone": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "relayone": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "writezero": {
+        "before": {
+          "retain": 0,
+          "release": 0
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "readother": {
+        "before": {
+          "retain": 1,
+          "release": 1
+        },
+        "after": {
+          "retain": 0,
+          "release": 0
+        }
+      },
+      "readsame": {
+        "before": {
+          "retain": 1,
+          "release": 1
+        },
+        "after": {
+          "retain": 1,
+          "release": 1
+        }
+      }
+    }
+  },
+  "same_path_determinism": {
+    "native": {
+      ".opt.ll": true
+    },
+    "wasm32": {
+      ".opt.ll": true,
+      ".wasm": true,
+      ".wat": true
+    }
+  },
+  "compiler_budget": {
+    "debug": {
+      "wall_seconds": {
+        "baseline_median": 0.9924052499991376,
+        "candidate_median": 0.9914003000012599,
+        "ratio": 0.998987359248776,
+        "limit_ratio": 1.25,
+        "passed": true
+      },
+      "peak_resident_bytes": {
+        "baseline_median": 121542656.0,
+        "candidate_median": 121362432.0,
+        "ratio": 0.9985171954774462,
+        "limit_ratio": 1.2,
+        "passed": true
+      }
+    },
+    "release": {
+      "wall_seconds": {
+        "baseline_median": 2.6149652999883983,
+        "candidate_median": 2.616866199998185,
+        "ratio": 1.0007269312559501,
+        "limit_ratio": 1.25,
+        "passed": true
+      },
+      "peak_resident_bytes": {
+        "baseline_median": 121229312.0,
+        "candidate_median": 121468928.0,
+        "ratio": 1.001976551677535,
+        "limit_ratio": 1.2,
+        "passed": true
+      }
+    }
+  },
+  "slot_probe": {
+    "iterations": 50000,
+    "rounds": 12,
+    "passes_per_process": 5,
+    "warmups": 2,
+    "timing_is_instrumented": false,
+    "counter_runs": "Separate single-arm instrumented processes; never used for latency comparisons.",
+    "results": {
+      "native": {
+        "nanoseconds_per_read": {
+          "baseline": 1.824,
+          "current": 1.276
+        },
+        "paired_ratio": {
+          "ratio": 0.6995614035087719,
+          "ci_low": 0.6511244150441966,
+          "ci_high": 0.700109649122807,
+          "decision": "pass",
+          "improvement": true
+        },
+        "counters_before": {
+          "allocs": 11,
+          "retain": 50008,
+          "release": 50019
+        },
+        "counters_after": {
+          "allocs": 11,
+          "retain": 8,
+          "release": 19
+        }
+      },
+      "wasm": {
+        "nanoseconds_per_read": {
+          "baseline": 3.001,
+          "current": 2.775
+        },
+        "paired_ratio": {
+          "ratio": 0.9218460434808601,
+          "ci_low": 0.8881998248274239,
+          "ci_high": 0.9505989151640222,
+          "decision": "pass",
+          "improvement": true
+        },
+        "counters_before": {
+          "allocs": 11,
+          "retain": 50008,
+          "release": 50019
+        },
+        "counters_after": {
+          "allocs": 11,
+          "retain": 8,
+          "release": 19
+        }
+      }
+    }
+  },
+  "native_suite_layout_control": {
+    "function_bytes": 64,
+    "loop_bytes": 32,
+    "regression_threshold": 0.1,
+    "implementation": "An ignored Rust llc wrapper passes -align-all-functions=6 -align-loops=32 equally to both compilers, matching the layout settings in the existing Linux CI benchmark workflow. No compiler defaults or CI thresholds changed."
+  },
+  "native_suites": {
+    "micro": {
+      "alloc_churn": {
+        "ratio": 0.9953887257783532,
+        "ci_low": 0.9675665051308424,
+        "ci_high": 1.0082364416327012,
+        "decision": "pass",
+        "improvement": false
+      },
+      "arc_locals": {
+        "ratio": 1.0085199893741454,
+        "ci_low": 0.9955857587622328,
+        "ci_high": 1.018581114750894,
+        "decision": "pass",
+        "improvement": false
+      },
+      "arr_add": {
+        "ratio": 1.0023793034693167,
+        "ci_low": 0.9967951040921791,
+        "ci_high": 1.007376828797343,
+        "decision": "pass",
+        "improvement": false
+      },
+      "async_poll": {
+        "ratio": 0.9744311468329039,
+        "ci_low": 0.9413607857526726,
+        "ci_high": 1.0149209789679328,
+        "decision": "pass",
+        "improvement": false
+      },
+      "binary_trees": {
+        "ratio": 0.9739732679544317,
+        "ci_low": 0.9473676466374026,
+        "ci_high": 0.9818706099142122,
+        "decision": "pass",
+        "improvement": true
+      },
+      "binary_trees_alloc": {
+        "ratio": 1.006997904782331,
+        "ci_low": 0.9797165318911245,
+        "ci_high": 1.077299000090461,
+        "decision": "pass",
+        "improvement": false
+      },
+      "binary_trees_reclaim": {
+        "ratio": 0.9653266556238023,
+        "ci_low": 0.94204165426683,
+        "ci_high": 0.9855389252898741,
+        "decision": "pass",
+        "improvement": true
+      },
+      "byte_scan": {
+        "ratio": 0.9971805451639386,
+        "ci_low": 0.9786276352387107,
+        "ci_high": 1.0117672564566584,
+        "decision": "pass",
+        "improvement": false
+      },
+      "char_scan": {
+        "ratio": 0.9928927565599934,
+        "ci_low": 0.9709808554287134,
+        "ci_high": 1.0135863410728037,
+        "decision": "pass",
+        "improvement": false
+      },
+      "closure_dispatch": {
+        "ratio": 1.0068359375,
+        "ci_low": 0.9497619389415255,
+        "ci_high": 1.1220789914031997,
+        "decision": "inconclusive",
+        "improvement": false
+      },
+      "fib_rec": {
+        "ratio": 1.0138733436950176,
+        "ci_low": 0.9861407102833044,
+        "ci_high": 1.0207103560581714,
+        "decision": "pass",
+        "improvement": false
+      },
+      "iface_dispatch": {
+        "ratio": 0.9982450420662738,
+        "ci_low": 0.9637621800590133,
+        "ci_high": 1.0345411750100109,
+        "decision": "pass",
+        "improvement": false
+      },
+      "json_deserialize": {
+        "ratio": 0.9928228811802439,
+        "ci_low": 0.9774655722185933,
+        "ci_high": 1.003323103731319,
+        "decision": "pass",
+        "improvement": false
+      },
+      "json_serialize": {
+        "ratio": 1.007983683278849,
+        "ci_low": 0.9946324866182408,
+        "ci_high": 1.030317906434051,
+        "decision": "pass",
+        "improvement": false
+      },
+      "linked_walk": {
+        "ratio": 0.999513583188302,
+        "ci_low": 0.9850464348200749,
+        "ci_high": 1.0080958861138698,
+        "decision": "pass",
+        "improvement": false
+      },
+      "list_clear_reuse": {
+        "ratio": 0.9857813943709843,
+        "ci_low": 0.979583429457099,
+        "ci_high": 1.0165159722800405,
+        "decision": "pass",
+        "improvement": false
+      },
+      "list_insert_mid": {
+        "ratio": 1.0017044396109434,
+        "ci_low": 0.9863719045914703,
+        "ci_high": 1.013541405472988,
+        "decision": "pass",
+        "improvement": false
+      },
+      "list_push": {
+        "ratio": 0.9983458654315829,
+        "ci_low": 0.9869740048701013,
+        "ci_high": 1.008094222449134,
+        "decision": "pass",
+        "improvement": false
+      },
+      "mandelbrot": {
+        "ratio": 0.9953423189963917,
+        "ci_low": 0.988724534812056,
+        "ci_high": 1.0109692195299587,
+        "decision": "pass",
+        "improvement": false
+      },
+      "map_clear_reuse": {
+        "ratio": 1.0109729970303607,
+        "ci_low": 0.9987672147422333,
+        "ci_high": 1.0233513656706146,
+        "decision": "pass",
+        "improvement": false
+      },
+      "map_get_set": {
+        "ratio": 0.9787036242598193,
+        "ci_low": 0.9096063194879032,
+        "ci_high": 1.0125423153667792,
+        "decision": "pass",
+        "improvement": false
+      },
+      "map_get_span": {
+        "ratio": 0.9799806628632852,
+        "ci_low": 0.9573118097185949,
+        "ci_high": 1.012030733646871,
+        "decision": "pass",
+        "improvement": false
+      },
+      "matmul_64": {
+        "ratio": 0.9999657683232855,
+        "ci_low": 0.9867399850809208,
+        "ci_high": 1.0045007141386735,
+        "decision": "pass",
+        "improvement": false
+      },
+      "nbody": {
+        "ratio": 1.002328247048895,
+        "ci_low": 0.9935816667850259,
+        "ci_high": 1.0157456401037368,
+        "decision": "pass",
+        "improvement": false
+      },
+      "parse_ints": {
+        "ratio": 0.994686714943593,
+        "ci_low": 0.9750664636605086,
+        "ci_high": 1.027329487172099,
+        "decision": "pass",
+        "improvement": false
+      },
+      "quicksort": {
+        "ratio": 0.9974118529874172,
+        "ci_low": 0.9897433685037151,
+        "ci_high": 1.0067468650627172,
+        "decision": "pass",
+        "improvement": false
+      },
+      "regex_find": {
+        "ratio": 0.9623136060866201,
+        "ci_low": 0.9358477511009312,
+        "ci_high": 0.9960914401867769,
+        "decision": "pass",
+        "improvement": true
+      },
+      "scheduler_queue": {
+        "ratio": 0.9969860235523132,
+        "ci_low": 0.976453364373568,
+        "ci_high": 1.0404653873624603,
+        "decision": "pass",
+        "improvement": false
+      },
+      "set_clear_reuse": {
+        "ratio": 1.0177311047883704,
+        "ci_low": 0.9799237446863367,
+        "ci_high": 1.0280580731652704,
+        "decision": "pass",
+        "improvement": false
+      },
+      "set_probe": {
+        "ratio": 1.006121834725532,
+        "ci_low": 0.9830297516848184,
+        "ci_high": 1.0145106332554834,
+        "decision": "pass",
+        "improvement": false
+      },
+      "sieve": {
+        "ratio": 0.9951075812937529,
+        "ci_low": 0.9691632952820817,
+        "ci_high": 1.0188558192044683,
+        "decision": "pass",
+        "improvement": false
+      },
+      "split_span": {
+        "ratio": 1.0008319464096305,
+        "ci_low": 0.9840137616758992,
+        "ci_high": 1.016978888267762,
+        "decision": "pass",
+        "improvement": false
+      },
+      "string_builder": {
+        "ratio": 0.9730372700858351,
+        "ci_low": 0.9387539822066513,
+        "ci_high": 1.0732036535429765,
+        "decision": "pass",
+        "improvement": false
+      },
+      "string_concat": {
+        "ratio": 0.9941172513582489,
+        "ci_low": 0.9736167559791891,
+        "ci_high": 1.0339728122094396,
+        "decision": "pass",
+        "improvement": false
+      },
+      "string_eq": {
+        "ratio": 0.9819269549589352,
+        "ci_low": 0.9668984029173128,
+        "ci_high": 1.0145219214752488,
+        "decision": "pass",
+        "improvement": false
+      },
+      "substring": {
+        "ratio": 1.0015621678572155,
+        "ci_low": 0.9880131587028724,
+        "ci_high": 1.0147599871291824,
+        "decision": "pass",
+        "improvement": false
+      },
+      "substring_span": {
+        "ratio": 0.9917880212314405,
+        "ci_low": 0.9864515298822787,
+        "ci_high": 1.0058395158355569,
+        "decision": "pass",
+        "improvement": false
+      },
+      "sum_options": {
+        "ratio": 0.9952536130170136,
+        "ci_low": 0.9794365582634866,
+        "ci_high": 1.006722712945663,
+        "decision": "pass",
+        "improvement": false
+      },
+      "vec_add": {
+        "ratio": 0.9798894040460778,
+        "ci_low": 0.9673652187208617,
+        "ci_high": 0.9962983007848563,
+        "decision": "pass",
+        "improvement": true
+      },
+      "weak_tree": {
+        "ratio": 1.0013563807516546,
+        "ci_low": 0.9811432574275212,
+        "ci_high": 1.0234332805061264,
+        "decision": "pass",
+        "improvement": false
+      },
+      "wordcount": {
+        "ratio": 1.0179286411249069,
+        "ci_low": 0.989735371670886,
+        "ci_high": 1.0244388454439974,
+        "decision": "pass",
+        "improvement": false
+      }
+    },
+    "macro": {
+      "async_fanout": {
+        "ratio": 1.0016053562917504,
+        "ci_low": 0.9930204809638254,
+        "ci_high": 1.017395549493889,
+        "decision": "pass",
+        "improvement": false
+      },
+      "graph_paths_class": {
+        "ratio": 1.0024185965663013,
+        "ci_low": 0.9943847935999732,
+        "ci_high": 1.013057816186365,
+        "decision": "pass",
+        "improvement": false
+      },
+      "graph_paths_value": {
+        "ratio": 1.0013392869570128,
+        "ci_low": 0.9822718127227473,
+        "ci_high": 1.0181958953399666,
+        "decision": "pass",
+        "improvement": false
+      },
+      "json_service": {
+        "ratio": 0.981134734141556,
+        "ci_low": 0.9566721379244212,
+        "ci_high": 0.9903884687409189,
+        "decision": "pass",
+        "improvement": true
+      },
+      "log_processor": {
+        "ratio": 0.9748551686094791,
+        "ci_low": 0.9613507917042808,
+        "ci_high": 1.0208423605893167,
+        "decision": "pass",
+        "improvement": false
+      },
+      "task_parallel": {
+        "ratio": 0.9849674457553574,
+        "ci_low": 0.7974701885027993,
+        "ci_high": 1.0688115843550152,
+        "decision": "pass",
+        "improvement": false
+      }
+    }
+  },
+  "default_layout_sensitivity": {
+    "default_layout_comparison": {
+      "ratio": 1.1653240835584322,
+      "ci_low": 1.1413753197102117,
+      "ci_high": 1.1821587956479411,
+      "decision": "regression",
+      "improvement": false
+    },
+    "llvm_body_identical": true,
+    "assembly_identical": true,
+    "interpretation": "Default native code placement remains timing-sensitive; identical JSON instructions regressed with the unaligned whole-suite layout, but pass with equally controlled placement. This is not a universal application speedup claim."
+  },
+  "limits": [
+    "Opaque callbacks and unresolved effects retain ordinary ARC.",
+    "Observable cleanup, count observations, ownership transfers and suspension remain barriers.",
+    "Mixed aggregates and releases with inconsistent destruction roles retain ordinary ownership."
+  ]
+}

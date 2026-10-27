@@ -212,7 +212,12 @@ fn step(s: &Statement, pos: &HashMap<Local, usize>, st: &mut State) -> Option<Rc
             let Some(m) = member_of(op, pos) else {
                 return Some(Rc::Other);
             };
-            if st.hold[pos[&m]] != Hold::Obj || st.count == 0 || st.count >= MAX_COUNT {
+            match st.hold[pos[&m]] {
+                Hold::Null => return Some(Rc::Op),
+                Hold::Stale => return None,
+                Hold::Obj => {}
+            }
+            if st.count == 0 || st.count >= MAX_COUNT {
                 return None;
             }
             st.count += 1;

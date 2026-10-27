@@ -164,6 +164,28 @@ fn select_can_hold_an_alias_or_null_without_taking_a_token() {
 }
 
 #[test]
+fn retaining_a_nullable_alias_preserves_one_consistent_final_cleanup() {
+    let life = run(|b, i, o, a| {
+        let c = b.new_param(i.bool(), None);
+        b.assign(
+            Place::Local(a),
+            Rvalue::Select {
+                cond: copy(c),
+                then_val: copy(o),
+                else_val: Operand::Const(Const::Null),
+            },
+        );
+        b.push(Statement::Retain(copy(a)));
+        b.push(Statement::Release(copy(a)));
+        b.push(Statement::Release(copy(o)));
+        b.terminate(Terminator::Return(None));
+    })
+    .expect("null RC is a no-op and the root always supplies the final cleanup");
+    assert_eq!(life.deaths.len(), 1);
+    assert_eq!(life.rc_ops.len(), 2);
+}
+
+#[test]
 fn a_release_that_is_final_on_only_one_path_is_refused() {
     assert!(
         run(|b, i, o, a| {

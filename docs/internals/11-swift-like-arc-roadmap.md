@@ -125,9 +125,15 @@ cursor inference; ownership observations still do.
 
 The post-inline and late `rc-proven-elision` stages also remove surplus copies covered by
 an existing live local owner. Verifier-enabled builds check ephemeral elision certificates
-before modifying statements. View families can borrow fresh arrays and default-constructed
-strong owners without extending cleanup. Static allocation lifetimes preserve alternative
-holder states at CFG joins but reject releases whose destruction role differs by path.
+before modifying statements. The CFG sweep also removes surplus pairs directly on immutable
+borrowed reference parameters across nonobserving summarized calls. Alias transfers, changed
+identities and a retain that can reexecute before its release block cancellation.
+View families can borrow fresh arrays and default-constructed strong owners through stable
+strong field and element links without extending cleanup. Read loans check the slots of
+each family, so an unrelated mutation need not reject other families. Nested records keep
+all-or-nothing aggregate borrowing. Static allocation lifetimes preserve alternative holder
+states at CFG joins, including retained nullable aliases, but reject releases whose
+destruction role differs by path.
 Post-insertion summaries inspect explicit cleanup rather than assuming every local can
 die implicitly. Snapshot proofs distinguish null setup from existing tokens and check
 observations over the original token lifetime. A release through a copy-propagated alias
@@ -140,6 +146,12 @@ Synchronous callback targets can propagate through closed direct forwarding help
 recursive cycles in release builds. This exposes the concrete callee's existing effects
 to borrowing and elision. Conflicting or unknown entries keep indirect calls; resolving
 a callback that observes ownership still preserves the reader's owning token.
+Array-write summaries preserve actual parameter roots and constant slots across forwarding
+helpers and closed interface calls, with the receiver occupying parameter zero. The same
+location extraction covers direct writes and bulk operations. Unknown indices/ranges overlap
+the relevant array, and unknown/coarse effects absorb precise ones. The array-helper LLVM
+golden requires zero retains/releases for reading slot zero across a helper writing slot one;
+the helper writing slot zero preserves the reader's owning pair.
 
 The [2026-10-27 callback measurements](ownership-proof-measurements.json) compare rebuilt
 compilers before and after converged forwarding on Windows with LLVM 22.1.8. In the
@@ -151,6 +163,17 @@ retain/release operations, while the caller still releases its function box. Sam
 recompiles produced identical native LLVM IR and WASM LLVM IR, WASM and WAT. The JSON also
 records the remaining cooperative-yield traffic and the unfinished supplemental release
 Unicode WASM stress run.
+
+The [additional proof validation](ownership-proof-final-measurements.json) compares the
+next batch against `9ee94332`. The array-helper probe removes 50,000 retain/release pairs
+per 50,000 reads, with unchanged allocations. Twelve alternating timing rounds measured
+about 30% less native read time and 8% less Node read time. Workspace checks, the full
+native/Node corpus, optimized ownership/serialization/collection cases with native ASan,
+and compiler time/memory budgets passed. The native micro/macro gates used equal 64-byte
+function and 32-byte loop alignment, matching the existing Linux CI layout settings.
+With default native placement, JSON serialization measured slower despite identical LLVM
+and assembly for that function; equal placement restored parity. That sensitivity remains
+recorded, and these workload gains do not establish a general application speedup.
 
 Authoring rule: borrow + move + dense memory + clear/reuse → ARC can beat gen0 on the *same*
 shapes; `new` + share a class graph every iteration will not.

@@ -125,9 +125,14 @@ unknown. Null origins distinguish setup before a snapshot exists from its live i
 
 Field effects retain direct parameter roots, substituted through direct-call edges in
 the existing dependency worklist. Coarse type/field queries project the same summaries.
-Missing bindings, constructor/interface edges without actual bindings, raw memory and
-unresolved calls remain conservative. Constant element indices can distinguish slots
-within one array; dynamic indices overlap.
+Element effects retain parameter roots and constant indices through that same worklist.
+Direct stores, slot take/swap, reallocation and bulk element operations use one location
+extractor; a singleton bulk write can retain its constant offset, while larger or dynamic
+ranges overlap all elements of the affected array. Both writes in an indexed assignment
+whose RHS takes another slot are included. Closed interface edges substitute the receiver
+at parameter zero before explicit arguments. Missing bindings, constructor edges without
+actual bindings, raw memory and unresolved calls remain conservative. Coarse slot queries
+project the richer summaries, and a coarse or unknown write absorbs a precise write.
 
 The same dependency worklist closes ownership-observation and cleanup flags independently
 of unknown writes. A typed scalar store through a pointer cannot discharge managed fields.
@@ -157,16 +162,33 @@ original explicit release; pre-insertion live-interval relaxation is limited to 
 without user destructors, where cleanup cannot be observed early.
 
 `object_life` joins sets of possible holder/count states. Alias selects can add
-alternatives, but each release must have one consistent role across all incoming states.
+alternatives, including retained nullable aliases: a retain of null is a no-op in the
+abstract count as in the runtime. Each release must have one consistent role across all incoming states.
 A mixed final/nonfinal release is rejected rather than adding a runtime ownership test.
 Every return must discharge the allocation, and each repeated allocation requires its
 previous instance to be dead. The existing count and frame-size limits remain in force.
 
 Fresh, private arrays and default-constructed strong objects can cover local view families
-using their existing owner lifetime. Early release, publication, replacement, observing
-calls and suspension reject that proof. Value-parameter forwarding closes to a fixed
-point in release builds. Read loans also admit writes to private fresh scratch arrays;
-they retain ordinary aggregate glue when a complete family cannot be proved safe.
+using their existing owner lifetime. Cursor links through strong fields or array elements
+can lead back to that root. Every link is protected during dependent uses; a finite set of
+local identities stops cycles without growing access paths. Early release, publication,
+relevant replacement, observing calls and suspension reject that proof. Unrelated summarized
+writes do not. Observations after the last real read still require coverage through the
+original value cleanup. Value-parameter forwarding closes to a fixed point in release builds.
+The observation check distinguishes initialized value storage from storage cleared by
+`ValueKill`; a later empty drop does not extend an old loan through the function exit.
+The proof's scratch MIR keeps statement positions fixed while consulting slot facts.
+Read loans protect each traversed slot over the lifetimes of its dependent locals, including
+their existing cleanup. Unrelated writes and independently mutated families do not reject
+an entire function. Nested records qualify only when all managed fields remain private and
+covered; incomplete aggregates retain ordinary copy/drop glue.
+
+The module RC sweep additionally cancels surplus pairs directly on immutable borrowed
+reference parameters across nonobserving summarized operations. The caller's token covers
+the interval. Transfers through aliases, unknown calls, cleanup barriers and observations
+still reject the pair. It reuses the ordinary postdominance region finder and revalidates
+accepted sites before rewriting in verifier-enabled builds. Both sweeps reject a changed
+local identity and a retain that can reexecute before its matching release.
 
 Debug-info builds call `optimize_module_opts(.., inline = false)`: RC insertion and pruning still run (they are correctness-relevant), but devirt/inlining is off so each user function keeps its own body and call frame for the debugger.
 

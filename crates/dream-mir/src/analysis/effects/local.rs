@@ -5,11 +5,12 @@ use crate::analysis::ownership::OwnershipFacts;
 use crate::{Callee, Global, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 pub(super) enum Edge {
     Call(DefId, Vec<TypeId>, Vec<Option<BTreeSet<usize>>>),
-    Iface(usize, usize),
+    Iface(usize, usize, Vec<Option<BTreeSet<usize>>>),
     Ctor(DefId),
 }
 
@@ -86,9 +87,25 @@ impl LocalSummary {
                 }
             }
             Effect::SlotStore(ty) => {
+                let writes = f.blocks[bi]
+                    .stmts
+                    .get(si)
+                    .and_then(|stmt| super::element_writes(stmt, f, interner))
+                    .and_then(|writes| {
+                        let mut roots = BTreeSet::new();
+                        for write in writes.into_iter().filter(|write| write.element == ty) {
+                            roots.extend(
+                                facts
+                                    .parameter_origins(bi, si, write.base)?
+                                    .into_iter()
+                                    .map(|root| (root, write.index)),
+                            );
+                        }
+                        Some(roots)
+                    });
                 for m in [&mut s.own, &mut s.own_fresh] {
                     if let Some(k) = m.known_mut() {
-                        k.slots.insert(ty);
+                        k.record_slot(ty, writes.clone());
                     }
                 }
             }
@@ -97,7 +114,7 @@ impl LocalSummary {
                 Some(&ty) => {
                     for m in [&mut s.own, &mut s.own_fresh] {
                         if let Some(k) = m.known_mut() {
-                            k.slots.insert(ty);
+                            k.record_slot(ty, None);
                         }
                     }
                 }
@@ -124,7 +141,17 @@ impl LocalSummary {
                     })
                     .collect(),
             )),
-            Effect::Iface(id, slot) => s.edges.push(Edge::Iface(id, slot)),
+            Effect::Iface(id, slot) => s.edges.push(Edge::Iface(
+                id,
+                slot,
+                arguments
+                    .iter()
+                    .map(|op| match op {
+                        Operand::Copy(Place::Local(l)) => facts.parameter_origins(bi, si, *l),
+                        _ => None,
+                    })
+                    .collect(),
+            )),
             Effect::Ctor(def) => s.edges.push(Edge::Ctor(def)),
         };
         for (bi, block) in f.blocks.iter().enumerate() {
@@ -135,11 +162,7 @@ impl LocalSummary {
                     || matches!(stmt, Statement::Assign(Place::Deref { .. }, rv)
                         if !matches!(rv, Rvalue::RawLoad { .. } | Rvalue::IndirectCall { .. }
                             | Rvalue::JsCall { .. } | Rvalue::ToString(_) | Rvalue::HashCode(_)));
-                let arguments = match stmt {
-                    Statement::Call { args, .. }
-                    | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
-                    _ => &[],
-                };
+                let arguments = call_arguments(stmt);
                 let mut effects = Vec::new();
                 if matches!(stmt, Statement::DebugLine(_)) {
                     effects.push(Effect::ObserveOwnership);
@@ -149,7 +172,7 @@ impl LocalSummary {
                     if matches!(e, Effect::Top) && !raw_write {
                         s.observes_rc = true;
                     }
-                    record(&mut s, e, bi, si, arguments);
+                    record(&mut s, e, bi, si, &arguments);
                 }
             }
             match &block.terminator {
@@ -165,6 +188,22 @@ impl LocalSummary {
             }
         }
         s
+    }
+}
+
+/// Method summaries use receiver index zero, matching their concrete MIR bodies.
+pub(crate) fn call_arguments(stmt: &Statement) -> Cow<'_, [Operand]> {
+    match stmt {
+        Statement::Call { args, .. } | Statement::Assign(_, Rvalue::Call { args, .. }) => {
+            Cow::Borrowed(args)
+        }
+        Statement::InterfaceCall { receiver, args, .. }
+        | Statement::Assign(_, Rvalue::InterfaceCall { receiver, args, .. }) => Cow::Owned(
+            std::iter::once(receiver.clone())
+                .chain(args.iter().cloned())
+                .collect(),
+        ),
+        _ => Cow::Borrowed(&[]),
     }
 }
 

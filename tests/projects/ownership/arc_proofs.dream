@@ -109,6 +109,88 @@ fun arc_proofs_distinguish_array_slots(): void {
 }
 
 @noinline
+fun proof_replace_slot_one(borrow values: string[]): void {
+    values[1] = "replacement";
+}
+
+@noinline
+fun proof_forward_slot_one(borrow values: string[]): void {
+    proof_replace_slot_one(values);
+}
+
+@noinline
+fun proof_read_across_slot_call(borrow values: string[]): int {
+    let first = values[0];
+    proof_forward_slot_one(values);
+    return first.length;
+}
+
+@noinline
+fun proof_replace_slot_zero(borrow values: string[]): void {
+    values[0] = "replacement";
+}
+
+@noinline
+fun proof_read_across_alias_call(borrow values: string[]): int {
+    let first = values[0];
+    proof_replace_slot_zero(values);
+    return first.length;
+}
+
+@test
+fun arc_proofs_substitute_array_writes_through_helpers(): void {
+    let values = ["first" + 1, "second" + 2];
+    Assert.eq(proof_read_across_slot_call(values), 6);
+    Assert.eq(values[1], "replacement");
+    Assert.eq(proof_read_across_alias_call(values), 6);
+    Assert.eq(values[0], "replacement");
+}
+
+class ProofArrayOwner {
+    public values: int[];
+
+    public constructor(values: int[]) {
+        this.values = values;
+    }
+}
+
+struct ProofTextRecord {
+    public text: string;
+
+    public constructor(text: string) {
+        this.text = text;
+    }
+}
+
+struct ProofTextEnvelope {
+    public record: ProofTextRecord;
+
+    public constructor(record: ProofTextRecord) {
+        this.record = record;
+    }
+}
+
+@noinline
+fun proof_read_envelope(borrow envelope: ProofTextEnvelope): int {
+    return envelope.record.text.length;
+}
+
+@test
+fun arc_proofs_keep_nested_views_alive_across_owner_link_replacement(): void {
+    let owner = ProofArrayOwner([10, 20]);
+    let view = ReadOnlySpan<int>.of(owner.values);
+    let other = ProofLeaf("scratch" + 1);
+    let envelope = ProofTextEnvelope(ProofTextRecord(other.text));
+    proof_replace(other);
+    Assert.eq(proof_read_envelope(envelope), 8);
+    Assert.eq(view[0], 10);
+    owner.values = [30, 40];
+    Assert.eq(proof_read_envelope(envelope), 8);
+    Assert.eq(view[0], 10);
+    Assert.eq(owner.values[0], 30);
+}
+
+@noinline
 fun proof_callback_recursive(borrow callback: fun(int): int, depth: int, value: int): int {
     if depth > 0 {
         return proof_callback_recursive(callback, depth - 1, value);

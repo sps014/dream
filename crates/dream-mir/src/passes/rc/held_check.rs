@@ -211,24 +211,16 @@ impl Check<'_> {
                 }
                 Effect::SlotStore(ty) => {
                     !self.hits_elem(ty)
-                        || match stmt {
-                            Statement::Assign(
-                                Place::Index {
-                                    base: written,
-                                    index,
-                                    ..
-                                },
-                                _,
-                            ) => {
-                                !self.facts.may_alias(bi, si, *written, crate::Local(base))
-                                    || self
-                                        .snap
-                                        .index
-                                        .zip(constant_index(index))
-                                        .is_some_and(|(a, b)| a != b)
-                            }
-                            _ => false,
-                        }
+                        || !self.facts.invalidates(
+                            self.f,
+                            self.interner,
+                            self.modref,
+                            (bi, si),
+                            Location::Element {
+                                base: crate::Local(base),
+                                index: self.snap.index,
+                            },
+                        )
                 }
                 Effect::Call(c) => {
                     let args = match stmt {
@@ -282,6 +274,15 @@ impl Check<'_> {
                         self.interner,
                         &protected,
                         args,
+                        (bi, si),
+                        location,
+                    ),
+                    Statement::InterfaceCall { .. }
+                    | Statement::Assign(_, Rvalue::InterfaceCall { .. }) => self.facts.call_hits(
+                        self.f,
+                        self.interner,
+                        &protected,
+                        &crate::analysis::effects::call_arguments(stmt),
                         (bi, si),
                         location,
                     ),

@@ -310,6 +310,97 @@ fn direct_call_field_roots_are_substituted_through_a_relay() {
 }
 
 #[test]
+fn array_call_roots_and_constant_slots_survive_parameter_permutation() {
+    for aliases in [false, true] {
+        for index in [Some(0), Some(1), None] {
+            let mut t = types();
+            let array = t.i.array(t.i.string());
+            let mut mutate = FunctionBuilder::new("mutate", t.i.void());
+            mutate.set_def(DefId::root(780), vec![]);
+            let dynamic = mutate.new_param(t.i.int(), None);
+            let p = mutate.new_param(array, None);
+            mutate.assign(
+                Place::index(
+                    p,
+                    index.map_or_else(
+                        || Operand::Copy(Place::Local(dynamic)),
+                        |n| Operand::Const(Const::Int(n)),
+                    ),
+                ),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            );
+            mutate.terminate(Terminator::Return(None));
+            let callee = |def, takes| Callee {
+                def: DefId::root(def),
+                args: vec![],
+                ret: t.i.void(),
+                take_params: takes,
+                borrowed_result: false,
+            };
+            let mut relay = FunctionBuilder::new("relay", t.i.void());
+            relay.set_def(DefId::root(781), vec![]);
+            let p = relay.new_param(array, None);
+            let dynamic = relay.new_param(t.i.int(), None);
+            relay.push(Statement::Call {
+                callee: callee(780, vec![false; 2]),
+                args: vec![
+                    Operand::Copy(Place::Local(dynamic)),
+                    Operand::Copy(Place::Local(p)),
+                ],
+            });
+            relay.terminate(Terminator::Return(None));
+            let mut b = FunctionBuilder::new("read", t.i.void());
+            let base = b.new_param(array, None);
+            let other = b.new_local(array, None);
+            b.assign(
+                Place::Local(other),
+                if aliases {
+                    Rvalue::Use(Operand::Copy(Place::Local(base)))
+                } else {
+                    Rvalue::ArrayLit {
+                        elem_ty: t.i.string(),
+                        elems: vec![Operand::Const(Const::Null)],
+                    }
+                },
+            );
+            let x = b.new_local(t.i.string(), None);
+            b.assign(
+                Place::Local(x),
+                Rvalue::Use(Operand::Copy(Place::index(
+                    base,
+                    Operand::Const(Const::Int(0)),
+                ))),
+            );
+            b.push(Statement::Retain(Operand::Copy(Place::Local(x))));
+            b.push(Statement::Call {
+                callee: callee(781, vec![false; 2]),
+                args: vec![
+                    Operand::Copy(Place::Local(other)),
+                    Operand::Const(Const::Int(0)),
+                ],
+            });
+            b.push(peek_call(&t, x));
+            b.push(Statement::Release(Operand::Copy(Place::Local(x))));
+            b.terminate(Terminator::Return(None));
+            let mut f = b.finish();
+            let mir = Mir {
+                functions: vec![mutate.finish(), relay.finish(), peek_fn(&t, false)],
+                layouts: t.layouts.clone(),
+                profile: dream_abi::profile::CompileProfile::Release,
+                ..Mir::default()
+            };
+            let effects = ModRefTable::compute(&mir, &t.i);
+            run_function(&mut f, &t.i, &t.layouts, &effects);
+            assert_eq!(
+                rc_ops(&f, x),
+                if aliases && index != Some(1) { 2 } else { 0 },
+                "aliases={aliases}, index={index:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn constant_element_writes_only_invalidate_overlapping_slots() {
     for written in [Some(0), Some(1), None] {
         let mut t = types();
@@ -807,3 +898,9 @@ fn heap_observation_requires_owner_coverage_through_each_query() {
         assert_eq!(rc_ops(&s.func, s.x), if drop_owner == 1 { 2 } else { 0 });
     }
 }
+
+#[path = "held_interface_tests.rs"]
+mod interface;
+
+#[path = "held_bulk_tests.rs"]
+mod bulk;

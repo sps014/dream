@@ -51,7 +51,7 @@ impl ModRefTable {
         }
         for local in locals {
             for edge in &local.edges {
-                if let Edge::Iface(id, slot) = edge {
+                if let Edge::Iface(id, slot, _) = edge {
                     targets.entry((*id, *slot)).or_insert(None);
                 }
             }
@@ -73,7 +73,7 @@ impl ModRefTable {
                 let target = match edge {
                     Edge::Call(def, args, _) => functions.get(&(*def, args.as_slice())),
                     Edge::Ctor(def) => constructors.get(def),
-                    Edge::Iface(id, slot) => interfaces.get(&(*id, *slot)),
+                    Edge::Iface(id, slot, _) => interfaces.get(&(*id, *slot)),
                 };
                 if let Some(&target) = target {
                     users[target].push(index);
@@ -117,7 +117,7 @@ impl ModRefTable {
                 let target = match edge {
                     Edge::Call(def, args, _) => functions.get(&(*def, args.as_slice())),
                     Edge::Ctor(def) => constructors.get(def),
-                    Edge::Iface(id, slot) => interfaces.get(&(*id, *slot)),
+                    Edge::Iface(id, slot, _) => interfaces.get(&(*id, *slot)),
                 };
                 target.map_or_else(
                     || match edge {
@@ -235,7 +235,7 @@ impl ModRefTable {
             summary.join(&match edge {
                 Edge::Call(def, args, parameters) => self.call_def(*def, args).mapped(parameters),
                 Edge::Ctor(def) => self.ctor(*def).mapped(&[]),
-                Edge::Iface(id, slot) => self.iface(*id, *slot).mapped(&[]),
+                Edge::Iface(id, slot, parameters) => self.iface(*id, *slot).mapped(parameters),
             });
         }
         summary

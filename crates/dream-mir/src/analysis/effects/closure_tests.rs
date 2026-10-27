@@ -31,7 +31,7 @@ fn rescan(table: &mut ModRefTable, mir: &Mir, locals: &[LocalSummary]) {
         }
         for local in locals {
             for edge in &local.edges {
-                if let Edge::Iface(id, slot) = edge {
+                if let Edge::Iface(id, slot, _) = edge {
                     interfaces.entry((*id, *slot)).or_insert(ModRef::Top);
                 }
             }
@@ -47,7 +47,7 @@ fn rescan(table: &mut ModRefTable, mir: &Mir, locals: &[LocalSummary]) {
                         table.call_def(*def, args).mapped(parameters)
                     }
                     Edge::Ctor(def) => table.ctor(*def).mapped(&[]),
-                    Edge::Iface(id, slot) => table.iface(*id, *slot).mapped(&[]),
+                    Edge::Iface(id, slot, parameters) => table.iface(*id, *slot).mapped(parameters),
                 };
                 normal.join(&effect);
                 fresh.join(&effect);
@@ -126,7 +126,7 @@ fn dependency_closure_matches_rescans_on_recursive_and_erased_graphs() {
             for _ in 0..next() % 4 {
                 let target = &mir.functions[next() % mir.functions.len()];
                 edges.push(match next() % 4 {
-                    0 => Edge::Iface(next() % 2, next() % 4),
+                    0 => Edge::Iface(next() % 2, next() % 4, vec![]),
                     1 => Edge::Ctor(target.def),
                     2 => Edge::Call(DefId::root(100), vec![], vec![]),
                     _ => Edge::Call(target.def, target.instance.clone(), vec![]),

@@ -7,7 +7,7 @@ use dream_types::TypeInterner;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Location {
     Field { base: Local, field: u32 },
     Element { base: Local, index: Option<i64> },
@@ -131,19 +131,15 @@ impl OwnershipFacts {
                         if !matches!(i.kind(f.local_ty(base)), dream_types::TyKind::Array(e) if *e == ty)
                         {
                             false
-                        } else if let Statement::Assign(
-                            Place::Index {
-                                base: written,
-                                index: at,
-                                ..
-                            },
-                            _,
-                        ) = stmt
-                        {
-                            self.may_alias(bi, si, base, *written)
-                                && !index.zip(constant_index(at)).is_some_and(|(a, b)| a != b)
                         } else {
-                            true
+                            super::effects::element_writes(stmt, f, i).is_none_or(|writes| {
+                                writes.into_iter().filter(|write| write.element == ty).any(
+                                    |write| {
+                                        self.may_alias(bi, si, base, write.base)
+                                            && !index.zip(write.index).is_some_and(|(a, b)| a != b)
+                                    },
+                                )
+                            })
                         }
                     }
                 },
@@ -155,7 +151,14 @@ impl OwnershipFacts {
                     };
                     self.call_hits(f, i, &table.call_at(c, args), args, point, location)
                 }
-                Effect::Iface(id, slot) => summary_hits(f, i, &table.iface(id, slot), location),
+                Effect::Iface(id, slot) => self.call_hits(
+                    f,
+                    i,
+                    &table.iface(id, slot),
+                    &super::effects::call_arguments(stmt),
+                    point,
+                    location,
+                ),
                 Effect::Ctor(def) => summary_hits(f, i, &table.ctor(def), location),
             };
         });
@@ -171,12 +174,40 @@ impl OwnershipFacts {
         point: (usize, usize),
         location: Location,
     ) -> bool {
-        let (ModRef::Known(k), Location::Field { base, field }) = (summary, location) else {
+        let ModRef::Known(k) = summary else {
             return summary_hits(f, i, summary, location);
         };
         if k.observes_ownership() {
             return true;
         }
+        let (base, field) = match location {
+            Location::Field { base, field } => (base, field),
+            Location::Element { base, index } => {
+                let dream_types::TyKind::Array(element) = i.kind(f.local_ty(base)) else {
+                    return true;
+                };
+                if k.any_slot {
+                    return true;
+                }
+                if !k.slots.contains(element) {
+                    return false;
+                }
+                let Some(Some(writes)) = k.slot_params.get(element) else {
+                    return true;
+                };
+                return writes.iter().any(|&(parameter, written_index)| {
+                    if index.zip(written_index).is_some_and(|(a, b)| a != b) {
+                        return false;
+                    }
+                    match args.get(parameter) {
+                        Some(Operand::Copy(Place::Local(actual))) => {
+                            self.may_alias(point.0, point.1, base, *actual)
+                        }
+                        _ => true,
+                    }
+                });
+            }
+        };
         let key = (f.local_ty(base), field);
         if !k.fields.contains(&key) {
             return false;

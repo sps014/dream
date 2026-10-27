@@ -761,6 +761,30 @@ fn rc_golden_flat_record_readers_and_array_projection() {
 }
 
 #[test]
+fn rc_golden_array_helpers_preserve_constant_slot_separation() {
+    let ir = emit_arc_release(include_str!("fixtures/compiler/arc_array_effects.dream"));
+    let functions = ir_func_defs(&ir);
+    for name in ["readother", "relayone"] {
+        let body = &functions
+            .iter()
+            .filter(|f| f.name.ends_with(name))
+            .max_by_key(|f| f.body.len())
+            .unwrap_or_else(|| panic!("missing {name}"))
+            .body;
+        assert_eq!(count_in(body, "@dream_retain("), 0, "{name}: {body}");
+        assert_eq!(count_in(body, "@dream_release("), 0, "{name}: {body}");
+    }
+    let body = &functions
+        .iter()
+        .filter(|f| f.name.ends_with("readsame"))
+        .max_by_key(|f| f.body.len())
+        .expect("same slot reader")
+        .body;
+    assert_eq!(count_in(body, "@dream_retain("), 1, "{body}");
+    assert_eq!(count_in(body, "@dream_release("), 1, "{body}");
+}
+
+#[test]
 fn rc_golden_index_scan_borrows_elements_but_overwrites_keep_snapshots() {
     let ir = emit_arc_release(
         r#"

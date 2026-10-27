@@ -13,7 +13,7 @@ pub(crate) enum Location {
     Element { base: Local, index: Option<i64> },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Origin {
     Parameter(usize),
     Allocation(usize, usize),
@@ -247,10 +247,7 @@ impl OwnershipFacts {
                     Some(entry) => {
                         let mut changed = false;
                         for (dst, src) in entry.iter_mut().zip(&state) {
-                            if src.iter().any(|origin| !dst.contains(origin)) {
-                                Rc::make_mut(dst).extend(src.iter().copied());
-                                changed = true;
-                            }
+                            changed |= join_origins(dst, src);
                         }
                         changed
                     }
@@ -394,6 +391,22 @@ fn operand(op: &Operand, state: &State, slots: &[Option<usize>]) -> Origins {
     }
 }
 
+fn join_origins(dst: &mut Origins, src: &Origins) -> bool {
+    // Unknown already aliases every object; preserving additional sites only inflates
+    // loop-carried states without adding information to any ownership query.
+    if Rc::ptr_eq(dst, src) || dst.contains(&Origin::Unknown) {
+        false
+    } else if src.contains(&Origin::Unknown) {
+        *dst = src.clone();
+        true
+    } else if src.iter().any(|origin| !dst.contains(origin)) {
+        Rc::make_mut(dst).extend(src.iter().copied());
+        true
+    } else {
+        false
+    }
+}
+
 fn transfer(bi: usize, si: usize, stmt: &Statement, state: &mut State, slots: &[Option<usize>]) {
     if let Statement::Assign(Place::Local(d), rv) = stmt
         && let Some(slot) = slots[d.0 as usize]
@@ -405,7 +418,7 @@ fn transfer(bi: usize, si: usize, stmt: &Statement, state: &mut State, slots: &[
                 then_val, else_val, ..
             } => {
                 let mut origins = operand(then_val, state, slots);
-                Rc::make_mut(&mut origins).extend(operand(else_val, state, slots).iter().copied());
+                join_origins(&mut origins, &operand(else_val, state, slots));
                 origins
             }
             Rvalue::New { .. } | Rvalue::ArrayNew { .. } | Rvalue::ArrayLit { .. } => {
@@ -413,5 +426,26 @@ fn transfer(bi: usize, si: usize, stmt: &Statement, state: &mut State, slots: &[
             }
             _ => Rc::new(BTreeSet::from([Origin::Unknown])),
         };
+    }
+}
+
+#[cfg(test)]
+mod domain_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_absorbs_sites_and_null_without_losing_alias_information() {
+        let unknown = Rc::new(BTreeSet::from([Origin::Unknown]));
+        let mut origins = Rc::new(BTreeSet::from([
+            Origin::Parameter(0),
+            Origin::Allocation(0, 0),
+        ]));
+        assert!(join_origins(&mut origins, &unknown));
+        for site in 0..128 {
+            let allocation = Rc::new(BTreeSet::from([Origin::Allocation(1, site)]));
+            assert!(!join_origins(&mut origins, &allocation));
+        }
+        assert!(!join_origins(&mut origins, &Origins::default()));
+        assert_eq!(*origins, *unknown);
     }
 }

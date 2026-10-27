@@ -50,7 +50,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     if mir.profile.is_debug() {
         return false;
     }
-    let modref = ModRefTable::compute(mir, interner);
+    let modref = ModRefTable::after_rc(mir, interner);
     let layouts = mir.layouts.clone();
     let mut changed = false;
     for f in &mut mir.functions {

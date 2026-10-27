@@ -6,11 +6,14 @@ mod effects_tests;
 pub(crate) mod escape;
 #[cfg(test)]
 mod escape_tests;
+pub(crate) mod function_boxes;
 pub(crate) mod function_key;
 pub(crate) mod object_life;
 #[cfg(test)]
 mod object_life_tests;
 pub(crate) mod ownership;
+#[cfg(test)]
+mod ownership_tests;
 
 pub(crate) mod protocol;
 #[cfg(test)]

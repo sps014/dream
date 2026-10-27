@@ -128,6 +128,11 @@ an existing live local owner. Verifier-enabled builds check ephemeral elision ce
 before modifying statements. View families can borrow fresh arrays and default-constructed
 strong owners without extending cleanup. Static allocation lifetimes preserve alternative
 holder states at CFG joins but reject releases whose destruction role differs by path.
+Post-insertion summaries inspect explicit cleanup rather than assuming every local can
+die implicitly. Snapshot proofs distinguish null setup from existing tokens and check
+observations over the original token lifetime. A release through a copy-propagated alias
+still needs its supplying retain; the JSON round-trip and consuming-copy regressions cover
+that case, including optimized sanitizer execution.
 Opaque cooperative-yield callbacks remain observation barriers. Snapshots spanning those
 callbacks or unresolved cleanup keep ordinary ARC; zero-RC iterator claims require closed
 callback effects as well as a live owner.

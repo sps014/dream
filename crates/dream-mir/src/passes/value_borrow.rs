@@ -41,7 +41,7 @@ type Signatures = BTreeMap<(DefId, Vec<TypeId>), Vec<bool>>;
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sigs = signatures(mir, interner);
     let modref = (!mir.profile.is_debug())
-        .then(|| crate::analysis::effects::ModRefTable::compute(mir, interner));
+        .then(|| crate::analysis::effects::ModRefTable::after_rc(mir, interner));
     let panics = panic_defs(mir);
     let mut changed = false;
     for f in &mut mir.functions {

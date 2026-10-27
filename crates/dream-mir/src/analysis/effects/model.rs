@@ -14,13 +14,18 @@ pub(crate) struct Known {
     pub(crate) slots: BTreeSet<TypeId>,
     /// Some array-element slot of an unknown (possibly RC) type may be overwritten.
     pub(crate) any_slot: bool,
-    /// May read an object's refcount or the live-object count (`Debug.ref_count` & co.).
+    /// May read an object's token count (`Debug.ref_count` or unknown user callbacks).
     pub(crate) observes_rc: bool,
+    /// Observes allocation/live-heap state without reading a token count.
+    pub(crate) observes_heap: bool,
     /// An owning obligation may discharge a destructor-bearing graph, including implicit cleanup.
     pub(crate) may_destroy: bool,
 }
 
 impl Known {
+    pub(crate) fn observes_ownership(&self) -> bool {
+        self.observes_rc || self.observes_heap
+    }
     pub(super) fn record_field(&mut self, key: (TypeId, u32), roots: Option<BTreeSet<usize>>) {
         let roots = if self.fields.contains(&key) {
             match (self.field_params.get(&key).cloned().flatten(), roots) {
@@ -74,6 +79,7 @@ impl ModRef {
                 a.slots.extend(b.slots.iter().copied());
                 a.any_slot |= b.any_slot;
                 a.observes_rc |= b.observes_rc;
+                a.observes_heap |= b.observes_heap;
                 a.may_destroy |= b.may_destroy;
                 before != *a
             }
@@ -140,7 +146,7 @@ impl ModRef {
                 k.fields.is_empty()
                     && k.slots.is_empty()
                     && !k.any_slot
-                    && !k.observes_rc
+                    && !k.observes_ownership()
                     && !k.may_destroy
             }
         }

@@ -414,6 +414,26 @@ fn initialized_function_field_resolves() {
 }
 
 #[test]
+fn scheduler_control_preserves_box_targets_but_foreign_calls_do_not() {
+    for key in ["dream_cancel", "dream_start", "foreign_unknown"] {
+        let (mut mir, i) = with_field();
+        let mut b = FunctionBuilder::new("control", i.void());
+        b.set_def(DefId::root(91), vec![]);
+        let future = b.new_param(i.object(), None);
+        b.push(Statement::Call {
+            callee: callee(90, i.void()),
+            args: vec![local(future)],
+        });
+        b.terminate(Terminator::Return(None));
+        mir.functions.push(b.finish());
+        if key != "foreign_unknown" {
+            mir.intrinsics.push((DefId::root(90), key.into()));
+        }
+        assert_eq!(run(&mut mir, &i), key != "foreign_unknown", "{key}");
+    }
+}
+
+#[test]
 fn conflicting_field_write_and_exports_reject_field_invariant() {
     for export in [false, true] {
         let (mut mir, mut i) = with_field();
@@ -460,5 +480,43 @@ fn opaque_call_and_representation_cast_keep_box_dynamic() {
         };
         mir.functions[0].blocks[0].stmts.insert(2, stmt);
         assert!(!run(&mut mir, &i));
+    }
+}
+
+#[test]
+fn capture_free_function_shapes_exclude_captures_foreign_results_and_raw_writes() {
+    use crate::analysis::effects::ModRefTable;
+    use dream_hir::TypeLayout;
+    for mode in 0..4 {
+        let (mut mir, mut i) = module(mode == 1, false);
+        mir.profile = dream_abi::profile::CompileProfile::Release;
+        let func = mir.functions[0].locals[1].ty;
+        if mode == 2 {
+            mir.functions[0].blocks[0].stmts.push(Statement::RawStore {
+                address: Operand::Const(Const::Int(0)),
+                value: Operand::Const(Const::Int(0)),
+                ty: i.int(),
+            });
+        } else if mode == 3 {
+            let dest = Local(mir.functions[0].locals.len() as u32);
+            let mut decl = mir.functions[0].locals[1].clone();
+            decl.ty = func;
+            mir.functions[0].locals.push(decl);
+            mir.functions[0].blocks[0].stmts.push(Statement::Assign(
+                Place::Local(dest),
+                Rvalue::Call {
+                    callee: callee(999, func),
+                    args: vec![],
+                },
+            ));
+        }
+        let marker = i.struct_ty(DefId::root(741), vec![]);
+        let mut layout = TypeLayout::from_fields(&i, "Destructor", []);
+        layout.destructor = Some(DefId::root(742));
+        mir.layouts.insert(marker, layout);
+        let facts = crate::analysis::function_boxes::capture_free_types(&mir, &i);
+        assert_eq!(facts.contains(&func), mode == 0);
+        let effects = ModRefTable::compute(&mir, &i);
+        assert_eq!(effects.may_run_del(func, &i, &mir.layouts), mode != 0);
     }
 }

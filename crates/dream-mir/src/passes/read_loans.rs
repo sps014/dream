@@ -15,7 +15,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     if mir.profile.is_debug() {
         return false;
     }
-    let effects = ModRefTable::compute(mir, interner);
+    let effects = ModRefTable::after_rc(mir, interner);
     let ref_calls: BTreeSet<_> = mir
         .functions
         .iter()
@@ -114,7 +114,7 @@ fn function(
     };
     let quiet = |m: &ModRef| match m {
         ModRef::Known(k) => {
-            !k.observes_rc
+            !k.observes_ownership()
                 && !k.any_slot
                 && k.slots.is_empty()
                 && (!k.may_destroy || effects.del().is_quiet())

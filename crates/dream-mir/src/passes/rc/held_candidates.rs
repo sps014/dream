@@ -143,7 +143,16 @@ pub(super) fn candidates(
         let moved_out = local_moves
             .iter()
             .any(|(d, s)| class.contains(s) && !class.contains(d));
-        if ok && !moved_out && !class.iter().any(|m| given_away.contains(m)) {
+        // Copy propagation may redirect a consuming alias to the original owner while
+        // leaving the candidate's retain in place. That retain can pay for its release.
+        let redirected_release = snap.slot == Slot::Param
+            && param_copies(f, snap.base).iter().any(|alias| {
+                *alias != snap.base
+                    && !class.contains(alias)
+                    && rc_ops.get(alias).is_some_and(|counts| counts.1 != 0)
+            });
+        if ok && !moved_out && !redirected_release && !class.iter().any(|m| given_away.contains(m))
+        {
             out.insert(x, Candidate { snap, class });
         }
     }
@@ -152,6 +161,10 @@ pub(super) fn candidates(
 
 /// Whether `p` or any local copied from it (transitively) gives a count away.
 fn param_handed_on(f: &MirFunction, p: u32, given_away: &IndexSet<u32>) -> bool {
+    param_copies(f, p).iter().any(|c| given_away.contains(c))
+}
+
+fn param_copies(f: &MirFunction, p: u32) -> IndexSet<u32> {
     let mut copies: IndexSet<u32> = IndexSet::from([p]);
     let mut grew = true;
     while grew {
@@ -161,18 +174,24 @@ fn param_handed_on(f: &MirFunction, p: u32, given_away: &IndexSet<u32>) -> bool 
                 let Statement::Assign(Place::Local(d), rv) = stmt else {
                     continue;
                 };
-                let src = match rv {
-                    Rvalue::Use(op) | Rvalue::Cast(op, _, _) => local_of(op),
-                    Rvalue::Move { src, .. } => Some(src.0),
-                    _ => None,
+                let sources = match rv {
+                    Rvalue::Use(op) | Rvalue::Cast(op, _, _) => vec![local_of(op)],
+                    Rvalue::Move { src, .. } => vec![Some(src.0)],
+                    Rvalue::Select {
+                        then_val, else_val, ..
+                    } => {
+                        vec![local_of(then_val), local_of(else_val)]
+                    }
+                    _ => vec![],
                 };
-                if src.is_some_and(|s| copies.contains(&s)) && copies.insert(d.0) {
+                if sources.into_iter().flatten().any(|s| copies.contains(&s)) && copies.insert(d.0)
+                {
                     grew = true;
                 }
             }
         }
     }
-    copies.iter().any(|c| given_away.contains(c))
+    copies
 }
 
 fn load_of(f: &MirFunction, rv: &Rvalue, layouts: &LayoutTable) -> Option<Snapshot> {

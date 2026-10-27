@@ -58,7 +58,7 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             // effects still have to exclude observations and unmodeled cleanup.
             let calls_safe = p.calls.iter().all(|call| {
                 matches!(effects.call(&call.callee), crate::analysis::effects::ModRef::Known(ref known)
-                    if !known.observes_rc && (!known.may_destroy || effects.del().is_quiet()))
+                    if !known.observes_ownership() && (!known.may_destroy || effects.del().is_quiet()))
             });
             (
                 k.clone(),

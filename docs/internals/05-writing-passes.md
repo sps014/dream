@@ -119,7 +119,9 @@ allocation sites and unknown values. Block entries join origins; sparse local-de
 events preserve reassignment without storing every local at every statement. Distinct
 parameters may alias. Different allocation sites are distinct, while repeated instances
 of one site remain potentially aliased. Heap projections remain unknown: disjoint
-containers may share a child. Functions with ref locals use unknown provenance.
+containers may share a child. A `ref` aliases inline value storage, so it does not
+invalidate unrelated heap-reference locals. References loaded from that storage stay
+unknown. Null origins distinguish setup before a snapshot exists from its live interval.
 
 Field effects retain direct parameter roots, substituted through direct-call edges in
 the existing dependency worklist. Coarse type/field queries project the same summaries.
@@ -131,13 +133,25 @@ The same dependency worklist closes ownership-observation and cleanup flags inde
 of unknown writes. A typed scalar store through a pointer cannot discharge managed fields.
 The internal `CollectionOwnerCount` intrinsic selects equivalent collection move/copy paths;
 it shares the runtime count reader with `Debug.ref_count` but does not make dead temporary
-tokens observable. Public debug observations and weak/unowned loads remain barriers.
+tokens observable. Constant retain/release event-counter reads measure the optimized
+program; live-heap queries and dynamic counter ids remain observations. The two registered
+clock hosts cannot access Dream storage or invoke callbacks; other host imports stay
+unknown. Refcount observations and weak/unowned loads remain barriers. Heap queries
+extend snapshot protection through each query during the original token lifetime;
+they cannot require a token once an unchanged covering owner proves identical heap state.
+Function-box escape facts are shared with target resolution. A closed function shape
+whose allocations all use null environments cannot own a destructor-bearing capture.
+Capturing allocations, foreign results, raw writes and exported entry points block this
+proof. Releasing such a capture-free comparator need not invalidate an unrelated snapshot.
 
 Release cursor inference can discharge a broad overwrite rejection when every relevant
 write is outside the snapshot's live interval or provably disjoint. Forwarding aliases
 participate in that interval. RC observations remain function-wide barriers because the
 pre-insertion token's cleanup is still implicit. Post-insertion proofs also preserve
-observations between the final value read and the explicit release.
+observations between the final value read and the explicit release. Observations outside
+that token's lifetime do not extend slot protection. After copy propagation, releases
+through aliases redirected to the source owner can still consume a candidate's retain;
+those copies remain owning unless the proof accounts for the consuming alias.
 Destructor-bearing snapshots additionally require owner and slot coverage through their
 original explicit release; pre-insertion live-interval relaxation is limited to graphs
 without user destructors, where cleanup cannot be observed early.

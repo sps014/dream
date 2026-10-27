@@ -1,10 +1,13 @@
-//! Opaque access to a box's representation invalidates every target of that function shape.
+//! Shared closed-world function-box representation and capture facts.
 
-use super::{IntrinsicOp, Key, Mir, Place, Rvalue, Statement, TypeId, TypeInterner, operand_type};
-use dream_types::TyKind;
+use crate::{Const, Mir, MirFunction, Operand, Place, Rvalue, Statement};
+use dream_abi::intrinsics::IntrinsicOp;
+use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> {
+type Key = (DefId, Vec<TypeId>);
+
+pub(crate) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> {
     let all: BTreeSet<_> = mir
         .functions
         .iter()
@@ -28,7 +31,9 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
     for f in mir.functions.iter().chain(&mir.polls) {
         for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
             match stmt {
-                Statement::Assign(Place::Deref { .. }, _) | Statement::ForceFree(_) => return all,
+                Statement::Assign(Place::Deref { .. }, _)
+                | Statement::RawStore { .. }
+                | Statement::ForceFree(_) => return all,
                 Statement::Assign(_, Rvalue::Cast(_, from, to)) if from != to => {
                     collect(*from, mir, interner, &all, true, &mut escaped);
                 }
@@ -37,7 +42,12 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
                     if !bodies.contains_key(&(callee.def, callee.args.clone())) =>
                 {
                     if let Some(op) = intrinsics.get(&callee.def) {
-                        if matches!(op, IntrinsicOp::FuncboxEnv | IntrinsicOp::FuncboxFuncidx) {
+                        if matches!(
+                            op,
+                            IntrinsicOp::FuncboxNew
+                                | IntrinsicOp::FuncboxEnv
+                                | IntrinsicOp::FuncboxFuncidx
+                        ) {
                             continue;
                         }
                         for arg in args {
@@ -49,6 +59,9 @@ pub(super) fn box_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> 
                         }
                     } else {
                         foreign = true;
+                        // An opaque result cannot expose a typed box until a cast does so.
+                        // Known result layouts can carry boxes directly and must invalidate them.
+                        collect(callee.ret, mir, interner, &all, false, &mut escaped);
                         for arg in args {
                             if let Some(ty) = operand_type(f, arg) {
                                 collect(ty, mir, interner, &all, true, &mut escaped);
@@ -153,11 +166,75 @@ fn collect(
     }
 }
 
-pub(super) fn result_type(rv: &Rvalue, f: &super::MirFunction) -> Option<TypeId> {
+pub(crate) fn result_type(rv: &Rvalue, f: &MirFunction) -> Option<TypeId> {
     match rv {
         Rvalue::Call { callee, .. } => Some(callee.ret),
         Rvalue::Use(o) => operand_type(f, o),
         Rvalue::Cast(_, _, to) => Some(*to),
         _ => None,
     }
+}
+
+pub(crate) fn operand_type(f: &MirFunction, o: &Operand) -> Option<TypeId> {
+    match o {
+        Operand::Copy(Place::Local(l)) => Some(f.local_ty(*l)),
+        _ => None,
+    }
+}
+
+pub(crate) fn capture_free_types(mir: &Mir, interner: &TypeInterner) -> BTreeSet<TypeId> {
+    if !mir.exports.is_empty() {
+        return BTreeSet::new();
+    }
+    let mut rejected = box_types(mir, interner);
+    let mut created = BTreeSet::new();
+    let bodies: BTreeSet<_> = mir
+        .functions
+        .iter()
+        .map(|f| (f.def, f.instance.clone()))
+        .collect();
+    let intrinsics: BTreeMap<_, _> = mir
+        .intrinsics
+        .iter()
+        .filter_map(|(def, key)| IntrinsicOp::from_key(key).map(|op| (*def, op)))
+        .collect();
+    for f in mir.functions.iter().chain(&mir.polls) {
+        for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
+            let Statement::Assign(Place::Local(dest), rv) = stmt else {
+                continue;
+            };
+            let ty = f.local_ty(*dest);
+            if !matches!(interner.kind(ty), TyKind::Func(..)) {
+                continue;
+            }
+            match rv {
+                Rvalue::Call { callee, args }
+                    if intrinsics.get(&callee.def) == Some(&IntrinsicOp::FuncboxNew) =>
+                {
+                    if matches!(
+                        args.get(1),
+                        Some(Operand::Const(Const::Int(0) | Const::Null))
+                    ) {
+                        created.insert(ty);
+                    } else {
+                        rejected.insert(ty);
+                    }
+                }
+                Rvalue::Use(Operand::Copy(
+                    Place::Local(_) | Place::Field { .. } | Place::Index { .. } | Place::Global(_),
+                ))
+                | Rvalue::Use(Operand::Const(Const::Null))
+                | Rvalue::Select { .. }
+                | Rvalue::UnionField { .. } => {}
+                Rvalue::Call { callee, .. }
+                    if bodies.contains(&(callee.def, callee.args.clone())) => {}
+                Rvalue::Cast(_, from, to) if from == to => {}
+                _ => {
+                    rejected.insert(ty);
+                }
+            }
+        }
+    }
+    created.retain(|ty| !rejected.contains(ty));
+    created
 }

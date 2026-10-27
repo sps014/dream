@@ -28,6 +28,7 @@ impl LocalSummary {
         globals: &IndexMap<Global, TypeId>,
         may_destroy: bool,
         precise: bool,
+        rc_event_counters: &BTreeSet<DefId>,
     ) -> Self {
         let this = f.params.first().copied();
         let mut s = LocalSummary {
@@ -105,6 +106,13 @@ impl LocalSummary {
                     s.own_fresh = ModRef::Top;
                 }
             },
+            Effect::Call(callee)
+                if precise
+                    && super::ModRefTable::is_rc_event_counter(
+                        rc_event_counters,
+                        callee.def,
+                        arguments,
+                    ) => {}
             Effect::Call(callee) => s.edges.push(Edge::Call(
                 callee.def,
                 callee.args.clone(),
@@ -127,13 +135,15 @@ impl LocalSummary {
                     || matches!(stmt, Statement::Assign(Place::Deref { .. }, rv)
                         if !matches!(rv, Rvalue::RawLoad { .. } | Rvalue::IndirectCall { .. }
                             | Rvalue::JsCall { .. } | Rvalue::ToString(_) | Rvalue::HashCode(_)));
-                s.observes_rc |= matches!(stmt, Statement::DebugLine(_));
                 let arguments = match stmt {
                     Statement::Call { args, .. }
                     | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
                     _ => &[],
                 };
                 let mut effects = Vec::new();
+                if matches!(stmt, Statement::DebugLine(_)) {
+                    effects.push(Effect::ObserveOwnership);
+                }
                 stmt_effects(stmt, f, interner, |e| effects.push(e));
                 for e in effects {
                     if matches!(e, Effect::Top) && !raw_write {

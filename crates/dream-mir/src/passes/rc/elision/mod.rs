@@ -16,7 +16,7 @@ pub(crate) fn run_module(mir: &mut crate::Mir, interner: &dream_types::TypeInter
     if mir.profile.is_debug() {
         return false;
     }
-    let effects = crate::analysis::effects::ModRefTable::compute(mir, interner);
+    let effects = crate::analysis::effects::ModRefTable::after_rc(mir, interner);
     let mut changed = false;
     for f in &mut mir.functions {
         if f.is_async {

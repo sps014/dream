@@ -424,6 +424,8 @@ impl IntrinsicOp {
             | "dream_task_context"
             | "dream_task_attach"
             | "dream_task_protect"
+            | "dream_cancel"
+            | "dream_start"
             | "dream_cancellation_new"
             | "dream_cancellation_release"
             | "dream_cancellation_is_cancelled"

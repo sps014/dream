@@ -36,32 +36,52 @@ pub(crate) fn observes_ownership(
     layouts: &dream_hir::LayoutTable,
     table: &ModRefTable,
 ) -> bool {
+    f.blocks
+        .iter()
+        .flat_map(|b| &b.stmts)
+        .any(|stmt| statement_observes_ownership(f, i, layouts, table, stmt))
+}
+
+pub(crate) fn statement_observes_ownership(
+    f: &MirFunction,
+    i: &TypeInterner,
+    layouts: &dream_hir::LayoutTable,
+    table: &ModRefTable,
+    stmt: &Statement,
+) -> bool {
     let observes = |summary: &ModRef| match summary {
         ModRef::Top => true,
-        ModRef::Known(k) => k.observes_rc,
+        ModRef::Known(k) => k.observes_ownership(),
     };
-    f.blocks.iter().flat_map(|b| &b.stmts).any(|stmt| {
-        let mut hit = matches!(stmt, Statement::DebugLine(_));
-        stmt_effects(stmt, f, i, |e| {
-            let summary = match e {
-                Effect::Top | Effect::ObserveOwnership => {
-                    hit = true;
-                    return;
-                }
-                Effect::Call(c) => {
-                    hit |= table.observes_def(c.def, &c.args)
-                        || (table.call_may_destroy(c.def, &c.args) && table.del_observes);
-                    return;
-                }
-                Effect::Iface(id, slot) => table.iface(id, slot),
-                Effect::Ctor(def) => table.ctor(def),
-                _ => return,
-            };
-            hit |= observes(&summary) || (summary.may_destroy() && table.del_observes);
-        });
-        let cleanup = table.statement_may_destroy(f, stmt, i, layouts) && table.del_observes;
-        hit || cleanup
-    })
+    let mut hit = matches!(stmt, Statement::DebugLine(_));
+    stmt_effects(stmt, f, i, |e| {
+        let summary = match e {
+            Effect::Top | Effect::ObserveOwnership => {
+                hit = true;
+                return;
+            }
+            Effect::Call(c) => {
+                let arguments = match stmt {
+                    Statement::Call { args, .. }
+                    | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
+                    _ => &[],
+                };
+                hit |= table.observes_call_at(c, arguments)
+                    || (table.call_may_destroy(c.def, &c.args) && table.del_observes);
+                return;
+            }
+            Effect::Iface(id, slot) => table.iface(id, slot),
+            Effect::Ctor(def) => {
+                hit |=
+                    table.observes_ctor(def) || (table.ctor_may_destroy(def) && table.del_observes);
+                return;
+            }
+            _ => return,
+        };
+        hit |= observes(&summary) || (summary.may_destroy() && table.del_observes);
+    });
+    let cleanup = table.statement_may_destroy(f, stmt, i, layouts) && table.del_observes;
+    hit || cleanup
 }
 
 impl OwnershipFacts {
@@ -133,7 +153,7 @@ impl OwnershipFacts {
                         | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
                         _ => &[],
                     };
-                    self.call_hits(f, i, &table.call(c), args, point, location)
+                    self.call_hits(f, i, &table.call_at(c, args), args, point, location)
                 }
                 Effect::Iface(id, slot) => summary_hits(f, i, &table.iface(id, slot), location),
                 Effect::Ctor(def) => summary_hits(f, i, &table.ctor(def), location),
@@ -142,7 +162,7 @@ impl OwnershipFacts {
         hit
     }
 
-    fn call_hits(
+    pub(crate) fn call_hits(
         &self,
         f: &MirFunction,
         i: &TypeInterner,
@@ -154,7 +174,7 @@ impl OwnershipFacts {
         let (ModRef::Known(k), Location::Field { base, field }) = (summary, location) else {
             return summary_hits(f, i, summary, location);
         };
-        if k.observes_rc {
+        if k.observes_ownership() {
             return true;
         }
         let key = (f.local_ty(base), field);
@@ -178,9 +198,8 @@ impl OwnershipFacts {
         let _span = tracing::debug_span!("ownership_origins", function = %f.name,
             locals = f.locals.len(), blocks = f.blocks.len())
         .entered();
-        if f.locals.iter().any(|l| l.is_ref) {
-            return Self::unknown();
-        }
+        // `ref` aliases inline value storage, never a heap-reference local's pointer slot.
+        // References loaded through that storage still receive unknown provenance.
         let mut count = 0;
         let slots: Vec<_> = f
             .locals
@@ -316,6 +335,13 @@ impl OwnershipFacts {
             .map(|roots| roots.into_iter().flatten().collect())
     }
 
+    pub(crate) fn may_be_nonnull(&self, bi: usize, si: usize, local: Local) -> bool {
+        self.opaque
+            || self
+                .origins(bi, si, local)
+                .is_none_or(|origins| !origins.is_empty())
+    }
+
     pub(crate) fn may_alias(&self, bi: usize, si: usize, left: Local, right: Local) -> bool {
         if self.opaque || left == right {
             return true;
@@ -348,7 +374,7 @@ fn summary_hits(f: &MirFunction, i: &TypeInterner, summary: &ModRef, location: L
     let ModRef::Known(k) = summary else {
         return true;
     };
-    k.observes_rc
+    k.observes_ownership()
         || match location {
             Location::Field { base, field } => summary.writes_field(f.local_ty(base), field),
             Location::Element { base, .. } => match i.kind(f.local_ty(base)) {

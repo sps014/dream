@@ -4,6 +4,111 @@ use dream_hir::{InterfaceImpl, InterfaceInfo, TypeLayout};
 use dream_types::{DefKind, TypeCtx};
 
 #[test]
+fn constant_rc_event_attribution_does_not_pin_tokens_but_heap_queries_do() {
+    use crate::build::FunctionBuilder;
+    use crate::{Callee, Const, Operand, Place, Rvalue, Statement, Terminator};
+    use dream_types::{DefId, TypeInterner};
+    let i = TypeInterner::new();
+    for id in [Some(3), Some(4), Some(11), Some(12), Some(13), None] {
+        let mut b = FunctionBuilder::new("counter", i.void());
+        b.set_def(DefId::root(700), vec![]);
+        let dynamic = b.new_param(i.int(), None);
+        let result = b.new_local(i.long(), None);
+        let args = vec![id.map_or_else(
+            || Operand::Copy(Place::Local(dynamic)),
+            |id| Operand::Const(Const::Int(id)),
+        )];
+        let callee = Callee {
+            borrowed_result: false,
+            def: DefId::root(701),
+            args: vec![],
+            ret: i.long(),
+            take_params: vec![false],
+        };
+        b.assign(
+            Place::Local(result),
+            Rvalue::Call {
+                callee: callee.clone(),
+                args: args.clone(),
+            },
+        );
+        b.terminate(Terminator::Return(None));
+        let mut mir = Mir {
+            profile: dream_abi::profile::CompileProfile::Release,
+            functions: vec![b.finish()],
+            ..Mir::default()
+        };
+        mir.intrinsics.push((
+            callee.def,
+            dream_abi::intrinsics::ATTR_DEBUG_RUNTIME_COUNTER.into(),
+        ));
+        let table = ModRefTable::compute(&mir, &i);
+        let observes = !matches!(id, Some(3 | 4));
+        assert!(table.observes_def(callee.def, &[]));
+        assert_eq!(table.observes_call_at(&callee, &args), observes);
+        assert_eq!(table.observes_def(DefId::root(700), &[]), observes);
+        assert_eq!(
+            super::ownership::observes_ownership(&mir.functions[0], &i, &mir.layouts, &table),
+            observes
+        );
+        if !observes {
+            mir.functions[0].blocks[0]
+                .stmts
+                .push(Statement::DebugLine(1));
+            let table = ModRefTable::compute(&mir, &i);
+            assert!(matches!(table.call_def(DefId::root(700), &[]),
+                super::effects::ModRef::Known(known) if known.observes_ownership()));
+        }
+    }
+}
+
+#[test]
+fn explicit_cleanup_summaries_do_not_destroy_a_transferred_return() {
+    use crate::build::FunctionBuilder;
+    use crate::{Operand, Place, Rvalue, Statement, Terminator};
+    use dream_types::DefId;
+    let mut ctx = TypeCtx::new();
+    let def = ctx.register(DefKind::Struct, "Owned", vec![]);
+    let ty = ctx.interner.struct_ty(def, vec![]);
+    for drops in [false, true] {
+        let mut b = FunctionBuilder::new("factory", if drops { ctx.interner.void() } else { ty });
+        b.set_def(DefId::root(710), vec![]);
+        let value = b.new_local(ty, None);
+        b.assign(
+            Place::Local(value),
+            Rvalue::New {
+                def,
+                ty,
+                ctor: None,
+                args: vec![],
+            },
+        );
+        if drops {
+            b.push(Statement::Release(Operand::Copy(Place::Local(value))));
+        }
+        b.terminate(Terminator::Return(
+            (!drops).then_some(Operand::Copy(Place::Local(value))),
+        ));
+        let mut mir = Mir {
+            functions: vec![b.finish()],
+            ..Mir::default()
+        };
+        mir.layouts.insert(
+            ty,
+            TypeLayout {
+                destructor: Some(DefId::root(711)),
+                ..TypeLayout::default()
+            },
+        );
+        assert!(ModRefTable::compute(&mir, &ctx.interner).call_may_destroy(DefId::root(710), &[]));
+        assert_eq!(
+            ModRefTable::after_rc(&mir, &ctx.interner).call_may_destroy(DefId::root(710), &[]),
+            drops
+        );
+    }
+}
+
+#[test]
 fn unknown_writes_do_not_imply_ownership_observation_or_scalar_cleanup() {
     use crate::build::FunctionBuilder;
     use crate::{Const, Operand, Place, Rvalue, Statement, Terminator};
@@ -32,6 +137,8 @@ fn unknown_writes_do_not_imply_ownership_observation_or_scalar_cleanup() {
     ));
     assert!(!effects.observes_def(DefId::root(460), &[]));
     assert!(!effects.call_may_destroy(DefId::root(460), &[]));
+    assert!(!effects.observes_ctor(DefId::root(460)));
+    assert!(!effects.ctor_may_destroy(DefId::root(460)));
     let scalar = crate::Local(mir.functions[0].locals.len() as u32);
     let mut decl = mir.functions[0].locals[0].clone();
     decl.ty = i.int();
@@ -43,6 +150,9 @@ fn unknown_writes_do_not_imply_ownership_observation_or_scalar_cleanup() {
     let effects = ModRefTable::compute(&mir, &i);
     assert!(effects.observes_def(DefId::root(460), &[]));
     assert!(effects.observes_def(DefId::root(999), &[]));
+    assert!(effects.observes_ctor(DefId::root(460)));
+    assert!(effects.observes_ctor(DefId::root(999)));
+    assert!(effects.ctor_may_destroy(DefId::root(999)));
 }
 
 #[test]
@@ -463,7 +573,7 @@ fn observed_loads_are_ownership_observations_in_function_summaries() {
     let effects = ModRefTable::compute(&mir, &ctx.interner);
     let summary = effects.call_def(DefId::root(10), &[]);
     assert!(
-        matches!(&summary, crate::analysis::effects::ModRef::Known(known) if known.observes_rc)
+        matches!(&summary, crate::analysis::effects::ModRef::Known(known) if known.observes_ownership())
     );
     assert!(!summary.is_quiet());
 }
@@ -496,4 +606,44 @@ fn a_bounds_check_panic_keeps_its_caller_quiet() {
         .push((panic, dream_abi::intrinsics::ATTR_PANIC.into()));
     let effects = ModRefTable::compute(&mir, &ctx.interner);
     assert!(effects.call_def(DefId::root(10), &[]).is_quiet());
+}
+
+#[test]
+fn late_summaries_preserve_value_frame_cleanup_until_it_is_explicit() {
+    use crate::Terminator;
+    use crate::build::FunctionBuilder;
+    use dream_types::DefId;
+    let mut ctx = TypeCtx::new();
+    let child_def = ctx.register(DefKind::Struct, "Child", vec![]);
+    let child = ctx.interner.struct_ty(child_def, vec![]);
+    let value_def = ctx.register(DefKind::Struct, "Value", vec![]);
+    ctx.interner.mark_value_def(value_def);
+    let value = ctx.interner.struct_ty(value_def, vec![]);
+    let mut b = FunctionBuilder::new("value_cleanup", ctx.interner.void());
+    b.set_def(DefId::root(744), vec![]);
+    let param = b.new_param(value, None);
+    b.terminate(Terminator::Return(None));
+    let mut mir = Mir {
+        functions: vec![b.finish()],
+        ..Mir::default()
+    };
+    mir.functions[0].locals[param.0 as usize].is_take = true;
+    mir.layouts.insert(
+        child,
+        TypeLayout {
+            destructor: Some(DefId::root(745)),
+            ..TypeLayout::default()
+        },
+    );
+    mir.layouts.insert(
+        value,
+        TypeLayout::from_fields(
+            &ctx.interner,
+            "Value",
+            [("child".into(), child, false, false)],
+        ),
+    );
+    assert!(ModRefTable::after_rc(&mir, &ctx.interner).call_may_destroy(DefId::root(744), &[]));
+    mir.functions[0].locals[param.0 as usize].manual_drop = true;
+    assert!(!ModRefTable::after_rc(&mir, &ctx.interner).call_may_destroy(DefId::root(744), &[]));
 }

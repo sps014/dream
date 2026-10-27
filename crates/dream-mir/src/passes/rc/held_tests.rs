@@ -707,3 +707,103 @@ fn call_replacing_the_owner_array_keeps_the_record_field_snapshot() {
     run_function(&mut f, &t.i, &t.layouts, &effects);
     assert_eq!(rc_ops(&f, x), 2);
 }
+
+#[test]
+fn redirected_consuming_alias_keeps_the_retain_that_pays_for_it() {
+    let t = types();
+    let mut b = FunctionBuilder::new("redirected", t.i.void());
+    let owner = b.new_param(t.i.string(), None);
+    let snapshot = b.new_local(t.i.string(), None);
+    let consumed = b.new_local(t.i.string(), None);
+    let op = |l| Operand::Copy(Place::Local(l));
+    b.assign(Place::Local(snapshot), Rvalue::Use(op(owner)));
+    b.push(Statement::Retain(op(snapshot)));
+    b.assign(Place::Local(consumed), Rvalue::Use(op(owner)));
+    b.push(peek_call(&t, consumed));
+    b.push(Statement::Release(op(consumed)));
+    b.push(peek_call(&t, owner));
+    b.terminate(Terminator::Return(None));
+    let mut f = b.finish();
+    let effects = ModRefTable::compute(
+        &Mir {
+            functions: vec![peek_fn(&t, false)],
+            ..Mir::default()
+        },
+        &t.i,
+    );
+    run_function(&mut f, &t.i, &t.layouts, &effects);
+    assert_eq!(rc_ops(&f, snapshot), 1);
+    assert_eq!(rc_ops(&f, consumed), 1);
+}
+
+#[test]
+fn unrelated_observation_does_not_extend_snapshot_slot_protection() {
+    let t = types();
+    let mut s = snapshot(&t, |_, _| {});
+    let base = s.func.params[0];
+    let observed = Local(s.func.locals.len() as u32);
+    let mut decl = s.func.locals[s.x.0 as usize].clone();
+    decl.ty = t.i.int();
+    s.func.locals.push(decl);
+    s.func.blocks[0].stmts.insert(
+        0,
+        Statement::Assign(
+            Place::Local(observed),
+            Rvalue::ObservedLoad(Operand::Copy(Place::Local(base))),
+        ),
+    );
+    let at = s.func.blocks[0].stmts.len() - 1;
+    s.func.blocks[0].stmts.insert(
+        at,
+        Statement::Assign(
+            Place::Field { base, field: 0 },
+            Rvalue::Use(Operand::Const(Const::Null)),
+        ),
+    );
+    run(&t, &mut s, false);
+    assert_eq!(rc_ops(&s.func, s.x), 0);
+}
+
+#[test]
+fn heap_observation_requires_owner_coverage_through_each_query() {
+    for drop_owner in 0..3 {
+        let t = types();
+        let mut s = snapshot(&t, |_, _| {});
+        let count = Local(s.func.locals.len() as u32);
+        let mut decl = s.func.locals[s.x.0 as usize].clone();
+        decl.ty = t.i.long();
+        s.func.locals.push(decl);
+        let at = s.func.blocks[0].stmts.len() - 1;
+        s.func.blocks[0].stmts.insert(
+            at,
+            Statement::Assign(
+                Place::Local(count),
+                Rvalue::Call {
+                    callee: Callee {
+                        borrowed_result: false,
+                        def: DefId::root(743),
+                        args: vec![],
+                        ret: t.i.long(),
+                        take_params: vec![],
+                    },
+                    args: vec![Operand::Const(Const::Int(11))],
+                },
+            ),
+        );
+        if drop_owner != 0 {
+            s.func.blocks[0].stmts.insert(
+                at + usize::from(drop_owner == 2),
+                Statement::Release(Operand::Copy(Place::Local(s.func.params[0]))),
+            );
+        }
+        let mir = Mir {
+            profile: dream_abi::profile::CompileProfile::Release,
+            functions: vec![peek_fn(&t, false)],
+            intrinsics: vec![(DefId::root(743), "debug_get_runtime_counter".into())],
+            ..Mir::default()
+        };
+        let effects = ModRefTable::after_rc(&mir, &t.i);
+        run_function(&mut s.func, &t.i, &t.layouts, &effects);
+        assert_eq!(rc_ops(&s.func, s.x), if drop_owner == 1 { 2 } else { 0 });
+    }
+}

@@ -9,7 +9,7 @@ use dream_abi::intrinsics::IntrinsicOp;
 use dream_types::{DefId, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
 
-mod escape;
+use crate::analysis::function_boxes::{self as escape, operand_type};
 mod params;
 
 type Field = (TypeId, usize);
@@ -207,13 +207,6 @@ fn local_targets(
     }
 }
 
-fn operand_type(f: &MirFunction, o: &Operand) -> Option<TypeId> {
-    match o {
-        Operand::Copy(Place::Local(l)) => Some(f.local_ty(*l)),
-        _ => None,
-    }
-}
-
 fn field_targets(
     mir: &Mir,
     interner: &TypeInterner,
@@ -234,7 +227,9 @@ fn field_targets(
         for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
             match stmt {
                 // Untyped writes can invalidate any typed field invariant.
-                Statement::Assign(Place::Deref { .. }, _) | Statement::ForceFree(_) => {
+                Statement::Assign(Place::Deref { .. }, _)
+                | Statement::RawStore { .. }
+                | Statement::ForceFree(_) => {
                     return BTreeMap::new();
                 }
                 Statement::Assign(_, Rvalue::New { ty, ctor, .. }) => {
@@ -293,6 +288,7 @@ fn field_targets(
                     if !bodies.contains_key(&(callee.def, callee.args.clone()))
                         && !intrinsics.contains_key(&callee.def) =>
                 {
+                    rejected.insert(callee.ret);
                     for o in args {
                         if let Some(ty) = operand_type(f, o) {
                             rejected.insert(ty);

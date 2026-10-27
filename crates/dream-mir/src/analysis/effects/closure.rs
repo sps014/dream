@@ -122,7 +122,7 @@ impl ModRefTable {
                 target.map_or_else(
                     || match edge {
                         Edge::Call(def, args, _) => match self.call_def(*def, args) {
-                            ModRef::Known(k) => (k.observes_rc, k.may_destroy),
+                            ModRef::Known(k) => (k.observes_ownership(), k.may_destroy),
                             _ => (true, true),
                         },
                         _ => (true, true),
@@ -133,7 +133,7 @@ impl ModRefTable {
             let ownership_body = |f: usize| {
                 let own = (
                     locals[f].observes_rc
-                        || matches!(&locals[f].own, ModRef::Known(k) if k.observes_rc),
+                        || matches!(&locals[f].own, ModRef::Known(k) if k.observes_ownership()),
                     locals[f].may_destroy,
                 );
                 locals[f].edges.iter().map(ownership_edge).fold(own, join)

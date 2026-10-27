@@ -25,16 +25,39 @@ impl Check<'_> {
     pub(super) fn holds(&self, live_out: &[IndexSet<u32>]) -> bool {
         // Cleanup can be observable after the last value read. Such snapshots need
         // their owner and slot protected through the original token's actual release.
-        let preserves_cleanup = self.observes
-            || self.modref.may_run_del(
-                self.f.local_ty(crate::Local(self.x)),
-                self.interner,
-                self.layouts,
-            );
+        let preserves_cleanup = self.modref.may_run_del(
+            self.f.local_ty(crate::Local(self.x)),
+            self.interner,
+            self.layouts,
+        );
+        let observations = if self.observes && !preserves_cleanup {
+            self.observation_reads()
+        } else {
+            BTreeMap::new()
+        };
+        let extended_live = if observations.is_empty() {
+            None
+        } else {
+            let mut observed = without_rc_on(self.f, self.ignored);
+            for (bi, block) in observed.blocks.iter_mut().enumerate() {
+                block.stmts.clear();
+                for (si, stmt) in self.f.blocks[bi].stmts.iter().enumerate() {
+                    if let Some(reads) = observations.get(&(bi, si)) {
+                        block.stmts.extend(reads.iter().map(|&local| {
+                            Statement::Retain(Operand::Copy(Place::Local(crate::Local(local))))
+                        }));
+                    }
+                    if rc_target(stmt).is_none_or(|local| !self.ignored.contains(&local)) {
+                        block.stmts.push(stmt.clone());
+                    }
+                }
+            }
+            Some(liveness::live_out(&observed))
+        };
         let live_out = if preserves_cleanup {
             self.token_live
         } else {
-            live_out
+            extended_live.as_deref().unwrap_or(live_out)
         };
         let base = self.snap.base;
         if self
@@ -49,8 +72,8 @@ impl Check<'_> {
         let owner_pinned = pins.iter().any(|&owner| {
             self.f.params.iter().any(|p| p.0 == owner) && !self.f.locals[owner as usize].is_take
         });
-        let base_ok = |live: &IndexSet<u32>| {
-            !self.class.iter().any(|m| live.contains(m))
+        let base_ok = |live: &IndexSet<u32>, bi, si| {
+            !self.family_live(live, bi, si)
                 || pinned
                 || live.contains(&base)
                 || owner_pinned
@@ -58,31 +81,75 @@ impl Check<'_> {
         };
         for (bi, block) in self.f.blocks.iter().enumerate() {
             let mut live = live_out[bi].clone();
-            if !base_ok(&live) {
+            if !base_ok(&live, bi, block.stmts.len()) {
                 return false;
             }
             add_terminator_reads(&block.terminator, &mut live);
-            if !base_ok(&live) {
+            if !base_ok(&live, bi, block.stmts.len()) {
                 return false;
             }
             for (si, stmt) in block.stmts.iter().enumerate().rev() {
                 let ignored_rc = !preserves_cleanup
                     && rc_target(stmt).is_some_and(|l| self.ignored.contains(&l));
-                let in_flight = self.class.iter().any(|&m| {
-                    live.contains(&m) || (!ignored_rc && super::super::stmt_reads_local(stmt, m))
-                });
+                if let Some(reads) = observations.get(&(bi, si)) {
+                    live.extend(reads);
+                }
+                let in_flight = self.family_live(&live, bi, si + 1)
+                    || (!ignored_rc
+                        && self.class.iter().any(|&m| {
+                            self.facts.may_be_nonnull(bi, si, crate::Local(m))
+                                && super::super::stmt_reads_local(stmt, m)
+                        }));
                 if in_flight && !self.stmt_ok(bi, si, stmt) {
                     return false;
                 }
                 if !ignored_rc {
                     transfer_stmt(stmt, &mut live);
                 }
-                if !base_ok(&live) {
+                if !base_ok(&live, bi, si) {
                     return false;
                 }
             }
         }
         true
+    }
+
+    fn family_live(&self, live: &IndexSet<u32>, bi: usize, si: usize) -> bool {
+        self.class
+            .iter()
+            .any(|&m| live.contains(&m) && self.facts.may_be_nonnull(bi, si, crate::Local(m)))
+    }
+
+    fn observation_reads(&self) -> BTreeMap<(usize, usize), IndexSet<u32>> {
+        let mut reads = BTreeMap::new();
+        for (bi, block) in self.f.blocks.iter().enumerate() {
+            let mut live = self.token_live[bi].clone();
+            add_terminator_reads(&block.terminator, &mut live);
+            for (si, stmt) in block.stmts.iter().enumerate().rev() {
+                if crate::analysis::ownership::statement_observes_ownership(
+                    self.f,
+                    self.interner,
+                    self.layouts,
+                    self.modref,
+                    stmt,
+                ) {
+                    let observed: IndexSet<_> = self
+                        .class
+                        .iter()
+                        .copied()
+                        .filter(|&m| {
+                            self.facts.may_be_nonnull(bi, si, crate::Local(m))
+                                && (live.contains(&m) || super::super::stmt_reads_local(stmt, m))
+                        })
+                        .collect();
+                    if !observed.is_empty() {
+                        reads.insert((bi, si), observed);
+                    }
+                }
+                transfer_stmt(stmt, &mut live);
+            }
+        }
+        reads
     }
 
     /// `stmt` runs while `x` is in use.
@@ -163,7 +230,14 @@ impl Check<'_> {
                             _ => false,
                         }
                 }
-                Effect::Call(c) => !self.call_hits(&self.modref.call(c), bi, si),
+                Effect::Call(c) => {
+                    let args = match stmt {
+                        Statement::Call { args, .. }
+                        | Statement::Assign(_, Rvalue::Call { args, .. }) => args.as_slice(),
+                        _ => &[],
+                    };
+                    !self.call_hits(&self.modref.call_at(c, args), bi, si)
+                }
                 Effect::Iface(id, slot) => !self.call_hits(&self.modref.iface(id, slot), bi, si),
                 Effect::Ctor(def) => !self.call_hits(&self.modref.ctor(def), bi, si),
             };
@@ -196,8 +270,23 @@ impl Check<'_> {
                     }),
             )
             .any(|location| {
-                self.facts
-                    .invalidates(self.f, self.interner, self.modref, (bi, si), location)
+                let mut protected = summary.clone();
+                if let ModRef::Known(k) = &mut protected {
+                    k.observes_heap = false;
+                }
+                let stmt = &self.f.blocks[bi].stmts[si];
+                match stmt {
+                    Statement::Call { args, .. }
+                    | Statement::Assign(_, Rvalue::Call { args, .. }) => self.facts.call_hits(
+                        self.f,
+                        self.interner,
+                        &protected,
+                        args,
+                        (bi, si),
+                        location,
+                    ),
+                    _ => self.summary_hits(&protected),
+                }
             });
         let observes = match summary {
             ModRef::Top => true,

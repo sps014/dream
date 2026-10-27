@@ -1,6 +1,6 @@
 //! Whole-module closure over concrete functions, constructors and closed interface targets.
 
-use super::intrinsics::intrinsic_summary;
+use super::intrinsics::{host_summary, intrinsic_summary};
 use super::local::LocalSummary;
 use super::{Known, ModRef, strong_children};
 use crate::analysis::function_key::FunctionKeyRef;
@@ -25,6 +25,8 @@ pub(crate) struct ModRefTable {
     pub(super) ctors: IndexMap<DefId, ModRef>,
     /// Bodiless intrinsic defs whose runtime helper overwrites no Dream heap slot.
     intrinsics: IndexMap<DefId, ModRef>,
+    rc_event_counters: BTreeSet<DefId>,
+    capture_free_boxes: BTreeSet<TypeId>,
     /// Union of every `del` body: what may run inside any `Release` that frees an object.
     del: ModRef,
     /// `(iface id, method slot)` → join of the concrete methods. Missing slots are [`ModRef::Top`].
@@ -45,6 +47,8 @@ impl Default for ModRefTable {
             globals: IndexMap::new(),
             ctors: IndexMap::new(),
             intrinsics: IndexMap::new(),
+            rc_event_counters: BTreeSet::new(),
+            capture_free_boxes: BTreeSet::new(),
             del: ModRef::Top,
             ifaces: IndexMap::new(),
             del_types: None,
@@ -55,6 +59,14 @@ impl Default for ModRefTable {
 
 impl ModRefTable {
     pub(crate) fn compute(mir: &Mir, interner: &TypeInterner) -> Self {
+        Self::build(mir, interner, true)
+    }
+
+    pub(crate) fn after_rc(mir: &Mir, interner: &TypeInterner) -> Self {
+        Self::build(mir, interner, false)
+    }
+
+    fn build(mir: &Mir, interner: &TypeInterner, implicit_cleanup: bool) -> Self {
         let _effects =
             tracing::info_span!("heap_effects", functions = mir.functions.len()).entered();
         let intrinsics: IndexMap<DefId, ModRef> = mir
@@ -66,6 +78,12 @@ impl ModRefTable {
                 }
                 intrinsic_summary(IntrinsicOp::from_key(key)?).map(|s| (*def, s))
             })
+            .chain(mir.imports.iter().filter_map(|import| {
+                (!mir.profile.is_debug() && !import.is_async && import.params.is_empty())
+                    .then(|| host_summary(&import.module, &import.field))
+                    .flatten()
+                    .map(|summary| (import.def, summary))
+            }))
             .collect();
         let globals: IndexMap<Global, TypeId> = mir.globals.iter().map(|g| (g.id, g.ty)).collect();
         let mut table = ModRefTable {
@@ -77,6 +95,19 @@ impl ModRefTable {
             globals: globals.clone(),
             ctors: IndexMap::new(),
             intrinsics,
+            rc_event_counters: mir
+                .intrinsics
+                .iter()
+                .filter_map(|(def, key)| {
+                    (IntrinsicOp::from_key(key) == Some(IntrinsicOp::DebugRuntimeCounter))
+                        .then_some(*def)
+                })
+                .collect(),
+            capture_free_boxes: if mir.profile.is_debug() {
+                BTreeSet::new()
+            } else {
+                crate::analysis::function_boxes::capture_free_types(mir, interner)
+            },
             del: ModRef::default(),
             ifaces: IndexMap::new(),
             interface_children: mir
@@ -115,28 +146,37 @@ impl ModRefTable {
             ),
         };
         let mut cleanup_types = BTreeMap::new();
-        let locals: Vec<LocalSummary> =
-            mir.functions
-                .iter()
-                .map(|f| {
-                    let may_destroy = f.locals.iter().enumerate().any(|(index, local)| {
-                        let borrowed_parameter =
-                            f.params.contains(&crate::Local(index as u32)) && !local.is_take;
-                        !local.is_ref
-                            && !local.is_cursor
-                            && !local.borrows_refs
-                            && !borrowed_parameter
-                            && *cleanup_types.entry(local.ty).or_insert_with(|| {
-                                table.may_run_del(local.ty, interner, &mir.layouts)
-                            })
-                    });
-                    let may_destroy = may_destroy
-                        || f.blocks.iter().flat_map(|block| &block.stmts).any(|stmt| {
-                            table.statement_may_destroy(f, stmt, interner, &mir.layouts)
-                        });
-                    LocalSummary::of(f, interner, &globals, may_destroy, table.release_proofs)
-                })
-                .collect();
+        let locals: Vec<LocalSummary> = mir
+            .functions
+            .iter()
+            .map(|f| {
+                let may_destroy = f.locals.iter().enumerate().any(|(index, local)| {
+                    let borrowed_parameter =
+                        f.params.contains(&crate::Local(index as u32)) && !local.is_take;
+                    (implicit_cleanup || (interner.is_value_type(local.ty) && !local.manual_drop))
+                        && !local.is_ref
+                        && !local.is_cursor
+                        && !local.borrows_refs
+                        && !borrowed_parameter
+                        && *cleanup_types
+                            .entry(local.ty)
+                            .or_insert_with(|| table.may_run_del(local.ty, interner, &mir.layouts))
+                });
+                let may_destroy = may_destroy
+                    || f.blocks
+                        .iter()
+                        .flat_map(|block| &block.stmts)
+                        .any(|stmt| table.statement_may_destroy(f, stmt, interner, &mir.layouts));
+                LocalSummary::of(
+                    f,
+                    interner,
+                    &globals,
+                    may_destroy,
+                    table.release_proofs,
+                    &table.rc_event_counters,
+                )
+            })
+            .collect();
         for (f, s) in mir.functions.iter().zip(&locals) {
             table.fns.insert((f.def, f.instance.clone()), s.own.clone());
             let entry = table.ctors.entry(f.def).or_default();
@@ -184,9 +224,27 @@ impl ModRefTable {
             .get(&FunctionKeyRef { def, args })
             .copied()
             .unwrap_or_else(|| match self.intrinsics.get(&def) {
-                Some(ModRef::Known(k)) => k.observes_rc,
+                Some(ModRef::Known(k)) => k.observes_ownership(),
                 _ => true,
             })
+    }
+
+    pub(crate) fn observes_ctor(&self, def: DefId) -> bool {
+        self.observers
+            .iter()
+            .filter(|((candidate, _), _)| *candidate == def)
+            .map(|(_, &observes)| observes)
+            .reduce(|a, b| a || b)
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn ctor_may_destroy(&self, def: DefId) -> bool {
+        self.cleanup
+            .iter()
+            .filter(|((candidate, _), _)| *candidate == def)
+            .map(|(_, &destroys)| destroys)
+            .reduce(|a, b| a || b)
+            .unwrap_or(true)
     }
 
     pub(crate) fn call_may_destroy(&self, def: DefId, args: &[TypeId]) -> bool {
@@ -198,6 +256,36 @@ impl ModRefTable {
 
     pub(crate) fn call(&self, callee: &Callee) -> ModRef {
         self.call_def(callee.def, &callee.args)
+    }
+
+    pub(crate) fn call_at(&self, callee: &Callee, arguments: &[crate::Operand]) -> ModRef {
+        if self.release_proofs
+            && Self::is_rc_event_counter(&self.rc_event_counters, callee.def, arguments)
+        {
+            ModRef::default()
+        } else {
+            self.call(callee)
+        }
+    }
+
+    pub(crate) fn observes_call_at(&self, callee: &Callee, arguments: &[crate::Operand]) -> bool {
+        !(self.release_proofs
+            && Self::is_rc_event_counter(&self.rc_event_counters, callee.def, arguments))
+            && self.observes_def(callee.def, &callee.args)
+    }
+
+    pub(super) fn is_rc_event_counter(
+        defs: &BTreeSet<DefId>,
+        def: DefId,
+        arguments: &[crate::Operand],
+    ) -> bool {
+        // Event attribution measures the optimized code. Heap-byte queries and dynamic ids
+        // can observe live storage, so only the retain/release event ids are exempt.
+        defs.contains(&def)
+            && matches!(
+                arguments.first(),
+                Some(crate::Operand::Const(crate::Const::Int(3 | 4)))
+            )
     }
 
     pub(crate) fn ctor(&self, def: DefId) -> ModRef {
@@ -295,6 +383,9 @@ impl ModRefTable {
             }
             if dels.contains(&t) {
                 return true;
+            }
+            if self.capture_free_boxes.contains(&t) {
+                continue;
             }
             if matches!(interner.kind(t), TyKind::Interface(..)) {
                 match self.interface_children.get(&t) {

@@ -136,3 +136,19 @@ fun arc_proofs_keep_forwarded_callback_environments_alive(): void {
     Assert.eq(proof_callback_read("ab", callback), 13);
     Assert.eq(captured[0], 11);
 }
+
+@noinline
+fun proof_make_owned_text(value: int): string {
+    return "value:" + value.to_string();
+}
+
+@test
+fun arc_proofs_preserve_owner_after_an_inlined_consumer(): void {
+    let i = 0;
+    while i < 3 {
+        let text = proof_make_owned_text(i);
+        Assert.eq(text.to_string(), "value:" + i.to_string());
+        Assert.eq(text.substring(0, text.length), "value:" + i.to_string());
+        i = i + 1;
+    }
+}

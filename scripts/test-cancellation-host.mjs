@@ -60,8 +60,10 @@ test("shared cancellation wakes across workers and memory growth without polling
     Atomics.store(word, 0, 1);
     Atomics.notify(word, 0);
   `, { eval: true, workerData: f.inst.memory.buffer });
+  // Cancellation can settle after the worker's exit event has already fired.
+  const exited = new Promise((resolve, reject) => { worker.once("exit", code => code ? reject(new Error(String(code))) : resolve()); worker.once("error", reject); });
   await Promise.all([...f.inst._hostSettlements]);
-  await new Promise((resolve, reject) => { worker.on("exit", code => code ? reject(new Error(String(code))) : resolve()); worker.on("error", reject); });
+  await exited;
   assert.deepEqual(f.settled, [[9, 0]]);
   assert.equal(f.pins, 0);
   assert.equal(f.inst._hostPending, 0);

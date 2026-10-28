@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -23,7 +24,21 @@ def command(args, cwd):
         raise RuntimeError(f'{args}:\n{result.stdout}\n{result.stderr}')
     return result.stdout.replace('\r\n', '\n')
 
-with tempfile.TemporaryDirectory(prefix='dream-release-check-') as temporary:
+@contextmanager
+def without_checkout_runtime():
+    source = (root / 'runtime/src').resolve()
+    if not source.is_relative_to(root.resolve()):
+        raise RuntimeError('Runtime source directory is outside the checkout')
+    hidden = source.with_name('src.release-check-hidden')
+    if hidden.exists():
+        raise RuntimeError(f'Runtime source backup already exists: {hidden}')
+    source.rename(hidden)
+    try:
+        yield
+    finally:
+        hidden.rename(source)
+
+with without_checkout_runtime(), tempfile.TemporaryDirectory(prefix='dream-release-check-') as temporary:
     work = Path(temporary)
     source = work / 'hello.dream'
     source.write_text('import system;\nfun main(): void { System.println("release 日本語"); }\n', encoding='utf-8')
@@ -55,4 +70,15 @@ fun main(): void {
         actual = command(['node', runner], work)
         assert actual == expected, (name, actual, expected)
         print('PASS Node ' + name, flush=True)
+    audio = work / 'audio.dream'
+    audio.write_text('''import system.audio;
+async fun main(): void {
+    let bytes: byte[] = [0];
+    let result = AudioBuffer.decode(bytes).await;
+    if result.is_err() { js.global.console.log("invalid audio"); }
+}
+''', encoding='utf-8')
+    command([compiler, '--release', '--runtime', '--web', '-o', work / 'audio.wasm', audio], work)
+    assert (work / 'audio.web.runtime.js').is_file()
+    print('PASS browser audio with bundled WASI libc', flush=True)
 print('Packaged compiler smoke checks passed', flush=True)

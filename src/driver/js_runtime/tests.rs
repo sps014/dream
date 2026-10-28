@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn packaged_js_sources_override_the_build_machine_checkout() {
+    let root = tempfile::tempdir().unwrap();
+    let sources = root.path().join("lib/runtime/js");
+    fs::create_dir_all(&sources).unwrap();
+    fs::write(sources.join("chunks.manifest"), "").unwrap();
+    let development = root.path().join("missing-build-checkout/runtime/src");
+    for exe in [root.path().join("dream"), root.path().join("bin/dream")] {
+        assert_eq!(runtime_sources_at(Some(&exe), &development), sources);
+    }
+    assert_eq!(runtime_sources_at(None, &development), development);
+}
+
+#[test]
 fn release_runtime_minification_renames_locals_and_removes_formatting() {
     let source = r#"
         export function load(unnecessarilyLongRuntimeParameter) {

@@ -102,7 +102,22 @@ fn parse_manifest(text: &'static str) -> Manifest {
     manifest
 }
 pub(crate) fn runtime_src_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/src")
+    runtime_sources_at(
+        std::env::current_exe().ok().as_deref(),
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/src"),
+    )
+}
+
+fn runtime_sources_at(exe: Option<&Path>, development: &Path) -> PathBuf {
+    if let Some(parent) = exe.and_then(Path::parent) {
+        for prefix in [Some(parent), parent.parent()].into_iter().flatten() {
+            let sources = prefix.join("lib/runtime/js");
+            if sources.join("chunks.manifest").is_file() {
+                return sources;
+            }
+        }
+    }
+    development.to_path_buf()
 }
 
 /// Strip ESM imports / rewrite exports so modules can share one scope when concatenated.

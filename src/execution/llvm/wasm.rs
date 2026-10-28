@@ -492,10 +492,11 @@ pub fn link_wasm(
         } else {
             "wasm32-wasip1"
         };
-        let libc = wasi_sysroot(&tools.clang()?)?
-            .join("lib")
-            .join(flavor)
-            .join("libc.a");
+        let sysroot = match super::bundle::prebuilt_rt(&tools.config) {
+            Some(root) => root.join("wasi-sysroot"),
+            None => wasi_sysroot(&tools.clang()?)?,
+        };
+        let libc = sysroot.join("lib").join(flavor).join("libc.a");
         if !libc.is_file() {
             return Err(format!("missing codec libc archive: {}", libc.display()));
         }

@@ -138,6 +138,7 @@ jobs:
           esac
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
+          cp -R runtime/src "$STAGE/lib/runtime/js"
           # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)
           # and the runtime prebuilt for every level, which `dream` finds beside itself.
           LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' crates/dream-abi/src/toolchain.rs)"

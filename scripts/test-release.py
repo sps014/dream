@@ -78,7 +78,7 @@ async fun main(): void {
     if result.is_err() { js.global.console.log("invalid audio"); }
 }
 ''', encoding='utf-8')
-    command([compiler, '--release', '--runtime', '--web', '-o', work / 'audio.wasm', audio], work)
+    command([compiler, '--runtime', '--web', '-o', work / 'audio.wasm', audio], work)
     assert (work / 'audio.web.runtime.js').is_file()
     print('PASS browser audio with bundled WASI libc', flush=True)
 print('Packaged compiler smoke checks passed', flush=True)

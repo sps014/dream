@@ -395,9 +395,9 @@ jobs:
           if-no-files-found: ignore
 
   corpus-sanitizers:
-    name: Golden corpus under ${{ matrix.sanitizer }} sanitizer
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout }}
     env:
       DREAM_NATIVE_SANITIZE: ${{ matrix.sanitizer }}
       ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=0
@@ -407,7 +407,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sanitizer: ['address,undefined', thread]
+        # Setup consumed 23 minutes before the debug corpus; the combined job then
+        # expired during release compilation. Each profile needs its own budget.
+        include:
+          - name: Golden corpus under address,undefined sanitizer
+            sanitizer: address,undefined
+            profile: debug
+            timeout: 60
+          - name: Optimized corpus under address,undefined sanitizer
+            sanitizer: address,undefined
+            profile: release
+            timeout: 180
+          - name: Golden corpus under thread sanitizer
+            sanitizer: thread
+            profile: concurrency
+            timeout: 60
     steps:
       - name: Install native dependencies
         run: |
@@ -451,31 +465,31 @@ jobs:
       # The runtime's own allocator hides heap blocks from ASan's malloc interposition; the
       # runtime poisons freed payloads instead, so dangling reads through ARC bugs still trap.
       - name: Full native corpus (runtime instrumented)
-        if: matrix.sanitizer != 'thread'
+        if: matrix.profile == 'debug'
         shell: bash
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py 2>&1 | tee target/probe-sanitize.log
       - name: Full native corpus, release guest builds (runtime instrumented)
-        if: ${{ !cancelled() && matrix.sanitizer != 'thread' }}
+        if: matrix.profile == 'release'
         shell: bash
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py --release 2>&1 | tee target/probe-sanitize-release.log
       - name: Concurrency cases (runtime instrumented)
-        if: matrix.sanitizer == 'thread'
+        if: matrix.profile == 'concurrency'
         shell: bash
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py --concurrency 2>&1 | tee target/probe-sanitize.log
       - name: Runtime fuzz harnesses (60 s each)
-        if: matrix.sanitizer != 'thread'
+        if: matrix.profile == 'debug'
         shell: bash
         run: scripts/fuzz_runtime.sh 60
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: corpus-sanitize-${{ strategy.job-index }}
+          name: corpus-sanitize-${{ matrix.profile }}
           path: target/probe-sanitize*.log
           retention-days: 7
           if-no-files-found: ignore

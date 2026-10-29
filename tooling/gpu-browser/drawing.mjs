@@ -38,7 +38,8 @@ try {
   browser = await chromium.launch({
     channel: 'chromium', headless: process.env.GPU_BROWSER_HEADLESS !== '0',
     executablePath: process.env.GPU_BROWSER_EXECUTABLE || undefined,
-    args: ['--enable-unsafe-webgpu', ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=native', '--disable-vulkan-surface', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'] : [])],
+    // Mesa WebGPU uses Vulkan; keeping the Xvfb compositor on GL makes canvas screenshots visible.
+    args: ['--enable-unsafe-webgpu', ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--use-gl=angle', '--use-angle=gl', '--use-vulkan=native', '--disable-vulkan-surface', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'] : [])],
   });
   const page = await browser.newPage();
   const errors = [];

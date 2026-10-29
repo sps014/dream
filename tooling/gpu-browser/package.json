@@ -2,6 +2,6 @@
   "name": "dream-gpu-browser-tests",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node test.mjs" },
+  "scripts": { "test": "node test.mjs", "test:drawing": "node drawing.mjs" },
   "devDependencies": { "playwright": "1.62.1" }
 }

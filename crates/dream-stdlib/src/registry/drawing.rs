@@ -1,0 +1,81 @@
+use super::StdPackage;
+
+pub(super) const PACKAGE: StdPackage = StdPackage {
+    name: "system.drawing",
+    deps: &["system", "system.collections"],
+    generators: &[],
+    files: &[
+        (
+            "<std>/system/drawing/backdrop.dream",
+            include_str!("../system/drawing/backdrop.dream"),
+        ),
+        (
+            "<std>/system/drawing/canvas.dream",
+            include_str!("../system/drawing/canvas.dream"),
+        ),
+        (
+            "<std>/system/drawing/color.dream",
+            include_str!("../system/drawing/color.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_backend.dream",
+            include_str!("../system/drawing/drawing_backend.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_error.dream",
+            include_str!("../system/drawing/drawing_error.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_host.dream",
+            include_str!("../system/drawing/drawing_host.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_path.dream",
+            include_str!("../system/drawing/drawing_path.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_presentation.dream",
+            include_str!("../system/drawing/drawing_presentation.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_resource.dream",
+            include_str!("../system/drawing/drawing_resource.dream"),
+        ),
+        (
+            "<std>/system/drawing/drawing_surface.dream",
+            include_str!("../system/drawing/drawing_surface.dream"),
+        ),
+        (
+            "<std>/system/drawing/fonts.dream",
+            include_str!("../system/drawing/fonts.dream"),
+        ),
+        (
+            "<std>/system/drawing/image.dream",
+            include_str!("../system/drawing/image.dream"),
+        ),
+        (
+            "<std>/system/drawing/paint.dream",
+            include_str!("../system/drawing/paint.dream"),
+        ),
+        (
+            "<std>/system/drawing/picture.dream",
+            include_str!("../system/drawing/picture.dream"),
+        ),
+        (
+            "<std>/system/drawing/rect.dream",
+            include_str!("../system/drawing/rect.dream"),
+        ),
+        (
+            "<std>/system/drawing/text_alignment.dream",
+            include_str!("../system/drawing/text_alignment.dream"),
+        ),
+        (
+            "<std>/system/drawing/text_layout.dream",
+            include_str!("../system/drawing/text_layout.dream"),
+        ),
+        (
+            "<std>/system/drawing/text_style.dream",
+            include_str!("../system/drawing/text_style.dream"),
+        ),
+    ],
+};

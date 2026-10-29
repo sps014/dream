@@ -1,0 +1,46 @@
+module system.drawing;
+
+/// An sRGB color with straight alpha. RGB factories take byte-scale channels; alpha is 0..1.
+public struct Color {
+    internal red: float;
+    internal green: float;
+    internal blue: float;
+    internal alpha: float;
+
+    /// Creates an opaque color from red, green and blue values in 0..255.
+    public static fun rgb(red: int, green: int, blue: int): Color {
+        return Color.rgba(red, green, blue, 1.0f);
+    }
+
+    /// Creates a color from RGB values in 0..255 and opacity in 0..1. Invalid channels fail at render.
+    public static fun rgba(red: int, green: int, blue: int, alpha: float): Color {
+        let color = Color();
+        color.red = (float)red / 255.0f;
+        color.green = (float)green / 255.0f;
+        color.blue = (float)blue / 255.0f;
+        color.alpha = alpha;
+        return color;
+    }
+
+    /// Opaque white.
+    public static get white(): Color {
+        return Color.rgb(255, 255, 255);
+    }
+
+    /// Opaque black.
+    public static get black(): Color {
+        return Color.rgb(0, 0, 0);
+    }
+
+    /// Transparent black.
+    public static get transparent(): Color {
+        return Color.rgba(0, 0, 0, 0.0f);
+    }
+
+    internal fun encode(borrow values: List<float>): void {
+        values.push(this.red);
+        values.push(this.green);
+        values.push(this.blue);
+        values.push(this.alpha);
+    }
+}

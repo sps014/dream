@@ -1,0 +1,24 @@
+module system.drawing;
+
+/// An axis-aligned rectangle in canvas coordinates, measured from its top-left corner.
+public struct Rect {
+    /// Left edge.
+    public x: float;
+
+    /// Top edge.
+    public y: float;
+
+    /// Width; positive values draw toward the right.
+    public width: float;
+
+    /// Height; positive values draw downward.
+    public height: float;
+
+    /// Creates a rectangle from position and dimensions in canvas units.
+    public constructor(x: float, y: float, width: float, height: float) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+}

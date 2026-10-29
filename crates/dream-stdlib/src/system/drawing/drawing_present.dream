@@ -1,0 +1,20 @@
+module system.drawing;
+
+import system.gpu;
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Dx11, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@vertex
+internal fun drawing_present_vertex(): GpuVec4 {
+    let x = (float)((vertex_id() & 1) * 4 - 1);
+    let y = (float)((vertex_id() >> 1) * 4 - 1);
+    return GpuVec4(x, y, 0, 1);
+}
+
+@gpu_targets(GpuTarget.Dx12, GpuTarget.Dx11, GpuTarget.Vulkan, GpuTarget.Metal, GpuTarget.WebGpu)
+@fragment
+internal fun drawing_present_fragment(
+    @builtin("position") position: GpuVec4,
+    texture: GpuTexture
+): GpuVec4 {
+    return texture.load(GpuIVec2((int)position.x, (int)position.y), 0);
+}

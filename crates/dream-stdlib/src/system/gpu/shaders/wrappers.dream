@@ -18,6 +18,12 @@ internal static class Wrappers {
         b.line("import system.collections;");
         b.line("import system.gpu;");
         b.line("");
+        let embedded = true;
+        for (let entry in shader_module.entries) {
+            if !entry.function.location.file.starts_with("<std>/") {
+                embedded = false;
+            }
+        }
         let backends = List<string>();
         for (let t in shader_module.targets()) {
             backends.push(Targets.backend(t));
@@ -41,7 +47,8 @@ internal static class Wrappers {
         b.indent();
         b.line("\"" + shader_module.name + "\",");
         b.line("Assets.bytes(\"" + shader_module.asset() + "\"),");
-        b.line("[" + backends.join(", ") + "]");
+        b.line("[" + backends.join(", ") + "],");
+        b.line(embedded.to_string());
         b.dedent();
         b.line(");");
         b.dedent();

@@ -1,0 +1,11 @@
+module system.drawing;
+
+/// A drawing failure. The message includes a stable code followed by a readable reason.
+public struct DrawingError {
+    /// A stable error code and description, separated by a newline.
+    public message: string;
+
+    internal constructor(message: string) {
+        this.message = message;
+    }
+}

@@ -1,0 +1,62 @@
+module system.drawing;
+
+/// A reusable solid color or two-color gradient, captured when a draw is recorded.
+public class Paint {
+    internal values: List<float>;
+
+    constructor() {
+        this.values = List<float>();
+    }
+
+    /// Creates a solid paint.
+    public static fun solid(color: Color): Paint {
+        let paint = Paint();
+        paint.values.push(0.0f);
+        color.encode(paint.values);
+        return paint;
+    }
+
+    /// Creates a gradient from start color at (x0, y0) to end color at (x1, y1).
+    public static fun linear(
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        start: Color,
+        end: Color
+    ): Paint {
+        let paint = Paint();
+        paint.values.push(1.0f);
+        paint.values.push(x0);
+        paint.values.push(y0);
+        paint.values.push(x1);
+        paint.values.push(y1);
+        paint.stops(start, end);
+        return paint;
+    }
+
+    /// Creates a circular gradient from the center color to the edge at a positive radius.
+    public static fun radial(x: float, y: float, radius: float, start: Color, end: Color): Paint {
+        let paint = Paint();
+        paint.values.push(2.0f);
+        paint.values.push(x);
+        paint.values.push(y);
+        paint.values.push(radius);
+        paint.stops(start, end);
+        return paint;
+    }
+
+    fun stops(start: Color, end: Color): void {
+        this.values.push(2.0f);
+        this.values.push(0.0f);
+        start.encode(this.values);
+        this.values.push(1.0f);
+        end.encode(this.values);
+    }
+
+    internal fun encode(borrow output: List<float>): void {
+        for (let value in this.values) {
+            output.push(value);
+        }
+    }
+}

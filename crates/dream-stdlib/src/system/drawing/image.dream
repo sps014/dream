@@ -1,0 +1,55 @@
+module system.drawing;
+
+/// An immutable decoded image. Canvas recordings retain it until they are released or cleared.
+public class Image: DrawingResource {
+    handle: int;
+    image_width: int;
+    image_height: int;
+
+    constructor(handle: int) {
+        this.handle = handle;
+        let size = DrawingHost.asset_metrics(handle);
+        this.image_width = (int)size[0];
+        this.image_height = (int)size[1];
+    }
+
+    /// Decodes PNG or JPEG bytes. Input is copied; malformed data, excessive dimensions or more than 64 MiB of encoded data return an error.
+    public static async fun decode(bytes: byte[]): Result<Image, DrawingError> {
+        let handle = DrawingHost.image_decode(bytes).await;
+        if handle <= 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(Image(handle));
+    }
+
+    /// Copies tightly packed straight-alpha sRGB RGBA8 pixels, top row first. Requires width * height * 4 bytes and the surface dimension limits.
+    public static async fun from_rgba(
+        width: int,
+        height: int,
+        bytes: byte[]
+    ): Result<Image, DrawingError> {
+        let handle = DrawingHost.image_rgba(width, height, bytes).await;
+        if handle <= 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(Image(handle));
+    }
+
+    /// Width of the decoded image in pixels.
+    public get width(): int {
+        return this.image_width;
+    }
+
+    /// Height of the decoded image in pixels.
+    public get height(): int {
+        return this.image_height;
+    }
+
+    internal get resource_handle(): int {
+        return this.handle;
+    }
+
+    del() {
+        DrawingHost.asset_release(this.handle);
+    }
+}

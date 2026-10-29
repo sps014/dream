@@ -1,0 +1,31 @@
+module system.drawing;
+
+/// Filters content drawn earlier in the canvas. Later drawings and other windows are excluded.
+public class Backdrop {
+    internal sigma: float;
+    internal color: Color;
+    internal radius: float;
+
+    constructor(sigma: float) {
+        this.sigma = sigma;
+        this.color = Color.transparent;
+        this.radius = 0.0f;
+    }
+
+    /// Creates a Gaussian backdrop blur. Sigma is 0..128 physical pixels; zero only applies tint.
+    public static fun blur(sigma: float): Backdrop {
+        return Backdrop(sigma);
+    }
+
+    /// Sets the color composited over the filtered backdrop and returns this configuration.
+    public fun tint(color: Color): Backdrop {
+        this.color = color;
+        return this;
+    }
+
+    /// Sets the panel's corner radius in canvas units and returns this configuration.
+    public fun rounded(radius: float): Backdrop {
+        this.radius = radius;
+        return this;
+    }
+}

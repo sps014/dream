@@ -1,0 +1,11 @@
+module system.drawing;
+
+/// Where a drawing surface rasterizes and composites its canvas.
+public enum DrawingBackend {
+    /// Attempts GPU initialization, then uses CPU if no suitable GPU is available.
+    Auto = 0,
+    /// Uses Vello software rendering without requiring a GPU.
+    Cpu = 1,
+    /// Requires Vello GPU rendering; initialization fails if unavailable.
+    Gpu = 2
+}

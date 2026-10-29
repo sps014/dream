@@ -10,8 +10,10 @@ internal class GpuShaderLibrary {
     internal name: string;
     internal bundle: byte[];
     internal backends: List<GpuBackend>;
+    embedded: bool;
 
-    constructor(name: string, bundle: byte[], backends: GpuBackend[]) {
+    constructor(name: string, bundle: byte[], backends: GpuBackend[], embedded: bool) {
+        this.embedded = embedded;
         this.name = name;
         this.bundle = bundle;
         this.backends = List<GpuBackend>(backends);
@@ -20,22 +22,31 @@ internal class GpuShaderLibrary {
     internal static fun register(
         name: string,
         bundle: byte[],
-        backends: GpuBackend[]
+        backends: GpuBackend[],
+        embedded: bool
     ): GpuShaderLibrary {
-        let library = GpuShaderLibrary(name, bundle, backends);
+        let library = GpuShaderLibrary(name, bundle, backends, embedded);
         gpu_shader_libraries.push(library);
         return library;
     }
 
-    // Bit `1 << backend` for every backend some registered bundle carries code for.
+    // Library implementation shaders must not broaden Auto beyond application shader targets.
     internal static fun compiled_mask(): int {
-        let mask = 0;
+        let application = 0;
+        let embedded = 0;
         for (let library in gpu_shader_libraries) {
             for (let backend in library.backends) {
                 let bit: int = backend;
-                mask = mask | (1 << bit);
+                if library.embedded {
+                    embedded = embedded | (1 << bit);
+                } else {
+                    application = application | (1 << bit);
+                }
             }
         }
-        return mask;
+        if application != 0 {
+            return application;
+        }
+        return embedded;
     }
 }

@@ -20,9 +20,10 @@ dream-host-window = { path = "../dream-host-window", optional = true }
 dream-host-gpu = { path = "../dream-host-gpu", optional = true }
 
 dream-host-audio = { path = "../dream-host-audio", optional = true }
+dream-host-drawing = { path = "../dream-host-drawing", optional = true }
 
 [features]
-default = ["core", "crypto", "process", "timezone", "net", "io", "window", "gpu", "audio"]
+default = ["core", "crypto", "process", "timezone", "net", "io", "window", "gpu", "audio", "drawing"]
 core = ["dep:dream-host-core"]
 crypto = ["core", "dep:dream-host-crypto"]
 process = ["core", "dep:dream-host-process"]
@@ -33,3 +34,4 @@ window = ["core", "dep:dream-host-window"]
 gpu = ["core", "dep:dream-host-gpu"]
 
 audio = ["core", "dep:dream-host-audio"]
+drawing = ["core", "dep:dream-host-drawing"]

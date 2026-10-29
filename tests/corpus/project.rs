@@ -17,6 +17,8 @@ pub(super) const CASES: &[Case] = &[
     Case::project("arc_proofs", "ownership", true),
     Case::project("arc_slot_walk", "ownership", true),
     Case::project("audio_analysis", "core", true),
+    Case::project("drawing_canvas", "core", true),
+    Case::project("drawing_gpu_copy", "gpu_runtime", false),
     Case::project("array_alloc", "collections", true),
     Case::project("async_await_in_control_flow", "async_tasks", true),
     Case::project("async_basic", "async_tasks", true),

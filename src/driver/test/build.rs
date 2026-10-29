@@ -148,6 +148,9 @@ impl BuildRequest<'_> {
                 wasm.clone(),
                 js.clone(),
                 wat.with_extension("abi.json"),
+                out_dir.join("dream_drawing.js"),
+                out_dir.join("dream_drawing_bg.wasm"),
+                out_dir.join("NotoSans-OFL.txt"),
             ]));
         }
         let script = out_dir.join("runner.mjs");

@@ -317,7 +317,7 @@ jobs:
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
-            libvulkan1 mesa-vulkan-drivers bubblewrap
+            libvulkan1 mesa-vulkan-drivers bubblewrap xvfb xauth
           # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
           # sandbox generator tools.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -368,6 +368,22 @@ jobs:
           path: ~/.dream/toolchains/slang-2026.20
           key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
       - run: cargo run --locked -p dreamer -- toolchain install slang
+      - name: Build drawing WASM host for Node assertions
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked
+          python3 scripts/build-drawing-web.py
+      - name: Drawing canvas CPU and WebGPU browser presentation
+        shell: bash
+        env:
+          GPU_BROWSER_SOFTWARE: "1"
+          GPU_BROWSER_HEADLESS: "0"
+        run: |
+          cargo build --locked -p dream --bin dream
+          npm ci --prefix tooling/gpu-browser
+          (cd tooling/gpu-browser && npx playwright install --with-deps chromium)
+          export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          xvfb-run -a npm run test:drawing --prefix tooling/gpu-browser
       - name: Full native and Node assertion corpus
         id: corpus-debug
         shell: bash

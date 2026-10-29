@@ -14,7 +14,7 @@ public class GpuDevice
 
 ## `create`
 
-Opens a device on `backend`.  `GpuBackend.Auto` picks the platform's native API when this build has shader code for it, and WebGPU otherwise. Any other backend is used exactly as asked: when this build has no shader code for it the result is `GpuError.BackendNotCompiled`, and when the machine cannot run it the result is `GpuError.BackendUnavailable`. A program without shaders may open any backend.
+Opens a device on `backend`.  `GpuBackend.Auto` picks the platform's native API when this build has shader code for it, and WebGPU otherwise. Any other backend is used exactly as asked: when this build has no shader code for it the result is `GpuError.BackendNotCompiled`, and when the machine cannot run it the result is `GpuError.BackendUnavailable`. A program without shaders may open any backend. Embedded library shaders determine available backends only when the program declares no application shaders.
 
 ```dream
 public static async fun create(backend: GpuBackend): Result<GpuDevice, GpuError>

@@ -308,7 +308,7 @@ pub fn apply(
                             run,
                             true,
                             format!(
-                                "cannot consume '{target}': expected an unambiguous selected or referenced top-level user function"
+                                "cannot consume '{target}': expected an unambiguous selected or referenced top-level function with an accessible body"
                             ),
                             target,
                         );

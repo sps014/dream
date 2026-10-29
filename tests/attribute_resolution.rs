@@ -1,6 +1,51 @@
 use std::process::Command;
 
 #[test]
+fn user_generators_cannot_consume_referenced_stdlib_functions() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("gen.dream"),
+        r#"
+module gen;
+import system.codegen;
+@attribute(AttributeTarget.Function)
+public struct ProbeAttribute { public provider: DeclarationPath; }
+@generator
+@on_attribute(ProbeAttribute)
+public fun probe(ctx: GenContext): void {
+    for (let f in ctx.functions_with<ProbeAttribute>()) {
+        let provider = f.attribute<ProbeAttribute>().unwrap().provider;
+        ctx.consume(ctx.find_function(provider.symbol).unwrap(), "library body");
+    }
+}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("main.dream"),
+        r#"
+import gen;
+import system.logging;
+@probe(level_name)
+fun handler(): void {}
+fun main(): void {}
+"#,
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+        .current_dir(dir.path())
+        .args(["--emit-llvm", "main.dream"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot consume 'system.logging::level_name'"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn typed_attribute_decoders_keep_the_declaring_module() {
     let dir = tempfile::tempdir().unwrap();
     for (file, module, value) in [("left", "one", 7), ("right", "two", 19)] {

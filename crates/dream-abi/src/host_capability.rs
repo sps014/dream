@@ -15,10 +15,11 @@ pub enum HostCapability {
     Window,
     Gpu,
     Audio,
+    Drawing,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Core,
         Self::Crypto,
         Self::Process,
@@ -28,6 +29,7 @@ impl HostCapability {
         Self::Window,
         Self::Gpu,
         Self::Audio,
+        Self::Drawing,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -41,6 +43,7 @@ impl HostCapability {
             Self::Window => "window",
             Self::Gpu => "gpu",
             Self::Audio => "audio",
+            Self::Drawing => "drawing",
         }
     }
 
@@ -55,6 +58,7 @@ impl HostCapability {
             Self::Window => "dream_host_window",
             Self::Gpu => "dream_host_gpu",
             Self::Audio => "dream_host_audio",
+            Self::Drawing => "dream_host_drawing",
         }
     }
 
@@ -114,6 +118,7 @@ impl HostCapability {
         target: &crate::target::TargetSpec,
     ) -> &'static [&'static str] {
         match self {
+            Self::Drawing => &["NotoSans-OFL.txt"],
             Self::Gpu if target.is_windows() => &["dawn.dll"],
             Self::Gpu if target.is_apple() => &["libdawn.dylib"],
             Self::Gpu => &["libdawn.so"],

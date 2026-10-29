@@ -1,0 +1,233 @@
+module system.drawing;
+
+/// Records 2D drawing in top-left coordinates with positive y downward. Calls execute at render.
+public class Canvas {
+    internal values: List<float>;
+    internal width: int;
+    internal height: int;
+    depth: int;
+    valid: bool;
+    resources: List<DrawingResource>;
+
+    /// Creates a recording canvas of the given physical pixel size, initially transparent.
+    public constructor(width: int, height: int) {
+        this.values = List<float>();
+        this.resources = List<DrawingResource>();
+        this.width = width;
+        this.height = height;
+        this.depth = 0;
+        this.valid = width > 0 && height > 0;
+    }
+
+    /// Discards recorded drawing and state, then starts with the supplied background color.
+    public fun clear(color: Color): void {
+        this.values.clear();
+        this.resources.clear();
+        this.depth = 0;
+        this.valid = this.width > 0 && this.height > 0;
+        this.values.push(0.0f);
+        color.encode(this.values);
+    }
+
+    /// Fills a rectangle with a solid color. Radius optionally rounds its corners.
+    public fun fill_rect(
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        color: Color,
+        radius: float = 0.0f
+    ): void {
+        this.record_fill(
+            DrawingPath.rect(Rect(x, y, width, height), radius),
+            Paint.solid(color),
+            false
+        );
+    }
+
+    /// Fills a circle with the given center, radius and solid color.
+    public fun fill_circle(x: float, y: float, radius: float, color: Color): void {
+        this.record_fill(
+            DrawingPath.ellipse(Rect(x - radius, y - radius, radius * 2.0f, radius * 2.0f)),
+            Paint.solid(color),
+            false
+        );
+    }
+
+    /// Fills vector geometry with a paint. even_odd selects alternating contour fill.
+    public fun fill(borrow path: DrawingPath, borrow paint: Paint, even_odd: bool = false): void {
+        this.record_fill(path, paint, even_odd);
+    }
+
+    /// Strokes vector geometry with a positive width, butt caps and miter joins.
+    public fun stroke(borrow path: DrawingPath, color: Color, width: float = 1.0f): void {
+        this.values.push(2.0f);
+        path.encode(this.values);
+        Paint.solid(color).encode(this.values);
+        this.values.push(width);
+        this.values.push(0.0f);
+        this.values.push(0.0f);
+        this.values.push(4.0f);
+        this.values.push(0.0f);
+        this.values.push(0.0f);
+    }
+
+    /// Saves the current transform and clip. Pair with restore before rendering.
+    public fun save(): void {
+        this.values.push(3.0f);
+        this.depth = this.depth + 1;
+    }
+
+    /// Starts an isolated opacity group. restore composites the group once using opacity in 0..1.
+    public fun save_layer(opacity: float = 1.0f): void {
+        this.values.push(7.0f);
+        this.values.push(opacity);
+        this.depth = this.depth + 1;
+    }
+
+    /// Restores the last saved transform and clip, and ends an isolated group if one was saved.
+    public fun restore(): void {
+        if this.depth <= 0 {
+            this.valid = false;
+            return;
+        }
+        this.depth = this.depth - 1;
+        this.values.push(4.0f);
+    }
+
+    /// Concatenates an affine matrix: x' = a*x + c*y + tx, y' = b*x + d*y + ty.
+    public fun transform(a: float, b: float, c: float, d: float, tx: float, ty: float): void {
+        this.record_transform(a, b, c, d, tx, ty);
+    }
+
+    /// Moves subsequent drawing by the given canvas offsets.
+    public fun translate(x: float, y: float): void {
+        this.record_transform(1.0f, 0.0f, 0.0f, 1.0f, x, y);
+    }
+
+    /// Scales subsequent drawing along each axis. Negative factors mirror the drawing.
+    public fun scale(x: float, y: float): void {
+        this.record_transform(x, 0.0f, 0.0f, y, 0.0f, 0.0f);
+    }
+
+    /// Rotates subsequent drawing clockwise about the origin by an angle in radians.
+    public fun rotate(radians: float): void {
+        let cosine = (float)Math.cos((double)radians);
+        let sine = (float)Math.sin((double)radians);
+        this.record_transform(cosine, sine, 0.0f - sine, cosine, 0.0f, 0.0f);
+    }
+
+    /// Intersects the current clip with the nonzero-filled path in the current transform.
+    public fun clip(borrow path: DrawingPath): void {
+        this.values.push(6.0f);
+        path.encode(this.values);
+    }
+
+    /// Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.
+    public fun backdrop(rect: Rect, borrow effect: Backdrop): void {
+        this.values.push(8.0f);
+        DrawingPath.rect(rect, effect.radius).encode(this.values);
+        this.values.push(effect.sigma);
+        effect.color.encode(this.values);
+    }
+
+    /// Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.
+    public fun finish(): Result<Picture, DrawingError> {
+        if !this.valid || this.depth != 0 {
+            return Result.Err(
+                DrawingError("EINVAL\ninvalid canvas dimensions or unbalanced save/restore")
+            );
+        }
+        let snapshot = Buffer.alloc<float>(this.values.length);
+        for (let i = 0; i < snapshot.length; i = i + 1) {
+            snapshot[i] = this.values[i];
+        }
+        let owners = Buffer.alloc<DrawingResource>(this.resources.length);
+        for (let i = 0; i < owners.length; i = i + 1) {
+            owners[i] = this.resources[i];
+        }
+        return Result.Ok(Picture(snapshot, this.width, this.height, owners));
+    }
+
+    fun record_fill(borrow path: DrawingPath, borrow paint: Paint, even_odd: bool): void {
+        this.values.push(1.0f);
+        path.encode(this.values);
+        paint.encode(this.values);
+        let rule = 0.0f;
+        if even_odd {
+            rule = 1.0f;
+        }
+        this.values.push(rule);
+    }
+
+    fun record_transform(a: float, b: float, c: float, d: float, tx: float, ty: float): void {
+        this.values.push(5.0f);
+        this.values.push(a);
+        this.values.push(b);
+        this.values.push(c);
+        this.values.push(d);
+        this.values.push(tx);
+        this.values.push(ty);
+    }
+
+    /// Draws an image into a destination rectangle. Optional source crops in image pixels; opacity is 0..1 and nearest enables pixel-art sampling.
+    public fun draw_image(
+        borrow image: Image,
+        target: Rect,
+        source: Option<Rect> = Option.None,
+        opacity: float = 1.0f,
+        nearest: bool = false
+    ): void {
+        this.values.push(9.0f);
+        this.values.push((float)this.resources.length);
+        this.resources.push(image);
+        let crop = source.unwrap_or(Rect(0.0f, 0.0f, (float)image.width, (float)image.height));
+        this.encode_rect(crop);
+        this.encode_rect(target);
+        this.values.push(opacity);
+        let sample = 0.0f;
+        if nearest {
+            sample = 1.0f;
+        }
+        this.values.push(sample);
+    }
+
+    /// Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.
+    public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void {
+        this.values.push(10.0f);
+        this.encode_string(text);
+        this.encode_string(style.family);
+        this.values.push(style.size);
+        this.values.push(style.weight);
+        this.values.push(style.max_width);
+        let alignment: int = style.alignment;
+        this.values.push((float)alignment);
+        this.values.push(x);
+        this.values.push(y);
+        style.color.encode(this.values);
+    }
+
+    /// Draws an immutable precomputed layout at a top-left origin using the supplied color.
+    public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void {
+        this.values.push(11.0f);
+        this.values.push((float)this.resources.length);
+        this.resources.push(layout);
+        this.values.push(x);
+        this.values.push(y);
+        color.encode(this.values);
+    }
+
+    fun encode_string(borrow text: string): void {
+        this.values.push((float)text.length);
+        for (let i = 0; i < text.length; i = i + 1) {
+            this.values.push((float)(int)text.char_at(i));
+        }
+    }
+
+    fun encode_rect(rect: Rect): void {
+        this.values.push(rect.x);
+        this.values.push(rect.y);
+        this.values.push(rect.width);
+        this.values.push(rect.height);
+    }
+}

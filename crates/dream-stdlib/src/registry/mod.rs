@@ -7,6 +7,8 @@ mod config;
 mod core;
 mod crypto;
 mod csv;
+mod drawing;
+mod drawing_gpu;
 mod encoding;
 mod gpu;
 mod gpu_shaders;
@@ -66,6 +68,8 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     csv::PACKAGE,
     compress::PACKAGE,
     crypto::PACKAGE,
+    drawing::PACKAGE,
+    drawing_gpu::PACKAGE,
     uuid::PACKAGE,
     validation::PACKAGE,
     validation_derive::PACKAGE,

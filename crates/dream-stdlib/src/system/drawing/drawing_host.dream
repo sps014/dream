@@ -1,0 +1,56 @@
+module system.drawing;
+
+internal static class DrawingHost {
+    @async_host
+    @runtime("drawingCreate")
+    internal static extern async fun create(width: int, height: int, backend: int): int;
+
+    @runtime("drawingLastError")
+    internal static extern fun error(): string;
+
+    @runtime("drawingRender")
+    internal static extern fun render(
+        handle: int,
+        borrow commands: float[],
+        borrow assets: int[]
+    ): int;
+
+    @async_host
+    @runtime("drawingPixels")
+    internal static extern async fun pixels(handle: int): byte[];
+
+    @runtime("drawingBackend")
+    internal static extern fun backend(handle: int): int;
+
+    @runtime("drawingRelease")
+    internal static extern fun release(handle: int): void;
+
+    @async_host
+    @runtime("drawingImageDecode")
+    internal static extern async fun image_decode(borrow bytes: byte[]): int;
+
+    @async_host
+    @runtime("drawingImageRgba")
+    internal static extern async fun image_rgba(width: int, height: int, borrow bytes: byte[]): int;
+
+    @async_host
+    @runtime("drawingTextCreate")
+    internal static extern async fun text_create(
+        borrow text: string,
+        borrow family: string,
+        size: float,
+        weight: float,
+        width: float,
+        alignment: int
+    ): int;
+
+    @async_host
+    @runtime("drawingFontRegister")
+    internal static extern async fun font_register(borrow bytes: byte[]): string;
+
+    @runtime("drawingAssetMetrics")
+    internal static extern fun asset_metrics(handle: int): float[];
+
+    @runtime("drawingAssetRelease")
+    internal static extern fun asset_release(handle: int): void;
+}

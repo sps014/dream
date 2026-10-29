@@ -1,0 +1,13 @@
+module system.drawing;
+
+/// Alignment of a paragraph within its wrapping width.
+public enum TextAlignment {
+    /// Aligns to the start edge of the text direction.
+    Start = 0,
+    /// Centers each line.
+    Center = 1,
+    /// Aligns to the end edge of the text direction.
+    End = 2,
+    /// Expands spacing to fill the paragraph width when applicable.
+    Justify = 3
+}

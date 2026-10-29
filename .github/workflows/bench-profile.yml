@@ -47,11 +47,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev \
             linux-tools-common "linux-tools-$(uname -r)" || \
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev
           sudo sysctl -w kernel.perf_event_paranoid=-1 || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

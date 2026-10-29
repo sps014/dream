@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -38,7 +38,7 @@ try {
   browser = await chromium.launch({
     channel: 'chromium', headless: process.env.GPU_BROWSER_HEADLESS !== '0',
     executablePath: process.env.GPU_BROWSER_EXECUTABLE || undefined,
-    args: ['--enable-unsafe-webgpu', ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=native', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'] : [])],
+    args: ['--enable-unsafe-webgpu', ...(process.env.GPU_BROWSER_SOFTWARE === '1' ? ['--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=native', '--disable-vulkan-surface', '--ignore-gpu-blocklist', '--disable-gpu-sandbox'] : [])],
   });
   const page = await browser.newPage();
   const errors = [];
@@ -59,14 +59,21 @@ try {
   });
   await Promise.race([ready, execution.then(() => { throw new Error('drawing program ended before presenting'); })]);
   try {
-    const screenshot = await page.locator('#drawing').screenshot();
-    const pixel = await page.evaluate(async bytes => {
-      const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
-      const canvas = new OffscreenCanvas(image.width, image.height);
-      const context = canvas.getContext('2d');
-      context.drawImage(image, 0, 0);
-      return Array.from(context.getImageData(Math.floor(image.width / 2), Math.floor(image.height / 2), 1, 1).data);
-    }, Array.from(screenshot));
+    let pixel;
+    const deadline = Date.now() + 10_000;
+    do {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const screenshot = await page.locator('#drawing').screenshot({ path: resolve(root, 'target/drawing-browser/presentation.png') });
+      pixel = await page.evaluate(async bytes => {
+        const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+        const canvas = new OffscreenCanvas(image.width, image.height);
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0);
+        return Array.from(context.getImageData(Math.floor(image.width / 2), Math.floor(image.height / 2), 1, 1).data);
+      }, Array.from(screenshot));
+      if (pixel.every((channel, index) => channel === [40, 100, 200, 255][index])) break;
+    } while (Date.now() < deadline);
+    await writeFile(resolve(root, 'target/drawing-browser/presentation.json'), JSON.stringify({ pixel, errors, messages }, null, 2));
     assert.deepEqual(pixel, [40, 100, 200, 255], 'the second cached presentation must reach the window');
   } finally {
     await page.evaluate(() => globalThis.drawingResume());

@@ -80,7 +80,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev \
             libvulkan1 mesa-vulkan-drivers bubblewrap xvfb xauth
           # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
           # sandbox generator tools.
@@ -316,7 +316,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev \
             libvulkan1 mesa-vulkan-drivers bubblewrap xvfb xauth
           # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
           # sandbox generator tools.
@@ -383,7 +383,18 @@ jobs:
           npm ci --prefix tooling/gpu-browser
           (cd tooling/gpu-browser && npx playwright install --with-deps chromium)
           export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
-          xvfb-run -a npm run test:drawing --prefix tooling/gpu-browser
+          xvfb-run -a npm run test:drawing --prefix tooling/gpu-browser 2>&1 | tee target/drawing-browser.log
+      - name: Preserve drawing browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: drawing-browser-Linux
+          path: |
+            target/drawing-browser.log
+            target/drawing-browser/presentation.png
+            target/drawing-browser/presentation.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Full native and Node assertion corpus
         id: corpus-debug
         shell: bash
@@ -445,7 +456,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libclang-dev \
             ninja-build pkg-config python3 xz-utils \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev \
             libvulkan1 mesa-vulkan-drivers bubblewrap
           # Ubuntu 24.04 blocks unprivileged user namespaces, which bubblewrap needs to
           # sandbox generator tools.

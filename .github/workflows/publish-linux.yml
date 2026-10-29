@@ -1,0 +1,76 @@
+name: Publish verified Linux toolchain
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+      source_run:
+        description: Release toolchain run containing the verified Linux artifact
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-linux-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify artifact provenance and Linux smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          expected=$(git rev-parse "$RELEASE_TAG^{commit}")
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN")
+          test "$(jq -r .head_sha <<< "$run")" = "$expected"
+          workflow=$(jq -r .workflow_id <<< "$run")
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow" --jq .path)" = .github/workflows/release.yml
+          linux=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | contains("linux-x64")) | .conclusion')
+          test "$linux" = success
+      - uses: actions/download-artifact@v4
+        with:
+          name: dream-linux-x64
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: linux
+      - name: Publish Linux assets without waiting for other platforms
+        working-directory: linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="dream-${RELEASE_TAG#v}-linux-x64.tar.gz"
+          test -f "$archive"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            for attempt in $(seq 1 12); do
+              assets=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+              if grep -Fxq "$archive" <<< "$assets" && grep -Fxq SHA256SUMS <<< "$assets"; then
+                echo 'The release already contains the Linux package and checksums.'
+                exit 0
+              fi
+              sleep 5
+            done
+            echo 'An existing release has not finished uploading its Linux assets.'
+            exit 1
+          fi
+          sha256sum "$archive" > SHA256SUMS
+          gh release create "$RELEASE_TAG" "$archive" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Dream $RELEASE_TAG" \
+            --notes 'Linux x64 package verified by release smoke tests. Includes standalone browser runtime packaging and bundled WASI fixes, retaining the ARC optimizations. Other platform assets are published by the full release workflow when ready.' --latest

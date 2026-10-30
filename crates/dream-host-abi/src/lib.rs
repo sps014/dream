@@ -3,6 +3,7 @@
 //! Allocation and completion go through the core C ABI so Rust static linking cannot
 //! duplicate the callback state. Counts retain Dream's int ABI; references use native pointers.
 
+pub mod drawing_gpu;
 pub mod handles;
 #[cfg(feature = "operations")]
 pub mod operations;

@@ -5,6 +5,15 @@ pub struct ColorFilter {
 }
 impl ColorFilter {
     pub fn new(device: &wgpu::Device) -> Self {
+        Self::pipeline(device, wgpu::TextureFormat::Rgba8Unorm, "fragment")
+    }
+
+    #[cfg(windows)]
+    pub(super) fn copy(device: &wgpu::Device) -> Self {
+        Self::pipeline(device, wgpu::TextureFormat::Bgra8Unorm, "copy")
+    }
+
+    fn pipeline(device: &wgpu::Device, format: wgpu::TextureFormat, fragment: &str) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Dream color effects"),
             source: wgpu::ShaderSource::Wgsl(include_str!("color_filter.wgsl").into()),
@@ -20,10 +29,10 @@ impl ColorFilter {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
-                entry_point: Some("fragment"),
+                entry_point: Some(fragment),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],

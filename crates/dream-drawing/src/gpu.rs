@@ -28,11 +28,37 @@ pub(super) struct GpuContext {
 
 impl GpuContext {
     pub async fn new() -> Result<Self> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions::default())
-            .await
-            .map_err(|e| DrawingError::Unavailable(e.to_string()))?;
+        let descriptor = || {
+            #[cfg(windows)]
+            {
+                let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+                // Enabling D3D12's debug layer after another host opened a device removes it.
+                desc.flags.remove(wgpu::InstanceFlags::VALIDATION);
+                desc
+            }
+            #[cfg(not(windows))]
+            {
+                wgpu::InstanceDescriptor::new_without_display_handle()
+            }
+        };
+        #[cfg(windows)]
+        let preferred = {
+            let mut desc = descriptor();
+            desc.backends = wgpu::Backends::DX12;
+            wgpu::Instance::new(desc)
+                .request_adapter(&wgpu::RequestAdapterOptions::default())
+                .await
+                .ok()
+        };
+        #[cfg(not(windows))]
+        let preferred = None;
+        let adapter = match preferred {
+            Some(adapter) => adapter,
+            None => wgpu::Instance::new(descriptor())
+                .request_adapter(&wgpu::RequestAdapterOptions::default())
+                .await
+                .map_err(|e| DrawingError::Unavailable(e.to_string()))?,
+        };
         let requested =
             adapter.features() & (wgpu::Features::SHADER_F16 | wgpu::Features::SUBGROUP);
         let (device, queue) = adapter
@@ -74,6 +100,8 @@ pub struct GpuSurface {
     pub(super) scratch: crate::gpu_effects::Pool,
     pub(super) color_filter: crate::gpu_color::ColorFilter,
     reads: AtomicU64,
+    #[cfg(windows)]
+    pub(super) transfer: Option<crate::native_dx12::Transfer>,
     _owner: Arc<DeviceOwner>,
     images: BTreeMap<usize, (Arc<crate::assets::RasterImage>, wgpu::Texture)>,
 }
@@ -129,6 +157,8 @@ impl GpuSurface {
             scratch: Default::default(),
             color_filter,
             reads: AtomicU64::new(0),
+            #[cfg(windows)]
+            transfer: None,
             _owner: owner,
         })
     }
@@ -294,7 +324,7 @@ impl GpuSurface {
         Ok(pixels)
     }
 
-    fn check(&self) -> Result<()> {
+    pub(super) fn check(&self) -> Result<()> {
         match &*self.error.lock().unwrap_or_else(|e| e.into_inner()) {
             Some(error) => Err(DrawingError::Render(error.clone())),
             None => Ok(()),

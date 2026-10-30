@@ -16,3 +16,7 @@ struct Parameters { kind:f32, factor:f32, reserved0:f32, reserved1:f32 }
     else {let luminance=dot(rgb,vec3<f32>(0.2126,0.7152,0.0722));adjusted=vec3<f32>(luminance)+(rgb-vec3<f32>(luminance))*parameters.factor;}
     return vec4<f32>(clamp(adjusted,vec3<f32>(0.),vec3<f32>(1.))*pixel.a,pixel.a);
 }
+
+@fragment fn copy(@builtin(position) position:vec4<f32>)->@location(0) vec4<f32> {
+    return textureLoad(source,vec2<i32>(position.xy),i32(parameters.reserved0));
+}

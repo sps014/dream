@@ -282,3 +282,47 @@ sampler heap, expects a recoverable error, then verifies subsequent valid submis
   semantics.
 - Wayland windows have no slang-rhi surface. GLFW runs them through XWayland, which gives an Xlib
   handle.
+
+## Native drawing handoff
+
+On Windows, `drawingCopyGpu` discovers `dream_gpu_drawing_copy_v1` in the already-loaded GPU
+capability. The ABI in `dream-host-abi::drawing_gpu` passes a synchronous producer callback;
+neither capability owns or statically links the other's handle table. The GPU state lock is
+held through the handoff, and the producer never enters the GPU host or guest scheduler again.
+
+D3D12 destinations on the same adapter use one cached shared texture and shared timeline fence
+per GPU device. The producer imports their handles into wgpu, waits on the previous consumed
+value, copies or blits the current drawing, transitions the shared texture back to COMMON, and
+signals ready. The consumer waits for ready on its GPU queue, copies into mip/layer zero,
+restores default resource states, and signals consumed plus its normal submission fence.
+These are GPU waits; neither side maps a pixel buffer or waits for completion on the CPU.
+
+A transfer uses values `2n` (previously consumed), `2n+1` (ready), and `2n+2` (consumed).
+The imported wrapper is keyed by a monotonic generation, not a recycled OS handle. Failed
+handoffs invalidate the cached export so an old ready signal cannot authorize a later copy.
+The destination's last-use fence keeps it alive after guest release, and an internal completion
+job collects deferred resources without completing a guest future.
+
+The shared texture is linear RGBA8 or BGRA8; sRGB variants reuse the same family. Copies preserve
+stored bytes rather than decoding/encoding sRGB again. BGRA uses an exact texture-load shader
+on the producer GPU. Each target is bounded by drawing's 8192-side/16-megapixel limits. Size or
+family changes while the prior handoff is still executing return an allocation error instead
+of allocating another full-surface target. Unsupported backends and adapter mismatches use the
+existing pixel bridge. D3D12's global debug layer must not be enabled after another capability
+has opened a device, so drawing disables that instance flag while retaining wgpu validation.
+
+Run the hardware test with:
+
+```powershell
+$env:DREAM_DRAWING_BENCH = '1'
+cargo test -p dream-host-drawing dx12_drawing -- --ignored --nocapture
+```
+
+It checks all four RGBA/BGRA linear/sRGB formats, repeated changing images, zero drawing pixel
+reads, target reuse, invalid/released targets, and early drawing/device release. The optional
+benchmark reports 30 warm transfers at 320×240. A local Windows run measured 564.7 µs/frame for
+the previous readback/upload path (including its waits), and 244.5 µs/frame for GPU-only
+submission. Direct rendering created one shared target, no new warm targets, and zero drawing
+pixel reads. These are calling-thread wall times, not GPU execution times or CI budgets;
+destination verification reads run outside both timed loops. The target counter excludes RHI,
+wgpu, command and driver allocations.

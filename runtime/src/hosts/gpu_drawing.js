@@ -10,4 +10,3 @@ export function drawingGpuBridge(getInstance) {
   }
   return bridge;
 }
-

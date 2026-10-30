@@ -1,3 +1,5 @@
+#[path = "web_gpu.rs"]
+mod gpu;
 use crate::assets::{Asset, RasterImage};
 use crate::{DrawingError, Picture, Surface};
 use std::cell::RefCell;
@@ -5,8 +7,16 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
-    static SURFACES: RefCell<Vec<Option<Rc<RefCell<Surface>>>>> = const { RefCell::new(Vec::new()) };
+    static SURFACES: RefCell<Vec<Option<Rc<RefCell<WebSurface>>>>> = const { RefCell::new(Vec::new()) };
     static ASSETS: RefCell<Vec<Option<Asset>>> = const { RefCell::new(Vec::new()) };
+}
+
+struct WebSurface {
+    surface: Surface,
+    picture: Option<Picture>,
+    context: u32,
+    width: u16,
+    height: u16,
 }
 
 fn js_error(error: DrawingError) -> JsValue {
@@ -23,7 +33,13 @@ pub async fn create(width: i32, height: i32, backend: i32) -> std::result::Resul
         // Never reuse browser handles: a stale reference must not name a new surface.
         let handle = i32::try_from(table.len() + 1)
             .map_err(|_| js_sys::Error::new("ELIMIT\ndrawing handle space exhausted"))?;
-        table.push(Some(Rc::new(RefCell::new(surface))));
+        table.push(Some(Rc::new(RefCell::new(WebSurface {
+            surface,
+            picture: None,
+            context: 0,
+            width: width as u16,
+            height: height as u16,
+        }))));
         Ok(handle as u32)
     })
 }
@@ -45,15 +61,16 @@ pub fn render(handle: u32, values: &[f32], handles: &[i32]) -> std::result::Resu
     })?;
     let picture = Picture::decode_with(values, &assets).map_err(js_error)?;
     SURFACES.with(|table| {
-        table
-            .borrow()
+        let table = table.borrow();
+        let mut record = table
             .get(handle.wrapping_sub(1) as usize)
             .and_then(Option::as_ref)
             .ok_or_else(|| js_sys::Error::new("EINVAL\ndrawing surface is closed"))?
             .try_borrow_mut()
-            .map_err(|_| js_sys::Error::new("EBUSY\ndrawing surface has an outstanding read"))?
-            .render(&picture)
-            .map_err(js_error)
+            .map_err(|_| js_sys::Error::new("EBUSY\ndrawing surface has an outstanding read"))?;
+        record.surface.render(&picture).map_err(js_error)?;
+        record.picture = Some(picture);
+        Ok(())
     })
 }
 
@@ -73,7 +90,7 @@ pub async fn pixels(handle: u32) -> std::result::Result<Vec<u8>, JsValue> {
     let borrowed = surface
         .try_borrow()
         .map_err(|_| js_sys::Error::new("EBUSY\ndrawing surface is busy"))?;
-    borrowed.pixels().await.map_err(js_error)
+    borrowed.surface.pixels().await.map_err(js_error)
 }
 
 #[wasm_bindgen]
@@ -84,7 +101,9 @@ pub fn backend(handle: u32) -> i32 {
             .get(handle.wrapping_sub(1) as usize)
             .and_then(Option::as_ref)
             .map_or(0, |surface| {
-                surface.try_borrow().map_or(0, |surface| surface.backend())
+                surface
+                    .try_borrow()
+                    .map_or(0, |surface| surface.surface.backend())
             })
     })
 }

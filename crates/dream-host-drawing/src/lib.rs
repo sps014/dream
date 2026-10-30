@@ -102,6 +102,11 @@ pub extern "C" fn drawingPixelsAsync(future: DreamPtr, handle: i32) -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn drawingCopyGpu(_handle: i32, _texture: i32, _width: i32, _height: i32) -> i32 {
+    -1
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn drawingBackend(handle: i32) -> i32 {
     dream_host_abi::lock(&SURFACES)
         .get(handle)

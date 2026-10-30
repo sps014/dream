@@ -2,5 +2,5 @@ module system.drawing;
 
 internal interface DrawingPresentation {
     get target_handle(): int;
-    async fun present(pixels: byte[]): Result<Unit, DrawingError>;
+    async fun present(drawing: DrawingSurface): Result<Unit, DrawingError>;
 }

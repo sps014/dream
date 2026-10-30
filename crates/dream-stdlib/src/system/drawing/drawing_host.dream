@@ -19,6 +19,9 @@ internal static class DrawingHost {
     @runtime("drawingPixels")
     internal static extern async fun pixels(handle: int): byte[];
 
+    @runtime("drawingCopyGpu")
+    internal static extern fun copy_gpu(handle: int, texture: int, width: int, height: int): int;
+
     @runtime("drawingBackend")
     internal static extern fun backend(handle: int): int;
 

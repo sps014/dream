@@ -30,7 +30,7 @@ export function defaultDreamModule(getInstance) {
     ...makeAudioMediaHost(),
     ...makeAudioCaptureHost(),
     ...makeGpuHost(getInstance),
-    ...makeDrawingHost(),
+    ...makeDrawingHost(getInstance),
   };
 }
 

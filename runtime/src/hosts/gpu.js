@@ -1,3 +1,5 @@
+import { drawingGpuBridge } from "./gpu_drawing.js";
+import { drawingGpuCopy } from "./gpu_drawing_copy.js";
 // WebGPU host for `system.gpu` (imports declared in crates/dream-stdlib/src/system/gpu/gpu_host.dream).
 // Shaders come only from the `wgsl` target of generated bundles; this host never compiles
 // anything but that WGSL. Canvas surfaces attach to `system.window` canvases.
@@ -50,6 +52,7 @@ function gpuBytes(data) {
 
 
 export function makeGpuHost(getInstance) {
+  const drawingBridge = drawingGpuBridge(getInstance);
   // Every live handle: devices, buffers, textures, samplers, libraries, pipelines and surfaces.
   const table = new Map();
   let nextHandle = 1;
@@ -100,6 +103,12 @@ export function makeGpuHost(getInstance) {
     }
   };
 
+  if (drawingBridge) drawingBridge.copy = (handle, width, height, source) => {
+    const record = recordOf(handle, "texture", "texture");
+    if (!record.dev.drawing) throw new Error("EUNAVAILABLE\nGPU device was created without drawing support");
+    drawingGpuCopy(record, source(record.dev.drawing.context), width, height);
+  };
+
   const createDevice = async (backend, compiled) => {
     if (backend !== GPU_BACKEND_AUTO && backend !== GPU_BACKEND_WEBGPU) {
       if (compiled !== 0 && (compiled & (1 << backend)) === 0) return fail("ENOTCOMPILED", backend);
@@ -109,30 +118,38 @@ export function makeGpuHost(getInstance) {
     if (compiled !== 0 && (compiled & (1 << GPU_BACKEND_WEBGPU)) === 0) return fail("ENOTCOMPILED", GPU_BACKEND_WEBGPU);
     const gpu = globalThis.navigator?.gpu;
     if (!gpu?.requestAdapter) return fail("ENODEVICE", "WebGPU is not available: navigator.gpu is missing");
-    let adapter;
-    try {
-      adapter = await gpu.requestAdapter();
-    } catch (error) {
-      return fail("ENODEVICE", "WebGPU adapter request failed: " + (error?.message || error));
-    }
-    if (!adapter) return fail("ENODEVICE", "WebGPU found no adapter");
-    const granted = GPU_OPTIONAL_FEATURES.filter(([name]) => adapter.features?.has?.(name));
     let device;
+    let drawing;
+    let info;
+    let granted;
     try {
-      device = await adapter.requestDevice({ requiredFeatures: granted.map(([name]) => name) });
+      if (drawingBridge?.createDevice) {
+        drawing = await drawingBridge.createDevice();
+        device = drawing.device;
+        info = device.adapterInfo;
+        granted = GPU_OPTIONAL_FEATURES.filter(([name]) => device.features.has(name));
+      } else {
+        const adapter = await gpu.requestAdapter();
+        if (!adapter) return fail("ENODEVICE", "WebGPU found no adapter");
+        granted = GPU_OPTIONAL_FEATURES.filter(([name]) => adapter.features?.has?.(name));
+        device = await adapter.requestDevice({ requiredFeatures: granted.map(([name]) => name) });
+        info = adapter.info;
+      }
     } catch (error) {
       return fail("ENODEVICE", "WebGPU device request failed: " + (error?.message || error));
     }
-    const adapterName = adapter.info?.description || [adapter.info?.vendor, adapter.info?.device].filter(Boolean).join(" ");
-    const dev = { type: "device", device, adapterName, lost: null, uncaptured: null, libraries: new Set(), features: 0 };
+    const adapterName = info?.description || [info?.vendor, info?.device].filter(Boolean).join(" ");
+    const dev = { type: "device", device, adapterName, lost: null, uncaptured: null, libraries: new Set(), features: 0, drawing };
     dev.dev = dev;
     for (const [name, bit] of granted) if (device.features?.has?.(name) !== false) dev.features |= 1 << bit;
     device.lost?.then?.(info => {
       if (dev.lost === null) dev.lost = info?.message || "the WebGPU device was lost";
     });
-    device.onuncapturederror = event => {
+    const onError = event => {
       dev.uncaptured ??= event?.error?.message || "WebGPU reported an error";
     };
+    if (drawing) device.addEventListener("uncapturederror", onError);
+    else device.onuncapturederror = onError;
     return register(dev);
   };
 
@@ -308,7 +325,9 @@ export function makeGpuHost(getInstance) {
     const dev = record.type === "device" ? record : record.dev;
     if (--dev.references === 0) {
       dev.lost ??= "the device was released";
-      dev.device.destroy?.();
+      dev.drawingStage?.texture.destroy();
+      if (dev.drawing) dev.drawing.release();
+      else dev.device.destroy?.();
     }
   };
 
@@ -386,6 +405,7 @@ export function makeGpuHost(getInstance) {
       if ((usage & 1) || format[1] === 0) flags |= GPU_TEXTURE.RENDER_ATTACHMENT;
       if (usage & 2) flags |= GPU_TEXTURE.STORAGE_BINDING;
       const obj = dev.device.createTexture({
+        label: "Dream GPU texture",
         size: [width, height, Math.max(1, layers)],
         mipLevelCount: Math.max(1, mips),
         sampleCount: Math.max(1, samples),

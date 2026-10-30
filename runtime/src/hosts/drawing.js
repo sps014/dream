@@ -1,4 +1,5 @@
 // The same Vello implementation runs natively and in the separate drawing WASM host.
+import { drawingGpuBridge } from "./gpu_drawing.js";
 import { isNode } from "../platform.js";
 
 let drawingEngine;
@@ -17,7 +18,13 @@ async function loadDrawingEngine() {
   return drawingEngine;
 }
 
-export function makeDrawingHost() {
+export function makeDrawingHost(getInstance) {
+  const bridge = drawingGpuBridge(getInstance);
+  if (bridge && !isNode) bridge.createDevice = async () => {
+    const module = await loadDrawingEngine();
+    const [context, device] = await module.gpu_context();
+    return { device, context, release: () => module.gpu_context_release(context) };
+  };
   let engine;
   let error = "";
   const guard = (fallback, body) => (...args) => {
@@ -41,6 +48,19 @@ export function makeDrawingHost() {
       try { return await engine.pixels(handle); }
       catch (failure) { error = failure.message || String(failure); return []; }
     },
+    drawingCopyGpu: guard(0, (handle, texture, width, height) => {
+      const backend = engine.backend(handle);
+      if (backend === 0) throw new Error("EINVAL\ndrawing surface is closed");
+      if (backend === 1) return -1;
+      if (!bridge?.copy) throw new Error("EUNAVAILABLE\nGPU host is unavailable");
+      try {
+        bridge.copy(texture, width, height, context => engine.gpu_source(handle, context));
+      } catch (failure) {
+        if (failure.code) throw new Error(failure.code + "\n" + failure.detail);
+        throw failure;
+      }
+      return 1;
+    }),
     drawingBackend: guard(0, handle => engine.backend(handle)),
     drawingRelease: guard(undefined, handle => engine.release(handle)),
     drawingImageDecode: asyncGuard(0, bytes => engine.image_decode(new Uint8Array(bytes))),

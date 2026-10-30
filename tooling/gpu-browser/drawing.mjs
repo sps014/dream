@@ -48,6 +48,26 @@ try {
   page.on('console', message => messages.push(message.text()));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(() => {
+    const mapAsync = GPUBuffer.prototype.mapAsync;
+    const writeTexture = GPUQueue.prototype.writeTexture;
+    globalThis.drawingDirectCases = 0;
+    let tracking = false;
+    let maps = 0;
+    let uploads = [];
+    GPUBuffer.prototype.mapAsync = function(...args) {
+      if (tracking) maps++;
+      return mapAsync.apply(this, args);
+    };
+    GPUQueue.prototype.writeTexture = function(...args) {
+      if (tracking) uploads.push([args[0].texture.label, args[1].byteLength]);
+      return writeTexture.apply(this, args);
+    };
+    globalThis.drawingDirectBegin = () => { tracking = true; maps = 0; uploads = []; };
+    globalThis.drawingDirectEnd = () => {
+      tracking = false;
+      if (maps || uploads.some(([label]) => label === "Dream GPU texture")) throw new Error(`GPU drawing transfer used ${maps} readbacks and uploads ${JSON.stringify(uploads)}`);
+      globalThis.drawingDirectCases++;
+    };
     globalThis.drawingCheckpoint = () => new Promise(resolve => {
       globalThis.drawingResume = resolve;
       console.log('drawing-present-ready');
@@ -57,6 +77,10 @@ try {
   const execution = page.evaluate(async () => {
     const { run } = await import('/target/drawing-browser/canvas.web.runtime.js');
     await run('/target/drawing-browser/canvas.wasm');
+  }).catch(async error => {
+    await writeFile(resolve(root, 'target/drawing-browser/failure.json'), JSON.stringify({ errors, messages }, null, 2));
+    console.error(messages.join('\n'));
+    throw error;
   });
   await Promise.race([ready, execution.then(() => { throw new Error('drawing program ended before presenting'); })]);
   try {
@@ -80,6 +104,7 @@ try {
     await page.evaluate(() => globalThis.drawingResume());
     await execution;
   }
+  assert.equal(await page.evaluate(() => globalThis.drawingDirectCases), 7);
   assert.deepEqual(errors, []);
   assert(messages.some(message => message.includes('drawing-browser-passed')), messages.join('\n'));
   console.log('Dream CPU/WebGPU backdrop, image and text rendering and cached one-call window presentation passed in Chromium.');

@@ -1262,6 +1262,7 @@ dependencies = [
  "js-sys",
  "parley",
  "pollster",
+ "serde_json",
  "thiserror 2.0.18",
  "vello_common",
  "vello_cpu",

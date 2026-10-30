@@ -47,6 +47,8 @@ sample/**/*.o
 *.dSYM/
 
 *.wgsl
+# Drawing post-processing shaders are source, not generated shader artifacts.
+!/crates/dream-drawing/src/*.wgsl
 
 # Keep the hand-written runtime WAT assets that the codegen embeds via include_str!.
 # (Previously under /src/; now owned by dream-mir.)

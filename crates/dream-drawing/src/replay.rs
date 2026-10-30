@@ -62,10 +62,18 @@ macro_rules! replay {
                         opacity,
                         blend,
                         commands,
+                        clips,
+                        ..
                     } => {
+                        for clip in clips {
+                            context.push_clip_path(clip);
+                        }
                         context.push_layer(None, Some(*blend), Some(*opacity), None, None);
                         $name(context, resources, commands, width, height, images)?;
                         context.pop_layer();
+                        for _ in clips {
+                            context.pop_clip();
+                        }
                     }
                     Command::Backdrop {
                         prefix,

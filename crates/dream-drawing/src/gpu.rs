@@ -1,6 +1,9 @@
 use crate::{DrawingError, Picture, Result, replay};
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
+};
 use vello_common::{TextureId, geometry::RectU16, paint::ImageSource};
 use vello_gpu::{
     ClearSettings, RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TargetInit,
@@ -8,14 +11,17 @@ use vello_gpu::{
 };
 
 pub struct GpuSurface {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    target: wgpu::Texture,
-    renderer: Renderer,
-    resources: Resources,
-    width: u16,
-    height: u16,
+    pub(super) device: wgpu::Device,
+    pub(super) queue: wgpu::Queue,
+    pub(super) target: wgpu::Texture,
+    pub(super) renderer: Renderer,
+    pub(super) resources: Resources,
+    pub(super) width: u16,
+    pub(super) height: u16,
     error: Arc<Mutex<Option<String>>>,
+    pub(super) scratch: crate::gpu_effects::Pool,
+    pub(super) color_filter: crate::gpu_color::ColorFilter,
+    reads: AtomicU64,
     images: BTreeMap<usize, (Arc<crate::assets::RasterImage>, wgpu::Texture)>,
 }
 
@@ -65,6 +71,7 @@ impl GpuSurface {
                 height,
             },
         );
+        let color_filter = crate::gpu_color::ColorFilter::new(&device);
         Ok(Self {
             device,
             queue,
@@ -75,6 +82,9 @@ impl GpuSurface {
             height,
             error,
             images: BTreeMap::new(),
+            scratch: Default::default(),
+            color_filter,
+            reads: AtomicU64::new(0),
         })
     }
 
@@ -124,16 +134,40 @@ impl GpuSurface {
                 ),
             );
         }
+        let mut frame = crate::gpu_effects::Frame::new(self, bindings, sources);
+        let commands = crate::prepare::commands(&mut frame, &picture.commands)?;
+        let target = frame.surface.target.clone();
+        frame
+            .surface
+            .render_scene(&commands, &target, &frame.bindings, &frame.sources, None)?;
+        self.check()
+    }
+
+    pub(super) fn render_scene(
+        &mut self,
+        commands: &[crate::Command],
+        target: &wgpu::Texture,
+        bindings: &TextureBindings,
+        sources: &BTreeMap<usize, ImageSource>,
+        filter: Option<vello_common::filter_effects::Filter>,
+    ) -> Result<()> {
         let mut scene = Scene::new(self.width, self.height);
+        let filtered = filter.is_some();
+        if let Some(filter) = filter {
+            scene.push_filter_layer(filter);
+        }
         replay::gpu(
             &mut scene,
             &mut self.resources,
-            &picture.commands,
+            commands,
             self.width,
             self.height,
-            &sources,
+            sources,
         )?;
-        let view = self.target.create_view(&Default::default());
+        if filtered {
+            scene.pop_layer();
+        }
+        let view = target.create_view(&Default::default());
         let mut encoder = self.device.create_command_encoder(&Default::default());
         self.renderer
             .render(
@@ -148,7 +182,7 @@ impl GpuSurface {
                 },
                 &view,
                 None,
-                &bindings,
+                bindings,
                 TargetInit::Clear(ClearSettings::default()),
             )
             .map_err(|e| DrawingError::Render(e.to_string()))?;
@@ -156,8 +190,15 @@ impl GpuSurface {
         self.check()
     }
 
+    pub fn stats(&self) -> crate::RenderStats {
+        let mut stats = self.scratch.stats;
+        stats.pixel_reads = self.reads.load(Ordering::Relaxed);
+        stats
+    }
+
     pub async fn pixels(&self) -> Result<Vec<u8>> {
         self.check()?;
+        self.reads.fetch_add(1, Ordering::Relaxed);
         let row_bytes = u32::from(self.width) * 4;
         let padded = row_bytes.div_ceil(256) * 256;
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {

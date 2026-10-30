@@ -75,10 +75,14 @@ public fun save(): void
 
 ## `save_layer`
 
-Starts an isolated opacity group. restore composites the group once using opacity in 0..1.
+Starts an isolated group. restore applies captured effects in order, then opacity in 0..1 and blending into the parent. The current clip also bounds the filtered output.
 
 ```dream
-public fun save_layer(opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver): void
+public fun save_layer(
+    opacity: float = 1.0f,
+    blend: BlendMode = BlendMode.SourceOver,
+    effects: Option<Effects> = Option.None
+): void
 ```
 
 ## `restore`

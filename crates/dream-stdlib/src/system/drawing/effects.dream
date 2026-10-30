@@ -1,0 +1,63 @@
+module system.drawing;
+
+/// An ordered chain of group filters. Canvas.save_layer captures it immediately. At most 16 operations; render returns DrawingError for invalid parameters.
+public class Effects {
+    values: List<float>;
+    count: int;
+
+    /// Creates an empty chain that leaves group pixels unchanged.
+    public constructor() {
+        this.values = List<float>();
+        this.count = 0;
+    }
+
+    /// Appends Gaussian blur with sigma in 0..128 physical pixels, independent of the canvas transform.
+    public fun blur(sigma: float): Effects {
+        this.values.push(0);
+        this.values.push(sigma);
+        this.count = this.count + 1;
+        return this;
+    }
+
+    /// Appends a colored shadow behind the original input. Offsets are physical pixels within +/-8192; sigma is 0..128 physical pixels. Includes the original input.
+    public fun shadow(dx: float, dy: float, sigma: float, color: Color): Effects {
+        this.values.push(1);
+        this.values.push(dx);
+        this.values.push(dy);
+        this.values.push(sigma);
+        color.encode(this.values);
+        this.count = this.count + 1;
+        return this;
+    }
+
+    /// Multiplies straight sRGB channels by factor in 0..8; one preserves brightness. Alpha is unchanged.
+    public fun brightness(factor: float): Effects {
+        this.values.push(2);
+        this.values.push(factor);
+        this.count = this.count + 1;
+        return this;
+    }
+
+    /// Scales straight sRGB channel distance from 0.5 by factor in 0..8; one preserves contrast. Alpha is unchanged.
+    public fun contrast(factor: float): Effects {
+        this.values.push(3);
+        this.values.push(factor);
+        this.count = this.count + 1;
+        return this;
+    }
+
+    /// Scales straight sRGB distance from luminance (0.2126 R + 0.7152 G + 0.0722 B) by factor in 0..8. Zero gives grayscale, one preserves saturation; alpha is unchanged.
+    public fun saturation(factor: float): Effects {
+        this.values.push(4);
+        this.values.push(factor);
+        this.count = this.count + 1;
+        return this;
+    }
+
+    internal fun encode(output: List<float>): void {
+        output.push((float)this.count);
+        for (let value in this.values) {
+            output.push(value);
+        }
+    }
+}

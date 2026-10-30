@@ -248,6 +248,8 @@ impl Picture {
                         clips: state.clips.clone(),
                         commands: Vec::new(),
                     });
+                    // Inherited clips bound the composite, not both the source and its edges.
+                    state.clips.clear();
                 }
                 8 => {
                     if groups.len() != 1 {

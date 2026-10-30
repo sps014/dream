@@ -3,7 +3,7 @@ module system.drawing;
 import system.gpu;
 
 extend DrawingSurface {
-    /// Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches texture and pipeline resources until close or a different target is used. Browser GPU rendering and Windows D3D12 GPU rendering on the same adapter stay on the GPU. CPU drawings and other native combinations use a pixel upload.
+    /// Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches texture and pipeline resources until close or a different target is used. Browser GPU rendering and Windows D3D12 or Vulkan GPU rendering on the same adapter with shared-resource support stay on the GPU. CPU drawings and other native combinations use a pixel upload.
     public async fun present(surface: GpuSurface): Result<Unit, DrawingError> {
         if surface.width != this.width || surface.height != this.height {
             return Result.Err(DrawingError("EINVAL\ndrawing and window surface dimensions differ"));
@@ -27,7 +27,7 @@ extend DrawingSurface {
         return presenter.present(this).await;
     }
 
-    /// Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu. Browser GPU rendering and Windows D3D12 GPU rendering on the same adapter copy on the GPU. CPU drawings and other native combinations use a pixel upload. The target must be single-sampled. On Windows D3D12, changing transfer size or RGBA/BGRA family while a copy is in flight returns a DrawingError; wait for prior GPU work before retrying.
+    /// Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu. Browser GPU rendering and Windows D3D12 or Vulkan GPU rendering on the same adapter with shared-resource support copy on the GPU. CPU drawings and other native combinations use a pixel upload. The target must be single-sampled. On Windows D3D12 or Vulkan, changing transfer size or RGBA/BGRA family while a copy is in flight returns a DrawingError; wait for prior GPU work before retrying.
     public async fun copy_to(texture: GpuTexture): Result<Unit, DrawingError> {
         if texture.width != this.width || texture.height != this.height {
             return Result.Err(

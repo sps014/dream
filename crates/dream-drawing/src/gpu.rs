@@ -27,6 +27,11 @@ pub(super) struct GpuContext {
 }
 
 impl GpuContext {
+    #[cfg(windows)]
+    pub(super) fn from_device(device: wgpu::Device, queue: wgpu::Queue) -> Self {
+        Self::install(device, queue)
+    }
+
     pub async fn new() -> Result<Self> {
         let descriptor = || {
             #[cfg(windows)]
@@ -68,6 +73,10 @@ impl GpuContext {
             })
             .await
             .map_err(|e| DrawingError::Unavailable(e.to_string()))?;
+        Ok(Self::install(device, queue))
+    }
+
+    fn install(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let error = Arc::new(Mutex::new(None));
         let errors = error.clone();
         device.on_uncaptured_error(Arc::new(move |failure: wgpu::Error| {
@@ -79,12 +88,12 @@ impl GpuContext {
                 Some(format!("device lost ({reason:?}): {message}"));
         });
         let owner = Arc::new(DeviceOwner(device.clone()));
-        Ok(Self {
+        Self {
             device,
             queue,
             error,
             owner,
-        })
+        }
     }
 }
 
@@ -102,6 +111,8 @@ pub struct GpuSurface {
     reads: AtomicU64,
     #[cfg(windows)]
     pub(super) transfer: Option<crate::native_dx12::Transfer>,
+    #[cfg(windows)]
+    pub(super) vulkan_transfer: Option<crate::native_vulkan::Transfer>,
     _owner: Arc<DeviceOwner>,
     images: BTreeMap<usize, (Arc<crate::assets::RasterImage>, wgpu::Texture)>,
 }
@@ -159,6 +170,8 @@ impl GpuSurface {
             reads: AtomicU64::new(0),
             #[cfg(windows)]
             transfer: None,
+            #[cfg(windows)]
+            vulkan_transfer: None,
             _owner: owner,
         })
     }

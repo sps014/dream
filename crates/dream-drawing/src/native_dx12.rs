@@ -22,7 +22,30 @@ impl Surface {
     /// # Safety
     /// Shared handles must remain valid through this call and describe the supplied target.
     /// The generation must uniquely identify this texture/fence pair and never be recycled.
-    pub unsafe fn copy_native(&mut self, target: &Target) -> Result<bool> {
+    pub unsafe fn copy_native(
+        &mut self,
+        target: &Target,
+        picture: Option<&crate::Picture>,
+    ) -> Result<bool> {
+        if target.backend == 3 {
+            return unsafe { crate::native_vulkan::copy(self, target, picture) };
+        }
+        if target.backend != 1 {
+            return Ok(false);
+        }
+        if let Self::Gpu(current) = self
+            && unsafe { current.device.as_hal::<wgpu::hal::api::Dx12>() }.is_none()
+        {
+            let context = pollster::block_on(crate::gpu::GpuContext::new())?;
+            if unsafe { context.device.as_hal::<wgpu::hal::api::Dx12>() }.is_none() {
+                return Ok(false);
+            }
+            let mut replacement = GpuSurface::with_context(current.width, current.height, context)?;
+            if let Some(picture) = picture {
+                replacement.render(picture)?;
+            }
+            **current = replacement;
+        }
         match self {
             Self::Cpu(_) => Ok(false),
             Self::Gpu(surface) => unsafe { surface.copy_shared(target) },

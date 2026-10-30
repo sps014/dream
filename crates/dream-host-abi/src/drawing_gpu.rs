@@ -2,7 +2,7 @@
 //! each API must retain imported GPU objects through its queued work.
 use std::ffi::{c_char, c_void};
 
-pub const COPY_SYMBOL: &str = "dream_gpu_drawing_copy_v1";
+pub const COPY_SYMBOL: &str = "dream_gpu_drawing_copy_v2";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -17,6 +17,11 @@ pub struct Target {
     pub width: u32,
     pub height: u32,
     pub format: u32,
+    pub backend: u32,
+    pub device_uuid: [u8; 16],
+    pub driver_uuid: [u8; 16],
+    pub memory_size: u64,
+    pub memory_type: u32,
 }
 
 /// 1 submitted, 0 unsupported, -1 error (UTF-8 detail in the caller's buffer).

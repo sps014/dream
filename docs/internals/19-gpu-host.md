@@ -285,7 +285,7 @@ sampler heap, expects a recoverable error, then verifies subsequent valid submis
 
 ## Native drawing handoff
 
-On Windows, `drawingCopyGpu` discovers `dream_gpu_drawing_copy_v1` in the already-loaded GPU
+On Windows, `drawingCopyGpu` discovers `dream_gpu_drawing_copy_v2` in the already-loaded GPU
 capability. The ABI in `dream-host-abi::drawing_gpu` passes a synchronous producer callback;
 neither capability owns or statically links the other's handle table. The GPU state lock is
 held through the handoff, and the producer never enters the GPU host or guest scheduler again.
@@ -297,7 +297,8 @@ signals ready. The consumer waits for ready on its GPU queue, copies into mip/la
 restores default resource states, and signals consumed plus its normal submission fence.
 These are GPU waits; neither side maps a pixel buffer or waits for completion on the CPU.
 
-A transfer uses values `2n` (previously consumed), `2n+1` (ready), and `2n+2` (consumed).
+A transfer signals ready at the previous consumed value plus one, then consumed plus two.
+D3D12 starts at zero; Vulkan starts at one after its initial ownership release.
 The imported wrapper is keyed by a monotonic generation, not a recycled OS handle. Failed
 handoffs invalidate the cached export so an old ready signal cannot authorize a later copy.
 The destination's last-use fence keeps it alive after guest release, and an internal completion
@@ -311,11 +312,28 @@ of allocating another full-surface target. Unsupported backends and adapter mism
 existing pixel bridge. D3D12's global debug layer must not be enabled after another capability
 has opened a device, so drawing disables that instance flag while retaining wgpu validation.
 
+Windows Vulkan destinations use a dedicated exported allocation and timeline semaphore. Both
+halves verify the physical-device and driver UUIDs. The drawing device explicitly enables the
+Win32 external-memory and semaphore extensions. Its first transfer moves to a matching Vulkan
+device and replays the retained picture; moving back to D3D12 also replays. Pictures retain
+assets without cloning command buffers on each render.
+
+The native image and its imported counterpart have identical creation parameters and dedicated
+memory bindings. Acquire/release barriers transfer exclusive queue-family ownership through
+`VK_QUEUE_FAMILY_EXTERNAL` in GENERAL layout. wgpu records these barriers in separate command
+buffers around its normal copy or BGRA pass. The native consumer commits its own copy barriers
+before releasing ownership. A cold allocation initializes and releases the image, then waits on
+the CPU once; warm transfers use only GPU semaphore waits. Allocations are capped at 256 MiB.
+The allocation owns both exported NT handles, while command callbacks retain the image through
+command-buffer retirement. Imports retain their allocation through wgpu's deferred destruction.
+Linux Vulkan file-descriptor sharing and Metal sharing remain separate follow-ups.
+
 Run the hardware test with:
 
 ```powershell
 $env:DREAM_DRAWING_BENCH = '1'
-cargo test -p dream-host-drawing dx12_drawing -- --ignored --nocapture
+$env:DREAM_DRAWING_NATIVE_BACKEND = '3' # Vulkan; use '1' for D3D12
+cargo test -p dream-host-drawing native_drawing -- --ignored --nocapture
 ```
 
 It checks all four RGBA/BGRA linear/sRGB formats, repeated changing images, zero drawing pixel
@@ -326,3 +344,8 @@ submission. Direct rendering created one shared target, no new warm targets, and
 pixel reads. These are calling-thread wall times, not GPU execution times or CI budgets;
 destination verification reads run outside both timed loops. The target counter excludes RHI,
 wgpu, command and driver allocations.
+
+A Windows Vulkan run measured 409.0 µs/frame for the readback/upload baseline and 151.8 µs/frame
+for warm GPU submission at the same size and iteration count. It allocated one shared target,
+no new warm targets, and performed zero drawing pixel reads. The hardware test also moves a
+nonuniform translucent drawing between Vulkan and D3D12 and verifies exact bytes after each move.

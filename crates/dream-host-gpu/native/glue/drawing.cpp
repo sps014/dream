@@ -7,10 +7,23 @@
 using namespace rhi;
 using namespace dream::gpu;
 
+uint64_t dream::gpu::nextDrawingId()
+{
+    static std::atomic<uint64_t> ids{0};
+    auto previous = ids.load(std::memory_order_relaxed);
+    do
+    {
+        if (previous == UINT64_MAX) return 0;
+    } while (!ids.compare_exchange_weak(previous, previous + 1, std::memory_order_relaxed));
+    return previous + 1;
+}
+
 extern "C" uint64_t dgpu_drawing_allocations(DgpuDevice* device)
 {
     return device->drawingAllocations;
 }
+
+int drawingVulkanCopy(DgpuDevice*, DgpuObject*, DgpuDrawingProducer, void*, char*, size_t, uint64_t*);
 
 extern "C" int dgpu_drawing_copy(
     DgpuDevice* device, DgpuObject* object, DgpuDrawingProducer producer,
@@ -21,6 +34,8 @@ extern "C" int dgpu_drawing_copy(
     (void)error; (void)capacity; (void)submitted;
     return DGPU_UNSUPPORTED;
 #else
+    if (device->backend == 3)
+        return drawingVulkanCopy(device, object, producer, context, error, capacity, submitted);
     if (device->backend != 1)
         return DGPU_UNSUPPORTED;
     DeviceScope scope(device->device);
@@ -70,10 +85,11 @@ extern "C" int dgpu_drawing_copy(
         result = device->device->createFence(fenceDesc, fence.writeRef());
         if (SLANG_FAILED(result))
             return failResult(device, result, "creating a shared drawing fence failed");
-        static std::atomic<uint64_t> ids{0};
+        auto generation = nextDrawingId();
+        if (!generation) return fail(DGPU_FAILED, "drawing generations exhausted");
         device->drawingTexture = texture;
         device->drawingFence = fence;
-        device->drawingId = ++ids;
+        device->drawingId = generation;
         device->drawingValue = 0;
         ++device->drawingAllocations;
     }
@@ -90,7 +106,7 @@ extern "C" int dgpu_drawing_copy(
         device->drawingId, (uint64_t(uint32_t(luid.HighPart)) << 32) | luid.LowPart,
         uintptr_t(textureHandle.value), uintptr_t(fenceHandle.value),
         device->drawingValue, device->drawingValue + 1,
-        desc.size.width, desc.size.height, format,
+        desc.size.width, desc.size.height, format, 1,
     };
     // Do not reuse a failed handoff: an old ready signal could race the next producer.
     auto poison = [&]() {

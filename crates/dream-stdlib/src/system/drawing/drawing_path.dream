@@ -1,0 +1,110 @@
+module system.drawing;
+
+/// Reusable vector geometry. Mutating a path does not change commands already recorded with it.
+public class DrawingPath {
+    internal values: List<float>;
+    internal segments: int;
+
+    /// Creates an empty path. Begin each contour with move_to.
+    public constructor() {
+        this.values = List<float>();
+        this.segments = 0;
+    }
+
+    /// Starts a contour at the given coordinates and returns this path.
+    public fun move_to(x: float, y: float): DrawingPath {
+        this.values.push(0.0f);
+        this.point(x, y);
+        this.segments = this.segments + 1;
+        return this;
+    }
+
+    /// Adds a straight segment to the given coordinates and returns this path.
+    public fun line_to(x: float, y: float): DrawingPath {
+        this.values.push(1.0f);
+        this.point(x, y);
+        this.segments = this.segments + 1;
+        return this;
+    }
+
+    /// Adds a quadratic curve with one control point and returns this path.
+    public fun quad_to(cx: float, cy: float, x: float, y: float): DrawingPath {
+        this.values.push(2.0f);
+        this.point(cx, cy);
+        this.point(x, y);
+        this.segments = this.segments + 1;
+        return this;
+    }
+
+    /// Adds a cubic curve with two control points and returns this path.
+    public fun curve_to(
+        ax: float,
+        ay: float,
+        bx: float,
+        by: float,
+        x: float,
+        y: float
+    ): DrawingPath {
+        this.values.push(3.0f);
+        this.point(ax, ay);
+        this.point(bx, by);
+        this.point(x, y);
+        this.segments = this.segments + 1;
+        return this;
+    }
+
+    /// Closes the current contour and returns this path.
+    public fun close(): DrawingPath {
+        this.values.push(4.0f);
+        this.segments = this.segments + 1;
+        return this;
+    }
+
+    /// Creates a closed rectangle. Radius rounds its corners and is clamped to half its smaller side.
+    public static fun rect(rect: Rect, radius: float = 0.0f): DrawingPath {
+        let path = DrawingPath();
+        let r = radius.min(rect.width.min(rect.height) * 0.5f).max(0.0f);
+        let x = rect.x;
+        let y = rect.y;
+        let right = x + rect.width;
+        let bottom = y + rect.height;
+        let k = 0.55228475f;
+        path.move_to(x + r, y).line_to(right - r, y);
+        path.curve_to(right - r + k * r, y, right, y + r - k * r, right, y + r);
+        path.line_to(right, bottom - r);
+        path.curve_to(right, bottom - r + k * r, right - r + k * r, bottom, right - r, bottom);
+        path.line_to(x + r, bottom);
+        path.curve_to(x + r - k * r, bottom, x, bottom - r + k * r, x, bottom - r);
+        path.line_to(x, y + r);
+        path.curve_to(x, y + r - k * r, x + r - k * r, y, x + r, y);
+        return path.close();
+    }
+
+    /// Creates a closed ellipse inscribed in the rectangle.
+    public static fun ellipse(rect: Rect): DrawingPath {
+        let path = DrawingPath();
+        let x = rect.x + rect.width * 0.5f;
+        let y = rect.y + rect.height * 0.5f;
+        let rx = rect.width * 0.5f;
+        let ry = rect.height * 0.5f;
+        let k = 0.55228475f;
+        path.move_to(x + rx, y);
+        path.curve_to(x + rx, y + k * ry, x + k * rx, y + ry, x, y + ry);
+        path.curve_to(x - k * rx, y + ry, x - rx, y + k * ry, x - rx, y);
+        path.curve_to(x - rx, y - k * ry, x - k * rx, y - ry, x, y - ry);
+        path.curve_to(x + k * rx, y - ry, x + rx, y - k * ry, x + rx, y);
+        return path.close();
+    }
+
+    fun point(x: float, y: float): void {
+        this.values.push(x);
+        this.values.push(y);
+    }
+
+    internal fun encode(borrow output: List<float>): void {
+        output.push((float)this.segments);
+        for (let value in this.values) {
+            output.push(value);
+        }
+    }
+}

@@ -408,6 +408,24 @@ impl Compiler {
         }
 
         let mut inputs = loaded.acc.resolution_inputs.clone();
+        if !self.runtimes.is_empty()
+            && loaded
+                .graph
+                .files
+                .iter()
+                .any(|file| file.path.starts_with("<std>/system/drawing/"))
+        {
+            let host = crate::driver::js_runtime::drawing_host_dir();
+            for name in [
+                "dream_drawing.js",
+                "dream_drawing_bg.wasm",
+                "NotoSans-OFL.txt",
+            ] {
+                let path = host.join(name);
+                field("drawing-host", input_hash(&path)?.as_bytes());
+                inputs.insert(path);
+            }
+        }
         for file in &loaded.graph.files {
             let path = PathBuf::from(&file.path);
             if path.is_file() {

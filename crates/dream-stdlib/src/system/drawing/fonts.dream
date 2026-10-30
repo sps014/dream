@@ -1,0 +1,13 @@
+module system.drawing;
+
+/// Registers application fonts for subsequent text layout. The bundled Noto Sans requires no setup.
+public static class Fonts {
+    /// Copies a TrueType, OpenType or collection file and returns its first family name. Existing TextLayouts retain their captured fonts.
+    public static async fun register(bytes: byte[]): Result<string, DrawingError> {
+        let family = DrawingHost.font_register(bytes).await;
+        if family.length == 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(family);
+    }
+}

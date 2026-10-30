@@ -108,6 +108,25 @@ pub(crate) fn runtime_src_dir() -> PathBuf {
     )
 }
 
+pub(crate) fn drawing_host_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("DREAM_DRAWING_WEB") {
+        return PathBuf::from(path);
+    }
+    let source = runtime_src_dir();
+    let installed = source
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("drawing");
+    if installed.join("dream_drawing.js").is_file() {
+        installed
+    } else {
+        std::env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"))
+            .join("drawing-web")
+    }
+}
+
 fn runtime_sources_at(exe: Option<&Path>, development: &Path) -> PathBuf {
     if let Some(parent) = exe.and_then(Path::parent) {
         for prefix in [Some(parent), parent.parent()].into_iter().flatten() {
@@ -334,6 +353,34 @@ pub(crate) fn emit_selective_runtimes(
     let abi: serde_json::Value =
         serde_json::from_slice(&fs::read(&abi_path)?).map_err(Error::other)?;
     let requirements = Requirements::from_abi(&abi, &live_imports)?;
+    if !targets.is_empty()
+        && live_imports
+            .iter()
+            .any(|(module, field)| module == "Dream" && field.starts_with("drawing"))
+    {
+        let source = drawing_host_dir();
+        let directory = Path::new(wat_path)
+            .parent()
+            .unwrap_or_else(|| Path::new("."));
+        for name in [
+            "dream_drawing.js",
+            "dream_drawing_bg.wasm",
+            "NotoSans-OFL.txt",
+        ] {
+            let input = source.join(name);
+            if !input.is_file() {
+                return Err(Error::other(format!(
+                    "drawing browser host is missing {}: run python scripts/build-drawing-web.py, or set DREAM_DRAWING_WEB to the built host directory",
+                    input.display()
+                )));
+            }
+            let output = directory.join(name);
+            if fs::canonicalize(&input).ok() != fs::canonicalize(&output).ok() {
+                fs::copy(input, &output)?;
+            }
+            written.push(output);
+        }
+    }
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
         let mut text = assemble_for_requirements(&live_imports, target, requirements)?;

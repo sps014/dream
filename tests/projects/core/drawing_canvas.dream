@@ -1,0 +1,81 @@
+import system;
+import system.drawing;
+import system.testing;
+
+@test
+async fun drawing_canvas(): void {
+    let canvas = Canvas(32, 32);
+    canvas.clear(Color.black);
+    canvas.fill_rect(16.0f, 0.0f, 16.0f, 32.0f, Color.white);
+    canvas.backdrop(Rect(8.0f, 4.0f, 16.0f, 24.0f), Backdrop.blur(3.0f));
+    canvas.fill_rect(14.0f, 12.0f, 4.0f, 8.0f, Color.rgb(255, 0, 0));
+
+    let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
+    Assert.eq(surface.backend, DrawingBackend.Cpu);
+    Assert.is_true(surface.render(canvas).is_ok());
+    let pixels = surface.read_pixels().await.unwrap();
+    Assert.eq(pixels.length, 4096);
+    Assert.eq((int)pixels[(16 * 32 + 4) * 4], 0);
+    Assert.eq((int)pixels[(16 * 32 + 28) * 4], 255);
+    Assert.is_true((int)pixels[(8 * 32 + 14) * 4] > 0);
+    Assert.is_true((int)pixels[(8 * 32 + 14) * 4] < 255);
+    Assert.eq((int)pixels[(16 * 32 + 16) * 4], 255);
+    Assert.eq((int)pixels[(16 * 32 + 16) * 4 + 1], 0);
+
+    let picture = canvas.finish().unwrap();
+    canvas.clear(Color.white);
+    Assert.is_true(surface.render(picture).is_ok());
+    Assert.eq((int)surface.read_pixels().await.unwrap()[0], 0);
+
+    canvas.save();
+    Assert.is_true(canvas.finish().is_err());
+    canvas.restore();
+    Assert.is_true(canvas.finish().is_ok());
+    canvas.restore();
+    Assert.is_true(canvas.finish().is_err());
+
+    Assert.is_true(DrawingSurface.create(0, 1, DrawingBackend.Cpu).await.is_err());
+    surface.close();
+    Assert.is_true(surface.render(picture).is_err());
+    Assert.is_true(surface.read_pixels().await.is_err());
+    drawing_images_and_text().await;
+}
+
+async fun drawing_image_picture(): Result<Picture, DrawingError> {
+    let image = Image.from_rgba(2, 1, [(byte)255, 0, 0, 255, 0, 255, 0, 128]).await?;
+    Assert.eq(image.width, 2);
+    Assert.eq(image.height, 1);
+    let style = TextStyle(20, Color.white);
+    let layout = TextLayout.create("office नमस्ते", style).await?;
+    Assert.is_true(layout.width > 20.0f);
+    Assert.is_true(layout.height >= 20.0f);
+    let canvas = Canvas(128, 64);
+    canvas.draw_image(image, Rect(0, 32, 128, 32), Option.None, 1.0f, true);
+    canvas.fill_text("Hello", 2, 0, style);
+    canvas.fill_text(layout, 50, 0, Color.white);
+    let picture = canvas.finish()?;
+    canvas.clear(Color.transparent);
+    return Result.Ok(picture);
+}
+
+async fun drawing_images_and_text(): void {
+    let picture = drawing_image_picture().await.unwrap();
+    let surface = DrawingSurface.create(128, 64, DrawingBackend.Cpu).await.unwrap();
+    surface.render(picture).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    Assert.eq((int)pixels[(50 * 128 + 10) * 4], 255);
+    Assert.eq((int)pixels[(50 * 128 + 10) * 4 + 1], 0);
+    Assert.eq((int)pixels[(50 * 128 + 100) * 4 + 1], 128);
+    Assert.eq((int)pixels[(50 * 128 + 100) * 4 + 3], 128);
+    let ink = 0;
+    for (let i = 0; i < 128 * 30; i = i + 1) {
+        if (int)pixels[i * 4 + 3] > 128 {
+            ink = ink + 1;
+        }
+    }
+    Assert.is_true(ink > 40);
+    Assert.is_true(Image.decode([(byte)0]).await.is_err());
+    Assert.is_true(Image.from_rgba(2, 2, [(byte)0]).await.is_err());
+    Assert.is_true(Fonts.register([(byte)0]).await.is_err());
+    Assert.is_true(TextLayout.create("bad", TextStyle(0, Color.white)).await.is_err());
+}

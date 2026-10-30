@@ -1,0 +1,85 @@
+module system.drawing;
+
+/// A persistent CPU or GPU offscreen drawing target. Pixel reads synchronize GPU work explicitly.
+public class DrawingSurface {
+    handle: int;
+    width: int;
+    height: int;
+    selected: DrawingBackend;
+    presentation: Option<DrawingPresentation>;
+
+    constructor(handle: int, width: int, height: int) {
+        this.handle = handle;
+        this.width = width;
+        this.height = height;
+        this.selected = DrawingBackend.Cpu;
+        this.presentation = Option.None;
+        if DrawingHost.backend(handle) == 2 {
+            this.selected = DrawingBackend.Gpu;
+        }
+    }
+
+    /// Creates a surface of 1..8192 pixels per side and at most 16777216 pixels. Auto prefers GPU and falls back to CPU during initialization.
+    public static async fun create(
+        width: int,
+        height: int,
+        backend: DrawingBackend = DrawingBackend.Auto
+    ): Result<DrawingSurface, DrawingError> {
+        let code: int = backend;
+        let handle = DrawingHost.create(width, height, code).await;
+        if handle <= 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(DrawingSurface(handle, width, height));
+    }
+
+    /// The selected rendering backend; Auto is resolved to Cpu or Gpu.
+    public get backend(): DrawingBackend {
+        return this.selected;
+    }
+
+    /// Submits the current canvas, replacing the previous image. Canvas and surface dimensions must match; pixel reads wait for GPU completion.
+    public fun render(borrow canvas: Canvas): Result<Unit, DrawingError> {
+        let picture = canvas.finish()?;
+        return this.submit(picture);
+    }
+
+    /// Submits a reusable picture, replacing the previous image. Picture and surface dimensions must match; pixel reads wait for GPU completion.
+    public fun render(borrow picture: Picture): Result<Unit, DrawingError> {
+        return this.submit(picture);
+    }
+
+    fun submit(borrow picture: Picture): Result<Unit, DrawingError> {
+        if picture.width != this.width || picture.height != this.height {
+            return Result.Err(DrawingError("EINVAL\npicture and surface dimensions differ"));
+        }
+        if DrawingHost.render(this.handle, picture.values, picture.handles) == 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(Unit());
+    }
+
+    /// Reads tightly packed premultiplied sRGB RGBA8 pixels, top row first. GPU reads wait for completion.
+    public async fun read_pixels(): Result<byte[], DrawingError> {
+        let pixels = DrawingHost.pixels(this.handle).await;
+        if pixels.length == 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(pixels);
+    }
+
+    /// Releases this surface. Subsequent rendering and reads return a DrawingError.
+    public fun close(): void {
+        this.presentation = Option.None;
+        if this.handle != 0 {
+            DrawingHost.release(this.handle);
+            this.handle = 0;
+        }
+    }
+
+    del() {
+        if this.handle != 0 {
+            DrawingHost.release(this.handle);
+        }
+    }
+}

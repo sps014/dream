@@ -31,6 +31,12 @@ Control flow stays **structured** (`if`/`while`/`for`/`foreach`/`switch`). Flatt
 
 ## The top-level container
 
+Embedded prelude visibility and global initialization use separate dependency graphs. Prelude
+visibility exposes the loaded standard library; initialization follows the package registry and
+resolved generated imports. This lets a generated library global use its dependency's initialized
+state without artificial visibility cycles changing execution order.
+
+
 `Hir` (`crates/dream-hir/src/mod.rs`) holds three lists:
 
 ```rust

@@ -1,0 +1,27 @@
+import system;
+import system.drawing;
+import system.drawing.gpu;
+import system.gpu;
+import system.testing;
+
+@test
+async fun drawing_gpu_copy(): void {
+    let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
+    let canvas = Canvas(8, 8);
+    canvas.clear(Color.rgb(255, 0, 0));
+    let surface = DrawingSurface.create(8, 8, DrawingBackend.Cpu).await.unwrap();
+    surface.render(canvas).unwrap();
+    let target = device.texture(GpuTextureDesc(8, 8, GpuTextureFormat.Rgba8Unorm)).unwrap();
+    surface.copy_to(target).await.unwrap();
+    let pixels = target.read(0).await.unwrap();
+    Assert.eq((int)pixels[0], 255);
+    Assert.eq((int)pixels[1], 0);
+    Assert.eq((int)pixels[3], 255);
+    let wrong_size = device.texture(GpuTextureDesc(4, 4, GpuTextureFormat.Rgba8Unorm)).unwrap();
+    Assert.is_true(surface.copy_to(wrong_size).await.is_err());
+    let bgra = device.texture(GpuTextureDesc(8, 8, GpuTextureFormat.Bgra8Unorm)).unwrap();
+    surface.copy_to(bgra).await.unwrap();
+    let blue_first = bgra.read(0).await.unwrap();
+    Assert.eq((int)blue_first[0], 0);
+    Assert.eq((int)blue_first[2], 255);
+}

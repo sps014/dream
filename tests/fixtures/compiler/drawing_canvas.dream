@@ -1,0 +1,86 @@
+import system;
+import system.drawing;
+import system.drawing.gpu;
+import system.gpu;
+import system.window;
+
+async fun check_drawing(backend: DrawingBackend): void {
+    let canvas = Canvas(32, 32);
+    canvas.clear(Color.black);
+    canvas.fill_rect(16.0f, 0.0f, 16.0f, 32.0f, Color.white);
+    canvas.backdrop(Rect(8.0f, 4.0f, 16.0f, 24.0f), Backdrop.blur(3.0f));
+    canvas.fill_rect(14.0f, 12.0f, 4.0f, 8.0f, Color.rgb(255, 0, 0));
+    let surface = DrawingSurface.create(32, 32, backend).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    let blurred = (int)pixels[(8 * 32 + 14) * 4];
+    if pixels.length != 4096 || blurred <= 0 || blurred >= 255 {
+        System.panic("drawing backdrop did not blur earlier content");
+    }
+    if (int)pixels[(16 * 32 + 4) * 4] != 0 {
+        System.panic("drawing backdrop escaped its clip");
+    }
+    if (int)pixels[(16 * 32 + 16) * 4 + 1] != 0 {
+        System.panic("drawing backdrop blurred later content");
+    }
+    surface.close();
+}
+
+async fun check_images_and_text(backend: DrawingBackend): void {
+    let image = Image.from_rgba(1, 1, [(byte)255, 0, 0, 255]).await.unwrap();
+    let canvas = Canvas(200, 64);
+    canvas.draw_image(image, Rect(0, 32, 200, 32));
+    let style = TextStyle(20, Color.white);
+    let label = TextLayout.create("Hello नमस्ते", style).await.unwrap();
+    canvas.fill_text(label, 2, 0, Color.white);
+    canvas.fill_text("office", 120, 0, style);
+    let surface = DrawingSurface.create(200, 64, backend).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    if (int)pixels[(48 * 200 + 20) * 4] != 255 {
+        System.panic("drawing image did not render");
+    }
+    let ink = 0;
+    for (let i = 0; i < 200 * 30; i = i + 1) {
+        if (int)pixels[i * 4 + 3] > 128 {
+            ink = ink + 1;
+        }
+    }
+    if ink < 40 || label.width < 20.0f {
+        System.panic("drawing text did not render");
+    }
+}
+
+async fun check_existing_gpu_presentation(): void {
+    let window = Window.canvas("drawing").unwrap();
+    let device = GpuDevice.create(GpuBackend.WebGpu).await.unwrap();
+    let surface = device.create_surface(window).unwrap();
+    let canvas = Canvas(surface.width, surface.height);
+    canvas.clear(Color.rgb(255, 0, 0));
+    let drawing = DrawingSurface.create(surface.width, surface.height, DrawingBackend.Cpu)
+        .await
+        .unwrap();
+    drawing.render(canvas).unwrap();
+    drawing.present(surface).await.unwrap();
+    canvas.clear(Color.rgb(40, 100, 200));
+    drawing.render(canvas).unwrap();
+    drawing.present(surface).await.unwrap();
+    js.global.drawingCheckpoint().await;
+    let wrong_size = DrawingSurface.create(1, 1, DrawingBackend.Cpu).await.unwrap();
+    if wrong_size.present(surface).await.is_ok() {
+        System.panic("presentation accepted mismatched dimensions");
+    }
+    drawing.close();
+    if drawing.present(surface).await.is_ok() {
+        System.panic("presentation accepted a closed drawing surface");
+    }
+}
+
+async fun main(): void {
+    check_drawing(DrawingBackend.Cpu).await;
+    check_drawing(DrawingBackend.Gpu).await;
+    check_images_and_text(DrawingBackend.Cpu).await;
+    check_images_and_text(DrawingBackend.Gpu).await;
+    check_existing_gpu_presentation().await;
+    System.println("drawing-browser-passed");
+}

@@ -39,6 +39,7 @@ pub fn build_snapshot(
         facts,
         spans: built.spans,
         include_bodies: true,
+        include_std_bodies: registered.is_std(),
     };
     b.spans.extend_definitions(catalog_built.spans);
     super::references::expand(&mut built.snapshot, |id| {

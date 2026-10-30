@@ -8553,6 +8553,652 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/drawing/backdrop.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-backdrop.md",
+    "declarations": [
+      {
+        "signature": "public class Backdrop",
+        "description": "Filters content drawn earlier in the canvas. Later drawings and other windows are excluded.",
+        "line": 4,
+        "page": "reference/api/drawing-backdrop.md"
+      },
+      {
+        "signature": "public static fun blur(sigma: float): Backdrop",
+        "description": "Creates a Gaussian backdrop blur. Sigma is 0..128 physical pixels; zero only applies tint.",
+        "line": 16,
+        "page": "reference/api/drawing-backdrop.md"
+      },
+      {
+        "signature": "public fun tint(color: Color): Backdrop",
+        "description": "Sets the color composited over the filtered backdrop and returns this configuration.",
+        "line": 21,
+        "page": "reference/api/drawing-backdrop.md"
+      },
+      {
+        "signature": "public fun rounded(radius: float): Backdrop",
+        "description": "Sets the panel's corner radius in canvas units and returns this configuration.",
+        "line": 27,
+        "page": "reference/api/drawing-backdrop.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/canvas.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-canvas.md",
+    "declarations": [
+      {
+        "signature": "public class Canvas",
+        "description": "Records 2D drawing in top-left coordinates with positive y downward. Calls execute at render.",
+        "line": 4,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public constructor(width: int, height: int)",
+        "description": "Creates a recording canvas of the given physical pixel size, initially transparent.",
+        "line": 13,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun clear(color: Color): void",
+        "description": "Discards recorded drawing and state, then starts with the supplied background color.",
+        "line": 23,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun fill_rect( x: float, y: float, width: float, height: float, color: Color, radius: float = 0.0f ): void",
+        "description": "Fills a rectangle with a solid color. Radius optionally rounds its corners.",
+        "line": 33,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun fill_circle(x: float, y: float, radius: float, color: Color): void",
+        "description": "Fills a circle with the given center, radius and solid color.",
+        "line": 49,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun fill(borrow path: DrawingPath, borrow paint: Paint, even_odd: bool = false): void",
+        "description": "Fills vector geometry with a paint. even_odd selects alternating contour fill.",
+        "line": 58,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun stroke(borrow path: DrawingPath, color: Color, width: float = 1.0f): void",
+        "description": "Strokes vector geometry with a positive width, butt caps and miter joins.",
+        "line": 63,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun save(): void",
+        "description": "Saves the current transform and clip. Pair with restore before rendering.",
+        "line": 76,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun save_layer(opacity: float = 1.0f): void",
+        "description": "Starts an isolated opacity group. restore composites the group once using opacity in 0..1.",
+        "line": 82,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun restore(): void",
+        "description": "Restores the last saved transform and clip, and ends an isolated group if one was saved.",
+        "line": 89,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun transform(a: float, b: float, c: float, d: float, tx: float, ty: float): void",
+        "description": "Concatenates an affine matrix: x' = a*x + c*y + tx, y' = b*x + d*y + ty.",
+        "line": 99,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun translate(x: float, y: float): void",
+        "description": "Moves subsequent drawing by the given canvas offsets.",
+        "line": 104,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun scale(x: float, y: float): void",
+        "description": "Scales subsequent drawing along each axis. Negative factors mirror the drawing.",
+        "line": 109,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun rotate(radians: float): void",
+        "description": "Rotates subsequent drawing clockwise about the origin by an angle in radians.",
+        "line": 114,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun clip(borrow path: DrawingPath): void",
+        "description": "Intersects the current clip with the nonzero-filled path in the current transform.",
+        "line": 121,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun backdrop(rect: Rect, borrow effect: Backdrop): void",
+        "description": "Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.",
+        "line": 127,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun finish(): Result<Picture, DrawingError>",
+        "description": "Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.",
+        "line": 135,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun draw_image( borrow image: Image, target: Rect, source: Option<Rect> = Option.None, opacity: float = 1.0f, nearest: bool = false ): void",
+        "description": "Draws an image into a destination rectangle. Optional source crops in image pixels; opacity is 0..1 and nearest enables pixel-art sampling.",
+        "line": 174,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void",
+        "description": "Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.",
+        "line": 196,
+        "page": "reference/api/drawing-canvas.md"
+      },
+      {
+        "signature": "public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void",
+        "description": "Draws an immutable precomputed layout at a top-left origin using the supplied color.",
+        "line": 211,
+        "page": "reference/api/drawing-canvas.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/color.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-color.md",
+    "declarations": [
+      {
+        "signature": "public struct Color",
+        "description": "An sRGB color with straight alpha. RGB factories take byte-scale channels; alpha is 0..1.",
+        "line": 4,
+        "page": "reference/api/drawing-color.md"
+      },
+      {
+        "signature": "public static fun rgb(red: int, green: int, blue: int): Color",
+        "description": "Creates an opaque color from red, green and blue values in 0..255.",
+        "line": 11,
+        "page": "reference/api/drawing-color.md"
+      },
+      {
+        "signature": "public static fun rgba(red: int, green: int, blue: int, alpha: float): Color",
+        "description": "Creates a color from RGB values in 0..255 and opacity in 0..1. Invalid channels fail at render.",
+        "line": 16,
+        "page": "reference/api/drawing-color.md"
+      },
+      {
+        "signature": "public static get white(): Color",
+        "description": "Opaque white.",
+        "line": 26,
+        "page": "reference/api/drawing-color.md"
+      },
+      {
+        "signature": "public static get black(): Color",
+        "description": "Opaque black.",
+        "line": 31,
+        "page": "reference/api/drawing-color.md"
+      },
+      {
+        "signature": "public static get transparent(): Color",
+        "description": "Transparent black.",
+        "line": 36,
+        "page": "reference/api/drawing-color.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/drawing_backend.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-drawing-backend.md",
+    "declarations": [
+      {
+        "signature": "public enum DrawingBackend",
+        "description": "Where a drawing surface rasterizes and composites its canvas.",
+        "line": 4,
+        "page": "reference/api/drawing-drawing-backend.md"
+      },
+      {
+        "signature": "Auto = 0",
+        "description": "Attempts GPU initialization, then uses CPU if no suitable GPU is available.",
+        "line": 6,
+        "page": "reference/api/drawing-drawing-backend.md"
+      },
+      {
+        "signature": "Cpu = 1",
+        "description": "Uses Vello software rendering without requiring a GPU.",
+        "line": 8,
+        "page": "reference/api/drawing-drawing-backend.md"
+      },
+      {
+        "signature": "Gpu = 2",
+        "description": "Requires Vello GPU rendering; initialization fails if unavailable.",
+        "line": 10,
+        "page": "reference/api/drawing-drawing-backend.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/drawing_error.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-drawing-error.md",
+    "declarations": [
+      {
+        "signature": "public struct DrawingError",
+        "description": "A drawing failure. The message includes a stable code followed by a readable reason.",
+        "line": 4,
+        "page": "reference/api/drawing-drawing-error.md"
+      },
+      {
+        "signature": "public message: string",
+        "description": "A stable error code and description, separated by a newline.",
+        "line": 6,
+        "page": "reference/api/drawing-drawing-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/drawing_path.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-drawing-path.md",
+    "declarations": [
+      {
+        "signature": "public class DrawingPath",
+        "description": "Reusable vector geometry. Mutating a path does not change commands already recorded with it.",
+        "line": 4,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty path. Begin each contour with move_to.",
+        "line": 9,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public fun move_to(x: float, y: float): DrawingPath",
+        "description": "Starts a contour at the given coordinates and returns this path.",
+        "line": 15,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public fun line_to(x: float, y: float): DrawingPath",
+        "description": "Adds a straight segment to the given coordinates and returns this path.",
+        "line": 23,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public fun quad_to(cx: float, cy: float, x: float, y: float): DrawingPath",
+        "description": "Adds a quadratic curve with one control point and returns this path.",
+        "line": 31,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public fun curve_to( ax: float, ay: float, bx: float, by: float, x: float, y: float ): DrawingPath",
+        "description": "Adds a cubic curve with two control points and returns this path.",
+        "line": 40,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public fun close(): DrawingPath",
+        "description": "Closes the current contour and returns this path.",
+        "line": 57,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public static fun rect(rect: Rect, radius: float = 0.0f): DrawingPath",
+        "description": "Creates a closed rectangle. Radius rounds its corners and is clamped to half its smaller side.",
+        "line": 64,
+        "page": "reference/api/drawing-drawing-path.md"
+      },
+      {
+        "signature": "public static fun ellipse(rect: Rect): DrawingPath",
+        "description": "Creates a closed ellipse inscribed in the rectangle.",
+        "line": 84,
+        "page": "reference/api/drawing-drawing-path.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/drawing_surface.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-drawing-surface.md",
+    "declarations": [
+      {
+        "signature": "public class DrawingSurface",
+        "description": "A persistent CPU or GPU offscreen drawing target. Pixel reads synchronize GPU work explicitly.",
+        "line": 4,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public static async fun create( width: int, height: int, backend: DrawingBackend = DrawingBackend.Auto ): Result<DrawingSurface, DrawingError>",
+        "description": "Creates a surface of 1..8192 pixels per side and at most 16777216 pixels. Auto prefers GPU and falls back to CPU during initialization.",
+        "line": 23,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public get backend(): DrawingBackend",
+        "description": "The selected rendering backend; Auto is resolved to Cpu or Gpu.",
+        "line": 37,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public fun render(borrow canvas: Canvas): Result<Unit, DrawingError>",
+        "description": "Submits the current canvas, replacing the previous image. Canvas and surface dimensions must match; pixel reads wait for GPU completion.",
+        "line": 42,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public fun render(borrow picture: Picture): Result<Unit, DrawingError>",
+        "description": "Submits a reusable picture, replacing the previous image. Picture and surface dimensions must match; pixel reads wait for GPU completion.",
+        "line": 48,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public async fun read_pixels(): Result<byte[], DrawingError>",
+        "description": "Reads tightly packed premultiplied sRGB RGBA8 pixels, top row first. GPU reads wait for completion.",
+        "line": 63,
+        "page": "reference/api/drawing-drawing-surface.md"
+      },
+      {
+        "signature": "public fun close(): void",
+        "description": "Releases this surface. Subsequent rendering and reads return a DrawingError.",
+        "line": 72,
+        "page": "reference/api/drawing-drawing-surface.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/drawing_surface_gpu.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-drawing-surface-gpu.md",
+    "declarations": [
+      {
+        "signature": "public async fun present(surface: GpuSurface): Result<Unit, DrawingError>",
+        "description": "Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches upload and pipeline resources until close or a different target is used; GPU drawing first waits for readback.",
+        "line": 7,
+        "page": "reference/api/drawing-drawing-surface-gpu.md"
+      },
+      {
+        "signature": "public async fun copy_to(texture: GpuTexture): Result<Unit, DrawingError>",
+        "description": "Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu; waits for readback when this surface uses GPU rendering.",
+        "line": 32,
+        "page": "reference/api/drawing-drawing-surface-gpu.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/fonts.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-fonts.md",
+    "declarations": [
+      {
+        "signature": "public static class Fonts",
+        "description": "Registers application fonts for subsequent text layout. The bundled Noto Sans requires no setup.",
+        "line": 4,
+        "page": "reference/api/drawing-fonts.md"
+      },
+      {
+        "signature": "public static async fun register(bytes: byte[]): Result<string, DrawingError>",
+        "description": "Copies a TrueType, OpenType or collection file and returns its first family name. Existing TextLayouts retain their captured fonts.",
+        "line": 6,
+        "page": "reference/api/drawing-fonts.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/image.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-image.md",
+    "declarations": [
+      {
+        "signature": "public class Image: DrawingResource",
+        "description": "An immutable decoded image. Canvas recordings retain it until they are released or cleared.",
+        "line": 4,
+        "page": "reference/api/drawing-image.md"
+      },
+      {
+        "signature": "public static async fun decode(bytes: byte[]): Result<Image, DrawingError>",
+        "description": "Decodes PNG or JPEG bytes. Input is copied; malformed data, excessive dimensions or more than 64 MiB of encoded data return an error.",
+        "line": 17,
+        "page": "reference/api/drawing-image.md"
+      },
+      {
+        "signature": "public static async fun from_rgba( width: int, height: int, bytes: byte[] ): Result<Image, DrawingError>",
+        "description": "Copies tightly packed straight-alpha sRGB RGBA8 pixels, top row first. Requires width * height * 4 bytes and the surface dimension limits.",
+        "line": 26,
+        "page": "reference/api/drawing-image.md"
+      },
+      {
+        "signature": "public get width(): int",
+        "description": "Width of the decoded image in pixels.",
+        "line": 39,
+        "page": "reference/api/drawing-image.md"
+      },
+      {
+        "signature": "public get height(): int",
+        "description": "Height of the decoded image in pixels.",
+        "line": 44,
+        "page": "reference/api/drawing-image.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/paint.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-paint.md",
+    "declarations": [
+      {
+        "signature": "public class Paint",
+        "description": "A reusable solid color or two-color gradient, captured when a draw is recorded.",
+        "line": 4,
+        "page": "reference/api/drawing-paint.md"
+      },
+      {
+        "signature": "public static fun solid(color: Color): Paint",
+        "description": "Creates a solid paint.",
+        "line": 12,
+        "page": "reference/api/drawing-paint.md"
+      },
+      {
+        "signature": "public static fun linear( x0: float, y0: float, x1: float, y1: float, start: Color, end: Color ): Paint",
+        "description": "Creates a gradient from start color at (x0, y0) to end color at (x1, y1).",
+        "line": 20,
+        "page": "reference/api/drawing-paint.md"
+      },
+      {
+        "signature": "public static fun radial(x: float, y: float, radius: float, start: Color, end: Color): Paint",
+        "description": "Creates a circular gradient from the center color to the edge at a positive radius.",
+        "line": 39,
+        "page": "reference/api/drawing-paint.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/picture.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-picture.md",
+    "declarations": [
+      {
+        "signature": "public class Picture",
+        "description": "An immutable drawing captured by Canvas.finish, reusable on CPU or GPU surfaces.",
+        "line": 4,
+        "page": "reference/api/drawing-picture.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/rect.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-rect.md",
+    "declarations": [
+      {
+        "signature": "public struct Rect",
+        "description": "An axis-aligned rectangle in canvas coordinates, measured from its top-left corner.",
+        "line": 4,
+        "page": "reference/api/drawing-rect.md"
+      },
+      {
+        "signature": "public x: float",
+        "description": "Left edge.",
+        "line": 6,
+        "page": "reference/api/drawing-rect.md"
+      },
+      {
+        "signature": "public y: float",
+        "description": "Top edge.",
+        "line": 9,
+        "page": "reference/api/drawing-rect.md"
+      },
+      {
+        "signature": "public width: float",
+        "description": "Width; positive values draw toward the right.",
+        "line": 12,
+        "page": "reference/api/drawing-rect.md"
+      },
+      {
+        "signature": "public height: float",
+        "description": "Height; positive values draw downward.",
+        "line": 15,
+        "page": "reference/api/drawing-rect.md"
+      },
+      {
+        "signature": "public constructor(x: float, y: float, width: float, height: float)",
+        "description": "Creates a rectangle from position and dimensions in canvas units.",
+        "line": 18,
+        "page": "reference/api/drawing-rect.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/text_alignment.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-text-alignment.md",
+    "declarations": [
+      {
+        "signature": "public enum TextAlignment",
+        "description": "Alignment of a paragraph within its wrapping width.",
+        "line": 4,
+        "page": "reference/api/drawing-text-alignment.md"
+      },
+      {
+        "signature": "Start = 0",
+        "description": "Aligns to the start edge of the text direction.",
+        "line": 6,
+        "page": "reference/api/drawing-text-alignment.md"
+      },
+      {
+        "signature": "Center = 1",
+        "description": "Centers each line.",
+        "line": 8,
+        "page": "reference/api/drawing-text-alignment.md"
+      },
+      {
+        "signature": "End = 2",
+        "description": "Aligns to the end edge of the text direction.",
+        "line": 10,
+        "page": "reference/api/drawing-text-alignment.md"
+      },
+      {
+        "signature": "Justify = 3",
+        "description": "Expands spacing to fill the paragraph width when applicable.",
+        "line": 12,
+        "page": "reference/api/drawing-text-alignment.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/text_layout.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-text-layout.md",
+    "declarations": [
+      {
+        "signature": "public class TextLayout: DrawingResource",
+        "description": "Immutable shaped text for repeated labels. Layout metrics and glyph positions are shared between CPU and GPU rendering.",
+        "line": 4,
+        "page": "reference/api/drawing-text-layout.md"
+      },
+      {
+        "signature": "public static async fun create( text: string, style: TextStyle ): Result<TextLayout, DrawingError>",
+        "description": "Shapes and lays out text with the supplied style, capturing its font and paragraph settings. Color is supplied separately when drawing.",
+        "line": 17,
+        "page": "reference/api/drawing-text-layout.md"
+      },
+      {
+        "signature": "public get width(): float",
+        "description": "Laid-out text width in canvas units.",
+        "line": 37,
+        "page": "reference/api/drawing-text-layout.md"
+      },
+      {
+        "signature": "public get height(): float",
+        "description": "Laid-out text height in canvas units.",
+        "line": 42,
+        "page": "reference/api/drawing-text-layout.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/text_style.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-text-style.md",
+    "declarations": [
+      {
+        "signature": "public class TextStyle",
+        "description": "Text appearance and paragraph layout. Canvas calls capture these values when recorded.",
+        "line": 4,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public size: float",
+        "description": "Font size in canvas units, from 0.1 to 4096.",
+        "line": 6,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public color: Color",
+        "description": "Solid text color.",
+        "line": 9,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public family: string",
+        "description": "Font family name; defaults to the bundled Noto Sans. Native programs may also use installed fonts.",
+        "line": 12,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public weight: float",
+        "description": "Font weight from 1 to 1000; defaults to regular, 400.",
+        "line": 15,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public max_width: float",
+        "description": "Wrapping width in canvas units. Zero disables automatic wrapping; explicit newlines still break lines.",
+        "line": 18,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public alignment: TextAlignment",
+        "description": "Paragraph alignment within max_width, interpreted relative to text direction.",
+        "line": 21,
+        "page": "reference/api/drawing-text-style.md"
+      },
+      {
+        "signature": "public constructor(size: float, color: Color)",
+        "description": "Creates regular text with a size and color. Noto Sans is available on native and browser targets.",
+        "line": 24,
+        "page": "reference/api/drawing-text-style.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/duration.dream",
     "package": "system",
     "page": "reference/api/duration.md",
@@ -9517,140 +10163,140 @@
       },
       {
         "signature": "public static async fun create(backend: GpuBackend): Result<GpuDevice, GpuError>",
-        "description": "Opens a device on `backend`.  `GpuBackend.Auto` picks the platform's native API when this build has shader code for it, and WebGPU otherwise. Any other backend is used exactly as asked: when this build has no shader code for it the result is `GpuError.BackendNotCompiled`, and when the machine cannot run it the result is `GpuError.BackendUnavailable`. A program without shaders may open any backend.",
-        "line": 33,
+        "description": "Opens a device on `backend`.  `GpuBackend.Auto` picks the platform's native API when this build has shader code for it, and WebGPU otherwise. Any other backend is used exactly as asked: when this build has no shader code for it the result is `GpuError.BackendNotCompiled`, and when the machine cannot run it the result is `GpuError.BackendUnavailable`. A program without shaders may open any backend. Embedded library shaders determine available backends only when the program declares no application shaders.",
+        "line": 34,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public get backend(): GpuBackend",
         "description": "The API this device runs on; never `GpuBackend.Auto`.",
-        "line": 47,
+        "line": 48,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public get adapter_name(): string",
         "description": "The driver's name for this device's graphics adapter, or an empty string when unavailable. Browsers may hide identifying information for privacy. This is a display label; use `supports` to decide which GPU features can run.",
-        "line": 54,
+        "line": 55,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun supports(feature: GpuFeature): bool",
         "description": "True when the device offers `feature`.",
-        "line": 63,
+        "line": 64,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun check(): Result<Unit, GpuError>",
         "description": "`Ok(Unit())` while the device works, or `GpuError.DeviceLost` once the driver or browser took it away. Calls that touch a lost device also fail with `DeviceLost`.",
-        "line": 70,
+        "line": 71,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a storage buffer that shaders can read and write, filled with `data`.",
-        "line": 95,
+        "line": 96,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun buffer_alloc<T: unmanaged>(length: int): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a storage buffer of `length` elements, all zero.",
-        "line": 100,
+        "line": 101,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun vertex_buffer_from<T: unmanaged>(data: T[]): Result<GpuBuffer<T>, GpuError>",
         "description": "Creates a vertex buffer filled with `data`, one element per vertex. Describe its layout to the pipeline with `GpuVertexLayout` and bind it with `GpuRenderPass.set_vertex_buffer`.",
-        "line": 107,
+        "line": 108,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun index_buffer_from(data: uint[]): Result<GpuBuffer<uint>, GpuError>",
         "description": "Creates an index buffer of 32-bit indexes for `GpuRenderPass.draw_indexed`.",
-        "line": 112,
+        "line": 113,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun index_buffer_from(data: ushort[]): Result<GpuBuffer<ushort>, GpuError>",
         "description": "Creates an index buffer of 16-bit indexes, which halves its memory when meshes have fewer than 65,536 vertices.",
-        "line": 118,
+        "line": 119,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun texture(desc: GpuTextureDesc): Result<GpuTexture, GpuError>",
         "description": "Creates a texture described by `desc`, with every texel zero.",
-        "line": 123,
+        "line": 124,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun storage_texture<T: unmanaged>( width: int, height: int ): Result<GpuStorageTexture<T>, GpuError>",
         "description": "Creates a `width` by `height` texture that shaders write texel by texel.  `T` chooses the format: `GpuVec4` stores four floats, `GpuVec2` two, `float` one and `uint` one unsigned integer. Other element types return `GpuError.InvalidResource`.",
-        "line": 142,
+        "line": 143,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun sampler(desc: GpuSamplerDesc): Result<GpuSampler, GpuError>",
         "description": "Creates a sampler, which tells shaders how to filter and wrap texture reads.",
-        "line": 161,
+        "line": 162,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun handle(texture: GpuTexture): Result<GpuHandle<GpuTexture>, GpuError>",
         "description": "A bindless handle to `texture`, which can be stored in any buffer and sampled by shaders. It stays valid while the texture is alive. Needs `GpuFeature.Bindless`.",
-        "line": 188,
+        "line": 189,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun handle(sampler: GpuSampler): Result<GpuHandle<GpuSampler>, GpuError>",
         "description": "A bindless handle to `sampler`. Needs `GpuFeature.Bindless`.",
-        "line": 194,
+        "line": 195,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun create_surface(window: Window): Result<GpuSurface, GpuError>",
         "description": "Connects the device to `window` so frames can be drawn into it. The surface follows the window's vsync hint from `WindowDesc.vsync`. Headless and closed windows return `GpuError.SurfaceLost`.",
-        "line": 202,
+        "line": 203,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun render_pipeline( vertex_shader: GpuStageShader, fragment_shader: GpuStageShader, desc: GpuRenderPipelineDesc ): Result<GpuRenderPipeline, GpuError>",
         "description": "Creates a render pipeline from a `@vertex` and a `@fragment` shader, both given as their `GpuShaders` descriptors. Every `@location` the fragment shader reads must be written by the vertex shader; otherwise the result is `GpuError.Validation`.",
-        "line": 217,
+        "line": 218,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun ray_tracing_pipeline( ray_generation: GpuStageShader, misses: GpuStageShader[], hit_groups: GpuHitGroup[], callables: GpuStageShader[] ): Result<GpuRayTracingPipeline, GpuError>",
         "description": "Creates a ray tracing pipeline from a `@ray_generation` shader, the `@miss` shaders `trace_ray` selects by index, the hit groups instances select by their hit group offset, and the `@callable` shaders `call_shader` selects by index. Needs `GpuFeature.RayTracing`.",
-        "line": 259,
+        "line": 260,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun build_bottom_level( geometry: GpuGeometry ): Result<GpuAccelerationStructure, GpuError>",
         "description": "Builds a bottom-level acceleration structure, the ray tracing index of one mesh. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.",
-        "line": 346,
+        "line": 347,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun build_top_level( instances: GpuInstance[] ): Result<GpuAccelerationStructure, GpuError>",
         "description": "Builds a top-level acceleration structure from mesh instances. Shaders trace rays against it. Needs `GpuFeature.RayTracing` or `GpuFeature.RayQuery`.",
-        "line": 364,
+        "line": 365,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun upload_mlp<T: unmanaged>( weights: T[], biases: T[], inputs: int, outputs: int ): Result<GpuMlpWeights<T>, GpuError>",
         "description": "Uploads one neural network layer for `GpuMlpWeights.apply`: `weights` holds `outputs` rows of `inputs` values each, and `biases` one value per output. On Vulkan and D3D12 devices with `GpuFeature.CooperativeVectors` the host converts the weights into the device's own matrix layout; elsewhere it keeps them row by row. Uploading works on any device. `T` is `float16` or `float`; other element sizes fail with `GpuError.InvalidResource`.",
-        "line": 395,
+        "line": 396,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public fun command_encoder(): GpuCommandEncoder",
         "description": "Starts recording GPU commands. Submit them with `submit`.",
-        "line": 426,
+        "line": 427,
         "page": "reference/api/gpu-gpu-device.md"
       },
       {
         "signature": "public async fun submit(commands: GpuCommandBuffer): Result<Unit, GpuError>",
         "description": "Runs recorded commands and waits until the GPU finished them. Recording errors, such as a resource from another device, are reported here.",
-        "line": 432,
+        "line": 433,
         "page": "reference/api/gpu-gpu-device.md"
       }
     ]

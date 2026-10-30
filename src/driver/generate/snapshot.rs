@@ -36,6 +36,7 @@ pub(super) struct Builder<'f, 'p> {
     pub(super) facts: &'p ProgramFacts<'f>,
     pub(super) spans: IdSpans,
     pub(super) include_bodies: bool,
+    pub(super) include_std_bodies: bool,
 }
 
 /// A generator's snapshot plus what maps its result back onto the program.
@@ -170,7 +171,8 @@ impl Builder<'_, '_> {
             None => dream_abi::attributes::decl_identity(module, &f.name.text),
         };
         self.mark(&id, file, f.name.position);
-        if owner.is_none() && super::walk::is_user_file(file) {
+        let body_available = super::walk::is_user_file(file) || self.include_std_bodies;
+        if owner.is_none() && body_available {
             self.spans.consumable.insert(
                 id.clone(),
                 (file.unwrap_or_default().to_string(), f.name.position),
@@ -195,7 +197,7 @@ impl Builder<'_, '_> {
         } else {
             id.as_str()
         };
-        let body = (self.include_bodies && super::walk::is_user_file(file))
+        let body = (self.include_bodies && body_available)
             .then(|| super::body::lower(f, body_owner, file, self.facts, &scope, &mut self.spans));
         let mut declaration_span = f.name.position;
         for p in &f.parameters {
@@ -350,6 +352,9 @@ pub(super) fn build_selected(
         facts,
         spans: IdSpans::default(),
         include_bodies: !all,
+        // Embedded generators also compile library-owned domains such as canvas shaders.
+        // User generators retain their existing source-only consumption rights.
+        include_std_bodies: registered.is_std(),
     };
     let registry = facts.attributes;
     let ids = &registered.attribute_triggers;

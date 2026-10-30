@@ -1,0 +1,32 @@
+module system.drawing;
+
+/// Text appearance and paragraph layout. Canvas calls capture these values when recorded.
+public class TextStyle {
+    /// Font size in canvas units, from 0.1 to 4096.
+    public size: float;
+
+    /// Solid text color.
+    public color: Color;
+
+    /// Font family name; defaults to the bundled Noto Sans. Native programs may also use installed fonts.
+    public family: string;
+
+    /// Font weight from 1 to 1000; defaults to regular, 400.
+    public weight: float;
+
+    /// Wrapping width in canvas units. Zero disables automatic wrapping; explicit newlines still break lines.
+    public max_width: float;
+
+    /// Paragraph alignment within max_width, interpreted relative to text direction.
+    public alignment: TextAlignment;
+
+    /// Creates regular text with a size and color. Noto Sans is available on native and browser targets.
+    public constructor(size: float, color: Color) {
+        this.size = size;
+        this.color = color;
+        this.family = "Noto Sans";
+        this.weight = 400.0f;
+        this.max_width = 0.0f;
+        this.alignment = TextAlignment.Start;
+    }
+}

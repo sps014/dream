@@ -1,0 +1,21 @@
+module system.drawing;
+
+/// An immutable drawing captured by Canvas.finish, reusable on CPU or GPU surfaces.
+public class Picture {
+    internal values: float[];
+    internal width: int;
+    internal height: int;
+    internal handles: int[];
+    owners: DrawingResource[];
+
+    internal constructor(values: float[], width: int, height: int, owners: DrawingResource[]) {
+        this.values = values;
+        this.width = width;
+        this.height = height;
+        this.handles = Buffer.alloc<int>(owners.length);
+        for (let i = 0; i < owners.length; i = i + 1) {
+            this.handles[i] = owners[i].resource_handle;
+        }
+        this.owners = owners;
+    }
+}

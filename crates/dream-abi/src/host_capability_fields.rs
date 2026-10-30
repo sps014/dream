@@ -5,6 +5,20 @@ use super::HostCapability;
 pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
     match capability {
         HostCapability::Core => &[],
+        HostCapability::Drawing => &[
+            "drawingCreate",
+            "drawingLastError",
+            "drawingRender",
+            "drawingPixels",
+            "drawingBackend",
+            "drawingRelease",
+            "drawingImageDecode",
+            "drawingImageRgba",
+            "drawingTextCreate",
+            "drawingFontRegister",
+            "drawingAssetMetrics",
+            "drawingAssetRelease",
+        ],
         HostCapability::Audio => &[
             "audioMediaCreate",
             "audioMediaSeek",

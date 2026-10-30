@@ -1,0 +1,53 @@
+module system.drawing;
+
+/// Immutable shaped text for repeated labels. Layout metrics and glyph positions are shared between CPU and GPU rendering.
+public class TextLayout: DrawingResource {
+    handle: int;
+    text_width: float;
+    text_height: float;
+
+    constructor(handle: int) {
+        this.handle = handle;
+        let metrics = DrawingHost.asset_metrics(handle);
+        this.text_width = metrics[0];
+        this.text_height = metrics[1];
+    }
+
+    /// Shapes and lays out text with the supplied style, capturing its font and paragraph settings. Color is supplied separately when drawing.
+    public static async fun create(
+        text: string,
+        style: TextStyle
+    ): Result<TextLayout, DrawingError> {
+        let alignment: int = style.alignment;
+        let handle = DrawingHost.text_create(
+            text,
+            style.family,
+            style.size,
+            style.weight,
+            style.max_width,
+            alignment
+        ).await;
+        if handle <= 0 {
+            return Result.Err(DrawingError(DrawingHost.error()));
+        }
+        return Result.Ok(TextLayout(handle));
+    }
+
+    /// Laid-out text width in canvas units.
+    public get width(): float {
+        return this.text_width;
+    }
+
+    /// Laid-out text height in canvas units.
+    public get height(): float {
+        return this.text_height;
+    }
+
+    internal get resource_handle(): int {
+        return this.handle;
+    }
+
+    del() {
+        DrawingHost.asset_release(this.handle);
+    }
+}

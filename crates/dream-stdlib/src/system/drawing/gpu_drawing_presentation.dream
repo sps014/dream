@@ -1,0 +1,51 @@
+module system.drawing;
+
+import system.gpu;
+
+internal class GpuDrawingPresentation: DrawingPresentation {
+    surface: GpuSurface;
+    texture: GpuTexture;
+    pipeline: GpuRenderPipeline;
+
+    constructor(surface: GpuSurface, texture: GpuTexture, pipeline: GpuRenderPipeline) {
+        this.surface = surface;
+        this.texture = texture;
+        this.pipeline = pipeline;
+    }
+
+    internal static fun create(surface: GpuSurface): Result<GpuDrawingPresentation, DrawingError> {
+        let device = surface.device;
+        let format = GpuTextureFormat.Rgba8Unorm;
+        if surface.color_format
+            == GpuTextureFormat.Rgba8UnormSrgb
+            || surface.color_format == GpuTextureFormat.Bgra8UnormSrgb {
+            format = GpuTextureFormat.Rgba8UnormSrgb;
+        }
+        let texture = device.texture(GpuTextureDesc(surface.width, surface.height, format))
+            .map_err(drawing_gpu_error)?;
+        let pipeline = device.render_pipeline(
+            GpuShaders.drawing_present_vertex,
+            GpuShaders.drawing_present_fragment,
+            GpuRenderPipelineDesc.defaults(surface.color_format)
+        ).map_err(drawing_gpu_error)?;
+        return Result.Ok(GpuDrawingPresentation(surface, texture, pipeline));
+    }
+
+    internal get target_handle(): int {
+        return this.surface.handle;
+    }
+
+    internal async fun present(pixels: byte[]): Result<Unit, DrawingError> {
+        this.texture.write(0, pixels).map_err(drawing_gpu_error)?;
+        let frame = this.surface.begin_frame(GpuVec4(0, 0, 0, 0)).await.map_err(drawing_gpu_error)?;
+        let pass = frame.pass;
+        pass.set_pipeline(this.pipeline);
+        pass.bind(GpuShaders.drawing_present_fragment.texture, this.texture);
+        pass.draw(3);
+        return frame.present().await.map_err(drawing_gpu_error);
+    }
+}
+
+internal fun drawing_gpu_error(error: GpuError): DrawingError {
+    return DrawingError(error.message());
+}

@@ -6,6 +6,7 @@ use dream_types::{DefKind, ModuleId, TypeCtx};
 use indexmap::{IndexMap, IndexSet};
 
 mod hash;
+mod order;
 use hash::{hash_count, hash_text};
 
 pub struct SourceModule {
@@ -72,6 +73,7 @@ pub struct ConsumedBy {
 pub struct ModuleGraph<'a> {
     pub modules: Vec<SourceModule>,
     pub files: Vec<SourceFile<'a>>,
+    initialization_dependencies: Vec<Vec<ModuleId>>,
     /// Compiler-made sources, including harnesses, helper declarations and generator outputs.
     pub generated_files: IndexSet<String>,
     /// Generator outputs follow module visibility; compiler harnesses retain their explicit privileges.
@@ -150,32 +152,12 @@ impl<'a> ModuleGraph<'a> {
                 }
             })
             .collect();
-        let paths: IndexMap<_, _> = files.iter().map(|f| (f.path.as_str(), f.module)).collect();
         for (index, file) in files.iter().enumerate() {
-            let module = &mut modules[file.module.0 as usize];
-            module.files.push(index);
-            for import in file
-                .program
-                .imports
-                .iter()
-                .filter(|import| import.alias.is_some())
-            {
-                if let Some((path, _)) = import.module_name.text.rsplit_once('.')
-                    && let Some(&id) = ids.get(path)
-                    && id != module.id
-                    && !module.imports.contains(&id)
-                {
-                    module.imports.push(id);
-                }
-            }
-            for target in edges.get(&file.path).into_iter().flatten() {
-                if let Some(&id) = paths.get(target.as_str())
-                    && id != module.id
-                    && !module.imports.contains(&id)
-                {
-                    module.imports.push(id);
-                }
-            }
+            modules[file.module.0 as usize].files.push(index);
+        }
+        let initialization_dependencies = order::dependencies(&files, &modules, edges);
+        for (module, imports) in modules.iter_mut().zip(&initialization_dependencies) {
+            module.imports = imports.clone();
         }
         for module in &mut modules {
             hash::prepare_module(module, &files);
@@ -183,6 +165,7 @@ impl<'a> ModuleGraph<'a> {
         let mut graph = Self {
             modules,
             files,
+            initialization_dependencies,
             generated_files: IndexSet::new(),
             generator_output_files: IndexMap::new(),
             std_generator_output_files: IndexSet::new(),
@@ -262,29 +245,12 @@ impl<'a> ModuleGraph<'a> {
     /// global initializer can rely on the globals of its dependencies. Import cycles keep the
     /// order in which the depth-first walk first reaches them.
     fn initialization_order(&self) -> Vec<ModuleId> {
-        let mut order = Vec::with_capacity(self.modules.len());
-        let mut visited = vec![false; self.modules.len()];
-        for root in &self.modules {
-            if visited[root.id.0 as usize] {
-                continue;
-            }
-            visited[root.id.0 as usize] = true;
-            let mut stack = vec![(root.id, 0usize)];
-            while let Some((id, next)) = stack.last_mut() {
-                let module = &self.modules[id.0 as usize];
-                if let Some(&import) = module.imports.get(*next) {
-                    *next += 1;
-                    if !visited[import.0 as usize] {
-                        visited[import.0 as usize] = true;
-                        stack.push((import, 0));
-                    }
-                } else {
-                    order.push(*id);
-                    stack.pop();
-                }
-            }
-        }
-        order
+        order::modules(&self.initialization_dependencies)
+    }
+
+    /// Sets execution dependencies independently of the broader prelude visibility graph.
+    pub fn set_initialization_dependencies(&mut self, edges: &IndexMap<String, Vec<String>>) {
+        self.initialization_dependencies = order::dependencies(&self.files, &self.modules, edges);
     }
 
     pub fn configure_types(&self, types: &mut TypeCtx) {

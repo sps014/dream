@@ -1,0 +1,5 @@
+module system.drawing;
+
+internal interface DrawingResource {
+    get resource_handle(): int;
+}

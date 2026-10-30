@@ -1,0 +1,64 @@
+module system.drawing;
+
+import system.gpu;
+
+extend DrawingSurface {
+    /// Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches upload and pipeline resources until close or a different target is used; GPU drawing first waits for readback.
+    public async fun present(surface: GpuSurface): Result<Unit, DrawingError> {
+        if surface.width != this.width || surface.height != this.height {
+            return Result.Err(DrawingError("EINVAL\ndrawing and window surface dimensions differ"));
+        }
+        if this.handle == 0 {
+            return Result.Err(DrawingError("EINVAL\ndrawing surface is closed"));
+        }
+        let cached = this.presentation;
+        switch (cached) {
+            Some(presenter) => {
+                if presenter.target_handle != surface.handle {
+                    this.presentation = Option.None;
+                }
+            }
+            None => {}
+        }
+        if this.presentation.is_none() {
+            this.presentation = Option.Some(GpuDrawingPresentation.create(surface)?);
+        }
+        let presenter = this.presentation.unwrap();
+        let pixels = this.read_pixels().await?;
+        return presenter.present(pixels).await;
+    }
+
+    /// Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu; waits for readback when this surface uses GPU rendering.
+    public async fun copy_to(texture: GpuTexture): Result<Unit, DrawingError> {
+        if texture.width != this.width || texture.height != this.height {
+            return Result.Err(
+                DrawingError("EINVAL\ndrawing surface and GPU texture dimensions differ")
+            );
+        }
+        let bgra = texture.format
+            == GpuTextureFormat.Bgra8Unorm || texture.format == GpuTextureFormat.Bgra8UnormSrgb;
+        let rgba = texture.format
+            == GpuTextureFormat.Rgba8Unorm || texture.format == GpuTextureFormat.Rgba8UnormSrgb;
+        if !bgra && !rgba {
+            return Result.Err(
+                DrawingError("EINVAL\ndrawing copies require an RGBA8 or BGRA8 texture")
+            );
+        }
+        let pixels = this.read_pixels().await?;
+        if bgra {
+            for (let i = 0; i < pixels.length; i = i + 4) {
+                let red = pixels[i];
+                pixels[i] = pixels[i + 2];
+                pixels[i + 2] = red;
+            }
+        }
+        switch (texture.write(0, pixels)) {
+            Ok(_) => {
+                return Result.Ok(Unit());
+            }
+            Err(error) => {
+                return Result.Err(DrawingError(error.message()));
+            }
+        }
+    }
+}

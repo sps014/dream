@@ -13,6 +13,12 @@ two compute pipelines with readback, checks every pixel of an offscreen triangle
 resizes a canvas, then destroys the actual WebGPU device and checks device-loss propagation.
 Missing WebGPU support fails the test. No GPU calls are mocked.
 
+For `system.drawing`, build the compiler with `cargo build --workspace`, build its portable host
+with `python scripts/build-drawing-web.py`, then run `npm run test:drawing`. This compiles a Dream
+canvas program and verifies CPU and WebGPU backdrop blur, clipping, images, shaped text and drawing
+order in Chromium, followed by cached `DrawingSurface.present` calls through the existing
+`GpuSurface` and `GpuFrame` APIs. A screenshot checks the second frame before resources are released.
+
 `GPU_BROWSER_EXECUTABLE` selects an installed Chromium browser, such as Microsoft Edge.
 On Linux without a GPU, install Mesa's Vulkan drivers, select its lavapipe ICD with
 `VK_ICD_FILENAMES`, and set `GPU_BROWSER_SOFTWARE=1`. CI discovers the installed ICD filename

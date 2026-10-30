@@ -146,6 +146,8 @@ members = [
     "crates/dream-host-window",
     "crates/dream-host-gpu",
     "crates/dream-host-audio",
+    "crates/dream-drawing",
+    "crates/dream-host-drawing",
     "crates/dream-host-abi",
     "tooling/dream-lsp",
     "tooling/dreamer",

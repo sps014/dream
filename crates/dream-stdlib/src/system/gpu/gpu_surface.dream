@@ -8,7 +8,7 @@ import system.window;
 /// draw, then `GpuFrame.present`. When the window reports `WindowEvent.Resized`, pass the
 /// new size to `resize` before the next frame.
 public class GpuSurface {
-    device: GpuDevice;
+    internal device: GpuDevice;
     internal handle: int;
     window: Window;
     surface_format: GpuTextureFormat;

@@ -56,7 +56,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             ca-certificates curl git xz-utils build-essential pkg-config \
             cmake ninja-build python3 clang libclang-dev \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev
 
       - uses: actions/checkout@v4
 
@@ -95,6 +95,13 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Build portable drawing browser host
+        shell: bash
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked
+          python scripts/build-drawing-web.py
+
       - name: Package archive
         shell: bash
         run: |
@@ -115,7 +122,7 @@ jobs:
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dream-lsp${EXT}" "$STAGE/"
-          for capability in core crypto process timezone net io gpu window audio; do
+          for capability in core crypto process timezone net io gpu window audio drawing; do
             case "$RUNNER_OS" in
               Windows) library="dream_host_${capability}.dll" ;;
               macOS) library="libdream_host_${capability}.dylib" ;;
@@ -139,6 +146,8 @@ jobs:
           mkdir -p "$STAGE/lib/runtime"
           cp -R crates/dream-mir/src/runtime/c "$STAGE/lib/runtime/"
           cp -R runtime/src "$STAGE/lib/runtime/js"
+          cp -R target/drawing-web "$STAGE/lib/runtime/drawing"
+          cp crates/dream-drawing/fonts/OFL.txt "$STAGE/NotoSans-OFL.txt"
           # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)
           # and the runtime prebuilt for every level, which `dream` finds beside itself.
           LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' crates/dream-abi/src/toolchain.rs)"

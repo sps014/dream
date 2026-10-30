@@ -196,7 +196,12 @@ impl<'l, 'a> Fx<'l, 'a> {
         let locals = teardown_value_locals(self.interner, self.f, skip);
         for local in locals {
             let v = self.read_local(local);
-            self.value_refs(self.f.local_ty(local), &v, false);
+            if self.poll_offsets.is_empty() {
+                self.value_refs(self.f.local_ty(local), &v, false);
+            } else {
+                // A completed future can outlive this poll; its drop glue must see empty edges.
+                self.clear_refs(self.f.local_ty(local), &v);
+            }
         }
     }
 }

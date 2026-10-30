@@ -238,6 +238,16 @@ impl LocalDefs {
                     | Rvalue::New { .. }
             );
         }
+        // Await writes its owned result at the resume entry, outside the statement list.
+        for block in &func.blocks {
+            if let Terminator::Await {
+                dest: Some(local), ..
+            } = block.terminator
+            {
+                defs.count[local.0 as usize] += 1;
+                defs.copy_src[local.0 as usize] = None;
+            }
+        }
         defs
     }
 
@@ -375,9 +385,10 @@ pub(super) fn insert_early_value_drops(
             // The value stays whole until resume; dropping it there keeps a loop that rebuilds
             // it from leaking the previous iteration's nested refs.
             for &local in &owning {
-                let used = block.stmts.iter().any(|stmt| {
-                    stmt_reads(stmt).contains(&local) || assigns_local(stmt, local)
-                });
+                let used = block
+                    .stmts
+                    .iter()
+                    .any(|stmt| stmt_reads(stmt).contains(&local) || assigns_local(stmt, local));
                 let borrowed = borrowers
                     .get(&local)
                     .is_some_and(|deps| deps.iter().any(|c| live.out()[bi].contains(c)));
@@ -435,6 +446,12 @@ pub(super) fn insert_early_value_drops(
         let stmts = &mut func.blocks[ri].stmts;
         stmts.insert(0, Statement::ValueKill(Local(local)));
         stmts.insert(0, Statement::ValueDrop(Local(local)));
+        // Statement sites refer to the block before its resume cleanup was prepended.
+        for (bi, at, _) in &mut drop_at {
+            if *bi == ri {
+                *at += 2;
+            }
+        }
         *changed = true;
     }
     if drop_at.is_empty() {

@@ -59,10 +59,10 @@ public fun fill(borrow path: DrawingPath, borrow paint: Paint, even_odd: bool = 
 
 ## `stroke`
 
-Strokes vector geometry with a positive width, butt caps and miter joins.
+Strokes a path with a solid or gradient paint and explicit stroke geometry. Captures paint, path and style immediately; render validates them.
 
 ```dream
-public fun stroke(borrow path: DrawingPath, color: Color, width: float = 1.0f): void
+public fun stroke(borrow path: DrawingPath, borrow paint: Paint, borrow style: StrokeStyle): void
 ```
 
 ## `save`
@@ -78,7 +78,7 @@ public fun save(): void
 Starts an isolated opacity group. restore composites the group once using opacity in 0..1.
 
 ```dream
-public fun save_layer(opacity: float = 1.0f): void
+public fun save_layer(opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver): void
 ```
 
 ## `restore`

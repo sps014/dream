@@ -1,0 +1,46 @@
+module system.drawing;
+
+/// Stroke geometry, captured by Canvas.stroke when recorded. Invalid values fail at render.
+public class StrokeStyle {
+    /// Positive stroke width in canvas units.
+    public width: float;
+
+    /// End treatment; defaults to Butt.
+    public cap: StrokeCap;
+
+    /// Corner treatment; defaults to Miter.
+    public join: StrokeJoin;
+
+    /// Maximum miter length divided by half the stroke width; at least one, default four.
+    public miter_limit: float;
+
+    /// Alternating positive dash and gap lengths in canvas units, at most 256. Empty draws a solid stroke; an odd list repeats twice.
+    public dashes: float[];
+
+    /// Distance into the repeating dash pattern in canvas units; defaults to zero.
+    public dash_offset: float;
+
+    /// Creates a stroke with butt caps, miter joins, miter limit four and no dashes.
+    public constructor(width: float) {
+        this.width = width;
+        this.cap = StrokeCap.Butt;
+        this.join = StrokeJoin.Miter;
+        this.miter_limit = 4;
+        this.dashes = [];
+        this.dash_offset = 0;
+    }
+
+    internal fun encode(output: List<float>): void {
+        output.push(this.width);
+        let cap: int = this.cap;
+        let join: int = this.join;
+        output.push((float)cap);
+        output.push((float)join);
+        output.push(this.miter_limit);
+        output.push(this.dash_offset);
+        output.push((float)this.dashes.length);
+        for (let dash in this.dashes) {
+            output.push(dash);
+        }
+    }
+}

@@ -59,17 +59,16 @@ public class Canvas {
         this.record_fill(path, paint, even_odd);
     }
 
-    /// Strokes vector geometry with a positive width, butt caps and miter joins.
-    public fun stroke(borrow path: DrawingPath, color: Color, width: float = 1.0f): void {
-        this.values.push(2.0f);
+    /// Strokes a path with a solid or gradient paint and explicit stroke geometry. Captures paint, path and style immediately; render validates them.
+    public fun stroke(
+        borrow path: DrawingPath,
+        borrow paint: Paint,
+        borrow style: StrokeStyle
+    ): void {
+        this.values.push(2);
         path.encode(this.values);
-        Paint.solid(color).encode(this.values);
-        this.values.push(width);
-        this.values.push(0.0f);
-        this.values.push(0.0f);
-        this.values.push(4.0f);
-        this.values.push(0.0f);
-        this.values.push(0.0f);
+        paint.encode(this.values);
+        style.encode(this.values);
     }
 
     /// Saves the current transform and clip. Pair with restore before rendering.
@@ -79,9 +78,11 @@ public class Canvas {
     }
 
     /// Starts an isolated opacity group. restore composites the group once using opacity in 0..1.
-    public fun save_layer(opacity: float = 1.0f): void {
+    public fun save_layer(opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver): void {
         this.values.push(7.0f);
         this.values.push(opacity);
+        let mode: int = blend;
+        this.values.push((float)mode);
         this.depth = this.depth + 1;
     }
 

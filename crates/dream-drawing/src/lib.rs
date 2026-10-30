@@ -6,6 +6,8 @@ mod cpu;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod effect_tests;
 pub mod effects;
+#[cfg(windows)]
+mod native_dx12;
 mod gpu;
 mod gpu_color;
 mod gpu_effects;

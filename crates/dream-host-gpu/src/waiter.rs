@@ -89,6 +89,8 @@ static HOOK: std::sync::OnceLock<CompletionHook> = std::sync::OnceLock::new();
 
 /// Resolves a guest future (or, in host tests without a guest, reports to the test hook).
 pub fn complete(future: usize, value: u64) {
+    // Internal submissions collect resources without publishing a guest future.
+    if future == 0 { return; }
     match HOOK.get() {
         Some(hook) => hook(future, value),
         None => dream_host_abi::complete_foreign_future(

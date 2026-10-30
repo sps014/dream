@@ -1,5 +1,8 @@
 //! Native drawing capability; guest allocation remains owned by dream-host-core.
 
+#[cfg(windows)]
+mod native;
+
 use dream_drawing::assets::{Asset, RasterImage};
 use dream_drawing::{Picture, Surface};
 use dream_host_abi::{
@@ -102,8 +105,11 @@ pub extern "C" fn drawingPixelsAsync(future: DreamPtr, handle: i32) -> i32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn drawingCopyGpu(_handle: i32, _texture: i32, _width: i32, _height: i32) -> i32 {
-    -1
+pub extern "C" fn drawingCopyGpu(handle: i32, texture: i32, width: i32, height: i32) -> i32 {
+    #[cfg(windows)]
+    { native::copy(handle, texture, width, height) }
+    #[cfg(not(windows))]
+    { let _ = (handle, texture, width, height); -1 }
 }
 
 #[unsafe(no_mangle)]

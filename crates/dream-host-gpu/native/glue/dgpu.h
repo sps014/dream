@@ -81,6 +81,21 @@ typedef struct DgpuTextureDesc
     uint32_t samples;
 } DgpuTextureDesc;
 
+typedef struct DgpuDrawingTarget {
+    uint64_t id;
+    uint64_t adapter;
+    uintptr_t texture;
+    uintptr_t fence;
+    uint64_t wait_value;
+    uint64_t signal_value;
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+} DgpuDrawingTarget;
+typedef int (*DgpuDrawingProducer)(void*, const DgpuDrawingTarget*, char*, size_t);
+uint64_t dgpu_drawing_allocations(DgpuDevice*);
+int dgpu_drawing_copy(DgpuDevice*, DgpuObject*, DgpuDrawingProducer, void*, char*, size_t, uint64_t*);
+
 int dgpu_texture_create(DgpuDevice* device, const DgpuTextureDesc* desc, DgpuObject** out);
 typedef struct DgpuReadbackLayout
 {

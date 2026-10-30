@@ -183,6 +183,12 @@ unsafe extern "C" {
         row_bytes: u64,
         rows: u32,
     ) -> c_int;
+    pub fn dgpu_drawing_allocations(device: *mut DgpuDevice) -> u64;
+    pub fn dgpu_drawing_copy(
+        device: *mut DgpuDevice, texture: *mut DgpuObject,
+        producer: dream_host_abi::drawing_gpu::Producer, context: *mut c_void,
+        error: *mut c_char, capacity: usize, submitted: *mut u64,
+    ) -> c_int;
     pub fn dgpu_texture_create(
         device: *mut DgpuDevice,
         desc: *const TextureDesc,

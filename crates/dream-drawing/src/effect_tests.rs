@@ -105,3 +105,26 @@ fn filtered_output_respects_the_saved_clip() {
     assert!(pixels[(16 * 32 + 16) * 4 + 3] > 100);
     assert_eq!(pixels[(16 * 32 + 28) * 4 + 3], 0);
 }
+
+#[test]
+fn group_clips_apply_antialiasing_only_once() {
+    let mut surface = pollster::block_on(Surface::create(32, 32, 1)).unwrap();
+    let mut expected = Vec::new();
+    for grouped in [false, true] {
+        let mut values = vec![6., 4., 0., 0., 0., 1., 32., 0., 1., 0., 32., 4.];
+        if grouped {
+            values.extend([7., 1., 0., 0.]);
+        }
+        fill(&mut values, 0., 0., 32., 32., [1.; 4]);
+        if grouped {
+            values.push(4.);
+        }
+        surface.render(&Picture::decode(&values).unwrap()).unwrap();
+        let pixels = pollster::block_on(surface.pixels()).unwrap();
+        if grouped {
+            assert_eq!(pixels, expected);
+        } else {
+            expected = pixels;
+        }
+    }
+}

@@ -39,7 +39,7 @@ fn backdrop(values: &mut Vec<f32>, sigma: f32) {
     values.push(8.0);
     values.extend(rect(8.0, 4.0, 16.0, 24.0));
     values.push(sigma);
-    values.extend([0.0; 4]);
+    values.extend([0.0; 7]);
 }
 
 #[test]
@@ -112,14 +112,15 @@ fn opacity_group_applies_once_and_render_replaces_pixels() {
 }
 
 #[test]
-fn backdrop_rejects_unsupported_nesting_and_excessive_blur() {
-    let mut nested = vec![7.0, 1.0, 0.0, 0.0];
-    backdrop(&mut nested, 3.0);
-    nested.push(4.0);
-    assert!(Picture::decode(&nested).is_err());
+fn backdrop_rejects_excessive_blur_and_noise() {
     let mut excessive = Vec::new();
-    backdrop(&mut excessive, 129.0);
+    backdrop(&mut excessive, 129.);
     assert!(Picture::decode(&excessive).is_err());
+    let mut invalid = Vec::new();
+    backdrop(&mut invalid, 0.);
+    let len = invalid.len();
+    invalid[len - 3] = 1.1;
+    assert!(Picture::decode(&invalid).is_err());
 }
 
 fn image_picture() -> Picture {

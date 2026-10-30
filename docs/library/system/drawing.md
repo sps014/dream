@@ -50,13 +50,28 @@ previous image, including transparent regions.
 
 ## Backdrop panels
 
-`canvas.backdrop(rect, effect)` filters the content recorded before that call. The blur can sample
+`canvas.backdrop(rect, effect)` filters earlier drawing in its current isolated group, or the
+canvas root when no group is open. Parent groups and later siblings are excluded. The blur can sample
 outside the panel, but the result and tint are clipped to the panel and the current clip. Drawing
 recorded afterward stays sharp. A zero blur sigma applies only the tint. Sigma is measured in physical
 pixels, ranges from 0 to 128, and does not scale with the current transform.
 
 The effect sees only this canvas. It cannot sample the desktop or other application windows. A
-picture permits at most eight backdrop panels. Record panels outside isolated `save_layer` groups.
+picture permits at most eight backdrop panels across all groups. An enclosing group applies its
+filters, opacity and blending after its nested panels have been composed.
+
+Add `.noise(opacity, seed: 0)` for acrylic-style grain after blur and tint. Opacity is 0..1;
+noise preserves the filtered panel's alpha. A seed selects a deterministic 64 by 64 monochrome
+tile shared by CPU and GPU rendering. The tile is anchored in device pixels so repeated renders
+and changing transforms do not animate the grain. Later edits to a `Backdrop` do not change
+panels already recorded.
+
+```dream
+canvas.backdrop(
+    Rect(40, 40, 320, 200),
+    Backdrop.blur(20).tint(Color.rgba(255, 255, 255, 0.15f)).noise(0.04f).rounded(16)
+);
+```
 
 ## Paths, gradients and clipping
 
@@ -222,6 +237,90 @@ surface first waits for GPU readback. Use CPU drawing to avoid that readback whe
 Direct sharing between the drawing engine and a `GpuDevice` is not implemented. Texture copies
 preserve premultiplied alpha; configure your consuming pipeline accordingly when compositing UI.
 
+## A complete visual card
+
+First record the card. The isolated outer group supplies the shadow. Its backdrop samples the
+colored shapes drawn inside that same group; the gradient outline and filtered label stay sharp.
+The logical 640 by 400 composition is scaled to the physical surface size.
+
+```dream
+import system;
+import system.drawing;
+import system.drawing.gpu;
+import system.gpu;
+import system.window;
+
+fun card(width: int, height: int): Canvas {
+    let canvas = Canvas(width, height);
+    canvas.clear(Color.rgb(24, 30, 48));
+    canvas.scale((float)width / 640.0f, (float)height / 400.0f);
+    canvas.fill_circle(550, 340, 180, Color.rgb(42, 64, 110));
+    canvas.save_layer(effects: Option.Some(Effects().shadow(0, 12, 18, Color.rgba(0, 0, 0, 0.4f))));
+    canvas.fill_rect(40, 40, 560, 320, Color.rgb(38, 58, 88), 24);
+    canvas.save();
+    canvas.clip(DrawingPath.rect(Rect(40, 40, 560, 320), 24));
+    canvas.fill_circle(490, 95, 110, Color.rgb(90, 100, 220));
+    canvas.fill_circle(170, 310, 140, Color.rgb(30, 140, 180));
+    let panel = Rect(64, 64, 512, 272);
+    canvas.backdrop(
+        panel,
+        Backdrop.blur(18).tint(Color.rgba(255, 255, 255, 0.12f)).noise(0.04f).rounded(16)
+    );
+    let outline = Paint.linear(
+        64,
+        64,
+        576,
+        336,
+        [
+            GradientStop(0, Color.rgba(255, 255, 255, 0.7f)),
+            GradientStop(0.5f, Color.rgba(150, 200, 255, 0.3f)),
+            GradientStop(1, Color.rgba(255, 255, 255, 0.1f))
+        ]
+    );
+    let stroke = StrokeStyle(2);
+    stroke.join = StrokeJoin.Round;
+    canvas.stroke(DrawingPath.rect(panel, 16), outline, stroke);
+    canvas.save_layer(effects: Option.Some(Effects().saturation(0.85f).brightness(1.05f)));
+    canvas.fill_text("Canvas UI", 96, 92, TextStyle(32, Color.white));
+    canvas.fill_text(
+        "Blur, grain, shadows and gradient outlines",
+        96,
+        148,
+        TextStyle(18, Color.rgb(225, 235, 255))
+    );
+    canvas.fill_rect(96, 230, 180, 48, Color.rgb(80, 120, 220), 12);
+    canvas.fill_text("Get started", 116, 240, TextStyle(20, Color.white));
+    canvas.restore();
+    canvas.restore();
+    canvas.restore();
+    return canvas;
+}
+```
+
+Then create the existing window/GPU surface and present the card. This example uses CPU drawing
+to avoid GPU readback in the current presentation bridge. `unwrap` stops on errors; inspect the
+returned `Result` values in an application that needs recovery.
+
+```dream
+async fun main(): void {
+    let window = Window.open(WindowDesc("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
+    let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
+    let screen = device.create_surface(window).unwrap();
+    let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Cpu)
+        .await
+        .unwrap();
+    drawing.render(card(screen.width, screen.height)).unwrap();
+    while window.is_open {
+        window.poll();
+        if !window.is_open {
+            break;
+        }
+        drawing.present(screen).await.unwrap();
+    }
+    drawing.close();
+}
+```
+
 ## Browser host
 
 Browser rendering uses the same Vello engine in a separate drawing WASM host. Build it once:
@@ -240,5 +339,5 @@ supports CPU rendering under Node when emitted with `--runtime --node`.
 
 Shapes, Bézier paths, strokes, solid colors, linear and radial gradients, affine transforms,
 nonzero/even-odd fills, clips, isolated opacity groups, backdrop blur, PNG/JPEG images, shaped text,
-pixel reads and copies into existing GPU textures are supported. SVG, additional blend modes,
+group filters, shadows, acrylic noise, nested backdrops, pixel reads and existing GPU window presentation are supported. SVG, additional blend modes,
 arbitrary filter graphs and direct GPU texture sharing remain future work.

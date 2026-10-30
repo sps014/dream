@@ -1,0 +1,69 @@
+import system;
+import system.drawing;
+import system.drawing.gpu;
+import system.gpu;
+import system.window;
+
+fun card(width: int, height: int): Canvas {
+    let canvas = Canvas(width, height);
+    canvas.clear(Color.rgb(24, 30, 48));
+    canvas.scale((float)width / 640.0f, (float)height / 400.0f);
+    canvas.fill_circle(550, 340, 180, Color.rgb(42, 64, 110));
+    canvas.save_layer(effects: Option.Some(Effects().shadow(0, 12, 18, Color.rgba(0, 0, 0, 0.4f))));
+    canvas.fill_rect(40, 40, 560, 320, Color.rgb(38, 58, 88), 24);
+    canvas.save();
+    canvas.clip(DrawingPath.rect(Rect(40, 40, 560, 320), 24));
+    canvas.fill_circle(490, 95, 110, Color.rgb(90, 100, 220));
+    canvas.fill_circle(170, 310, 140, Color.rgb(30, 140, 180));
+    let panel = Rect(64, 64, 512, 272);
+    canvas.backdrop(
+        panel,
+        Backdrop.blur(18).tint(Color.rgba(255, 255, 255, 0.12f)).noise(0.04f).rounded(16)
+    );
+    let outline = Paint.linear(
+        64,
+        64,
+        576,
+        336,
+        [
+            GradientStop(0, Color.rgba(255, 255, 255, 0.7f)),
+            GradientStop(0.5f, Color.rgba(150, 200, 255, 0.3f)),
+            GradientStop(1, Color.rgba(255, 255, 255, 0.1f))
+        ]
+    );
+    let stroke = StrokeStyle(2);
+    stroke.join = StrokeJoin.Round;
+    canvas.stroke(DrawingPath.rect(panel, 16), outline, stroke);
+    canvas.save_layer(effects: Option.Some(Effects().saturation(0.85f).brightness(1.05f)));
+    canvas.fill_text("Canvas UI", 96, 92, TextStyle(32, Color.white));
+    canvas.fill_text(
+        "Blur, grain, shadows and gradient outlines",
+        96,
+        148,
+        TextStyle(18, Color.rgb(225, 235, 255))
+    );
+    canvas.fill_rect(96, 230, 180, 48, Color.rgb(80, 120, 220), 12);
+    canvas.fill_text("Get started", 116, 240, TextStyle(20, Color.white));
+    canvas.restore();
+    canvas.restore();
+    canvas.restore();
+    return canvas;
+}
+
+async fun main(): void {
+    let window = Window.open(WindowDesc("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
+    let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
+    let screen = device.create_surface(window).unwrap();
+    let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Cpu)
+        .await
+        .unwrap();
+    drawing.render(card(screen.width, screen.height)).unwrap();
+    while window.is_open {
+        window.poll();
+        if !window.is_open {
+            break;
+        }
+        drawing.present(screen).await.unwrap();
+    }
+    drawing.close();
+}

@@ -148,8 +148,8 @@ then premultiplied again. Color operations preserve alpha and keep transparent p
 
 Recording captures the chain, so later changes do not affect earlier groups. A chain permits at
 most 16 operations. Invalid values and exceeding 256 MiB of pooled full-surface scratch targets
-return `DrawingError` at render. GPU filters stay on the GPU; `read_pixels` and the existing
-window upload bridge are the explicit readback points. Inset shadows, spread and arbitrary filter
+return `DrawingError` at render. GPU filters stay on the GPU. `read_pixels` explicitly synchronizes and downloads pixels;
+native GPU presentation also currently reads pixels through its upload bridge. Inset shadows, spread and arbitrary filter
 graphs are not provided.
 
 ## Images and text
@@ -192,7 +192,7 @@ internally. `draw_image` accepts an optional source rectangle, opacity and neare
 
 Import `system.drawing.gpu` to display a drawing through an existing `GpuSurface` with
 `drawing.present(surface).await`. The drawing and window surface dimensions must match. The first
-presentation creates a pipeline and upload texture; later calls reuse them. `close()` releases
+presentation creates a pipeline and texture; later calls reuse them. `close()` releases
 those cached resources. Presenting to another surface replaces the cache.
 
 ```dream
@@ -232,10 +232,19 @@ For resizable windows, pass `WindowEvent.Resized` sizes to `screen.resize`, then
 `DrawingSurface` and `Canvas` at the new physical dimensions before presenting again.
 
 Presentation replaces the entire window image. Use `copy_to(texture).await` instead when your own
-GPU pipeline composites a UI texture with other rendering. Both paths upload pixels; a GPU drawing
-surface first waits for GPU readback. Use CPU drawing to avoid that readback when updating a window.
-Direct sharing between the drawing engine and a `GpuDevice` is not implemented. Texture copies
-preserve premultiplied alpha; configure your consuming pipeline accordingly when compositing UI.
+GPU pipeline composites a UI texture with other rendering. In a browser, GPU drawings share the
+window device and transfer on the GPU, without a pixel download or CPU upload. The first transfer
+to a device replays the recorded picture there; later renders and transfers reuse that device.
+Transferring to another device replays the picture again, preserving its recorded configuration.
+RGBA textures copy directly; BGRA textures use a cached GPU conversion pass. Copies preserve the
+stored sRGB bytes and premultiplied alpha, including sRGB texture formats. The destination must
+match the drawing dimensions and be single-sampled.
+
+CPU drawings upload pixels. Native GPU drawings currently download then upload pixels because
+native device sharing between wgpu and slang-rhi is still pending. Use CPU drawing for native
+window updates until that bridge is replaced. Explicit `read_pixels` always remains a
+synchronization point. Configure your consuming pipeline for premultiplied alpha when compositing
+UI textures.
 
 ## A complete visual card
 
@@ -298,7 +307,8 @@ fun card(width: int, height: int): Canvas {
 ```
 
 Then create the existing window/GPU surface and present the card. This example uses CPU drawing
-to avoid GPU readback in the current presentation bridge. `unwrap` stops on errors; inspect the
+to avoid native GPU readback. In a browser, change the backend to `DrawingBackend.Gpu` to keep
+rendering and presentation on the GPU. `unwrap` stops on errors; inspect the
 returned `Result` values in an application that needs recovery.
 
 ```dream

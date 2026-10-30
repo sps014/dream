@@ -57,14 +57,24 @@ async fun check_existing_gpu_presentation(): void {
     let surface = device.create_surface(window).unwrap();
     let canvas = Canvas(surface.width, surface.height);
     canvas.clear(Color.rgb(255, 0, 0));
-    let drawing = DrawingSurface.create(surface.width, surface.height, DrawingBackend.Cpu)
+    let cpu_drawing = DrawingSurface.create(surface.width, surface.height, DrawingBackend.Cpu)
+        .await
+        .unwrap();
+    cpu_drawing.render(canvas).unwrap();
+    cpu_drawing.present(surface).await.unwrap();
+    cpu_drawing.close();
+    let drawing = DrawingSurface.create(surface.width, surface.height, DrawingBackend.Gpu)
         .await
         .unwrap();
     drawing.render(canvas).unwrap();
+    js.global.drawingDirectBegin();
     drawing.present(surface).await.unwrap();
+    js.global.drawingDirectEnd();
     canvas.clear(Color.rgb(40, 100, 200));
     drawing.render(canvas).unwrap();
+    js.global.drawingDirectBegin();
     drawing.present(surface).await.unwrap();
+    js.global.drawingDirectEnd();
     js.global.drawingCheckpoint().await;
     let wrong_size = DrawingSurface.create(1, 1, DrawingBackend.Cpu).await.unwrap();
     if wrong_size.present(surface).await.is_ok() {
@@ -74,6 +84,56 @@ async fun check_existing_gpu_presentation(): void {
     if drawing.present(surface).await.is_ok() {
         System.panic("presentation accepted a closed drawing surface");
     }
+}
+
+async fun check_copy_format(
+    device: GpuDevice,
+    drawing: DrawingSurface,
+    format: GpuTextureFormat
+): void {
+    let texture = device.texture(GpuTextureDesc(16, 16, format)).unwrap();
+    js.global.drawingDirectBegin();
+    drawing.copy_to(texture).await.unwrap();
+    drawing.copy_to(texture).await.unwrap();
+    js.global.drawingDirectEnd();
+    let pixels = texture.read(0).await.unwrap();
+    let red = 0;
+    let blue = 2;
+    if format == GpuTextureFormat.Bgra8Unorm || format == GpuTextureFormat.Bgra8UnormSrgb {
+        red = 2;
+        blue = 0;
+    }
+    if (int)pixels[red]
+        != 20 || (int)pixels[1] != 50 || (int)pixels[blue] != 100 || (int)pixels[3] != 128 {
+        System.panic("direct drawing copy changed premultiplication or encoding");
+    }
+    texture.destroy();
+}
+
+async fun check_direct_copy(): void {
+    let device = GpuDevice.create(GpuBackend.WebGpu).await.unwrap();
+    let other = GpuDevice.create(GpuBackend.WebGpu).await.unwrap();
+    let drawing = DrawingSurface.create(16, 16, DrawingBackend.Gpu).await.unwrap();
+    let canvas = Canvas(16, 16);
+    canvas.clear(Color.rgba(40, 100, 200, 0.5f));
+    drawing.render(canvas).unwrap();
+    check_copy_format(device, drawing, GpuTextureFormat.Rgba8Unorm).await;
+    check_copy_format(device, drawing, GpuTextureFormat.Rgba8UnormSrgb).await;
+    check_copy_format(device, drawing, GpuTextureFormat.Bgra8Unorm).await;
+    check_copy_format(device, drawing, GpuTextureFormat.Bgra8UnormSrgb).await;
+    let migrated = other.texture(GpuTextureDesc(16, 16, GpuTextureFormat.Rgba8Unorm)).unwrap();
+    js.global.drawingDirectBegin();
+    drawing.copy_to(migrated).await.unwrap();
+    js.global.drawingDirectEnd();
+    let pixels = migrated.read(0).await.unwrap();
+    if (int)pixels[0] != 20 {
+        System.panic("moving a drawing between devices lost its picture");
+    }
+    drawing.close();
+    if drawing.copy_to(migrated).await.is_ok() {
+        System.panic("direct copy accepted a closed drawing");
+    }
+    migrated.destroy();
 }
 
 async fun check_styles(backend: DrawingBackend): void {
@@ -199,6 +259,7 @@ async fun main(): void {
     check_effects(DrawingBackend.Gpu).await;
     check_materials(DrawingBackend.Cpu).await;
     check_materials(DrawingBackend.Gpu).await;
+    check_direct_copy().await;
     check_existing_gpu_presentation().await;
     System.println("drawing-browser-passed");
 }

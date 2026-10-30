@@ -10,30 +10,36 @@ use vello_gpu::{
     TextureBindings,
 };
 
-pub struct GpuSurface {
-    pub(super) device: wgpu::Device,
-    pub(super) queue: wgpu::Queue,
-    pub(super) target: wgpu::Texture,
-    pub(super) renderer: Renderer,
-    pub(super) resources: Resources,
-    pub(super) width: u16,
-    pub(super) height: u16,
-    error: Arc<Mutex<Option<String>>>,
-    pub(super) scratch: crate::gpu_effects::Pool,
-    pub(super) color_filter: crate::gpu_color::ColorFilter,
-    reads: AtomicU64,
-    images: BTreeMap<usize, (Arc<crate::assets::RasterImage>, wgpu::Texture)>,
+struct DeviceOwner(wgpu::Device);
+
+impl Drop for DeviceOwner {
+    fn drop(&mut self) {
+        self.0.destroy();
+    }
 }
 
-impl GpuSurface {
-    pub async fn new(width: u16, height: u16) -> Result<Self> {
+#[derive(Clone)]
+pub(super) struct GpuContext {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    owner: Arc<DeviceOwner>,
+    error: Arc<Mutex<Option<String>>>,
+}
+
+impl GpuContext {
+    pub async fn new() -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
             .map_err(|e| DrawingError::Unavailable(e.to_string()))?;
+        let requested =
+            adapter.features() & (wgpu::Features::SHADER_F16 | wgpu::Features::SUBGROUP);
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
+            .request_device(&wgpu::DeviceDescriptor {
+                required_features: requested,
+                ..Default::default()
+            })
             .await
             .map_err(|e| DrawingError::Unavailable(e.to_string()))?;
         let error = Arc::new(Mutex::new(None));
@@ -46,6 +52,44 @@ impl GpuSurface {
             *errors.lock().unwrap_or_else(|e| e.into_inner()) =
                 Some(format!("device lost ({reason:?}): {message}"));
         });
+        let owner = Arc::new(DeviceOwner(device.clone()));
+        Ok(Self {
+            device,
+            queue,
+            error,
+            owner,
+        })
+    }
+}
+
+pub struct GpuSurface {
+    pub(super) device: wgpu::Device,
+    pub(super) queue: wgpu::Queue,
+    pub(super) target: wgpu::Texture,
+    pub(super) renderer: Renderer,
+    pub(super) resources: Resources,
+    pub(super) width: u16,
+    pub(super) height: u16,
+    error: Arc<Mutex<Option<String>>>,
+    pub(super) scratch: crate::gpu_effects::Pool,
+    pub(super) color_filter: crate::gpu_color::ColorFilter,
+    reads: AtomicU64,
+    _owner: Arc<DeviceOwner>,
+    images: BTreeMap<usize, (Arc<crate::assets::RasterImage>, wgpu::Texture)>,
+}
+
+impl GpuSurface {
+    pub async fn new(width: u16, height: u16) -> Result<Self> {
+        Self::with_context(width, height, GpuContext::new().await?)
+    }
+
+    pub(super) fn with_context(width: u16, height: u16, context: GpuContext) -> Result<Self> {
+        let GpuContext {
+            device,
+            queue,
+            error,
+            owner,
+        } = context;
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Dream drawing target"),
@@ -85,6 +129,7 @@ impl GpuSurface {
             scratch: Default::default(),
             color_filter,
             reads: AtomicU64::new(0),
+            _owner: owner,
         })
     }
 
@@ -254,5 +299,25 @@ impl GpuSurface {
             Some(error) => Err(DrawingError::Render(error.clone())),
             None => Ok(()),
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires a real GPU; absence is a failure"]
+    fn shared_device_survives_releasing_one_surface() {
+        let context = pollster::block_on(GpuContext::new()).unwrap();
+        let first = GpuSurface::with_context(8, 8, context.clone()).unwrap();
+        let mut second = GpuSurface::with_context(8, 8, context.clone()).unwrap();
+        drop(context);
+        drop(first);
+        second
+            .render(&Picture::decode(&[0., 0.25, 0.5, 0.75, 1.]).unwrap())
+            .unwrap();
+        let pixels = pollster::block_on(second.pixels()).unwrap();
+        assert_eq!(&pixels[..4], &[64, 128, 191, 255]);
     }
 }

@@ -35,8 +35,8 @@ internal class GpuDrawingPresentation: DrawingPresentation {
         return this.surface.handle;
     }
 
-    internal async fun present(pixels: byte[]): Result<Unit, DrawingError> {
-        this.texture.write(0, pixels).map_err(drawing_gpu_error)?;
+    internal async fun present(drawing: DrawingSurface): Result<Unit, DrawingError> {
+        drawing.copy_to(this.texture).await?;
         let frame = this.surface.begin_frame(GpuVec4(0, 0, 0, 0)).await.map_err(drawing_gpu_error)?;
         let pass = frame.pass;
         pass.set_pipeline(this.pipeline);

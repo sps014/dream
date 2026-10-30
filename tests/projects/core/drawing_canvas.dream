@@ -41,6 +41,7 @@ async fun drawing_canvas(): void {
     drawing_images_and_text().await;
     drawing_styles().await;
     drawing_effects().await;
+    drawing_materials().await;
 }
 
 async fun drawing_image_picture(): Result<Picture, DrawingError> {
@@ -170,5 +171,58 @@ async fun drawing_effects(): void {
     canvas.clear(Color.transparent);
     canvas.save_layer(effects: Option.Some(Effects().blur(129)));
     canvas.restore();
+    Assert.is_true(surface.render(canvas).is_err());
+}
+
+async fun drawing_materials(): void {
+    let canvas = Canvas(128, 32);
+    canvas.fill_rect(0, 0, 128, 32, Color.rgba(100, 100, 100, 0.5f));
+    let grain = Backdrop.blur(0).noise(0.3f, seed: -12345);
+    canvas.backdrop(Rect(0, 0, 128, 32), grain);
+    grain.noise(0);
+    let surface = DrawingSurface.create(128, 32, DrawingBackend.Cpu).await.unwrap();
+    let picture = canvas.finish().unwrap();
+    surface.render(picture).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    let changes = 0;
+    for (let i = 0; i < 128 * 32; i = i + 1) {
+        Assert.eq((int)pixels[i * 4 + 3], 128);
+        Assert.eq((int)pixels[i * 4], (int)pixels[i * 4 + 1]);
+        if i > 0 && pixels[i * 4] != pixels[(i - 1) * 4] {
+            changes = changes + 1;
+        }
+    }
+    Assert.is_true(changes > 500);
+    Assert.eq(pixels[(8 * 128 + 8) * 4], pixels[(8 * 128 + 72) * 4]);
+    surface.render(picture).unwrap();
+    let repeated = surface.read_pixels().await.unwrap();
+    Assert.eq(pixels[(8 * 128 + 8) * 4], repeated[(8 * 128 + 8) * 4]);
+    canvas.clear(Color.rgb(255, 0, 0));
+    canvas.save_layer(opacity: 0.5f);
+    canvas.fill_rect(0, 0, 128, 32, Color.rgba(0, 0, 255, 0.5f));
+    canvas.backdrop(Rect(0, 0, 128, 32), Backdrop.blur(0));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let nested = surface.read_pixels().await.unwrap();
+    Assert.is_true((int)nested[0] >= 190 && (int)nested[0] <= 192);
+    Assert.is_true((int)nested[2] >= 63 && (int)nested[2] <= 65);
+    Assert.eq((int)nested[3], 255);
+    canvas.clear(Color.transparent);
+    canvas.save_layer(effects: Option.Some(Effects().shadow(4, 4, 3, Color.black)));
+    canvas.fill_rect(4, 4, 20, 20, Color.white);
+    canvas.backdrop(Rect(8, 8, 12, 12), Backdrop.blur(2).noise(0.04f));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    canvas.clear(Color.rgb(64, 128, 192));
+    canvas.save();
+    canvas.clip(DrawingPath.rect(Rect(0, 0, 96, 32)));
+    canvas.backdrop(Rect(16, 4, 48, 24), Backdrop.blur(0));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let clipped = surface.read_pixels().await.unwrap();
+    Assert.eq((int)clipped[(8 * 128 + 8) * 4], 64);
+    Assert.eq((int)clipped[(8 * 128 + 8) * 4 + 3], 255);
+    canvas.clear(Color.transparent);
+    canvas.backdrop(Rect(0, 0, 128, 32), Backdrop.blur(0).noise(2));
     Assert.is_true(surface.render(canvas).is_err());
 }

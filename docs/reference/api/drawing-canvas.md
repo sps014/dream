@@ -135,7 +135,7 @@ public fun clip(borrow path: DrawingPath): void
 
 ## `backdrop`
 
-Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.
+Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most eight panels per picture.
 
 ```dream
 public fun backdrop(rect: Rect, borrow effect: Backdrop): void

@@ -8559,26 +8559,32 @@
     "declarations": [
       {
         "signature": "public class Backdrop",
-        "description": "Filters content drawn earlier in the canvas. Later drawings and other windows are excluded.",
+        "description": "Filters earlier content in the current isolated group, or the canvas root. Parent groups, later drawings and other windows are excluded.",
         "line": 4,
         "page": "reference/api/drawing-backdrop.md"
       },
       {
         "signature": "public static fun blur(sigma: float): Backdrop",
         "description": "Creates a Gaussian backdrop blur. Sigma is 0..128 physical pixels; zero only applies tint.",
-        "line": 16,
+        "line": 20,
         "page": "reference/api/drawing-backdrop.md"
       },
       {
         "signature": "public fun tint(color: Color): Backdrop",
         "description": "Sets the color composited over the filtered backdrop and returns this configuration.",
-        "line": 21,
+        "line": 25,
+        "page": "reference/api/drawing-backdrop.md"
+      },
+      {
+        "signature": "public fun noise(opacity: float, seed: int = 0): Backdrop",
+        "description": "Adds monochrome grain after blur and tint, preserving the panel alpha. Opacity is 0..1. A fixed seed (default zero) produces the same 64-pixel repeating tile, anchored in device pixels.",
+        "line": 31,
         "page": "reference/api/drawing-backdrop.md"
       },
       {
         "signature": "public fun rounded(radius: float): Backdrop",
         "description": "Sets the panel's corner radius in canvas units and returns this configuration.",
-        "line": 27,
+        "line": 38,
         "page": "reference/api/drawing-backdrop.md"
       }
     ]
@@ -8741,32 +8747,32 @@
       },
       {
         "signature": "public fun backdrop(rect: Rect, borrow effect: Backdrop): void",
-        "description": "Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.",
+        "description": "Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most eight panels per picture.",
         "line": 140,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun finish(): Result<Picture, DrawingError>",
         "description": "Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.",
-        "line": 148,
+        "line": 151,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun draw_image( borrow image: Image, target: Rect, source: Option<Rect> = Option.None, opacity: float = 1.0f, nearest: bool = false ): void",
         "description": "Draws an image into a destination rectangle. Optional source crops in image pixels; opacity is 0..1 and nearest enables pixel-art sampling.",
-        "line": 187,
+        "line": 190,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void",
         "description": "Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.",
-        "line": 209,
+        "line": 212,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void",
         "description": "Draws an immutable precomputed layout at a top-left origin using the supplied color.",
-        "line": 224,
+        "line": 227,
         "page": "reference/api/drawing-canvas.md"
       }
     ]

@@ -68,23 +68,31 @@ macro_rules! replay {
                         for clip in clips {
                             context.push_clip_path(clip);
                         }
-                        context.push_layer(None, Some(*blend), Some(*opacity), None, None);
-                        $name(context, resources, commands, width, height, images)?;
-                        context.pop_layer();
+                        let clip = (!clips.is_empty()).then_some(&viewport);
+                        context.push_layer(clip, Some(*blend), Some(*opacity), None, None);
                         for _ in clips {
                             context.pop_clip();
                         }
+                        $name(context, resources, commands, width, height, images)?;
+                        context.pop_layer();
                     }
                     Command::Backdrop {
                         prefix,
                         clips,
                         sigma,
                         tint,
+                        noise,
                     } => {
                         context.set_fill_rule(Fill::NonZero);
                         let copy = BlendMode::new(vello_common::peniko::Mix::Normal, Compose::Copy);
                         for clip in clips {
-                            context.push_layer(Some(clip), Some(copy), None, None, None);
+                            context.push_clip_path(clip);
+                        }
+                        // Capture the clip intersection once. Nested Copy layers would erase
+                        // earlier content outside the innermost panel but inside outer clips.
+                        context.push_layer(Some(&viewport), Some(copy), None, None, None);
+                        for _ in clips {
+                            context.pop_clip();
                         }
                         // Replace the clipped backdrop, rather than source-over it a second
                         // time: translucent earlier content must retain its original alpha.
@@ -100,9 +108,33 @@ macro_rules! replay {
                         context.set_transform(Affine::IDENTITY);
                         context.set_paint(*tint);
                         context.fill_path(&viewport);
-                        for _ in clips {
+                        if let Some(noise) = noise {
+                            context.push_layer(
+                                None,
+                                Some(BlendMode::new(
+                                    vello_common::peniko::Mix::Normal,
+                                    Compose::SrcAtop,
+                                )),
+                                None,
+                                None,
+                                None,
+                            );
+                            context.set_paint_transform(Affine::IDENTITY);
+                            let source = images
+                                .get(&(Arc::as_ptr(&noise.image) as usize))
+                                .cloned()
+                                .unwrap_or_else(|| ImageSource::Pixmap(noise.image.pixels.clone()));
+                            context.set_paint(Image {
+                                image: source,
+                                sampler: ImageSampler::new()
+                                    .with_extend(vello_common::peniko::Extend::Repeat)
+                                    .with_alpha(noise.opacity)
+                                    .with_quality(ImageQuality::Low),
+                            });
+                            context.fill_path(&viewport);
                             context.pop_layer();
                         }
+                        context.pop_layer();
                     }
                     Command::Image(draw) => {
                         context.set_fill_rule(Fill::NonZero);

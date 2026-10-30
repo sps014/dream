@@ -23,6 +23,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("async_await_in_control_flow", "async_tasks", true),
     Case::project("async_basic", "async_tasks", true),
     Case::project("structured_concurrency", "async_tasks", true),
+    Case::project("async_value_error", "async_tasks", true),
     Case::project("channels", "async_tasks", true),
     Case::project("async_value_struct_locals", "async_tasks", true),
     Case::project("range_expressions", "core", true),

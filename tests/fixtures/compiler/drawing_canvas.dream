@@ -139,6 +139,55 @@ async fun check_effects(backend: DrawingBackend): void {
     }
 }
 
+async fun check_materials(backend: DrawingBackend): void {
+    let canvas = Canvas(128, 32);
+    canvas.fill_rect(0, 0, 128, 32, Color.rgba(100, 100, 100, 0.5f));
+    canvas.backdrop(Rect(0, 0, 128, 32), Backdrop.blur(0).noise(0.3f, seed: -12345));
+    let surface = DrawingSurface.create(128, 32, backend).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    let changes = 0;
+    for (let i = 0; i < 128 * 32; i = i + 1) {
+        if (int)pixels[i * 4 + 3] != 128 {
+            System.panic("noise changed alpha");
+        }
+        if i > 0 && pixels[i * 4] != pixels[(i - 1) * 4] {
+            changes = changes + 1;
+        }
+    }
+    if changes < 500 || pixels[(8 * 128 + 8) * 4] != pixels[(8 * 128 + 72) * 4] {
+        System.panic("grain is missing or not tiled");
+    }
+    canvas.clear(Color.rgb(255, 0, 0));
+    canvas.save_layer(opacity: 0.5f);
+    canvas.fill_rect(0, 0, 128, 32, Color.rgba(0, 0, 255, 0.5f));
+    canvas.backdrop(Rect(0, 0, 128, 32), Backdrop.blur(0));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let nested = surface.read_pixels().await.unwrap();
+    if (int)nested[0] < 190 || (int)nested[0] > 192 || (int)nested[2] < 63 || (int)nested[2] > 65 {
+        System.panic("nested backdrop sampled parent content");
+    }
+    canvas.clear(Color.transparent);
+    canvas.save_layer(
+        effects: Option.Some(Effects().shadow(4, 4, 3, Color.black).saturation(0.8f))
+    );
+    canvas.fill_rect(4, 4, 20, 20, Color.white);
+    canvas.backdrop(Rect(8, 8, 12, 12), Backdrop.blur(2).noise(0.04f));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    canvas.clear(Color.rgb(64, 128, 192));
+    canvas.save();
+    canvas.clip(DrawingPath.rect(Rect(0, 0, 96, 32)));
+    canvas.backdrop(Rect(16, 4, 48, 24), Backdrop.blur(0));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let clipped = surface.read_pixels().await.unwrap();
+    if (int)clipped[(8 * 128 + 8) * 4] != 64 || (int)clipped[(8 * 128 + 8) * 4 + 3] != 255 {
+        System.panic("backdrop erased pixels outside its clip intersection");
+    }
+}
+
 async fun main(): void {
     check_drawing(DrawingBackend.Cpu).await;
     check_drawing(DrawingBackend.Gpu).await;
@@ -148,6 +197,8 @@ async fun main(): void {
     check_styles(DrawingBackend.Gpu).await;
     check_effects(DrawingBackend.Cpu).await;
     check_effects(DrawingBackend.Gpu).await;
+    check_materials(DrawingBackend.Cpu).await;
+    check_materials(DrawingBackend.Gpu).await;
     check_existing_gpu_presentation().await;
     System.println("drawing-browser-passed");
 }

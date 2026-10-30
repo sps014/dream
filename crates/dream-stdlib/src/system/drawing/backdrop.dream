@@ -1,15 +1,19 @@
 module system.drawing;
 
-/// Filters content drawn earlier in the canvas. Later drawings and other windows are excluded.
+/// Filters earlier content in the current isolated group, or the canvas root. Parent groups, later drawings and other windows are excluded.
 public class Backdrop {
     internal sigma: float;
     internal color: Color;
     internal radius: float;
+    internal noise_opacity: float;
+    internal noise_seed: int;
 
     constructor(sigma: float) {
         this.sigma = sigma;
         this.color = Color.transparent;
         this.radius = 0.0f;
+        this.noise_opacity = 0;
+        this.noise_seed = 0;
     }
 
     /// Creates a Gaussian backdrop blur. Sigma is 0..128 physical pixels; zero only applies tint.
@@ -20,6 +24,13 @@ public class Backdrop {
     /// Sets the color composited over the filtered backdrop and returns this configuration.
     public fun tint(color: Color): Backdrop {
         this.color = color;
+        return this;
+    }
+
+    /// Adds monochrome grain after blur and tint, preserving the panel alpha. Opacity is 0..1. A fixed seed (default zero) produces the same 64-pixel repeating tile, anchored in device pixels.
+    public fun noise(opacity: float, seed: int = 0): Backdrop {
+        this.noise_opacity = opacity;
+        this.noise_seed = seed;
         return this;
     }
 

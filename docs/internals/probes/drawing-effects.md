@@ -20,3 +20,20 @@ allocations are excluded. Zero warm allocations do not imply the whole renderer 
 
 All measured render loops performed zero GPU pixel reads. The acrylic baseline here uses three
 blurred/tinted panels; the following materials stage adds noise and nested panel coverage.
+
+## Materials stage
+
+The acrylic scene now puts its three panels in an isolated group and adds deterministic grain
+(opacity 0.04, seed 17). These measurements include the new scene work and are not a like-for-like
+regression comparison with the simpler baseline above.
+
+| Backend | Scene | Cold CPU us | Warm CPU us/frame | Cold scratch targets | New warm targets | Resident bytes |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| cpu | unfiltered | 607.7 | 483.2 | 0 | 0 | 0 |
+| cpu | filtered | 5161.7 | 5083.0 | 2 | 0 | 614400 |
+| cpu | acrylic | 5675.8 | 5725.3 | 0 | 0 | 0 |
+| gpu | unfiltered | 470.9 | 91.0 | 0 | 0 | 0 |
+| gpu | filtered | 1119.7 | 429.6 | 4 | 0 | 1228800 |
+| gpu | acrylic | 2264.1 | 1243.3 | 0 | 0 | 0 |
+
+Warm rendering again creates no new drawing scratch targets and performs no GPU pixel reads.

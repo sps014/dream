@@ -35,6 +35,7 @@ pub enum Command {
         clips: Vec<BezPath>,
         sigma: f32,
         tint: Color,
+        noise: Option<crate::noise::Noise>,
     },
     Image(Box<ImageCommand>),
     Text {
@@ -97,7 +98,12 @@ impl Picture {
                         output.insert(Arc::as_ptr(&draw.image) as usize, draw.image.clone());
                     }
                     Command::Layer { commands, .. } => collect(commands, output),
-                    Command::Backdrop { prefix, .. } => collect(prefix, output),
+                    Command::Backdrop { prefix, noise, .. } => {
+                        collect(prefix, output);
+                        if let Some(noise) = noise {
+                            output.insert(Arc::as_ptr(&noise.image) as usize, noise.image.clone());
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -252,11 +258,6 @@ impl Picture {
                     state.clips.clear();
                 }
                 8 => {
-                    if groups.len() != 1 {
-                        return Err(invalid(
-                            "backdrop filters cannot be recorded inside an isolated layer",
-                        ));
-                    }
                     backdrops += 1;
                     if backdrops > 8 {
                         return Err(invalid("a picture supports at most eight backdrop panels"));
@@ -270,12 +271,30 @@ impl Picture {
                         ));
                     }
                     let tint = reader.color()?;
-                    let prefix = Arc::from(groups[0].commands.clone());
-                    groups[0].commands.push(Command::Backdrop {
+                    let opacity = reader.value()?;
+                    if !(0.0..=1.0).contains(&opacity) {
+                        return Err(invalid("backdrop noise opacity must be in 0..1"));
+                    }
+                    let low = reader.count(65535)? as u32;
+                    let high = reader.count(65535)? as u32;
+                    let noise = if opacity == 0. {
+                        None
+                    } else {
+                        Some(crate::noise::Noise {
+                            opacity,
+                            image: crate::noise::tile(low | (high << 16)),
+                        })
+                    };
+                    let group = groups
+                        .last_mut()
+                        .ok_or_else(|| invalid("missing drawing group"))?;
+                    let prefix = Arc::from(group.commands.clone());
+                    group.commands.push(Command::Backdrop {
                         prefix,
                         clips,
                         sigma,
                         tint,
+                        noise,
                     });
                 }
                 9 => {

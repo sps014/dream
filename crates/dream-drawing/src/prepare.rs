@@ -67,11 +67,13 @@ pub fn commands(backend: &mut impl FilterBackend, input: &[Command]) -> Result<V
                 clips,
                 sigma,
                 tint,
+                noise,
             } => Ok(Command::Backdrop {
                 prefix: Arc::from(commands(backend, prefix)?),
                 clips: clips.clone(),
                 sigma: *sigma,
                 tint: *tint,
+                noise: noise.clone(),
             }),
             _ => Ok(command.clone()),
         })

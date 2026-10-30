@@ -8698,75 +8698,75 @@
         "page": "reference/api/drawing-canvas.md"
       },
       {
-        "signature": "public fun save_layer(opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver): void",
-        "description": "Starts an isolated opacity group. restore composites the group once using opacity in 0..1.",
+        "signature": "public fun save_layer( opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver, effects: Option<Effects> = Option.None ): void",
+        "description": "Starts an isolated group. restore applies captured effects in order, then opacity in 0..1 and blending into the parent. The current clip also bounds the filtered output.",
         "line": 81,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun restore(): void",
         "description": "Restores the last saved transform and clip, and ends an isolated group if one was saved.",
-        "line": 90,
+        "line": 102,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun transform(a: float, b: float, c: float, d: float, tx: float, ty: float): void",
         "description": "Concatenates an affine matrix: x' = a*x + c*y + tx, y' = b*x + d*y + ty.",
-        "line": 100,
+        "line": 112,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun translate(x: float, y: float): void",
         "description": "Moves subsequent drawing by the given canvas offsets.",
-        "line": 105,
+        "line": 117,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun scale(x: float, y: float): void",
         "description": "Scales subsequent drawing along each axis. Negative factors mirror the drawing.",
-        "line": 110,
+        "line": 122,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun rotate(radians: float): void",
         "description": "Rotates subsequent drawing clockwise about the origin by an angle in radians.",
-        "line": 115,
+        "line": 127,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun clip(borrow path: DrawingPath): void",
         "description": "Intersects the current clip with the nonzero-filled path in the current transform.",
-        "line": 122,
+        "line": 134,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun backdrop(rect: Rect, borrow effect: Backdrop): void",
         "description": "Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.",
-        "line": 128,
+        "line": 140,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun finish(): Result<Picture, DrawingError>",
         "description": "Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.",
-        "line": 136,
+        "line": 148,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun draw_image( borrow image: Image, target: Rect, source: Option<Rect> = Option.None, opacity: float = 1.0f, nearest: bool = false ): void",
         "description": "Draws an image into a destination rectangle. Optional source crops in image pixels; opacity is 0..1 and nearest enables pixel-art sampling.",
-        "line": 175,
+        "line": 187,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void",
         "description": "Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.",
-        "line": 197,
+        "line": 209,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void",
         "description": "Draws an immutable precomputed layout at a top-left origin using the supplied color.",
-        "line": 212,
+        "line": 224,
         "page": "reference/api/drawing-canvas.md"
       }
     ]
@@ -8990,6 +8990,55 @@
         "description": "Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu; waits for readback when this surface uses GPU rendering.",
         "line": 32,
         "page": "reference/api/drawing-drawing-surface-gpu.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/effects.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-effects.md",
+    "declarations": [
+      {
+        "signature": "public class Effects",
+        "description": "An ordered chain of group filters. Canvas.save_layer captures it immediately. At most 16 operations; render returns DrawingError for invalid parameters.",
+        "line": 4,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty chain that leaves group pixels unchanged.",
+        "line": 9,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public fun blur(sigma: float): Effects",
+        "description": "Appends Gaussian blur with sigma in 0..128 physical pixels, independent of the canvas transform.",
+        "line": 15,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public fun shadow(dx: float, dy: float, sigma: float, color: Color): Effects",
+        "description": "Appends a colored shadow behind the original input. Offsets are physical pixels within +/-8192; sigma is 0..128 physical pixels. Includes the original input.",
+        "line": 23,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public fun brightness(factor: float): Effects",
+        "description": "Multiplies straight sRGB channels by factor in 0..8; one preserves brightness. Alpha is unchanged.",
+        "line": 34,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public fun contrast(factor: float): Effects",
+        "description": "Scales straight sRGB channel distance from 0.5 by factor in 0..8; one preserves contrast. Alpha is unchanged.",
+        "line": 42,
+        "page": "reference/api/drawing-effects.md"
+      },
+      {
+        "signature": "public fun saturation(factor: float): Effects",
+        "description": "Scales straight sRGB distance from luminance (0.2126 R + 0.7152 G + 0.0722 B) by factor in 0..8. Zero gives grayscale, one preserves saturation; alpha is unchanged.",
+        "line": 50,
+        "page": "reference/api/drawing-effects.md"
       }
     ]
   },

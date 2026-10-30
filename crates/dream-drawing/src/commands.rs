@@ -3,6 +3,7 @@ mod reader;
 use crate::{
     Result,
     assets::{Asset, RasterImage},
+    effects::Effect,
     text::ShapedText,
 };
 use reader::{Reader, invalid};
@@ -25,6 +26,8 @@ pub enum Command {
     Layer {
         opacity: f32,
         blend: BlendMode,
+        effects: Vec<Effect>,
+        clips: Vec<BezPath>,
         commands: Vec<Command>,
     },
     Backdrop {
@@ -73,6 +76,15 @@ struct State {
     clips: Vec<BezPath>,
 }
 
+#[derive(Default)]
+struct Group {
+    opacity: f32,
+    blend: BlendMode,
+    effects: Vec<Effect>,
+    clips: Vec<BezPath>,
+    commands: Vec<Command>,
+}
+
 impl Picture {
     pub fn images(&self) -> std::collections::BTreeMap<usize, Arc<RasterImage>> {
         fn collect(
@@ -105,16 +117,18 @@ impl Picture {
         let mut reader = Reader { values, offset: 0 };
         let mut state = State::default();
         let mut stack = Vec::new();
-        let mut groups: Vec<(f32, BlendMode, Vec<Command>)> =
-            vec![(1.0, BlendMode::default(), Vec::new())];
+        let mut groups = vec![Group {
+            opacity: 1.,
+            ..Default::default()
+        }];
         let mut backdrops = 0;
         while reader.offset < values.len() {
             match reader.count(11)? {
                 0 => {
-                    if groups.len() != 1 || !groups[0].2.is_empty() {
+                    if groups.len() != 1 || !groups[0].commands.is_empty() {
                         return Err(invalid("clear must be the first drawing command"));
                     }
-                    groups[0].2.push(Command::Clear(reader.color()?));
+                    groups[0].commands.push(Command::Clear(reader.color()?));
                 }
                 opcode @ (1 | 2) => {
                     let path = reader.path()?;
@@ -163,7 +177,7 @@ impl Picture {
                     groups
                         .last_mut()
                         .ok_or_else(|| invalid("missing drawing group"))?
-                        .2
+                        .commands
                         .push(Command::Draw(Box::new(DrawCommand {
                             path,
                             brush,
@@ -183,17 +197,19 @@ impl Picture {
                     let (saved, layer) =
                         stack.pop().ok_or_else(|| invalid("restore without save"))?;
                     if layer {
-                        let (opacity, blend, commands) = groups
+                        let group = groups
                             .pop()
                             .ok_or_else(|| invalid("missing drawing group"))?;
                         groups
                             .last_mut()
                             .ok_or_else(|| invalid("missing drawing group"))?
-                            .2
+                            .commands
                             .push(Command::Layer {
-                                opacity,
-                                blend,
-                                commands,
+                                opacity: group.opacity,
+                                blend: group.blend,
+                                effects: group.effects,
+                                clips: group.clips,
+                                commands: group.commands,
                             });
                     }
                     state = saved;
@@ -225,7 +241,13 @@ impl Picture {
                         return Err(invalid("invalid layer opacity or layer depth"));
                     }
                     stack.push((state.clone(), true));
-                    groups.push((opacity, reader.blend()?, Vec::new()));
+                    groups.push(Group {
+                        opacity,
+                        blend: reader.blend()?,
+                        effects: reader.effects()?,
+                        clips: state.clips.clone(),
+                        commands: Vec::new(),
+                    });
                 }
                 8 => {
                     if groups.len() != 1 {
@@ -246,8 +268,8 @@ impl Picture {
                         ));
                     }
                     let tint = reader.color()?;
-                    let prefix = Arc::from(groups[0].2.clone());
-                    groups[0].2.push(Command::Backdrop {
+                    let prefix = Arc::from(groups[0].commands.clone());
+                    groups[0].commands.push(Command::Backdrop {
                         prefix,
                         clips,
                         sigma,
@@ -276,7 +298,7 @@ impl Picture {
                     groups
                         .last_mut()
                         .ok_or_else(|| invalid("missing drawing group"))?
-                        .2
+                        .commands
                         .push(Command::Image(Box::new(ImageCommand {
                             image: image.clone(),
                             source,
@@ -310,7 +332,7 @@ impl Picture {
                     groups
                         .last_mut()
                         .ok_or_else(|| invalid("missing drawing group"))?
-                        .2
+                        .commands
                         .push(Command::Text {
                             layout,
                             color,
@@ -325,7 +347,7 @@ impl Picture {
             return Err(invalid("unbalanced canvas save/restore"));
         }
         Ok(Self {
-            commands: groups.remove(0).2,
+            commands: groups.remove(0).commands,
         })
     }
 }

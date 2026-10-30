@@ -49,7 +49,7 @@ fn blend_modes_are_isolated_and_match_channel_equations() {
     for (mode, value) in expected.into_iter().enumerate() {
         let mut values = Vec::new();
         fill(&mut values, 0., 0., 32., 32., [d, d, d, 1.]);
-        values.extend([7., 0.5, mode as f32]);
+        values.extend([7., 0.5, mode as f32, 0.]);
         fill(&mut values, 0., 0., 24., 32., [s, s, s, 1.]);
         fill(&mut values, 8., 0., 24., 32., [s, s, s, 1.]);
         values.push(4.);
@@ -89,7 +89,7 @@ fn styled_cpu_gpu_output_matches() {
     for mode in 0..8 {
         let mut values = Vec::new();
         fill(&mut values, 0., 0., 32., 32., [0.25, 0.5, 0.75, 1.]);
-        values.extend([7., 0.6, mode as f32]);
+        values.extend([7., 0.6, mode as f32, 0.]);
         fill(&mut values, 4., 4., 24., 24., [0.7, 0.3, 0.8, 0.8]);
         values.push(4.);
         pictures.push(Picture::decode(&values).unwrap());

@@ -112,6 +112,33 @@ async fun check_styles(backend: DrawingBackend): void {
     }
 }
 
+async fun check_effects(backend: DrawingBackend): void {
+    let canvas = Canvas(32, 32);
+    canvas.save_layer(effects: Option.Some(Effects().brightness(2).contrast(0)));
+    canvas.fill_rect(8, 8, 12, 12, Color.rgba(255, 0, 0, 0.5f));
+    canvas.restore();
+    let surface = DrawingSurface.create(32, 32, backend).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    let at = (12 * 32 + 12) * 4;
+    if (int)pixels[at] < 63
+        || (int)pixels[at] > 65
+        || (int)pixels[at + 1] < 63 || (int)pixels[at + 3] != 128 || (int)pixels[0] != 0 {
+        System.panic("color effects changed order or alpha");
+    }
+    canvas.clear(Color.transparent);
+    canvas.save_layer(
+        effects: Option.Some(Effects().shadow(8, 0, 2, Color.rgba(0, 0, 255, 0.5f)).blur(1))
+    );
+    canvas.fill_rect(8, 8, 12, 12, Color.rgb(255, 0, 0));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let shadow = surface.read_pixels().await.unwrap();
+    if (int)shadow[(14 * 32 + 25) * 4 + 2] < 10 {
+        System.panic("spatial effects did not render");
+    }
+}
+
 async fun main(): void {
     check_drawing(DrawingBackend.Cpu).await;
     check_drawing(DrawingBackend.Gpu).await;
@@ -119,6 +146,8 @@ async fun main(): void {
     check_images_and_text(DrawingBackend.Gpu).await;
     check_styles(DrawingBackend.Cpu).await;
     check_styles(DrawingBackend.Gpu).await;
+    check_effects(DrawingBackend.Cpu).await;
+    check_effects(DrawingBackend.Gpu).await;
     check_existing_gpu_presentation().await;
     System.println("drawing-browser-passed");
 }

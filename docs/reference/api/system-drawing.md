@@ -26,6 +26,7 @@ pixel formats, browser setup and current feature coverage.
 | [StrokeCap](drawing-stroke-cap.md) | Choose open stroke endpoints |
 | [StrokeJoin](drawing-stroke-join.md) | Choose stroke corners |
 | [GradientStop](drawing-gradient-stop.md) | Position a color in a gradient |
+| [Effects](drawing-effects.md) | Apply ordered blur, shadow and color adjustments |
 | [BlendMode](drawing-blend-mode.md) | Composite an isolated group |
 
 Import `system.drawing.gpu` for [`DrawingSurface.present` and `copy_to`](drawing-drawing-surface-gpu.md): display through an existing GPU window surface or upload to a texture.

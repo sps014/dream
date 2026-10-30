@@ -71,8 +71,7 @@ let paint = Paint.linear(
     20.0f,
     300.0f,
     220.0f,
-    Color.rgb(40, 100, 200),
-    Color.rgb(140, 60, 180)
+    [GradientStop(0, Color.rgb(40, 100, 200)), GradientStop(1, Color.rgb(140, 60, 180))]
 );
 canvas.fill(panel, paint);
 canvas.save();
@@ -90,6 +89,28 @@ captures one automatically. `clear` discards the previous recording and resets c
 `finish` rejects unbalanced state. Rendering additionally validates colors, paths, transforms, blur
 sigma and command limits. Invalid input returns `DrawingError`. Geometry values must be finite and
 within +/-1000000; a picture permits at most 4000000 encoded float values.
+
+## Stroke styles and blending
+
+Pass `StrokeStyle(width)` and a `Paint` to `canvas.stroke`. The style's `cap`, `join`,
+`miter_limit`, `dashes` and `dash_offset` are captured when recorded. Dash lengths must be positive;
+an empty list draws a continuous stroke. Gradient paints accept 2..256 stops sorted within 0..1.
+Equal offsets produce hard transitions. `Paint.sweep` measures clockwise angles in radians.
+
+```dream
+let outline = StrokeStyle(2);
+outline.cap = StrokeCap.Round;
+outline.join = StrokeJoin.Round;
+outline.dashes = [6.0f, 3.0f];
+canvas.stroke(panel, paint, outline);
+canvas.save_layer(opacity: 0.8f, blend: BlendMode.Screen);
+canvas.fill_circle(160, 120, 60, Color.rgb(80, 120, 220));
+canvas.restore();
+```
+
+Blending applies to the whole isolated group after group opacity, using earlier parent content
+as its destination. Choose SourceOver, Multiply, Screen, Overlay, Darken, Lighten, Difference or
+Exclusion. Invalid styles, colors and stop arrays return `DrawingError` at render.
 
 ## Images and text
 

@@ -1,0 +1,21 @@
+module system.drawing;
+
+/// How an isolated group combines with earlier parent content.
+public enum BlendMode {
+    /// Composites the group over earlier content.
+    SourceOver,
+    /// Multiplies source and destination colors.
+    Multiply,
+    /// Combines colors using their inverse product.
+    Screen,
+    /// Multiplies dark destination colors and screens light ones.
+    Overlay,
+    /// Selects the darker source or destination channel.
+    Darken,
+    /// Selects the lighter source or destination channel.
+    Lighten,
+    /// Uses the absolute difference of source and destination channels.
+    Difference,
+    /// Uses a lower-contrast difference blend.
+    Exclusion,
+}

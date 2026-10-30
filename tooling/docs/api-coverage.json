@@ -8584,6 +8584,67 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/drawing/blend_mode.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-blend-mode.md",
+    "declarations": [
+      {
+        "signature": "public enum BlendMode",
+        "description": "How an isolated group combines with earlier parent content.",
+        "line": 4,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "SourceOver",
+        "description": "Composites the group over earlier content.",
+        "line": 6,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Multiply",
+        "description": "Multiplies source and destination colors.",
+        "line": 8,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Screen",
+        "description": "Combines colors using their inverse product.",
+        "line": 10,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Overlay",
+        "description": "Multiplies dark destination colors and screens light ones.",
+        "line": 12,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Darken",
+        "description": "Selects the darker source or destination channel.",
+        "line": 14,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Lighten",
+        "description": "Selects the lighter source or destination channel.",
+        "line": 16,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Difference",
+        "description": "Uses the absolute difference of source and destination channels.",
+        "line": 18,
+        "page": "reference/api/drawing-blend-mode.md"
+      },
+      {
+        "signature": "Exclusion",
+        "description": "Uses a lower-contrast difference blend.",
+        "line": 20,
+        "page": "reference/api/drawing-blend-mode.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/drawing/canvas.dream",
     "package": "system.drawing",
     "page": "reference/api/drawing-canvas.md",
@@ -8625,87 +8686,87 @@
         "page": "reference/api/drawing-canvas.md"
       },
       {
-        "signature": "public fun stroke(borrow path: DrawingPath, color: Color, width: float = 1.0f): void",
-        "description": "Strokes vector geometry with a positive width, butt caps and miter joins.",
+        "signature": "public fun stroke( borrow path: DrawingPath, borrow paint: Paint, borrow style: StrokeStyle ): void",
+        "description": "Strokes a path with a solid or gradient paint and explicit stroke geometry. Captures paint, path and style immediately; render validates them.",
         "line": 63,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun save(): void",
         "description": "Saves the current transform and clip. Pair with restore before rendering.",
-        "line": 76,
+        "line": 75,
         "page": "reference/api/drawing-canvas.md"
       },
       {
-        "signature": "public fun save_layer(opacity: float = 1.0f): void",
+        "signature": "public fun save_layer(opacity: float = 1.0f, blend: BlendMode = BlendMode.SourceOver): void",
         "description": "Starts an isolated opacity group. restore composites the group once using opacity in 0..1.",
-        "line": 82,
+        "line": 81,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun restore(): void",
         "description": "Restores the last saved transform and clip, and ends an isolated group if one was saved.",
-        "line": 89,
+        "line": 90,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun transform(a: float, b: float, c: float, d: float, tx: float, ty: float): void",
         "description": "Concatenates an affine matrix: x' = a*x + c*y + tx, y' = b*x + d*y + ty.",
-        "line": 99,
+        "line": 100,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun translate(x: float, y: float): void",
         "description": "Moves subsequent drawing by the given canvas offsets.",
-        "line": 104,
+        "line": 105,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun scale(x: float, y: float): void",
         "description": "Scales subsequent drawing along each axis. Negative factors mirror the drawing.",
-        "line": 109,
+        "line": 110,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun rotate(radians: float): void",
         "description": "Rotates subsequent drawing clockwise about the origin by an angle in radians.",
-        "line": 114,
+        "line": 115,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun clip(borrow path: DrawingPath): void",
         "description": "Intersects the current clip with the nonzero-filled path in the current transform.",
-        "line": 121,
+        "line": 122,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun backdrop(rect: Rect, borrow effect: Backdrop): void",
         "description": "Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.",
-        "line": 127,
+        "line": 128,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun finish(): Result<Picture, DrawingError>",
         "description": "Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.",
-        "line": 135,
+        "line": 136,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun draw_image( borrow image: Image, target: Rect, source: Option<Rect> = Option.None, opacity: float = 1.0f, nearest: bool = false ): void",
         "description": "Draws an image into a destination rectangle. Optional source crops in image pixels; opacity is 0..1 and nearest enables pixel-art sampling.",
-        "line": 174,
+        "line": 175,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void",
         "description": "Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.",
-        "line": 196,
+        "line": 197,
         "page": "reference/api/drawing-canvas.md"
       },
       {
         "signature": "public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void",
         "description": "Draws an immutable precomputed layout at a top-left origin using the supplied color.",
-        "line": 211,
+        "line": 212,
         "page": "reference/api/drawing-canvas.md"
       }
     ]
@@ -8952,6 +9013,37 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/drawing/gradient_stop.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-gradient-stop.md",
+    "declarations": [
+      {
+        "signature": "public struct GradientStop",
+        "description": "A gradient color at an offset from zero to one. Equal offsets create a hard transition.",
+        "line": 4,
+        "page": "reference/api/drawing-gradient-stop.md"
+      },
+      {
+        "signature": "public offset: float",
+        "description": "Position along the gradient in 0..1. Stops must be sorted.",
+        "line": 6,
+        "page": "reference/api/drawing-gradient-stop.md"
+      },
+      {
+        "signature": "public color: Color",
+        "description": "Color at this position.",
+        "line": 9,
+        "page": "reference/api/drawing-gradient-stop.md"
+      },
+      {
+        "signature": "public constructor(offset: float, color: Color)",
+        "description": "Creates a stop. Rendering validates offsets and colors.",
+        "line": 12,
+        "page": "reference/api/drawing-gradient-stop.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/drawing/image.dream",
     "package": "system.drawing",
     "page": "reference/api/drawing-image.md",
@@ -8995,7 +9087,7 @@
     "declarations": [
       {
         "signature": "public class Paint",
-        "description": "A reusable solid color or two-color gradient, captured when a draw is recorded.",
+        "description": "A reusable solid color or multi-stop gradient, captured when a draw is recorded.",
         "line": 4,
         "page": "reference/api/drawing-paint.md"
       },
@@ -9006,15 +9098,21 @@
         "page": "reference/api/drawing-paint.md"
       },
       {
-        "signature": "public static fun linear( x0: float, y0: float, x1: float, y1: float, start: Color, end: Color ): Paint",
-        "description": "Creates a gradient from start color at (x0, y0) to end color at (x1, y1).",
+        "signature": "public static fun linear( x0: float, y0: float, x1: float, y1: float, stops: GradientStop[] ): Paint",
+        "description": "Creates a linear gradient between the endpoints. Requires 2..256 sorted stops in 0..1; colors outside the stop range extend to the edges.",
         "line": 20,
         "page": "reference/api/drawing-paint.md"
       },
       {
-        "signature": "public static fun radial(x: float, y: float, radius: float, start: Color, end: Color): Paint",
-        "description": "Creates a circular gradient from the center color to the edge at a positive radius.",
-        "line": 39,
+        "signature": "public static fun radial(x: float, y: float, radius: float, stops: GradientStop[]): Paint",
+        "description": "Creates a circular gradient from the center to a positive radius. Requires 2..256 sorted stops in 0..1.",
+        "line": 38,
+        "page": "reference/api/drawing-paint.md"
+      },
+      {
+        "signature": "public static fun sweep( x: float, y: float, start_angle: float, end_angle: float, stops: GradientStop[] ): Paint",
+        "description": "Creates a clockwise angular gradient about the center, from start_angle to a greater end_angle in radians. Requires 2..256 sorted stops in 0..1.",
+        "line": 49,
         "page": "reference/api/drawing-paint.md"
       }
     ]
@@ -9072,6 +9170,123 @@
         "description": "Creates a rectangle from position and dimensions in canvas units.",
         "line": 18,
         "page": "reference/api/drawing-rect.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/stroke_cap.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-stroke-cap.md",
+    "declarations": [
+      {
+        "signature": "public enum StrokeCap",
+        "description": "How an open stroke ends.",
+        "line": 4,
+        "page": "reference/api/drawing-stroke-cap.md"
+      },
+      {
+        "signature": "Butt",
+        "description": "Stops at the endpoint without extending it.",
+        "line": 6,
+        "page": "reference/api/drawing-stroke-cap.md"
+      },
+      {
+        "signature": "Round",
+        "description": "Adds a semicircle with the stroke radius.",
+        "line": 8,
+        "page": "reference/api/drawing-stroke-cap.md"
+      },
+      {
+        "signature": "Square",
+        "description": "Extends half the stroke width beyond the endpoint.",
+        "line": 10,
+        "page": "reference/api/drawing-stroke-cap.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/stroke_join.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-stroke-join.md",
+    "declarations": [
+      {
+        "signature": "public enum StrokeJoin",
+        "description": "How adjacent stroke segments connect.",
+        "line": 4,
+        "page": "reference/api/drawing-stroke-join.md"
+      },
+      {
+        "signature": "Miter",
+        "description": "Extends edges to their intersection, bounded by the miter limit.",
+        "line": 6,
+        "page": "reference/api/drawing-stroke-join.md"
+      },
+      {
+        "signature": "Round",
+        "description": "Connects edges with a circular arc.",
+        "line": 8,
+        "page": "reference/api/drawing-stroke-join.md"
+      },
+      {
+        "signature": "Bevel",
+        "description": "Connects edges with a straight bevel.",
+        "line": 10,
+        "page": "reference/api/drawing-stroke-join.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/drawing/stroke_style.dream",
+    "package": "system.drawing",
+    "page": "reference/api/drawing-stroke-style.md",
+    "declarations": [
+      {
+        "signature": "public class StrokeStyle",
+        "description": "Stroke geometry, captured by Canvas.stroke when recorded. Invalid values fail at render.",
+        "line": 4,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public width: float",
+        "description": "Positive stroke width in canvas units.",
+        "line": 6,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public cap: StrokeCap",
+        "description": "End treatment; defaults to Butt.",
+        "line": 9,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public join: StrokeJoin",
+        "description": "Corner treatment; defaults to Miter.",
+        "line": 12,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public miter_limit: float",
+        "description": "Maximum miter length divided by half the stroke width; at least one, default four.",
+        "line": 15,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public dashes: float[]",
+        "description": "Alternating positive dash and gap lengths in canvas units, at most 256. Empty draws a solid stroke; an odd list repeats twice.",
+        "line": 18,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public dash_offset: float",
+        "description": "Distance into the repeating dash pattern in canvas units; defaults to zero.",
+        "line": 21,
+        "page": "reference/api/drawing-stroke-style.md"
+      },
+      {
+        "signature": "public constructor(width: float)",
+        "description": "Creates a stroke with butt caps, miter joins, miter limit four and no dashes.",
+        "line": 24,
+        "page": "reference/api/drawing-stroke-style.md"
       }
     ]
   },

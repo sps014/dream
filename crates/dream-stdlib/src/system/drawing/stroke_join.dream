@@ -1,0 +1,11 @@
+module system.drawing;
+
+/// How adjacent stroke segments connect.
+public enum StrokeJoin {
+    /// Extends edges to their intersection, bounded by the miter limit.
+    Miter,
+    /// Connects edges with a circular arc.
+    Round,
+    /// Connects edges with a straight bevel.
+    Bevel,
+}

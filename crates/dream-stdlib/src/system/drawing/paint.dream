@@ -1,6 +1,6 @@
 module system.drawing;
 
-/// A reusable solid color or two-color gradient, captured when a draw is recorded.
+/// A reusable solid color or multi-stop gradient, captured when a draw is recorded.
 public class Paint {
     internal values: List<float>;
 
@@ -16,14 +16,13 @@ public class Paint {
         return paint;
     }
 
-    /// Creates a gradient from start color at (x0, y0) to end color at (x1, y1).
+    /// Creates a linear gradient between the endpoints. Requires 2..256 sorted stops in 0..1; colors outside the stop range extend to the edges.
     public static fun linear(
         x0: float,
         y0: float,
         x1: float,
         y1: float,
-        start: Color,
-        end: Color
+        stops: GradientStop[]
     ): Paint {
         let paint = Paint();
         paint.values.push(1.0f);
@@ -31,27 +30,45 @@ public class Paint {
         paint.values.push(y0);
         paint.values.push(x1);
         paint.values.push(y1);
-        paint.stops(start, end);
+        paint.stops(stops);
         return paint;
     }
 
-    /// Creates a circular gradient from the center color to the edge at a positive radius.
-    public static fun radial(x: float, y: float, radius: float, start: Color, end: Color): Paint {
+    /// Creates a circular gradient from the center to a positive radius. Requires 2..256 sorted stops in 0..1.
+    public static fun radial(x: float, y: float, radius: float, stops: GradientStop[]): Paint {
         let paint = Paint();
-        paint.values.push(2.0f);
+        paint.values.push(2);
         paint.values.push(x);
         paint.values.push(y);
         paint.values.push(radius);
-        paint.stops(start, end);
+        paint.stops(stops);
         return paint;
     }
 
-    fun stops(start: Color, end: Color): void {
-        this.values.push(2.0f);
-        this.values.push(0.0f);
-        start.encode(this.values);
-        this.values.push(1.0f);
-        end.encode(this.values);
+    /// Creates a clockwise angular gradient about the center, from start_angle to a greater end_angle in radians. Requires 2..256 sorted stops in 0..1.
+    public static fun sweep(
+        x: float,
+        y: float,
+        start_angle: float,
+        end_angle: float,
+        stops: GradientStop[]
+    ): Paint {
+        let paint = Paint();
+        paint.values.push(3);
+        paint.values.push(x);
+        paint.values.push(y);
+        paint.values.push(start_angle);
+        paint.values.push(end_angle);
+        paint.stops(stops);
+        return paint;
+    }
+
+    fun stops(stops: GradientStop[]): void {
+        this.values.push((float)stops.length);
+        for (let stop in stops) {
+            this.values.push(stop.offset);
+            stop.color.encode(this.values);
+        }
     }
 
     internal fun encode(borrow output: List<float>): void {

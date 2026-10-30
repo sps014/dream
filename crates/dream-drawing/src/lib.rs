@@ -7,6 +7,8 @@ mod replay;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;
 pub mod text;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod visual_tests;
 #[cfg(target_arch = "wasm32")]
 mod web;
 

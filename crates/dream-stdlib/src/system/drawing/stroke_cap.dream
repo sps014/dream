@@ -1,0 +1,11 @@
+module system.drawing;
+
+/// How an open stroke ends.
+public enum StrokeCap {
+    /// Stops at the endpoint without extending it.
+    Butt,
+    /// Adds a semicircle with the stroke radius.
+    Round,
+    /// Extends half the stroke width beyond the endpoint.
+    Square,
+}

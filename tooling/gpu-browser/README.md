@@ -31,3 +31,9 @@ Qualified on Windows with an RTX 4080 in Chromium and Edge on 2026-10-18. Softwa
 exercises the browser integration but does not qualify hardware ray tracing or native GPU hosts.
 
 The Linux software suite passes in [CI run 39126271217](https://github.com/sps014/dream/actions/runs/39126271217).
+
+The drawing checks also exercise repeated RGBA/BGRA (including sRGB) GPU copies and device
+switches. They instrument `GPUBuffer.mapAsync` and uploads to destination textures while a
+transfer runs, so a readback/upload bridge cannot pass as a GPU transfer. Vello's initialization
+uploads (such as its alpha lookup texture) remain allowed. Explicit verification reads run outside
+these measured sections. Early guest failures are recorded in `target/drawing-browser/failure.json`.

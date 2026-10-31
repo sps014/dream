@@ -109,6 +109,13 @@ impl Liveness {
 }
 
 fn transfer_block(stmts: &[Statement], term: &Terminator, live: &mut IndexSet<u32>) {
+    if let Terminator::Await {
+        dest: Some(local), ..
+    } = term
+    {
+        // The resume edge defines a fresh result; later iterations do not read this generation.
+        live.swap_remove(&local.0);
+    }
     add_terminator_reads(term, live);
     for stmt in stmts.iter().rev() {
         transfer_stmt(stmt, live);

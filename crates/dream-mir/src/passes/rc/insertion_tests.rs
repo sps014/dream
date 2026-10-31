@@ -1932,3 +1932,69 @@ fn early_value_drop_clears_storage_and_cleans_up_the_other_exit() {
             .any(|s| matches!(s, Statement::ValueDrop(d) if *d == input))
     );
 }
+
+#[test]
+fn resume_cleanup_preserves_later_value_drop_positions() {
+    let mut ctx = TypeCtx::new();
+    let value = point_ty(&mut ctx);
+    let read = ctx.register(DefKind::Function, "read", vec![]);
+    let make = ctx.register(DefKind::Function, "make", vec![]);
+    let mut b = FunctionBuilder::new("resume_values", ctx.interner.void());
+    b.set_async(true);
+    let future = b.new_param(ctx.interner.string(), Some("future".into()));
+    let input = b.new_local(value, Some("input".into()));
+    let result = b.new_temp(value);
+    let resume = b.new_block();
+    b.assign(
+        Place::Local(input),
+        Rvalue::Call {
+            callee: Callee {
+                def: make,
+                args: vec![],
+                ret: value,
+                take_params: vec![],
+                borrowed_result: false,
+            },
+            args: vec![],
+        },
+    );
+    let reader = Callee {
+        def: read,
+        args: vec![],
+        ret: ctx.interner.void(),
+        take_params: vec![false],
+        borrowed_result: false,
+    };
+    b.push(Statement::Call {
+        callee: reader.clone(),
+        args: vec![Operand::Copy(Place::Local(input))],
+    });
+    b.terminate(Terminator::Await {
+        future: Operand::Copy(Place::Local(future)),
+        dest: Some(result),
+        resume,
+    });
+    b.switch_to(resume);
+    b.push(Statement::Call {
+        callee: reader,
+        args: vec![Operand::Copy(Place::Local(result))],
+    });
+    b.terminate(Terminator::AsyncComplete(None));
+    let mut func = b.finish();
+    let mut changed = false;
+    super::super::value::insert_early_value_drops(&mut func, &ctx.interner, &mut changed, true);
+    let statements = &func.block(resume).stmts;
+    let input_drop = statements
+        .iter()
+        .position(|s| matches!(s, Statement::ValueDrop(l) if *l == input))
+        .unwrap();
+    let read = statements
+        .iter()
+        .position(|s| matches!(s, Statement::Call { .. }))
+        .unwrap();
+    let result_drop = statements
+        .iter()
+        .position(|s| matches!(s, Statement::ValueDrop(l) if *l == result))
+        .unwrap();
+    assert!(input_drop < read && read < result_drop, "{statements:?}");
+}

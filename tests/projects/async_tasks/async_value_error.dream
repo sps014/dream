@@ -1,0 +1,37 @@
+import system;
+import system.testing;
+
+struct AsyncValueError {
+    public message: string;
+
+    public constructor(message: string) {
+        this.message = message;
+    }
+}
+
+async fun value_failure(message: string): Result<Unit, AsyncValueError> {
+    return Result.Err(AsyncValueError(message));
+}
+
+@test
+async fun async_value_error_temporary_cleanup(): void {
+    for (let i = 0; i < 16; i = i + 1) {
+        Assert.is_false(value_failure($"dynamic error {i}").await.is_ok());
+    }
+}
+
+@test
+async fun async_value_error_retained_payload(): void {
+    let result = value_failure($"retained error {42}").await;
+    let error = result.unwrap_err();
+    Assert.eq(error.message, "retained error 42");
+}
+
+@test
+async fun async_value_error_kept_future(): void {
+    let pending = value_failure($"kept future {7}");
+    let first = pending.await;
+    let second = pending.await;
+    Assert.eq(first.unwrap_err().message, "kept future 7");
+    Assert.eq(second.unwrap_err().message, "kept future 7");
+}

@@ -10,6 +10,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "drawingLastError",
             "drawingRender",
             "drawingPixels",
+            "drawingCopyGpu",
             "drawingBackend",
             "drawingRelease",
             "drawingImageDecode",

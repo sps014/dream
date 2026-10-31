@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { drawingGpuBridge } from '../runtime/src/hosts/gpu_drawing.js';
 import { makeGpuHost } from '../runtime/src/hosts/gpu.js';
 import { GPU_BINDING_LAYOUTS } from '../runtime/src/hosts/gpu_layouts.js';
 import { gpuParseBundle, loadGpuParser } from '../runtime/src/hosts/gpu_bundle.js';
@@ -139,7 +140,7 @@ class FakeBuffer {
 }
 
 class FakeTexture {
-  constructor(desc) { this.desc = desc; this.destroyed = false; }
+  constructor(desc) { this.desc = desc; this.destroyed = false; this.usage = desc.usage; this.sampleCount = desc.sampleCount ?? 1; }
   createView() { return { view: this }; }
   destroy() { this.destroyed = true; }
 }
@@ -194,6 +195,7 @@ class FakeDevice {
       beginRenderPass(desc) { const p = new FakePass('render', desc); ops.push(['pass', p]); device.lastPass = p; return p; },
       copyBufferToBuffer(...args) { ops.push(['copyBufferToBuffer', ...args]); },
       copyTextureToBuffer(...args) { ops.push(['copyTextureToBuffer', ...args]); },
+      copyTextureToTexture(...args) { ops.push(['copyTextureToTexture', ...args]); },
       finish() { return { ops }; },
     };
   }
@@ -880,4 +882,44 @@ test('generator bundles translate into WebGPU pipelines', {
       }
     } finally { uninstall(); }
   }
+});
+
+
+test('drawing shares a device per runtime, pools BGRA conversion and releases it after its last resource', async () => {
+  installGpu();
+  try {
+    const getInstance = () => null;
+    const bridge = drawingGpuBridge(getInstance);
+    assert.notEqual(bridge, drawingGpuBridge(() => null));
+    const device = new FakeDevice([]);
+    device.addEventListener = () => {};
+    const createPipeline = device.createRenderPipeline.bind(device);
+    device.createRenderPipeline = desc => ({ ...createPipeline(desc), getBindGroupLayout: () => ({}) });
+    let released = 0;
+    bridge.createDevice = async () => ({ device, context: 17, release: () => released++ });
+    const host = makeGpuHost(getInstance);
+    const handle = await host.gpuDeviceCreate(6, 1 << 6);
+    assert.ok(handle > 0, host.gpuLastError());
+    const rgba = host.gpuTextureCreate(handle, [16, 16, 1, 1, 0, 0, 1]);
+    const bgra = host.gpuTextureCreate(handle, [16, 16, 1, 1, 3, 0, 1]);
+    const source = new FakeTexture({});
+    const provide = context => { assert.equal(context, 17); return source; };
+    bridge.copy(rgba, 16, 16, provide);
+    bridge.copy(bgra, 16, 16, provide);
+    bridge.copy(bgra, 16, 16, provide);
+    assert.equal(device.named('createTexture').length, 3, 'BGRA target is pooled');
+    assert.equal(device.named('createRenderPipeline').length, 1);
+    assert.equal(device.named('createBindGroup').length, 1);
+    assert.equal(device.named('writeTexture').length, 0);
+    assert.equal(device.buffers.length, 0, 'no pixel staging buffer');
+    assert.throws(() => bridge.copy(bgra, 8, 8, provide), /matching single-sample/);
+    host.gpuRelease(handle);
+    assert.equal(released, 0, 'textures retain their device');
+    bridge.copy(rgba, 16, 16, provide);
+    host.gpuRelease(rgba);
+    host.gpuRelease(bgra);
+    assert.equal(released, 1);
+    assert.equal(device.named('createTexture')[2].destroyed, true);
+    assert.throws(() => bridge.copy(bgra, 16, 16, provide), /released/);
+  } finally { uninstall(); }
 });

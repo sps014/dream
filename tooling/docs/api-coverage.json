@@ -8987,14 +8987,14 @@
     "declarations": [
       {
         "signature": "public async fun present(surface: GpuSurface): Result<Unit, DrawingError>",
-        "description": "Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches upload and pipeline resources until close or a different target is used; GPU drawing first waits for readback.",
+        "description": "Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches texture and pipeline resources until close or a different target is used. Browser GPU rendering stays on the GPU; CPU and native rendering use a pixel upload.",
         "line": 7,
         "page": "reference/api/drawing-drawing-surface-gpu.md"
       },
       {
         "signature": "public async fun copy_to(texture: GpuTexture): Result<Unit, DrawingError>",
-        "description": "Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu; waits for readback when this surface uses GPU rendering.",
-        "line": 32,
+        "description": "Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu. Browser GPU rendering copies on the GPU; CPU and native rendering use a pixel upload. The target must be single-sampled.",
+        "line": 31,
         "page": "reference/api/drawing-drawing-surface-gpu.md"
       }
     ]

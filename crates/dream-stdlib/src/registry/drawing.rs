@@ -6,6 +6,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/drawing/effects.dream",
+            include_str!("../system/drawing/effects.dream"),
+        ),
+        (
             "<std>/system/drawing/blend_mode.dream",
             include_str!("../system/drawing/blend_mode.dream"),
         ),

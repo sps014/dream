@@ -91,7 +91,7 @@ fn zero_blur_does_not_double_translucent_alpha() {
 
 #[test]
 fn opacity_group_applies_once_and_render_replaces_pixels() {
-    let mut values = vec![7.0, 0.5, 0.0];
+    let mut values = vec![7.0, 0.5, 0.0, 0.0];
     fill(&mut values, 0.0, 0.0, 24.0, 32.0, [1.0, 0.0, 0.0, 1.0]);
     fill(&mut values, 8.0, 0.0, 24.0, 32.0, [1.0, 0.0, 0.0, 1.0]);
     values.push(4.0);
@@ -113,7 +113,7 @@ fn opacity_group_applies_once_and_render_replaces_pixels() {
 
 #[test]
 fn backdrop_rejects_unsupported_nesting_and_excessive_blur() {
-    let mut nested = vec![7.0, 1.0, 0.0];
+    let mut nested = vec![7.0, 1.0, 0.0, 0.0];
     backdrop(&mut nested, 3.0);
     nested.push(4.0);
     assert!(Picture::decode(&nested).is_err());

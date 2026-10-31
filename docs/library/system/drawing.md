@@ -112,6 +112,31 @@ Blending applies to the whole isolated group after group opacity, using earlier 
 as its destination. Choose SourceOver, Multiply, Screen, Overlay, Darken, Lighten, Difference or
 Exclusion. Invalid styles, colors and stop arrays return `DrawingError` at render.
 
+## Group filters and shadows
+
+An `Effects()` chain runs in call order on an isolated group. Pair `save_layer` with `restore`.
+Effects run before group opacity and parent blending; the active clip bounds their output.
+
+```dream
+let effects = Effects().shadow(0, 8, 16, Color.rgba(0, 0, 0, 0.25f)).saturation(0.8f);
+canvas.save_layer(effects: Option.Some(effects));
+canvas.fill_rect(40, 40, 240, 120, Color.white, 16);
+canvas.restore();
+```
+
+`blur(sigma)` and `shadow(dx, dy, sigma, color)` use physical pixels, independent of transforms.
+Sigma is 0..128; shadow offsets are within +/-8192. Shadows include the original input.
+`brightness`, `contrast` and `saturation` accept factors in 0..8; one preserves the input.
+Brightness multiplies straight sRGB channels; contrast scales their distance from 0.5;
+saturation scales their distance from luminance. Channels are clamped after every operation,
+then premultiplied again. Color operations preserve alpha and keep transparent pixels colorless.
+
+Recording captures the chain, so later changes do not affect earlier groups. A chain permits at
+most 16 operations. Invalid values and exceeding 256 MiB of pooled full-surface scratch targets
+return `DrawingError` at render. GPU filters stay on the GPU; `read_pixels` and the existing
+window upload bridge are the explicit readback points. Inset shadows, spread and arbitrary filter
+graphs are not provided.
+
 ## Images and text
 
 Decode PNG or JPEG bytes with `Image.decode(bytes).await`, or create an image from straight RGBA8
@@ -216,4 +241,4 @@ supports CPU rendering under Node when emitted with `--runtime --node`.
 Shapes, Bézier paths, strokes, solid colors, linear and radial gradients, affine transforms,
 nonzero/even-odd fills, clips, isolated opacity groups, backdrop blur, PNG/JPEG images, shaped text,
 pixel reads and copies into existing GPU textures are supported. SVG, additional blend modes,
-general effects and direct GPU texture sharing remain future work.
+arbitrary filter graphs and direct GPU texture sharing remain future work.

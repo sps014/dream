@@ -40,6 +40,7 @@ async fun drawing_canvas(): void {
     Assert.is_true(surface.read_pixels().await.is_err());
     drawing_images_and_text().await;
     drawing_styles().await;
+    drawing_effects().await;
 }
 
 async fun drawing_image_picture(): Result<Picture, DrawingError> {
@@ -131,5 +132,43 @@ async fun drawing_styles(): void {
     canvas.clear(Color.transparent);
     style.dashes = [0.0f];
     canvas.stroke(DrawingPath().move_to(0, 0).line_to(32, 32), Paint.solid(Color.white), style);
+    Assert.is_true(surface.render(canvas).is_err());
+}
+
+async fun drawing_effects(): void {
+    let canvas = Canvas(32, 32);
+    let effects = Effects().brightness(2).contrast(0);
+    canvas.save_layer(effects: Option.Some(effects));
+    canvas.fill_rect(8, 8, 12, 12, Color.rgba(255, 0, 0, 0.5f));
+    canvas.restore();
+    effects.brightness(0);
+    let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    let at = (12 * 32 + 12) * 4;
+    Assert.eq((int)pixels[at], 64);
+    Assert.eq((int)pixels[at + 1], 64);
+    Assert.eq((int)pixels[at + 3], 128);
+    Assert.eq((int)pixels[0], 0);
+    canvas.clear(Color.transparent);
+    canvas.save_layer(
+        effects: Option.Some(
+            Effects().shadow(8, 0, 2, Color.rgba(0, 0, 255, 0.5f)).blur(1).saturation(0.8f)
+        )
+    );
+    canvas.save_layer(opacity: 0.8f);
+    canvas.fill_rect(8, 8, 12, 12, Color.rgb(255, 0, 0));
+    canvas.restore();
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let shadow = surface.read_pixels().await.unwrap();
+    Assert.is_true((int)shadow[(14 * 32 + 25) * 4 + 2] > 10);
+    canvas.clear(Color.transparent);
+    canvas.save_layer(effects: Option.Some(Effects().brightness(-1)));
+    canvas.restore();
+    Assert.is_true(surface.render(canvas).is_err());
+    canvas.clear(Color.transparent);
+    canvas.save_layer(effects: Option.Some(Effects().blur(129)));
+    canvas.restore();
     Assert.is_true(surface.render(canvas).is_err());
 }

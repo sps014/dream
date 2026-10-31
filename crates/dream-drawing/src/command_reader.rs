@@ -15,6 +15,27 @@ pub(super) fn invalid(message: &str) -> DrawingError {
 }
 
 impl Reader<'_> {
+    pub(super) fn effects(&mut self) -> Result<Vec<crate::effects::Effect>> {
+        use crate::effects::Effect;
+        let count = self.count(16)?;
+        (0..count).map(|_| {
+            let kind=self.count(4)?;
+            if kind==1 {
+                let dx=self.value()?;
+                let dy=self.value()?;
+                let sigma=self.value()?;
+                if dx.abs()>8192.||dy.abs()>8192.||!(0.0..=128.0).contains(&sigma) {
+                    return Err(invalid("shadow offsets must be within +/-8192 and sigma in 0..128 physical pixels"));
+                }
+                return Ok(Effect::Shadow {dx,dy,sigma,color:self.color()?});
+            }
+            let value=self.value()?;
+            let max=if kind==0 {128.} else {8.};
+            if !(0.0..=max).contains(&value) {return Err(invalid("blur sigma must be in 0..128 and color factors in 0..8"));}
+            Ok(match kind {0=>Effect::Blur(value),2=>Effect::Brightness(value),3=>Effect::Contrast(value),_=>Effect::Saturation(value)})
+        }).collect()
+    }
+
     pub(super) fn blend(&mut self) -> Result<BlendMode> {
         let mix = match self.count(7)? {
             0 => Mix::Normal,

@@ -6,6 +6,26 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/drawing/blend_mode.dream",
+            include_str!("../system/drawing/blend_mode.dream"),
+        ),
+        (
+            "<std>/system/drawing/gradient_stop.dream",
+            include_str!("../system/drawing/gradient_stop.dream"),
+        ),
+        (
+            "<std>/system/drawing/stroke_cap.dream",
+            include_str!("../system/drawing/stroke_cap.dream"),
+        ),
+        (
+            "<std>/system/drawing/stroke_join.dream",
+            include_str!("../system/drawing/stroke_join.dream"),
+        ),
+        (
+            "<std>/system/drawing/stroke_style.dream",
+            include_str!("../system/drawing/stroke_style.dream"),
+        ),
+        (
             "<std>/system/drawing/backdrop.dream",
             include_str!("../system/drawing/backdrop.dream"),
         ),

@@ -58,8 +58,12 @@ macro_rules! replay {
                             context.pop_clip();
                         }
                     }
-                    Command::Layer { opacity, commands } => {
-                        context.push_opacity_layer(*opacity);
+                    Command::Layer {
+                        opacity,
+                        blend,
+                        commands,
+                    } => {
+                        context.push_layer(None, Some(*blend), Some(*opacity), None, None);
                         $name(context, resources, commands, width, height, images)?;
                         context.pop_layer();
                     }

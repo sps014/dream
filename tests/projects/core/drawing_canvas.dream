@@ -39,6 +39,7 @@ async fun drawing_canvas(): void {
     Assert.is_true(surface.render(picture).is_err());
     Assert.is_true(surface.read_pixels().await.is_err());
     drawing_images_and_text().await;
+    drawing_styles().await;
 }
 
 async fun drawing_image_picture(): Result<Picture, DrawingError> {
@@ -78,4 +79,57 @@ async fun drawing_images_and_text(): void {
     Assert.is_true(Image.from_rgba(2, 2, [(byte)0]).await.is_err());
     Assert.is_true(Fonts.register([(byte)0]).await.is_err());
     Assert.is_true(TextLayout.create("bad", TextStyle(0, Color.white)).await.is_err());
+}
+
+async fun drawing_styles(): void {
+    let canvas = Canvas(32, 32);
+    let style = StrokeStyle(8);
+    style.cap = StrokeCap.Round;
+    style.join = StrokeJoin.Round;
+    let stops = [
+        GradientStop(0, Color.rgb(255, 0, 0)),
+        GradientStop(0.5f, Color.rgb(255, 0, 0)),
+        GradientStop(0.5f, Color.rgb(0, 0, 255)),
+        GradientStop(1, Color.rgb(0, 0, 255))
+    ];
+    let paint = Paint.linear(8, 16, 24, 16, stops);
+    canvas.stroke(DrawingPath().move_to(8, 16).line_to(24, 16), paint, style);
+    style.width = 0;
+    stops[0].color = Color.black;
+    let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
+    surface.render(canvas).unwrap();
+    let pixels = surface.read_pixels().await.unwrap();
+    Assert.eq((int)pixels[(16 * 32 + 10) * 4], 255);
+    Assert.eq((int)pixels[(16 * 32 + 22) * 4 + 2], 255);
+    Assert.is_true((int)pixels[(16 * 32 + 5) * 4 + 3] > 200);
+    canvas.clear(Color.rgb(64, 64, 64));
+    canvas.save_layer(blend: BlendMode.Multiply);
+    canvas.fill_rect(0, 0, 32, 32, Color.rgb(128, 128, 128));
+    canvas.restore();
+    surface.render(canvas).unwrap();
+    let blended = surface.read_pixels().await.unwrap();
+    Assert.is_true((int)blended[0] >= 31 && (int)blended[0] <= 33);
+    canvas.clear(Color.transparent);
+    style.width = 2;
+    style.dashes = [4.0f, 2.0f];
+    canvas.stroke(DrawingPath().move_to(0, 8).line_to(32, 8), Paint.solid(Color.white), style);
+    canvas.fill(
+        DrawingPath.rect(Rect(0, 16, 32, 16)),
+        Paint.radial(16, 24, 16, [GradientStop(0, Color.white), GradientStop(1, Color.black)])
+    );
+    canvas.fill(
+        DrawingPath.rect(Rect(0, 0, 8, 8)),
+        Paint.sweep(
+            4,
+            4,
+            0,
+            6.283185f,
+            [GradientStop(0, Color.white), GradientStop(1, Color.black)]
+        )
+    );
+    surface.render(canvas).unwrap();
+    canvas.clear(Color.transparent);
+    style.dashes = [0.0f];
+    canvas.stroke(DrawingPath().move_to(0, 0).line_to(32, 32), Paint.solid(Color.white), style);
+    Assert.is_true(surface.render(canvas).is_err());
 }

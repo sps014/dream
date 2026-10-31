@@ -2,7 +2,7 @@ use super::Brush;
 use crate::{DrawingError, Result};
 use vello_common::{
     kurbo::{BezPath, Point},
-    peniko::{Color, Gradient},
+    peniko::{BlendMode, Color, Compose, Gradient, Mix},
 };
 
 pub(super) struct Reader<'a> {
@@ -15,6 +15,20 @@ pub(super) fn invalid(message: &str) -> DrawingError {
 }
 
 impl Reader<'_> {
+    pub(super) fn blend(&mut self) -> Result<BlendMode> {
+        let mix = match self.count(7)? {
+            0 => Mix::Normal,
+            1 => Mix::Multiply,
+            2 => Mix::Screen,
+            3 => Mix::Overlay,
+            4 => Mix::Darken,
+            5 => Mix::Lighten,
+            6 => Mix::Difference,
+            _ => Mix::Exclusion,
+        };
+        Ok(BlendMode::new(mix, Compose::SrcOver))
+    }
+
     pub(super) fn string(&mut self, limit: usize) -> Result<String> {
         let length = self.count(limit)?;
         let units = (0..length)
@@ -115,7 +129,14 @@ impl Reader<'_> {
                 }
                 Gradient::new_radial(a, radius)
             }
-            3 => Gradient::new_sweep(a, self.value()?, self.value()?),
+            3 => {
+                let start = self.value()?;
+                let end = self.value()?;
+                if end <= start {
+                    return Err(invalid("sweep end angle must exceed start angle"));
+                }
+                Gradient::new_sweep(a, start, end)
+            }
             _ => unreachable!(),
         };
         let count = self.count(256)?;

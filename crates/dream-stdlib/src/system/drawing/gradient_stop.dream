@@ -1,0 +1,16 @@
+module system.drawing;
+
+/// A gradient color at an offset from zero to one. Equal offsets create a hard transition.
+public struct GradientStop {
+    /// Position along the gradient in 0..1. Stops must be sorted.
+    public offset: float;
+
+    /// Color at this position.
+    public color: Color;
+
+    /// Creates a stop. Rendering validates offsets and colors.
+    public constructor(offset: float, color: Color) {
+        this.offset = offset;
+        this.color = color;
+    }
+}

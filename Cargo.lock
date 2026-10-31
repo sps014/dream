@@ -1256,6 +1256,7 @@ dependencies = [
 name = "dream-drawing"
 version = "0.1.0"
 dependencies = [
+ "dream-host-abi",
  "fastrand",
  "futures-channel",
  "glifo",
@@ -1271,6 +1272,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wgpu",
+ "windows",
 ]
 
 [[package]]
@@ -1356,7 +1358,9 @@ dependencies = [
  "dream-drawing",
  "dream-host-abi",
  "dream-host-core",
+ "dream-host-gpu",
  "pollster",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -4,17 +4,19 @@ import system.drawing.gpu;
 import system.gpu;
 import system.testing;
 
-@test
-async fun drawing_gpu_copy(): void {
+async fun check_drawing_copy(backend: DrawingBackend): void {
     let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
     let canvas = Canvas(8, 8);
     canvas.clear(Color.rgb(255, 0, 0));
-    let surface = DrawingSurface.create(8, 8, DrawingBackend.Cpu).await.unwrap();
+    canvas.fill_rect(0, 0, 4, 4, Color.rgb(0, 0, 255));
+    let surface = DrawingSurface.create(8, 8, backend).await.unwrap();
     surface.render(canvas).unwrap();
     let target = device.texture(GpuTextureDesc(8, 8, GpuTextureFormat.Rgba8Unorm)).unwrap();
     surface.copy_to(target).await.unwrap();
     let pixels = target.read(0).await.unwrap();
-    Assert.eq((int)pixels[0], 255);
+    Assert.eq((int)pixels[0], 0);
+    Assert.eq((int)pixels[2], 255);
+    Assert.eq((int)pixels[(7 * 8 + 7) * 4], 255);
     Assert.eq((int)pixels[1], 0);
     Assert.eq((int)pixels[3], 255);
     let wrong_size = device.texture(GpuTextureDesc(4, 4, GpuTextureFormat.Rgba8Unorm)).unwrap();
@@ -22,6 +24,13 @@ async fun drawing_gpu_copy(): void {
     let bgra = device.texture(GpuTextureDesc(8, 8, GpuTextureFormat.Bgra8Unorm)).unwrap();
     surface.copy_to(bgra).await.unwrap();
     let blue_first = bgra.read(0).await.unwrap();
-    Assert.eq((int)blue_first[0], 0);
-    Assert.eq((int)blue_first[2], 255);
+    Assert.eq((int)blue_first[0], 255);
+    Assert.eq((int)blue_first[2], 0);
+    Assert.eq((int)blue_first[(7 * 8 + 7) * 4 + 2], 255);
+}
+
+@test
+async fun drawing_gpu_copy(): void {
+    check_drawing_copy(DrawingBackend.Cpu).await;
+    check_drawing_copy(DrawingBackend.Gpu).await;
 }

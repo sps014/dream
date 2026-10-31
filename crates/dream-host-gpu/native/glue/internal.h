@@ -80,6 +80,11 @@ struct DgpuDevice
     rhi::ComPtr<rhi::ITexture> placeholderTexture;
     std::vector<rhi::ComPtr<rhi::ITexture>> placeholderMutableTextures;
     rhi::ComPtr<rhi::ISampler> placeholderSampler;
+    rhi::ComPtr<rhi::ITexture> drawingTexture;
+    rhi::ComPtr<rhi::IFence> drawingFence;
+    uint64_t drawingId = 0;
+    uint64_t drawingValue = 0;
+    uint64_t drawingAllocations = 0;
 };
 
 struct DgpuProgram

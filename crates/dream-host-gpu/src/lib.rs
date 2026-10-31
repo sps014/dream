@@ -4,6 +4,7 @@
 pub mod backend;
 pub mod bundle;
 mod commands;
+pub mod drawing;
 pub mod devices;
 pub mod error;
 mod exports;

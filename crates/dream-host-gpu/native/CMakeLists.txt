@@ -53,6 +53,7 @@ add_library(dream-gpu-glue STATIC
     ../../dream-mir/src/runtime/c/core/gpu_bundle.c
     glue/device.cpp
     glue/resources.cpp
+    glue/drawing.cpp
     glue/programs.cpp
     glue/bindings.cpp
     glue/encoder.cpp

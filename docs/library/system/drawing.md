@@ -149,7 +149,8 @@ then premultiplied again. Color operations preserve alpha and keep transparent p
 Recording captures the chain, so later changes do not affect earlier groups. A chain permits at
 most 16 operations. Invalid values and exceeding 256 MiB of pooled full-surface scratch targets
 return `DrawingError` at render. GPU filters stay on the GPU. `read_pixels` explicitly synchronizes and downloads pixels;
-native GPU presentation also currently reads pixels through its upload bridge. Inset shadows, spread and arbitrary filter
+native GPU presentation reads pixels through its upload bridge unless both devices use D3D12
+on the same Windows adapter. Inset shadows, spread and arbitrary filter
 graphs are not provided.
 
 ## Images and text
@@ -240,9 +241,14 @@ RGBA textures copy directly; BGRA textures use a cached GPU conversion pass. Cop
 stored sRGB bytes and premultiplied alpha, including sRGB texture formats. The destination must
 match the drawing dimensions and be single-sampled.
 
-CPU drawings upload pixels. Native GPU drawings currently download then upload pixels because
-native device sharing between wgpu and slang-rhi is still pending. Use CPU drawing for native
-window updates until that bridge is replaced. Explicit `read_pixels` always remains a
+On Windows, GPU drawings prefer D3D12. When the destination also uses D3D12 on the same adapter,
+`present` and `copy_to` transfer through a reusable shared texture with GPU fence handoffs. They
+do not download or re-upload canvas pixels. RGBA and BGRA copies preserve the stored sRGB bytes
+and premultiplied alpha. Changing the transfer size or RGBA/BGRA family while a previous copy is
+still executing returns a `DrawingError`; wait for the previous GPU work before retrying.
+
+CPU drawings upload pixels. Other native combinations currently download then upload GPU drawing
+pixels; use CPU drawing there to avoid the download. Explicit `read_pixels` always remains a
 synchronization point. Configure your consuming pipeline for premultiplied alpha when compositing
 UI textures.
 
@@ -307,8 +313,8 @@ fun card(width: int, height: int): Canvas {
 ```
 
 Then create the existing window/GPU surface and present the card. This example uses CPU drawing
-to avoid native GPU readback. In a browser, change the backend to `DrawingBackend.Gpu` to keep
-rendering and presentation on the GPU. `unwrap` stops on errors; inspect the
+for portable window updates. In a browser or on Windows with a D3D12 window surface, change the
+backend to `DrawingBackend.Gpu` to keep rendering and presentation on the GPU. `unwrap` stops on errors; inspect the
 returned `Result` values in an application that needs recovery.
 
 ```dream

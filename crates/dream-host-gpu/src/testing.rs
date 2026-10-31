@@ -41,3 +41,9 @@ pub fn loaded_slang_compilers() -> (usize, String) {
     let count = unsafe { crate::ffi::dgpu_loaded_slang_compilers() };
     (count as usize, crate::ffi::message())
 }
+
+/// Shared native drawing textures created by this device, excluding driver/RHI allocations.
+pub fn drawing_allocations(device: i32) -> crate::error::HostResult<u64> {
+    let core = crate::state::lock().device(device)?;
+    Ok(unsafe { crate::ffi::dgpu_drawing_allocations(core.raw()) })
+}

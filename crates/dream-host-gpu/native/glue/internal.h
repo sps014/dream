@@ -16,6 +16,7 @@
 namespace dream::gpu {
 
 using rhi::ComPtr;
+uint64_t nextDrawingId();
 
 /// Records `message` as the calling thread's failure detail and returns `status`.
 int fail(int status, std::string message);
@@ -80,6 +81,7 @@ struct DgpuDevice
     rhi::ComPtr<rhi::ITexture> placeholderTexture;
     std::vector<rhi::ComPtr<rhi::ITexture>> placeholderMutableTextures;
     rhi::ComPtr<rhi::ISampler> placeholderSampler;
+    std::shared_ptr<void> drawingExternal;
     rhi::ComPtr<rhi::ITexture> drawingTexture;
     rhi::ComPtr<rhi::IFence> drawingFence;
     uint64_t drawingId = 0;

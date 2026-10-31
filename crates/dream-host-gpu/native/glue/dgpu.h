@@ -91,6 +91,11 @@ typedef struct DgpuDrawingTarget {
     uint32_t width;
     uint32_t height;
     uint32_t format;
+    uint32_t backend;
+    uint8_t device_uuid[16];
+    uint8_t driver_uuid[16];
+    uint64_t memory_size;
+    uint32_t memory_type;
 } DgpuDrawingTarget;
 typedef int (*DgpuDrawingProducer)(void*, const DgpuDrawingTarget*, char*, size_t);
 uint64_t dgpu_drawing_allocations(DgpuDevice*);

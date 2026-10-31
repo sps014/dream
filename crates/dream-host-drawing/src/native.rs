@@ -1,5 +1,4 @@
-use super::{SURFACES, fail};
-use dream_drawing::Surface;
+use super::{NativeSurface, SURFACES, fail};
 use dream_host_abi::drawing_gpu::{COPY_SYMBOL, CopyFn, Target, write_error};
 use std::{
     ffi::{CStr, CString, c_char, c_void},
@@ -25,8 +24,12 @@ unsafe extern "C" fn produce(
     output: *mut c_char,
     capacity: usize,
 ) -> i32 {
-    let surface = unsafe { &mut *context.cast::<Surface>() };
-    match unsafe { surface.copy_native(&*target) } {
+    let surface = unsafe { &mut *context.cast::<NativeSurface>() };
+    match unsafe {
+        surface
+            .surface
+            .copy_native(&*target, surface.picture.as_ref())
+    } {
         Ok(true) => 1,
         Ok(false) => 0,
         Err(error) => {
@@ -47,7 +50,7 @@ pub(super) fn copy(handle: i32, texture: i32, width: i32, height: i32) -> i32 {
     if width <= 0 || height <= 0 {
         return fail("EINVAL\ninvalid drawing dimensions");
     }
-    if surface.backend() != 2 {
+    if surface.surface.backend() != 2 {
         return -1;
     }
     let mut error = [0 as c_char; 2048];
@@ -55,7 +58,7 @@ pub(super) fn copy(handle: i32, texture: i32, width: i32, height: i32) -> i32 {
         copy(
             texture,
             produce,
-            (surface as *mut Surface).cast(),
+            (surface as *mut NativeSurface).cast(),
             error.as_mut_ptr(),
             error.len(),
         )

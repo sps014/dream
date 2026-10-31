@@ -8,6 +8,8 @@ mod effect_tests;
 pub mod effects;
 #[cfg(windows)]
 mod native_dx12;
+#[cfg(windows)]
+mod native_vulkan;
 mod gpu;
 mod gpu_color;
 mod gpu_effects;

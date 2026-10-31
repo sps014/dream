@@ -54,6 +54,7 @@ add_library(dream-gpu-glue STATIC
     glue/device.cpp
     glue/resources.cpp
     glue/drawing.cpp
+    glue/drawing_vulkan.cpp
     glue/programs.cpp
     glue/bindings.cpp
     glue/encoder.cpp
@@ -64,6 +65,10 @@ add_library(dream-gpu-glue STATIC
 target_include_directories(dream-gpu-glue PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../dream-mir/src/runtime/c/include)
 target_link_libraries(dream-gpu-glue PRIVATE slang-rhi dream-slang-replay)
+
+if(WIN32 AND TARGET slang-rhi-vulkan-headers)
+    target_link_libraries(dream-gpu-glue PRIVATE slang-rhi-vulkan-headers)
+endif()
 
 # build.rs links these archives in dependency order.
 set(DREAM_GPU_ARCHIVES dream-gpu-glue slang-rhi slang-rhi-resources)

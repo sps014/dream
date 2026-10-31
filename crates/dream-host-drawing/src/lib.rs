@@ -12,7 +12,20 @@ use dream_host_abi::{
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-static SURFACES: Mutex<HandleTable<Surface>> = Mutex::new(HandleTable::new());
+static SURFACES: Mutex<HandleTable<NativeSurface>> = Mutex::new(HandleTable::new());
+struct NativeSurface {
+    surface: Surface,
+    picture: Option<Picture>,
+}
+
+impl NativeSurface {
+    fn render(&mut self, picture: Picture) -> dream_drawing::Result<()> {
+        self.surface.render(&picture)?;
+        self.picture = (self.surface.backend() == 2).then_some(picture);
+        Ok(())
+    }
+}
+
 static ASSETS: Mutex<HandleTable<Asset>> = Mutex::new(HandleTable::new());
 
 thread_local! {
@@ -37,7 +50,10 @@ pub extern "C" fn drawingCreateAsync(
     let result = pollster::block_on(Surface::create(width, height, backend));
     let handle = match result {
         Ok(surface) => dream_host_abi::lock(&SURFACES)
-            .insert(surface)
+            .insert(NativeSurface {
+                surface,
+                picture: None,
+            })
             .unwrap_or_else(|| fail("ELIMIT\ndrawing handle table is full")),
         Err(error) => fail(error),
     };
@@ -76,7 +92,7 @@ pub unsafe extern "C" fn drawingRender(handle: i32, commands: DreamPtr, assets: 
                 .ok_or_else(|| {
                     dream_drawing::DrawingError::Invalid("drawing surface is closed".into())
                 })?
-                .render(&picture)
+                .render(picture)
         });
     match result {
         Ok(()) => 1,
@@ -91,7 +107,7 @@ pub extern "C" fn drawingPixelsAsync(future: DreamPtr, handle: i32) -> i32 {
         table
             .get(handle)
             .ok_or_else(|| dream_drawing::DrawingError::Invalid("drawing surface is closed".into()))
-            .and_then(|surface| pollster::block_on(surface.pixels()))
+            .and_then(|surface| pollster::block_on(surface.surface.pixels()))
     };
     let pointer = match result {
         Ok(pixels) => alloc_bytes(&pixels),
@@ -107,16 +123,21 @@ pub extern "C" fn drawingPixelsAsync(future: DreamPtr, handle: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn drawingCopyGpu(handle: i32, texture: i32, width: i32, height: i32) -> i32 {
     #[cfg(windows)]
-    { native::copy(handle, texture, width, height) }
+    {
+        native::copy(handle, texture, width, height)
+    }
     #[cfg(not(windows))]
-    { let _ = (handle, texture, width, height); -1 }
+    {
+        let _ = (handle, texture, width, height);
+        -1
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn drawingBackend(handle: i32) -> i32 {
     dream_host_abi::lock(&SURFACES)
         .get(handle)
-        .map_or(0, Surface::backend)
+        .map_or(0, |surface| surface.surface.backend())
 }
 
 #[unsafe(no_mangle)]

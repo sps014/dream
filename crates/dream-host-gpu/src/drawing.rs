@@ -45,7 +45,7 @@ unsafe fn copy(
 /// # Safety
 /// The producer/context and error buffer must remain valid for this synchronous call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dream_gpu_drawing_copy_v1(
+pub unsafe extern "C" fn dream_gpu_drawing_copy_v2(
     texture: i32,
     producer: Producer,
     context: *mut c_void,

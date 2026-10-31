@@ -29,6 +29,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 
 [target.'cfg(windows)'.dependencies]
+ash = "0.38"
 dream-host-abi = { path = "../dream-host-abi" }
 windows = { version = "0.62", features = ["Win32_Graphics_Direct3D12", "Win32_Foundation"] }
 

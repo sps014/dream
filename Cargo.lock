@@ -1256,6 +1256,7 @@ dependencies = [
 name = "dream-drawing"
 version = "0.1.0"
 dependencies = [
+ "ash",
  "dream-host-abi",
  "fastrand",
  "futures-channel",

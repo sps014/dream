@@ -33,6 +33,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     7., 1., 0., 3., 1., 0., 8., 12., 0., 0., 0., 0.4, 2., 1.1, 4., 0.8,
                 ]);
             }
+            if kind == "acrylic" {
+                values.extend([7., 1., 0., 0.]);
+            }
             for i in 0..8 {
                 fill(
                     &mut values,
@@ -53,8 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     fill(&mut path, x, 32., 88., 160., [0.; 4]);
                     values.push(8.);
                     values.extend_from_slice(&path[1..15]);
-                    values.extend([8., 1., 1., 1., 0.1]);
+                    values.extend([8., 1., 1., 1., 0.1, 0.04, 17., 0.]);
                 }
+            }
+            if kind == "acrylic" {
+                values.push(4.);
             }
             let picture = Picture::decode(&values)?;
             let mut surface = pollster::block_on(Surface::create(320, 240, code))?;

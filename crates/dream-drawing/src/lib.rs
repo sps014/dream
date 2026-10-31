@@ -9,6 +9,9 @@ pub mod effects;
 mod gpu;
 mod gpu_color;
 mod gpu_effects;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod material_tests;
+mod noise;
 mod prepare;
 mod replay;
 #[cfg(all(test, not(target_arch = "wasm32")))]

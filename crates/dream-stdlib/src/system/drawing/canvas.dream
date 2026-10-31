@@ -136,12 +136,15 @@ public class Canvas {
         path.encode(this.values);
     }
 
-    /// Filters earlier canvas content inside a panel and applies its tint. At most eight panels per picture; unavailable inside save_layer.
+    /// Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most eight panels per picture.
     public fun backdrop(rect: Rect, borrow effect: Backdrop): void {
         this.values.push(8.0f);
         DrawingPath.rect(rect, effect.radius).encode(this.values);
         this.values.push(effect.sigma);
         effect.color.encode(this.values);
+        this.values.push(effect.noise_opacity);
+        this.values.push((float)(effect.noise_seed & 65535));
+        this.values.push((float)((effect.noise_seed >> 16) & 65535));
     }
 
     /// Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.

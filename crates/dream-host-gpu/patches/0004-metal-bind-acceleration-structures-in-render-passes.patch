@@ -1,0 +1,44 @@
+Subject: [PATCH] metal: bind acceleration structures in render passes
+
+Compute passes bind root-level acceleration structures with
+setAccelerationStructure:atBufferIndex: and make every acceleration structure resident, but
+render passes did neither: a vertex or fragment shader running a ray query traced against an
+unbound slot and missed every ray. Render bindings now do both, for the vertex and fragment
+stages. Upstreamable.
+
+---
+--- a/src/metal/metal-command.cpp
++++ b/src/metal/metal-command.cpp
+@@ -614,8 +614,32 @@
+                     (const MTL::Resource* const*)m_bindingData->usedRWResources,
+                     m_bindingData->usedRWResourceCount,
+                     MTL::ResourceUsageRead | MTL::ResourceUsageWrite
++                );
++            }
++
++            auto accelerationStructureResources = m_device->getAccelerationStructureResources();
++            if (!accelerationStructureResources.empty())
++            {
++                encoder->useResources(
++                    accelerationStructureResources.data(),
++                    accelerationStructureResources.size(),
++                    MTL::ResourceUsageRead
+                 );
+             }
++        }
++
++        // Slang emits root-level acceleration structures as [[buffer(N)]] parameters of either
++        // stage; setVertexBuffers/setFragmentBuffers cannot bind them.
++        for (uint32_t i = 0; i < m_bindingData->rootAccelerationStructureCount; ++i)
++        {
++            encoder->setVertexAccelerationStructure(
++                m_bindingData->rootAccelerationStructures[i],
++                m_bindingData->rootAccelerationStructureSlots[i]
++            );
++            encoder->setFragmentAccelerationStructure(
++                m_bindingData->rootAccelerationStructures[i],
++                m_bindingData->rootAccelerationStructureSlots[i]
++            );
+         }
+     }
+ 

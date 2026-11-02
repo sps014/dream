@@ -35,6 +35,7 @@ impl Compiler {
             wasm_opt: self.guest_opt(),
             opt_remarks: None,
         };
+        let sigs_phase = tracing::info_span!("compile_phase", phase = "runtime_sigs").entered();
         let runtime = llvm
             .ok_or_else(|| CompileError::Toolchain("no LLVM toolchain configured".into()))?
             .runtime_sigs(&req)
@@ -49,6 +50,7 @@ impl Compiler {
                 Ok(sigs)
             })
             .map_err(stale)?;
+        drop(sigs_phase);
         let mut diagnostics = DiagnosticBag::new(None);
         for (_, export) in &mir.exports {
             if sigs.has_function(export) || mir.functions.iter().any(|f| f.symbol == *export) {

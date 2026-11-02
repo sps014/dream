@@ -132,6 +132,10 @@ impl ToolchainConfig {
         self.prefix.join("cache").join("generators")
     }
 
+    pub fn tool_identity_cache_root(&self) -> PathBuf {
+        self.prefix.join("cache").join("tool-identity")
+    }
+
     pub fn std_sources_root(&self) -> PathBuf {
         self.prefix.join("cache").join("std-src")
     }

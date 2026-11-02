@@ -114,6 +114,121 @@ parity and byte-identical repeated artifacts; preserve Release runtime benchmark
 gates are workspace build, strict Clippy, workspace tests, the full native corpus, parity,
 runtime layering checks, relevant ignored DAP/toolchain tests, and Linux sanitizer CI.
 
+### Compile-speed profile against Go
+
+The [second measurement set](build-profile-measurements-v2.json) profiles every build
+scenario and compares it with `go build` (Go 1.27.3) on programs of the same shape, on
+macOS arm64 with the pinned LLVM 22.1.8. `scripts/bench.py build --workload <name>` and
+`scripts/bench.py go --workload <name>` reproduce it. The workloads are:
+
+- `hello`: one class and `main`.
+- `gen200` and `gen2000`: 200 or 2000 functions, each with one allocation, a loop and a
+  branch (3,000 and 30,000 lines).
+- `stdlib`: `@json` serialization, a regex, `List` and `Map`.
+
+Medians of five repetitions, in seconds. Dream uses the system `cc` through the tracing
+wrapper, which adds about 30 ms per subprocess. Go's cold build includes compiling its
+standard library, the counterpart of Dream's runtime C build.
+
+| Workload | Dream Debug cold | Dream Debug edit | Dream unchanged | Go cold | Go edit | Go unchanged |
+|---|---|---|---|---|---|---|
+| hello | 4.33 | 1.20 | 0.13–0.27 | 2.14 | 0.15–0.29 | 0.06–0.13 |
+| gen200 | 5.50 | 1.65 | 0.21 | 2.40 | 0.16 | 0.07 |
+| gen2000 | 8.83 | 5.65 | 0.16 | 2.34 | 0.37 | 0.08 |
+| stdlib | 26.48 | 3.16 | 0.31 | 2.37 | 0.21 | 0.09 |
+
+Release edits cost about the same as Debug edits plus 0.1–1.3 s of whole-program
+`opt`/`llc`: 1.32 s for `hello`, 6.95 s for `gen2000` and 4.21 s for `stdlib`. Wasm Debug
+edits are within 0.8 s of native. Release `stdlib` is the exception: `wasm-opt` adds 5.4 s
+to each wasm edit, for 12.6 s in total. With the default Zig linker driver, unchanged builds
+take 0.6–0.7 s and edits take up to 2.1 s longer than with the system `cc`.
+
+#### Where the time goes
+
+Phase spans (`compile_phase`) and 1 ms `sample` call trees attribute the cost as follows,
+largest first:
+
+1. **Quadratic source positions.** `LineText::get_point` walks every line from the start of
+   the file for each token, so lexing is O(tokens × lines). The user file is lexed twice:
+   once by the parser and again by `module_graph::hash::prepare_module`. In the `gen2000`
+   Debug edit, 3.6 s of 5.6 s is `Lexer::lex_all`, 1.5 s of it in `get_point` itself. Line
+   widths are also counted in characters while lexer spans are byte offsets, so columns are
+   wrong after non-ASCII text.
+2. **Re-hashing tools on every build.** The early cache key (`request_key`) BLAKE3-hashes
+   the compiler, `opt`, `llc`, `llvm-link`, `llvm-dis`, `clang`, the C driver and every host
+   capability library. `tool_identity` memoizes only within one process. This is 0.28–0.47 s
+   of every build, 77% of an unchanged `hello` build, and about 0.6 s with the 185 MB Zig
+   driver.
+3. **Generator pass work without matching generators.** Generator discovery, building the
+   module graph a second time, and parsing the std generator sources cost 0.12–0.24 s per
+   `hello` build. With `@json` in use, the pass takes 1.7 s per edit. Of that,
+   `generate::body::lower` (lowering referenced function bodies into the snapshot) is 0.7 s
+   and `analyze_for_generators` is 0.37 s, even when every generator executable is cached.
+4. **Re-parsing the prelude.** Bootstrap and imported packages are lexed and parsed on every
+   build: 0.15–0.2 s, or 0.4 s with `json`/`text` imported. Monomorphization adds a near
+   constant 0.12 s (0.5 s with `stdlib`).
+5. **Cold runtime and generator builds.** A cold Debug build compiles 38–48 runtime C units
+   (about 2.5 s) and builds runtime signatures (1.1–1.5 s). Each std generator executable is
+   compiled and linked through the full Release bitcode path, so a cold `stdlib` build takes
+   26 s, 18 s of it in generator links.
+6. **Program LLVM work.** Debug `llc` plus the final link is 0.08–0.5 s per edit, and
+   in-process link bookkeeping adds about 0.1 s. This is close to Go's link cost and is not
+   the bottleneck. A Cranelift Debug backend would remove at most this slice.
+
+#### Fix candidates
+
+Estimated savings are taken from the measured phase and sample shares; each needs its own
+before/after measurement.
+
+| Candidate | Saves (Debug edit) | Saves (unchanged) | Effort | Risk |
+|---|---|---|---|---|
+| Skip generator discovery when no generator attribute is reachable; cache the generator snapshot model | 0.1–0.2 s, 1.5 s with `@json` | — | Medium | Medium: incremental-generator correctness |
+| Cache the parsed and analyzed prelude per package | 0.2–0.5 s | — | Large | Medium: arena AST lifetime |
+| Ship prebuilt runtime objects, runtime signatures and std generator executables with the toolchain | — | — | Medium | Low; cold Debug drops from 4–26 s to about the edit time |
+| Cranelift Debug backend | at most 0.1–0.5 s | — | Large | High |
+
+Reaching Go's 0.15–0.37 s edits needs the generator and prelude caches.
+
+#### Applied fixes
+
+- `LineText` keeps a line-start table and resolves a span by binary search, so diagnostics
+  and debug locations no longer rescan the source from the start for every span. Columns
+  count characters, not bytes.
+- Tool identities (the compiler, LLVM tools, the linker driver, host libraries, and the
+  runtime-signature tools) persist in `<toolchain prefix>/cache/tool-identity`, keyed by the
+  same device, inode, size, mtime and ctime stamp the in-process cache trusts. A file whose
+  ctime is within two seconds of hashing is not persisted, because a same-tick rewrite would
+  keep its stamp.
+- Building the module graph once is not possible as stated: the generator pass builds its
+  graph before generation, and the final graph includes generated files. The second lex in
+  module-graph hashing stays; it is linear in the source size.
+
+Plain wall times, native Debug, median of 3–5 runs, before and after these fixes:
+
+| Workload | Linker | Edited before | Edited after | Unchanged before | Unchanged after |
+|---|---|---:|---:|---:|---:|
+| `hello` | Zig | 1.71 s | 0.81 s | 0.74 s | 0.06 s |
+| `gen2000` | Zig | 7.76 s | 1.89 s | 0.69 s | 0.06 s |
+| `hello` | system `cc` | 1.20 s | 1.21 s | 0.27 s | 0.09 s |
+| `gen2000` | system `cc` | 5.65 s | 2.1–3.3 s | 0.16 s | 0.11 s |
+| `stdlib` | system `cc` | 3.16 s | 3.23 s | 0.31 s | 0.07–0.41 s |
+
+Unchanged builds now match Go's 0.06–0.09 s. The `stdlib` edit is still dominated by the
+generator pass.
+
+#### Toolchain failures found during measurement
+
+- With the default Zig 0.16 linker driver, native Release links and every source-generator
+  executable fail with `duplicate symbol definition: _main`, so programs that use `@json`
+  do not build with the default driver on macOS. The measurements above use the system `cc`.
+- An executable `DREAM_WASM_OPT` override that matches the install layout
+  (`…/binaryen-133/bin/wasm-opt`) resolves to `…/binaryen-133/wasm-opt`: `from_override`
+  records the install root but marks it as not owned, so `LocatedTool::executable` keeps only
+  the file name.
+- The system `ld` (ld-27037) rejects the locally built `libdream_host_net.dylib` with
+  "mis-aligned LINKEDIT string pool", so the `webapi` sample could not be measured with the
+  system `cc`.
+
 ### Historical measured results and remaining performance cost
 
 The [recorded samples](build-profile-measurements.json) compare release-built host compilers

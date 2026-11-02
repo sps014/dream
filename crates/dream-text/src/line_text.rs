@@ -1,48 +1,59 @@
 pub struct LineText {
-    line_width: Vec<usize>,
+    text: String,
+    /// Byte offset where each line starts; the first entry is always 0.
+    line_starts: Vec<usize>,
 }
 
 impl LineText {
     pub fn new(text: String) -> LineText {
-        LineText {
-            line_width: LineText::calculate_line_width(text),
-        }
+        let line_starts = std::iter::once(0)
+            .chain(text.match_indices('\n').map(|(index, _)| index + 1))
+            .collect();
+        LineText { text, line_starts }
     }
-    ///internally used to calculate the line widths of the text
-    fn calculate_line_width(input: String) -> Vec<usize> {
-        let mut line_width = Vec::new();
-        let mut width = 0;
-        for c in input.chars() {
-            if c == '\n' {
-                line_width.push(width + 1);
-                width = 0;
-            } else {
-                width += 1;
-            }
-        }
-        line_width.push(width + 1);
-        line_width
-    }
-    ///returns the line number,column number of the token at the given index
+
+    /// The 1-based line and character column of byte offset `start`. Offsets past the end
+    /// resolve on the last line.
     pub fn get_point(&self, start: usize) -> (usize, usize) {
-        let mut line_number = 0;
-        let mut sum: usize = 0;
-        // visit each line width
-        for i in self.line_width.iter() {
-            //if the sum+current_line_size is greater than the start index, then we are in the line
-            if sum + *i > start {
-                break;
+        let line = self.line_starts.partition_point(|&s| s <= start) - 1;
+        let line_start = self.line_starts[line];
+        let column = match self.text.get(line_start..start) {
+            Some(prefix) => prefix.chars().count(),
+            None if start > self.text.len() => {
+                self.text[line_start..].chars().count() + (start - self.text.len())
             }
-            sum += *i;
-            line_number += 1;
-        }
-        (
-            line_number + 1,
-            if start > sum {
-                start - sum + 1
-            } else {
-                sum - start + 1
-            },
-        )
+            None => start - line_start,
+        };
+        (line + 1, column + 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LineText;
+
+    #[test]
+    fn points_are_one_based_lines_and_columns() {
+        let text = LineText::new("ab\ncd\n\nef".into());
+        assert_eq!(text.get_point(0), (1, 1));
+        assert_eq!(text.get_point(1), (1, 2));
+        assert_eq!(text.get_point(2), (1, 3));
+        assert_eq!(text.get_point(3), (2, 1));
+        assert_eq!(text.get_point(6), (3, 1));
+        assert_eq!(text.get_point(7), (4, 1));
+        assert_eq!(text.get_point(9), (4, 3));
+    }
+
+    #[test]
+    fn columns_count_characters_not_bytes() {
+        let text = LineText::new("é = \"ü\"; x\nλ y".into());
+        assert_eq!(text.get_point("é = \"ü\"; ".len()), (1, 10));
+        assert_eq!(text.get_point("é = \"ü\"; x\nλ ".len()), (2, 3));
+    }
+
+    #[test]
+    fn empty_text_and_offsets_past_the_end() {
+        assert_eq!(LineText::new(String::new()).get_point(0), (1, 1));
+        assert_eq!(LineText::new("ab".into()).get_point(4), (1, 5));
     }
 }

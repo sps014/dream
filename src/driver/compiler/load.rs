@@ -36,6 +36,7 @@ impl Compiler {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator::default();
+        let source_phase = tracing::info_span!("compile_phase", phase = "source_load").entered();
         match &self.virtual_entry {
             Some(source) => {
                 // Compiler-made entries (test runners, generator harnesses) call into the files
@@ -55,8 +56,10 @@ impl Compiler {
         let native_graph =
             crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
                 .map_err(CompileError::Manifest)?;
+        drop(source_phase);
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`).
+        let prelude_phase = tracing::info_span!("compile_phase", phase = "prelude_parse").entered();
         merge_prelude(
             arena,
             &mut acc.all_functions,
@@ -70,6 +73,9 @@ impl Compiler {
             &mut acc.file_modules,
             &acc.requested_std_packages,
         )?;
+        drop(prelude_phase);
+        let _attributes_phase =
+            tracing::info_span!("compile_phase", phase = "attributes").entered();
 
         // Validate every attribute in the merged program (unknown names, disallowed placements,
         // wrong argument shapes, duplicates) against the builtin specs and the program's declared
@@ -113,6 +119,8 @@ impl Compiler {
             cpp_bridge,
         } = self.load_front(main_file_path, arena, diagnostics)?;
 
+        let _generators_phase =
+            tracing::info_span!("compile_phase", phase = "generators").entered();
         run_generators(
             &self.generate_request(main_file_path),
             arena,

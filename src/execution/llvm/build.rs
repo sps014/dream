@@ -267,6 +267,7 @@ pub fn compile_llvm(
         relocatable,
         output_kind,
     } = options;
+    let _phase = tracing::info_span!("compile_phase", phase = "link").entered();
     super::remarks::prepare(opt_remarks)?;
     if !spec.can_link_on_host() && *pgo != Pgo::Off {
         return Err("cross-target PGO requires running the profile on its target".into());
@@ -686,6 +687,7 @@ impl crate::driver::compiler::LlvmToolchain for Toolchain {
         opt_ll: Option<&Path>,
         req: &crate::driver::compiler::LlvmRuntimeRequest,
     ) -> Result<(), String> {
+        let _phase = tracing::info_span!("compile_phase", phase = "link").entered();
         let config = &self.config;
         if req
             .target

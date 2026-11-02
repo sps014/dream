@@ -28,9 +28,11 @@ pub(super) fn load(
     let clang = tools.clang()?;
     let mut inputs = rt_stamp::files_under(&tools.config.runtime_c);
     inputs.retain(|path| path.extension().is_some_and(|ext| ext == "h"));
-    let clang_identity = rt_stamp::tool_identity(&clang).ok_or("unreadable clang identity")?;
-    let dis_identity =
-        rt_stamp::tool_identity(&tools.tool("llvm-dis")).ok_or("unreadable llvm-dis identity")?;
+    let identities = tools.config.tool_identity_cache_root();
+    let clang_identity = rt_stamp::persistent_tool_identity(&clang, &identities)
+        .ok_or("unreadable clang identity")?;
+    let dis_identity = rt_stamp::persistent_tool_identity(&tools.tool("llvm-dis"), &identities)
+        .ok_or("unreadable llvm-dis identity")?;
     let key = format!(
         "abi-v4:{spec:?}:{}:{}:{}:{clang_identity}:{dis_identity}:{:?}:{:?}:{:?}",
         req.threads,

@@ -13,6 +13,7 @@ and runtime counters when the binary was built with them.
 Examples:
   scripts/bench.py                        # current Dream, 20 rounds, 10 passes
   scripts/bench.py build --help           # compiler cold/warm/edited builds
+  scripts/bench.py go --help              # `go build` on the same workload shapes
   scripts/bench.py generators --help      # isolated source-generator caches
   scripts/bench.py profile --suite macro  # CPU profile (samply, perf or xctrace)
   scripts/bench.py --suite macro          # Dream application workloads
@@ -429,8 +430,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "profile", "startup"):
+        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "go", "profile", "startup"):
             command = sys.argv.pop(1)
+            if command == "go":
+                from benchmarks import go_baseline
+                sys.exit(go_baseline.main())
             if command == "startup":
                 from benchmarks import startup
                 sys.exit(startup.main())

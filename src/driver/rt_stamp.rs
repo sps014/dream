@@ -92,27 +92,31 @@ pub fn content_hash(path: &std::path::Path) -> Option<blake3::Hash> {
     Some(hash.finalize())
 }
 
+/// Filesystem identity plus modification and change timestamps. Rewriting a file always moves
+/// its change timestamp, which user code cannot set.
+#[cfg(unix)]
+fn file_stamp(path: &std::path::Path) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let m = std::fs::metadata(path).ok()?;
+    Some(format!(
+        "{}:{}:{}:{}:{}:{}:{}",
+        m.dev(),
+        m.ino(),
+        m.len(),
+        m.mtime(),
+        m.mtime_nsec(),
+        m.ctime(),
+        m.ctime_nsec()
+    ))
+}
+
 /// Unix change timestamps let one process reuse verified contents, including shared headers.
 pub fn tool_identity(path: &std::path::Path) -> Option<String> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
         type ToolCache = std::collections::BTreeMap<PathBuf, (String, String)>;
         static CACHE: std::sync::OnceLock<std::sync::Mutex<ToolCache>> = std::sync::OnceLock::new();
-        let stamp = |path: &std::path::Path| -> Option<String> {
-            let m = std::fs::metadata(path).ok()?;
-            Some(format!(
-                "{}:{}:{}:{}:{}:{}:{}",
-                m.dev(),
-                m.ino(),
-                m.len(),
-                m.mtime(),
-                m.mtime_nsec(),
-                m.ctime(),
-                m.ctime_nsec()
-            ))
-        };
-        let before = stamp(path)?;
+        let before = file_stamp(path)?;
         let cache = CACHE.get_or_init(Default::default);
         if let Some((recorded, identity)) = cache.lock().ok()?.get(path)
             && *recorded == before
@@ -120,7 +124,7 @@ pub fn tool_identity(path: &std::path::Path) -> Option<String> {
             return Some(identity.clone());
         }
         let identity = content_hash(path)?.to_hex().to_string();
-        if stamp(path)? != before {
+        if file_stamp(path)? != before {
             return None;
         }
         cache
@@ -131,6 +135,52 @@ pub fn tool_identity(path: &std::path::Path) -> Option<String> {
     }
     #[cfg(not(unix))]
     content_hash(path).map(|hash| hash.to_hex().to_string())
+}
+
+/// A file whose change timestamp is this close to the time it was hashed may still be rewritten
+/// within the same timestamp tick on filesystems with coarse timestamps, so it is not persisted.
+#[cfg(unix)]
+const RACY_WINDOW: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// [`tool_identity`] for large, rarely changing executables and libraries, remembered across
+/// processes in `store` under the same filesystem stamp the in-process cache trusts.
+pub fn persistent_tool_identity(path: &std::path::Path, store: &std::path::Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let before = file_stamp(path)?;
+        let key = path.to_string_lossy();
+        let entry = store.join(&blake3::hash(key.as_bytes()).to_hex()[..32]);
+        if let Ok(recorded) = std::fs::read_to_string(&entry)
+            && let Some((recorded_path, rest)) = recorded.split_once('\n')
+            && let Some((recorded_stamp, identity)) = rest.split_once('\n')
+            && recorded_path == key
+            && recorded_stamp == before
+            && identity.len() == 64
+        {
+            return Some(identity.to_string());
+        }
+        let identity = tool_identity(path)?;
+        let changed = std::fs::metadata(path).ok()?.ctime();
+        let settled = std::time::SystemTime::now()
+            .checked_sub(RACY_WINDOW)
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .is_some_and(|t| changed < t.as_secs() as i64);
+        if settled && std::fs::create_dir_all(store).is_ok() {
+            let partial = entry.with_extension(format!("{}.partial", std::process::id()));
+            if std::fs::write(&partial, format!("{key}\n{before}\n{identity}")).is_ok()
+                && std::fs::rename(&partial, &entry).is_err()
+            {
+                let _ = std::fs::remove_file(&partial);
+            }
+        }
+        Some(identity)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = store;
+        tool_identity(path)
+    }
 }
 
 #[cfg(test)]
@@ -156,5 +206,43 @@ mod tests {
         #[cfg(unix)]
         assert_ne!(metadata, super::fingerprint(vec![path.clone()]));
         assert_ne!(fingerprint, super::content_fingerprint(vec![path]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_identity_is_trusted_only_for_the_recorded_stamp() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("tool");
+        let store = temporary.path().join("store");
+        std::fs::write(&path, b"first").unwrap();
+        let first = super::persistent_tool_identity(&path, &store).unwrap();
+        assert_eq!(
+            first,
+            super::content_hash(&path).unwrap().to_hex().to_string()
+        );
+        assert!(
+            !store.exists(),
+            "a file changed within the racy window must not be persisted"
+        );
+
+        let key = path.to_string_lossy();
+        let entry = store.join(&blake3::hash(key.as_bytes()).to_hex()[..32]);
+        let remembered = "a".repeat(64);
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(
+            &entry,
+            format!("{key}\n{}\n{remembered}", super::file_stamp(&path).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(
+            super::persistent_tool_identity(&path, &store).unwrap(),
+            remembered
+        );
+
+        std::fs::write(&path, b"other").unwrap();
+        assert_eq!(
+            super::persistent_tool_identity(&path, &store).unwrap(),
+            super::content_hash(&path).unwrap().to_hex().to_string()
+        );
     }
 }

@@ -243,11 +243,11 @@ impl Compiler {
             hash.update(value);
         };
         field("header", STAMP_HEADER.as_bytes());
+        let identities = self.toolchain_config.tool_identity_cache_root();
+        let tool_identity =
+            |path: &Path| crate::driver::rt_stamp::persistent_tool_identity(path, &identities);
         let exe = std::env::current_exe().ok()?;
-        field(
-            "compiler",
-            crate::driver::rt_stamp::tool_identity(&exe)?.as_bytes(),
-        );
+        field("compiler", tool_identity(&exe)?.as_bytes());
         field(
             "runtime",
             crate::driver::rt_stamp::content_fingerprint(crate::driver::rt_stamp::files_under(
@@ -338,7 +338,7 @@ impl Compiler {
                     "{:?}",
                     paths
                         .iter()
-                        .map(|path| (path, crate::driver::rt_stamp::tool_identity(path)))
+                        .map(|path| (path, tool_identity(path)))
                         .collect::<Vec<_>>()
                 )
                 .as_bytes(),

@@ -119,11 +119,83 @@ class Node {
 }
 fun main() { let node = Node(42); System.println(node.value); }
 '''
+STDLIB_SOURCE = '''import system;
+import system.json;
+import system.text;
+
+@json
+class Developer {
+    public name: string;
+    public languages: string[];
+
+    public constructor(name: string, languages: string[]) {
+        this.name = name;
+        this.languages = languages;
+    }
+}
+
+fun main() {
+    let developers = List<Developer>();
+    developers.push(Developer("Ada", ["Dream", "TypeScript"]));
+    developers.push(Developer("Grace", ["COBOL"]));
+    let counts = Map<string, int>();
+    let digits = Regex.compile("\\\\d+", RegexFlags.Global).unwrap();
+    for (let developer in developers) {
+        let text = Json.serialize(developer);
+        counts[developer.name] = text.length;
+        System.println(text);
+    }
+    let parsed = Json.deserialize<JsonValue>("{\\"seed\\": 42}").unwrap_or(JsonValue.null());
+    System.println(parsed.get("seed").unwrap_or(JsonValue.null()).as_int().unwrap_or(0));
+    System.println(digits.test("abc123"));
+    System.println(counts.length);
+}
+'''
+
+def generated_source(functions):
+    """Mirrors `scripts/benchmarks/go_baseline.py`: one allocation, one loop and a branch per function."""
+    parts = [SOURCE.split("fun main()")[0]]
+    for i in range(functions):
+        parts.append(f'''fun work_{i}(seed: int): int {{
+    let node = Node(seed);
+    let value = node.value;
+    for (let i = 0; i < 32; i++) {{
+        if (i % 3 == 0) {{
+            value += i;
+        }} else {{
+            value -= i;
+        }}
+    }}
+    return value;
+}}
+''')
+    calls = "\n".join(f"    total += work_{i}({i});" for i in range(functions))
+    parts.append(f"fun main() {{\n    let total = Node(42).value;\n{calls}\n    System.println(total);\n}}\n")
+    return "".join(parts)
+
+
+def workload(name):
+    """Returns `(source, marker)`; the edited build changes the single `42` inside `marker`."""
+    if name == "hello":
+        return SOURCE, "Node(42)"
+    if name == "stdlib":
+        return STDLIB_SOURCE, '\\"seed\\": 42'
+    if name == "webapi":
+        return (ROOT / "sample/webapi/app.dream").read_text().replace("8000", "8042"), "8042"
+    match = re.fullmatch(r"gen(\d+)", name)
+    if match and int(match[1]) > 0:
+        return generated_source(int(match[1])), "Node(42)"
+    raise argparse.ArgumentTypeError(f"unknown workload {name!r}: use hello, genN, stdlib or webapi")
 
 
 def install_wrappers(work: Path, llvm: Path) -> Path:
-    wrappers = work / "llvm"
-    wrappers.mkdir()
+    # The pinned-tool lookup accepts an override only as the toolchain's own `bin/`; its siblings
+    # carry the clang resource directory, compiler-rt and the WASI sysroot.
+    wrappers = work / "llvm" / "bin"
+    wrappers.mkdir(parents=True)
+    for sibling in llvm.parent.iterdir():
+        if sibling.name != "bin":
+            (work / "llvm" / sibling.name).symlink_to(sibling, target_is_directory=sibling.is_dir())
     if os.name != "nt":
         for tool in TOOLS:
             path = wrappers / tool
@@ -145,9 +217,26 @@ def install_wrappers(work: Path, llvm: Path) -> Path:
     return wrappers
 
 
-def run_build(binary, source, output, flags, env, trace, log, timing):
+def exclusive_phase_seconds(log):
+    """Per-phase busy time with nested `compile_phase` spans subtracted from their parent."""
+    factors = {"s": 1, "ms": .001, "µs": .000001, "ns": .000000001}
+    inclusive = collections.Counter()
+    nested = collections.Counter()
+    for line in log.splitlines():
+        phases = re.findall(r'compile_phase\{phase="([^"]+)"\}', line)
+        cost = re.search(r'close time.busy=([\d.]+)(s|ms|µs|ns)', line)
+        if not phases or not cost or ':function_passes{' in line or ':compile_tool{' in line:
+            continue
+        seconds = float(cost[1]) * factors[cost[2]]
+        inclusive[phases[-1]] += seconds
+        if len(phases) > 1:
+            nested[phases[-2]] += seconds
+    return {phase: max(total - nested[phase], 0.0) for phase, total in inclusive.items()}
+
+
+def run_build(binary, source, output, flags, env, trace, log, timing, plain=False):
     trace.write_text("", encoding="utf-8")
-    command = [str(binary), "-v", *flags, str(source), "-o", str(output)]
+    command = [str(binary), *([] if plain else ["-v"]), *flags, str(source), "-o", str(output)]
     started = time.monotonic()
     if os.name == "nt":
         proc = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -174,15 +263,8 @@ def run_build(binary, source, output, flags, env, trace, log, timing):
             elif "Maximum resident set size (kbytes):" in line:
                 rss = int(line.rsplit(":", 1)[1]) * 1024
     calls = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
-    phase_seconds = {}
-    factors = {"s": 1, "ms": .001, "µs": .000001, "ns": .000000001}
-    for line in captured.splitlines():
-        phases = re.findall(r'compile_phase\{phase="([^"]+)"\}', line)
-        cost = re.search(r'close time.busy=([\d.]+)(s|ms|µs|ns)', line)
-        if phases and cost and ':function_passes{' not in line and ':compile_tool{' not in line:
-            phase_seconds[phases[-1]] = phase_seconds.get(phases[-1], 0) + float(cost[1]) * factors[cost[2]]
     return {"seconds": seconds, "max_rss_bytes": rss,
-            "phase_seconds": phase_seconds,
+            "phase_seconds": exclusive_phase_seconds(captured),
             "subprocesses": dict(collections.Counter(call["tool"] for call in calls)),
             "subprocess_seconds": sum(call["seconds"] for call in calls),
             "trace": str(trace), "compiler_log": str(log)}
@@ -207,28 +289,41 @@ def runtime_digest(root):
     return digest.hexdigest()
 
 
+PROFILES = {"Debug": [], "Debug-g": ["-g"], "Release": ["--release"]}
+TARGETS = {"native": [], "wasm": ["--wasm"]}
+
+
+def csv_choice(choices):
+    def parse(value):
+        items = [item for item in value.split(",") if item]
+        unknown = [item for item in items if item not in choices]
+        if unknown or not items:
+            raise argparse.ArgumentTypeError(f"choose from {', '.join(choices)}")
+        return items
+    return parse
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=ROOT / "target" / "debug" / dream_name())
     parser.add_argument("--llvm", type=Path, required=True)
     parser.add_argument("--runtime", type=Path, default=ROOT / "crates/dream-mir/src/runtime/c")
     parser.add_argument("--repeat", type=int, default=3)
-    parser.add_argument("--functions", type=int, default=0, help="add independently callable ARC functions")
+    parser.add_argument("--workload", default="hello",
+                        help="hello, genN (N generated functions), stdlib (json/regex/collections) or webapi")
+    parser.add_argument("--profiles", type=csv_choice(PROFILES), default=list(PROFILES))
+    parser.add_argument("--targets", type=csv_choice(TARGETS), default=["native"])
+    parser.add_argument("--plain", action="store_true",
+                        help="measure wall time only: no -v tracing and no subprocess wrappers")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if args.repeat < 1 or args.functions < 0:
-        parser.error("repeat must be positive and functions must be nonnegative")
-    source_text = SOURCE
-    if args.functions:
-        declarations = "\n".join(
-            f"fun work_{i}(value: int): int {{ let node = Node(value); return node.value * 2 + 1; }}"
-            for i in range(args.functions)
-        )
-        calls = "\n".join(f"total += work_{i}({i});" for i in range(args.functions))
-        source_text = SOURCE.split("fun main()")[0] + declarations + (
-            "\nfun main() { let node = Node(42); let total = node.value;\n"
-            + calls + "\nSystem.println(total); }\n"
-        )
+    if args.repeat < 1:
+        parser.error("repeat must be positive")
+    try:
+        source_text, marker = workload(args.workload)
+    except argparse.ArgumentTypeError as error:
+        parser.error(str(error))
+    edited_text = source_text.replace(marker, marker.replace("42", "43"), 1)
     metadata = {
         "platform": platform.platform(),
         "binary": str(with_exe(args.binary).resolve()),
@@ -236,41 +331,51 @@ def main():
         "runtime_sha256": runtime_digest(args.runtime.resolve()),
         "source_sha256": hashlib.sha256(source_text.encode()).hexdigest(),
         "llvm": str(args.llvm.resolve()),
-        "functions": args.functions,
+        "workload": args.workload,
+        "source_lines": source_text.count("\n"),
+        "plain": args.plain,
     }
     destination = args.output.resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     traces = destination.with_suffix(".traces")
     traces.mkdir(exist_ok=True)
     rows = []
+    binary = with_exe(args.binary).resolve()
     with tempfile.TemporaryDirectory(prefix="dream-build-bench-") as directory:
         work = Path(directory)
         wrappers = install_wrappers(work, args.llvm.resolve())
         cc = shutil.which("cc") or shutil.which("clang") or shutil.which("clang.exe") or ""
-        for profile, flags in [("Debug", []), ("Debug-g", ["-g"]), ("Release", ["--release"])]:
-            for repeat in range(args.repeat):
-                project = work / f"{profile}-{repeat}"
-                project.mkdir()
-                source = project / "main.dream"
-                output = project / "out/main.ll"
-                source.write_text(source_text)
-                env = dict(os.environ, DREAM_PREFIX=str(project / "prefix"), DREAM_LLVM=str(wrappers),
-                           DREAM_RUNTIME_C=str(args.runtime.resolve()), DREAM_BENCH_LLVM_REAL=str(args.llvm.resolve()),
-                           DREAM_BENCH_CC_REAL=cc, DREAM_CC=str(wrappers / ("cc.exe" if os.name == "nt" else "cc")))
-                if os.name == "nt":
-                    env["DREAM_BENCH_PYTHON"] = sys.executable
-                    env["DREAM_BENCH_WRAPPER"] = str(work / "llvm-wrapper.py")
-                live_trace = project / "trace.jsonl"
-                env["DREAM_BENCH_TRACE"] = str(live_trace)
-                for phase in ["cold", "unchanged", "edited", "unchanged_after_edit"]:
-                    if phase == "edited":
-                        source.write_text(source_text.replace("Node(42)", "Node(43)"))
-                    key = f"{profile}-{repeat}-{phase}"
-                    trace = traces / f"{key}.jsonl"
-                    row = run_build(with_exe(args.binary).resolve(), source, output, flags, env, live_trace,
-                                    traces / f"{key}.log", traces / f"{key}.time")
-                    shutil.copyfile(live_trace, trace)
-                    row["trace"] = str(trace)
-                    rows.append(dict(profile=profile, repeat=repeat, phase=phase, **row))
-                    destination.write_text(json.dumps(dict(metadata, rows=rows), indent=2) + "\n")
-                    print(f"{key}: {row['seconds']:.3f}s {row['subprocesses']}", flush=True)
+        for target in args.targets:
+            for profile in args.profiles:
+                flags = PROFILES[profile] + TARGETS[target]
+                for repeat in range(args.repeat):
+                    project = work / f"{target}-{profile}-{repeat}"
+                    project.mkdir()
+                    source = project / "main.dream"
+                    output = project / "out/main.ll"
+                    source.write_text(source_text)
+                    env = dict(os.environ, DREAM_PREFIX=str(project / "prefix"),
+                               DREAM_RUNTIME_C=str(args.runtime.resolve()))
+                    if args.plain:
+                        env["DREAM_LLVM"] = str(args.llvm.resolve())
+                    else:
+                        env.update(DREAM_LLVM=str(wrappers), DREAM_BENCH_LLVM_REAL=str(args.llvm.resolve()),
+                                   DREAM_BENCH_CC_REAL=cc,
+                                   DREAM_CC=str(wrappers / ("cc.exe" if os.name == "nt" else "cc")))
+                    if os.name == "nt":
+                        env["DREAM_BENCH_PYTHON"] = sys.executable
+                        env["DREAM_BENCH_WRAPPER"] = str(work / "llvm-wrapper.py")
+                    live_trace = project / "trace.jsonl"
+                    env["DREAM_BENCH_TRACE"] = str(live_trace)
+                    for phase in ["cold", "unchanged", "edited", "unchanged_after_edit"]:
+                        if phase == "edited":
+                            source.write_text(edited_text)
+                        key = f"{target}-{profile}-{repeat}-{phase}"
+                        trace = traces / f"{key}.jsonl"
+                        row = run_build(binary, source, output, flags, env, live_trace,
+                                        traces / f"{key}.log", traces / f"{key}.time", args.plain)
+                        shutil.copyfile(live_trace, trace)
+                        row["trace"] = str(trace)
+                        rows.append(dict(target=target, profile=profile, repeat=repeat, phase=phase, **row))
+                        destination.write_text(json.dumps(dict(metadata, rows=rows), indent=2) + "\n")
+                        print(f"{key}: {row['seconds']:.3f}s {row['subprocesses']}", flush=True)

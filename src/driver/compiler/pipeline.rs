@@ -22,7 +22,11 @@ impl Compiler {
                 "staticlib and dylib require a native target".into(),
             ));
         }
-        if let Some(artifacts) = self.early_build_lookup(main_file_path, out_path) {
+        let early = {
+            let _phase = tracing::info_span!("compile_phase", phase = "cache_lookup").entered();
+            self.early_build_lookup(main_file_path, out_path)
+        };
+        if let Some(artifacts) = early {
             info!("reusing cached build before parsing");
             return Ok(BuildOutcome::Cached(artifacts));
         }
@@ -34,11 +38,16 @@ impl Compiler {
             self.load_program(main_file_path, &arena, &mut diagnostics)?
         };
         info!("finished parsing");
-        let stamp = self
-            .build_cache
-            .as_deref()
-            .and_then(|link_key| self.build_stamp(link_key, &loaded, main_file_path, out_path));
-        if let Some(artifacts) = stamp.as_ref().and_then(BuildStamp::lookup) {
+        let (stamp, cached) = {
+            let _phase = tracing::info_span!("compile_phase", phase = "cache_lookup").entered();
+            let stamp = self
+                .build_cache
+                .as_deref()
+                .and_then(|link_key| self.build_stamp(link_key, &loaded, main_file_path, out_path));
+            let cached = stamp.as_ref().and_then(BuildStamp::lookup);
+            (stamp, cached)
+        };
+        if let Some(artifacts) = cached {
             info!("reusing cached build");
             return Ok(BuildOutcome::Cached(artifacts));
         }
@@ -119,7 +128,10 @@ impl Compiler {
                 return Err(CompileError::Internal(message));
             }
         };
-        self.emit_artifacts(out_path, &loaded, emitted, layouts, llvm.as_deref())?;
+        {
+            let _phase = tracing::info_span!("compile_phase", phase = "artifacts").entered();
+            self.emit_artifacts(out_path, &loaded, emitted, layouts, llvm.as_deref())?;
+        }
         self.publish_generated_artifacts(out_path, &loaded.acc)?;
         Ok(BuildOutcome::Built(stamp.map(|stamp| {
             stamp.with_warnings(&diagnostics, &loaded.acc.file_contents)

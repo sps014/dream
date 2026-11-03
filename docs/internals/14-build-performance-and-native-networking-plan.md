@@ -182,7 +182,7 @@ before/after measurement.
 
 | Candidate | Saves (Debug edit) | Saves (unchanged) | Effort | Risk |
 |---|---|---|---|---|
-| Skip generator discovery when no generator attribute is reachable; cache the generator snapshot model | 0.1–0.2 s, 1.5 s with `@json` | — | Medium | Medium: incremental-generator correctness |
+| Cache the generator analysis (`analyze_for_generators`, about 0.35 s with `@json`) across edits that leave the generator inputs unchanged | 0.35 s with `@json` | — | Medium | Medium: incremental-generator correctness |
 | Cache the parsed and analyzed prelude per package | 0.2–0.5 s | — | Large | Medium: arena AST lifetime |
 | Ship prebuilt runtime objects, runtime signatures and std generator executables with the toolchain | — | — | Medium | Low; cold Debug drops from 4–26 s to about the edit time |
 | Cranelift Debug backend | at most 0.1–0.5 s | — | Large | High |
@@ -215,6 +215,42 @@ Plain wall times, native Debug, median of 3–5 runs, before and after these fix
 
 Unchanged builds now match Go's 0.06–0.09 s. The `stdlib` edit is still dominated by the
 generator pass.
+
+A second round removed per-process work that did not depend on the edit:
+
+- The embedded generator packages (`system.json.derive`, `system.gpu.shaders`, …) are parsed
+  only when a loaded package registers them, once per process. A program that loads none of
+  their owners skips them; `hello`'s generator pass went from 73–83 ms to about 2 ms.
+- The snapshot's referenced-declaration closure remembers ids that resolved to nothing or to
+  an already-recorded declaration. Member references such as `Type.field` used to re-lower
+  every method body of `Type` for each occurrence. Snapshot building with `@json` went from
+  0.92 s to 0.15 s; the emitted snapshots and span maps are byte-identical on the JSON,
+  validation and GPU workloads.
+- Module content and interface hashes are computed on demand (`ModuleGraph::module_hashes`).
+  Only the build stamp reads them, so the generator pass's graph no longer pays about 70 ms
+  for an AST print and re-lex of every module.
+- The `opt --version` check is remembered per `opt` content identity, and the runtime-source
+  fingerprints (the build stamp's and the runtime bitcode stamp's, which include `clang`)
+  persist under the files' stat stamps. Spawning `opt` cost 30–280 ms and hashing `clang`
+  about 100 ms on every build. Runtime unit and object cache keys use the persisted `clang`
+  identity as well.
+
+The bimodal `llc` (14 ms or 275 ms) and `cc` link (55 ms or 380 ms) times on macOS follow
+`syspolicyd` load, not the compiler.
+
+The same machine under the same background load, alternating the two compilers, median of 5:
+
+| Workload | Edited before | Edited after | Unchanged before | Unchanged after |
+|---|---:|---:|---:|---:|
+| `hello` | 1.05 s | 0.74 s | 0.06 s | 0.02 s |
+| `stdlib` | 3.68 s | 2.57 s | 0.38 s | 0.05 s |
+
+Every compile also caps the shared caches under the toolchain prefix. Generator results stay
+within 256 MB, generator executables within 1 GB, runtime objects within 512 MB, stdlib
+source snapshots within 32 MB and remembered tool identities within 64 MB. The least recently used entries are removed; anything modified
+in the last 15 minutes is kept, so a compile does not delete an object another link still has
+open. A cache hit refreshes the entry's modification time. Each directory is measured at most
+once a minute across processes; a `.budget-checked` marker records the last check.
 
 #### Toolchain failures found during measurement
 

@@ -217,13 +217,7 @@ pub(super) fn clang_unit(
         cmd.arg(format!("-D{d}"));
     }
     cmd.arg(&u.path);
-    super::runtime_cache::compile(
-        cmd,
-        &config.native_rt_cache_root(),
-        out,
-        config.compiler_environment.is_empty(),
-        namespaces,
-    )
+    super::runtime_cache::compile(cmd, config, out, namespaces)
 }
 
 fn bitcode_flags(
@@ -326,7 +320,7 @@ pub(super) fn build_native_runtime(
         all.extend_from_slice(dependencies);
         format!(
             "{}{}\n{}\n{}|{}|{:?}|{:?}\n",
-            rt_stamp::content_fingerprint(all),
+            rt_stamp::persistent_content_fingerprint(all, &config.tool_identity_cache_root()),
             bc_flags.join(" "),
             native_target_arg(spec),
             sysroot_args(config, spec).join(" "),
@@ -487,14 +481,8 @@ pub(super) fn build_anchor(
             .args(flags)
             .arg(&inc)
             .arg(src);
-        let dependencies = super::runtime_cache::compile(
-            command,
-            &config.native_rt_cache_root(),
-            out,
-            config.compiler_environment.is_empty(),
-            &Default::default(),
-        )?
-        .dependencies;
+        let dependencies =
+            super::runtime_cache::compile(command, config, out, &Default::default())?.dependencies;
         std::fs::write(
             dir.join(".anchor-dependencies.json"),
             serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,

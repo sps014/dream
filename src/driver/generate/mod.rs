@@ -40,6 +40,7 @@ mod snapshot;
 mod snapshot_expand;
 mod stage;
 mod stats;
+mod std_generators;
 mod symbol_instances;
 #[cfg(feature = "native")]
 mod tool_sandbox;

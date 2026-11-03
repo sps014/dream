@@ -79,18 +79,7 @@ fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
             ));
         }
     }
-    let out = tools
-        .command("opt")
-        .arg("--version")
-        .output()
-        .map_err(|e| format!("running {}: {e}", tools.tool("opt").display()))?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    let version = text
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("LLVM version "))
-        .unwrap_or("")
-        .trim()
-        .to_string();
+    let version = opt_version(&tools)?;
     if !version.starts_with(LLVM_MAJOR) {
         return Err(format!(
             "LLVM at {} is version `{version}`, the backend needs {LLVM_VERSION}",
@@ -98,6 +87,45 @@ fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
         ));
     }
     Ok(tools.bin)
+}
+
+/// The reported version is a function of the `opt` executable's contents, so it is remembered
+/// under the same persisted content identity that tool fingerprints use; spawning `opt` costs tens
+/// to hundreds of milliseconds per compile.
+fn opt_version(tools: &LlvmTools) -> Result<String, String> {
+    let opt = tools.tool("opt");
+    let store = tools.config.tool_identity_cache_root();
+    let entry = crate::driver::rt_stamp::persistent_tool_identity(&opt, &store)
+        .map(|identity| store.join(format!("llvm-version-{}", &identity[..32])));
+    if let Some(entry) = &entry
+        && let Ok(version) = std::fs::read_to_string(entry)
+        && version.starts_with(LLVM_MAJOR)
+    {
+        return Ok(version);
+    }
+    let out = tools
+        .command("opt")
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("running {}: {e}", opt.display()))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let version = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("LLVM version "))
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if let Some(entry) = entry
+        && version.starts_with(LLVM_MAJOR)
+        && std::fs::create_dir_all(&store).is_ok()
+    {
+        let partial = entry.with_extension(format!("{}.partial", std::process::id()));
+        if std::fs::write(&partial, &version).is_ok() && std::fs::rename(&partial, &entry).is_err()
+        {
+            let _ = std::fs::remove_file(&partial);
+        }
+    }
+    Ok(version)
 }
 
 /// LLVM response files keep large runtime inventories below the Windows command-line limit.

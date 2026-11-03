@@ -160,7 +160,7 @@ pub(super) fn build_wasm_runtime(
         all.extend_from_slice(deps);
         format!(
             "{}|{opt:?}|{threads}|{}|{:?}|{:?}",
-            rt_stamp::content_fingerprint(all),
+            rt_stamp::persistent_content_fingerprint(all, &tools.config.tool_identity_cache_root()),
             tools.config.fingerprint(),
             crate::driver::wasi::GUEST_FEATURES,
             dream_mir::runtime::WASM32_LIBC_UNITS
@@ -205,14 +205,7 @@ pub(super) fn build_wasm_runtime(
             dependencies.push(u.path.clone());
         } else {
             dependencies.extend(
-                super::runtime_cache::compile(
-                    cmd,
-                    &tools.config.native_rt_cache_root(),
-                    &out,
-                    tools.config.compiler_environment.is_empty(),
-                    &namespaces,
-                )?
-                .dependencies,
+                super::runtime_cache::compile(cmd, &tools.config, &out, &namespaces)?.dependencies,
             );
         }
         if !asm {

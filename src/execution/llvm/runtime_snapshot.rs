@@ -18,6 +18,7 @@ pub(super) fn publish(root: &Path, files: &[PathBuf]) -> Result<Vec<PathBuf>, St
         .join("versions")
         .join(hasher.finalize().to_hex().as_str());
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    crate::driver::cache_budget::touch(&directory);
     let mut outputs = Vec::with_capacity(files.len());
     for (file, hash) in files.iter().zip(hashes) {
         let output = directory.join(file.file_name().ok_or("runtime output has no filename")?);
@@ -32,6 +33,13 @@ pub(super) fn publish(root: &Path, files: &[PathBuf]) -> Result<Vec<PathBuf>, St
             std::fs::rename(partial, &output).map_err(|e| e.to_string())?;
         }
         outputs.push(output);
+    }
+    if let Some(versions) = directory.parent() {
+        crate::driver::cache_budget::enforce(
+            versions,
+            crate::driver::cache_budget::RUNTIME_VERSIONS,
+            &[],
+        );
     }
     Ok(outputs)
 }

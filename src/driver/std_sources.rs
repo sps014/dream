@@ -37,6 +37,8 @@ fn digest() -> &'static str {
 pub fn materialize(root: &Path) -> io::Result<PathBuf> {
     let dir = root.join(digest());
     if dir.is_dir() {
+        crate::driver::cache_budget::touch(&dir);
+        crate::driver::cache_budget::enforce(root, crate::driver::cache_budget::STD_SOURCES, &[]);
         return Ok(dir);
     }
     // Generator executables compile in parallel inside the same compiler process.
@@ -56,7 +58,14 @@ pub fn materialize(root: &Path) -> io::Result<PathBuf> {
         std::fs::write(&target, source)?;
     }
     match std::fs::rename(&staged, &dir) {
-        Ok(()) => Ok(dir),
+        Ok(()) => {
+            crate::driver::cache_budget::enforce(
+                root,
+                crate::driver::cache_budget::STD_SOURCES,
+                &[],
+            );
+            Ok(dir)
+        }
         Err(_) if dir.is_dir() => {
             let _ = std::fs::remove_dir_all(&staged);
             Ok(dir)

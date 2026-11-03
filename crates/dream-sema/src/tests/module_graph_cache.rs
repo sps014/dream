@@ -68,16 +68,16 @@ fn interface_hash_ignores_bodies_and_source_positions() {
         })
         .collect();
     assert_ne!(
-        graphs[0].modules[1].content_hash,
-        graphs[1].modules[1].content_hash
+        graphs[0].module_hashes()[1].content,
+        graphs[1].module_hashes()[1].content
     );
     assert_eq!(
-        graphs[0].modules[1].interface_hash,
-        graphs[1].modules[1].interface_hash
+        graphs[0].module_hashes()[1].interface,
+        graphs[1].module_hashes()[1].interface
     );
     assert_ne!(
-        graphs[0].modules[1].interface_hash,
-        graphs[2].modules[1].interface_hash
+        graphs[0].module_hashes()[1].interface,
+        graphs[2].module_hashes()[1].interface
     );
 }
 fn graph<'a>(
@@ -104,7 +104,7 @@ fn graph<'a>(
 
 fn interface(source: &str) -> [u8; 32] {
     let arena = Bump::new();
-    graph(&arena, &[("a.dream", source)], &[]).modules[1].interface_hash
+    graph(&arena, &[("a.dream", source)], &[]).module_hashes()[1].interface
 }
 
 #[test]
@@ -186,13 +186,19 @@ fn dependency_keys_track_interfaces_content_and_transitive_changes() {
         ],
         edges,
     );
-    assert_eq!(base.modules[1].cache_key(), body.modules[1].cache_key());
-    assert_ne!(base.modules[3].cache_key(), body.modules[3].cache_key());
-    assert_ne!(
-        base.modules[1].cache_key(),
-        signature.modules[1].cache_key()
+    assert_eq!(
+        base.module_hashes()[1].cache_key(),
+        body.module_hashes()[1].cache_key()
     );
-    assert_eq!(base.modules[1].dependency_interfaces.len(), 2);
+    assert_ne!(
+        base.module_hashes()[3].cache_key(),
+        body.module_hashes()[3].cache_key()
+    );
+    assert_ne!(
+        base.module_hashes()[1].cache_key(),
+        signature.module_hashes()[1].cache_key()
+    );
+    assert_eq!(base.module_hashes()[1].dependency_interfaces.len(), 2);
 }
 
 #[test]
@@ -211,7 +217,7 @@ fn dependency_keys_are_order_independent_and_cycles_terminate() {
             ("b.dream", &["a.dream"]),
         ],
     );
-    let mut right = graph(
+    let right = graph(
         &arena,
         &[sources[2], sources[1], sources[0]],
         &[
@@ -220,16 +226,18 @@ fn dependency_keys_are_order_independent_and_cycles_terminate() {
         ],
     );
     let a = |g: &ModuleGraph<'_>| {
-        g.modules
-            .iter()
+        g.module_hashes()
+            .into_iter()
             .find(|m| m.path == "a")
             .unwrap()
             .cache_key()
     };
     assert_eq!(a(&left), a(&right));
-    right.prepare_dependency_interfaces();
-    assert_eq!(a(&left), a(&right));
-    let b = right.modules.iter().find(|m| m.path == "b").unwrap();
+    let b = right
+        .module_hashes()
+        .into_iter()
+        .find(|m| m.path == "b")
+        .unwrap();
     assert!(b.dependency_interfaces.iter().all(|(path, _)| path != "b"));
 }
 
@@ -239,7 +247,8 @@ fn file_identity_and_prepared_ast_changes_invalidate_content_keys() {
     let source = "module a; public class A {}";
     let mut base = graph(&arena, &[("a.dream", source)], &[]);
     let renamed = graph(&arena, &[("other.dream", source)], &[]);
-    assert_ne!(base.modules[1].cache_key(), renamed.modules[1].cache_key());
+    let base_key = base.module_hashes()[1].cache_key();
+    assert_ne!(base_key, renamed.module_hashes()[1].cache_key());
     base.files[0].program.structs[0].is_sealed = true;
     let prepared = ModuleGraph::new(
         vec![(
@@ -249,7 +258,7 @@ fn file_identity_and_prepared_ast_changes_invalidate_content_keys() {
         )],
         &IndexMap::new(),
     );
-    assert_ne!(base.modules[1].cache_key(), prepared.modules[1].cache_key());
+    assert_ne!(base_key, prepared.module_hashes()[1].cache_key());
 }
 
 #[test]
@@ -292,8 +301,8 @@ fn implementation_dependent_interfaces_include_other_files_in_the_module() {
         &[],
     );
     assert_ne!(
-        before.modules[1].interface_hash,
-        after.modules[1].interface_hash
+        before.module_hashes()[1].interface,
+        after.module_hashes()[1].interface
     );
 }
 
@@ -320,8 +329,11 @@ fn aliased_imports_prepare_dependency_interfaces_without_file_edges() {
         ],
         &[],
     );
-    assert_eq!(before.modules[1].dependency_interfaces.len(), 1);
-    assert_ne!(before.modules[1].cache_key(), after.modules[1].cache_key());
+    assert_eq!(before.module_hashes()[1].dependency_interfaces.len(), 1);
+    assert_ne!(
+        before.module_hashes()[1].cache_key(),
+        after.module_hashes()[1].cache_key()
+    );
 }
 
 #[test]

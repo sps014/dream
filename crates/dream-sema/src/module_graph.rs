@@ -5,6 +5,7 @@ use dream_syntax::nodes::{
 use dream_types::{DefKind, ModuleId, TypeCtx};
 use indexmap::{IndexMap, IndexSet};
 
+mod exports;
 mod hash;
 mod order;
 use hash::{hash_count, hash_text};
@@ -17,8 +18,14 @@ pub struct SourceModule {
     pub exports: Vec<ModuleExport>,
     pub globals: Vec<ModuleValueExport>,
     pub extensions: Vec<ModuleValueExport>,
-    pub content_hash: [u8; 32],
-    pub interface_hash: [u8; 32],
+}
+
+/// A module's build-cache identity: its own content and exported interface, plus the interfaces
+/// of every module reachable through its imports.
+pub struct ModuleHashes {
+    pub path: String,
+    pub content: [u8; 32],
+    pub interface: [u8; 32],
     pub dependency_interfaces: Vec<(String, [u8; 32])>,
 }
 
@@ -36,13 +43,13 @@ pub struct ModuleValueExport {
     pub file: usize,
 }
 
-impl SourceModule {
+impl ModuleHashes {
     pub fn cache_key(&self) -> [u8; 32] {
         let mut hash = blake3::Hasher::new();
         hash_text(&mut hash, "dream-module-cache-v2");
         hash_text(&mut hash, &self.path);
-        hash.update(&self.content_hash);
-        hash.update(&self.interface_hash);
+        hash.update(&self.content);
+        hash.update(&self.interface);
         let mut dependencies: Vec<_> = self.dependency_interfaces.iter().collect();
         dependencies.sort_by(|a, b| a.0.cmp(&b.0));
         hash_count(&mut hash, dependencies.len());
@@ -131,9 +138,6 @@ impl<'a> ModuleGraph<'a> {
                 exports: vec![],
                 globals: vec![],
                 extensions: vec![],
-                content_hash: [0; 32],
-                interface_hash: [0; 32],
-                dependency_interfaces: vec![],
             })
             .collect();
         let files: Vec<_> = inputs
@@ -160,9 +164,9 @@ impl<'a> ModuleGraph<'a> {
             module.imports = imports.clone();
         }
         for module in &mut modules {
-            hash::prepare_module(module, &files);
+            exports::collect(module, &files);
         }
-        let mut graph = Self {
+        Self {
             modules,
             files,
             initialization_dependencies,
@@ -172,37 +176,44 @@ impl<'a> ModuleGraph<'a> {
             generator_access: IndexMap::new(),
             consumed: IndexMap::new(),
             embedded_assets: IndexMap::new(),
-        };
-        graph.prepare_dependency_interfaces();
-        graph
+        }
     }
 
-    /// Include the reachable interface closure: a signature can expose a type from an indirect
-    /// dependency. Iterative traversal also terminates for import cycles without recursive hashes.
-    pub fn prepare_dependency_interfaces(&mut self) {
-        let dependencies: Vec<_> = self
+    /// Computed on demand: hashing prints every prepared AST and re-lexes implementation-dependent
+    /// modules, which only build caching needs. The dependency closure is reachable rather than
+    /// direct because a signature can expose a type from an indirect dependency; iterative
+    /// traversal terminates for import cycles.
+    pub fn module_hashes(&self) -> Vec<ModuleHashes> {
+        let own: Vec<_> = self
             .modules
             .iter()
-            .map(|module| {
+            .map(|module| hash::module_hashes(module, &self.files))
+            .collect();
+        self.modules
+            .iter()
+            .zip(&own)
+            .map(|(module, &(content, interface))| {
                 let mut seen = IndexSet::new();
                 seen.insert(module.id);
                 let mut pending = module.imports.clone();
-                let mut interfaces = Vec::new();
+                let mut dependency_interfaces = Vec::new();
                 while let Some(id) = pending.pop() {
                     if !seen.insert(id) {
                         continue;
                     }
                     let dependency = &self.modules[id.0 as usize];
-                    interfaces.push((dependency.path.clone(), dependency.interface_hash));
+                    dependency_interfaces.push((dependency.path.clone(), own[id.0 as usize].1));
                     pending.extend(dependency.imports.iter().copied());
                 }
-                interfaces.sort_by(|a, b| a.0.cmp(&b.0));
-                interfaces
+                dependency_interfaces.sort_by(|a, b| a.0.cmp(&b.0));
+                ModuleHashes {
+                    path: module.path.clone(),
+                    content,
+                    interface,
+                    dependency_interfaces,
+                }
             })
-            .collect();
-        for (module, interfaces) in self.modules.iter_mut().zip(dependencies) {
-            module.dependency_interfaces = interfaces;
-        }
+            .collect()
     }
 
     pub fn view(&'a self) -> ProgramView<'a> {

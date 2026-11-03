@@ -258,6 +258,14 @@ pub fn ensure_built(
 #[cfg(feature = "native")]
 fn build_once(config: &Arc<ToolchainConfig>, plan: &ExePlan) -> Result<(GenExe, bool), String> {
     if plan.is_built() {
+        crate::driver::cache_budget::touch(&plan.dir);
+        if let Some(parent) = plan.dir.parent() {
+            crate::driver::cache_budget::enforce(
+                parent,
+                crate::driver::cache_budget::GENERATOR_EXES,
+                &[],
+            );
+        }
         return Ok((plan.exe(), false));
     }
     let Some(parent) = plan.dir.parent() else {
@@ -279,6 +287,7 @@ fn build_once(config: &Arc<ToolchainConfig>, plan: &ExePlan) -> Result<(GenExe, 
         let _ = std::fs::remove_dir_all(&plan.dir);
         return Err(e);
     }
+    crate::driver::cache_budget::enforce(parent, crate::driver::cache_budget::GENERATOR_EXES, &[]);
     Ok((plan.exe(), true))
 }
 

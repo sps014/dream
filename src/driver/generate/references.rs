@@ -1,6 +1,6 @@
 use super::model::{Attr, BodyNode, Decl, Function, Snapshot, TypeRef};
 use indexmap::IndexSet;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 pub(super) enum Reference {
     Decl(Box<Decl>),
@@ -107,9 +107,12 @@ pub(super) fn expand(
             type_refs(ty, &mut initial);
         }
     }
+    // Ids that resolved to nothing or to an already-recorded canonical id. Kept apart from `seen`
+    // so the closure limit still counts only distinct recorded declarations.
+    let mut settled: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<_> = initial.into_iter().map(|id| (id, 0)).collect();
     while let Some((id, depth)) = queue.pop_front() {
-        if seen.contains(&id) {
+        if seen.contains(&id) || !settled.insert(id.clone()) {
             continue;
         }
         let Some(reference) = resolve(&id) else {

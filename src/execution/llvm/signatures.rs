@@ -122,14 +122,9 @@ pub(super) fn load(
         let compile = |source: &Path, output: &Path| {
             let mut command = command(source);
             command.arg("-w").arg(source);
-            let dependencies = super::runtime_cache::compile(
-                command,
-                &tools.config.native_rt_cache_root(),
-                output,
-                tools.config.compiler_environment.is_empty(),
-                &Default::default(),
-            )?
-            .dependencies;
+            let dependencies =
+                super::runtime_cache::compile(command, &tools.config, output, &Default::default())?
+                    .dependencies;
             std::fs::write(
                 &dependencies_file,
                 serde_json::to_vec(&dependencies).map_err(|e| e.to_string())?,

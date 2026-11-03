@@ -112,13 +112,7 @@ pub(super) fn link(
             objects.push(object);
             continue;
         }
-        let compiled = super::runtime_cache::compile(
-            command,
-            &config.native_rt_cache_root(),
-            &object,
-            config.compiler_environment.is_empty(),
-            &namespaces,
-        )?;
+        let compiled = super::runtime_cache::compile(command, config, &object, &namespaces)?;
         objects.push(compiled.object);
     }
     let mut command = Command::new(&clang);

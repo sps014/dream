@@ -17,6 +17,7 @@ impl Compiler {
         main_file_path: &String,
         out_path: &str,
     ) -> Result<BuildOutcome, CompileError> {
+        crate::driver::cache_budget::enforce_shared(self.toolchain_config());
         if self.output_kind.is_library() && self.target.spec().capabilities.linear_memory {
             return Err(CompileError::Manifest(
                 "staticlib and dylib require a native target".into(),

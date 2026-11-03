@@ -14,7 +14,6 @@ use dream_abi::attributes::{
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{AttributeArg, AttributeNode, FunctionNode, Type};
 use dream_text::text_span::TextSpan;
-use std::sync::OnceLock;
 
 /// The `system.codegen` parameter type every generator takes.
 pub const GEN_CONTEXT_TYPE: &str = "GenContext";
@@ -53,7 +52,7 @@ impl RegisteredGenerator {
 
 /// The parts of a `@generator` declaration registration needs, detached from any arena.
 #[derive(Debug, Clone)]
-struct GeneratorDecl {
+pub(super) struct GeneratorDecl {
     name: String,
     span: TextSpan,
     attributes: Vec<AttributeNode>,
@@ -61,7 +60,7 @@ struct GeneratorDecl {
     has_body: bool,
 }
 
-fn generator_decl(f: &FunctionNode<'_>) -> Option<GeneratorDecl> {
+pub(super) fn generator_decl(f: &FunctionNode<'_>) -> Option<GeneratorDecl> {
     if !dream_abi::attributes::has_generator_attr(&f.attributes) {
         return None;
     }
@@ -108,31 +107,6 @@ fn scan_source(path: &str, source: &str, diagnostics: &mut DiagnosticBag) -> Par
             .filter_map(generator_decl)
             .collect(),
     }
-}
-
-/// `(package, file, module, decl)` for every generator in the embedded generator packages,
-/// parsed once per process.
-fn std_generator_decls() -> &'static [(&'static str, &'static str, String, GeneratorDecl)] {
-    static DECLS: OnceLock<Vec<(&'static str, &'static str, String, GeneratorDecl)>> =
-        OnceLock::new();
-    DECLS.get_or_init(|| {
-        let mut out = Vec::new();
-        for pkg in dream_stdlib::STD_PACKAGES {
-            for &gen_pkg in pkg.generators {
-                let Some(package) = dream_stdlib::find_package(gen_pkg) else {
-                    continue;
-                };
-                for (path, source) in package.files {
-                    let mut scratch = DiagnosticBag::new(None);
-                    let parsed = scan_source(path, source, &mut scratch);
-                    for decl in parsed.decls {
-                        out.push((package.name, *path, parsed.module.clone(), decl));
-                    }
-                }
-            }
-        }
-        out
-    })
 }
 
 fn path_parts(arg: &AttributeArg) -> Option<Vec<&str>> {
@@ -342,11 +316,18 @@ impl Registration<'_> {
                 }
             }
         }
-        let loaded = dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages);
-        for (package, file, module, decl) in std_generator_decls() {
-            let owner_loaded = loaded.iter().any(|p| p.generators.contains(package));
-            if owner_loaded {
-                out.extend(self.register(decl, file, module, Some(package), None, diagnostics));
+        for package in super::std_generators::loaded(acc) {
+            for file in &package.files {
+                for decl in &file.decls {
+                    out.extend(self.register(
+                        decl,
+                        file.file,
+                        &file.module,
+                        Some(package.name),
+                        None,
+                        diagnostics,
+                    ));
+                }
             }
         }
         out.sort_by(|a, b| a.id.cmp(&b.id).then(a.file.cmp(&b.file)));

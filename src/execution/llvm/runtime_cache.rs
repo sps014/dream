@@ -1,5 +1,6 @@
 //! Content-verified C units, including clang-recorded transitive and system headers.
 use crate::driver::rt_stamp;
+use crate::driver::toolchain::ToolchainConfig;
 use crate::driver::wasi::run_captured;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -162,11 +163,12 @@ fn include_namespace(path: &Path, cache: Option<&Path>) -> Option<String> {
 
 pub(super) fn compile(
     mut command: Command,
-    root: &Path,
+    config: &ToolchainConfig,
     output: &Path,
-    cache_allowed: bool,
     namespaces: &IncludeInventory,
 ) -> Result<CompiledUnit, String> {
+    let root = &config.native_rt_cache_root();
+    let cache_allowed = config.compiler_environment.is_empty();
     for name in [
         "CPATH",
         "C_INCLUDE_PATH",
@@ -263,7 +265,8 @@ pub(super) fn compile(
     let identity = format!(
         "{:?}:{}",
         include_inventory,
-        rt_stamp::tool_identity(&executable).ok_or("runtime compiler identity is unreadable")?
+        rt_stamp::persistent_tool_identity(&executable, &config.tool_identity_cache_root())
+            .ok_or("runtime compiler identity is unreadable")?
     );
     let cacheable = include_inventory.values().all(Option::is_some) && cache_allowed;
     let key = blake3::hash(format!("unit-v2:{identity}:{command:?}").as_bytes())
@@ -288,6 +291,13 @@ pub(super) fn compile(
         && rt_stamp::content_hash(&object)
             .is_some_and(|hash| hash.to_hex().as_str() == entry.object)
     {
+        crate::driver::cache_budget::touch(&stamp);
+        crate::driver::cache_budget::touch(&object);
+        crate::driver::cache_budget::enforce(
+            &cache,
+            crate::driver::cache_budget::RUNTIME_UNITS,
+            &["versions"],
+        );
         return completed_unit(&cache, &object, output, entry.dependencies);
     }
     let partial = cache.join(format!("{key}.partial"));
@@ -386,6 +396,16 @@ mod dependency_tests {
 mod tests {
     use super::*;
 
+    /// A prefix inside the compiled sources' directory would add its caches to their include
+    /// inventory.
+    fn rooted(prefix: &Path) -> ToolchainConfig {
+        ToolchainConfig {
+            prefix: prefix.to_path_buf(),
+            compiler_environment: Default::default(),
+            ..ToolchainConfig::default()
+        }
+    }
+
     #[test]
     fn include_inventory_tracks_symlinked_directories_without_recursing_forever() {
         let temporary = tempfile::tempdir().unwrap();
@@ -427,18 +447,21 @@ mod tests {
         let source = temp.path().join("concurrent.c");
         std::fs::write(&source, "int answer(void) { return 42; }\n").unwrap();
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let prefix = tempfile::tempdir().unwrap();
+        let config = rooted(prefix.path());
         std::thread::scope(|scope| {
             let mut threads = Vec::new();
             for i in 0..4 {
                 let barrier = barrier.clone();
                 let source = &source;
                 let root = temp.path();
+                let config = &config;
                 threads.push(scope.spawn(move || {
                     let output = root.join(format!("out-{i}.o"));
                     let mut command = Command::new("cc");
                     command.arg("-c").arg(source);
                     barrier.wait();
-                    compile(command, root, &output, true, &Default::default()).unwrap();
+                    compile(command, config, &output, &Default::default()).unwrap();
                     std::fs::read(output).unwrap()
                 }));
             }
@@ -446,7 +469,7 @@ mod tests {
             assert!(outputs.windows(2).all(|pair| pair[0] == pair[1]));
         });
         assert_eq!(
-            std::fs::read_dir(temp.path().join("units"))
+            std::fs::read_dir(config.native_rt_cache_root().join("units"))
                 .unwrap()
                 .filter(|entry| entry
                     .as_ref()
@@ -474,26 +497,28 @@ mod tests {
         std::fs::write(&indirect, "#include \"nested.h\"\n").unwrap();
         std::fs::write(&header, "#define ANSWER 1\n").unwrap();
         let output = root.join("output.o");
+        let prefix = tempfile::tempdir().unwrap();
+        let config = rooted(prefix.path());
         let build = || {
             let mut command = Command::new("cc");
             command.arg("-c").arg(&source);
-            compile(command, root, &output, true, &Default::default())
+            compile(command, &config, &output, &Default::default())
                 .unwrap()
                 .dependencies
         };
         assert!(build().contains(&header));
         let first = std::fs::read(&output).unwrap();
-        let object = std::fs::read_dir(root.join("units"))
+        let object = std::fs::read_dir(config.native_rt_cache_root().join("units"))
             .unwrap()
             .map(|entry| entry.unwrap().path())
             .find(|path| path.extension().is_some_and(|ext| ext == "object"))
             .unwrap();
-        let modified = std::fs::metadata(&object).unwrap().modified().unwrap();
+        // Hits refresh the object's modification time for eviction; a rebuild replaces the file.
+        let inode =
+            |path: &Path| std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(path).unwrap());
+        let built = inode(&object);
         build();
-        assert_eq!(
-            modified,
-            std::fs::metadata(&object).unwrap().modified().unwrap()
-        );
+        assert_eq!(built, inode(&object));
         std::fs::write(&header, "#define ANSWER 2\n").unwrap();
         build();
         let second = std::fs::read(&output).unwrap();

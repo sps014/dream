@@ -183,6 +183,49 @@ pub fn persistent_tool_identity(path: &std::path::Path, store: &std::path::Path)
     }
 }
 
+/// [`content_fingerprint`] for a large, rarely changing source tree, remembered across processes
+/// in `store` under the inputs' [`fingerprint`]: the filesystem identities the per-file caches
+/// already trust.
+pub fn persistent_content_fingerprint(inputs: Vec<PathBuf>, store: &std::path::Path) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let stamps = fingerprint(inputs.clone());
+        let entry = store.join(format!(
+            "tree-{}",
+            &blake3::hash(stamps.as_bytes()).to_hex()[..32]
+        ));
+        if let Ok(recorded) = std::fs::read_to_string(&entry)
+            && let Some((recorded_stamps, contents)) = recorded.split_once('\0')
+            && recorded_stamps == stamps
+        {
+            return contents.to_string();
+        }
+        let contents = content_fingerprint(inputs.clone());
+        let settled_before = std::time::SystemTime::now()
+            .checked_sub(RACY_WINDOW)
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map_or(0, |t| t.as_secs() as i64);
+        let settled = inputs
+            .iter()
+            .all(|path| std::fs::metadata(path).is_ok_and(|meta| meta.ctime() < settled_before));
+        if settled && fingerprint(inputs) == stamps && std::fs::create_dir_all(store).is_ok() {
+            let partial = entry.with_extension(format!("{}.partial", std::process::id()));
+            if std::fs::write(&partial, format!("{stamps}\0{contents}")).is_ok()
+                && std::fs::rename(&partial, &entry).is_err()
+            {
+                let _ = std::fs::remove_file(&partial);
+            }
+        }
+        contents
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = store;
+        content_fingerprint(inputs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -243,6 +286,42 @@ mod tests {
         assert_eq!(
             super::persistent_tool_identity(&path, &store).unwrap(),
             super::content_hash(&path).unwrap().to_hex().to_string()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_tree_fingerprint_is_trusted_only_for_the_recorded_stamps() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("unit.c");
+        let store = temporary.path().join("store");
+        std::fs::write(&path, b"first").unwrap();
+        let inputs = vec![path.clone()];
+        assert_eq!(
+            super::persistent_content_fingerprint(inputs.clone(), &store),
+            super::content_fingerprint(inputs.clone())
+        );
+        assert!(
+            !store.exists(),
+            "a tree changed within the racy window must not be persisted"
+        );
+
+        let stamps = super::fingerprint(inputs.clone());
+        let entry = store.join(format!(
+            "tree-{}",
+            &blake3::hash(stamps.as_bytes()).to_hex()[..32]
+        ));
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(&entry, format!("{stamps}\0remembered")).unwrap();
+        assert_eq!(
+            super::persistent_content_fingerprint(inputs.clone(), &store),
+            "remembered"
+        );
+
+        std::fs::write(&path, b"other").unwrap();
+        assert_eq!(
+            super::persistent_content_fingerprint(inputs.clone(), &store),
+            super::content_fingerprint(inputs)
         );
     }
 }

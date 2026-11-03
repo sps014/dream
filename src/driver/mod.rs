@@ -10,6 +10,7 @@
 pub mod abi;
 pub mod assets;
 pub mod attributes;
+pub mod cache_budget;
 pub mod compiler;
 pub mod compress;
 pub mod diag_highlight;

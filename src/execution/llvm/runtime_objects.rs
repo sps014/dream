@@ -1,5 +1,6 @@
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
+use crate::driver::toolchain::ToolchainConfig;
 use crate::driver::wasi::{GuestUnitOutput, guest_include_dirs, unit_command};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
@@ -74,6 +75,11 @@ pub(super) fn store_prebuilt(dir: &Path, objects: &[PathBuf]) -> Result<(), Stri
     .map_err(|e| e.to_string())
 }
 
+fn clang_identity(config: &ToolchainConfig, clang: &Path) -> Result<String, String> {
+    rt_stamp::persistent_tool_identity(clang, &config.tool_identity_cache_root())
+        .ok_or_else(|| format!("unreadable runtime compiler {}", clang.display()))
+}
+
 fn load_prebuilt(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let manifest: Vec<(String, String)> = serde_json::from_slice(
         &std::fs::read(dir.join("objects.json")).map_err(|e| e.to_string())?,
@@ -119,7 +125,7 @@ pub(super) fn wasm(
     let identity = format!(
         "wasm-objects-v2:{need:?}:{threads}:{}:{}:{:?}:{:?}",
         config.fingerprint(),
-        rt_stamp::content_fingerprint(vec![clang.clone()]),
+        clang_identity(config, &clang)?,
         crate::driver::wasi::GUEST_FEATURES,
         dream_mir::runtime::WASM32_LIBC_UNITS
     );
@@ -152,13 +158,7 @@ pub(super) fn wasm(
             command.arg("-DDREAM_RUNTIME_COUNTERS=1");
         }
         command.arg(&unit.path);
-        let unit = super::runtime_cache::compile(
-            command,
-            &config.native_rt_cache_root(),
-            &output,
-            config.compiler_environment.is_empty(),
-            &namespaces,
-        )?;
+        let unit = super::runtime_cache::compile(command, config, &output, &namespaces)?;
         Ok(unit.object)
     })
 }
@@ -181,7 +181,7 @@ pub(super) fn native(
     let identity = format!(
         "native-objects-v2:{spec:?}:{need:?}:{debug_info}:{}:{}",
         config.fingerprint(),
-        rt_stamp::content_fingerprint(vec![clang.clone()])
+        clang_identity(config, &clang)?
     );
     let dir = objects_dir(config, "native-objects", &identity)?;
     let (mut units, vendors) = super::runtime::bitcode_units(&config.runtime_c, need);

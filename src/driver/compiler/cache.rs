@@ -250,9 +250,10 @@ impl Compiler {
         field("compiler", tool_identity(&exe)?.as_bytes());
         field(
             "runtime",
-            crate::driver::rt_stamp::content_fingerprint(crate::driver::rt_stamp::files_under(
-                &self.toolchain_config.runtime_c,
-            ))
+            crate::driver::rt_stamp::persistent_content_fingerprint(
+                crate::driver::rt_stamp::files_under(&self.toolchain_config.runtime_c),
+                &identities,
+            )
             .as_bytes(),
         );
         if !self.runtimes.is_empty() {
@@ -391,7 +392,7 @@ impl Compiler {
             field("file", file.path.as_bytes());
             field("source", file.source.as_bytes());
         }
-        for module in &loaded.graph.modules {
+        for module in loaded.graph.module_hashes() {
             field("module", &module.cache_key());
         }
         for (name, bytes) in &loaded.graph.embedded_assets {

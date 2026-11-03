@@ -22,8 +22,11 @@ fn path(cache_root: &Path, key: &str) -> PathBuf {
 
 #[cfg(feature = "native")]
 pub fn load(cache_root: &Path, key: &str) -> Option<GenResult> {
-    let text = std::fs::read_to_string(path(cache_root, key)).ok()?;
-    serde_json::from_str(&text).ok()
+    let path = path(cache_root, key);
+    let text = std::fs::read_to_string(&path).ok()?;
+    let result = serde_json::from_str(&text).ok()?;
+    crate::driver::cache_budget::touch(&path);
+    Some(result)
 }
 
 #[cfg(feature = "native")]
@@ -42,4 +45,5 @@ pub fn store(cache_root: &Path, key: &str, result: &GenResult) {
     if std::fs::write(&scratch, text).is_ok() && std::fs::rename(&scratch, &target).is_err() {
         let _ = std::fs::remove_file(&scratch);
     }
+    crate::driver::cache_budget::enforce(dir, crate::driver::cache_budget::GENERATOR_RESULTS, &[]);
 }

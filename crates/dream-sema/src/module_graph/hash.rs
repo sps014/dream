@@ -1,7 +1,11 @@
 use super::*;
 use dream_syntax::nodes::{FunctionNode, Visibility};
 
-pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]) {
+/// The module's own content and interface hashes, excluding its dependencies.
+pub(super) fn module_hashes(
+    module: &SourceModule,
+    files: &[SourceFile<'_>],
+) -> ([u8; 32], [u8; 32]) {
     let mut content = blake3::Hasher::new();
     let mut interface = blake3::Hasher::new();
     hash_text(&mut content, "dream-module-content-v2");
@@ -13,7 +17,7 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
         content.update(&(file.source.len() as u64).to_le_bytes());
         content.update(file.source.as_bytes());
         // Prepared ASTs include generated declarations absent from the original source.
-        hash_text(&mut content, &format!("{:?}", file.program));
+        hash_debug(&mut content, &file.program);
         if let Some(declaration) = &file.program.module {
             hash_text(&mut interface, "module");
             hash_attributes(&mut interface, &declaration.attributes);
@@ -22,10 +26,6 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
             if global.visibility != Visibility::Public {
                 continue;
             }
-            module.globals.push(ModuleValueExport {
-                name: global.name.text.clone(),
-                file: index,
-            });
             hash_text(&mut interface, "global");
             hash_text(&mut interface, &global.name.text);
             interface.update(&[global.is_const as u8]);
@@ -49,10 +49,6 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
             {
                 continue;
             }
-            module.extensions.push(ModuleValueExport {
-                name: extension.target.text.clone(),
-                file: index,
-            });
             hash_text(&mut interface, "extension");
             hash_text(&mut interface, &extension.target.text);
             hash_generics(
@@ -72,21 +68,11 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
         }
         for function in &file.program.functions {
             if function.visibility == Visibility::Public {
-                module.exports.push(ModuleExport {
-                    kind: DefKind::Function,
-                    name: function.name.text.clone(),
-                    file: index,
-                });
                 hash_signature(&mut interface, function);
             }
         }
         for declaration in &file.program.structs {
             if declaration.visibility == Visibility::Public {
-                module.exports.push(ModuleExport {
-                    kind: DefKind::Struct,
-                    name: declaration.name.text.clone(),
-                    file: index,
-                });
                 hash_text(&mut interface, "struct");
                 hash_text(&mut interface, &declaration.name.text);
                 hash_generics(
@@ -124,11 +110,6 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
             if declaration.visibility != Visibility::Public {
                 continue;
             }
-            module.exports.push(ModuleExport {
-                kind: DefKind::Interface,
-                name: declaration.name.text.clone(),
-                file: index,
-            });
             hash_text(&mut interface, "interface");
             hash_text(&mut interface, &declaration.name.text);
             hash_generics(
@@ -150,15 +131,6 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
             if declaration.visibility != Visibility::Public {
                 continue;
             }
-            module.exports.push(ModuleExport {
-                kind: if declaration.is_data_enum() {
-                    DefKind::Union
-                } else {
-                    DefKind::Enum
-                },
-                name: declaration.name.text.clone(),
-                file: index,
-            });
             hash_text(&mut interface, "enum");
             hash_text(&mut interface, &declaration.name.text);
             hash_generics(
@@ -199,8 +171,10 @@ pub(super) fn prepare_module(module: &mut SourceModule, files: &[SourceFile<'_>]
             hash_implementation(&mut interface, &files[index]);
         }
     }
-    module.content_hash = *content.finalize().as_bytes();
-    module.interface_hash = *interface.finalize().as_bytes();
+    (
+        *content.finalize().as_bytes(),
+        *interface.finalize().as_bytes(),
+    )
 }
 
 fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
@@ -407,21 +381,52 @@ fn interface_needs_implementation(program: &ProgramNode<'_>) -> bool {
 fn hash_implementation(hash: &mut blake3::Hasher, file: &SourceFile<'_>) {
     hash_text(hash, "implementation-dependent-interface");
     for extension in file.program.extends.iter().filter(|e| e.is_synthesized) {
-        hash_text(hash, &format!("{extension:?}"));
+        hash_debug(hash, extension);
     }
     // Until analyzed export summaries exist, hash the complete token stream conservatively:
     // inferred types/receivers and generic/default bodies can depend on private helpers.
     if file.source.is_empty() {
-        hash_text(hash, &format!("{:?}", file.program));
+        hash_debug(hash, &file.program);
     } else {
         let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
         let tokens = dream_syntax::lexer::Lexer::new(file.source.clone()).lex_all(&mut diagnostics);
         hash_count(hash, tokens.len());
         for token in tokens {
-            hash_text(hash, &format!("{:?}", token.kind));
+            hash.update(&(token.kind as u16).to_le_bytes());
             hash_text(hash, &token.text);
         }
     }
+}
+
+/// Streams a `Debug` rendering into the hash, followed by its length, through a bounded buffer
+/// instead of materializing the whole rendering.
+fn hash_debug(hash: &mut blake3::Hasher, value: &impl std::fmt::Debug) {
+    const CHUNK: usize = 16 * 1024;
+    struct Writer<'h> {
+        hash: &'h mut blake3::Hasher,
+        buffer: String,
+        len: u64,
+    }
+    impl std::fmt::Write for Writer<'_> {
+        fn write_str(&mut self, text: &str) -> std::fmt::Result {
+            self.len += text.len() as u64;
+            self.buffer.push_str(text);
+            if self.buffer.len() >= CHUNK {
+                self.hash.update(self.buffer.as_bytes());
+                self.buffer.clear();
+            }
+            Ok(())
+        }
+    }
+    let mut writer = Writer {
+        hash,
+        buffer: String::with_capacity(2 * CHUNK),
+        len: 0,
+    };
+    let _ = std::fmt::write(&mut writer, format_args!("{value:?}"));
+    let Writer { hash, buffer, len } = writer;
+    hash.update(buffer.as_bytes());
+    hash.update(&len.to_le_bytes());
 }
 
 pub(super) fn hash_text(hash: &mut blake3::Hasher, text: &str) {

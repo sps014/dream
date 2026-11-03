@@ -173,3 +173,53 @@ fun value_argument_indirect_ownership(): void {
     Assert.eq(copy.data, "hello world");
     Assert.eq(value.data, "hello world");
 }
+
+// A by-value parameter whose body writes a reference field owns its copy: the write releases
+// the old field value, which a borrowed copy would share with the caller.
+struct c28d_Label {
+    public text: string;
+
+    public constructor(text: string) {
+        this.text = text;
+    }
+
+    public fun rename(text: string): void {
+        this.text = text;
+    }
+}
+
+fun c28d_length(label: c28d_Label): int {
+    return label.text.length;
+}
+
+fun c28d_overwrite(label: c28d_Label): int {
+    label.text = "replaced";
+    return label.text.length;
+}
+
+fun c28d_clear(ref text: string): void {
+    text = "";
+}
+
+fun c28d_clear_field(label: c28d_Label): int {
+    c28d_clear(ref label.text);
+    return label.text.length;
+}
+
+fun c28d_rename(label: c28d_Label): int {
+    label.rename("x");
+    return label.text.length;
+}
+
+@test
+@timeout(180000)
+fun value_argument_field_writes_keep_caller_copy(): void {
+    let label = c28d_Label("hello" + System.env("DREAM_VALUE_SUFFIX").unwrap_or(" world"));
+    Assert.eq(c28d_length(label), 11);
+    Assert.eq(c28d_overwrite(label), 8);
+    Assert.eq(c28d_clear_field(label), 0);
+    Assert.eq(c28d_rename(label), 1);
+    let filler = "fill" + System.env("DREAM_VALUE_SUFFIX").unwrap_or(" again");
+    Assert.eq(label.text, "hello world");
+    Assert.eq(filler, "fill again");
+}

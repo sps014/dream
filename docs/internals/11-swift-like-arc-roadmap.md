@@ -26,18 +26,13 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   stay retain-free while their roots are live and no traversed `(type, field)` slot can be
   stored. Union-field snapshots own a retain at insertion; post-inline `rc-held-by-owner`
   (`rc/held.rs`) removes it when the owner provably outlives every read.
-- **Borrow inference** (`passes/param_modes.rs`): release builds prove borrowing independently
-  for each parameter before `RcInsertion`, then rewrite every direct caller. Local aliases,
-  projections, branches, loops and recursive direct calls participate in a conservative
-  fixed point. Strings, arrays and nested classes/records with transparent strong fields
-  qualify; a returned alias or forwarding to an owning parameter keeps that parameter owning
-  without disqualifying unrelated parameters. Parameter reassignment, destructors, weak/unowned
-  fields, ownership observations, invalidating managed slot writes, global writes,
-  opaque calls, constructor/foreign/exported ABIs and suspension remain outside the proof. Scalar array
-  element and scalar field mutations need no ownership transfer and may qualify.
-  Recursive strong layouts close over a finite type graph; a weak/unowned field, opaque
-  descendant or destructor rejects the affected layout. Reaching local definitions and
-  returned-parameter summaries avoid keeping dependencies after an alias is overwritten.
+- **Borrow inference** (`dream-sema` `analyzer/param_inference.rs`): sema infers borrowing for
+  read-only sink parameters over the whole program in every build profile and rewrites every
+  direct caller before MIR lowering. References and value aggregates that hold references
+  qualify. Stored, returned, captured or reassigned parameters, sink forwarding, possible
+  destructors, aggregates with weak or unowned fields, aggregates written through a field,
+  `ref` argument or method receiver, async functions, exports, interface implementations and
+  functions used as values keep owning conventions.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
   on the heap with a 16-byte header ending in `[tag][ref_count]` (wasm32 leads with `[size][type info]`;
   native leads with one word holding the type info and the size class, and blocks over 64 KiB keep

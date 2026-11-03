@@ -79,6 +79,9 @@ Some parameters always take the value, whatever the body does:
   because the compiler cannot see what they hold.
 - Parameters of exported and `async` functions, of interface implementations, and of functions
   you pass around as values. Their callers cannot be checked, so they keep the written mode.
+- A `struct` parameter whose body changes it: assigns one of its fields, passes a field as a
+  `ref` argument, or calls one of its methods. The function then works on its own copy, so
+  your struct is never changed by the call.
 
 | On the parameter | Meaning |
 |------------------|---------|

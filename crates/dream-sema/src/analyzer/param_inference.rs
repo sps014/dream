@@ -1,6 +1,7 @@
 //! Parameter ownership modes are inferred from function bodies, so users never write `sink`.
 //! A parameter is a sink when the body stores, returns, binds, reassigns or captures it, or
-//! passes it to another sink; every other unmarked reference parameter borrows. Recursive and
+//! passes it to another sink; every other unmarked reference parameter borrows. A by-value
+//! aggregate holding references borrows the same way unless the body writes into it. Recursive and
 //! mutually recursive functions converge in one fixpoint that only moves parameters from borrow
 //! to sink. Modes are per declaration (joined across generic instances), and every call site's
 //! take flags are rewritten from the result, so callers and callees always agree.
@@ -10,6 +11,7 @@
 //! implementations and functions used as values (indirect callers), and slot getters. Parameters
 //! whose destruction may run a `del` stay sinks, so inference never moves a destructor.
 
+mod aggregates;
 mod destructors;
 mod facts;
 
@@ -54,7 +56,8 @@ pub(super) fn infer_param_modes(
         let entry = modes.entry(f.def).or_insert_with(|| declared.collect());
         for (i, p) in f.params.iter().enumerate() {
             if p.mode == ParamMode::Sink
-                && program.interner.is_rc_tracked(p.ty)
+                && (program.interner.is_rc_tracked(p.ty)
+                    || aggregates::owns_references(program.interner, program.layouts, p.ty))
                 && !program.pinned_sink.contains(&(f.def, i))
                 && !destructors.may_run(p.ty)
             {
@@ -64,6 +67,10 @@ pub(super) fn infer_param_modes(
         }
     }
 
+    let refs: IndexMap<DefId, Vec<bool>> = functions
+        .iter()
+        .map(|f| (f.def, f.params.iter().map(|p| p.mode == ParamMode::Ref).collect()))
+        .collect();
     let mut forwards: Vec<((DefId, usize), (DefId, usize))> = Vec::new();
     for f in functions.iter() {
         if !inferable.contains(&f.def) {
@@ -76,7 +83,16 @@ pub(super) fn infer_param_modes(
             .filter(|(i, _)| candidates.contains(&(f.def, *i)))
             .map(|(i, p)| (p.local, i))
             .collect();
-        let facts = BodyFacts::collect(locals, &f.body, &inferable);
+        let values = f
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| {
+                candidates.contains(&(f.def, *i)) && !program.interner.is_rc_tracked(p.ty)
+            })
+            .map(|(_, p)| p.local)
+            .collect();
+        let facts = BodyFacts::collect(locals, values, &f.body, &inferable, &refs);
         for index in facts.consumed {
             modes[&f.def][index] = true;
         }

@@ -18,6 +18,9 @@ enum Use {
 pub(super) struct BodyFacts {
     /// Parameter index of each candidate parameter's local.
     candidates: IndexMap<LocalId, usize>,
+    /// Candidates held by value: a borrowed copy does not own its fields, so writing through it
+    /// or calling a method that may mutate `this` needs the sink.
+    values: IndexSet<LocalId>,
     /// Candidate parameters the body consumes regardless of any callee.
     pub(super) consumed: IndexSet<usize>,
     /// `(parameter, callee def, callee parameter)`: the parameter is passed straight to a
@@ -28,17 +31,21 @@ pub(super) struct BodyFacts {
 impl BodyFacts {
     pub(super) fn collect(
         candidates: IndexMap<LocalId, usize>,
+        values: IndexSet<LocalId>,
         body: &[HStmt],
         inferable: &IndexSet<DefId>,
+        refs: &IndexMap<DefId, Vec<bool>>,
     ) -> Self {
         let mut facts = BodyFacts {
             candidates,
+            values,
             consumed: IndexSet::new(),
             forwards: Vec::new(),
         };
         let mut walker = Walker {
             facts: &mut facts,
             inferable,
+            refs,
         };
         walker.stmts(body);
         facts
@@ -48,6 +55,9 @@ impl BodyFacts {
 struct Walker<'f> {
     facts: &'f mut BodyFacts,
     inferable: &'f IndexSet<DefId>,
+    /// `ref` positions of every lowered function; a callee missing here may take any argument
+    /// by `ref`.
+    refs: &'f IndexMap<DefId, Vec<bool>>,
 }
 
 impl Walker<'_> {
@@ -144,10 +154,35 @@ impl Walker<'_> {
                 }
             }
             HPlace::Global(_) => {}
-            HPlace::Field { obj, .. } => self.expr(obj, Use::Read),
+            HPlace::Field { obj, .. } => {
+                self.mutate(obj);
+                self.expr(obj, Use::Read);
+            }
             HPlace::Index { array, index } => {
+                self.mutate(array);
                 self.expr(array, Use::Read);
                 self.expr(index, Use::Read);
+            }
+        }
+    }
+
+    /// Consumes the by-value candidate at the root of `target`, a place that may be written.
+    fn mutate(&mut self, target: &HExpr) {
+        let mut root = target;
+        loop {
+            match &root.kind {
+                HExprKind::Field { obj: inner, .. }
+                | HExprKind::UnionField { base: inner, .. }
+                | HExprKind::Index { array: inner, .. } => root = inner,
+                HExprKind::Var(Binding::Local(local)) => {
+                    if self.facts.values.contains(local)
+                        && let Some(&index) = self.facts.candidates.get(local)
+                    {
+                        self.facts.consumed.insert(index);
+                    }
+                    return;
+                }
+                _ => return,
             }
         }
     }
@@ -167,6 +202,13 @@ impl Walker<'_> {
     /// One argument of a resolved call. `take` is the call site's flag for the callee parameter
     /// at `param`; a borrowed argument is a read.
     fn arg(&mut self, arg: &HExpr, def: DefId, param: usize, take: bool) {
+        if self
+            .refs
+            .get(&def)
+            .is_none_or(|refs| refs.get(param).copied().unwrap_or(false))
+        {
+            self.mutate(arg);
+        }
         if !take {
             self.expr(arg, Use::Read);
             return;
@@ -215,6 +257,7 @@ impl Walker<'_> {
                 callee,
                 args,
             } => {
+                self.mutate(receiver);
                 self.expr(receiver, Use::Read);
                 self.call_args(callee, args, 1);
             }
@@ -233,11 +276,14 @@ impl Walker<'_> {
                 }
             }
             K::InterfaceCall { receiver, args, .. } => {
+                self.mutate(receiver);
                 self.expr(receiver, Use::Read);
+                args.iter().for_each(|arg| self.mutate(arg));
                 self.escapes(args);
             }
             K::IndirectCall { target, args, .. } => {
                 self.expr(target, Use::Read);
+                args.iter().for_each(|arg| self.mutate(arg));
                 self.escapes(args);
             }
             K::JsCall {

@@ -101,8 +101,6 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
         function_targets::run(mir, interner)
     });
     dump.module(function_targets::STAGE, mir, interner);
-    module_stage(param_modes::STAGE, || param_modes::run(mir, interner));
-    dump.module(param_modes::STAGE, mir, interner);
     module_stage(ownership_args::STAGE, || ownership_args::run(mir, interner));
     dump.module(ownership_args::STAGE, mir, interner);
     let layouts = mir.layouts.clone();

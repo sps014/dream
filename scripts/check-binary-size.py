@@ -14,7 +14,7 @@ import tempfile
 MEASURED_CAPABILITIES = ("core", "crypto", "process", "timezone", "net", "io")
 
 
-def measure(compiler, host_directory, llvm_directory):
+def measure(compiler, host_directory, llvm_directory, mold_directory):
     root = Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix="dream-size-") as temporary:
         directory = Path(temporary)
@@ -28,6 +28,8 @@ def measure(compiler, host_directory, llvm_directory):
         compile_env = os.environ.copy()
         compile_env.update(DREAM_HOME=str(directory), DREAM_BIN=str(isolated_compiler), DREAM_TARGETS=str(directory / "targets"))
         compile_env["DREAM_LLVM"] = str(llvm_directory)
+        if mold_directory is not None:
+            compile_env["DREAM_MOLD"] = str(mold_directory)
         subprocess.run(
             [str(isolated_compiler), "--release", "-O3", "--relocatable", "-o", str(output),
              str(root / "tests/size/hello.dream")],
@@ -71,10 +73,13 @@ def main():
                         help="directory containing release core, unicode, crypto, process, timezone, net, cli, data and io libraries")
     parser.add_argument("--llvm-directory", type=Path, required=True,
                         help="pinned LLVM bin directory available to the isolated compiler")
+    parser.add_argument("--mold-directory", type=Path,
+                        help="pinned mold install root for ELF and Mach-O links")
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     sizes = measure(args.compiler.resolve(strict=True), args.host_directory.resolve(strict=True),
-                    args.llvm_directory.resolve(strict=True))
+                    args.llvm_directory.resolve(strict=True),
+                    args.mold_directory and args.mold_directory.resolve(strict=True))
     report = {"platform": platform.system(), "architecture": platform.machine(),
               "guest_opt": "O3", "host_profile": "release", "bytes": sizes,
               "hello_bundle_bytes": sizes["hello"]}

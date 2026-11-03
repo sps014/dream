@@ -20,7 +20,7 @@ Ownership explains what happens when you assign a value or pass it to a function
     ```
 
     - Objects are shared on assignment; simple values and structs are copied.
-    - Unmarked parameters take ownership, `borrow` shares, and a last use moves.
+    - A function takes a parameter it keeps and borrows one it only reads; a last use moves.
 
 This page is only about **who owns that value** when you pass or assign something. There is no `move` keyword. Dream moves for you when it can see you are done with a name.
 
@@ -62,55 +62,62 @@ Automatic **move** (the rest of this page) applies to **share** types. A `struct
 
 ## Passing to a function
 
-Write nothing extra on a parameter and the callee **takes** the value (a **sink**). If you still need the name afterward, Dream **copies** instead of moving.
+Write nothing on a parameter and Dream reads the function body to decide who owns the value:
 
-Mark a parameter `borrow` when the function only **looks** — you keep the value.
+- If the body **keeps** the parameter (stores it in a field, element or global, returns it, or
+  passes it to another function that keeps it), the function **takes** it. This is a **sink**.
+  When you still need the name after the call, Dream passes a copy instead of moving.
+- Otherwise the function only **borrows** it: you keep the value and nothing is copied.
 
-In release builds, the compiler can infer a borrowed calling convention for internal helpers
-without a `borrow` annotation. It proves each parameter independently through aliases and
-known direct calls, including recursion. Returning an alias keeps that parameter owning while
-unrelated parameters can still borrow. The proof is conservative around managed mutations,
-unknown calls, destructors and suspension; exported functions keep their declared ownership
-contract. Explicit `borrow` remains useful for interface contracts and cases inference cannot
-prove. This optimization does not change the source-level sink-default rules.
+Recursive functions are handled too: a function that only passes a parameter to itself and reads
+it borrows it.
+
+Some parameters always take the value, whatever the body does:
+
+- A parameter whose type has a `del` (or holds a value that does), so its destructor always runs
+  when the function returns, never later. Function values and interfaces count as having one,
+  because the compiler cannot see what they hold.
+- Parameters of exported and `async` functions, of interface implementations, and of functions
+  you pass around as values. Their callers cannot be checked, so they keep the written mode.
 
 | On the parameter | Meaning |
 |------------------|---------|
-| *(nothing)* | Sink — callee takes it. Move if this is the last use, otherwise copy. |
-| `borrow` | Share — callee reads it; you still own it. |
+| *(nothing)* | Decided from the body: takes the value if the body keeps it, otherwise borrows it. |
+| `sink` | Always takes the value, even when the body only reads it. |
+| `borrow` | Always borrows: the callee reads it and you still own it. |
 | `ref` | Alias the **variable** itself so the callee can assign to your local. See [Functions](../functions/parameters.md#ref-parameters). |
 
 ```dream
-fun take(s: string): void {
-    System.println(s);
+class Inbox {
+    public last: string;
+
+    public constructor() {
+        this.last = "";
+    }
+
+    public fun keep(s: string): void {
+        this.last = s; // stores s, so `keep` takes it
+    }
 }
 
-fun peek(borrow s: string): void {
-    System.println(s);
+fun show(s: string): void {
+    System.println(s); // only reads s, so `show` borrows it
 }
 
 fun demo() {
+    let inbox = Inbox();
+
     let a = "hi";
-    take(a); // last use of a → move, no extra copy
+    show(a); // a stays yours
+    inbox.keep(a); // last use of a → move, no extra copy
 
     let b = "yo";
-    peek(b); // borrow: b stays yours
-    take(b); // last use → move
+    inbox.keep(b); // b is used again below → copy into keep
+    show(b); // still valid
 }
 ```
 
-If you use the name **after** a sink call, that call becomes a copy:
-
-```dream
-fun demo() {
-    let b = "yo";
-    peek(b);
-    take(b); // b is used again below → copy into take
-    peek(b); // still valid
-}
-```
-
-`List.push` (and similar stores) are sinks too:
+`List.push` (and similar stores) take their argument too:
 
 ```dream
 let xs = List<string>();

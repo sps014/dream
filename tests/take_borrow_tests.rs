@@ -69,7 +69,7 @@ fn use_after_sink_field_store_is_error() {
     assert!(d.has_errors(), "expected use-after-move error");
     let msg = format!("{:?}", d);
     assert!(
-        msg.contains("after move"),
+        msg.contains("after it was moved"),
         "unexpected diagnostics: {}",
         msg
     );

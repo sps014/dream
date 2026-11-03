@@ -60,6 +60,12 @@ mode from the function body, the same way it already infers receiver modes for `
 - **Inferred sink:** the body stores the parameter (field, element, global, escaping capture),
   returns it, moves it into a local that escapes, or passes it to another sink parameter.
 - **Inferred borrow:** every other parameter.
+- **Always sink while counts remain:** a parameter whose destruction may run a `del` (the type, a
+  strongly held part, or an erased `object`/interface/function value). Under reference counting a
+  borrowed argument with a `del` is released at the caller's block end rather than when the call
+  returns, so inferring borrow would move an observable destructor, and objects with a `del` can
+  be reached from outside the frame (a cancellation token's source, a pending host operation).
+  Static destroy at the owner's last use lifts this once unique types stop counting.
 - `ref name: T` stays explicit: it is an exclusive mutable borrow of the caller's place, and the
   call site writes `ref x`.
 

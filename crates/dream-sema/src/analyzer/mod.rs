@@ -32,6 +32,7 @@ pub mod ide;
 mod iterators;
 mod js_interop;
 mod ownership;
+mod param_inference;
 mod receiver_modes;
 mod statements;
 mod switch_unions;
@@ -353,7 +354,10 @@ pub struct Analyzer<'a> {
     type_visibility:
         HashMap<dream_types::DefId, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
     /// Sink RC params moved into a field/index store; further uses of the binding are errors.
-    moved_locals: HashSet<String>,
+    moved_locals: ownership::MovedLocals,
+    /// `(function def, parameter index)` of every explicit `sink` parameter; inference keeps
+    /// these sinks even when the body only reads them.
+    pinned_sink_params: indexmap::IndexSet<(dream_types::DefId, usize)>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
     /// annotation or `return` type). Used to resolve the type arguments of a generic union's
     /// nullary variant (`let o: Option<int> = Option.None;`), where they cannot be inferred from
@@ -471,7 +475,8 @@ impl<'a> Analyzer<'a> {
             ref_boxed_locals: HashSet::new(),
             unboxed_captures: HashSet::new(),
             direct_captures: HashSet::new(),
-            moved_locals: HashSet::new(),
+            moved_locals: ownership::MovedLocals::new(),
+            pinned_sink_params: indexmap::IndexSet::new(),
             closure_parents: indexmap::IndexMap::new(),
             closure_captures: HashMap::new(),
             closure_binding_modifiers: HashMap::new(),

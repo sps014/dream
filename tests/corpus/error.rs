@@ -138,6 +138,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "move_errors",
+        "use of 'node' after it was moved\n'node' was moved into 'holder.node' on line 24; 'holder.node' owns it now\nuse 'holder.node' here instead of 'node'\n'node' was moved into 'holder.slots[0]' on line 29\n'node' was moved into a task body on line 35; the task owns it now\nmake the type a 'shared class' if both threads must use the same object",
+        true,
+    ),
+    Case::error(
         "numeric_errors",
         "cannot convert from float to int\ncannot convert from double to float\ncannot convert from long to int\ncannot convert from float to float16\ncannot convert from int to float16\nliteral 70000.0 does not fit in float16\ninteger literal '99999999999999999999' is out of range or malformed\nliteral 300 does not fit in byte\n~ operator requires an integer operand (int/long/uint/ulong/byte), got bool\n'..' requires int operands",
         true,

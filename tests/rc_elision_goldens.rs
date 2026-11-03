@@ -607,11 +607,7 @@ fn rc_golden_closed_callback_forwarding_keeps_the_reader_borrowed() {
                 .expect(name)
                 .body;
             assert_eq!(count_in(body, "@dream_retain("), 0, "{name}: {body}");
-            assert_eq!(
-                count_in(body, "@dream_release("),
-                usize::from(observes && name == "reader"),
-                "{name}: {body}"
-            );
+            assert_eq!(count_in(body, "@dream_release("), 0, "{name}: {body}");
             assert!(
                 !body
                     .lines()
@@ -625,7 +621,7 @@ fn rc_golden_closed_callback_forwarding_keeps_the_reader_borrowed() {
             .expect("audit");
         assert_eq!(
             count_in(&audit.body, "@dream_retain("),
-            if observes { 2 } else { 0 },
+            usize::from(observes),
             "{}",
             audit.body
         );
@@ -878,4 +874,85 @@ fn rc_golden_stdlib_slot_walks_avoid_element_retains() {
         );
         assert!(!f.body.contains("Iterator"), "{}: {}", f.name, f.body);
     }
+}
+
+fn user_fn<'c>(funcs: &'c [IrFunc], name: &str) -> &'c IrFunc {
+    funcs
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| {
+            let names: Vec<_> = funcs.iter().map(|f| f.name.as_str()).collect();
+            panic!("no function '{name}' in {names:?}")
+        })
+}
+
+#[test]
+fn rc_golden_inferred_borrow_params_have_no_rc_traffic() {
+    // Read-only parameters (including constructors' and those of functions with observable
+    // effects) are inferred borrows before any elision pass runs; a parameter that reaches a
+    // store through another call stays a sink and is handed on without a retain.
+    let code = r#"
+        class Node {
+            public name: string;
+            public constructor(name: string) {
+                this.name = name;
+            }
+        }
+        class Label {
+            public size: int;
+            public constructor(source: Node) {
+                this.size = source.name.length;
+            }
+        }
+        class Bag {
+            public last: Node;
+            public constructor(first: Node) {
+                this.last = first;
+            }
+            public unique fun put(n: Node): void {
+                this.last = n;
+            }
+        }
+        fun show(n: Node, depth: int): void {
+            System.println(n.name);
+            if (depth > 0) {
+                show(n, depth - 1);
+            }
+        }
+        fun forward(b: Bag, n: Node): void {
+            b.put(n);
+        }
+        fun main(): void {
+            let a = Node("alpha");
+            show(a, 3);
+            System.println(Label(a).size);
+            let b = Bag(Node("first"));
+            forward(b, a);
+        }
+    "#;
+    let c = emit_hir_to_module_rc_only(&format!("{}\n{}", SYSTEM_STUB, code));
+    let funcs = ir_func_defs(&c);
+    for f in funcs
+        .iter()
+        .filter(|f| f.name.contains("Label_0_constructor") || f.name == "show")
+    {
+        assert_eq!(
+            count_in(&f.body, "@dream_rc_last(") + count_in(&f.body, "@release_Node("),
+            0,
+            "'{}' should borrow its parameter:\n{}",
+            f.name,
+            f.body
+        );
+    }
+    assert!(
+        funcs.iter().any(|f| f.name == "show")
+            && funcs.iter().any(|f| f.name.contains("Label_0_constructor")),
+        "'show' or the 'Label' constructor was not emitted:\n{c}"
+    );
+    let forward = &user_fn(&funcs, "forward").body;
+    assert_eq!(
+        count_in(forward, "@dream_retain("),
+        0,
+        "'forward' should hand its sink parameter on:\n{forward}"
+    );
 }

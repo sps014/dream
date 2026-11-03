@@ -163,7 +163,7 @@ impl<'a> Analyzer<'a> {
         )?;
         let body_hir = self.hir_close_block();
         let exit_moved = self.snapshot_moved();
-        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        let merged = crate::analyzer::ownership::merge_moved(entry_moved, &exit_moved);
         self.restore_moved(merged);
         self.hir_foreach(elem_slot, iter_hir, body_hir, label);
         Ok(())
@@ -198,7 +198,7 @@ impl<'a> Analyzer<'a> {
         self.analyze_body(body, parent_function, Some(&body_scope), true, diagnostics)?;
         let body_hir = self.hir_close_block();
         let exit_moved = self.snapshot_moved();
-        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        let merged = crate::analyzer::ownership::merge_moved(entry_moved, &exit_moved);
         self.restore_moved(merged);
         self.hir_while(cond_hir, body_hir, label);
         Ok(())
@@ -222,7 +222,7 @@ impl<'a> Analyzer<'a> {
         self.analyze_body(body, parent_function, Some(symbol_table), true, diagnostics)?;
         let body_hir = self.hir_close_block();
         let exit_moved = self.snapshot_moved();
-        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        let merged = crate::analyzer::ownership::merge_moved(entry_moved, &exit_moved);
         self.restore_moved(merged);
         self.hir_do_while(cond_hir, body_hir, label);
         Ok(())
@@ -290,7 +290,7 @@ impl<'a> Analyzer<'a> {
         let body_hir = self.hir_close_block();
 
         let exit_moved = self.snapshot_moved();
-        let merged = entry_moved.union(&exit_moved).cloned().collect();
+        let merged = crate::analyzer::ownership::merge_moved(entry_moved, &exit_moved);
         self.restore_moved(merged);
 
         self.hir_for(init_hir, cond_hir, step_hir, body_hir, label);

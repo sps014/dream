@@ -31,7 +31,7 @@ impl<'a> Analyzer<'a> {
         let branches = std::iter::once((condition, condition.position(), if_body))
             .chain(else_if.iter().map(|i| (&i.0, i.0.position(), &i.1)));
 
-        let mut branch_moved: Vec<indexmap::IndexSet<String>> = Vec::new();
+        let mut branch_moved: Vec<crate::analyzer::ownership::MovedLocals> = Vec::new();
         let before_if = self.snapshot_moved();
 
         let mut taken_index: Option<usize> = None;
@@ -191,7 +191,7 @@ impl<'a> Analyzer<'a> {
 
         let mut merged = before_if;
         for m in branch_moved {
-            merged = merged.union(&m).cloned().collect();
+            merged = crate::analyzer::ownership::merge_moved(merged, &m);
         }
         self.restore_moved(merged);
 

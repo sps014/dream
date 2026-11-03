@@ -288,6 +288,11 @@ impl<'a> Analyzer<'a> {
             let local = LocalId(self.hir.next_local);
             self.hir.next_local += 1;
             self.hir.locals.insert(param.name.text.clone(), (local, ty));
+            if param.is_sink
+                && let Some(def) = self.hir.def
+            {
+                self.pinned_sink_params.insert((def, self.hir.params.len()));
+            }
             self.hir.params.push(HParam {
                 local,
                 name: param.name.text.clone(),

@@ -739,7 +739,7 @@ impl<'a> Analyzer<'a> {
         // The lambda literal is the transfer point: from here on, moved captures are owned by
         // the worker body and any later use of the sender-side binding is a use-after-move.
         for name in move_captures {
-            self.moved_locals.insert(name);
+            self.note_task_capture_move(name, Some(lambda.open_paren_position));
         }
         match captures.len() {
             0 => self.hir_set_func_value(&name, &func_ty, &box_ret),

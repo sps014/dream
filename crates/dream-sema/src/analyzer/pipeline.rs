@@ -64,6 +64,23 @@ impl<'a> Analyzer<'a> {
         if diagnostics.has_errors() {
             return Err(SemanticError::AnalysisFailed);
         }
+        let exports: indexmap::IndexSet<_> = node
+            .functions
+            .iter()
+            .filter(|f| dream_abi::attributes::has_export_attr(&f.attributes))
+            .filter_map(|f| self.function_table.declaration_node(f).map(|(def, _)| def))
+            .collect();
+        param_inference::infer_param_modes(
+            &mut hir_functions,
+            &mut self.hir.global_decls,
+            &param_inference::Program {
+                interfaces: &interfaces,
+                exports: &exports,
+                pinned_sink: &self.pinned_sink_params,
+                interner: &self.type_ctx.interner,
+                layouts: &layouts,
+            },
+        );
         self.validate_cycles(
             node,
             &layouts,

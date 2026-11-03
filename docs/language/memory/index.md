@@ -47,7 +47,7 @@ Every heap object tracks how many names still point at it.
 - When a variable goes out of scope, that count goes down.
 - Reassigning a variable drops the value it held before. Module-level `let` names follow the same automatic reference tracking rules as a field store (a still-live local copied into a global is retained; the previous occupant is released).
 - When the count reaches zero, the object is freed (its `del` destructor runs first, if it has one).
-- Passing and assigning heap values uses [ownership](ownership.md): unmarked parameters take ownership, `borrow` shares, and a last use **moves** instead of copying.
+- Passing and assigning heap values uses [ownership](ownership.md): a function takes a parameter its body keeps and borrows one it only reads, and a last use **moves** instead of copying.
 
 ```dream
 fun make_list(): int[] {
@@ -84,7 +84,7 @@ The following are documented limitations, not silent unsoundness — each degrad
 - Use `byte_size` / `byte_at` for the raw UTF-16 bytes; `char_at` / `substring` index UTF-16 code units. `substring` is a cheap slice of the parent; `string.clone` copies.
 - `List` / `Map` / `Set` `clear()` keeps capacity. Prefer `clear` + refill over allocating a new collection each batch.
 - `Arena` manually owns raw blocks for mixed unmanaged scratch allocations. `reset()` invalidates allocations and retains blocks for reuse; `free()` releases all storage. [`sizeof` and `alignof`](../basics/type-queries.md#sizeof-nameof-and-typeof) report target storage size and alignment.
-- Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`.
+- A function borrows a parameter it only reads, so readers need no annotation (see [Ownership](ownership.md)).
 - Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths.
 
 ## Call stack (`dream run`)

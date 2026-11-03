@@ -173,21 +173,22 @@ Rules:
   `T` values, not a pre-built array).
 
 
-## Ownership: sink-default and `borrow`
+## Ownership: inferred from the body
 
-Unmarked parameters **sink**; `borrow` shares; last-use **moves** with no keyword. Full guide:
-[Ownership](../memory/ownership.md).
+Write nothing on a parameter and Dream decides from the function body: the function **takes**
+(sinks) a parameter it keeps, and **borrows** one it only reads. A last use **moves** with no
+keyword. Full guide, including the parameters that always sink: [Ownership](../memory/ownership.md).
 
 | Modifier | Meaning |
 |----------|---------|
-| *(none)* | Sink — callee takes it (move if last use, else copy) |
-| `sink` | Sink, written out — the same as no modifier today |
-| `borrow` | Callee reads it; you keep it |
+| *(none)* | Takes the value if the body keeps it, otherwise borrows it |
+| `sink` | Always takes the value |
+| `borrow` | Always borrows: callee reads it; you keep it |
 | `ref` | Mutable place alias ([below](#ref-parameters)) |
 
-You never need to write `sink`: an unmarked parameter already sinks. It exists for declarations
-that want to state the contract in the signature, such as an interface method whose
-implementations keep the argument:
+You never need to write `sink` on a function with a body. It exists for declarations without one,
+such as an interface method whose implementations keep the argument, and for pinning a contract
+that should not change when the body does:
 
 ```dream
 interface Store {

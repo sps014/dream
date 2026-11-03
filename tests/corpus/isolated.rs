@@ -9,7 +9,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::isolated(
         "arc_complete",
-        "use 1\ndrop 1\n0\ndrop 0\ndrop 1\ndrop 2\ndrop 3\n0\n15\ndrop 15\n0\nZaphod\nbye Zaphod\n0\nconsume 5\ndrop 5\n0\n2\n3\n4\n3\n1\n2\n1\n2\n1\nrc.fresh=1\nrc.aliased=2\nrc.in_field=3\nrc.in_array=5\nheld\n2\nlive_delta=0\nheap_grew=false\nfree_stable=false\ndrop 1\ndrop 2\ndone",
+        "use 1\ndrop 1\n0\ndrop 0\ndrop 1\ndrop 2\ndrop 3\n0\n15\ndrop 15\n0\nZaphod\nbye Zaphod\n0\nconsume 5\ndrop 5\n0\n2\n3\n4\n3\n1\n2\n1\n2\n2\nrc.fresh=1\nrc.aliased=2\nrc.in_field=3\nrc.in_array=5\nheld\n2\nlive_delta=0\nheap_grew=false\nfree_stable=false\ndrop 1\ndrop 2\ndone",
         true,
         "destructor ordering and exit cleanup",
     ),

@@ -304,6 +304,8 @@ fun struct_last_use_move() {
     take(b);
     take(c);
 
+    // `take_leaf` only reads its parameter, so the retained `d.n` snapshot lives to the end of
+    // the function and `take(d)` sees two owners.
     let d = Wrap(Leaf());
     take_leaf(d.n);
     take(d);

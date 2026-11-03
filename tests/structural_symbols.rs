@@ -50,7 +50,7 @@ fn parameter_ownership_modes_are_semantic_hir_facts() {
         r#"
         class Owned { public constructor() {} }
         shared class Shared { public constructor() {} }
-        fun modes(borrow borrowed: Owned, sink: Owned, shared_value: Shared, ref number: int): void {}
+        fun modes(borrow borrowed: Owned, sink pinned: Owned, read: Owned, shared_value: Shared, ref number: int): void {}
         fun main(): void {}
     "#
     );
@@ -70,6 +70,7 @@ fn parameter_ownership_modes_are_semantic_hir_facts() {
             vec![
                 dream_hir::ParamMode::Borrow,
                 dream_hir::ParamMode::Sink,
+                dream_hir::ParamMode::Borrow,
                 dream_hir::ParamMode::Share,
                 dream_hir::ParamMode::Ref
             ]

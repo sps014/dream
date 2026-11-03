@@ -1,0 +1,41 @@
+// Each use after a move names where the value went and what to use instead.
+import system;
+import system.task;
+
+class Node {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+class Holder {
+    public node: Node;
+    public slots: Node[];
+
+    public constructor(node: Node) {
+        this.node = node;
+        this.slots = Array.alloc<Node>(1);
+    }
+}
+
+fun adopt(holder: Holder, node: Node): void {
+    holder.node = node;
+    System.println(node.name);
+}
+
+fun slot(holder: Holder, node: Node): void {
+    holder.slots[0] = node;
+    System.println(node.name);
+}
+
+async fun spawned(): void {
+    let node = Node("task");
+    let _ = Task.spawn(() => {
+        return node.name;
+    }).await;
+    System.println(node.name);
+}
+
+fun main(): void {}

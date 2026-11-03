@@ -289,6 +289,10 @@ pub struct Analyzer<'a> {
     intrinsic_defs: Vec<(dream_types::DefId, String)>,
     generic_method_bindings: indexmap::IndexMap<dream_types::DefId, GenericBindings>,
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
+    /// Skip library bodies until reachable HIR names them; see `declarations::functions::reach`.
+    lazy_library_bodies: bool,
+    /// Library bodies whose analysis waits for a reachable reference, keyed by their def.
+    deferred_bodies: IndexMap<dream_types::DefId, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
     enum_table: EnumTable,
     /// Layout of every registered (monomorphized) discriminated union.
@@ -480,6 +484,8 @@ impl<'a> Analyzer<'a> {
             intrinsic_defs: Vec::new(),
             generic_method_bindings: indexmap::IndexMap::new(),
             struct_methods: Vec::new(),
+            lazy_library_bodies: false,
+            deferred_bodies: IndexMap::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),
             generic_unions: HashMap::new(),
@@ -577,6 +583,15 @@ impl<'a> Analyzer<'a> {
     /// Active compile-time runtime target(s). Call before [`Self::analyze`].
     pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
         self.compile_targets = targets;
+        self
+    }
+
+    /// Analyze only the library bodies a user body, export, or global initializer can reach.
+    /// Unreached library code is then neither type-checked nor emitted, so callers that need
+    /// diagnostics or facts for the whole prelude keep the default eager analysis.
+    /// Call before [`Self::analyze`].
+    pub fn with_lazy_library_bodies(mut self) -> Self {
+        self.lazy_library_bodies = true;
         self
     }
 

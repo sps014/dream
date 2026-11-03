@@ -2,9 +2,9 @@
 //! points, then drops globals no surviving function reads.
 
 use super::FnKey;
-use super::hir_edges::{HirEdges, hir_body_edges};
 use crate::lower;
 use crate::{Global, Mir, Operand, Place, Rvalue, Statement, Terminator};
+use dream_hir::{HirEdges, hir_body_edges};
 use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 

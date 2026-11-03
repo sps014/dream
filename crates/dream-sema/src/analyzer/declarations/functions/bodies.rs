@@ -15,6 +15,9 @@ impl<'a> Analyzer<'a> {
             if function.is_extern {
                 continue;
             }
+            if self.defer_library_body(function, &GenericBindings::new()) {
+                continue;
+            }
             diagnostics.file_path = file_path_string(&function.file_path);
             self.analyze_function(function, diagnostics)?;
         }
@@ -22,7 +25,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Passes 3 & 4 (combined fixpoint): analyze the bodies of every monomorphized generic
-    /// function instance and every (de-sugared) struct method.
+    /// function instance, every (de-sugared) struct method, and every deferred library body that
+    /// emitted HIR reaches.
     ///
     /// Analyzing one body can lazily instantiate *more* generics — a struct method that uses
     /// `List<JsonValue>` queues new struct methods, and a builder that calls `List<JsonValue>()`
@@ -37,6 +41,7 @@ impl<'a> Analyzer<'a> {
         let mut processed_generics: indexmap::IndexSet<crate::function_table::FunctionIdentity> =
             indexmap::IndexSet::new();
         let mut method_index = 0;
+        let mut reach = super::reach::LibraryReach::default();
         // Semantic type depth bounds recursive expansion without penalizing qualified callback names.
         let mut items_processed: usize = 0;
         loop {
@@ -105,6 +110,9 @@ impl<'a> Analyzer<'a> {
             while method_index < self.struct_methods.len() {
                 let (method, bindings) = self.struct_methods[method_index].clone();
                 method_index += 1;
+                if self.defer_library_body(method, &bindings) {
+                    continue;
+                }
                 diagnostics.file_path = file_path_string(&method.file_path);
                 self.with_generic_bindings(bindings.clone(), |s| {
                     s.analyze_function(method, diagnostics)
@@ -117,6 +125,10 @@ impl<'a> Analyzer<'a> {
                 check_instantiation_bounds(items_processed, &bindings, &key, diagnostics)?;
                 progressed = true;
             }
+
+            // Runs after the struct-method pass so the methods of types instantiated by the bodies
+            // it analyzes are already deferred when the next round scans those bodies.
+            progressed |= self.analyze_reachable_library_bodies(&mut reach, diagnostics)?;
 
             if !progressed {
                 break;

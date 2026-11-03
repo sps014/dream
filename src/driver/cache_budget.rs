@@ -94,10 +94,13 @@ pub fn enforce(dir: &Path, budget: u64, skip: &[&str]) {
     }
 }
 
+/// Shares its cache directory with the entries it guards.
+pub const CHECK_MARKER: &str = ".budget-checked";
+
 /// Measuring a directory walks every entry, so each compile process would otherwise pay for it.
 /// The marker's modification time records the last check across processes.
 fn due(dir: &Path) -> bool {
-    let marker = dir.join(".budget-checked");
+    let marker = dir.join(CHECK_MARKER);
     let now = SystemTime::now();
     if std::fs::metadata(&marker)
         .and_then(|meta| meta.modified())

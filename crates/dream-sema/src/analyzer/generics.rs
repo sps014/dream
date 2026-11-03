@@ -294,7 +294,7 @@ impl<'a> Analyzer<'a> {
 
     /// Registers every generic value-struct instance reachable through `ty`'s fields, such as
     /// `GpuHandle<GpuTexture>` inside a user struct, so the kind check can see their fields.
-    fn instantiate_value_fields(
+    pub(in crate::analyzer) fn instantiate_value_fields(
         &mut self,
         ty: dream_types::TypeId,
         seen: &mut indexmap::IndexSet<dream_types::TypeId>,

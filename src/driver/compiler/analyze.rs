@@ -14,6 +14,7 @@ impl Compiler {
             .with_aliased_imports(loaded.acc.aliased_imports.clone())
             .with_crate_type(self.crate_type)
             .with_compile_targets(self.compile_targets)
+            .with_lazy_library_bodies()
             .with_target_layout(dream_hir::TargetLayout {
                 ptr_size: self.target.spec().ptr_size,
                 ptr_align: self.target.spec().ptr_align,

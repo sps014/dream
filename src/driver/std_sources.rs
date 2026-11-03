@@ -80,6 +80,7 @@ pub fn materialize(root: &Path) -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::driver::cache_budget::CHECK_MARKER;
 
     #[test]
     fn concurrent_compiles_publish_complete_source_trees() {
@@ -96,7 +97,7 @@ mod tests {
                 });
             }
         });
-        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        assert_eq!(trees(root.path()), 1);
     }
 
     #[test]
@@ -110,7 +111,13 @@ mod tests {
             .unwrap()
             .1;
         assert_eq!(std::fs::read_to_string(list).unwrap(), embedded_list);
-        let entries = std::fs::read_dir(root.path()).unwrap().count();
-        assert_eq!(entries, 1, "staging directories are cleaned up");
+        assert_eq!(trees(root.path()), 1, "staging directories are cleaned up");
+    }
+
+    fn trees(root: &Path) -> usize {
+        std::fs::read_dir(root)
+            .unwrap()
+            .filter(|entry| entry.as_ref().unwrap().file_name() != CHECK_MARKER)
+            .count()
     }
 }

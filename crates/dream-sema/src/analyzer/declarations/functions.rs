@@ -9,6 +9,7 @@ use dream_syntax::nodes::Type;
 
 mod bodies;
 mod entry;
+mod reach;
 mod visibility;
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn check_internal_intrinsic_declaration(

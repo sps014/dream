@@ -183,7 +183,7 @@ before/after measurement.
 | Candidate | Saves (Debug edit) | Saves (unchanged) | Effort | Risk |
 |---|---|---|---|---|
 | Cache the generator analysis (`analyze_for_generators`, about 0.35 s with `@json`) across edits that leave the generator inputs unchanged | 0.35 s with `@json` | — | Medium | Medium: incremental-generator correctness |
-| Cache the parsed and analyzed prelude per package | 0.2–0.5 s | — | Large | Medium: arena AST lifetime |
+| Cache the parsed prelude per package (`prelude_parse` is about 0.1 s for `hello`) | 0.1–0.4 s | — | Large | Medium: arena AST lifetime |
 | Ship prebuilt runtime objects, runtime signatures and std generator executables with the toolchain | — | — | Medium | Low; cold Debug drops from 4–26 s to about the edit time |
 | Cranelift Debug backend | at most 0.1–0.5 s | — | Large | High |
 
@@ -252,6 +252,34 @@ in the last 15 minutes is kept, so a compile does not delete an object another l
 open. A cache hit refreshes the entry's modification time. Each directory is measured at most
 once a minute across processes; a `.budget-checked` marker records the last check.
 
+A third round stopped analyzing standard-library bodies that the program cannot reach. The
+driver enables `Analyzer::with_lazy_library_bodies`. Std free functions and std struct and
+extension methods are then deferred, and the instantiation fixpoint analyzes only those that
+already emitted HIR reaches. The edges match MIR dead-code pruning:
+
+- direct callees and function references;
+- the destructor, `to_string` and `hash_code` of every type a reachable body or global
+  mentions, including nested type arguments and field types;
+- the protocol methods of every primitive;
+- for each interface slot that is called, the method filling it in every implementing type.
+
+Exported functions stay roots. Once a compile has reported an error, every deferred body is
+analyzed, so diagnostics in library bodies still appear. A generic value struct named only by
+a field (such as `ReadOnlySpan<char>` inside `StringLines`) is instantiated directly, because
+every registered struct gets a layout. The LSP, generator analysis and the `dream-sema` tests
+keep eager analysis. For `hello`, `sema` went from 147 ms to 25 ms and monomorphization from
+112 ms to 2 ms. Later phases gain as well, because far less unreachable code reaches lowering
+and the MIR passes. Alternating the two compilers, median of 8:
+
+| Workload | Edited before | Edited after | Unchanged before | Unchanged after |
+|---|---:|---:|---:|---:|
+| `hello` | 0.55 s | 0.41 s | 0.01 s | 0.01 s |
+| `stdlib` | 1.96 s | 1.13 s | 0.01 s | 0.01 s |
+
+Any of the C compiler variables in `ToolchainConfig::compiler_environment` (`CPATH`,
+`LIBRARY_PATH`, …) disables the build caches, so a benchmark harness must clear them. Homebrew
+Python exports both.
+
 #### Toolchain failures found during measurement
 
 - With the default Zig 0.16 linker driver, native Release links and every source-generator
@@ -263,7 +291,8 @@ once a minute across processes; a `.budget-checked` marker records the last chec
   the file name.
 - The system `ld` (ld-27037) rejects the locally built `libdream_host_net.dylib` with
   "mis-aligned LINKEDIT string pool", so the `webapi` sample could not be measured with the
-  system `cc`.
+  system `cc`. The misalignment comes from the release profile's default debug-info `strip`.
+  Building with `CARGO_PROFILE_RELEASE_STRIP=none` produces a library that links.
 
 ### Historical measured results and remaining performance cost
 

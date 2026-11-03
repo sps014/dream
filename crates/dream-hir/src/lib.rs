@@ -6,11 +6,13 @@
 //! desugaring into a CFG happens in MIR. Monomorphization is an explicit [`MonoInstance`] worklist.
 #![deny(clippy::disallowed_types)]
 
+mod edges;
 pub mod layout;
 mod module;
 mod nodes;
 pub mod ops;
 
+pub use edges::{HirEdges, hir_body_edges, hir_expr_edges};
 pub use layout::{
     FieldLayout, LayoutFieldDef, LayoutTable, StructLayoutDef, TargetLayout, TypeLayout,
     UnionLayout, UnionLayoutDef, UnionVariant, UnionVariantDef,

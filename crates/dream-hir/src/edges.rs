@@ -1,17 +1,19 @@
-//! HIR call-edge recovery. An `async` function is lowered to a MIR stub (its real control flow is
-//! rebuilt from `hir_fn` during the coroutine transform in `async_emit`), so the block-based
-//! reachability walk in [`super::dead_code`] cannot see the calls it makes. These walkers recover
-//! those edges (plus live types, string literals, and interface calls) from the preserved HIR body so
-//! a callee reachable *only* through an async body is not pruned.
+//! HIR call-edge recovery. The analyzer uses these edges to decide which library bodies are
+//! reachable before it analyzes them. MIR uses them for `async` functions, whose MIR body is a stub
+//! rebuilt from the preserved HIR during the coroutine transform, so its block walk cannot see the
+//! calls they make.
 
-use super::FnKey;
-use dream_types::TypeId;
+use dream_types::{DefId, TypeId};
+
+type FnKey = (DefId, Vec<TypeId>);
 
 /// The edges (call targets, live types) and string literals discovered in an HIR body.
 #[derive(Default)]
-pub(crate) struct HirEdges {
+pub struct HirEdges {
     pub callees: Vec<FnKey>,
     pub types: Vec<TypeId>,
+    /// The type of every expression, a superset of the types MIR temporaries take.
+    pub expr_types: Vec<TypeId>,
     pub strings: Vec<String>,
     /// `(iface_id, method_slot)` of every interface call, so reachability can keep the concrete
     /// implementations dispatched through it.
@@ -25,14 +27,14 @@ pub(crate) struct HirEdges {
     pub hash_code: Vec<TypeId>,
 }
 
-pub(crate) fn hir_body_edges(body: &[dream_hir::HStmt], out: &mut HirEdges) {
+pub fn hir_body_edges(body: &[crate::HStmt], out: &mut HirEdges) {
     for stmt in body {
         hir_stmt_edges(stmt, out);
     }
 }
 
-fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
-    use dream_hir::{HPlace, HStmt};
+fn hir_stmt_edges(stmt: &crate::HStmt, out: &mut HirEdges) {
+    use crate::{HPlace, HStmt};
     match stmt {
         HStmt::Let { value, .. } | HStmt::Expr(value) | HStmt::Await { future: value, .. } => {
             hir_expr_edges(value, out)
@@ -103,7 +105,7 @@ fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
         } => {
             hir_expr_edges(scrutinee, out);
             for arm in arms {
-                if let dream_hir::HPattern::Const(e) = &arm.pattern {
+                if let crate::HPattern::Const(e) = &arm.pattern {
                     hir_expr_edges(e, out);
                 }
                 hir_body_edges(&arm.body, out);
@@ -114,8 +116,9 @@ fn hir_stmt_edges(stmt: &dream_hir::HStmt, out: &mut HirEdges) {
     }
 }
 
-fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
-    use dream_hir::HExprKind as K;
+pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
+    use crate::HExprKind as K;
+    out.expr_types.push(e.ty);
     match &e.kind {
         K::RawLoad(address) => hir_expr_edges(address, out),
         K::RawStore { address, value } => {
@@ -308,7 +311,7 @@ fn hir_expr_edges(e: &dream_hir::HExpr, out: &mut HirEdges) {
         // walk keeps it alive via `Rvalue::FuncRef`, but an `async` body's reachability comes only
         // from these HIR edges, so record the callee here or it would be pruned and its funcref
         // slot would be missing from the function table.
-        K::Var(dream_hir::Binding::Func(callee)) => {
+        K::Var(crate::Binding::Func(callee)) => {
             let key = (callee.def, callee.instance.clone());
             out.callees.push(key.clone());
             out.funcrefs.push(key);

@@ -223,8 +223,7 @@ impl<'a> Analyzer<'a> {
         self.hir.name_span = Some(function.name.position);
         self.hir.is_async = function.is_async;
         self.hir.file = function.file_path.as_ref().map(|f| f.to_string());
-        self.hir.borrowed_result =
-            dream_abi::attributes::has_named_attr(&function.attributes, "borrowed_result");
+        self.hir.borrowed_result = function.returns_borrow;
         self.hir.inline = if dream_abi::attributes::has_noinline_attr(&function.attributes) {
             dream_hir::InlineHint::Never
         } else if dream_abi::attributes::has_inline_attr(&function.attributes) {

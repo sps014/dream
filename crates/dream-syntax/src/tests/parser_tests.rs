@@ -62,6 +62,34 @@ fn test_parse_sink_parameter_modifier() {
 }
 
 #[test]
+fn test_parse_borrow_return_type() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "class Bag { fun first(): borrow string { return \"\"; } fun this[i: int]: borrow int { return i; } get size(): int { return 0; } }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    let shape: Vec<(bool, String)> = program.structs[0]
+        .methods
+        .iter()
+        .map(|m| {
+            (
+                m.returns_borrow,
+                m.return_type.as_ref().unwrap().get_type(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            (true, "string".to_string()),
+            (true, "int".to_string()),
+            (false, "int".to_string())
+        ]
+    );
+}
+
+#[test]
 fn test_parse_sink_lambda_parameter() {
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(

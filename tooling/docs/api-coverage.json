@@ -4314,25 +4314,25 @@
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 363,
+        "line": 362,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T: Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 417,
+        "line": 416,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 425,
+        "line": 424,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 444,
+        "line": 443,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -4416,93 +4416,93 @@
         "page": "reference/api/collections-map.md"
       },
       {
-        "signature": "public fun get(borrow key: K): Option<V>",
+        "signature": "public fun get(borrow key: K): borrow Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 252,
+        "line": 251,
         "page": "reference/api/collections-map.md"
       },
       {
-        "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey",
+        "signature": "public fun get(borrow key: ReadOnlySpan<char>): borrow Option<V> where K: StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 262,
+        "line": 260,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey",
         "description": "Returns whether `key` is present.",
-        "line": 271,
+        "line": 269,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 277,
+        "line": 275,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V",
         "description": "Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.",
-        "line": 287,
+        "line": 285,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "Copies entries from `other`, replacing values with matching keys.",
-        "line": 298,
+        "line": 296,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "Returns a new list of key/value pairs.",
-        "line": 305,
+        "line": 303,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes `key` and its value; returns whether the key was present.",
-        "line": 318,
+        "line": 316,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "Returns whether there are no elements.",
-        "line": 334,
+        "line": 332,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 340,
+        "line": 338,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void where K: unmanaged, V: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 360,
+        "line": 358,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun keys(): List<K>",
         "description": "Returns a new list of the keys, in the map's iteration order.",
-        "line": 367,
+        "line": 365,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun values(): List<V>",
         "description": "Returns a new list of the values, in the map's iteration order.",
-        "line": 380,
+        "line": 378,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "Creates a cursor over the sequence. Close it when iteration ends early.",
-        "line": 393,
+        "line": 391,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 418,
+        "line": 414,
         "page": "reference/api/collections-map.md"
       }
     ]
@@ -4960,7 +4960,7 @@
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 408,
+        "line": 407,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -15027,81 +15027,81 @@
         "page": "reference/api/json-json-value-1.md"
       },
       {
-        "signature": "public fun as_array(): Option<List<JsonValue>>",
+        "signature": "public fun as_array(): borrow Option<List<JsonValue>>",
         "description": "Returns the elements when this is an array, otherwise `None`.",
-        "line": 182,
+        "line": 181,
         "page": "reference/api/json-json-value-1.md"
       },
       {
-        "signature": "public fun as_map(): Option<Map<string, JsonValue>>",
+        "signature": "public fun as_map(): borrow Option<Map<string, JsonValue>>",
         "description": "Returns the entries when this is an object, otherwise `None`.",
-        "line": 191,
+        "line": 189,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun remove(borrow key: string): bool",
         "description": "Removes the named object property; returns whether it existed.",
-        "line": 199,
+        "line": 197,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun contains(borrow key: string): bool",
         "description": "Returns whether this is an object with a property named `key`. Always `false` for arrays and scalars.",
-        "line": 226,
+        "line": 224,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun get(borrow key: string): Option<JsonValue>",
         "description": "Returns the property named `key`, or `None` when this is not an object or the property is absent. Chain `as_string`, `as_int`, and similar readers through `and_then` to read a typed property.",
-        "line": 236,
+        "line": 234,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun this[borrow key: string]: JsonValue",
         "description": "Returns the property named `key`. Panics when this is not an object or the property is absent; use `get` when absence is expected.",
-        "line": 245,
+        "line": 243,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun this[key: string] = value: JsonValue",
         "description": "Sets the value for `key` (objects only).",
-        "line": 254,
+        "line": 252,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun key_at(index: int): Option<string>",
         "description": "The object key at `index`, or `None`.",
-        "line": 285,
+        "line": 283,
         "page": "reference/api/json-json-value-1.md"
       },
       {
         "signature": "public fun value_at(index: int): Option<JsonValue>",
         "description": "The object value at insertion index `index`, or `None`.",
-        "line": 300,
+        "line": 298,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun keys(): List<string>",
         "description": "The keys of the object (empty list when not an object).",
-        "line": 315,
+        "line": 313,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun at(index: int): Option<JsonValue>",
         "description": "The array element at `index`, or `None`.",
-        "line": 320,
+        "line": 318,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun push(value: JsonValue): void",
         "description": "Appends a value to the array.",
-        "line": 335,
+        "line": 333,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Element count for arrays/objects (0 for scalars).",
-        "line": 345,
+        "line": 343,
         "page": "reference/api/json-json-value-2.md"
       }
     ]

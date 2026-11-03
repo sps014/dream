@@ -127,6 +127,13 @@ xs.push(s); // last use of s → move into the list
 
 A method’s implicit `this` is **never** a sink. Calling `obj.foo()` does not consume `obj`.
 
+### Results marked `borrow`
+
+A few standard library methods, such as `Map.get` and `JsonValue.as_map`, show `borrow` before
+their return type (`fun get(borrow key: K): borrow Option<V>`). The result is read straight out
+of the collection instead of being copied for the call. You use and keep it like any other
+value; Dream adds the copy only when the value outlives the line that reads it.
+
 ## Last-use move (no keyword)
 
 Dream looks **forward**: after this line, is this name still read?
@@ -158,9 +165,18 @@ class Bag {
     public constructor(items: List<int>) {
         this.items = items;
         this.end = this.items.length; // OK
-    // this.end = items.length;     // error: 'items' was moved into the field
+    // this.end = items.length;     // error: use of 'items' after it was moved
     }
 }
+```
+
+The error names the place that owns the value now and what to write instead:
+
+```text
+error: use of 'items' after it was moved
+note: 'items' was moved into 'this.items' on line 6; 'this.items' owns it now
+help: use 'this.items' here instead of 'items'
+help: or read what you need from 'items' before the line that stores it
 ```
 
 Giving a new value to the same name (`items = List<int>();`) makes the name usable again.

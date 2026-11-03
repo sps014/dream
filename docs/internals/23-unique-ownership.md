@@ -428,7 +428,8 @@ There is no compatibility path. Every program, test, sample and stdlib file migr
   modifiers that only restate the inferred mode are deleted.
 - Aliased class graphs become `shared class` or restructure into trees or indices.
 - Indexers and getters return `borrow T`; element moves use `take`, `swap`, `pop` and `drain`.
-- `@borrowed_result` is deleted in favor of projections.
+- `@borrowed_result` is replaced by the `: borrow T` return modifier, still limited to standard
+  library slot getters until the exclusivity checker can validate user projections.
 - `unowned` fields become `weak` fields of a `shared class`, or are restructured.
 
 ## 8. Open follow-ups

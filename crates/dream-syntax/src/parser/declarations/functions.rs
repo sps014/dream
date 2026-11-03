@@ -187,11 +187,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let mut prop_name = self.match_token(TokenKind::IdentifierToken);
             Self::splice_leading_trivia(&mut prop_name, first_trivia);
             let params = self.parse_formal_parameters()?;
-            let mut return_type: Option<Type> = None;
-            if self.current_token().kind == TokenKind::ColonToken {
-                self.match_token(TokenKind::ColonToken);
-                return_type = Some(self.parse_type()?);
-            }
+            let (return_type, returns_borrow) = self.parse_return_type()?;
             let block = self.parse_block()?;
             let mut node = FunctionNode::new(
                 attributes,
@@ -206,6 +202,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_async = is_async;
             node.accessor = Some(accessor_kind);
             node.is_override = is_override;
+            node.returns_borrow = returns_borrow;
             return Ok(node);
         }
 
@@ -276,12 +273,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
 
-        let mut return_type: Option<Type> = None;
-        if self.current_token().kind == TokenKind::ColonToken {
-            //eat the colon
-            self.match_token(TokenKind::ColonToken);
-            return_type = Some(self.parse_type()?);
-        }
+        let (return_type, returns_borrow) = self.parse_return_type()?;
 
         let where_constraints = self.parse_where_constraints();
 
@@ -309,6 +301,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 visibility,
             );
             node.is_extern = true;
+            node.returns_borrow = returns_borrow;
             node.is_static = is_static;
             node.is_async = is_async;
             node.generic_constraints = generic_constraints;
@@ -331,6 +324,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             block,
             visibility,
         );
+        node.returns_borrow = returns_borrow;
         node.is_static = is_static;
         node.is_async = is_async;
         node.generic_constraints = generic_constraints;
@@ -531,6 +525,19 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     /// Consumes a contextual `sink` parameter modifier. `sink` is a modifier only when another
     /// identifier (or `...`) follows it (`sink items: T`); `sink: T` is a parameter named `sink`.
+    /// An optional `: T` or `: borrow T` return annotation.
+    fn parse_return_type(&mut self) -> Result<(Option<Type>, bool), Error> {
+        if self.current_token().kind != TokenKind::ColonToken {
+            return Ok((None, false));
+        }
+        self.match_token(TokenKind::ColonToken);
+        let returns_borrow = self.current_token().kind == TokenKind::BorrowToken;
+        if returns_borrow {
+            self.next_token();
+        }
+        Ok((Some(self.parse_type()?), returns_borrow))
+    }
+
     pub(crate) fn eat_sink_modifier(&mut self) -> bool {
         let current = self.current_token();
         if current.kind == TokenKind::IdentifierToken

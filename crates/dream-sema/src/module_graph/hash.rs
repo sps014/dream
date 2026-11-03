@@ -227,7 +227,11 @@ fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
         Some(ty) => hash_type(hash, ty),
         None => hash_type(hash, &dream_syntax::nodes::Type::Void),
     }
-    hash.update(&[function.is_async as u8, function.is_static as u8]);
+    hash.update(&[
+        function.is_async as u8,
+        function.is_static as u8,
+        function.returns_borrow as u8,
+    ]);
     hash_text(hash, function.operator_symbol.as_deref().unwrap_or(""));
     hash_text(
         hash,

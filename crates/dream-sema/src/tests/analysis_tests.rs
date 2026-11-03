@@ -2534,8 +2534,16 @@ fn range_operator_rejects_a_user_range_type() {
 fn ownership_protocol_attributes_cannot_be_forged() {
     for (code, message) in [
         (
-            "class Forged { @borrowed_result public fun read(): string { return \"x\"; } }",
-            "borrowed results are reserved",
+            "class Forged { public fun read(): borrow string { return \"x\"; } }",
+            "a 'borrow' return type is reserved",
+        ),
+        (
+            "fun read(): borrow string { return \"x\"; }",
+            "only instance methods can declare one",
+        ),
+        (
+            "class Forged { public static fun read(): borrow string { return \"x\"; } }",
+            "only instance methods can declare one",
         ),
         (
             "@slot_walk(\"length\", \"read\", \"\") class Forged {}",

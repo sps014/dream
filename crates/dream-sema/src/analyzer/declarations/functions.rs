@@ -15,10 +15,17 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn check_internal_intrinsic_declaration(
         &self,
         function: &dream_syntax::nodes::FunctionNode<'a>,
+        is_method: bool,
         diagnostics: &mut DiagnosticBag,
     ) {
         use dream_abi::intrinsics::IntrinsicOp;
-        if dream_abi::attributes::has_named_attr(&function.attributes, "borrowed_result")
+        if function.returns_borrow && (!is_method || function.is_static) {
+            diagnostics.report_error(
+                "a 'borrow' return type borrows from 'this', so only instance methods can declare one"
+                    .into(),
+                Some(function.name.position),
+            );
+        } else if function.returns_borrow
             && (!function
                 .file_path
                 .as_deref()
@@ -27,7 +34,8 @@ impl<'a> Analyzer<'a> {
                 || function.is_extern)
         {
             diagnostics.report_error(
-                "borrowed results are reserved for synchronous internal stdlib slot getters".into(),
+                "a 'borrow' return type is reserved for synchronous standard library slot getters"
+                    .into(),
                 Some(function.name.position),
             );
         }
@@ -149,7 +157,7 @@ impl<'a> Analyzer<'a> {
         let mut exported = indexmap::IndexSet::new();
         for function in node.functions.iter() {
             diagnostics.file_path = file_path_string(&function.file_path);
-            self.check_internal_intrinsic_declaration(function, diagnostics);
+            self.check_internal_intrinsic_declaration(function, false, diagnostics);
             if dream_abi::attributes::has_export_attr(&function.attributes) {
                 let name = &function.name.text;
                 if !dream_abi::c_abi::is_c_identifier(name)

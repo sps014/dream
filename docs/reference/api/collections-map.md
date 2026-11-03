@@ -81,7 +81,7 @@ public constructor(borrow keys: K[], borrow values: V[])
 Value for `key`, or `None` when absent.
 
 ```dream
-public fun get(borrow key: K): Option<V>
+public fun get(borrow key: K): borrow Option<V>
 ```
 
 ## `get`
@@ -89,7 +89,7 @@ public fun get(borrow key: K): Option<V>
 Value for the `string` key equal to `key`, without building a `string`.
 
 ```dream
-public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey
+public fun get(borrow key: ReadOnlySpan<char>): borrow Option<V> where K: StringKey
 ```
 
 ## `contains`

@@ -61,7 +61,7 @@ impl<'a> Analyzer<'a> {
             })
             .collect();
         for method in methods {
-            self.check_internal_intrinsic_declaration(method, diagnostics);
+            self.check_internal_intrinsic_declaration(method, true, diagnostics);
             // Conditional methods (`fun sort(): void where T : Comparable<T>`) only attach when
             // every where-bound is satisfied by this instantiation — same rule as constrained
             // `extend` blocks.

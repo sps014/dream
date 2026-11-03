@@ -119,8 +119,7 @@ public class Queue<T>: Collection<T> {
     }
 
     // Slot access for `QueueIterator` (same-module; `offset >= 0`).
-    @borrowed_result
-    internal fun at_offset(offset: int): T {
+    internal fun at_offset(offset: int): borrow T {
         return Buffer.get_unchecked<T>(this.items, (this.head + offset) % this.items.length);
     }
 }

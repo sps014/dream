@@ -193,6 +193,9 @@ pub struct FunctionNode<'a> {
     /// constrained `extend` block, but declared on the type itself).
     pub where_constraints: Vec<crate::nodes::GenericConstraint>,
     pub return_type: Option<Type>,
+    /// `: borrow T` — the result is a projection borrowed from `this` (or the first argument of
+    /// a slot getter), not an owned value the caller must release.
+    pub returns_borrow: bool,
     pub parameters: Vec<ParameterNode>,
     pub body: &'a [StatementNode<'a>],
     /// Accessibility of the declaration: `public` is visible to other modules and (for top-level
@@ -249,6 +252,7 @@ impl<'a> FunctionNode<'a> {
             generic_constraints: Vec::new(),
             where_constraints: Vec::new(),
             return_type,
+            returns_borrow: false,
             parameters,
             body,
             visibility,

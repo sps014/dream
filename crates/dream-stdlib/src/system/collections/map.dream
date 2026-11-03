@@ -248,8 +248,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
 
     /// Value for `key`, or `None` when absent.
     @inline
-    @borrowed_result
-    public fun get(borrow key: K): Option<V> {
+    public fun get(borrow key: K): borrow Option<V> {
         let i = this.slot_of(key);
         if i >= 0 {
             return Option.Some(this.slots[i].value);
@@ -258,8 +257,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     /// Value for the `string` key equal to `key`, without building a `string`.
-    @borrowed_result
-    public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey {
+    public fun get(borrow key: ReadOnlySpan<char>): borrow Option<V> where K: StringKey {
         let i = this.find_span(key);
         if i >= 0 {
             return Option.Some(this.slots[i].value);
@@ -404,13 +402,11 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         return this.slots[i].state == this.epoch;
     }
 
-    @borrowed_result
-    internal fun slot_key(i: int): K {
+    internal fun slot_key(i: int): borrow K {
         return this.slots[i].key;
     }
 
-    @borrowed_result
-    internal fun slot_value(i: int): V {
+    internal fun slot_value(i: int): borrow V {
         return this.slots[i].value;
     }
 

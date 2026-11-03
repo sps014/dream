@@ -399,8 +399,7 @@ public class Set<T>: Collection<T> {
         return this.states[i] == this.epoch;
     }
 
-    @borrowed_result
-    internal fun slot_key(i: int): T {
+    internal fun slot_key(i: int): borrow T {
         return this.keys[i];
     }
 

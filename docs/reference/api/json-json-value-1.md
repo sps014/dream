@@ -137,7 +137,7 @@ public fun as_string(): Option<string>
 Returns the elements when this is an array, otherwise `None`.
 
 ```dream
-public fun as_array(): Option<List<JsonValue>>
+public fun as_array(): borrow Option<List<JsonValue>>
 ```
 
 ## `as_map`
@@ -145,7 +145,7 @@ public fun as_array(): Option<List<JsonValue>>
 Returns the entries when this is an object, otherwise `None`.
 
 ```dream
-public fun as_map(): Option<Map<string, JsonValue>>
+public fun as_map(): borrow Option<Map<string, JsonValue>>
 ```
 
 ## `remove`

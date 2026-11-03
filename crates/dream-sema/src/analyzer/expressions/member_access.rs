@@ -488,6 +488,7 @@ impl<'a> Analyzer<'a> {
             generic_constraints: Vec::new(),
             where_constraints: Vec::new(),
             return_type: Some(box_ret.clone()),
+            returns_borrow: false,
             parameters,
             body,
             visibility: dream_syntax::nodes::Visibility::Private,

@@ -191,7 +191,11 @@ fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
     for parameter in &function.parameters {
         hash_text(hash, &parameter.name.text);
         hash_type(hash, &parameter.type_);
-        hash.update(&[parameter.is_ref as u8, parameter.is_borrow as u8]);
+        hash.update(&[
+            parameter.is_ref as u8,
+            parameter.is_borrow as u8,
+            parameter.is_sink as u8,
+        ]);
         hash.update(&[parameter.is_variadic as u8]);
         hash_attributes(hash, &parameter.attributes);
         hash.update(&[parameter.default.is_some() as u8]);

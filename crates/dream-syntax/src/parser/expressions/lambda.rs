@@ -98,6 +98,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 false
             };
+            let is_sink = !is_ref && !is_borrow && self.eat_sink_modifier();
 
             let param = self.match_token(TokenKind::IdentifierToken);
 
@@ -148,7 +149,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
                     None
                 };
-                params.push(ParameterNode::with_default(param, param_type, default));
+                let node = ParameterNode::with_default(param, param_type, default);
+                params.push(if is_sink { node.into_sink() } else { node });
             }
 
             if self.current_token_index == index_before {

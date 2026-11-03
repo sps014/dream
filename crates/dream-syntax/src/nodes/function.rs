@@ -32,6 +32,11 @@ pub struct ParameterNode {
     /// Mutually exclusive with `ref`/`default`/`is_variadic` (enforced by the parser).
     /// `borrow` is a reserved keyword (same class as `ref`).
     pub is_borrow: bool,
+    /// True for an explicit `sink name: T` parameter: the callee takes ownership of the
+    /// argument. `sink` is a contextual keyword, a modifier only when another identifier follows
+    /// it, so `sink: T` still names a parameter `sink`. Mutually exclusive with
+    /// `ref`/`borrow`/`is_variadic` (enforced by the parser).
+    pub is_sink: bool,
 }
 
 impl ParameterNode {
@@ -45,6 +50,7 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: false,
+            is_sink: false,
         }
     }
 
@@ -58,6 +64,7 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: false,
+            is_sink: false,
         }
     }
 
@@ -71,6 +78,7 @@ impl ParameterNode {
             is_variadic: true,
             is_ref: false,
             is_borrow: false,
+            is_sink: false,
         }
     }
 
@@ -84,6 +92,7 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: true,
             is_borrow: false,
+            is_sink: false,
         }
     }
 
@@ -97,7 +106,14 @@ impl ParameterNode {
             is_variadic: false,
             is_ref: false,
             is_borrow: true,
+            is_sink: false,
         }
+    }
+
+    /// Marks the parameter as an explicit `sink`.
+    pub fn into_sink(mut self) -> Self {
+        self.is_sink = true;
+        self
     }
 
     /// Attaches attributes parsed before the parameter name.
@@ -122,6 +138,8 @@ pub const GET_ACCESSOR: &str = "get";
 pub const SET_ACCESSOR: &str = "set";
 /// Spelling of the `borrow` parameter-modifier keyword ([`TokenKind::BorrowToken`](crate::token::token_kind::TokenKind::BorrowToken)).
 pub const BORROW_PARAM: &str = "borrow";
+/// Contextual keyword for the `sink` parameter modifier.
+pub const SINK_PARAM: &str = "sink";
 
 impl AccessorKind {
     /// Classifies a member-leading identifier as an accessor keyword. `get`/`set` are contextual

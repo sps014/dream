@@ -1,4 +1,5 @@
 use super::super::Parser;
+use crate::nodes::function::SINK_PARAM;
 use crate::nodes::{FunctionNode, ParameterNode, StatementNode, Type, Visibility};
 use crate::token::token_kind::TokenKind;
 use std::io::Error;
@@ -371,6 +372,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 false
             };
+            let is_sink = !is_ref && !is_borrow && self.eat_sink_modifier();
 
             // A trailing variadic parameter: `...name: T[]`. Must be the last parameter and
             // carries no default (an omitted variadic simply collects zero elements).
@@ -394,7 +396,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 None
             };
 
-            if let Some(modifier) = ownership_modifier
+            if let Some(modifier) = ownership_modifier.or(is_sink.then_some(SINK_PARAM))
                 && is_variadic
             {
                 self.diagnostics.report_error(
@@ -468,10 +470,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                         }
                         None
                     };
-                    params.push(
-                        ParameterNode::with_default(param, param_type, default)
-                            .with_attributes(attributes),
-                    );
+                    let node = ParameterNode::with_default(param, param_type, default)
+                        .with_attributes(attributes);
+                    params.push(if is_sink { node.into_sink() } else { node });
                 }
             }
 
@@ -513,6 +514,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else {
             false
         };
+        let is_sink = !is_ref && !is_borrow && self.eat_sink_modifier();
         let param = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::ColonToken);
         let param_type = self.parse_type()?;
@@ -520,9 +522,28 @@ impl<'a, 'b> Parser<'a, 'b> {
             Ok(ParameterNode::by_ref(param, param_type))
         } else if is_borrow {
             Ok(ParameterNode::borrow(param, param_type))
+        } else if is_sink {
+            Ok(ParameterNode::new(param, param_type).into_sink())
         } else {
             Ok(ParameterNode::new(param, param_type))
         }
+    }
+
+    /// Consumes a contextual `sink` parameter modifier. `sink` is a modifier only when another
+    /// identifier (or `...`) follows it (`sink items: T`); `sink: T` is a parameter named `sink`.
+    pub(crate) fn eat_sink_modifier(&mut self) -> bool {
+        let current = self.current_token();
+        if current.kind == TokenKind::IdentifierToken
+            && current.text == SINK_PARAM
+            && matches!(
+                self.peek_token(1).kind,
+                TokenKind::IdentifierToken | TokenKind::DotDotDotToken
+            )
+        {
+            self.next_token();
+            return true;
+        }
+        false
     }
 }
 

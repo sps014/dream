@@ -42,6 +42,50 @@ fn test_parse_public_override_methods() {
 }
 
 #[test]
+fn test_parse_sink_parameter_modifier() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun keep(sink items: int[], sink: int, plain: int, sink limit: int = 3): void {}",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    let params = &program.functions[0].parameters;
+    let shape: Vec<(&str, bool)> = params
+        .iter()
+        .map(|p| (p.name.text.as_str(), p.is_sink))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![("items", true), ("sink", false), ("plain", false), ("limit", true)]
+    );
+    assert!(params[3].default.is_some());
+}
+
+#[test]
+fn test_parse_sink_lambda_parameter() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun main(): void { let f = (sink x: int[], sink) => 1; }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    let StatementNode::Declaration(_, _, ExpressionNode::Lambda(lambda), ..) =
+        &program.functions[0].body[0]
+    else {
+        panic!("expected a lambda declaration");
+    };
+    let sinks: Vec<bool> = lambda.parameters.iter().map(|p| p.is_sink).collect();
+    assert_eq!(sinks, vec![true, false]);
+}
+
+#[test]
+fn test_parse_sink_variadic_is_rejected() {
+    let arena = bumpalo::Bump::new();
+    let (_, diagnostics) = parse_code("fun f(sink ...xs: int[]): void {}", &arena);
+    assert!(diagnostics.has_errors());
+}
+
+#[test]
 fn test_parse_function_declaration() {
     let code = "fun main(): int { return 42; }";
     let arena = bumpalo::Bump::new();

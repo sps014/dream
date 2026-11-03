@@ -181,8 +181,23 @@ Unmarked parameters **sink**; `borrow` shares; last-use **moves** with no keywor
 | Modifier | Meaning |
 |----------|---------|
 | *(none)* | Sink — callee takes it (move if last use, else copy) |
+| `sink` | Sink, written out — the same as no modifier today |
 | `borrow` | Callee reads it; you keep it |
 | `ref` | Mutable place alias ([below](#ref-parameters)) |
+
+You never need to write `sink`: an unmarked parameter already sinks. It exists for declarations
+that want to state the contract in the signature, such as an interface method whose
+implementations keep the argument:
+
+```dream
+interface Store {
+    unique fun put(sink item: string): void;
+}
+```
+
+`sink` is a modifier only when a parameter name follows it, so a parameter can still be named
+`sink` (`fun route(sink: string)`). A `sink` parameter may have a default value, but cannot be
+variadic.
 
 The implicit `this` value you call the method on is never a sink.
 

@@ -221,6 +221,38 @@ fn program_cache_matches_a_generation_that_skips_the_cache() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+const ROUTE_PROGRAM: &str = r#"import system;
+import system.encoding;
+import system.webapi;
+
+@router("")
+class Routes {
+    @get("/health")
+    public static fun health(): string {
+        return Encoding.hex_encode(Encoding.utf8_encode("ok"));
+    }
+}
+
+async fun main(): void {
+    let app = WebApp();
+    app.include_router(Routes.router()).unwrap();
+}
+"#;
+
+#[test]
+#[ignore = "builds the std webapi generator executable; cargo test --workspace -- --ignored"]
+fn program_cache_hit_keeps_access_to_private_referenced_functions() {
+    if !llvm_available() {
+        return;
+    }
+    let dir = project("access", ROUTE_PROGRAM);
+    let (_, first_ir) = compile(&dir);
+    let (hit_log, hit_ir) = compile(&dir);
+    assert!(has(&hit_log, "gen program: cache hit"), "{hit_log:?}");
+    assert_eq!(first_ir, hit_ir, "a cache hit must emit the same IR");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 #[ignore = "builds the std json generator executable; cargo test --workspace -- --ignored"]
 fn unrelated_function_edit_reuses_the_program_cache() {

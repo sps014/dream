@@ -32,6 +32,8 @@ pub struct Hit {
     assets: Vec<StoredAsset>,
     consumed: Vec<StoredConsumed>,
     consumed_artifacts: Vec<(String, String)>,
+    access: Vec<(String, Vec<String>)>,
+    untracked_inputs: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -44,6 +46,10 @@ struct Entry {
     assets: Vec<StoredAsset>,
     consumed: Vec<StoredConsumed>,
     consumed_artifacts: Vec<(String, String)>,
+    /// Private declarations each generator's output may name; a hit skips the snapshot that
+    /// normally grants this access.
+    access: Vec<(String, Vec<String>)>,
+    untracked_inputs: bool,
     modules: Vec<(String, String)>,
     decls: Vec<(String, String)>,
     /// Names and kinds of every declaration. A new type changes `type_index()` even when it is
@@ -136,6 +142,8 @@ pub fn lookup(
         assets: entry.assets,
         consumed: entry.consumed,
         consumed_artifacts: entry.consumed_artifacts,
+        access: entry.access,
+        untracked_inputs: entry.untracked_inputs,
     })
 }
 
@@ -147,6 +155,13 @@ pub fn restore<'a>(
     hit: Hit,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
+    for (generator, ids) in &hit.access {
+        acc.generator_access
+            .entry(generator.clone())
+            .or_default()
+            .extend(ids.iter().cloned());
+    }
+    acc.untracked_generator_inputs |= hit.untracked_inputs;
     for consumed in &hit.consumed {
         let Some((file, span)) = declaration_span(acc, &consumed.id) else {
             continue;
@@ -315,6 +330,14 @@ pub fn store(
             })
             .collect(),
         consumed_artifacts: consumed_artifact_paths(acc, runs, &applied.consumed, &root),
+        access: runs
+            .iter()
+            .filter_map(|run| {
+                let ids = acc.generator_access.get(&run.registered.id)?;
+                Some((run.registered.id.clone(), ids.iter().cloned().collect()))
+            })
+            .collect(),
+        untracked_inputs: runs.iter().any(|run| !run.registered.incremental),
         modules: module_interfaces(acc).into_iter().collect(),
         decls: declaration_dependencies(acc, runs).into_iter().collect(),
         index: declaration_index(acc),

@@ -107,22 +107,29 @@ fi
 "$DEST/bin/opt$EXE" --version | grep -q "LLVM version ${LLVM_VERSION}"
 echo "LLVM ${LLVM_VERSION} ready at $DEST"
 
-MOLD_DEST="${TOOLCHAINS}/mold-${MOLD_VERSION}"
-if ! "$MOLD_DEST/bin/mold$EXE" --version 2>/dev/null | grep -q "$MOLD_COMMIT" \
-   || [[ ! -x "$MOLD_DEST/bin/ld64.mold$EXE" ]]; then
-  command -v cargo >/dev/null 2>&1 || { echo "building mold needs cargo (https://rustup.rs)" >&2; exit 1; }
-  src="$(mktemp -d)"
-  git -C "$src" init -q
-  git -C "$src" fetch -q --depth 1 https://github.com/rui314/mold.git "$MOLD_COMMIT"
-  git -C "$src" checkout -q FETCH_HEAD
-  cargo build --release --locked --manifest-path "$src/Cargo.toml" -p mold \
-    --no-default-features --features "$MOLD_FEATURES"
-  rm -rf "$MOLD_DEST"
-  mkdir -p "$MOLD_DEST/bin"
-  cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/mold$EXE"
-  cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/ld64.mold$EXE"
-  cp "$src/LICENSE" "$MOLD_DEST/LICENSE"
-  rm -rf "$src"
-fi
-"$MOLD_DEST/bin/mold$EXE" --version | grep -q "$MOLD_COMMIT"
-echo "mold ${MOLD_VERSION} ready at $MOLD_DEST"
+# Windows links COFF with the pinned lld. mold has no COFF backend, and Git Bash puts its
+# own link.exe ahead of MSVC's, so a source build there cannot link.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    echo "mold is not installed on Windows; COFF links use the pinned lld" ;;
+  *)
+    MOLD_DEST="${TOOLCHAINS}/mold-${MOLD_VERSION}"
+    if ! "$MOLD_DEST/bin/mold$EXE" --version 2>/dev/null | grep -q "$MOLD_COMMIT" \
+       || [[ ! -x "$MOLD_DEST/bin/ld64.mold$EXE" ]]; then
+      command -v cargo >/dev/null 2>&1 || { echo "building mold needs cargo (https://rustup.rs)" >&2; exit 1; }
+      src="$(mktemp -d)"
+      git -C "$src" init -q
+      git -C "$src" fetch -q --depth 1 https://github.com/rui314/mold.git "$MOLD_COMMIT"
+      git -C "$src" checkout -q FETCH_HEAD
+      cargo build --release --locked --manifest-path "$src/Cargo.toml" -p mold \
+        --no-default-features --features "$MOLD_FEATURES"
+      rm -rf "$MOLD_DEST"
+      mkdir -p "$MOLD_DEST/bin"
+      cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/mold$EXE"
+      cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/ld64.mold$EXE"
+      cp "$src/LICENSE" "$MOLD_DEST/LICENSE"
+      rm -rf "$src"
+    fi
+    "$MOLD_DEST/bin/mold$EXE" --version | grep -q "$MOLD_COMMIT"
+    echo "mold ${MOLD_VERSION} ready at $MOLD_DEST" ;;
+esac

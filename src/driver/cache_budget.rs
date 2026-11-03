@@ -47,10 +47,7 @@ pub fn enforce_shared(config: &crate::driver::toolchain::ToolchainConfig) {
 
 /// `dir/<name>` was just used. Refreshing its modification time keeps it ahead of unused entries.
 pub fn touch(path: &Path) {
-    let Ok(file) = std::fs::File::open(path) else {
-        return;
-    };
-    let _ = file.set_modified(SystemTime::now());
+    let _ = filetime::set_file_mtime(path, filetime::FileTime::now());
 }
 
 pub fn enforce(dir: &Path, budget: u64, skip: &[&str]) {
@@ -188,8 +185,8 @@ mod tests {
     use super::*;
 
     fn age(path: &Path, ago: Duration) {
-        let file = std::fs::File::open(path).unwrap();
-        file.set_modified(SystemTime::now() - ago).unwrap();
+        let when = filetime::FileTime::from_system_time(SystemTime::now() - ago);
+        filetime::set_file_mtime(path, when).unwrap();
     }
 
     #[test]

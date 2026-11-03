@@ -1,5 +1,12 @@
 # Design note: Ownership and memory performance
 
+!!! warning "Superseded"
+    [23 — Unique-by-default ownership](23-unique-ownership.md) replaces the sink-default ABI,
+    borrow inference, cursor locals and the use-after-move rules described here. Non-`shared`
+    classes, strings, arrays and collections become unique and are destroyed without a
+    reference count. This note stays as the record of the ARC model being migrated away from
+    and of the heap-throughput levers that still apply to `shared class` values.
+
 Decision record for ARC performance. **Sink-default ABI**, **cursor locals**, and
 **use-after-move** diagnostics are the active model (moves, copies, and cleanup are selected while compiling, above non-atomic reference counting).
 

@@ -29,7 +29,8 @@ Read the chapters in order the first time; afterward, use this page as an index.
 | 08 | [Testing & Determinism](08-testing-and-determinism.md) | How to test, the determinism contract, conventions |
 | 09 | [Nullable Purge Design Note](09-nullable-purge-design-note.md) | Decision record for removing `T?` in favor of `Option<T>` |
 | 10 | [Rejected: SSO / class `@stack` / size-class mono](10-stack-alloc-and-mono-design-note.md) | Permanent non-goals: no small-string SSO, no `@stack` class alloc, no size-class-keyed unmanaged mono |
-| 11 | [Ownership and memory performance](11-swift-like-arc-roadmap.md) | Sink-default ABI, last-use move, RC elision; user `=copy`/`=sink` and CoW-by-default stay non-goals |
+| 11 | [Ownership and memory performance](11-swift-like-arc-roadmap.md) | Historical ARC model and heap-throughput levers; ownership sections superseded by 23 |
+| 23 | [Unique-by-default ownership](23-unique-ownership.md) | Why freeing without counts needs a restriction, the move/borrow/exclusivity rules, `shared class`, and the backend consequences |
 
 Additional engineering records:
 

@@ -54,18 +54,49 @@ String literals are unique values backed by immortal storage; destroying one is 
 
 ### Parameters
 
-- An unmarked parameter is an immutable borrow.
-- `ref name: T` is an exclusive mutable borrow; the call site writes `ref x`.
-- `sink name: T` takes ownership. The callee destroys the value or moves it on.
-- The `borrow` parameter keyword is removed: borrowing is the default.
-- Implicit `this` is a borrow, or a mutable borrow for methods that mutate it (the existing
-  inferred receiver modes, `[borrow|unique] fun`).
-- Storing, returning or moving a borrowed parameter is an error:
-  `cannot store borrowed parameter 'items'` with the help `mark it 'sink', or store 'items.copy()'`.
+Users do not write ownership modes on ordinary parameters. The analyzer infers each parameter's
+mode from the function body, the same way it already infers receiver modes for `this`:
+
+- **Inferred sink:** the body stores the parameter (field, element, global, escaping capture),
+  returns it, moves it into a local that escapes, or passes it to another sink parameter.
+- **Inferred borrow:** every other parameter.
+- `ref name: T` stays explicit: it is an exclusive mutable borrow of the caller's place, and the
+  call site writes `ref x`.
+
+Rust needs `&` in signatures because it compiles crates separately and a caller sees only the
+signature. Dream analyzes the whole program, including the stdlib, so every body is available.
+Inference runs once over the call graph: strongly connected components (recursive and mutually
+recursive functions) iterate to a fixed point, starting from borrow and only ever moving a
+parameter to sink. Generic functions are inferred once on their generic body; a parameter whose
+type is trivially copyable has no observable mode.
+
+Declarations without a body cannot be inferred:
+
+- Interface methods default to borrow. An implementation whose inferred mode is sink where the
+  interface says borrow is an error that points at the storing line, as receiver-mode mismatches
+  are today.
+- `extern` functions and function types (`fun(T): R`) default to borrow.
+- The optional `sink` keyword (contextual: `sink name: T`) declares sink in these places, and pins a
+  contract on an ordinary function. A body that would infer sink under an explicit `borrow`
+  contract is an error.
+
+The `borrow` parameter keyword stays only as an explicit contract pin, mirroring `borrow fun`.
+
+Because a parameter mode is part of what callers see, editing a body to start storing a parameter
+can turn a caller's later use into a use-after-move error. The diagnostic names the line in the
+callee that made the parameter a sink:
+
+```text
+error: 'xs' was moved into 'Bag'
+  note: 'Bag' takes ownership of 'items' because it stores it here: this.items = items
+  help: pass 'xs.copy()' to keep using 'xs'
+```
+
+The language server shows inferred modes as inlay hints (`items: sink List<int>`).
 
 ### Moves
 
-A unique value moves when it is passed to a `sink` parameter, assigned to a local, field, element
+A unique value moves when it is passed to a sink parameter (inferred or declared), assigned to a local, field, element
 or global, returned, captured by an escaping closure, or sent to a `Task`. Afterwards the source
 local is **moved**; reading it is an error that suggests `.copy()`. A move on only some paths
 leaves the local **maybe moved**, which is also an error to read. Assigning a new value revives the
@@ -132,8 +163,8 @@ copyable: the destructor usually guards an external resource. Generic code may c
 - An `async fun` may take borrowed parameters, and async methods borrow `this`. The future such a
   call returns holds those borrows, so it is second-class: a call that borrows a unique argument
   (or the receiver) must be awaited in the same expression, `f(x).await`. Storing, returning or
-  spawning that future is an error: `this future borrows 'x'; await it here or pass 'x' as sink`.
-  Calls whose arguments are all `sink`, trivially copyable or shared return ordinary futures.
+  spawning that future is an error: `this future borrows 'x'; await it here or pass 'x.copy()'`.
+  Calls whose unique arguments all go to sink parameters return ordinary futures.
 - `ref` parameters follow the same rule: the mutable borrow lasts until the immediate `.await`
   completes.
 - Borrows of frame-owned locals may cross `.await`; the frame owns both the value and the borrow.
@@ -262,16 +293,22 @@ fun nudge(ref p: Point): void {
     p.x = p.x + 1;
 }
 
-fun consume(sink p: Point): int {
-    return p.x;
+class Shape {
+    public corner: Point;
+
+    public constructor(corner: Point) {     // stored: inferred sink
+        this.corner = corner;
+    }
 }
 
 fun calls(): void {
     let p = Point(1);
-    System.println(describe(p));
+    System.println(describe(p));    // inferred borrow: p is still usable
     nudge(ref p);
-    let n = consume(p);
-    System.println(p.x);    // error: 'p' was moved into 'consume'
+    let shape = Shape(p);           // p moves into the shape
+    System.println(p.x);            // error: 'p' was moved into 'Shape'
+                                    //   note: 'Shape' stores 'corner' here: this.corner = corner
+                                    //   help: pass 'p.copy()' to keep using 'p'
 }
 ```
 
@@ -372,7 +409,7 @@ async fun save(doc: Document, stream: MemoryStream): Result<int, IoError> {
 
 async fun start(doc: Document, stream: MemoryStream): void {
     let pending = save(doc, stream);
-    // error: this future borrows 'doc'; await it here or pass 'doc' as sink
+    // error: this future borrows 'doc'; await it here or pass 'doc.copy()'
 }
 ```
 
@@ -380,7 +417,9 @@ async fun start(doc: Document, stream: MemoryStream): void {
 
 There is no compatibility path. Every program, test, sample and stdlib file migrates:
 
-- Stored parameters gain `sink`; `borrow` parameter modifiers are deleted.
+- Ordinary parameters need no edits: modes are inferred. Interface methods, `extern` functions and
+  function types whose implementations store a parameter gain `sink`. Explicit `borrow` parameter
+  modifiers that only restate the inferred mode are deleted.
 - Aliased class graphs become `shared class` or restructure into trees or indices.
 - Indexers and getters return `borrow T`; element moves use `take`, `swap`, `pop` and `drain`.
 - `@borrowed_result` is deleted in favor of projections.

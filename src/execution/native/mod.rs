@@ -3,7 +3,7 @@
 pub(crate) mod bundle;
 pub(crate) mod c_link;
 pub(crate) mod capability_abi;
-pub(crate) mod cc;
+pub(crate) mod driver;
 pub mod exit_status;
 pub(crate) mod native_c;
 pub(crate) mod pgo;

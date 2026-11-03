@@ -1,5 +1,5 @@
-//! Native C/C++ packages: `native/` sources, `@c` wrappers, and `@cpp` shims. Tests that compile C
-//! or C++ need a C/C++ compiler (Zig, `DREAM_CXX`, or the system `clang++`/`c++`).
+//! Native C/C++ packages: `native/` sources, `@c` wrappers, and `@cpp` shims, compiled and linked
+//! with the pinned clang.
 
 use dream::driver::compiler::Compiler;
 use dream::driver::wasm_opt::OptLevel;

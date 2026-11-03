@@ -136,7 +136,7 @@ impl OwnershipFacts {
                                 writes.into_iter().filter(|write| write.element == ty).any(
                                     |write| {
                                         self.may_alias(bi, si, base, write.base)
-                                            && !index.zip(write.index).is_some_and(|(a, b)| a != b)
+                                            && index.zip(write.index).is_none_or(|(a, b)| a == b)
                                     },
                                 )
                             })

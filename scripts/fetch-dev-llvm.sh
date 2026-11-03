@@ -17,7 +17,11 @@ WASI_SDK_SHA="0ba8b5bfaeb2adf3f29bab5841d76cf5318ab8e1642ea195f88baba1abd47bce"
 
 TOOLCHAINS="${DREAM_TOOLCHAINS:-${HOME}/.dream/toolchains}"
 DEST="${TOOLCHAINS}/llvm-${LLVM_VERSION}"
-TOOLS=(clang opt llc llvm-link llvm-dis llvm-as llvm-ar llvm-profdata lld wasm-ld)
+TOOLS=(clang opt llc llvm-link llvm-dis llvm-as llvm-ar llvm-profdata llvm-rc lld ld.lld lld-link wasm-ld)
+# mold has no Mach-O release yet, so it is built from this commit of its Rust tree.
+MOLD_VERSION="3.0.0-331ac66"
+MOLD_COMMIT="331ac663668dc0b1f4949403854613b9b1913025"
+MOLD_FEATURES="x86_64,arm64,macho-x86_64,macho-arm64"
 EXE=""
 
 [[ "$(uname -s)" == Linux || "$(uname -s)" == Darwin ]] && TOOLS+=("clang-${LLVM_MAJOR}")
@@ -33,7 +37,7 @@ case "$(uname -s)-$(uname -m)" in
     LLVM_ARCHIVE="clang+llvm-${LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz"
     LLVM_SHA="d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
     EXE=".exe"
-    TOOLS+=(clang++ llvm-rc lld-link) ;;
+    TOOLS+=(clang++) ;;
   *) echo "no official LLVM ${LLVM_VERSION} build for this host; install it yourself and set DREAM_LLVM" >&2
      exit 1 ;;
 esac
@@ -102,3 +106,23 @@ fi
 
 "$DEST/bin/opt$EXE" --version | grep -q "LLVM version ${LLVM_VERSION}"
 echo "LLVM ${LLVM_VERSION} ready at $DEST"
+
+MOLD_DEST="${TOOLCHAINS}/mold-${MOLD_VERSION}"
+if ! "$MOLD_DEST/bin/mold$EXE" --version 2>/dev/null | grep -q "$MOLD_COMMIT" \
+   || [[ ! -x "$MOLD_DEST/bin/ld64.mold$EXE" ]]; then
+  command -v cargo >/dev/null 2>&1 || { echo "building mold needs cargo (https://rustup.rs)" >&2; exit 1; }
+  src="$(mktemp -d)"
+  git -C "$src" init -q
+  git -C "$src" fetch -q --depth 1 https://github.com/rui314/mold.git "$MOLD_COMMIT"
+  git -C "$src" checkout -q FETCH_HEAD
+  cargo build --release --locked --manifest-path "$src/Cargo.toml" -p mold \
+    --no-default-features --features "$MOLD_FEATURES"
+  rm -rf "$MOLD_DEST"
+  mkdir -p "$MOLD_DEST/bin"
+  cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/mold$EXE"
+  cp "$src/target/release/mold$EXE" "$MOLD_DEST/bin/ld64.mold$EXE"
+  cp "$src/LICENSE" "$MOLD_DEST/LICENSE"
+  rm -rf "$src"
+fi
+"$MOLD_DEST/bin/mold$EXE" --version | grep -q "$MOLD_COMMIT"
+echo "mold ${MOLD_VERSION} ready at $MOLD_DEST"

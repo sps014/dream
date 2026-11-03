@@ -17,13 +17,18 @@ pub struct LocatedTool {
 
 impl LocatedTool {
     pub fn executable(&self, relative: &str) -> PathBuf {
-        let path = if self.owns_root {
-            self.root.join(relative)
-        } else {
-            self.root
-                .join(relative.rsplit('/').next().unwrap_or(relative))
-        };
-        exe(path)
+        if self.owns_root {
+            return exe(self.root.join(relative));
+        }
+        // An override that points at the installed file still has `bin/` in the real path.
+        // `root` is that file's install root, so prefer the relative path when it exists.
+        let installed = self.root.join(relative);
+        if installed.is_file() {
+            return exe(installed);
+        }
+        exe(self
+            .root
+            .join(relative.rsplit('/').next().unwrap_or(relative)))
     }
 
     pub fn primary(&self) -> PathBuf {

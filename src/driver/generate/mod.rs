@@ -31,6 +31,8 @@ mod paths;
 #[cfg(feature = "native")]
 mod phases;
 mod references;
+#[cfg(feature = "native")]
+mod result_cache;
 mod registry;
 mod rewrite;
 #[cfg(feature = "native")]

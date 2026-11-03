@@ -43,17 +43,13 @@ jobs:
           cache-on-failure: true
       - uses: actions/cache@v6
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and WASI support
         shell: bash
         run: scripts/fetch-dev-llvm.sh
-      - name: Select the MSVC-compatible C driver
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
-          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - run: cargo build --workspace
       - run: python scripts/qualify-io-net.py
       - name: Check cancellation under sanitizers

@@ -15,10 +15,10 @@ enum LibOutput {
 /// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
 struct OptFlags {
-    /// Trimmed build; wasm-opt / cc default `-O3` (`-Os` with `--web`).
+    /// Trimmed build; wasm-opt / native default `-O3` (`-Os` with `--web`).
     #[arg(long)]
     release: bool,
-    /// Release wasm-opt and cc level (`0`-`4`, `s`, `z`; bare `-O` is `-Os`). Requires `--release`.
+    /// Release wasm-opt and native level (`0`-`4`, `s`, `z`; bare `-O` is `-Os`). Requires `--release`.
     #[arg(
         short = 'O',
         long = "optimize",
@@ -56,8 +56,8 @@ impl OptFlags {
     name = "dreamer",
     version,
     about = "Package manager for the Dream language",
-    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install cc",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          relocatable native executable (default --release / -O3)\n  dreamer toolchain install cc          Zig linker for native builds when no system cc exists"
+    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install binaryen",
+    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          relocatable native executable (default --release / -O3)\n  dreamer toolchain install binaryen    WASM optimizer for release WASM builds"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -206,7 +206,7 @@ enum Cmd {
         #[arg(short = 'p', long = "package", value_name = "NAME")]
         package: Option<String>,
     },
-    /// Install or manage the optional Zig linker (`cc`) and Binaryen optimizer under ~/.dream/toolchains/.
+    /// Install or manage pinned build tools (Binaryen, Slang, …) under ~/.dream/toolchains/.
     Toolchain {
         #[command(subcommand)]
         cmd: ToolchainCmd,
@@ -224,13 +224,13 @@ enum ToolchainCmd {
     },
     /// Download pinned build tools for this OS/arch. `dream` installs missing tools when needed.
     Install {
-        /// A pinned tool: `cc` (Zig), `binaryen` (WASM optimizer) or `slang` (shader compiler).
-        /// Omit to install `cc` and `binaryen`.
+        /// A pinned tool such as `binaryen` (WASM optimizer) or `slang` (shader compiler). Omit
+        /// to install the default set (`binaryen`).
         component: Option<String>,
     },
     /// Show which toolchain components are installed.
     List,
-    /// Remove an installed pinned tool (`cc`, `binaryen` or `slang`).
+    /// Remove an installed pinned tool (`binaryen`, `slang`, …).
     Uninstall { component: String },
 }
 

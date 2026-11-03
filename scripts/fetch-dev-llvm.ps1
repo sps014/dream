@@ -23,7 +23,7 @@ $LlvmSha = "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
 
 $Toolchains = if ($env:DREAM_TOOLCHAINS) { $env:DREAM_TOOLCHAINS } else { Join-Path $HOME ".dream\toolchains" }
 $Dest = Join-Path $Toolchains "llvm-$LlvmVersion"
-$Tools = @("clang", "clang++", "opt", "llc", "llvm-link", "llvm-dis", "llvm-as", "llvm-ar", "llvm-profdata", "lld", "lld-link", "wasm-ld", "llvm-rc")
+$Tools = @("clang", "clang++", "opt", "llc", "llvm-link", "llvm-dis", "llvm-as", "llvm-ar", "llvm-profdata", "lld", "ld.lld", "lld-link", "wasm-ld", "llvm-rc")
 
 New-Item -ItemType Directory -Force -Path $Toolchains, $Dest | Out-Null
 
@@ -95,3 +95,33 @@ if ($missing) {
 $version = & (Join-Path $Dest "bin\opt.exe") --version | Select-String "LLVM version $LlvmVersion"
 if (-not $version) { throw "LLVM at $Dest is not version $LlvmVersion" }
 Write-Host "LLVM $LlvmVersion ready at $Dest"
+
+# mold links ELF and Mach-O cross targets; it has no Mach-O release yet, so it is built from this
+# commit of its Rust tree.
+$MoldVersion = "3.0.0-331ac66"
+$MoldCommit = "331ac663668dc0b1f4949403854613b9b1913025"
+$MoldDest = Join-Path $Toolchains "mold-$MoldVersion"
+$mold = Join-Path $MoldDest "bin\mold.exe"
+$moldReady = (Test-Path $mold) -and (Test-Path (Join-Path $MoldDest "bin\ld64.mold.exe")) -and
+    ((& $mold --version) -match $MoldCommit)
+if (-not $moldReady) {
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw "building mold needs cargo (https://rustup.rs)" }
+    $src = Join-Path ([IO.Path]::GetTempPath()) ("dream-mold-" + [Guid]::NewGuid())
+    try {
+        git init -q $src
+        git -C $src fetch -q --depth 1 https://github.com/rui314/mold.git $MoldCommit
+        git -C $src checkout -q FETCH_HEAD
+        cargo build --release --locked --manifest-path (Join-Path $src "Cargo.toml") -p mold `
+            --no-default-features --features "x86_64,arm64,macho-x86_64,macho-arm64"
+        if ($LASTEXITCODE -ne 0) { throw "building mold failed" }
+        if (Test-Path $MoldDest) { Remove-Item -Recurse -Force $MoldDest }
+        New-Item -ItemType Directory -Force -Path (Join-Path $MoldDest "bin") | Out-Null
+        Copy-Item (Join-Path $src "target\release\mold.exe") $mold
+        Copy-Item (Join-Path $src "target\release\mold.exe") (Join-Path $MoldDest "bin\ld64.mold.exe")
+        Copy-Item (Join-Path $src "LICENSE") (Join-Path $MoldDest "LICENSE")
+    } finally {
+        Remove-Item -Recurse -Force $src -ErrorAction SilentlyContinue
+    }
+}
+if (-not ((& $mold --version) -match $MoldCommit)) { throw "mold at $MoldDest is not $MoldVersion" }
+Write-Host "mold $MoldVersion ready at $MoldDest"

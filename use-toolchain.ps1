@@ -175,7 +175,7 @@ DREAM_BIN=$env:DREAM_BIN
 "@ | Set-Content -Path $EnvFile -Encoding utf8
 Write-Host "Wrote $EnvFile"
 
-# `dreamer toolchain install` records DREAM_ZIG here; env.sh sources it on Unix.
+# `dreamer toolchain install` records tool overrides here; env.sh sources it on Unix.
 $toolchainsEnv = Join-Path $UserDir "toolchains.env"
 function Import-ToolchainsEnv {
     if (-not (Test-Path $toolchainsEnv)) { return }
@@ -191,33 +191,9 @@ Write-Host "New terminals pick this up automatically; this one is already config
 Write-Host "Reload the Cursor/VS Code window if the LSP was already running."
 Write-Host "To remove:  .\use-toolchain.ps1 -Unlink"
 
-function Test-Compiler([string]$Value) {
-    if ([string]::IsNullOrEmpty($Value)) { return $false }
-    if (Test-Path -LiteralPath $Value -PathType Leaf) { return $true }
-    return $null -ne (Get-Command $Value -ErrorAction SilentlyContinue)
-}
-
-if ($env:DREAM_SKIP_CC -eq "1") {
-    Write-Host "Skipped C compiler install (DREAM_SKIP_CC=1)"
-} else {
-    $hasCc = (Test-Compiler $env:DREAM_CC) -or (Test-Compiler $env:CC) -or (Test-Compiler $env:DREAM_ZIG) -or
-        (@(Get-ChildItem -Path (Join-Path $UserDir "toolchains\zig-*\zig.exe") -ErrorAction SilentlyContinue).Count -gt 0) -or
-        (@("cc", "clang", "zig") | Where-Object { Get-Command $_ -ErrorAction SilentlyContinue })
-    if ($hasCc) {
-        Write-Host "C compiler already found; skipped dreamer toolchain install cc"
-    } else {
-        Write-Host "No C compiler on PATH; installing via dreamer toolchain install cc"
-        & dreamer toolchain install cc
-        if ($LASTEXITCODE -eq 0) {
-            Import-ToolchainsEnv
-        } else {
-            Write-Warning "could not install a C compiler; later run: dreamer toolchain install cc"
-        }
-    }
-}
-
 # A development build compiles the C runtime itself, so it needs the full official LLVM (plus the
-# wasm32 builtins and WASI headers); releases ship a minimal LLVM and the runtime prebuilt.
+# wasm32 builtins and WASI headers) and mold; releases ship a minimal LLVM, mold and the runtime
+# prebuilt.
 if ($env:DREAM_SKIP_LLVM -eq "1") {
     Write-Host "Skipped LLVM fetch (DREAM_SKIP_LLVM=1)"
 } elseif ($env:DREAM_LLVM) {

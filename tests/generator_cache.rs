@@ -38,8 +38,13 @@ fn project(tag: &str, source: &str) -> PathBuf {
 
 /// `dream -v --emit-llvm` with a fresh build-cache nonce; returns `(gen log lines, emitted IR)`.
 fn compile(dir: &Path) -> (Vec<String>, String) {
+    compile_with(dir, &[])
+}
+
+fn compile_with(dir: &Path, env: &[(&str, &str)]) -> (Vec<String>, String) {
     let out_ll = dir.join("out.ll");
-    let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dream"));
+    command
         .current_dir(dir)
         .env(
             "DREAM_BENCH_NONCE",
@@ -47,9 +52,11 @@ fn compile(dir: &Path) -> (Vec<String>, String) {
         )
         .args(["-v", "--emit-llvm", "-o"])
         .arg(&out_ll)
-        .arg("main.dream")
-        .output()
-        .unwrap();
+        .arg("main.dream");
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command.output().unwrap();
     let log = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(output.status.success(), "compile failed:\n{log}");
     let gen_lines = log
@@ -60,6 +67,29 @@ fn compile(dir: &Path) -> (Vec<String>, String) {
         gen_lines,
         std::fs::read_to_string(out_ll.with_extension("opt.ll")).unwrap(),
     )
+}
+
+fn generated_sources(dir: &Path) -> Vec<(String, String)> {
+    let mut files = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "dream")
+                && path != dir.join("main.dream")
+                && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                files.push((path.display().to_string(), text));
+            }
+        }
+    }
+    files.sort();
+    files
 }
 
 fn has(lines: &[String], want: &str) -> bool {
@@ -168,6 +198,72 @@ fn capture_then_replay_reproduces_the_result() {
         replayed.status.success(),
         "{}",
         String::from_utf8_lossy(&replayed.stderr)
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore = "builds the std json generator executable; cargo test --workspace -- --ignored"]
+fn program_cache_matches_a_generation_that_skips_the_cache() {
+    if !llvm_available() {
+        return;
+    }
+    let source = JSON_PROGRAM.replace("Point(1, 2)", "Point(7, 8)");
+    let dir = project("equiv", &source);
+    let (first_log, first_ir) = compile(&dir);
+    assert!(
+        first_log.iter().any(|line| line.contains(": run ")),
+        "a new program must run the generator: {first_log:?}"
+    );
+    let (hit_log, hit_ir) = compile(&dir);
+    assert!(has(&hit_log, "gen program: cache hit"), "{hit_log:?}");
+    assert_eq!(first_ir, hit_ir, "a cache hit must emit the same IR");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore = "builds the std json generator executable; cargo test --workspace -- --ignored"]
+fn unrelated_function_edit_reuses_the_program_cache() {
+    if !llvm_available() {
+        return;
+    }
+    let source = format!("{JSON_PROGRAM}\nfun unused(): int {{ return 1; }}\n");
+    let dir = project("unrelated", &source);
+    compile(&dir);
+    std::fs::write(
+        dir.join("main.dream"),
+        source.replace("return 1", "return 2"),
+    )
+    .unwrap();
+    let (warm, _) = compile(&dir);
+    assert!(
+        has(&warm, "gen system.json.derive::json_derive: result hit"),
+        "{warm:?}"
+    );
+    assert!(!warm.iter().any(|line| line.contains(": run ")), "{warm:?}");
+    let cached = generated_sources(&dir);
+    compile_with(&dir, &[("DREAM_GENERATOR_CACHE", "0")]);
+    assert_eq!(cached, generated_sources(&dir));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+#[ignore = "builds the std json generator executable; cargo test --workspace -- --ignored"]
+fn editing_a_trigger_input_misses_the_program_cache() {
+    if !llvm_available() {
+        return;
+    }
+    let dir = project("miss", JSON_PROGRAM);
+    compile(&dir);
+    let edited = JSON_PROGRAM
+        .replace("public y: int;", "public renamed: int;")
+        .replace("constructor(x: int, y: int)", "constructor(x: int, renamed: int)")
+        .replace("this.y = y", "this.renamed = renamed");
+    std::fs::write(dir.join("main.dream"), edited).unwrap();
+    let (log, _) = compile(&dir);
+    assert!(
+        log.iter().any(|line| line.contains(": run ")),
+        "an attributed field edit must regenerate: {log:?}"
     );
     let _ = std::fs::remove_dir_all(dir);
 }

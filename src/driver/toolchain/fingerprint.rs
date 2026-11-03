@@ -29,13 +29,7 @@ impl ToolchainConfig {
             ),
             format!(
                 "{:?}",
-                (
-                    &self.path,
-                    &self.cc,
-                    &self.cxx,
-                    &self.targets,
-                    &self.sysroot
-                )
+                (&self.path, &self.targets, &self.sysroot)
             ),
             format!(
                 "{:?}",

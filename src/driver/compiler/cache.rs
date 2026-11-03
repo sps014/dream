@@ -310,15 +310,8 @@ impl Compiler {
             .map(|name| tools.tool(name))
             .to_vec();
             if !spec.capabilities.linear_memory {
-                if spec.is_windows() {
-                    paths.extend(crate::execution::native::cc::installed_zig(toolchain));
-                }
-                paths.push(
-                    crate::execution::native::cc::resolve_existing_target_cc(toolchain, spec)
-                        .ok()?
-                        .path()
-                        .to_path_buf(),
-                );
+                let linker = crate::execution::native::driver::Linker::resolve(&tools, spec).ok()?;
+                paths.extend(linker.executables().map(std::path::Path::to_path_buf));
                 let directories = if spec.can_link_on_host() {
                     toolchain.host_library_dirs()
                 } else {

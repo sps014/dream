@@ -20,7 +20,7 @@ fn runtime_instrumentation_has_a_distinct_cache_identity() {
 }
 
 #[test]
-fn explicit_paths_and_compiler_precedence_are_captured() {
+fn explicit_paths_and_tool_overrides_are_captured() {
     let c = config(
         &[
             ("DREAM_HOME", "/install/bin"),
@@ -28,10 +28,7 @@ fn explicit_paths_and_compiler_precedence_are_captured() {
             ("DREAM_TOOLCHAINS", "/tools"),
             ("DREAM_LLVM", "/llvm/bin"),
             ("DREAM_RUNTIME_C", "/runtime"),
-            ("DREAM_CC", "dream-clang"),
-            ("CC", "other-clang"),
-            ("DREAM_CXX", "dream-clang++"),
-            ("CXX", "other-clang++"),
+            ("DREAM_MOLD", "/mold"),
         ],
         None,
         PathBuf::from("/project"),
@@ -49,8 +46,7 @@ fn explicit_paths_and_compiler_precedence_are_captured() {
         Some(&PathBuf::from("/llvm/bin"))
     );
     assert_eq!(c.runtime_c, PathBuf::from("/runtime"));
-    assert_eq!(c.cc, Some(OsString::from("dream-clang")));
-    assert_eq!(c.cxx, Some(OsString::from("dream-clang++")));
+    assert_eq!(c.tool_overrides.get("mold"), Some(&PathBuf::from("/mold")));
 }
 
 #[test]
@@ -61,8 +57,6 @@ fn empty_overrides_use_user_defaults_not_cargo_output_as_install_prefix() {
             ("DREAM_TOOLCHAINS", ""),
             ("DREAM_LLVM", ""),
             ("HOME", "/user"),
-            ("DREAM_CC", ""),
-            ("CC", "clang"),
         ],
         None,
         PathBuf::from("/project"),
@@ -70,7 +64,6 @@ fn empty_overrides_use_user_defaults_not_cargo_output_as_install_prefix() {
     assert_eq!(c.prefix, PathBuf::from("/user/.dream"));
     assert_eq!(c.toolchains, vec![PathBuf::from("/user/.dream/toolchains")]);
     assert!(c.tool_overrides.is_empty());
-    assert_eq!(c.cc, Some(OsString::from("clang")));
 }
 
 #[test]
@@ -157,7 +150,7 @@ fn execution_and_runtime_catalog_do_not_read_environment_again() {
         include_str!("../../execution/llvm/wasm_opt.rs"),
         include_str!("../../execution/llvm/runtime.rs"),
         include_str!("../../execution/llvm/bundle.rs"),
-        include_str!("../../execution/native/cc.rs"),
+        include_str!("../../execution/native/driver.rs"),
         include_str!("../../execution/native/c_link.rs"),
         include_str!("../../execution/native/mod.rs"),
         include_str!("../../execution/debugger/mod.rs"),
@@ -174,7 +167,7 @@ fn target_sysroot_and_driver_changes_invalidate_configuration_hash() {
     for values in [
         [("DREAM_TARGETS", "/foreign")],
         [("DREAM_SYSROOT", "/sdk")],
-        [("DREAM_CC", "other-clang")],
+        [("DREAM_MOLD", "/mold")],
         [("DREAM_WASM_OPT", "/binaryen/bin/wasm-opt")],
         [("CPATH", "/extra-headers")],
         [("LIBRARY_PATH", "/extra-libraries")],

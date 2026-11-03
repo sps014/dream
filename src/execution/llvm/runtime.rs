@@ -16,6 +16,7 @@ use super::runtime_build::{RuntimeCache, Unit, write_signatures};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::run_captured;
+use crate::execution::native::driver::{Lang, compiler};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
 use dream_mir::runtime::{RUNTIME_MODULES, RuntimeNeed, core_runtime_include_dir};
@@ -106,22 +107,6 @@ pub(crate) fn sysroot_args(
         .clone()
 }
 
-pub(super) fn runtime_command(
-    config: &crate::driver::toolchain::ToolchainConfig,
-    spec: &TargetSpec,
-    clang: &Path,
-) -> Result<Command, String> {
-    let mut command = if spec.can_link_on_host() {
-        let mut command = Command::new(clang);
-        command.arg(native_target_arg(spec));
-        command
-    } else {
-        crate::execution::native::cc::resolve_target_cc(config, spec)?.cc_command(config, spec)?
-    };
-    command.args(sysroot_args(config, spec));
-    Ok(command)
-}
-
 /// `-fsanitize=<list>` from `DREAM_NATIVE_SANITIZE` for host-runnable native builds. Prebuilt
 /// runtime bundles are never sanitized, so callers that see `Some` must compile the runtime.
 pub(crate) fn native_sanitize_flag(
@@ -192,7 +177,7 @@ pub(super) fn clang_unit(
     out: &Path,
     namespaces: &super::runtime_cache::IncludeInventory,
 ) -> Result<super::runtime_cache::CompiledUnit, String> {
-    let mut cmd = runtime_command(config, spec, clang)?;
+    let mut cmd = compiler(clang, config, spec, Lang::C);
     if config.runtime_counters {
         cmd.arg("-DDREAM_RUNTIME_COUNTERS=1");
     }
@@ -226,12 +211,8 @@ fn bitcode_flags(
     opt: OptLevel,
     level: &[&'static str],
 ) -> Vec<&'static str> {
-    let mut flags = Vec::new();
-    if spec.can_link_on_host() {
-        flags.push("-emit-llvm");
-    }
-    // Zig writes nothing for `-emit-llvm` combined with the cache's `-MD`.
-    if opt != OptLevel::O0 || !spec.can_link_on_host() {
+    let mut flags = vec!["-emit-llvm"];
+    if opt != OptLevel::O0 {
         flags.push("-flto=full");
     }
     if native_sanitize_flag(config, spec).is_some() {
@@ -302,13 +283,6 @@ pub(super) fn build_native_runtime(
     inputs.push(clang.clone());
     inputs.push(tools.tool("llvm-link"));
     inputs.push(tools.tool("llvm-dis"));
-    if !spec.can_link_on_host() {
-        inputs.push(
-            crate::execution::native::cc::resolve_target_cc(config, spec)?
-                .path()
-                .to_path_buf(),
-        );
-    }
     let layout: Vec<_> = bc_units
         .iter()
         .map(|u| u.path.as_path())
@@ -452,7 +426,7 @@ pub(super) fn build_anchor(
     let inc = format!("-I{}", core_runtime_include_dir(root).display());
     let anchor_command = || -> Result<Command, String> {
         if spec.can_link_on_host() {
-            runtime_command(config, spec, clang)
+            Ok(compiler(clang, config, spec, Lang::C))
         } else {
             let mut cmd = Command::new(clang);
             cmd.arg(native_target_arg(spec)).arg("-ffreestanding");

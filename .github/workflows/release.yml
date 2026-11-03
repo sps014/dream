@@ -156,6 +156,9 @@ jobs:
             "https://github.com/${{ github.repository }}/releases/download/llvm-dist-${LLVM_VERSION}/${LLVM_DIST}.tar.xz"
           mkdir -p "$STAGE/lib/dream/llvm"
           tar -xJf "${LLVM_DIST}.tar.xz" -C "$STAGE/lib/dream/llvm" --strip-components=1
+          # mold, built from its pinned commit by scripts/fetch-dev-llvm.sh above.
+          MOLD_VERSION="$(sed -n 's/^pub const MOLD_VERSION: &str = "\(.*\)";/\1/p' crates/dream-abi/src/toolchain.rs)"
+          cp -R "${HOME}/.dream/toolchains/mold-${MOLD_VERSION}" "$STAGE/lib/dream/mold"
           DREAM_LLVM="${HOME}/.dream/toolchains/llvm-${LLVM_VERSION}/bin" \
             "${BIN_DIR}/dream${EXT}" pack-runtime "$STAGE/lib/dream/rt"
           du -sh "$STAGE" "$STAGE/lib/dream/llvm" "$STAGE/lib/dream/rt"

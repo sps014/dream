@@ -32,9 +32,10 @@ idiomatic Dream API it wants on top. Consumers just `import` the package.
   system libsqlite3 cannot be linked into it. Unused bindings are pruned before checking target availability.
 
 
-For native builds, Zig (installed by `dreamer toolchain install cc`) compiles the C/C++ and links
-it with the Dream object. `DREAM_CXX` / `CXX` override the native C++ compiler. WASM package builds
-use the pinned clang.
+Native and WASM package builds compile the C/C++ with the pinned clang that ships with Dream, and
+the native link uses the same clang. C++ code uses the target platform's C++ standard library:
+libc++ on Apple platforms, libstdc++ from the system or `DREAM_SYSROOT` on Linux, and the MSVC
+library on Windows.
 
 Runnable samples: [`sample/native_c/`](https://github.com/sps014/dream/tree/main/sample/native_c) and
 [`sample/native_cpp/`](https://github.com/sps014/dream/tree/main/sample/native_cpp).

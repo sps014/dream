@@ -280,6 +280,50 @@ Any of the C compiler variables in `ToolchainConfig::compiler_environment` (`CPA
 `LIBRARY_PATH`, …) disables the build caches, so a benchmark harness must clear them. Homebrew
 Python exports both.
 
+A fourth round removed the Zig linker driver and stopped re-running generator analysis when
+the generator's inputs are unchanged.
+
+Native, cross, PGO, sanitizer and package C/C++ links all go through the pinned clang.
+ELF and Mach-O use mold (`ld64.mold` on Apple, selected with `--ld-path`); COFF uses the
+pinned LLVM `lld-link` (MSVC) or `ld.lld` (MinGW) via `-fuse-ld=lld`. wasm32 still calls
+`wasm-ld` directly. There is no system-compiler fallback. A cross link needs `DREAM_SYSROOT`,
+or `SDKROOT` for Apple. Link lines pass `--build-id=none` on ELF, `/Brepro` on MSVC and
+`--no-insert-timestamp` on MinGW, so two links of the same objects to the same path are
+byte-identical (`native_binary_is_deterministic`). mold is pinned at commit `331ac66` and
+built from source into the toolchain (`scripts/fetch-dev-llvm.sh`); it is not part of the
+compiler crate build. On this machine mold's Mach-O link was faster than `ld64.lld` and the
+system `ld` (about 25 ms versus about 38 ms on a replayed hello link).
+
+The generator pass used to run `analyze_for_generators`, expand the snapshot closure and
+lower referenced bodies on every compile that matched a trigger, then often replay a cached
+generator executable result. The new program cache (`src/driver/generate/result_cache.rs`)
+sits in front of that. Its key is the compiler identity, the target layout, the generator
+executable identities, the fingerprints of the tools those generators run, and the syntactic trigger set: each matched call's enclosing
+declaration, each attributed declaration, and each syntax block. The stored entry is the
+generated files plus the module interface hashes and the text hashes of the declarations the
+snapshot closure named. A hit merges those files and skips semantic analysis, snapshot
+expansion and body lowering. Editing an unrelated function body hits. Editing a trigger
+call, an attributed declaration, or a declaration the generator read misses. The snapshot's
+symbol list is trimmed to that closure, so an unrelated generic instantiation does not
+change what the generator would have seen. `DREAM_GENERATOR_CACHE=0` disables the cache.
+The entry lives under the toolchain generator cache and shares the 256 MB result budget.
+
+`scripts/bench.py build` on this machine, release host compiler, native Debug, `--plain`,
+median of 3. The harness gives each repetition a fresh `DREAM_PREFIX`, and its edit changes
+a literal inside the program, so a `stdlib` edit still misses the program cache and pays
+the full generator pass:
+
+| Workload | Edited | Unchanged |
+|---|---:|---:|
+| `hello` | 0.38 s | 0.022 s |
+| `stdlib` | 2.03 s | 0.026 s |
+
+The third-round medians on the same shape were 0.41 s / 0.01 s for `hello` and 1.13 s /
+0.01 s for `stdlib`. Unchanged builds stay in the same band. The `stdlib` edit is slower
+here because the changed literal is a generator input, and the cache records its
+dependencies on the miss path. An edit outside that closure reuses the generated files;
+`unrelated_function_edit_reuses_the_program_cache` covers that case.
+
 #### Toolchain failures found during measurement
 
 - With the default Zig 0.16 linker driver, native Release links and every source-generator

@@ -9,8 +9,10 @@ pub const LLVM_VERSION: &str = "22.1.8";
 /// Binaryen release used for deterministic WASM post-processing.
 pub const BINARYEN_VERSION: &str = "133";
 
-/// Zig release used as the cross-linking C compiler driver.
-pub const ZIG_VERSION: &str = "0.16.0";
+/// mold revision linking ELF and Mach-O outputs. Its Mach-O linker has no tagged release yet, so
+/// the pin is a commit of mold's Rust tree. Must match `scripts/fetch-dev-llvm.sh` and
+/// `scripts/fetch-dev-llvm.ps1`.
+pub const MOLD_VERSION: &str = "3.0.0-331ac66";
 
 /// Slang shader compiler release available to generators.
 pub const SLANG_VERSION: &str = "2026.20";
@@ -130,7 +132,10 @@ pub static PINNED_TOOLS: &[PinnedTool] = &[
             "bin/llvm-link",
             "bin/llvm-ar",
             "bin/llvm-profdata",
+            "bin/llvm-rc",
             "bin/lld",
+            "bin/ld.lld",
+            "bin/lld-link",
             "bin/wasm-ld",
         ],
         env: "DREAM_LLVM",
@@ -200,54 +205,19 @@ pub static PINNED_TOOLS: &[PinnedTool] = &[
         install_hint: "run `dreamer toolchain install binaryen` or set DREAM_WASM_OPT",
     },
     PinnedTool {
-        name: "zig",
-        aliases: &["cc"],
-        version: ZIG_VERSION,
-        executables: &["zig"],
-        env: "DREAM_ZIG",
-        override_kind: OverrideKind::Executable,
-        bundled: None,
+        name: "mold",
+        aliases: &[],
+        version: MOLD_VERSION,
+        // mold picks its output format from the name it runs under: `ld64.mold` links Mach-O.
+        executables: &["bin/mold", "bin/ld64.mold"],
+        env: "DREAM_MOLD",
+        override_kind: OverrideKind::Root,
+        bundled: Some("mold"),
         timeout_secs: 120,
-        default_install: true,
-        archives: &[
-            HostArchive {
-                host: "linux-x64",
-                url: "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz",
-                sha256: "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00",
-                kind: ArchiveKind::TarXz,
-            },
-            HostArchive {
-                host: "linux-arm64",
-                url: "https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz",
-                sha256: "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17",
-                kind: ArchiveKind::TarXz,
-            },
-            HostArchive {
-                host: "macos-x64",
-                url: "https://ziglang.org/download/0.16.0/zig-x86_64-macos-0.16.0.tar.xz",
-                sha256: "0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7",
-                kind: ArchiveKind::TarXz,
-            },
-            HostArchive {
-                host: "macos-arm64",
-                url: "https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz",
-                sha256: "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489",
-                kind: ArchiveKind::TarXz,
-            },
-            HostArchive {
-                host: "windows-x64",
-                url: "https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip",
-                sha256: "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e",
-                kind: ArchiveKind::Zip,
-            },
-            HostArchive {
-                host: "windows-arm64",
-                url: "https://ziglang.org/download/0.16.0/zig-aarch64-windows-0.16.0.zip",
-                sha256: "aee38316ee4111717900f45dd3130145c39289e105541d737eb8c5ed653c78ef",
-                kind: ArchiveKind::Zip,
-            },
-        ],
-        install_hint: "run `dreamer toolchain install cc` or set DREAM_ZIG",
+        default_install: false,
+        archives: &[],
+        install_hint: "mold ships with Dream releases in lib/dream/mold; for a development build \
+                       run scripts/fetch-dev-llvm.sh, or set DREAM_MOLD to its install root",
     },
     PinnedTool {
         name: "slang",
@@ -496,7 +466,7 @@ mod tests {
         assert_eq!(tool_providing("slangc").unwrap().0.name, "slang");
         let (tool, path) = tool_providing("dream-slang-layout").unwrap();
         assert_eq!((tool.name, path), ("slang", "bin/dream-slang-layout"));
-        assert_eq!(pinned_tool("cc").unwrap().name, "zig");
+        assert_eq!(tool_providing("ld64.mold").unwrap().0.name, "mold");
         assert!(tool_providing("bash").is_none());
     }
 }

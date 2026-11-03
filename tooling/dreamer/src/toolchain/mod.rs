@@ -130,8 +130,7 @@ mod tests {
 
     #[test]
     fn parse_component_aliases() {
-        assert_eq!(parse_tool("cc").unwrap().name, "zig");
-        assert_eq!(parse_tool("zig").unwrap().name, "zig");
+        assert!(parse_tool("mold").unwrap().archives.is_empty());
         assert_eq!(parse_tool("binaryen").unwrap().name, "binaryen");
         assert_eq!(parse_tool("slang").unwrap().name, "slang");
         assert!(parse_tool("llvm").unwrap().archives.is_empty());

@@ -54,8 +54,6 @@ impl ToolchainConfig {
             path: value("PATH")
                 .map(|p| std::env::split_paths(&p).collect())
                 .unwrap_or_default(),
-            cc: value("DREAM_CC").or_else(|| value("CC")),
-            cxx: value("DREAM_CXX").or_else(|| value("CXX")),
             targets: value("DREAM_TARGETS")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| prefix.join("targets")),
@@ -93,8 +91,6 @@ impl ToolchainConfig {
             resolved_llvm: OnceLock::new(),
             #[cfg(feature = "native")]
             resolved_wasm_opt: OnceLock::new(),
-            #[cfg(feature = "native")]
-            resolved_cc: OnceLock::new(),
         }
     }
 }

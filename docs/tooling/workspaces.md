@@ -104,24 +104,23 @@ Cross builds read these environment variables:
 
 | Variable | Meaning |
 |---|---|
-| `DREAM_CC` | C compiler driver for linking; checked before `CC` |
-| `CC` | C compiler driver when `DREAM_CC` is unset |
 | `DREAM_TARGETS` | Root of target-built capability libraries (default `~/.dream/targets`) |
 | `DREAM_SYSROOT` | Target SDK sysroot |
 | `SDKROOT` | Apple SDK path |
 | `DEVELOPER_DIR` | Xcode installation to use |
 
-Cross builds use the installed Zig unless `DREAM_CC` / `CC` names a target-capable compiler.
-Install Zig with `dreamer toolchain install cc`. Place target-built capability libraries in
+Cross builds use the same pinned clang and linkers as host builds, so the only extra inputs are the
+target's system files and capability libraries. Place target-built capability libraries in
 `~/.dream/targets/<target-triple>/lib/` (override the targets root with `DREAM_TARGETS`),
 including Windows import libraries where applicable. The compiler validates architecture,
 file format and the current library version marker before linking; it never substitutes host libraries.
-Set `DREAM_SYSROOT` to the target SDK sysroot, or `SDKROOT` for Apple SDKs. `DEVELOPER_DIR` selects an Xcode installation. On macOS,
-`xcrun` resolves the selected macOS/iOS SDK. Android builds can select the NDK Clang driver
-with `DREAM_CC`. Cross builds require the target runtime sources and the required build-tools installation.
+A cross link needs the target's C library and startup files: set `DREAM_SYSROOT` to the target
+sysroot (for Android, the NDK's `toolchains/llvm/prebuilt/<host>/sysroot`), or `SDKROOT` for Apple
+SDKs. `DEVELOPER_DIR` selects an Xcode installation. On macOS, `xcrun` resolves the selected
+macOS/iOS SDK. Cross builds require the target runtime sources and the required build-tools installation.
 
 Use `dreamer toolchain doctor --target aarch64-unknown-linux-gnu` to inspect these requirements.
-Windows icon resources use pinned `llvm-rc` or the selected/installed Zig resource compiler.
+Windows icon resources are compiled with the pinned `llvm-rc`.
 The configuration hash and resolved tool/library identities, including resolved SDK arguments, enter build stamps, so changing
 the compiler, SDK or capability libraries invalidates cached outputs. Cross-target PGO requires
 running profiles on the target and is currently rejected.

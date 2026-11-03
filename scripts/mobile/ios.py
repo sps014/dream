@@ -20,9 +20,6 @@ def main():
     ]:
         env = os.environ.copy()
         env["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0"
-        llvm = os.environ.get("DREAM_LLVM", os.path.expanduser("~/.dream/toolchains/llvm-22.1.8/bin"))
-        env["DREAM_CC"] = llvm + "/clang"
-        env["DREAM_CXX"] = llvm + "/clang"
         archive, core, env = build_slice(
             output, project, dream, rust_target, dream_target, env, "dylib"
         )

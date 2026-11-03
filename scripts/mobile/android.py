@@ -77,8 +77,6 @@ def main():
         env = os.environ.copy()
         linker = toolchain / f"bin/{triple}23-clang"
         env[f"CARGO_TARGET_{triple.upper().replace('-', '_')}_LINKER"] = str(linker)
-        env["DREAM_CC"] = str(toolchain / "bin/clang")
-        env["DREAM_CXX"] = str(toolchain / "bin/clang++")
         env["DREAM_SYSROOT"] = str(toolchain / "sysroot")
         archive, core, env = build_slice(output, project, dream, triple, triple, env, "so")
         library = archive.with_suffix(".so")

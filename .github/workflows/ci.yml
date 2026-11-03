@@ -122,7 +122,9 @@ jobs:
       - uses: actions/cache/restore@v6
         id: llvm-cache
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         shell: bash
@@ -131,14 +133,10 @@ jobs:
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - name: Use the MSVC-compatible pinned C driver
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          "DREAM_CC=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang.exe" >> $env:GITHUB_ENV
-          "DREAM_CXX=$env:USERPROFILE\.dream\toolchains\llvm-22.1.8\bin\clang++.exe" >> $env:GITHUB_ENV
       - uses: actions/cache@v6
         with:
           path: ~/.dream/toolchains/binaryen-133
@@ -351,7 +349,9 @@ jobs:
       - uses: actions/cache/restore@v6
         id: llvm-cache
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh
@@ -359,7 +359,9 @@ jobs:
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
       # The GPU shader generator compiles with the pinned slangc and records layouts with
       # dream-slang-layout, which the install builds against that Slang release.
@@ -478,7 +480,9 @@ jobs:
           save-if: false
       - uses: actions/cache/restore@v6
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM and wasi-sdk support
         run: scripts/fetch-dev-llvm.sh

@@ -82,6 +82,6 @@ Continue with the [language tour](tour.md) and [your first small project](first-
 
 ## Installation options
 
-Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download, and `DREAM_SKIP_CC=1` skips the native linker download; use these only when you already have suitable tools.
+Set `DREAM_VERSION` before running the installer to request a particular release. `DREAM_SKIP_LLVM=1` skips the build-tools download; use it only when you already have suitable tools.
 
 Linux release downloads require glibc 2.36 or later. Read [Toolchain setup](../tooling/toolchain.md) to inspect or change your tools, and [the compiler command guide](../tooling/compiler.md) for advanced output and target options.

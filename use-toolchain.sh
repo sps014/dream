@@ -288,46 +288,9 @@ echo "New terminals pick this up automatically. This shell is already configured
 echo "Reload the Cursor/VS Code window if the LSP was already running."
 echo "To remove:  source ./use-toolchain.sh --unlink"
 
-if [ "${DREAM_SKIP_CC:-}" = "1" ]; then
-  echo "Skipped C compiler install (DREAM_SKIP_CC=1)"
-elif command -v dreamer >/dev/null 2>&1; then
-  _dream_has_cc=0
-  if [ -n "${DREAM_CC:-}" ] && { [ -f "${DREAM_CC}" ] || command -v "${DREAM_CC}" >/dev/null 2>&1; }; then
-    _dream_has_cc=1
-  elif [ -n "${CC:-}" ] && { [ -f "${CC}" ] || command -v "${CC}" >/dev/null 2>&1; }; then
-    _dream_has_cc=1
-  elif [ -n "${DREAM_ZIG:-}" ] && { [ -f "${DREAM_ZIG}" ] || command -v "${DREAM_ZIG}" >/dev/null 2>&1; }; then
-    _dream_has_cc=1
-  else
-    for _cand in "${_dream_user_dir}/toolchains"/zig-*/zig "${_dream_user_dir}/toolchains"/zig-*/zig.exe; do
-      if [ -f "$_cand" ]; then
-        _dream_has_cc=1
-        break
-      fi
-    done
-  fi
-  if [ "$_dream_has_cc" -eq 0 ]; then
-    command -v cc >/dev/null 2>&1 && _dream_has_cc=1
-  fi
-  if [ "$_dream_has_cc" -eq 0 ]; then
-    command -v clang >/dev/null 2>&1 && _dream_has_cc=1
-  fi
-  if [ "$_dream_has_cc" -eq 0 ]; then
-    command -v zig >/dev/null 2>&1 && _dream_has_cc=1
-  fi
-  if [ "$_dream_has_cc" -eq 1 ]; then
-    echo "C compiler already found; skipped dreamer toolchain install cc"
-  else
-    echo "No C compiler on PATH; installing via dreamer toolchain install cc"
-    if ! dreamer toolchain install cc; then
-      echo "warning: could not install a C compiler; later run: dreamer toolchain install cc" >&2
-    fi
-  fi
-  unset _dream_has_cc _cand
-fi
-
 # A development build compiles the C runtime itself, so it needs the full official LLVM (plus the
-# wasm32 builtins and WASI headers); releases ship a minimal LLVM and the runtime prebuilt.
+# wasm32 builtins and WASI headers) and mold; releases ship a minimal LLVM, mold and the runtime
+# prebuilt.
 if [ "${DREAM_SKIP_LLVM:-}" = "1" ]; then
   echo "Skipped LLVM fetch (DREAM_SKIP_LLVM=1)"
 elif [ -n "${DREAM_LLVM:-}" ]; then

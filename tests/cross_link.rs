@@ -13,21 +13,37 @@ fn checked(command: &mut Command) {
     );
 }
 
-fn zig() -> std::path::PathBuf {
-    let tools = std::env::var_os("DREAM_ZIG")
+/// The pinned clang and the foreign target's sysroot, which every cross link needs.
+fn cross_toolchain() -> (std::path::PathBuf, std::ffi::OsString) {
+    let bin = std::env::var_os("DREAM_LLVM")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             let home =
                 std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap();
-            std::path::PathBuf::from(home)
-                .join(".dream/toolchains/zig-0.16.0")
-                .join(if cfg!(windows) { "zig.exe" } else { "zig" })
+            std::path::PathBuf::from(home).join(format!(
+                ".dream/toolchains/llvm-{}/bin",
+                dream_abi::toolchain::LLVM_VERSION
+            ))
         });
-    assert!(
-        tools.is_file(),
-        "set DREAM_ZIG to the installed Zig executable"
+    let clang = bin.join(if cfg!(windows) { "clang.exe" } else { "clang" });
+    assert!(clang.is_file(), "set DREAM_LLVM to the pinned LLVM bin/");
+    let sysroot = std::env::var_os("DREAM_SYSROOT")
+        .unwrap_or_else(|| panic!("set DREAM_SYSROOT to a {} sysroot", foreign_triple()));
+    (clang, sysroot)
+}
+
+/// A stand-in capability library: only its exported symbols matter to the link.
+fn foreign_library(clang: &std::path::Path, triple: &str, source: &std::path::Path, out: &std::path::Path) {
+    let name = out.file_name().unwrap().to_string_lossy();
+    checked(
+        Command::new(clang)
+            .arg(format!("--target={triple}"))
+            .args(["-fuse-ld=lld", "-nostdlib", "-shared", "-fPIC"])
+            .arg(format!("-Wl,-soname,{name}"))
+            .arg(source)
+            .arg("-o")
+            .arg(out),
     );
-    tools
 }
 
 fn foreign_triple() -> &'static str {
@@ -39,9 +55,9 @@ fn foreign_triple() -> &'static str {
 }
 
 #[test]
-#[ignore = "requires installed Zig cross compiler and LLVM"]
-fn zig_links_foreign_release_executable_with_local_exec_runtime_tls() {
-    let tools = zig();
+#[ignore = "requires the pinned LLVM and mold, and DREAM_SYSROOT for the foreign Linux target"]
+fn links_foreign_release_executable_with_local_exec_runtime_tls() {
+    let (_, sysroot) = cross_toolchain();
     let triple = foreign_triple();
     let root = tempfile::tempdir().unwrap();
     let ir = root.path().join("classes.ll");
@@ -50,7 +66,7 @@ fn zig_links_foreign_release_executable_with_local_exec_runtime_tls() {
             .args(["--release", "--emit-opt-ir", "--target", triple, "-o"])
             .arg(&ir)
             .arg("tests/fixtures/compiler/classes.dream")
-            .env("DREAM_CC", &tools),
+            .env("DREAM_SYSROOT", &sysroot),
     );
     let bytes = std::fs::read(ir.with_extension("bin")).unwrap();
     let binary = object::File::parse(bytes.as_slice()).unwrap();
@@ -61,9 +77,9 @@ fn zig_links_foreign_release_executable_with_local_exec_runtime_tls() {
 }
 
 #[test]
-#[ignore = "requires installed Zig cross compiler and LLVM"]
-fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
-    let tools = zig();
+#[ignore = "requires the pinned LLVM and mold, and DREAM_SYSROOT for the foreign Linux target"]
+fn links_foreign_executable_and_rejects_stale_capability_abi() {
+    let (clang, sysroot) = cross_toolchain();
     let triple = foreign_triple();
     let spec = TargetSpec::parse(triple).unwrap();
     assert!(!spec.can_link_on_host());
@@ -75,36 +91,15 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
     let library = libs.join("libdream_host_core.so");
     let build_host = |marker: &str| {
         std::fs::write(&c, format!("void {marker}(void) {{}}\nint dream_host_bind_v3(void *context) {{ (void)context; return 0; }}\n")).unwrap();
-        checked(
-            Command::new(&tools)
-                .args([
-                    "cc",
-                    "-target",
-                    &format!("{}-linux-gnu", spec.triple.architecture),
-                    "-shared",
-                    "-fPIC",
-                    "-Wl,-soname,libdream_host_core.so",
-                ])
-                .arg(&c)
-                .arg("-o")
-                .arg(&library),
-        );
+        foreign_library(&clang, triple, &c, &library);
     };
     let timezone_source = root.path().join("timezone.c");
     std::fs::write(&timezone_source, "void dream_host_timezone_abi_v3(void) {}\nvoid *dateLocalZoneName(void) { return 0; }\nint dateZoneOffsetMinutes(void *zone, long long millis) { (void)zone; (void)millis; return 0; }\n").unwrap();
-    checked(
-        Command::new(&tools)
-            .args([
-                "cc",
-                "-target",
-                &format!("{}-linux-gnu", spec.triple.architecture),
-                "-shared",
-                "-fPIC",
-                "-Wl,-soname,libdream_host_timezone.so",
-            ])
-            .arg(&timezone_source)
-            .arg("-o")
-            .arg(libs.join("libdream_host_timezone.so")),
+    foreign_library(
+        &clang,
+        triple,
+        &timezone_source,
+        &libs.join("libdream_host_timezone.so"),
     );
     build_host("dream_host_core_abi_v3");
     let source = root.path().join("main.dream");
@@ -120,7 +115,7 @@ fn zig_links_foreign_executable_and_rejects_stale_capability_abi() {
             .args(["--target", triple, "-o"])
             .arg(&ir)
             .arg(&source)
-            .env("DREAM_CC", &tools)
+            .env("DREAM_SYSROOT", &sysroot)
             .env("DREAM_TARGETS", &targets);
         if !root.path().join("dream.toml").exists() {
             command.arg("--relocatable");

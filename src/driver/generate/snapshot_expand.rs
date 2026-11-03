@@ -143,5 +143,90 @@ pub fn build_snapshot(
         .consumable
         .retain(|target, _| catalog.functions.iter().filter(|f| &f.id == target).count() == 1);
     built.spans = b.spans;
+    // The catalog behind `symbols` lists every declaration, and semantic type views list every
+    // interned instance. Keep only the trigger closure: an unrelated instantiation must not change
+    // the snapshot the generator reads.
+    trim_to_closure(&mut built.snapshot);
     Ok(built)
+}
+
+/// Drops symbol views and instances the generator's trigger closure does not name.
+fn trim_to_closure(snapshot: &mut Snapshot) {
+    use indexmap::IndexSet;
+    let mut ids = IndexSet::new();
+    for decl in snapshot.decls.iter().chain(&snapshot.referenced) {
+        ids.insert(decl.id.clone());
+    }
+    for function in snapshot
+        .functions
+        .iter()
+        .chain(&snapshot.referenced_functions)
+    {
+        ids.insert(function.id.clone());
+        if !function.overload.is_empty() {
+            ids.insert(function.overload.clone());
+        }
+    }
+    snapshot.symbols.retain(|symbol| {
+        ids.contains(&symbol.id)
+            || symbol.function.as_ref().is_some_and(|function| {
+                ids.contains(&function.id)
+                    || (!function.overload.is_empty() && ids.contains(&function.overload))
+            })
+    });
+    let mut types = Vec::new();
+    for decl in snapshot.decls.iter().chain(&snapshot.referenced) {
+        collect_decl_types(decl, &mut types);
+    }
+    for function in snapshot
+        .functions
+        .iter()
+        .chain(&snapshot.referenced_functions)
+    {
+        collect_function_types(function, &mut types);
+    }
+    for call in &snapshot.calls {
+        types.extend(call.type_args.iter().cloned());
+        types.extend(call.arg_types.iter().cloned());
+    }
+    for symbol in &mut snapshot.symbols {
+        symbol
+            .instances
+            .retain(|instance| types.iter().any(|ty| ty == &instance.ty));
+    }
+}
+
+fn collect_decl_types(decl: &Decl, out: &mut Vec<TypeRef>) {
+    out.extend(decl.implements.iter().cloned());
+    for field in &decl.fields {
+        out.push(field.ty.clone());
+    }
+    for variant in &decl.variants {
+        for field in &variant.fields {
+            out.push(field.ty.clone());
+        }
+    }
+    for method in &decl.methods {
+        collect_function_types(method, out);
+    }
+}
+
+fn collect_function_types(function: &Function, out: &mut Vec<TypeRef>) {
+    for param in &function.params {
+        out.push(param.ty.clone());
+    }
+    out.push(function.ret.clone());
+    if let Some(body) = &function.body {
+        for statement in &body.statements {
+            collect_node_types(statement, out);
+        }
+    }
+}
+
+fn collect_node_types(node: &BodyNode, out: &mut Vec<TypeRef>) {
+    out.extend(node.types.iter().cloned());
+    out.push(node.ty.clone());
+    for child in &node.children {
+        collect_node_types(child, out);
+    }
 }

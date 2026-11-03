@@ -49,6 +49,17 @@ pub fn gather(
     attributes: &UserAttributes,
     diagnostics: &mut DiagnosticBag,
 ) -> PassInputs {
+    let mut inputs = gather_unresolved(req, acc, attributes, diagnostics);
+    resolve_semantics(&mut inputs, req, acc, attributes);
+    inputs
+}
+
+fn gather_unresolved(
+    req: &GenerateRequest<'_>,
+    acc: &ProgramAccumulator<'_>,
+    attributes: &UserAttributes,
+    diagnostics: &mut DiagnosticBag,
+) -> PassInputs {
     let manifest = if req.stage == GeneratorStage::All {
         super::manifest::load_manifest_generators(req.entry_file)
     } else {
@@ -95,38 +106,10 @@ pub fn gather(
             .filter(|id| gens.iter().any(|g| g.syntax_block && &g.id == id));
     }
     let calls = collect_calls(acc, &call_triggers, None);
-    let applies = gens.iter().any(|g| {
-        (g.syntax_block
-            && sites
-                .iter()
-                .any(|s| s.generator.as_deref() == Some(g.id.as_str())))
-            || g.call_triggers
-                .iter()
-                .any(|t| calls.iter().any(|c| call_triggers[c.trigger].id == t.id))
-            || program_carries(acc, &g.attribute_triggers, attributes)
-    });
-    let semantic = if applies {
-        let graph = acc.module_graph();
-        let arena = Bump::new();
-        dream_sema::analyzer::Analyzer::new(&graph, &arena)
-            .with_aliased_imports(acc.aliased_imports.clone())
-            .with_target_layout(dream_hir::TargetLayout {
-                ptr_size: req.target.ptr_size,
-                ptr_align: req.target.ptr_align,
-            })
-            .analyze_for_generators()
-    } else {
-        Default::default()
-    };
-    let calls = if applies {
-        collect_calls(acc, &call_triggers, Some(&semantic))
-    } else {
-        calls
-    };
     PassInputs {
         sites,
         calls,
-        semantic,
+        semantic: Default::default(),
         source_spans: acc
             .parsed_files
             .iter()
@@ -140,6 +123,42 @@ pub fn gather(
         paths: ProjectPaths::for_entry(req.entry_file),
         target: req.target.triple.to_string(),
     }
+}
+
+/// Semantic facts, only when a generator's triggers match. A program-cache hit skips this.
+fn resolve_semantics(
+    inputs: &mut PassInputs,
+    req: &GenerateRequest<'_>,
+    acc: &ProgramAccumulator<'_>,
+    attributes: &UserAttributes,
+) {
+    let applies = inputs.gens.iter().any(|g| {
+        (g.syntax_block
+            && inputs
+                .sites
+                .iter()
+                .any(|s| s.generator.as_deref() == Some(g.id.as_str())))
+            || g.call_triggers.iter().any(|t| {
+                inputs
+                    .calls
+                    .iter()
+                    .any(|c| inputs.call_triggers[c.trigger].id == t.id)
+            })
+            || program_carries(acc, &g.attribute_triggers, attributes)
+    });
+    if !applies {
+        return;
+    }
+    let graph = acc.module_graph();
+    let arena = Bump::new();
+    inputs.semantic = dream_sema::analyzer::Analyzer::new(&graph, &arena)
+        .with_aliased_imports(acc.aliased_imports.clone())
+        .with_target_layout(dream_hir::TargetLayout {
+            ptr_size: req.target.ptr_size,
+            ptr_align: req.target.ptr_align,
+        })
+        .analyze_for_generators();
+    inputs.calls = collect_calls(acc, &inputs.call_triggers, Some(&inputs.semantic));
 }
 
 impl PassInputs {
@@ -189,7 +208,7 @@ impl PassInputs {
         super::materialize::entry_dir(&self.paths.generated_dir(), entry_file)
     }
 
-    fn report_sites(
+    pub(super) fn report_sites(
         &self,
         done: &dyn Fn(&Site) -> bool,
         failed: &[String],
@@ -240,7 +259,17 @@ pub fn run_generators<'a>(
 ) -> Result<(), Error> {
     record(Event::Pass);
     let started = std::time::Instant::now();
-    let inputs = gather(req, acc, attributes, diagnostics);
+    let mut inputs = gather_unresolved(req, acc, attributes, diagnostics);
+    #[cfg(feature = "native")]
+    let cache_key = super::result_cache::key(req, acc, attributes, &inputs);
+    #[cfg(feature = "native")]
+    if !req.replay_materialized
+        && let Some(key) = cache_key.as_deref()
+        && let Some(hit) = super::result_cache::lookup(req, acc, &inputs, key)
+    {
+        return super::result_cache::restore(req, arena, acc, &inputs, hit, diagnostics);
+    }
+    resolve_semantics(&mut inputs, req, acc, attributes);
     let mut applicable: Vec<&RegisteredGenerator> = Vec::new();
     for g in &inputs.gens {
         if inputs.applicable(g, acc, attributes) {
@@ -333,6 +362,13 @@ pub fn run_generators<'a>(
     let consumed_ranges = super::consumption::ranges(&runs);
     let applied = super::apply::apply(&runs, &root, diagnostics);
     failed.extend(applied.failed.iter().cloned());
+    #[cfg(feature = "native")]
+    if !req.replay_materialized
+        && failed.is_empty()
+        && let Some(key) = cache_key.as_deref()
+    {
+        super::result_cache::store(req, acc, &inputs, &runs, &applied, key);
+    }
     for output in &applied.published {
         acc.published_artifacts
             .insert(output.path.clone(), output.bytes.clone());

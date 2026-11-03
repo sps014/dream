@@ -17,15 +17,15 @@ import time
 from benchmarks.process import dream_name, peak_working_set, with_exe
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOLS = ["clang", "opt", "llc", "llvm-link", "llvm-dis", "llvm-ar", "llvm-profdata", "llvm-rc", "wasm-ld", "cc"]
+TOOLS = ["clang", "opt", "llc", "llvm-link", "llvm-dis", "llvm-ar", "llvm-profdata", "llvm-rc", "wasm-ld", "ld.lld", "lld-link"]
 WRAPPER = r'''#!/usr/bin/env python3
 import json, os, subprocess, sys, time
 from pathlib import Path
 name = os.environ.get("DREAM_BENCH_TOOL") or Path(sys.argv[0]).name
 if name.endswith(".exe"):
     name = name[:-4]
-suffix = ".exe" if os.name == "nt" and name != "cc" else ""
-real = Path(os.environ["DREAM_BENCH_CC_REAL"]) if name == "cc" else Path(os.environ["DREAM_BENCH_LLVM_REAL"]) / (name + suffix)
+suffix = ".exe" if os.name == "nt" else ""
+real = Path(os.environ["DREAM_BENCH_LLVM_REAL"]) / (name + suffix)
 started = time.monotonic()
 result = subprocess.run([str(real), *sys.argv[1:]])
 line = json.dumps({"tool": name, "args": sys.argv[1:], "seconds": time.monotonic() - started, "exit": result.returncode}) + "\n"
@@ -344,7 +344,6 @@ def main():
     with tempfile.TemporaryDirectory(prefix="dream-build-bench-") as directory:
         work = Path(directory)
         wrappers = install_wrappers(work, args.llvm.resolve())
-        cc = shutil.which("cc") or shutil.which("clang") or shutil.which("clang.exe") or ""
         for target in args.targets:
             for profile in args.profiles:
                 flags = PROFILES[profile] + TARGETS[target]
@@ -359,9 +358,7 @@ def main():
                     if args.plain:
                         env["DREAM_LLVM"] = str(args.llvm.resolve())
                     else:
-                        env.update(DREAM_LLVM=str(wrappers), DREAM_BENCH_LLVM_REAL=str(args.llvm.resolve()),
-                                   DREAM_BENCH_CC_REAL=cc,
-                                   DREAM_CC=str(wrappers / ("cc.exe" if os.name == "nt" else "cc")))
+                        env.update(DREAM_LLVM=str(wrappers), DREAM_BENCH_LLVM_REAL=str(args.llvm.resolve()))
                     if os.name == "nt":
                         env["DREAM_BENCH_PYTHON"] = sys.executable
                         env["DREAM_BENCH_WRAPPER"] = str(work / "llvm-wrapper.py")

@@ -1,5 +1,6 @@
 use crate::driver::toolchain::ToolchainConfig;
-use crate::execution::native::{cc, host_library_dir};
+use crate::execution::native::driver::{Lang, Linker};
+use crate::execution::native::host_library_dir;
 use dream_abi::{host_capability::HostCapability, target::TargetSpec};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -59,17 +60,11 @@ pub fn run(
         .as_ref()
         .and_then(|path| super::wasm_opt::validate(path.clone()).err());
     tools.insert("wasm-opt".into(), json!({"path": binaryen, "available": binaryen.is_some() && binaryen_error.is_none(), "expected_version": dream_abi::toolchain::BINARYEN_VERSION, "reason": binaryen_error}));
-    match cc::resolve_existing_target_cc(&config, &spec) {
-        Ok(cc) => {
-            let command = cc.cc_command(&config, &spec)?;
-            tools.insert("cc".into(), json!({"path": command.get_program().to_string_lossy(), "args": command.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()}));
-            match cc.cxx_command(&config, &spec) {
-                Ok(command) => {
-                    tools.insert("cxx".into(), json!({"path": command.get_program().to_string_lossy(), "args": command.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()}));
-                }
-                Err(error) => {
-                    tools.insert("cxx".into(), json!({"available": false, "reason": error}));
-                }
+    match super::resolve_llvm(&config).and_then(|llvm| Linker::resolve(&llvm, &spec)) {
+        Ok(linker) => {
+            for (name, lang) in [("linker", Lang::C), ("cxx_linker", Lang::Cxx)] {
+                let command = linker.command(&config, &spec, lang);
+                tools.insert(name.into(), json!({"path": command.get_program().to_string_lossy(), "args": command.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()}));
             }
         }
         Err(error) => errors.push(error),

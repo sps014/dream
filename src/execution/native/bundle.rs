@@ -1,8 +1,8 @@
 //! Package-relative host runtime linkage for redistributable native executables.
 
 use dream_abi::host_capability::HostCapability;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 pub(crate) fn stage_runtime(
     source_dir: &Path,
@@ -36,58 +36,53 @@ pub(crate) fn stage_runtime(
     Ok(output_dir.to_path_buf())
 }
 
-/// `zig_driver` selects the force-undefined spelling for MSVC targets: `zig cc` parses `-Wl`
-/// arguments itself and rejects `/include:`, while clang forwards them verbatim to `lld-link`.
+/// Link arguments for the capability libraries; a portable `bundled` directory links each
+/// library directly so its package-relative install name is kept.
 pub(crate) fn link_runtime(
-    command: &mut Command,
     source_dir: &Path,
     bundled: Option<&Path>,
     capabilities: &[HostCapability],
     spec: &dream_abi::target::TargetSpec,
-    zig_driver: bool,
-) {
+) -> Vec<OsString> {
+    let mut args: Vec<OsString> = Vec::new();
     // A stale capability library must fail at link time, before any mixed-ABI callback runs.
     for capability in capabilities {
         let symbol = capability.abi_marker();
-        if spec.is_windows() {
-            command.arg(if spec.is_msvc() && !zig_driver {
+        args.push(
+            if spec.is_msvc() {
                 format!("-Wl,/include:{symbol}")
+            } else if spec.is_apple() {
+                format!("-Wl,-u,_{symbol}")
             } else {
                 format!("-Wl,-u,{symbol}")
-            });
-        } else if spec.is_apple() {
-            command.arg(format!("-Wl,-u,_{symbol}"));
-        } else {
-            command.arg(format!("-Wl,-u,{symbol}"));
-        }
+            }
+            .into(),
+        );
     }
     if spec.is_windows() {
         for capability in capabilities {
-            command.arg(source_dir.join(capability.import_library_name(spec)));
+            args.push(source_dir.join(capability.import_library_name(spec)).into());
         }
-        return;
+        return args;
     }
     if let Some(directory) = bundled {
-        // Zig turns -L directories into native rpaths; direct inputs preserve the
-        // libraries' package-relative install names without leaking the build path.
         for capability in capabilities {
-            command.arg(directory.join(capability.library_name(spec)));
+            args.push(directory.join(capability.library_name(spec)).into());
         }
         if spec.is_apple() {
-            command.args([
-                "-Wl,-rpath,@executable_path",
-                "-Wl,-rpath,@executable_path/../Frameworks",
-            ]);
+            args.push("-Wl,-rpath,@executable_path".into());
+            args.push("-Wl,-rpath,@executable_path/../Frameworks".into());
         } else {
-            command.arg("-Wl,-rpath,$ORIGIN");
+            args.push("-Wl,-rpath,$ORIGIN".into());
         }
     } else {
-        command.arg(format!("-L{}", source_dir.display()));
+        args.push(format!("-L{}", source_dir.display()).into());
         for capability in capabilities {
-            command.arg(format!("-l{}", capability.link_name()));
+            args.push(format!("-l{}", capability.link_name()).into());
         }
-        command.arg(format!("-Wl,-rpath,{}", source_dir.display()));
+        args.push(format!("-Wl,-rpath,{}", source_dir.display()).into());
     }
+    args
 }
 
 #[cfg(test)]
@@ -96,9 +91,7 @@ mod tests {
 
     #[test]
     fn every_selected_capability_requires_its_current_abi_marker() {
-        let mut command = Command::new("cc");
-        link_runtime(
-            &mut command,
+        let args = link_runtime(
             Path::new("/toolchain"),
             None,
             &[
@@ -107,12 +100,8 @@ mod tests {
                 HostCapability::Net,
             ],
             &dream_abi::target::TargetSpec::host(),
-            false,
         );
-        let args: Vec<_> = command
-            .get_args()
-            .map(|arg| arg.to_string_lossy())
-            .collect();
+        let args: Vec<_> = args.iter().map(|arg| arg.to_string_lossy()).collect();
         for capability in [
             HostCapability::Core,
             HostCapability::Crypto,
@@ -137,23 +126,6 @@ mod tests {
     }
 
     #[test]
-    fn zig_msvc_link_uses_the_gnu_force_undefined_spelling() {
-        let spec = dream_abi::target::TargetSpec::parse("x86_64-pc-windows-msvc").unwrap();
-        let mut command = Command::new("zig");
-        link_runtime(
-            &mut command,
-            Path::new("/toolchain"),
-            None,
-            &[HostCapability::Core],
-            &spec,
-            true,
-        );
-        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
-        assert!(args.iter().any(|a| a == "-Wl,-u,dream_host_core_abi_v3"));
-        assert!(!args.iter().any(|a| a.contains("/include:")));
-    }
-
-    #[test]
     fn core_only_staging_does_not_require_or_copy_other_libraries() {
         let source = tempfile::tempdir().unwrap();
         let output = tempfile::tempdir().unwrap();
@@ -172,16 +144,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(std::fs::read_dir(output.path()).unwrap().count(), 1);
-        let mut command = Command::new("cc");
-        link_runtime(
-            &mut command,
+        let args = link_runtime(
             source.path(),
             Some(output.path()),
             &[HostCapability::Core],
             &dream_abi::target::TargetSpec::host(),
-            false,
         );
-        let args = format!("{command:?}");
+        let args = format!("{args:?}");
         for capability in [HostCapability::Crypto, HostCapability::Process] {
             assert!(!args.contains(capability.link_name()));
         }
@@ -189,16 +158,13 @@ mod tests {
 
     #[test]
     fn portable_link_uses_loader_relative_paths() {
-        let mut command = Command::new("cc");
-        link_runtime(
-            &mut command,
+        let args = link_runtime(
             Path::new("/toolchain"),
             Some(Path::new("/package")),
             &HostCapability::ALL,
             &dream_abi::target::TargetSpec::host(),
-            false,
         );
-        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        let args: Vec<_> = args.iter().map(|a| a.to_string_lossy()).collect();
         for capability in HostCapability::ALL {
             let expected = if cfg!(windows) {
                 Path::new("/toolchain")
@@ -263,21 +229,18 @@ mod tests {
         if cfg!(windows) {
             return;
         }
-        let mut command = Command::new("cc");
-        link_runtime(
-            &mut command,
+        let args = link_runtime(
             Path::new("/toolchain"),
             Some(Path::new(".")),
             &HostCapability::ALL,
             &dream_abi::target::TargetSpec::host(),
-            false,
         );
         for capability in HostCapability::ALL {
-            assert!(command.get_args().any(|arg| {
-                arg == Path::new(".")
+            assert!(args.iter().any(|arg| {
+                Path::new(arg) == Path::new(".")
                     .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
             }));
         }
-        assert!(!command.get_args().any(|arg| arg == "-L."));
+        assert!(!args.iter().any(|arg| arg == "-L."));
     }
 }

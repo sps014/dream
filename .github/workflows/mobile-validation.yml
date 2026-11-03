@@ -43,7 +43,9 @@ jobs:
           shared-key: mobile-android
       - uses: actions/cache@v4
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - run: scripts/fetch-dev-llvm.sh
       - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
@@ -82,7 +84,9 @@ jobs:
           shared-key: mobile-ios
       - uses: actions/cache@v4
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: mobile-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - run: scripts/fetch-dev-llvm.sh
       - run: cargo build --locked -p dream --no-default-features --features native -p dreamer

@@ -67,7 +67,9 @@ jobs:
           key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: actions/cache@v4
         with:
-          path: ~/.dream/toolchains/llvm-22.1.8
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
           key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
       - name: Install pinned LLVM
         run: scripts/fetch-dev-llvm.sh

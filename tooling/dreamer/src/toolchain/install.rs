@@ -319,17 +319,17 @@ mod tests {
             let mut hdr = tar::Header::new_gnu();
             hdr.set_size(3);
             hdr.set_cksum();
-            b.append_data(&mut hdr, "zig-1/bin/hello.txt", b"hi\n" as &[u8])
+            b.append_data(&mut hdr, "tool-1/bin/hello.txt", b"hi\n" as &[u8])
                 .unwrap();
             b.finish().unwrap();
         }
-        let archive = tmp.path().join("zig.tar.xz");
+        let archive = tmp.path().join("tool.tar.xz");
         let mut xz = Vec::new();
         lzma_rs::xz_compress(&mut tar_bytes.as_slice(), &mut xz).unwrap();
         fs::write(&archive, xz).unwrap();
         let dest = tmp.path().join("out");
         extract_archive(&archive, ArchiveKind::TarXz, &dest).unwrap();
         assert!(dest.join("bin/hello.txt").is_file());
-        assert!(!dest.join("zig-1").exists());
+        assert!(!dest.join("tool-1").exists());
     }
 }

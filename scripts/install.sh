@@ -8,8 +8,7 @@
 # Env:
 #   DREAM_VERSION   optional tag without leading v (default: latest release)
 #   DREAM_HOME      install prefix (default: ~/.dream). Re-runs replace bin/, lib/,
-#                   and leftover files; toolchains/ (Zig) is kept.
-#   DREAM_SKIP_CC=1 skip auto `dreamer toolchain install cc` when no compiler is found
+#                   and leftover files; toolchains/ is kept.
 
 set -eu
 
@@ -144,7 +143,7 @@ else
 fi
 
 # Drop the previous compiler/runtime payload so leftover binaries and headers
-# cannot mix with this version. Keep `toolchains/` (Zig).
+# cannot mix with this version. Keep `toolchains/`.
 replace_previous_install() {
   [ -d "$PREFIX" ] || return 0
   echo "Removing previous Dream install under ${PREFIX} (keeping toolchains/)"
@@ -224,35 +223,6 @@ mkdir -p "${PREFIX}/lib"
 rm -rf "${PREFIX}/lib/dream"
 cp -R "$BUNDLE" "${PREFIX}/lib/dream"
 
-env_compiler() {
-  _v="$1"
-  [ -n "$_v" ] || return 1
-  if [ -f "$_v" ]; then
-    return 0
-  fi
-  command -v "$_v" >/dev/null 2>&1
-}
-
-has_toolchain_zig() {
-  for cand in "${PREFIX}/toolchains"/zig-*/zig "${PREFIX}/toolchains"/zig-*/zig.exe; do
-    if [ -f "$cand" ]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-has_cc() {
-  env_compiler "${DREAM_CC:-}" && return 0
-  env_compiler "${CC:-}" && return 0
-  env_compiler "${DREAM_ZIG:-}" && return 0
-  has_toolchain_zig && return 0
-  command -v cc >/dev/null 2>&1 && return 0
-  command -v clang >/dev/null 2>&1 && return 0
-  command -v zig >/dev/null 2>&1 && return 0
-  return 1
-}
-
 LIBS_NOTE=
 cat > "${PREFIX}/toolchain.env" <<EOF
 DREAM_HOME=${BIN_DIR}
@@ -305,8 +275,6 @@ case ":${PATH}:" in
   *) export PATH="${BIN_DIR}:${PATH}" ;;
 esac
 
-ensure_cc
-
 echo
 echo "Installed:"
 echo "  ${BIN_DIR}/dream${EXT}"
@@ -314,9 +282,6 @@ echo "  ${BIN_DIR}/dreamer${EXT}"
 echo "  ${BIN_DIR}/dream-lsp${EXT}"
 if [ -n "${LIBS_NOTE}" ]; then
   echo "  ${LIBS_NOTE}"
-fi
-if [ -n "${CC_NOTE}" ]; then
-  echo "  ${CC_NOTE}"
 fi
 echo
 echo "Open a new terminal (or: . ${PREFIX}/env.sh), then:"

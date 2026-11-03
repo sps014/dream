@@ -26,8 +26,6 @@ pub struct ToolchainConfig {
     pub exe: Option<PathBuf>,
     pub cwd: PathBuf,
     pub path: Vec<PathBuf>,
-    pub cc: Option<OsString>,
-    pub cxx: Option<OsString>,
     pub targets: PathBuf,
     pub sysroot: Option<PathBuf>,
     pub no_auto_install: bool,
@@ -46,6 +44,4 @@ pub struct ToolchainConfig {
     pub(crate) resolved_llvm: OnceLock<Result<PathBuf, String>>,
     #[cfg(feature = "native")]
     pub(crate) resolved_wasm_opt: OnceLock<Result<PathBuf, String>>,
-    #[cfg(feature = "native")]
-    pub(crate) resolved_cc: OnceLock<Result<crate::execution::native::cc::Cc, String>>,
 }

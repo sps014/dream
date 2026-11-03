@@ -71,7 +71,7 @@ Dream/
 .dream source → Lexer (logos) → Parser (recursive descent, arena AST) → Semantic Analyzer
   → Typed HIR (types::TypeCtx feeds it) → MIR lowering (CFG) → Pass manager (opt passes)
   → textual LLVM IR (`backend/llvm`) → `.ll` → llvm-link with the C runtime bitcode → opt → llc
-  → native: host cc links `.bin` | wasm32: wasm-ld `.wasm` → wasmprinter `.wat` + `.abi.json` sidecar
+  → native: pinned clang links `.bin` with mold (ELF/Mach-O) or lld (COFF) | wasm32: wasm-ld `.wasm` → wasmprinter `.wat` + `.abi.json` sidecar
 ```
 
 Each arrow is a **total** lowering: the producer records everything the consumer needs, so the consumer never looks backward. Types are interned once (`TypeId`), so equality is `==`, never string comparison/mangling (the old `"Box_int"`-style stringly-typed system is gone — do not reintroduce string-keyed types).
@@ -132,7 +132,7 @@ Swift-like ARC follow-ups (stronger elision shipped in Phase 1; CoW / ownership 
 
 Every MIR block becomes one LLVM block and every local an entry `alloca` (mem2reg promotes them); async poll functions switch on the `Future` state word to resume. Runtime calls are typed from the runtime bitcode's own signatures (`RuntimeSigs`) — never spell a runtime signature by hand. Ownership stays in MIR: each `Retain`/`Release` becomes exactly one call or glue sequence, and no LLVM attribute or metadata is added unless Dream semantics prove it (see `docs/internals/06-llvm-backend.md`).
 
-Every build needs the pinned LLVM (`LLVM_VERSION` in `crates/dream-abi/src/toolchain.rs`, the pinned-tool table): bundled with releases or fetched by `scripts/fetch-dev-llvm.sh`, or `DREAM_LLVM` pointing at its `bin/`. Native builds also need a linker driver (`cc`, or Zig via `dreamer toolchain install cc`).
+Every build needs the pinned LLVM (`LLVM_VERSION` in `crates/dream-abi/src/toolchain.rs`, the pinned-tool table): bundled with releases or fetched by `scripts/fetch-dev-llvm.sh`, or `DREAM_LLVM` pointing at its `bin/`. Native builds compile and link only with that clang, plus the pinned mold (`MOLD_VERSION`, built from source by the same script; `DREAM_MOLD` overrides) for ELF/Mach-O and LLVM's lld for COFF — never a `PATH` compiler or linker. Cross targets need `DREAM_SYSROOT` (or `SDKROOT` for Apple).
 
 ## Error handling model
 

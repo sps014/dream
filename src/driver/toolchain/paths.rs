@@ -105,15 +105,6 @@ impl ToolchainConfig {
         which::which_in(name, Some(search), &self.cwd).ok()
     }
 
-    pub fn program(&self, value: Option<&OsString>) -> Option<PathBuf> {
-        let p = PathBuf::from(value?);
-        if p.is_file() {
-            Some(p)
-        } else {
-            self.find_on_path(p.to_str()?)
-        }
-    }
-
     pub fn bundle_dir(&self) -> Option<PathBuf> {
         let exe = self.exe.as_ref()?;
         let exe = dunce::canonicalize(exe).unwrap_or_else(|_| exe.clone());

@@ -201,8 +201,8 @@ impl Check<'_> {
                 Effect::None | Effect::GlobalStore(_) => true,
                 Effect::Top | Effect::ObserveOwnership => false,
                 Effect::Store(b, field) => {
-                    !(self.snap.slot == Slot::Field(self.f.local_ty(b), field)
-                        && self.facts.may_alias(bi, si, b, crate::Local(base)))
+                    (self.snap.slot != Slot::Field(self.f.local_ty(b), field)
+                        || !self.facts.may_alias(bi, si, b, crate::Local(base)))
                         && !matches!(self.snap.slot, Slot::ElemField(arr, f)
                             if self.interner.kind(arr) == &TyKind::Array(self.f.local_ty(b)) && f == field)
                         && !self.pin_locations().iter().any(|&(owner, f)| {

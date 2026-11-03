@@ -14,9 +14,8 @@ use crate::execution::native::c_link::{
 };
 use crate::execution::native::native_c::{NativeObjects, compile_sets, read_c_sources_from_abi};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
-use crate::execution::native::{
-    Pgo, cc, host_library_dir, native_bin_fresh, read_host_capabilities,
-};
+use crate::execution::native::driver::{Lang, Linker};
+use crate::execution::native::{Pgo, host_library_dir, native_bin_fresh, read_host_capabilities};
 #[path = "library.rs"]
 mod library;
 #[path = "build_policy.rs"]
@@ -330,9 +329,6 @@ pub fn compile_llvm(
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
     let c_sources = read_c_sources_from_abi(&abi_path);
-    if !c_sources.is_empty() && *pgo != Pgo::Off {
-        return Err(PGO_NATIVE_SOURCES.into());
-    }
     let native = if c_sources.is_empty() {
         NativeObjects::default()
     } else {
@@ -342,7 +338,7 @@ pub fn compile_llvm(
             .join("native-c");
         compile_sets(
             config,
-            &cc::resolve_target_cc(config, &spec)?,
+            &tools.clang()?,
             &spec,
             &c_sources,
             &cache,
@@ -350,11 +346,14 @@ pub fn compile_llvm(
         )?
     };
     let stamp_path = bin.with_extension("flags");
-    let driver = cc::resolve_target_cc(config, &spec)?;
+    let linker = match output_kind {
+        OutputKind::Staticlib => None,
+        _ => Some(Linker::resolve(&tools, &spec)?),
+    };
     let vendor_exports: Vec<_> =
         dream_mir::runtime::modules::vendor_runtime_exports(need).collect();
     let stamp = format!(
-        "native-c-shim-v5\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
+        "native-link-v6\n{}\n{}\n{}\n{}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         pipeline(opt),
         debug,
         llc_level(opt),
@@ -372,7 +371,11 @@ pub fn compile_llvm(
         section_args(&spec),
         dead_strip_args(&spec)
     );
-    let mut resolved_inputs = vec![driver.path().to_path_buf()];
+    let mut resolved_inputs: Vec<PathBuf> = linker
+        .iter()
+        .flat_map(Linker::executables)
+        .map(Path::to_path_buf)
+        .collect();
     if icon_png.is_some() && spec.is_windows() {
         resolved_inputs.push(PathBuf::from(icon::resource_command(&tools)?.get_program()));
     }
@@ -388,12 +391,8 @@ pub fn compile_llvm(
         }
     }
     let stamp = format!(
-        "{stamp}\n{}\n{spec:?}\n{driver:?}\n{:?}\n{}\n{vendor_exports:?}",
+        "{stamp}\n{}\n{spec:?}\n{linker:?}\n{}\n{vendor_exports:?}",
         config.fingerprint(),
-        driver
-            .cc_command(config, &spec)?
-            .get_args()
-            .collect::<Vec<_>>(),
         crate::driver::rt_stamp::fingerprint(resolved_inputs)
     );
     let input = match (pgo, &profile) {
@@ -493,11 +492,13 @@ pub fn compile_llvm(
         objects.extend(debug_objects.iter().cloned());
         library::archive(&tools, &bin, &obj, &objects, runtime_archive)?;
         let mut flags = Vec::new();
-        let mut host = std::process::Command::new("cc");
         if let Some(dir) = &dir {
-            link_runtime(&mut host, dir, None, &capabilities, &spec, false);
+            flags.extend(
+                link_runtime(dir, None, &capabilities, &spec)
+                    .iter()
+                    .map(|a| a.to_string_lossy().into_owned()),
+            );
         }
-        flags.extend(host.get_args().map(|a| a.to_string_lossy().into_owned()));
         flags.extend(system_libs(&spec).iter().map(|l| l.to_string()));
         let libs = read_c_libs_from_abi(&abi_path);
         flags.extend(cc_link_flags(
@@ -518,27 +519,18 @@ pub fn compile_llvm(
         let _ = std::fs::remove_file(&obj);
         return Ok(bin);
     }
-    let sanitize = super::runtime::native_sanitize_flag(config, &spec);
-    let mut lcmd = if *pgo == Pgo::Generate {
-        let mut c = std::process::Command::new(cc::resolve_system_cc(config).ok_or(PGO_NEEDS_CC)?);
-        c.arg(&obj).args(profile_link_args(&tools)?);
-        c
-    } else if sanitize.is_some() {
-        // Only the pinned clang ships sanitizer runtimes matching the instrumentation it emitted;
-        // Zig carries none on macOS and the system compiler's may be a different ABI version.
-        let mut c = super::runtime::runtime_command(config, &spec, &tools.clang()?)?;
-        c.arg(&obj);
-        c
-    } else {
-        let cc = cc::resolve_target_cc(config, &spec)?;
-        let mut c = if native.needs_cxx && spec.is_msvc() {
-            cc.cxx_command(config, &spec)?
-        } else {
-            cc.cc_command(config, &spec)?
-        };
-        c.arg(&obj);
-        c
+    let Some(linker) = &linker else {
+        unreachable!("only static libraries skip the linker")
     };
+    let mut lcmd = linker.command(
+        config,
+        &spec,
+        if native.needs_cxx { Lang::Cxx } else { Lang::C },
+    );
+    lcmd.arg(&obj);
+    if *pgo == Pgo::Generate {
+        lcmd.args(profile_link_args(&tools, &spec)?);
+    }
     let object_inputs = super::tools::input_response(native.objects.iter().chain(&debug_objects))?;
     lcmd.arg(format!("@{}", object_inputs.path().display()));
     if let Some(version) = spec.min_os {
@@ -558,8 +550,6 @@ pub fn compile_llvm(
             version.patch
         ));
     }
-    let zig_driver =
-        *pgo != Pgo::Generate && sanitize.is_none() && matches!(driver, cc::Cc::Zig(_));
     let export_file = if output_kind == OutputKind::Dylib {
         Some(library::shared_flags(
             &mut lcmd,
@@ -567,7 +557,6 @@ pub fn compile_llvm(
             &bin,
             &library::exports(&abi_path)?,
             &spec,
-            zig_driver,
         )?)
     } else {
         None
@@ -581,14 +570,7 @@ pub fn compile_llvm(
     }
     lcmd.args(system_libs(&spec));
     if let Some(dir) = &dir {
-        link_runtime(
-            &mut lcmd,
-            dir,
-            bundled.as_deref(),
-            &capabilities,
-            &spec,
-            zig_driver,
-        );
+        lcmd.args(link_runtime(dir, bundled.as_deref(), &capabilities, &spec));
     }
     let c_libs = read_c_libs_from_abi(&abi_path);
     if !c_libs.is_empty() {
@@ -596,11 +578,11 @@ pub fn compile_llvm(
         lcmd.args(cc_link_flags(config, &c_libs, &roots, &spec));
     }
     lcmd.args(&native.link_args);
-    if let Some(sanitize) = &sanitize {
+    if let Some(sanitize) = super::runtime::native_sanitize_flag(config, &spec) {
         lcmd.arg(sanitize);
     }
     lcmd.arg("-o").arg(&bin);
-    if let Err(e) = run_captured(&mut lcmd, &format!("cc link ({})", obj.display())) {
+    if let Err(e) = run_captured(&mut lcmd, &format!("link ({})", obj.display())) {
         let _ = std::fs::remove_file(&bin);
         return Err(e.into());
     }
@@ -620,11 +602,6 @@ pub fn compile_llvm(
     Ok(bin)
 }
 
-/// PGO links with the system compiler, whose C++ standard library may differ from the one the
-/// package's native sources were compiled against.
-const PGO_NATIVE_SOURCES: &str = "--profile is not supported for programs with `native/` C/C++ sources yet: profile builds \
-     link with the system compiler, whose C/C++ runtime may not match the Zig-built objects";
-
 fn newer_than(a: &Path, b: &Path) -> bool {
     let t = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     match (t(a), t(b)) {
@@ -633,18 +610,16 @@ fn newer_than(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// zig's linker lays out the `__llvm_prf_*` sections so the profile runtime writes corrupt
-/// counters, so instrumented binaries link with the platform linker.
-const PGO_NEEDS_CC: &str = "--profile needs a system C compiler (cc or clang on PATH, or CC): the Zig toolchain \
-     cannot link profile-instrumented binaries";
-
 /// What `clang -fprofile-generate` adds at link time: compiler-rt's profile runtime, kept alive by
 /// its registration symbol (Linux) or with the counter sections page-aligned as its Mach-O
 /// writer expects (macOS).
-fn profile_link_args(tools: &LlvmTools) -> Result<Vec<String>, String> {
+fn profile_link_args(
+    tools: &LlvmTools,
+    spec: &dream_abi::target::TargetSpec,
+) -> Result<Vec<String>, String> {
     let rt = super::bundle::clang_rt(tools, super::bundle::ClangRt::Profile)?;
     let mut args = Vec::new();
-    if cfg!(target_os = "macos") {
+    if spec.is_apple() {
         for section in ["__llvm_prf_cnts", "__llvm_prf_bits", "__llvm_prf_data"] {
             args.push(format!("-Wl,-sectalign,__DATA,{section},0x4000"));
         }

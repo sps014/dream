@@ -13,7 +13,7 @@ flowchart TD
     ll --> link["llvm-link"]
     link --> opt["opt: internalize + default&lt;On&gt;"]
     opt --> llc["llc -filetype=obj"]
-    llc --> cc["native: cc link → .bin"]
+    llc --> cc["native: pinned clang + mold / lld → .bin"]
     llc --> wld["wasm32: wasm-ld → .wasm → wasmprinter .wat"]
 ```
 
@@ -66,13 +66,24 @@ and rejects any other major version. The installers
 (`scripts/install.sh`, `install.ps1`, `use-toolchain.sh`) install it unless `DREAM_SKIP_LLVM=1`.
 No crate links against LLVM: the IR is text, and the tools run as subprocesses.
 
+Native C/C++ compiles and links have one driver, `execution/native/driver.rs`: the pinned clang with
+`--target=<llvm triple>` and the target sysroot (`DREAM_SYSROOT`, or the Apple SDK from `SDKROOT` /
+`xcrun`). Links pick the linker from the target's object format, never the host: ELF and Mach-O
+link with the pinned mold (`--ld-path=<mold>`, or `ld64.mold`, the name under which mold links
+Mach-O), COFF with lld (`-fuse-ld=lld`, which clang resolves to the `lld-link` / `ld.lld` beside
+itself). Nothing is taken from `PATH`, and a cross link without a sysroot fails instead of falling
+back. Links are reproducible: ELF links pass `--build-id=none`, COFF links `/Brepro` (MinGW
+`--no-insert-timestamp`), and mold derives the Mach-O `LC_UUID` from the output; the
+`native_binary_is_deterministic` e2e test relinks a program and compares the bytes. PGO,
+sanitizer, cross and package C/C++ builds are flags on the same command.
+
 The driver captures toolchain configuration once in `driver/toolchain/environment.rs`.
 One shared `ToolchainConfig` is passed through the compiler, generators, native links,
 runtime builds, packing and debugger setup. LLVM/linker discovery and the macOS SDK query
 are cached per configuration, not process-global. Runtime catalogs receive their source
 root explicitly and never read the environment. `DREAM_HOME`, `DREAM_BIN`, `DREAM_LLVM`,
-`DREAM_CC`/`CC`, `DREAM_CXX`/`CXX`, `DREAM_TOOLCHAINS` and `DREAM_RUNTIME_C` keep their
-documented search roles. Windows uses `USERPROFILE` for the default install prefix.
+`DREAM_MOLD`, `DREAM_SYSROOT`, `DREAM_TOOLCHAINS` and `DREAM_RUNTIME_C` keep their documented
+search roles. Windows uses `USERPROFILE` for the default install prefix.
 
 The runtime bitcode (`src/execution/llvm/runtime.rs`, `wasm.rs`) is built by the pinned clang for
 native targets and by the pinned clang with WASI headers for wasm32. It is cached per LLVM version, opt level and
@@ -134,8 +145,8 @@ Native `--relocatable` builds stage the selected host libraries next to the exec
 this link policy in the freshness stamp. Linux uses `$ORIGIN`; macOS libraries carry their
 `@rpath/libdream_host_*.dylib` install identities from build time and executables use relative
 search paths for adjacent libraries. Bundled Unix libraries
-are direct linker inputs rather than `-L` search directories, since Zig adds native search
-directories to rpaths. Linux libraries carry filename-only SONAMEs; each non-core library finds
+are direct linker inputs rather than `-L` search directories, so no build path reaches the
+executable. Linux libraries carry filename-only SONAMEs; each non-core library finds
 core through `$ORIGIN` (macOS: `@loader_path`). Windows ships the selected `dream_host_*.dll` files
 beside the executable, linking through their MSVC import libraries. `dreamer pack` copies the
 selected libraries into each package layout, ignoring unused artifacts left by other builds.
@@ -433,9 +444,9 @@ internalize, so C linked into it can call them.
 
 ## PGO
 
-- `--profile` runs `opt` with `-pgo-kind=pgo-instr-gen-pipeline` and links through the pinned
-  clang with `-fprofile-generate`. zig's linker lays out the `__llvm_prf_*` sections in a way that
-  makes the profile runtime write corrupt counters.
+- `--profile` runs `opt` with `-pgo-kind=pgo-instr-gen-pipeline` and adds compiler-rt's profile
+  runtime to the ordinary native link (on Mach-O with the `__llvm_prf_*` sections page-aligned, as
+  the runtime's writer expects).
 - `--use-profile` merges the `.profraw` runs with the pinned `llvm-profdata`, then runs `opt` with
   `-pgo-kind=pgo-instr-use-pipeline`.
 
@@ -451,7 +462,7 @@ internalize, so C linked into it can call them.
 - **Link.** `llvm-link` merges the module `.ll` and the runtime `.bc`. `opt` then internalizes
   everything except the runtime's `wasm-export-name` functions, the module's own exports and
   `memcpy`/`memmove`/`memset`/`memcmp`, and runs `default<On>`. `llc -filetype=obj` follows, and
-  wasi-sdk's `wasm-ld` links with the assembly objects and compiler-rt builtins
+  the pinned LLVM's `wasm-ld` links with the assembly objects and compiler-rt builtins
   (`src/driver/wasi.rs`). `wasm-opt`, the `.wat` printer and `.abi.json` follow.
 - **Glue.** On wasm, `main` is exported as `dream_guest_entry`, which returns an async main's
   future to the host. The other exports are `__dream_main_report`, `dream_ft_get`,

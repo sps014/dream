@@ -184,6 +184,34 @@ fn codegen_is_deterministic() {
     }
 }
 
+/// The native link is part of the build: relinking the same program to the same path must give a
+/// byte-identical executable (no linker timestamps, random build ids or UUIDs).
+#[cfg(feature = "native")]
+#[test]
+fn native_binary_is_deterministic() {
+    let src = crate::common::compiler_fixture("arc_cycles");
+    let dir = tempfile::tempdir().unwrap();
+    let ll = dir.path().join("arc_cycles.ll");
+    let bin = ll.with_extension("bin");
+    let mut builds = Vec::new();
+    for _ in 0..2 {
+        let _ = fs::remove_file(&bin);
+        let output = Command::new(env!("CARGO_BIN_EXE_dream"))
+            .args(["--release", "-o"])
+            .arg(&ll)
+            .arg(&src)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        builds.push(fs::read(&bin).unwrap());
+    }
+    assert!(builds[0] == builds[1], "relinking changed {}", bin.display());
+}
+
 /// Every Node-capable project and isolated program must produce reproducible artifacts.
 #[test]
 #[ignore = "full corpus determinism; two builds per project or isolated fixture"]

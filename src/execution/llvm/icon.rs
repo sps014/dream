@@ -99,14 +99,7 @@ pub(crate) fn png_to_ico(png: &[u8]) -> Result<Vec<u8>, String> {
 pub(super) fn resource_command(
     tools: &super::tools::LlvmTools,
 ) -> Result<std::process::Command, String> {
-    if let Ok(path) = tools.optional_tool("llvm-rc") {
-        return Ok(std::process::Command::new(path));
-    }
-    let zig = crate::execution::native::cc::installed_zig(&tools.config)
-        .ok_or("Windows icons require llvm-rc or Zig; run dreamer toolchain install cc")?;
-    let mut command = std::process::Command::new(zig);
-    command.arg("rc");
-    Ok(command)
+    tools.optional_tool("llvm-rc").map(std::process::Command::new)
 }
 
 /// Resource files have no machine code, so the same resource compiler serves each Windows target.

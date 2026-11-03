@@ -44,10 +44,11 @@ fn unused_capability_imports_and_functions_do_not_link_hosts() {
 #[cfg(unix)]
 #[test]
 fn compiler_without_any_host_libraries_compiles_and_runs() {
-    let tools = dream::execution::llvm::resolve_llvm(&std::sync::Arc::new(
-        dream::driver::toolchain::ToolchainConfig::default(),
-    ))
-    .unwrap();
+    let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
+    let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
+    let mold = config
+        .locate_tool(dream_abi::toolchain::pinned_tool("mold").unwrap())
+        .unwrap();
     let directory = tempfile::tempdir().unwrap();
     let compiler = std::path::Path::new(env!("CARGO_BIN_EXE_dream"));
     let isolated = directory.path().join("dream");
@@ -65,7 +66,7 @@ fn compiler_without_any_host_libraries_compiles_and_runs() {
         .env("DREAM_HOME", directory.path())
         .env("DREAM_BIN", &isolated)
         .env("HOME", directory.path())
-        .env("DREAM_CC", "/usr/bin/cc")
+        .env("DREAM_MOLD", mold.root)
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("DYLD_LIBRARY_PATH")
         .current_dir(directory.path())

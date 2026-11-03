@@ -233,4 +233,8 @@ impl IdSpans {
     pub fn get(&self, id: &str) -> Option<(Option<&str>, TextSpan)> {
         self.spans.get(id).map(|(f, s)| (f.as_deref(), *s))
     }
+
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.spans.keys().map(String::as_str)
+    }
 }

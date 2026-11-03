@@ -1,9 +1,9 @@
 //! Compiles a program's live `native/` C/C++ source sets (the `.abi.json` `c_sources` list) to
-//! objects with the same toolchain that links the binary (Zig by default, so C++ objects and the
-//! final link agree on one C++ standard library). Until transitive dependencies are recorded,
-//! every native source is compiled again under `<artifact dir>/native-c/`.
+//! objects with the pinned clang that also links the binary, so C++ objects and the final link
+//! agree on one C++ standard library. Until transitive dependencies are recorded, every native
+//! source is compiled again under `<artifact dir>/native-c/`.
 
-use super::cc::Cc;
+use super::driver::{Lang, compiler};
 use crate::driver::wasi::run_captured;
 use dream_mir::runtime::runtime_abi_include_dir;
 use serde::Deserialize;
@@ -50,6 +50,7 @@ pub fn read_c_sources_from_abi(abi_path: &Path) -> Vec<CSourceSet> {
 pub struct NativeObjects {
     pub objects: Vec<PathBuf>,
     pub link_args: Vec<String>,
+    /// Links in C++ mode, which adds the target's C++ standard library.
     pub needs_cxx: bool,
     pub runtime_exports: Vec<String>,
 }
@@ -64,7 +65,7 @@ fn is_cxx(path: &Path) -> bool {
 /// Compiles every set to objects under `cache_root/<set>/`.
 pub fn compile_sets(
     config: &crate::driver::toolchain::ToolchainConfig,
-    cc: &Cc,
+    clang: &Path,
     spec: &dream_abi::target::TargetSpec,
     sets: &[CSourceSet],
     cache_root: &Path,
@@ -90,16 +91,13 @@ pub fn compile_sets(
             let cxx = is_cxx(&src);
             out.needs_cxx |= cxx;
             let args = compile_args(set, &embed_include, &src, &obj, cxx, debug, spec);
-            let mut command = if cxx {
-                cc.cxx_command(config, spec)?
-            } else {
-                cc.cc_command(config, spec)?
-            };
+            let lang = if cxx { Lang::Cxx } else { Lang::C };
+            let mut command = compiler(clang, config, spec, lang);
             command.args(&args);
             if let Err(error) = run_captured(&mut command, &format!("compiling {}", src.display()))
             {
                 let _ = std::fs::remove_file(&obj);
-                return Err(strip_warning_noise(&error));
+                return Err(error);
             }
             out.objects.push(obj);
         }
@@ -117,16 +115,6 @@ pub fn compile_sets(
                 out.runtime_exports.push(e.clone());
             }
         }
-    }
-    if out.needs_cxx && !spec.is_msvc() {
-        out.link_args.push(
-            if matches!(cc, Cc::Zig(_)) || spec.is_apple() {
-                "-lc++"
-            } else {
-                "-lstdc++"
-            }
-            .into(),
-        );
     }
     Ok(out)
 }
@@ -185,25 +173,6 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     h
 }
 
-/// Zig builds libc++ from source the first time, which floods stderr with nullability warnings
-/// from its own headers; keep only the lines about the user's code.
-fn strip_warning_noise(msg: &str) -> String {
-    let mut out = Vec::new();
-    let mut skipping = false;
-    for line in msg.lines() {
-        if line.contains("/lib/libcxx/") || line.contains("/lib/libcxxabi/") {
-            skipping = true;
-            continue;
-        }
-        if skipping && (line.starts_with(' ') || line.trim().is_empty()) {
-            continue;
-        }
-        skipping = false;
-        out.push(line);
-    }
-    out.join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,13 +220,5 @@ mod tests {
             &dream_abi::target::TargetSpec::host(),
         );
         assert!(cxx.contains(&"-std=gnu++20".to_string()) && cxx.contains(&"-g".to_string()));
-    }
-
-    #[test]
-    fn drops_libcxx_build_noise() {
-        let msg = "compiling x failed\n/z/lib/libcxx/include/string:1:1: warning: w\n   1 | x\n      |  ^\nkv.dream:12:5: error: bad\n";
-        let cleaned = strip_warning_noise(msg);
-        assert!(!cleaned.contains("libcxx"));
-        assert!(cleaned.contains("kv.dream:12:5: error: bad"));
     }
 }

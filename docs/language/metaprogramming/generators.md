@@ -535,12 +535,11 @@ executable. Dream resolves it from its own table of pinned tools first:
 | ---------- | ----------------------------------- | -------------------------------------------- | ---------------- |
 | `llvm`     | ships with Dream releases           | `clang`, `opt`, `llc`, `llvm-*`, `wasm-ld`, … | `DREAM_LLVM`     |
 | `binaryen` | `dreamer toolchain install binaryen` | `wasm-opt`, `wasm-as`, `wasm-dis`, …         | `DREAM_WASM_OPT` |
-| `zig`      | `dreamer toolchain install cc`       | `zig`                                        | `DREAM_ZIG`      |
 | `slang`    | `dreamer toolchain install slang`    | `slangc`                                     | `DREAM_SLANG`    |
 
 Each tool installs into `~/.dream/toolchains/<name>-<version>`. A `DREAM_<TOOL>` variable
-points at an install root (or its `bin/`), except `DREAM_WASM_OPT` and `DREAM_ZIG`, which name
-the executable itself. Any other tool is pinned in the project's `dream.toml`:
+points at an install root (or its `bin/`), except `DREAM_WASM_OPT`, which names the executable
+itself. Any other tool is pinned in the project's `dream.toml`:
 
 ```toml
 [tools.schema]

@@ -80,7 +80,7 @@ pub(super) fn select(text: &str, factory: &str, live: &BTreeSet<&str>) -> Result
                 if property.computed
                     || property.kind != PropertyKind::Init
                     || name == "__proto__"
-                    || live.contains(name.as_ref())
+                    || name.as_str().is_some_and(|name| live.contains(name))
                 {
                     continue;
                 }

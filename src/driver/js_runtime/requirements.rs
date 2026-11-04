@@ -168,7 +168,7 @@ impl Requirements {
                     && method
                         .key
                         .static_name()
-                        .is_some_and(|name| omitted.contains(name.as_ref()))
+                        .is_some_and(|name| name.as_str().is_some_and(|name| omitted.contains(name)))
                 {
                     spans.push(method.span);
                 }

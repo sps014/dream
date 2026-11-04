@@ -554,6 +554,9 @@ jobs:
     name: cargo-deny
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The action runs in a container that does not have the workflow's sccache wrapper.
+    env:
+      RUSTC_WRAPPER: ''
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2

@@ -33,13 +33,13 @@ jobs:
       matrix:
         revision: ${{ fromJSON(inputs.revisions) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.revision }}
           fetch-depth: 0
       # The harness and this workflow come from the dispatching ref so older revisions
       # are measured the same way as the current one.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: harness
       - name: Install native build dependencies and perf
@@ -61,11 +61,11 @@ jobs:
       # outside target/ so rust-cache's pruning cannot leave partial extractions behind.
       - name: Locate the GPU host cache
         run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/dream-gpu-cache
           key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.dream/toolchains/llvm-22.1.8

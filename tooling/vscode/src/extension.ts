@@ -946,7 +946,7 @@ function registerStatusBar(context: vscode.ExtensionContext): void {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-    const outputChannel = vscode.window.createOutputChannel('Dream Language Server');
+    const outputChannel = vscode.window.createOutputChannel('Dream Language Server', { log: true });
     outputChannel.appendLine('Activating Dream extension...');
 
     compilerOutputChannel = vscode.window.createOutputChannel('Dream Compiler');

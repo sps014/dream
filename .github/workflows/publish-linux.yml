@@ -27,7 +27,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
       SOURCE_RUN: ${{ inputs.source_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false

@@ -442,11 +442,11 @@
     "watch": "tsc -watch -p ./"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^11.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.80.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.144.0",
+    "typescript": "^7.0.2"
   }
 }

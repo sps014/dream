@@ -68,14 +68,14 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check pinned version
         shell: bash
         run: |
           grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" crates/dream-abi/src/toolchain.rs
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: cache
         with:
           path: dist

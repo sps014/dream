@@ -236,10 +236,15 @@ async fn serve(
         }
         None => {
             // Protocol detection reads the first bytes before hyper's header timeout starts.
-            if let Some(idle) = idle
-                && tokio::time::timeout(idle, socket.readable()).await.is_err()
-            {
-                return;
+            // Tokio 1.54 marks an accepted socket readable before any byte arrives, so
+            // `readable()` cannot be the keep-alive. `peek` waits for a real byte and
+            // leaves it for hyper.
+            if let Some(idle) = idle {
+                let mut byte = [0u8; 1];
+                match tokio::time::timeout(idle, socket.peek(&mut byte)).await {
+                    Ok(Ok(n)) if n > 0 => {}
+                    _ => return,
+                }
             }
             (Box::new(socket), None)
         }

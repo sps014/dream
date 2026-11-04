@@ -3,6 +3,7 @@ name = "dream"
 version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
 edition.workspace = true
+license.workspace = true
 autotests = false
 
 [lib]
@@ -125,6 +126,7 @@ overflow-checks = true
 
 [workspace.package]
 edition = "2024"
+license = "MIT"
 
 [workspace]
 default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net",

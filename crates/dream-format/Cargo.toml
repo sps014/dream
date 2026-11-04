@@ -2,6 +2,7 @@
 name = "dream-format"
 version = "0.1.0"
 edition.workspace = true
+license.workspace = true
 description = "Lossless source formatter for the Dream language (LSP + `dream fmt`)."
 
 [lib]

@@ -3,6 +3,7 @@ name = "dreamer"
 version = "0.1.0"
 authors = ["Shivendra Pratap Singh <shivendrapsingh014@gmail.com>"]
 edition.workspace = true
+license.workspace = true
 description = "Package manager for the Dream language: dream.toml manifests, dream.lock lockfiles, and dream_packages/ dependency installs."
 
 [lib]

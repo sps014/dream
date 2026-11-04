@@ -65,7 +65,7 @@ oxc_ast = "0.146"
 oxc_allocator = "0.146"
 oxc_codegen = "0.146"
 oxc_span = "0.146"
-oxc_semantic = "0.146"
+oxc_semantic = "0.156"
 flate2 = "1.1.9"
 brotli = "8.0.4"
 

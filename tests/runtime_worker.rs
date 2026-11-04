@@ -37,7 +37,8 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap.c",
         "ownership.c",

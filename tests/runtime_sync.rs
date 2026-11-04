@@ -21,7 +21,8 @@ fn lock_registry_reclaims_reused_addresses_and_checks_ownership() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap.c",
         "ownership.c",

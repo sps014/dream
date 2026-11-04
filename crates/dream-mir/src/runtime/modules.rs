@@ -248,6 +248,7 @@ const NATIVE_SYS_C: &[&str] = &[
     "env.c",
     "time.c",
     "stdio.c",
+    "stdout_buffer.c",
     "stdio_streams.c",
     "worker.c",
 ];
@@ -286,6 +287,7 @@ pub fn component_runtime_c_files(root: &Path) -> Vec<PathBuf> {
             [
                 "host_support.c",
                 "stdio.c",
+                "stdout_buffer.c",
                 "fs.c",
                 "dirs.c",
                 "env.c",

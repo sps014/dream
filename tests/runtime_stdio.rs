@@ -18,6 +18,7 @@ fn chunked_output_preserves_streams_unicode_and_c_string_boundaries() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/utf8.c"))
         .arg(runtime.join("sys/native/stdio.c"))
+        .arg(runtime.join("sys/native/stdout_buffer.c"))
         .arg(root.join("tests/runtime_stdio.c"))
         .arg("-o")
         .arg(&binary)

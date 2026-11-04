@@ -62,7 +62,8 @@ fn leak_tally_counts_past_i32_and_never_drops_types() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap.c",
         "ownership.c",

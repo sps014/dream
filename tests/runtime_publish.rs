@@ -25,7 +25,8 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap.c",
         "ownership.c",

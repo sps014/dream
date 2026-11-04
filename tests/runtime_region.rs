@@ -21,7 +21,8 @@ fn regions_chain_rewind_and_fall_back_independently_per_thread() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap.c",
         "ownership.c",

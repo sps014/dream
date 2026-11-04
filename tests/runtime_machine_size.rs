@@ -29,7 +29,8 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         .arg(runtime.join("include"))
         .arg(runtime.join("core/platform.c"))
         .arg(runtime.join("core/utf8.c"))
-        .arg(native.join("platform.c"));
+        .arg(native.join("platform.c"))
+        .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap_maps.c",
         "ownership.c",

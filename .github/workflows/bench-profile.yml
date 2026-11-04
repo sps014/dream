@@ -61,11 +61,11 @@ jobs:
       # outside target/ so rust-cache's pruning cannot leave partial extractions behind.
       - name: Locate the GPU host cache
         run: echo "DREAM_GPU_CACHE=${{ runner.temp }}/dream-gpu-cache" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/dream-gpu-cache
           key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.dream/toolchains/llvm-22.1.8

@@ -75,7 +75,7 @@ jobs:
         run: |
           grep -q "LLVM_VERSION: &str = \"${LLVM_VERSION}\"" crates/dream-abi/src/toolchain.rs
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: cache
         with:
           path: dist

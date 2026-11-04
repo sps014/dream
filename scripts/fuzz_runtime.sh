@@ -17,7 +17,7 @@ fi
 
 "$CLANG" "${SYSROOT[@]}" -std=gnu11 -O1 -g -pthread -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all \
   -I"$RT/core/include" -I"$RT/sys/native/include" -I"$RT/include" \
-  "$RT/core/platform.c" "$RT/core/utf8.c" "$RT/sys/native/platform.c" \
+  "$RT/core/platform.c" "$RT/core/utf8.c" "$RT/sys/native/platform.c" "$RT/sys/native/stdout_buffer.c" \
   "$RT/core/heap.c" "$RT/core/ownership.c" "$RT/core/heap_maps.c" "$RT/core/publish.c" \
   "$RT/core/region.c" "$RT/core/weak.c" "$RT/sys/native/sync.c" "$RT/core/strings.c" \
   "$RT/core/string_view.c" "$RT/core/format.c" "$RT/core/object.c" \

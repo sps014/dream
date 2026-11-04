@@ -227,16 +227,17 @@ fun add_one(values: GpuBuffer<int>, n: int): void {
 
 async fun run(device: GpuDevice, values: GpuBuffer<int>, n: int): Result<Unit, GpuError> {
     let encoder = device.command_encoder();
-    let pass = encoder.begin_compute_pass();
-    for (let round = 0; round < 10; round = round + 1) {
-        GpuShaders.add_one.encode(device, pass, GpuDispatch.threads_1d(n), values, n);
-    }
-    pass.end();
+    encoder.compute_pass((pass: GpuComputePass) => {
+        for (let round = 0; round < 10; round = round + 1) {
+            GpuShaders.add_one.encode(device, pass, GpuDispatch.threads_1d(n), values, n);
+        }
+    });
     return device.submit(encoder.finish()).await;
 }
 ```
 
-Dispatches in one pass run in order, and each sees the writes of the ones before it. Mistakes made
+`compute_pass` hands the pass to the function you give it and ends the pass when that function
+returns. Dispatches in one pass run in order, and each sees the writes of the ones before it. Mistakes made
 while recording, such as using a buffer from another device, are returned by `submit`.
 
 ## Errors

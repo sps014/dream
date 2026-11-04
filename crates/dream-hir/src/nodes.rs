@@ -160,10 +160,28 @@ pub enum HPlace {
     },
 }
 
+/// Byte range of the source expression an [`HExpr`] came from, in its function's file.
+/// Ownership diagnostics point here; lowering ignores it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct HSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl HSpan {
+    /// No source expression (synthesized by a desugaring).
+    pub const NONE: HSpan = HSpan { start: 0, end: 0 };
+
+    pub fn is_none(self) -> bool {
+        self.start == self.end
+    }
+}
+
 /// A typed expression: `kind` is the shape, `ty` is its interned result type.
 #[derive(Debug, Clone)]
 pub struct HExpr {
     pub ty: TypeId,
+    pub span: HSpan,
     pub kind: HExprKind,
 }
 
@@ -433,7 +451,11 @@ pub enum HExprKind {
 
 impl HExpr {
     pub fn new(ty: TypeId, kind: HExprKind) -> Self {
-        HExpr { ty, kind }
+        HExpr {
+            ty,
+            span: HSpan::NONE,
+            kind,
+        }
     }
 }
 

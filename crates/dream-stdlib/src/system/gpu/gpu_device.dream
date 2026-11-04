@@ -209,7 +209,7 @@ public class GpuDevice {
         if handle <= 0 {
             return Result.Err(GpuHost.error());
         }
-        return Result.Ok(GpuSurface(this, handle, window));
+        return Result.Ok(GpuSurface(this.handle, handle));
     }
 
     /// Creates a render pipeline from a `@vertex` and a `@fragment` shader, both given as
@@ -431,42 +431,50 @@ public class GpuDevice {
     /// Runs recorded commands and waits until the GPU finished them. Recording errors,
     /// such as a resource from another device, are reported here.
     public async fun submit(commands: GpuCommandBuffer): Result<Unit, GpuError> {
-        switch (commands.error) {
+        return GpuDevice.send(this.handle, commands).await;
+    }
+
+    // Submits `commands` to the device with host handle `device`.
+    internal static async fun send(device: int, commands: GpuCommandBuffer): Result<Unit, GpuError> {
+        switch (commands.recording.error) {
             Some(e) => {
                 return Result.Err(e);
             }
             None => {}
         }
-        if commands.device_id != this.handle {
+        if commands.recording.device_id != device {
             return Result.Err(GpuError.WrongDevice("command buffer"));
         }
-        if GpuHost.submit(this.handle, commands.words, commands.data).await != 0 {
+        let words = commands.recording.words.take_array();
+        let data = commands.recording.data.take_array();
+        if GpuHost.submit(device, words, data).await != 0 {
             return Result.Err(GpuHost.error());
         }
         return Result.Ok(Unit());
     }
 
     // The device-local handle of a generated shader bundle, loaded on first use.
-    internal fun library(library: GpuShaderLibrary): Result<int, GpuError> {
-        switch (this.libraries.get(library.name)) {
+    internal fun library(index: int): Result<int, GpuError> {
+        let name = GpuShaderLibrary.name_of(index);
+        switch (this.libraries.get(name)) {
             Some(handle) => {
                 return Result.Ok(handle);
             }
             None => {}
         }
-        if !library.backends.contains(this.device_backend) {
+        if !GpuShaderLibrary.has_backend(index, this.device_backend) {
             return Result.Err(GpuError.BackendNotCompiled(this.device_backend));
         }
-        let handle = GpuHost.library_load(this.handle, library.bundle);
+        let handle = GpuShaderLibrary.load(index, this.handle);
         if handle <= 0 {
             return Result.Err(GpuHost.error());
         }
-        this.libraries[library.name] = handle;
+        this.libraries[name] = handle;
         return Result.Ok(handle);
     }
 
     internal fun compute_pipeline(shader: GpuComputeShader): Result<int, GpuError> {
-        let key = shader.library.name + "/" + shader.name;
+        let key = GpuShaderLibrary.name_of(shader.library) + "/" + shader.name;
         switch (this.pipelines.get(key)) {
             Some(handle) => {
                 return Result.Ok(handle);

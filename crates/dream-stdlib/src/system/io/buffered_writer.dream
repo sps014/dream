@@ -1,16 +1,16 @@
 module system.io;
 
-/// Buffers output to a borrowed writer without closing it. Call `finish()` explicitly
-/// to report flush failures; destruction does not flush pending bytes.
-public class BufferedWriter: Writer {
-    destination: Writer;
+/// Buffers output to the writer it owns, without closing it. Call `finish()` explicitly to
+/// report flush failures; destruction does not flush pending bytes.
+public class BufferedWriter<W: Writer>: Writer {
+    destination: W;
     capacity: int;
     buffer: byte[];
     count: int;
     finished: bool;
 
     /// Wraps `destination` with an 8 KiB default buffer; nonpositive sizes fail on use.
-    public constructor(destination: Writer, buffer_size: int = 8192) {
+    public constructor(destination: W, buffer_size: int = 8192) {
         this.destination = destination;
         this.capacity = buffer_size;
         let size = buffer_size;
@@ -77,5 +77,11 @@ public class BufferedWriter: Writer {
         this.flush()?;
         this.finished = true;
         return Result.Ok(Unit());
+    }
+
+    /// The wrapped writer. Bytes still in this wrapper's buffer have not reached it; call
+    /// `flush` first.
+    public get inner(): borrow W {
+        return this.destination;
     }
 }

@@ -2,7 +2,7 @@ import system;
 
 // Each test closes a strong cycle and then breaks it by clearing `next`.
 @allow_cycle
-class CycleNode {
+shared class CycleNode {
     public id: int;
     public next: Option<CycleNode>;
     public constructor(id: int) { this.id = id; this.next = Option.None; }

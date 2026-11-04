@@ -109,10 +109,13 @@ layout together. `-reflection-json` is accepted and ignored.
 
 Handles come from `dream_host_abi::handles::HandleTable`: they are positive, `0` means failure,
 and a released slot comes back with a new generation, so a stale handle misses instead of naming
-a newer resource and the id space never runs out. The guest keeps each handle in a
-`GpuOwnedHandle`, and command encoders and `GpuArgs` keep the owned handles of every resource
-their commands name, so a resource whose last user reference is gone is released only after
-`submit` handed its commands to the host. Each entry records its owning device,
+a newer resource and the id space never runs out. Each resource object owns its handle through a
+`GpuOwnedHandle`, which calls `gpuRelease` when the object is dropped. Guest resources are
+unique, so recordings never hold resource objects. Instead a `GpuRecording` pins (`gpuPin`) every
+handle its commands name, and unpins (`gpuUnpin`) them when it is dropped, after `submit` handed
+the commands to the host. A `gpuRelease` of a pinned handle only marks it; the last unpin
+performs the release. `GpuGeometry` pins its buffers the same way until the build that reads them.
+Each entry records its owning device,
 and using a resource with another device reports `EWRONGDEVICE`. Each submission stamps every
 resource it references with its fence value. `gpuRelease` frees a resource at once when its last
 submission has finished. Otherwise the resource moves to a deferred list, which the completion

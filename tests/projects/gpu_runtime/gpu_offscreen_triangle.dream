@@ -121,17 +121,15 @@ async fun gpu_offscreen_triangle(): void {
                 );
 
                 let encoder = device.command_encoder();
-                let pass = encoder.begin_render_pass(
-                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 1.0f, 1.0f)))
-                );
-                pass.set_pipeline(pipeline);
-                pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
-                pass.bind_value(
-                    GpuShaders.offscreen_fragment.tint,
-                    GpuVec4(1.0f, 0.4f, 1.0f, 1.0f)
-                );
-                pass.draw(3);
-                pass.end();
+                encoder.render_pass(GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 1.0f, 1.0f))), (pass: GpuRenderPass) => {
+                    pass.set_pipeline(pipeline);
+                    pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
+                    pass.bind_value(
+                        GpuShaders.offscreen_fragment.tint,
+                        GpuVec4(1.0f, 0.4f, 1.0f, 1.0f)
+                    );
+                    pass.draw(3);
+                });
                 triangle_ok(device.submit(encoder.finish()).await, "draw on " + label);
 
                 let bytes = triangle_ok(target.read(0).await, "read on " + label);
@@ -158,17 +156,15 @@ async fun gpu_offscreen_triangle(): void {
                         "HDR pipeline on " + label
                     );
                     let hdr_encoder = device.command_encoder();
-                    let hdr_pass = hdr_encoder.begin_render_pass(
-                        GpuRenderPassDesc.color(hdr, GpuLoad.Clear(GpuVec4(0.0f)))
-                    );
-                    hdr_pass.set_pipeline(hdr_pipeline);
-                    hdr_pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
-                    hdr_pass.bind_value(
-                        GpuShaders.offscreen_fragment.tint,
-                        GpuVec4(4.0f, 4.0f, 0.0f, 1.0f)
-                    );
-                    hdr_pass.draw(3);
-                    hdr_pass.end();
+                    hdr_encoder.render_pass(GpuRenderPassDesc.color(hdr, GpuLoad.Clear(GpuVec4(0.0f))), (hdr_pass: GpuRenderPass) => {
+                        hdr_pass.set_pipeline(hdr_pipeline);
+                        hdr_pass.bind_value(GpuShaders.offscreen_vertex.scale, 1.5f);
+                        hdr_pass.bind_value(
+                            GpuShaders.offscreen_fragment.tint,
+                            GpuVec4(4.0f, 4.0f, 0.0f, 1.0f)
+                        );
+                        hdr_pass.draw(3);
+                    });
                     triangle_ok(device.submit(hdr_encoder.finish()).await, "HDR draw on " + label);
                     let values = triangle_ok(hdr.read(0).await, "HDR read on " + label);
                     if format == GpuTextureFormat.Rgba16Float {

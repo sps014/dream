@@ -200,6 +200,7 @@ impl<'a> Analyzer<'a> {
                     let notes = suggest_methods(&self.function_table, owner, &method.text)
                         .iter()
                         .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
+                        .chain(self.missing_copy_note(owner, &method.text))
                         .collect();
                     return Err(report_with_notes(
                         diagnostics,
@@ -287,6 +288,7 @@ impl<'a> Analyzer<'a> {
                     let notes = suggest_methods(&self.function_table, owner, &method.text)
                         .iter()
                         .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
+                        .chain(self.missing_copy_note(owner, &method.text))
                         .collect();
                     return Err(report_noted(
                         diagnostics,
@@ -331,6 +333,7 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_copy_call(owner, &method.text, method.position, diagnostics);
         self.check_runtime_call(
             &format!("{}.{}", effective_struct, method.text),
             store_sig.runtime_support,
@@ -417,7 +420,6 @@ impl<'a> Analyzer<'a> {
         // name; resolve to the selected overload's name so the call targets the right instance.
         // Non-overloaded methods keep their base-mangled name.
         self.hir_set_method_call(receiver, &store_sig.identity, arg_hirs, &ret_type);
-        self.note_sink_arg_moves(params, &arg_types, &expected_is_take, false, diagnostics);
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             method.position,

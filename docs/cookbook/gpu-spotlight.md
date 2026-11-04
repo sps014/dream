@@ -86,12 +86,13 @@ async fun run(window: Window): Result<Unit, GpuError> {
         let center = GpuVec2(input.mouse.position.x * scale, input.mouse.position.y * scale);
 
         let frame = surface.begin_frame(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)).await?;
-        let pass = frame.pass;
-        pass.set_pipeline(pipeline);
-        pass.bind_value(GpuShaders.spotlight_fragment.center, center);
-        pass.bind_value(GpuShaders.spotlight_fragment.radius, 40.0f * scale);
-        pass.bind_value(GpuShaders.spotlight_fragment.color, color);
-        pass.draw(3);
+        frame.pass((pass: GpuRenderPass) => {
+            pass.set_pipeline(pipeline);
+            pass.bind_value(GpuShaders.spotlight_fragment.center, center);
+            pass.bind_value(GpuShaders.spotlight_fragment.radius, 40.0f * scale);
+            pass.bind_value(GpuShaders.spotlight_fragment.color, color);
+            pass.draw(3);
+        });
         frame.present().await?;
     }
     return Result.Ok(Unit());

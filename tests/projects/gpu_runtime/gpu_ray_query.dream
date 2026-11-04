@@ -193,14 +193,12 @@ async fun gpu_ray_query(): void {
                     "ray render pipeline"
                 );
                 let encoder = device.command_encoder();
-                let pass = encoder.begin_render_pass(
-                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f)))
-                );
-                pass.set_pipeline(pipeline);
-                pass.bind(GpuShaders.ray_surface.scene, tlas);
-                pass.bind_value(GpuShaders.ray_surface.size, size);
-                pass.draw(3);
-                pass.end();
+                encoder.render_pass(GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f))), (pass: GpuRenderPass) => {
+                    pass.set_pipeline(pipeline);
+                    pass.bind(GpuShaders.ray_surface.scene, tlas);
+                    pass.bind_value(GpuShaders.ray_surface.size, size);
+                    pass.draw(3);
+                });
                 rays_ok(device.submit(encoder.finish()).await, "fragment ray submission");
                 let pixels = rays_ok(target.read(0).await, "fragment ray readback");
                 for (let i in 0..size * size) {

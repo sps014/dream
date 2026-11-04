@@ -1,0 +1,5 @@
+module system.core;
+
+/// Lets values of this type be duplicated with `.copy()`. A class or union has a single owner, so passing or assigning it moves it; `.copy()` returns an independent value the new owner can keep while the original stays usable. For a class the compiler writes `copy()` itself, copying every field deeply; each field's type must itself be copyable. A union, or a class that needs special handling, declares its own `public fun copy(): Self` instead.
+@attribute(AttributeTarget.Class, AttributeTarget.Union)
+public struct CopyAttribute {}

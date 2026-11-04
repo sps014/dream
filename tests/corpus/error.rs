@@ -139,7 +139,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "move_errors",
-        "use of 'node' after it was moved\n'node' was moved into 'holder.node' on line 24; 'holder.node' owns it now\nuse 'holder.node' here instead of 'node'\n'node' was moved into 'holder.slots[0]' on line 29\n'node' was moved into a task body on line 35; the task owns it now\nmake the type a 'shared class' if both threads must use the same object",
+        "use of 'node' after it was moved\n'node' was moved into 'holder.node' on line 23; 'holder.node' owns it now\nuse 'holder.node' here instead of 'node'\n'node' was moved into 'holder.slots[0]' on line 28; 'holder.slots[0]' owns it now\n'first' was moved into 'second' on line 34\nuse 'second' here instead of 'first'\n'inner' was moved into 'Holder' on line 40, which keeps its 'node' argument\nuse of 'maybe', which may have been moved\n'maybe' may have been moved into 'holder.node' on line 47\n'looped' is moved here on every pass through the loop\ncreate 'looped' inside the loop so each pass moves its own value\na 'Node' value has one owner; add @copy to 'Node' to pass copies, or declare it 'shared class' if several places must use the same object",
         true,
     ),
     Case::error(
@@ -186,6 +186,11 @@ pub(super) const CASES: &[Case] = &[
     Case::error(
         "task_capture_errors",
         "cannot capture 'wrap' of type 'Wrap' in a `Task.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)\ncannot capture 'wrap' of type 'Wrap' in a `TaskScope_string.spawn_parallel` body: 'Wrap' is not shared",
+        true,
+    ),
+    Case::error(
+        "task_move_errors",
+        "use of 'node' after it was moved\n'node' was moved into a task body on line 15; the task owns it now\nmake the type a 'shared class' if both threads must use the same object",
         true,
     ),
     Case::error(

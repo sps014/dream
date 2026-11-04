@@ -41,7 +41,8 @@ Failures return `UuidError`, whose `code()` is `EUUID`.
 
 ## Streaming CSV
 
-`CsvReader` borrows a `Reader`; `CsvWriter` borrows a `Writer`. Both behave the same on every target and need no host library. The writer ends each record with CRLF and quotes a field only when it contains the delimiter, a quote, or a line break (doubling any quotes inside), or when it is the record's only field and is empty, so `["a", "b,c"]` becomes `a,"b,c"`. The reader frames records incrementally, rejects misplaced/unclosed quotes, validates UTF-8 strictly, and reports a one-based logical record number and absolute byte offset on errors. LF, CRLF, and standalone CR terminate records outside quotes; embedded newlines remain part of quoted fields. Blank records produce one empty field.
+`CsvReader` owns the `Reader` it reads from and `CsvWriter` owns the `Writer` it writes to; reach
+the wrapped stream through `inner`, for example to read back what a writer produced. Both behave the same on every target and need no host library. The writer ends each record with CRLF and quotes a field only when it contains the delimiter, a quote, or a line break (doubling any quotes inside), or when it is the record's only field and is empty, so `["a", "b,c"]` becomes `a,"b,c"`. The reader frames records incrementally, rejects misplaced/unclosed quotes, validates UTF-8 strictly, and reports a one-based logical record number and absolute byte offset on errors. LF, CRLF, and standalone CR terminate records outside quotes; embedded newlines remain part of quoted fields. Blank records produce one empty field.
 
 ```dream
 import system;
@@ -49,27 +50,27 @@ import system.io;
 import system.csv;
 
 fun main(): void {
-    let memory = MemoryStream();
-    let writer = CsvWriter(memory, delimiter: ';');
+    let writer = CsvWriter(MemoryStream(), delimiter: ';');
     writer.write_record(["Ada;Lovelace", "line\nnext"]).unwrap();
     writer.flush().unwrap();
-    memory.seek(0L).unwrap();
-    let reader = CsvReader(memory, delimiter: ';');
+    let csv = writer.inner.to_bytes().unwrap();
+    let reader = CsvReader(MemoryStream(csv), delimiter: ';');
     let fields = reader.read_record().unwrap().unwrap();
     System.println(fields[0]);
     System.println(fields[1]);
 }
 ```
 
-Records default to a 1 MiB limit and accept a configured limit up to 4 MiB. Reader memory is bounded by that record limit plus its input buffer. A malformed record permanently fails that reader. Writer limits include escaping and the trailing CRLF. Delimiters must be nonzero ASCII excluding quote, CR, and LF. Close the underlying resources explicitly after finishing borrowed wrappers.
+Records default to a 1 MiB limit and accept a configured limit up to 4 MiB. Reader memory is bounded by that record limit plus its input buffer. A malformed record permanently fails that reader. Writer limits include escaping and the trailing CRLF. Delimiters must be nonzero ASCII excluding quote, CR, and LF. Close a wrapped file through `inner` once you are done with it.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
-| `CsvReader(source, delimiter = ',', max_record_bytes = 1048576)` | `CsvReader` | Reads records from a borrowed `Reader`. |
+| `CsvReader(source, delimiter = ',', max_record_bytes = 1048576)` | `CsvReader<R>` | Reads records from `source`, which it owns. |
 | `reader.read_record()` | `Result<Option<string[]>, CsvError>` | Returns the next record's fields, or `None` at end of input. |
-| `CsvWriter(destination, delimiter = ',', max_record_bytes = 1048576)` | `CsvWriter` | Writes records to a borrowed `Writer`. |
+| `CsvWriter(destination, delimiter = ',', max_record_bytes = 1048576)` | `CsvWriter<W>` | Writes records to `destination`, which it owns. |
 | `writer.write_record(fields)` | `Result<Unit, CsvError>` | Writes one quoted-as-needed record ending in CRLF. |
-| `writer.flush()` | `Result<Unit, CsvError>` | Flushes the borrowed destination. |
+| `writer.flush()` | `Result<Unit, CsvError>` | Flushes the destination. |
+| `reader.inner` / `writer.inner` | `R` / `W` | The wrapped stream. |
 
 `CsvError.code()` is `ECSV`. Its `record` field is the one-based record number and
 `offset` is the zero-based byte offset where reading or writing failed.
@@ -217,16 +218,15 @@ async fun convert(url: string, output: string): Result<long, IoError> {
     response.close().map_err<IoError>(http_failure)?;
     client.close().map_err<IoError>(http_failure)?;
     downloaded?;
-    input.file.seek(0L)?;
+    input.file.flush()?;
     let output_file = TempFile.create_in(Path.parent(output).unwrap_or("."))?;
-    let destination = output_file.file;
-    let reader = CsvReader(input.file);
-    let writer = CsvWriter(destination);
+    let reader = CsvReader(FileHandle.open(input.path, FileMode.Read)?);
+    let writer = CsvWriter(FileHandle.open(output_file.path, FileMode.Write)?);
     let count = 0L;
     while true {
         let next = reader.read_record();
         if next.is_err() {
-            destination.close();
+            writer.inner.close();
             return Result.Err(IoError.other(url, next.unwrap_err().message()));
         }
         if next.unwrap().is_none() {
@@ -235,7 +235,7 @@ async fun convert(url: string, output: string): Result<long, IoError> {
         let fields = List<string>();
         let id = Uuid.v4();
         if id.is_err() {
-            destination.close();
+            writer.inner.close();
             return Result.Err(IoError.other(output, id.unwrap_err().message()));
         }
         fields.push(id.unwrap().to_string());
@@ -244,13 +244,14 @@ async fun convert(url: string, output: string): Result<long, IoError> {
         }
         let written = writer.write_record(fields.take_array());
         if written.is_err() {
-            destination.close();
+            writer.inner.close();
             return Result.Err(IoError.other(output, written.unwrap_err().message()));
         }
         count = count + 1L;
     }
     let flushed = writer.flush();
-    let closed = destination.close();
+    let closed = writer.inner.close();
+    reader.inner.close()?;
     input.close()?;
     if flushed.is_err() {
         return Result.Err(IoError.other(output, flushed.unwrap_err().message()));

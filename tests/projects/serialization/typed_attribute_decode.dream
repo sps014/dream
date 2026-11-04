@@ -30,8 +30,12 @@ fun typed_attribute_decode(): void {
     let first = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
     Assert.eq(first.name, "example");
     Assert.is_true(first.mode.is_none());
-    args.push(GenAttrArg(GenValueKind.Enum, "DecodeProbeMode.Second", ""));
-    let second = GenAttributes.decode<DecodeProbeAttribute>(attrs).unwrap();
+    let both = List<GenAttrArg>();
+    both.push(GenAttrArg(GenValueKind.String, "example", ""));
+    both.push(GenAttrArg(GenValueKind.Enum, "DecodeProbeMode.Second", ""));
+    let attrs_second = List<GenAttribute>();
+    attrs_second.push(GenAttribute(GenAttributes.id<DecodeProbeAttribute>(), "decode_probe", both));
+    let second = GenAttributes.decode<DecodeProbeAttribute>(attrs_second).unwrap();
     Assert.is_true(second.mode.unwrap() == DecodeProbeMode.Second);
 
     let paths = List<GenAttrArg>();

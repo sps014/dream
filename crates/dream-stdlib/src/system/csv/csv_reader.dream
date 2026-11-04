@@ -1,8 +1,9 @@
 module system.csv;
 
-/// Bounded-memory CSV reader over a borrowed byte stream, with strict quoting and UTF-8 validation.
-public class CsvReader {
-    source: Reader;
+/// Bounded-memory CSV reader over the byte stream it owns, with strict quoting and UTF-8
+/// validation.
+public class CsvReader<R: Reader> {
+    source: R;
     delimiter: char;
     limit: int;
     buffer: byte[];
@@ -12,8 +13,8 @@ public class CsvReader {
     skip_lf: bool;
     failed: bool;
 
-    /// Borrows source; record limits count encoded bytes including embedded newlines.
-    public constructor(source: Reader, delimiter: char = ',', max_record_bytes: int = 1048576) {
+    /// Reads records from `source`; record limits count encoded bytes including embedded newlines.
+    public constructor(source: R, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.source = source;
         this.delimiter = delimiter;
         this.limit = max_record_bytes;
@@ -136,5 +137,10 @@ public class CsvReader {
         let text = decoded.unwrap() + trailing.unwrap();
         this.record = this.record + 1L;
         return Result.Ok(Option.Some(CsvSyntax.split(text, this.delimiter)));
+    }
+
+    /// The wrapped reader. Reading from it directly skips bytes this reader already buffered.
+    public get inner(): borrow R {
+        return this.source;
     }
 }

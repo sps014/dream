@@ -1,0 +1,8 @@
+module system.core;
+
+// Generic stdlib code copies elements whose type it does not know; user code calls `.copy()`.
+internal static class Copy {
+    // A deep copy when `T` is a class or union with one owner; any other value is returned as is.
+    @intrinsic(Intrinsic.CopyOf)
+    internal static extern fun of<T>(borrow value: T): T;
+}

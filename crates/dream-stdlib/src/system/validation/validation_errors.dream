@@ -10,9 +10,9 @@ public class ValidationErrors: Error {
         this.issues = List<ValidationIssue>();
     }
 
-    /// Appends an issue with the supplied location, code, and message.
-    public fun add(location: List<string>, code: string, message: string): void {
-        this.issues.push(ValidationIssue(location, code, message));
+    /// Appends an issue with a copy of `location`, plus `code` and `message`.
+    public fun add(borrow location: List<string>, code: string, message: string): void {
+        this.issues.push(ValidationIssue(location.copy(), code, message));
     }
 
     /// Returns whether there are no elements.

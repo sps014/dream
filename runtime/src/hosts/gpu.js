@@ -301,6 +301,11 @@ export function makeGpuHost(getInstance) {
     return 0;
   };
 
+  // Recorded commands pin the handles they name, so a resource the program drops before
+  // submitting stays alive until the recording that uses it is gone.
+  const pins = new Map();
+  const releasedWhilePinned = new Set();
+
   const release = handle => {
     const record = table.get(handle);
     if (!record) return;
@@ -553,7 +558,30 @@ export function makeGpuHost(getInstance) {
       return 0;
     }),
     gpuSubmit: asyncGuard(1, submit),
+    gpuPin: handle => {
+      if (table.has(handle)) pins.set(handle, (pins.get(handle) ?? 0) + 1);
+    },
+    gpuUnpin: handle => {
+      const count = pins.get(handle);
+      if (count === undefined) return;
+      if (count > 1) {
+        pins.set(handle, count - 1);
+        return;
+      }
+      pins.delete(handle);
+      if (releasedWhilePinned.delete(handle)) {
+        try {
+          release(handle);
+        } catch (_) {
+          // Releasing never fails from the program's point of view.
+        }
+      }
+    },
     gpuRelease: handle => {
+      if (pins.has(handle)) {
+        releasedWhilePinned.add(handle);
+        return;
+      }
       try {
         release(handle);
       } catch (_) {

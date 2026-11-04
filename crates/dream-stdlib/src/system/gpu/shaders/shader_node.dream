@@ -132,11 +132,15 @@ internal class ShaderNode {
             && this.ty.kind == TypeRefKind.Unknown && this.symbol.is_empty();
     }
 
-    // Every node below this one, depth first, in source order.
-    internal fun walk(out: List<ShaderNode>): void {
+    // Appends this node and every node below it, depth first, in source order.
+    internal fun flatten_into(out: List<ShaderNode>): void {
+        let below = List<ShaderNode>();
         for (let c in this.children) {
-            out.push(c);
-            c.walk(out);
+            c.flatten_into(below);
+        }
+        out.push(this);
+        for (let n in below) {
+            out.push(n);
         }
     }
 }

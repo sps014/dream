@@ -1,0 +1,129 @@
+module system.gpu;
+
+// GPU commands being recorded for one device: the command words, the bytes of bound values
+// they point into, the first recording mistake, and the host handles they name. Every named
+// handle is pinned, so a resource the program drops before submitting stays alive until the
+// recording that uses it is gone; the host keeps it after that until the GPU finished.
+internal class GpuRecording {
+    internal device_id: int;
+    internal words: List<int>;
+    internal data: List<byte>;
+    internal error: Option<GpuError>;
+    pinned: List<int>;
+
+    // Bytes the encoder already holds before this recording's `data`; value binds point at
+    // their offset in the encoder's bytes, where `absorb` places them.
+    base: int;
+
+    internal constructor(device_id: int, base: int) {
+        this.device_id = device_id;
+        this.words = List<int>();
+        this.data = List<byte>();
+        this.error = Option.None;
+        this.pinned = List<int>();
+        this.base = base;
+    }
+
+    internal fun op(code: GpuOp): void {
+        let word: int = code;
+        this.words.push(word);
+    }
+
+    // Records the first failure only, so the reported error is the earliest mistake.
+    internal fun fail(error: GpuError): void {
+        if this.error.is_none() {
+            this.error = Option.Some(error);
+        }
+    }
+
+    // Pins `handle` for this recording if it is live and belongs to the recording's device.
+    internal fun check(handle: int, device_id: int, what: string): bool {
+        if handle == 0 {
+            this.fail(GpuError.InvalidResource("the " + what + " was destroyed"));
+            return false;
+        }
+        if device_id != this.device_id {
+            this.fail(GpuError.WrongDevice(what));
+            return false;
+        }
+        this.pin(handle);
+        return true;
+    }
+
+    fun pin(handle: int): void {
+        GpuHost.pin(handle);
+        this.pinned.push(handle);
+    }
+
+    // Appends `bytes` and returns their offset in the encoder's bytes.
+    internal fun value(bytes: byte[]): int {
+        let offset = this.base + this.data.length;
+        this.data.push_all(bytes);
+        return offset;
+    }
+
+    fun append(words: List<int>, data: List<byte>): void {
+        for (let word in words) {
+            this.words.push(word);
+        }
+        for (let b in data) {
+            this.data.push(b);
+        }
+    }
+
+    // Appends `args` as Bind commands for the shader parameters of `stage`.
+    internal fun bind_args(stage: GpuStage, args: GpuArgs): void {
+        switch (args.check(this.device_id)) {
+            Some(e) => {
+                this.fail(e);
+                return;
+            }
+            None => {}
+        }
+        let base = this.base + this.data.length;
+        for (let b in args.data) {
+            this.data.push(b);
+        }
+        let stage_code: int = stage;
+        let count = args.items.length / 3;
+        for (let i = 0; i < count; i = i + 1) {
+            let kind = args.items[i * 3];
+            let a = args.items[i * 3 + 1];
+            if kind == GpuArgKind.Value {
+                a = a + base;
+            } else {
+                this.pin(a);
+            }
+            this.op(GpuOp.Bind);
+            this.words.push_all([stage_code, i, kind, a, args.items[i * 3 + 2]]);
+        }
+    }
+
+    // Appends everything `other` recorded and takes over its pins, leaving it empty.
+    internal fun absorb(other: GpuRecording): void {
+        this.append(other.words, other.data);
+        for (let handle in other.pinned) {
+            this.pinned.push(handle);
+        }
+        other.words.clear();
+        other.data.clear();
+        other.pinned.clear();
+        switch (other.error) {
+            Some(e) => {
+                this.fail(e);
+            }
+            None => {}
+        }
+        other.error = Option.None;
+    }
+
+    internal static fun bits(value: float): int {
+        return Bytes.to<int>(Bytes.of(value));
+    }
+
+    del() {
+        for (let handle in this.pinned) {
+            GpuHost.unpin(handle);
+        }
+    }
+}

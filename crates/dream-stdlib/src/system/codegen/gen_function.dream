@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A method, or a top-level function.
+@copy
 public class GenFunction {
     /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;

@@ -1,15 +1,15 @@
 module system.io;
 
-/// Reads ahead from a borrowed reader without closing it; use this wrapper for positioning
-/// while buffered bytes remain, or recover them before accessing the source directly.
-public class BufferedReader: Reader {
-    source: Reader;
+/// Reads ahead from the reader it owns. Use this wrapper for positioning while buffered bytes
+/// remain, or recover them with `take_buffered` before reading `inner` directly.
+public class BufferedReader<R: Reader>: Reader {
+    source: R;
     capacity: int;
     buffer: byte[];
     offset: int;
 
     /// Wraps `source` with an 8 KiB default buffer; nonpositive sizes fail on reads.
-    public constructor(source: Reader, buffer_size: int = 8192) {
+    public constructor(source: R, buffer_size: int = 8192) {
         this.source = source;
         this.capacity = buffer_size;
         this.buffer = [];
@@ -101,5 +101,11 @@ public class BufferedReader: Reader {
         this.buffer = [];
         this.offset = 0;
         return bytes;
+    }
+
+    /// The wrapped reader. Reading from it directly skips the bytes this wrapper already
+    /// buffered; take them with `take_buffered` first.
+    public get inner(): borrow R {
+        return this.source;
     }
 }

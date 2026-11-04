@@ -70,7 +70,7 @@ impl<'a> Analyzer<'a> {
             .filter(|f| dream_abi::attributes::has_export_attr(&f.attributes))
             .filter_map(|f| self.function_table.declaration_node(f).map(|(def, _)| def))
             .collect();
-        param_inference::infer_param_modes(
+        let kept = param_inference::infer_param_modes(
             &mut hir_functions,
             &mut self.hir.global_decls,
             &param_inference::Program {
@@ -81,6 +81,7 @@ impl<'a> Analyzer<'a> {
                 layouts: &layouts,
             },
         );
+        self.check_moves(&hir_functions, &kept, &layouts, diagnostics);
         self.validate_cycles(
             node,
             &layouts,
@@ -158,8 +159,10 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
         self.type_ctx.set_scope(dream_types::ModuleId::ROOT);
-        self.type_ctx
+        let future = self
+            .type_ctx
             .register(DefKind::Struct, FUTURE_TYPE, vec!["T".to_string()]);
+        self.type_ctx.interner.mark_future_def(future);
         for file in &self.graph.files {
             self.type_ctx.set_scope(file.module);
             for declaration in &file.program.structs {
@@ -226,6 +229,7 @@ impl<'a> Analyzer<'a> {
         self.register_structs(node, diagnostics);
         self.register_extensions(node, diagnostics);
         self.register_functions(node, diagnostics);
+        self.check_copy_declarations(node, diagnostics);
         // `ref struct` params on an `async` function/method would need to survive a suspend point,
         // which spills the function's live locals into a heap-allocated coroutine state object —
         // exactly the escape a `ref struct` forbids. Checked once every function/method/`extend`

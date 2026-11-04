@@ -25,6 +25,10 @@ impl<'a> Analyzer<'a> {
         self.type_ctx
             .set_scope(self.graph.module_for_file(struct_decl.file_path.as_deref()));
         self.register_methods_for(struct_type, &struct_decl.methods, bindings, diagnostics);
+        if let Some(copy) = self.derived_copy_method(struct_decl, struct_type) {
+            self.register_methods_for(struct_type, copy, bindings, diagnostics);
+            self.note_derived_copy(struct_type);
+        }
         self.type_ctx.set_scope(scope);
     }
 

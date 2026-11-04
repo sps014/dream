@@ -5,7 +5,8 @@ module system.gpu;
 let gpu_shader_libraries: List<GpuShaderLibrary> = List<GpuShaderLibrary>();
 
 // One generated shader bundle: the compiled code of one module's shaders for every backend
-// in `backends`. Devices load it lazily, once each.
+// in `backends`. Devices load it lazily, once each. The registry owns every library; shaders
+// name theirs by registry index.
 internal class GpuShaderLibrary {
     internal name: string;
     internal bundle: byte[];
@@ -24,10 +25,27 @@ internal class GpuShaderLibrary {
         bundle: byte[],
         backends: GpuBackend[],
         embedded: bool
-    ): GpuShaderLibrary {
-        let library = GpuShaderLibrary(name, bundle, backends, embedded);
-        gpu_shader_libraries.push(library);
-        return library;
+    ): int {
+        gpu_shader_libraries.push(GpuShaderLibrary(name, bundle, backends, embedded));
+        return gpu_shader_libraries.length - 1;
+    }
+
+    // The name of the library `register` returned `index` for.
+    internal static fun name_of(index: int): string {
+        return gpu_shader_libraries[index].name;
+    }
+
+    internal static fun backends_of(index: int): List<GpuBackend> {
+        return gpu_shader_libraries[index].backends.copy();
+    }
+
+    internal static fun has_backend(index: int, backend: GpuBackend): bool {
+        return gpu_shader_libraries[index].backends.contains(backend);
+    }
+
+    // Loads the library's code for `device`, returning the host's library handle.
+    internal static fun load(index: int, device: int): int {
+        return GpuHost.library_load(device, gpu_shader_libraries[index].bundle);
     }
 
     // Library implementation shaders must not broaden Auto beyond application shader targets.

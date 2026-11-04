@@ -143,27 +143,30 @@ fun main(): Result<Unit, IoError> {
     let reader = BufferedReader(source, buffer_size: 8192);
     let first = reader.read_line()?;
     reader.seek(0L)?;
-    let destination = MemoryStream();
-    let writer = BufferedWriter(destination, buffer_size: 8192);
+    let writer = BufferedWriter(MemoryStream(), buffer_size: 8192);
     writer.write_all(Encoding.utf8_encode("hello"))?;
     writer.finish()?;
-    return destination.close();
+    return writer.inner.close();
 }
 ```
 
 | Member | Returns | Effect |
 |---|---|---|
-| `BufferedReader(source, buffer_size)` | `BufferedReader` | Wraps a `Reader`; `buffer_size` defaults to 8192. |
+| `BufferedReader(source, buffer_size)` | `BufferedReader<R>` | Takes ownership of a `Reader`; `buffer_size` defaults to 8192. |
 | `BufferedReader.read(max_bytes)` | `Result<byte[], IoError>` | Reads from the buffer, refilling as needed. |
 | `BufferedReader.read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
 | `BufferedReader.seek(position)` / `tell()` | `Result<Unit, IoError>` / `Result<long, IoError>` | Repositions the source / reports the logical position. |
 | `BufferedReader.take_buffered()` | `byte[]` | Removes and returns unread buffered bytes. |
-| `BufferedWriter(destination, buffer_size)` | `BufferedWriter` | Wraps a `Writer`; `buffer_size` defaults to 8192. |
+| `BufferedReader.inner` | `R` | The wrapped reader. |
+| `BufferedWriter(destination, buffer_size)` | `BufferedWriter<W>` | Takes ownership of a `Writer`; `buffer_size` defaults to 8192. |
 | `BufferedWriter.write(data)` | `Result<int, IoError>` | Buffers bytes; may accept only part. |
 | `BufferedWriter.flush()` | `Result<Unit, IoError>` | Writes pending bytes and flushes the destination. |
 | `BufferedWriter.finish()` | `Result<Unit, IoError>` | Flushes and rejects later writes with `ECLOSED`. |
+| `BufferedWriter.inner` | `W` | The wrapped writer. |
 
-Buffer wrappers retain their underlying streams without closing them. Finish a
+A buffer wrapper owns its underlying stream but never closes it; reach the stream through
+`inner`, for example to close it. Read `take_buffered()` before reading `inner` directly, and
+flush before inspecting what reached the writer's `inner`. Finish a
 buffered writer explicitly so failures are visible; dropping it does not flush.
 After a partial flush failure, the unwritten bytes remain available for retry.
 `finish()` is idempotent after success and rejects subsequent writes.

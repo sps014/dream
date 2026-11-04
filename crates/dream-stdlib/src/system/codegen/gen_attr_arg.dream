@@ -6,6 +6,7 @@ import system.json;
 
 /// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
 /// `enum`; `value` is the unquoted string, literal text, or dotted enum path.
+@copy
 public class GenAttrArg {
     /// Literal category of the argument as written (`string`, `int`, `enum`, ...).
     public kind: GenValueKind;

@@ -7,9 +7,14 @@ import system.gpu;
 
 // Calls in shader bodies: `system.gpu` built-ins through their `Builtins` template, the few
 // that need code (cooperative types, MLP weights), user helpers and struct construction.
-internal static class SlangCalls {
-    internal static fun call(b: SlangBody, borrow n: ShaderNode): void {
-        let w = b.w;
+extend SlangBody {
+    internal fun call(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
+        let w = this.w;
         let key = Builtins.key_of(n);
         let free = n.is_expr(ExprKind.FunctionCall) || n.is_statement(StmtKind.FunctionInvocation);
         let first = 0;
@@ -22,15 +27,15 @@ internal static class SlangCalls {
         }
         if !key.is_empty() {
             if SlangBody.special(key) {
-                SlangCalls.special_call(b, n, key, first);
+                this.special_call(ctx, program, shader_module, n, key, first);
                 return;
             }
             switch (Builtins.template(key)) {
                 Some(template) => {
-                    SlangCalls.expand(b, n, template, first);
+                    this.expand(ctx, program, shader_module, n, template, first);
                 }
                 None => {
-                    b.ctx.error_at(n.id, "'" + n.text + "' is not available in GPU shaders");
+                    ctx.error_at(n.id, "'" + n.text + "' is not available in GPU shaders");
                 }
             }
             return;
@@ -50,19 +55,21 @@ internal static class SlangCalls {
             if i > first {
                 w.text(", ");
             }
-            b.expr(n.child(i));
+            this.expr(ctx, program, shader_module, n.child(i));
             i = i + 1;
         }
         w.text(")");
     }
 
-    internal static fun expand(
-        b: SlangBody,
+    internal fun expand(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
         borrow n: ShaderNode,
         borrow template: string,
         first: int
     ): void {
-        let w = b.w;
+        let w = this.w;
         let pending = StringBuilder();
         let dollar = false;
         for (let c in template) {
@@ -78,7 +85,7 @@ internal static class SlangCalls {
             w.text(pending.to_string());
             pending = StringBuilder();
             if c == 'r' {
-                b.expr(n.child(0));
+                this.expr(ctx, program, shader_module, n.child(0));
             } else if c == 'T' {
                 w.text(SlangTypes.of(n.ty, List<int>()));
             } else if c == 'E' {
@@ -89,21 +96,21 @@ internal static class SlangCalls {
                     if j > first {
                         w.text(", ");
                     }
-                    b.expr(n.child(j));
+                    this.expr(ctx, program, shader_module, n.child(j));
                     j = j + 1;
                 }
             } else {
                 let arg = ((int)c) - 48;
                 if first + arg < n.children.length {
-                    b.expr(n.child(first + arg));
+                    this.expr(ctx, program, shader_module, n.child(first + arg));
                 }
             }
         }
         w.text(pending.to_string());
     }
 
-    internal static fun constant_arg(
-        b: SlangBody,
+    internal fun constant_arg(
+        ctx: GenContext,
         borrow n: ShaderNode,
         index: int,
         borrow what: string
@@ -111,19 +118,21 @@ internal static class SlangCalls {
         if index < n.children.length && n.child(index).has_constant {
             return n.child(index).constant;
         }
-        b.ctx.error_at(n.id, what + " must be a constant");
+        ctx.error_at(n.id, what + " must be a constant");
         return "1";
     }
 
-    internal static fun special_call(
-        b: SlangBody,
+    internal fun special_call(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
         borrow n: ShaderNode,
         borrow key: string,
         first: int
     ): void {
-        let w = b.w;
+        let w = this.w;
         if key == "GpuWorkgroupArray.length" {
-            w.text("int(" + SlangCalls.length_of(b, n.child(0)) + ")");
+            w.text("int(" + this.length_of(program, n.child(0)) + ")");
             return;
         }
         if key == "GpuCoopVec.zeros" {
@@ -132,7 +141,7 @@ internal static class SlangCalls {
                 "CoopVec<"
                     + element
                     + ", "
-                    + SlangCalls.constant_arg(b, n, first, "the GpuCoopVec length")
+                    + this.constant_arg(ctx, n, first, "the GpuCoopVec length")
                     + ">(" + element + "(0))"
             );
             return;
@@ -143,14 +152,14 @@ internal static class SlangCalls {
             if key == "GpuCoopMat.load" {
                 rows = first + 3;
             }
-            let usage = b.coop_uses.get(b.declaring).unwrap_or("MatrixAccumulator");
+            let usage = this.coop_uses.get(this.declaring).unwrap_or("MatrixAccumulator");
             w.text(
                 "CoopMat<"
                     + element
                     + ", MemoryScope.Subgroup, "
-                    + SlangCalls.constant_arg(b, n, rows, "the matrix row count")
+                    + this.constant_arg(ctx, n, rows, "the matrix row count")
                     + ", "
-                    + SlangCalls.constant_arg(b, n, rows + 1, "the matrix column count")
+                    + this.constant_arg(ctx, n, rows + 1, "the matrix column count")
                     + ", CoopMatMatrixUse." + usage + ">"
             );
             if key == "GpuCoopMat.zeros" {
@@ -158,19 +167,19 @@ internal static class SlangCalls {
                 return;
             }
             w.text(".Load<CoopMatMatrixLayout.RowMajor>(");
-            b.expr(n.child(first));
+            this.expr(ctx, program, shader_module, n.child(first));
             w.text(", ");
-            b.expr(n.child(first + 1));
+            this.expr(ctx, program, shader_module, n.child(first + 1));
             w.text(", ");
-            b.expr(n.child(first + 2));
+            this.expr(ctx, program, shader_module, n.child(first + 2));
             w.text(")");
             return;
         }
         if key == "GpuMlpWeights.apply" {
             let receiver = n.child(0);
             let shape = List<int>();
-            for (let e in b.shader_module.entries) {
-                if e.function.id == b.function_id {
+            for (let e in shader_module.entries) {
+                if e.function.id == this.function_id {
                     switch (e.param(receiver.text)) {
                         Some(p) => {
                             shape = p.coop;
@@ -180,7 +189,7 @@ internal static class SlangCalls {
                 }
             }
             if shape.length != 2 {
-                b.ctx.error_at(
+                ctx.error_at(
                     receiver.id,
                     "GpuMlpWeights parameter '"
                         + receiver.text + "' needs @coop_shape(inputs, outputs)"
@@ -199,11 +208,11 @@ internal static class SlangCalls {
             let bias_bytes = shape[1] * size;
             let matrix_offset = (bias_bytes + 63) / 64 * 64;
             w.text("coopVecMatMulAdd<" + element + ", " + shape[1].to_string() + ">(");
-            b.expr(n.child(1));
+            this.expr(ctx, program, shader_module, n.child(1));
             w.text(", " + component + ", ");
-            b.expr(receiver);
+            this.expr(ctx, program, shader_module, receiver);
             w.text(", " + matrix_offset.to_string() + ", " + component + ", ");
-            b.expr(receiver);
+            this.expr(ctx, program, shader_module, receiver);
             w.text(
                 ", 0, "
                     + component
@@ -212,14 +221,11 @@ internal static class SlangCalls {
             );
             return;
         }
-        b.ctx.error_at(
-            n.id,
-            "'" + n.text + "' can only initialize a local variable in GPU shaders"
-        );
+        ctx.error_at(n.id, "'" + n.text + "' can only initialize a local variable in GPU shaders");
     }
 
-    internal static fun length_of(b: SlangBody, borrow array: ShaderNode): string {
-        for (let n in b.program.nodes(b.function_id)) {
+    internal fun length_of(program: ShaderProgram, borrow array: ShaderNode): string {
+        for (let n in program.nodes(this.function_id)) {
             if n.is_statement(StmtKind.Declaration) && n.text == array.text && n.children.length > 0 {
                 let init = n.child(0);
                 if init.children.length > 0 {

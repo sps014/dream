@@ -8,7 +8,7 @@
 // The destructor prints make reclamation order observable for the `del()` cases.
 
 import system;
-class Node {
+shared class Node {
     public val: int;
     public next: Option<Node>;
 
@@ -256,7 +256,7 @@ fun factories() {
 //   after second read:  w + slot + x + y            -> 4
 //   after overwrite:    slot released; w + x + y    -> 3
 
-class Widget {
+shared class Widget {
     public id: int;
     public constructor(id: int) { this.id = id; }
 }

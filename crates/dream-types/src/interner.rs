@@ -29,6 +29,9 @@ pub struct TypeInterner {
     shared_defs: HashSet<DefId>,
     /// `DefId`s of `static class` types — namespaces of static members, not instantiable values.
     static_defs: HashSet<DefId>,
+    /// The builtin `Future<T>` class. A future is held by the scheduler and by whoever awaits,
+    /// races or cancels it, so it keeps shared ownership.
+    future_def: Option<DefId>,
     /// Interned ids of value *unions* (a data `enum` instance every one of whose variant payloads is
     /// value/primitive, e.g. `Option<int>`). Unlike value structs (marked per-`DefId`) value-ness is
     /// per-`TypeId`, because `Option<int>` (value) and `Option<string>` (heap) share one `DefId`.
@@ -58,6 +61,7 @@ impl TypeInterner {
             ref_struct_defs: HashSet::new(),
             shared_defs: HashSet::new(),
             static_defs: HashSet::new(),
+            future_def: None,
             value_unions: HashSet::new(),
             niche_unions: HashSet::new(),
         };
@@ -230,6 +234,22 @@ impl TypeInterner {
     /// True when `ty` is (or resolves to) an `@shared class` type.
     pub fn is_shared_type(&self, ty: TypeId) -> bool {
         matches!(self.kind(ty), TyKind::Struct(def, _) if self.shared_defs.contains(def))
+    }
+
+    /// Records `def` as the builtin `Future<T>` class.
+    pub fn mark_future_def(&mut self, def: DefId) {
+        self.future_def = Some(def);
+    }
+
+    /// True when a value of `ty` has exactly one owner, so passing it to a sink, assigning or
+    /// returning it moves it: instances of classes that are neither `shared` nor `static`, and
+    /// are not futures.
+    pub fn is_unique_type(&self, ty: TypeId) -> bool {
+        matches!(self.kind(ty), TyKind::Struct(def, _)
+            if !self.value_defs.contains(def)
+                && !self.shared_defs.contains(def)
+                && !self.static_defs.contains(def)
+                && self.future_def != Some(*def))
     }
 
     /// Records `def` as a `static class`. Idempotent.

@@ -47,7 +47,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 `list[index]` requires a valid position and stops the program if the position is outside the list. Indexed assignment replaces an item.
 
-`pop()` returns `Option<T>` because a list can be empty. `remove_at(index)` returns whether it removed an item; `remove(value)` removes the first matching item. Searches compare items by value, so strings match by their contents.
+`pop()` returns `Option<T>` because a list can be empty. `remove_at(index)` returns the removed item, or `None` when `index` is outside the list; `remove(value)` removes the first matching item. Searches compare items by value, so strings match by their contents.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -60,13 +60,13 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 | `last_index_of(value)` | `Option<int>` | Position of the last equal item. |
 | `find_index(pred)` | `Option<int>` | Position of the first item where `pred` returns `true`. |
 | `pop()` | `Option<T>` | Removes and returns the last item. |
-| `remove_at(index)` | `bool` | Removes the item at `index`; `false` and no change for an invalid index. |
+| `remove_at(index)` | `Option<T>` | Removes and returns the item at `index`; `None` and no change for an invalid index. |
 | `remove(value)` | `bool` | Removes the first equal item; `false` when none matched. |
 | `clear()` | `void` | Removes every item and keeps capacity. |
 
 ## Copy, join, and sort
 
-`clone()` makes a new list holding the same elements. Objects inside it are still shared; it does not copy each object. `slice(start, end)` makes a list from a range, excluding `end`. It panics unless `0 <= start <= end <= length`, the same rule as array and span `slice`. `concat(other)` makes a combined list. `reverse()` changes the current list.
+`copy()` makes an independent list holding a copy of each element, so changing either list or its elements never affects the other. Copying a list of objects requires their class to be marked `@copy`. `slice(start, end)` makes a list from a range, excluding `end`. It panics unless `0 <= start <= end <= length`, the same rule as array and span `slice`. `concat(other)` makes a combined list. `reverse()` changes the current list.
 
 `join(separator)` converts items to text and joins them. `sort()` uses the elements' comparison order. `sort_by(compare)` takes your comparison function: return a negative number when the first item should come first, zero when equal, or a positive number when the second should come first. Sorting is stable, so equal items keep their relative order. `binary_search` requires a list already sorted in the matching order.
 
@@ -74,7 +74,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 | Member | Returns | Effect |
 | --- | --- | --- |
-| `clone()` | `List<T>` | New list with the same items. |
+| `copy()` | `List<T>` | Independent list with a copy of each item. |
 | `slice(start, end)` | `List<T>` | New list of items from `start` up to, but not including, `end`. |
 | `concat(other)` | `List<T>` | New list of this list's items followed by `other`'s. |
 | `reverse()` | `void` | Reverses the list in place. |

@@ -96,8 +96,8 @@ internal class AudioState {
         terminal: bool
     ): AudioError {
         let error = AudioError(code, message);
-        this.failure = Option.Some(error);
-        this.events.push(AudioEvent.Error(AudioEvents.now(), error, operation, terminal));
+        this.failure = Option.Some(error.copy());
+        this.events.push(AudioEvent.Error(AudioEvents.now(), error.copy(), operation, terminal));
         return error;
     }
 
@@ -181,7 +181,7 @@ internal class AudioState {
             AudioOutput.control(this.handle, 2, 0.0d);
             this.paused = true;
             let error = AudioError("ENODEVICE", "audio output is no longer available");
-            this.failure = Option.Some(error);
+            this.failure = Option.Some(error.copy());
             this.events.push(AudioEvent.DeviceLost(AudioEvents.now(), error));
         }
         if this.paused == false && AudioOutput.query(this.handle, 2) != 0.0d {

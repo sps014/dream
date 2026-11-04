@@ -3,7 +3,7 @@
 // values transferred across a suspension.
 import system;
 
-class Tracked {
+shared class Tracked {
     public id: int;
 
     public constructor(id: int) {

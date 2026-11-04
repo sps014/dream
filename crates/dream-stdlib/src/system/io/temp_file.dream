@@ -5,8 +5,9 @@ public class TempFile {
     // File access remains owned by this temporary resource; close or persist before releasing it.
     handle: FileHandle;
 
-    /// Borrowed access to the owned temporary file.
-    public get file(): FileHandle {
+    /// Borrowed access to the owned temporary file. To hand a file to a wrapper that owns its
+    /// stream, such as `CsvWriter`, open another handle on `path`.
+    public get file(): borrow FileHandle {
         return this.handle;
     }
 

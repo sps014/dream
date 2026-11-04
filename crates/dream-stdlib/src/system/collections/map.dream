@@ -2,6 +2,7 @@ module system.collections;
 
 /// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 @slot_walk("capacity", "slot_entry", "slot_occupied")
+@copy
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
     count: int;
@@ -127,8 +128,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let tomb = 0 - epoch;
         let idx = hash & (cap - 1);
         let first_tomb = -1;
-        let done = false;
-        while done == false {
+        while true {
             let s = slots[idx].state;
             if (s != epoch) && (s != tomb) {
                 let target = idx;
@@ -142,11 +142,11 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
                 if first_tomb < 0 {
                     this.used = this.used + 1;
                 }
-                done = true;
+                return;
             } else {
                 if (s == epoch) && (slots[idx].key == key) {
                     slots[idx].value = value;
-                    done = true;
+                    return;
                 } else {
                     if (s == tomb) && (first_tomb < 0) {
                         first_tomb = idx;
@@ -287,9 +287,8 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         if i >= 0 {
             return this.slots[i].value;
         }
-        let value = factory();
-        this[key] = value;
-        return value;
+        this[key] = factory();
+        return this.slots[this.slot_of(key)].value;
     }
 
     /// Copies entries from `other`, replacing values with matching keys.
@@ -297,6 +296,20 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         for (let pair in other) {
             this[pair.key] = pair.value;
         }
+    }
+
+    /// An independent map holding a copy of every key and value. Copying a `Map<string, Node>`
+    /// requires `Node` to be `@copy`.
+    public fun copy(): Map<K, V> {
+        let result = Map<K, V>(this.count);
+        let i = 0;
+        while i < this.cap {
+            if this.slots[i].state == this.epoch {
+                result[Copy.of(this.slots[i].key)] = Copy.of(this.slots[i].value);
+            }
+            i = i + 1;
+        }
+        return result;
     }
 
     /// Returns a new list of key/value pairs.

@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A `dream.toml` `additional_files` entry.
+@copy
 public class GenFile {
     /// Request or resource path.
     public path: string;

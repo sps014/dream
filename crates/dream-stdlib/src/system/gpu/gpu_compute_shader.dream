@@ -3,12 +3,13 @@ module system.gpu;
 /// A compiled `@compute` shader. The shader generator creates one for every compute shader
 /// as `GpuShaders.<name>`, with a typed `dispatch(device, GpuDispatch, ...)` that takes the
 /// shader's own parameters.
+@copy
 public class GpuComputeShader {
-    internal library: GpuShaderLibrary;
+    internal library: int;
     entry: string;
     workgroup: GpuIVec3;
 
-    internal constructor(library: GpuShaderLibrary, entry: string, x: int, y: int, z: int) {
+    internal constructor(library: int, entry: string, x: int, y: int, z: int) {
         this.library = library;
         this.entry = entry;
         this.workgroup = GpuIVec3(x, y, z);
@@ -33,7 +34,7 @@ public class GpuComputeShader {
     ): void {
         switch (args.mismatch) {
             Some(e) => {
-                pass.encoder.fail(e);
+                pass.recording.fail(e);
                 return;
             }
             None => {}
@@ -43,7 +44,7 @@ public class GpuComputeShader {
                 pass.dispatch(pipeline, dispatch.group_counts(this.workgroup), args);
             }
             Err(e) => {
-                pass.encoder.fail(e);
+                pass.recording.fail(e);
             }
         }
     }
@@ -55,9 +56,9 @@ public class GpuComputeShader {
         args: GpuArgs
     ): Result<Unit, GpuError> {
         let encoder = device.command_encoder();
-        let pass = encoder.begin_compute_pass();
-        this.encode(device, pass, dispatch, args);
-        pass.end();
+        encoder.compute_pass((pass: GpuComputePass) => {
+            this.encode(device, pass, dispatch, args);
+        });
         return device.submit(encoder.finish()).await;
     }
 }

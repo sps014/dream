@@ -88,7 +88,7 @@ public class ParsedArguments {
     /// Copies all string values in order, including an optional default when no value was supplied.
     public fun get_strings(name: string): Result<string[], CliError> {
         let entry = this.typed(name, CliArgumentKind.String)?;
-        return Result.Ok(entry.values.clone().take_array());
+        return Result.Ok(entry.values.copy().take_array());
     }
 
     /// Returns the last parsed integer; every occurrence has already passed decimal 32-bit validation.

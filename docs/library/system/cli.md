@@ -53,7 +53,7 @@ mistakes are reported by `parse`, not by the builder call.
 | `int_option(name, ...)` | `short = ""`, `default_value = 0`, `required = false`, `description = ""` | Adds `--name <integer>` (signed 32-bit). |
 | `flag(name, ...)` | `short = ""`, `description = ""` | Adds a boolean `--name` that defaults to false. |
 | `choices(name, values)` | `values: string[]` | Restricts an already declared positional, string, or integer argument. |
-| `subcommand(command)` | `command: Command` | Attaches a snapshot of a child command. |
+| `subcommand(command)` | `command: Command` | Attaches a child command and takes ownership of it. |
 | `require_subcommand(required)` | `required = true` | Makes invoking one of the subcommands mandatory. |
 | `parse(arguments)` | `arguments: string[]` | Returns `Result<ParsedArguments, CliError>`. |
 
@@ -125,7 +125,7 @@ fun main(): void {
 }
 ```
 
-An attached subcommand is a snapshot: finish configuring it before attaching it.
+Attaching a subcommand moves it into its parent, so finish configuring it before attaching it.
 Each parsed command scope has its own values. A selected child is available through
 `parsed.subcommand`; use `command_name` to identify it.
 

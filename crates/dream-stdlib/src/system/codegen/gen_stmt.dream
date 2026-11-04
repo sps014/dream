@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A statement that a source generator can inspect.
+@copy
 public class GenStmt {
     /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;

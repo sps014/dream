@@ -5,13 +5,12 @@ import system.encoding;
 import system.io;
 
 fun encoded(fields: string[]): string {
-    let memory = MemoryStream();
-    CsvWriter(memory).write_record(fields).unwrap();
-    memory.seek(0L).unwrap();
-    return Encoding.utf8_decode(memory.read(1024).unwrap());
+    let writer = CsvWriter(MemoryStream());
+    writer.write_record(fields).unwrap();
+    return Encoding.utf8_decode(writer.inner.to_bytes().unwrap());
 }
 
-fun records(text: string): CsvReader {
+fun records(text: string): CsvReader<MemoryStream> {
     return CsvReader(MemoryStream(Encoding.utf8_encode(text)));
 }
 
@@ -55,11 +54,12 @@ fun reader_rejects_misplaced_quotes(): void {
 
 @test
 fun custom_delimiters_round_trip(): void {
-    let memory = MemoryStream();
-    let writer = CsvWriter(memory, delimiter: '\t');
+    let writer = CsvWriter(MemoryStream(), delimiter: '\t');
     writer.write_record(["tab\there", "plain"]).unwrap();
-    memory.seek(0L).unwrap();
-    let fields = CsvReader(memory, delimiter: '\t').read_record().unwrap().unwrap();
+    let fields = CsvReader(MemoryStream(writer.inner.to_bytes().unwrap()), delimiter: '\t')
+        .read_record()
+        .unwrap()
+        .unwrap();
     Assert.eq(fields[0], "tab\there");
     Assert.eq(fields[1], "plain");
     Assert.is_true(CsvWriter(MemoryStream(), delimiter: '"').write_record(["a"]).is_err());

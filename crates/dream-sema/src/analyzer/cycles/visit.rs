@@ -79,10 +79,7 @@ fn stmt(s: &HStmt, f: &mut impl FnMut(&HExpr)) {
             stmts(default, f);
         }
         HStmt::Await { future, .. } => expr(future, f),
-        HStmt::Break(_)
-        | HStmt::Continue(_)
-        | HStmt::DebugLine(_)
-        | HStmt::SourceLine(_) => {}
+        HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) | HStmt::SourceLine(_) => {}
     }
 }
 
@@ -104,10 +101,10 @@ pub(super) fn expr(e: &HExpr, f: &mut impl FnMut(&HExpr)) {
     }
 }
 
-pub(super) type Children<'e> = SmallVec<[&'e HExpr; 4]>;
+pub(in crate::analyzer) type Children<'e> = SmallVec<[&'e HExpr; 4]>;
 
 /// Direct subexpressions in evaluation order.
-pub(super) fn children(e: &HExpr) -> Children<'_> {
+pub(in crate::analyzer) fn children(e: &HExpr) -> Children<'_> {
     use HExprKind as K;
     let mut out = Children::new();
     match &e.kind {
@@ -217,4 +214,3 @@ pub(super) fn children(e: &HExpr) -> Children<'_> {
     }
     out
 }
-

@@ -45,7 +45,7 @@ fun arc_proofs_preserve_snapshot_destruction_time(): void {
     Assert.eq(proof_drop_count, before + 1);
 }
 
-class ProofLeaf {
+shared class ProofLeaf {
     public text: string;
 
     public constructor(text: string) {

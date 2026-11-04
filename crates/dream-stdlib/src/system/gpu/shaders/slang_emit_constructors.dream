@@ -5,15 +5,20 @@ import system.collections;
 import system.codegen;
 
 extend SlangEmit {
-    fun constructors(borrow d: GenDecl): void {
-        let w = this.w;
+    fun constructors(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow d: GenDecl
+    ): void {
+        let w = this.body.w;
         for (let constructor in d.methods) {
             if constructor.name != "constructor" || constructor.body.is_none() {
                 continue;
             }
             let used = false;
-            for (let function in this.module_functions()) {
-                for (let node in this.program.nodes(function.id)) {
+            for (let function in this.module_functions(shader_module)) {
+                for (let node in program.nodes(function.id)) {
                     if node.overload == constructor.overload && !node.overload.is_empty() {
                         used = true;
                     }
@@ -23,8 +28,8 @@ extend SlangEmit {
                 continue;
             }
             let body = ShaderNode.body_of(constructor);
-            Verify.function(this.ctx, this.program, constructor, body);
-            this.body.begin(constructor.id);
+            Verify.function(ctx, program, constructor, body);
+            this.body.begin(program, constructor.id);
             this.body.names["this"] = "this";
             w.open();
             w.text("__init(");
@@ -50,7 +55,7 @@ extend SlangEmit {
                 w.line_of("this." + Names.ident(field.name) + " = (" + ty + ")0;");
             }
             for (let statement in body) {
-                this.body.statement(statement);
+                this.body.statement(ctx, program, shader_module, statement);
             }
             w.dedent();
             w.line_of("}");

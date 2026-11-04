@@ -106,7 +106,7 @@ pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
         "generator" | "generator_only" | "incremental" | "on_attribute" | "on_call"
         | "syntax_block" | "uses_tool" => "system.codegen",
         "attribute" | "repeatable" | "export" | "intrinsic" | "llvm" | "inline" | "noinline"
-        | "unsafe" | "slot_walk" | "allow_cycle" | "consuming" | "owned"
+        | "unsafe" | "slot_walk" | "allow_cycle" | "copy" | "consuming" | "owned"
         | "js" | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
         _ => return None,
     })

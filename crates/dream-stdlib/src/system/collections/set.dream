@@ -2,6 +2,7 @@ module system.collections;
 
 /// A generic open-addressing hash set.
 @slot_walk("capacity", "slot_key", "slot_occupied")
+@copy
 public class Set<T>: Collection<T> {
     keys: T[];
     states: int[];
@@ -107,9 +108,7 @@ public class Set<T>: Collection<T> {
         let tomb = 0 - epoch;
         let idx = hash & (cap - 1);
         let first_tomb = -1;
-        let added = false;
-        let done = false;
-        while done == false {
+        while true {
             let s = states[idx];
             if (s != epoch) && (s != tomb) {
                 let target = idx;
@@ -122,27 +121,20 @@ public class Set<T>: Collection<T> {
                 if first_tomb < 0 {
                     this.used = this.used + 1;
                 }
-                added = true;
-                done = true;
-            } else {
-                if s == epoch {
-                    if keys[idx] == value {
-                        done = true;
-                    }
-                } else {
-                    if (s == tomb) && (first_tomb < 0) {
-                        first_tomb = idx;
-                    }
+                return true;
+            }
+            if s == epoch {
+                if keys[idx] == value {
+                    return false;
                 }
-                if done == false {
-                    idx = idx + 1;
-                    if idx == cap {
-                        idx = 0;
-                    }
-                }
+            } else if (s == tomb) && (first_tomb < 0) {
+                first_tomb = idx;
+            }
+            idx = idx + 1;
+            if idx == cap {
+                idx = 0;
             }
         }
-        return added;
     }
 
     // When `old_keys` is uniquely owned, `hash_code` cannot observe it through `this`
@@ -395,6 +387,19 @@ public class Set<T>: Collection<T> {
     }
 
     // Slot helpers for `SetIterator` (same-module).
+    /// An independent set holding a copy of every element.
+    public fun copy(): Set<T> {
+        let result = Set<T>(this.count);
+        let i = 0;
+        while i < this.cap {
+            if this.states[i] == this.epoch {
+                result.add(Copy.of(this.keys[i]));
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
     internal fun slot_occupied(i: int): bool {
         return this.states[i] == this.epoch;
     }

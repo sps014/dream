@@ -6,33 +6,35 @@ public class GpuGeometry {
     internal device_id: int;
     kind: int;
 
-    // The buffers stay alive until the build that reads them was submitted.
-    vertices: GpuOwnedHandle;
+    // The buffers are pinned, so they stay alive until the geometry is gone even if the
+    // program drops them first.
+    vertices: int;
 
     vertex_count: int;
-    indices: Option<GpuOwnedHandle>;
+    indices: int;
     index_count: int;
     is_opaque: bool;
 
-    constructor(device_id: int, kind: int, vertices: GpuOwnedHandle, vertex_count: int) {
+    constructor(device_id: int, kind: int, vertices: int, vertex_count: int) {
+        GpuHost.pin(vertices);
         this.device_id = device_id;
         this.kind = kind;
         this.vertices = vertices;
         this.vertex_count = vertex_count;
-        this.indices = Option.None;
+        this.indices = 0;
         this.index_count = 0;
         this.is_opaque = true;
     }
 
     /// Triangles whose corners are consecutive triples of `positions`.
     public static fun triangles(positions: GpuBuffer<GpuVec3>): GpuGeometry {
-        return GpuGeometry(positions.device_id, 0, positions.owner, positions.length);
+        return GpuGeometry(positions.device_id, 0, positions.handle, positions.length);
     }
 
     /// Custom shapes, one per pair of `bounds` corners: each box is its minimum corner
     /// followed by its maximum corner.
     public static fun boxes(bounds: GpuBuffer<GpuVec3>): GpuGeometry {
-        return GpuGeometry(bounds.device_id, 1, bounds.owner, bounds.length);
+        return GpuGeometry(bounds.device_id, 1, bounds.handle, bounds.length);
     }
 
     /// Builds triangles from consecutive triples of `indices` into the positions instead of
@@ -41,7 +43,9 @@ public class GpuGeometry {
         if indices.device_id != this.device_id {
             this.device_id = -1;
         }
-        this.indices = Option.Some(indices.owner);
+        GpuHost.unpin(this.indices);
+        GpuHost.pin(indices.handle);
+        this.indices = indices.handle;
         this.index_count = indices.length;
         return this;
     }
@@ -56,17 +60,18 @@ public class GpuGeometry {
     // [kind (0 triangles, 1 boxes), vertex_buffer, vertex_count, index_buffer or 0, index_count,
     //  opaque]
     internal fun encode(): int[] {
-        let index_buffer = switch (this.indices) {
-            Some(owner) => owner.handle,
-            None => 0,
-        };
         return [
             this.kind,
-            this.vertices.handle,
+            this.vertices,
             this.vertex_count,
-            index_buffer,
+            this.indices,
             this.index_count,
             this.is_opaque ? 1 : 0
         ];
+    }
+
+    del() {
+        GpuHost.unpin(this.vertices);
+        GpuHost.unpin(this.indices);
     }
 }

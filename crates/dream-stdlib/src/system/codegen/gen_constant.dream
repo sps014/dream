@@ -3,6 +3,7 @@ module system.codegen;
 import system.json;
 
 /// A constant value and its kind, as seen by a source generator.
+@copy
 public class GenConstant {
     /// Scalar category of the constant (`int`, `string`, `bool`, ...).
     public kind: GenValueKind;

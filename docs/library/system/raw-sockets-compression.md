@@ -94,12 +94,11 @@ import system.io;
 import system.compress;
 
 fun main(): void {
-    let encoded = MemoryStream();
-    let writer = Compression.writer(encoded, CompressionFormat.Gzip).unwrap();
+    let writer = Compression.writer(MemoryStream(), CompressionFormat.Gzip).unwrap();
     writer.write_all(Encoding.utf8_encode("hello compression")).unwrap();
     writer.finish().unwrap();
-    encoded.seek(0L).unwrap();
-    let reader = Compression.reader(encoded, CompressionFormat.Gzip).unwrap();
+    let encoded = writer.inner.to_bytes().unwrap();
+    let reader = Compression.reader(MemoryStream(encoded), CompressionFormat.Gzip).unwrap();
     let decoded = MemoryStream();
     Streams.copy(reader, decoded).unwrap();
     decoded.seek(0L).unwrap();
@@ -110,8 +109,8 @@ fun main(): void {
 
 | Member | Returns | Effect |
 | --- | --- | --- |
-| `Compression.writer(destination, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionWriter, IoError>` | Creates an encoder writing to `destination`. |
-| `Compression.reader(source, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionReader, IoError>` | Creates a decoder reading from `source`. |
+| `Compression.writer(destination, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionWriter<W>, IoError>` | Creates an encoder that owns `destination` and writes to it. |
+| `Compression.reader(source, format = CompressionFormat.Gzip, max_output_bytes = 67108864L)` | `Result<CompressionReader<R>, IoError>` | Creates a decoder that owns `source` and reads from it. |
 | `writer.write(bytes)` | `Result<int, IoError>` | Accepts up to 64 KiB and returns how many bytes it consumed. Compressed blocks reach the destination as they fill. |
 | `writer.flush()` | `Result<Unit, IoError>` | Writes pending data without ending the stream. |
 | `writer.finish()` | `Result<Unit, IoError>` | Writes the trailer and flushes. |
@@ -126,9 +125,9 @@ fun main(): void {
 A `max_output_bytes` outside 0 to 1 GiB returns `EINVAL`; corrupt, truncated,
 oversized, or trailing input returns `ECOMPRESS`.
 
-`CompressionWriter` implements `Writer`. `flush()` emits a synchronization boundary and flushes its destination. `finish()` emits the trailer, releases encoder state, and flushes. `close()` abandons the stream without closing or finishing the borrowed destination. Dropping a writer also abandons it, so call `finish()` to observe trailer and flush failures.
+`CompressionWriter` implements `Writer`. `flush()` emits a synchronization boundary and flushes its destination. `finish()` emits the trailer, releases encoder state, and flushes. `close()` abandons the stream without closing or finishing the destination. `inner` is the destination, holding the compressed bytes written so far. Dropping a writer also abandons it, so call `finish()` to observe trailer and flush failures.
 
-`CompressionReader` implements `Reader` and verifies checksums and complete stream termination. Corruption, truncation, expansion beyond the configured limit, concatenated members, and trailing bytes return errors. Successful EOF requires the underlying source to reach EOF after exactly one compressed stream. A failure can occur after previously decoded bytes have been consumed; those side effects are preserved.
+`CompressionReader` implements `Reader` and verifies checksums and complete stream termination. `inner` is its compressed source. Corruption, truncation, expansion beyond the configured limit, concatenated members, and trailing bytes return errors. Successful EOF requires the underlying source to reach EOF after exactly one compressed stream. A failure can occur after previously decoded bytes have been consumed; those side effects are preserved.
 
 ## Collection capacity
 

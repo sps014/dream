@@ -447,19 +447,6 @@ impl<'a> Analyzer<'a> {
                     ctor_summary,
                 );
                 self.hir_set_new(&name.text, ctor, arg_hirs, &t);
-                if let Some(info) = resolved_ctor_name
-                    .as_ref()
-                    .and_then(|key| self.function_table.functions.get(key))
-                    .cloned()
-                {
-                    self.note_sink_arg_moves(
-                        params,
-                        &params_types,
-                        &info.is_take,
-                        true,
-                        diagnostics,
-                    );
-                }
             }
             return Ok(t);
         }
@@ -625,13 +612,6 @@ impl<'a> Analyzer<'a> {
         // resolve to the selected overload's emitted name (each is a distinct `DefId`);
         // non-overloaded ones resolve directly by their base name.
         self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
-        self.note_sink_arg_moves(
-            params,
-            &params_types,
-            &store_sig.is_take,
-            false,
-            diagnostics,
-        );
         let call_summary = self.ide_summary(&ret_type);
         self.record_ide_ref(
             name.position,

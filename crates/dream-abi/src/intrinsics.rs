@@ -218,6 +218,8 @@ pub const ATTR_ARRAY_ELEMS_COPY: &str = "array_elems_copy";
 pub const ATTR_ARRAY_ELEMS_FILL: &str = "array_elems_fill";
 /// Checked extraction of a typed slot, transferring its token and zeroing the source.
 pub const ATTR_ARRAY_SLOT_TAKE: &str = "array_slot_take";
+/// `Copy.of<T>(value)` — a deep copy when `T` is unique, the value itself otherwise.
+pub const ATTR_COPY_OF: &str = "copy_of";
 /// Checked typed slot permutation, preserving the array's ownership tokens.
 pub const ATTR_BUFFER_IS_STRING: &str = "buffer_is_string";
 pub const ATTR_ARRAY_SLOT_SWAP: &str = "array_slot_swap";
@@ -369,6 +371,8 @@ pub enum IntrinsicOp {
     BufferIsString,
     /// Transfers one array slot into an owning result.
     ArraySlotTake,
+    /// Deep copy of a unique value, chosen per instantiation; other values pass through.
+    CopyOf,
     /// `Buffer.free<T>(arr)` (`@unsafe`) — unconditional `$free`, bypassing reference counting.
     ForceFree,
     /// `Buffer.get_unchecked<T>(arr, i)` (`@unsafe`) — `arr[i]` without the bounds check.
@@ -497,6 +501,7 @@ impl IntrinsicOp {
             ATTR_ARRAY_SLOT_SWAP => IntrinsicOp::ArraySlotSwap,
             ATTR_BUFFER_IS_STRING => IntrinsicOp::BufferIsString,
             ATTR_ARRAY_SLOT_TAKE => IntrinsicOp::ArraySlotTake,
+            ATTR_COPY_OF => IntrinsicOp::CopyOf,
             ATTR_FORCE_FREE => IntrinsicOp::ForceFree,
             ATTR_ARRAY_GET_UNCHECKED => IntrinsicOp::ArrayGetUnchecked,
             ATTR_ARRAY_SET_UNCHECKED => IntrinsicOp::ArraySetUnchecked,

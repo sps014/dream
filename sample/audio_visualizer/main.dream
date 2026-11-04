@@ -191,9 +191,11 @@ async fun visualize(window: Window): Result<Unit, GpuError> {
             continue;
         }
         let frame = surface.begin_frame(GpuVec4(0.025f, 0.04f, 0.08f, 1.0f)).await?;
-        frame.pass.set_pipeline(pipeline);
-        frame.pass.bind_buffer(GpuShaders.audio_fragment.values, values);
-        frame.pass.draw(3);
+        frame.pass((pass: GpuRenderPass) => {
+            pass.set_pipeline(pipeline);
+            pass.bind_buffer(GpuShaders.audio_fragment.values, values);
+            pass.draw(3);
+        });
         frame.present().await?;
     }
     return Result.Ok(Unit());

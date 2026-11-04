@@ -12,6 +12,7 @@ internal class YieldAsyncIterable<T>: AsyncIterable<T> {
     /// Creates a cursor over the sequence. Close it when iteration ends early.
     public fun iterator(): AsyncIterator<T> {
         let channel = YieldChannel<T>();
-        return YieldAsyncCursor<T>(channel, (this.factory)(channel));
+        let producer = (this.factory)(channel);
+        return YieldAsyncCursor<T>(channel, producer);
     }
 }

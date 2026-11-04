@@ -205,21 +205,22 @@ async fun run_room(window: Window): Result<Unit, GpuError> {
             (float)nodes.length
         );
         let frame = surface.begin_frame(GpuVec4(0.0f)).await?;
-        let pass = frame.pass;
-        if hardware {
-            pass.set_pipeline(accelerated.unwrap());
-            pass.bind_buffer(GpuShaders.room_hardware.triangles, triangles);
-            pass.bind(GpuShaders.room_hardware.scene, acceleration.unwrap());
-            pass.bind_buffer(GpuShaders.room_hardware.font, font);
-            pass.bind_value(GpuShaders.room_hardware.view, view);
-        } else {
-            pass.set_pipeline(portable);
-            pass.bind_buffer(GpuShaders.room_portable.triangles, triangles);
-            pass.bind_buffer(GpuShaders.room_portable.nodes, nodes);
-            pass.bind_buffer(GpuShaders.room_portable.font, font);
-            pass.bind_value(GpuShaders.room_portable.view, view);
-        }
-        pass.draw(3);
+        frame.pass((pass: GpuRenderPass) => {
+            if hardware {
+                pass.set_pipeline(accelerated.unwrap());
+                pass.bind_buffer(GpuShaders.room_hardware.triangles, triangles);
+                pass.bind(GpuShaders.room_hardware.scene, acceleration.unwrap());
+                pass.bind_buffer(GpuShaders.room_hardware.font, font);
+                pass.bind_value(GpuShaders.room_hardware.view, view);
+            } else {
+                pass.set_pipeline(portable);
+                pass.bind_buffer(GpuShaders.room_portable.triangles, triangles);
+                pass.bind_buffer(GpuShaders.room_portable.nodes, nodes);
+                pass.bind_buffer(GpuShaders.room_portable.font, font);
+                pass.bind_value(GpuShaders.room_portable.view, view);
+            }
+            pass.draw(3);
+        });
         frame.present().await?;
         report_frames = report_frames + 1;
         report_seconds = report_seconds + (float)input.delta_seconds;

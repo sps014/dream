@@ -53,18 +53,4 @@ public class SwaggerOptions {
         this.oauth_client_id = oauth_client_id;
         this.oauth_use_pkce = oauth_use_pkce;
     }
-
-    internal fun copy(): SwaggerOptions {
-        return SwaggerOptions(
-            this.js_url,
-            this.css_url,
-            this.redoc_js_url,
-            this.oauth_redirect_url,
-            this.deep_linking,
-            this.persist_authorization,
-            this.try_it_out_enabled,
-            this.oauth_client_id,
-            this.oauth_use_pkce
-        );
-    }
 }

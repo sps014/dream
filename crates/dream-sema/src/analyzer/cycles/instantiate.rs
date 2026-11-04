@@ -222,13 +222,11 @@ impl Walker<'_, '_> {
     fn map(&mut self, atom: Atom, args: &[Atoms], refs: &[bool], fresh: Fresh<'_>) -> Atoms {
         match atom {
             Atom::Old => one(Atom::Old),
-            Atom::Fresh(group) => one(
-                fresh
-                    .get(group as usize)
-                    .copied()
-                    .flatten()
-                    .unwrap_or(Atom::Old),
-            ),
+            Atom::Fresh(group) => one(fresh
+                .get(group as usize)
+                .copied()
+                .flatten()
+                .unwrap_or(Atom::Old)),
             Atom::Param(i, path) => {
                 let i = i as usize;
                 if refs.get(i).copied().unwrap_or(false) {

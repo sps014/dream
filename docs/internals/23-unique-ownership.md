@@ -127,9 +127,17 @@ borrowed from `this`. That is the only borrowed return; there is no way to retur
 parameter, so no lifetime is ever ambiguous.
 
 ```dream
-public fun this[index: int]: borrow T { ... }
-public fun get(key: K): borrow Option<V> { ... }
-public fun first(): borrow Option<T> { ... }
+public fun this[index: int]: borrow T {
+    ...
+}
+
+public fun get(key: K): borrow Option<V> {
+    ...
+}
+
+public fun first(): borrow Option<T> {
+    ...
+}
 ```
 
 The caller's borrow of `this` lasts as long as the projection is live. An `Option` projection holds
@@ -143,10 +151,10 @@ mutable borrow, and a borrowed place cannot be moved or reassigned. Places overl
 
 ```dream
 let n = names[0];
-names.push("b");        // error: cannot mutate 'names' while 'n' borrows it
+names.push("b"); // error: cannot mutate 'names' while 'n' borrows it
 System.println(n);
 
-swap_x(ref p, ref p);   // error: 'p' is borrowed mutably twice in one call
+swap_x(ref p, ref p); // error: 'p' is borrowed mutably twice in one call
 ```
 
 ### Copies
@@ -277,14 +285,14 @@ class Point {
 
 fun points(): void {
     let p = Point(1);
-    let q = p;              // moves: q is now the only owner
+    let q = p; // moves: q is now the only owner
     q.x = 9;
-    System.println(p.x);    // error: 'p' was moved; use 'p.copy()' to keep both
+    System.println(p.x); // error: 'p' was moved; use 'p.copy()' to keep both
 
     let a = Point(1);
     let b = a.copy();
     b.x = 9;
-    System.println(a.x);    // 1
+    System.println(a.x); // 1
 }
 ```
 
@@ -302,19 +310,19 @@ fun nudge(ref p: Point): void {
 class Shape {
     public corner: Point;
 
-    public constructor(corner: Point) {     // stored: inferred sink
+    public constructor(corner: Point) { // stored: inferred sink
         this.corner = corner;
     }
 }
 
 fun calls(): void {
     let p = Point(1);
-    System.println(describe(p));    // inferred borrow: p is still usable
+    System.println(describe(p)); // inferred borrow: p is still usable
     nudge(ref p);
-    let shape = Shape(p);           // p moves into the shape
-    System.println(p.x);            // error: 'p' was moved into 'Shape'
-                                    //   note: 'Shape' stores 'corner' here: this.corner = corner
-                                    //   help: pass 'p.copy()' to keep using 'p'
+    let shape = Shape(p); // p moves into the shape
+    System.println(p.x); // error: 'p' was moved into 'Shape'
+//   note: 'Shape' stores 'corner' here: this.corner = corner
+//   help: pass 'p.copy()' to keep using 'p'
 }
 ```
 
@@ -330,7 +338,7 @@ fun people(archive: List<Person>): void {
 
     System.println(people[0].name);
 
-    let first = people[0];          // only read: inferred borrow
+    let first = people[0]; // only read: inferred borrow
     System.println(first.name);
 
     let ana = people.take(0);
@@ -360,7 +368,7 @@ class Node {
 }
 
 fun print_all(head: Node): void {
-    let curr = head.next;           // borrow; rebinding below walks the chain
+    let curr = head.next; // borrow; rebinding below walks the chain
     while curr.is_some() {
         let node = curr.unwrap();
         System.println(node.value);
@@ -386,7 +394,7 @@ fun windows(): void {
     let root = Window("main");
     let child = Window("dialog");
     child.parent = Option.Some(root);
-    let alias = root;               // shared: the copy retains
+    let alias = root; // shared: the copy retains
     System.println(alias.title);
 }
 ```
@@ -396,26 +404,28 @@ fun windows(): void {
 ```dream
 fun closures(items: List<int>): void {
     let total = 0;
-    items.for_each((x) => {
-        total = total + x;          // non-escaping: may mutate the capture
-    });
+    items.for_each(
+        (x) => {
+            total = total + x; // non-escaping: may mutate the capture
+        }
+    );
 
     let label = "count";
     let printer = () => {
-        System.println(label);      // escaping: 'label' moves in
+        System.println(label); // escaping: 'label' moves in
     };
-    System.println(label);          // error: 'label' was moved into the closure
+    System.println(label); // error: 'label' was moved into the closure
 }
 
 async fun save(doc: Document, stream: MemoryStream): Result<int, IoError> {
-    let data = doc.data;            // inferred borrow of the caller's document
+    let data = doc.data; // inferred borrow of the caller's document
     stream.write_async(data).await?;
-    return Result.Ok(data.length);  // the borrow may cross the await
+    return Result.Ok(data.length); // the borrow may cross the await
 }
 
 async fun start(doc: Document, stream: MemoryStream): void {
     let pending = save(doc, stream);
-    // error: this future borrows 'doc'; await it here or pass 'doc.copy()'
+// error: this future borrows 'doc'; await it here or pass 'doc.copy()'
 }
 ```
 

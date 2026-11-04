@@ -1,30 +1,15 @@
-//! Move tracking for parameters and task captures.
-//!
-//! Storing an unmarked RC param into a field/index moves it (and makes the param a sink once
-//! modes are inferred): further uses must go through the destination (e.g. `this.items.length`,
-//! not `items.length` after `this.items = items`). Callers still copy into sink *calls* when the
-//! argument is live afterward (MIR [`RcInsertion`]), so call sites do not invalidate the binding.
+//! Move tracking for task captures: a local a `Task` body captures belongs to that task.
+//! Moves of unique values everywhere else are checked on the HIR by `move_check`.
 
-use crate::symbol_table::SymbolTable;
-use dream_abi::names::THIS_NAME;
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
-use dream_syntax::nodes::{ExpressionNode, Type};
+use dream_syntax::nodes::Type;
 use dream_text::text_span::TextSpan;
 use indexmap::IndexMap;
 
-/// Where a local's value went, so a later use can say what to write instead.
+/// Where a `Task` body captured a local.
 #[derive(Debug, Clone)]
 pub(super) struct MoveSite {
     pub(super) span: Option<TextSpan>,
-    pub(super) kind: MoveKind,
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum MoveKind {
-    /// Stored into a field or element; `place` is its source spelling when it has a simple one.
-    Stored { place: Option<String> },
-    /// Captured by a `Task` body, which now owns it on another thread.
-    Task,
 }
 
 pub(super) type MovedLocals = IndexMap<String, MoveSite>;
@@ -35,22 +20,6 @@ pub(super) fn merge_moved(mut into: MovedLocals, other: &MovedLocals) -> MovedLo
         into.entry(name.clone()).or_insert_with(|| site.clone());
     }
     into
-}
-
-/// Source spelling of a simple place (`this.items`, `node.next`, `slots[i]`), for diagnostics.
-pub(super) fn place_text(expr: &ExpressionNode<'_>) -> Option<String> {
-    match expr {
-        ExpressionNode::Identifier(id) => Some(id.text.clone()),
-        ExpressionNode::MemberAccess(obj, member) => {
-            Some(format!("{}.{}", place_text(obj)?, member.text))
-        }
-        ExpressionNode::IndexAccess(array, index) => {
-            Some(format!("{}[{}]", place_text(array)?, place_text(index)?))
-        }
-        ExpressionNode::Parenthesized(_, inner) => place_text(inner),
-        ExpressionNode::Literal(Type::Integer(token)) => Some(token.text.clone()),
-        _ => None,
-    }
 }
 
 impl<'a> super::Analyzer<'a> {
@@ -81,78 +50,17 @@ impl<'a> super::Analyzer<'a> {
             diagnostics.file_path.clone(),
         )
         .with_code("use-after-move");
-        let diagnostic = match &site.kind {
-            MoveKind::Stored { place: Some(place) } => diagnostic
-                .with_note(format!("'{name}' was moved into '{place}'{line}; '{place}' owns it now"))
-                .with_help(format!("use '{place}' here instead of '{name}'"))
-                .with_help(format!(
-                    "or read what you need from '{name}' before the line that stores it"
-                )),
-            MoveKind::Stored { place: None } => diagnostic
-                .with_note(format!("'{name}' was moved into a field or element{line}"))
-                .with_help("read it through the place that now holds it")
-                .with_help(format!(
-                    "or read what you need from '{name}' before the line that stores it"
-                )),
-            MoveKind::Task => diagnostic
-                .with_note(format!("'{name}' was moved into a task body{line}; the task owns it now"))
-                .with_help(format!(
-                    "finish using '{name}' before starting the task, or have the task return what you need"
-                ))
-                .with_help("make the type a 'shared class' if both threads must use the same object"),
-        };
+        let diagnostic = diagnostic
+            .with_note(format!("'{name}' was moved into a task body{line}; the task owns it now"))
+            .with_help(format!(
+                "finish using '{name}' before starting the task, or have the task return what you need"
+            ))
+            .with_help("make the type a 'shared class' if both threads must use the same object");
         diagnostics.report(diagnostic);
     }
 
-    /// After `place = <ident>` where `ident` is a sink RC parameter: mark it moved.
-    pub(super) fn note_sink_store_move(
-        &mut self,
-        rhs: &ExpressionNode<'a>,
-        rhs_ty: &Type,
-        symbols: &SymbolTable,
-        place: Option<String>,
-    ) {
-        let ExpressionNode::Identifier(id) = rhs else {
-            return;
-        };
-        if id.text == THIS_NAME || id.text == "_" {
-            return;
-        }
-        if rhs_ty.is_unknown() || !self.type_is_rc_tracked(rhs_ty) {
-            return;
-        }
-        if !symbols.is_sink_parameter(&id.text) {
-            return;
-        }
-        self.moved_locals.insert(
-            id.text.clone(),
-            MoveSite {
-                span: Some(id.position),
-                kind: MoveKind::Stored { place },
-            },
-        );
-    }
-
     pub(super) fn note_task_capture_move(&mut self, name: String, span: Option<TextSpan>) {
-        self.moved_locals.insert(
-            name,
-            MoveSite {
-                span,
-                kind: MoveKind::Task,
-            },
-        );
-    }
-
-    /// Hook after a resolved sink call. Unmarked sinks copy when live (see MIR), so this does
-    /// not mark caller locals moved.
-    pub(super) fn note_sink_arg_moves(
-        &mut self,
-        _args: &[ExpressionNode<'a>],
-        _arg_type_names: &[dream_types::TypeId],
-        _is_take: &[bool],
-        _skip_receiver: bool,
-        _diagnostics: &mut DiagnosticBag,
-    ) {
+        self.moved_locals.insert(name, MoveSite { span });
     }
 
     pub(super) fn snapshot_moved(&self) -> MovedLocals {
@@ -180,10 +88,5 @@ impl<'a> super::Analyzer<'a> {
             dream_types::TyKind::Struct(def, _) => !self.type_ctx.interner.is_value_def(*def),
             _ => false,
         }
-    }
-
-    fn type_is_rc_tracked(&mut self, ty: &Type) -> bool {
-        let id = self.type_ctx.lower(ty);
-        self.type_ctx.interner.is_rc_tracked(id)
     }
 }

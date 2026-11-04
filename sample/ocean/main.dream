@@ -299,18 +299,19 @@ async fun run_ocean(window: Window): Result<Unit, GpuError> {
             continue;
         }
         let frame = surface.begin_frame(GpuVec4(0.0f, 0.09f, 0.18f, 1.0f)).await?;
-        let pass = frame.pass;
-        pass.set_pipeline(pipeline);
-        pass.bind_value(
-            GpuShaders.ocean_fragment.resolution,
-            GpuVec2((float)size.width, (float)size.height)
-        );
-        pass.bind_value(GpuShaders.ocean_fragment.time, time);
-        pass.bind_value(GpuShaders.ocean_fragment.strength, strength);
-        pass.bind_value(GpuShaders.ocean_fragment.daylight, daylight);
-        pass.bind_value(GpuShaders.ocean_fragment.antialias, antialias);
-        pass.bind_value(GpuShaders.ocean_fragment.target_srgb, target_srgb);
-        pass.draw(3);
+        frame.pass((pass: GpuRenderPass) => {
+            pass.set_pipeline(pipeline);
+            pass.bind_value(
+                GpuShaders.ocean_fragment.resolution,
+                GpuVec2((float)size.width, (float)size.height)
+            );
+            pass.bind_value(GpuShaders.ocean_fragment.time, time);
+            pass.bind_value(GpuShaders.ocean_fragment.strength, strength);
+            pass.bind_value(GpuShaders.ocean_fragment.daylight, daylight);
+            pass.bind_value(GpuShaders.ocean_fragment.antialias, antialias);
+            pass.bind_value(GpuShaders.ocean_fragment.target_srgb, target_srgb);
+            pass.draw(3);
+        });
         frame.present().await?;
     }
     return Result.Ok(Unit());

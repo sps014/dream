@@ -1,6 +1,7 @@
 //! Parameter ownership modes are inferred from function bodies, so users never write `sink`.
-//! A parameter is a sink when the body stores, returns, binds, reassigns or captures it, or
-//! passes it to another sink; every other unmarked reference parameter borrows. A by-value
+//! A parameter is a sink when the body stores, returns, binds or reassigns it, or passes it to
+//! another sink; every other unmarked reference parameter borrows. A closure capture shares the
+//! value with the closure rather than keeping it, matching the move checker. A by-value
 //! aggregate holding references borrows the same way unless the body writes into it. Recursive and
 //! mutually recursive functions converge in one fixpoint that only moves parameters from borrow
 //! to sink. Modes are per declaration (joined across generic instances), and every call site's
@@ -15,12 +16,12 @@ mod aggregates;
 mod destructors;
 mod facts;
 
+use destructors::Destructors;
 use dream_hir::{
     HExpr, HExprKind, HFunction, HGlobal, HPlace, HStmt, InterfaceTable, LayoutTable, ParamMode,
 };
 use dream_types::{DefId, TypeInterner};
-use destructors::Destructors;
-use facts::BodyFacts;
+use facts::{BodyFacts, Question};
 use indexmap::{IndexMap, IndexSet};
 
 /// Program facts the inference reads but never changes.
@@ -34,11 +35,14 @@ pub(super) struct Program<'p> {
 }
 
 /// Infers parameter modes for `functions` and rewrites every call site's take flags to match.
+/// Returns the parameters whose body keeps the argument, which is what moves it at a call site.
+/// That set can be smaller than the sink calling convention, which also keeps parameters whose
+/// destructor timing or callers the convention cannot change.
 pub(super) fn infer_param_modes(
     functions: &mut [HFunction],
     globals: &mut [HGlobal],
     program: &Program<'_>,
-) {
+) -> IndexSet<(DefId, usize)> {
     let inferable = inferable_defs(functions, globals, program.interfaces, program.exports);
     let mut destructors = Destructors::new(program.interner, program.layouts);
 
@@ -69,7 +73,12 @@ pub(super) fn infer_param_modes(
 
     let refs: IndexMap<DefId, Vec<bool>> = functions
         .iter()
-        .map(|f| (f.def, f.params.iter().map(|p| p.mode == ParamMode::Ref).collect()))
+        .map(|f| {
+            (
+                f.def,
+                f.params.iter().map(|p| p.mode == ParamMode::Ref).collect(),
+            )
+        })
         .collect();
     let mut forwards: Vec<((DefId, usize), (DefId, usize))> = Vec::new();
     for f in functions.iter() {
@@ -92,7 +101,15 @@ pub(super) fn infer_param_modes(
             })
             .map(|(_, p)| p.local)
             .collect();
-        let facts = BodyFacts::collect(locals, values, &f.body, &inferable, &refs);
+        let facts = BodyFacts::collect(
+            locals,
+            values,
+            &f.body,
+            &inferable,
+            &refs,
+            Question::Convention,
+            &IndexSet::new(),
+        );
         for index in facts.consumed {
             modes[&f.def][index] = true;
         }
@@ -140,6 +157,94 @@ pub(super) fn infer_param_modes(
             rewrite.expr(init);
         }
     }
+    kept_params(functions, program, &refs)
+}
+
+/// Parameters whose body keeps the argument: it stores, returns or binds it, or passes it on to
+/// another kept parameter. Explicit `sink` and `share` parameters are always kept; `this`,
+/// `borrow` and `ref` parameters never are.
+fn kept_params(
+    functions: &[HFunction],
+    program: &Program<'_>,
+    refs: &IndexMap<DefId, Vec<bool>>,
+) -> IndexSet<(DefId, usize)> {
+    let bodies: IndexSet<DefId> = functions.iter().map(|f| f.def).collect();
+    let mut kept: IndexMap<DefId, Vec<bool>> = IndexMap::new();
+    let mut forwards: Vec<((DefId, usize), (DefId, usize))> = Vec::new();
+    for f in functions {
+        let entry = kept
+            .entry(f.def)
+            .or_insert_with(|| vec![false; f.params.len()]);
+        for (i, p) in f.params.iter().enumerate() {
+            if program.pinned_sink.contains(&(f.def, i)) || p.mode == ParamMode::Share {
+                entry[i] = true;
+            }
+        }
+        let owns = |p: &dream_hir::HParam| {
+            p.mode == ParamMode::Sink
+                && p.name != dream_abi::names::THIS_NAME
+                && (program.interner.is_rc_tracked(p.ty)
+                    || aggregates::owns_references(program.interner, program.layouts, p.ty))
+        };
+        let locals = f
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| owns(p))
+            .map(|(i, p)| (p.local, i))
+            .collect();
+        let values = f
+            .params
+            .iter()
+            .filter(|p| owns(p) && !program.interner.is_rc_tracked(p.ty))
+            .map(|p| p.local)
+            .collect();
+        let scratch: IndexSet<dream_hir::LocalId> = f
+            .locals
+            .iter()
+            .filter(|l| super::move_check::is_synthetic(&l.name))
+            .map(|l| l.id)
+            .collect();
+        let facts = BodyFacts::collect(
+            locals,
+            values,
+            &f.body,
+            &bodies,
+            refs,
+            Question::Keeps,
+            &scratch,
+        );
+        for index in facts.consumed {
+            kept[&f.def][index] = true;
+        }
+        for (index, def, param) in facts.forwards {
+            forwards.push(((f.def, index), (def, param)));
+        }
+    }
+    loop {
+        let mut changed = false;
+        for &((def, index), (callee, param)) in &forwards {
+            if kept[&def][index] {
+                continue;
+            }
+            if kept.get(&callee).and_then(|k| k.get(param)).copied() == Some(true) {
+                kept[&def][index] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    kept.into_iter()
+        .flat_map(|(def, params)| {
+            params
+                .into_iter()
+                .enumerate()
+                .filter(|(_, keeps)| *keeps)
+                .map(move |(i, _)| (def, i))
+        })
+        .collect()
 }
 
 /// Functions whose modes this pass may change: every caller is a direct call it can rewrite.
@@ -269,10 +374,7 @@ trait ExprVisitor {
                 }
                 self.stmts(default);
             }
-            HStmt::Break(_)
-            | HStmt::Continue(_)
-            | HStmt::DebugLine(_)
-            | HStmt::SourceLine(_) => {}
+            HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) | HStmt::SourceLine(_) => {}
         }
     }
 
@@ -309,7 +411,9 @@ fn children(kind: &mut HExprKind) -> Vec<&mut HExpr> {
             target: receiver,
             args,
             ..
-        } => std::iter::once(&mut **receiver).chain(args.iter_mut()).collect(),
+        } => std::iter::once(&mut **receiver)
+            .chain(args.iter_mut())
+            .collect(),
         K::JsCall {
             target,
             via,
@@ -395,12 +499,7 @@ fn children(kind: &mut HExprKind) -> Vec<&mut HExpr> {
             other_array,
             right,
             ..
-        } => vec![
-            &mut **array,
-            &mut **left,
-            &mut **other_array,
-            &mut **right,
-        ],
+        } => vec![&mut **array, &mut **left, &mut **other_array, &mut **right],
         K::ArraySetUnchecked {
             array,
             index,

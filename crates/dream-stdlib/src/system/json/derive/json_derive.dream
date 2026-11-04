@@ -28,7 +28,6 @@ internal fun json_derive(ctx: GenContext): void {
             continue;
         }
         json_names.push(d.name);
-        declarations.push(d);
         if d.kind == DeclKind.Union {
             let variants = List<JsonVariantSpec>();
             for (let v in d.variants) {
@@ -54,6 +53,7 @@ internal fun json_derive(ctx: GenContext): void {
             spec.assign_fields = how == Construction.Assign;
             types.push(spec);
         }
+        declarations.push(d);
     }
     let collections = List<JsonCollectionSpec>();
     let serialize = declof(Json.serialize);

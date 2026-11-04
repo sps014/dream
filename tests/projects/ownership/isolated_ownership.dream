@@ -54,8 +54,6 @@ fun iso_arc_discarded_result(): void {
 
 // --- arc_private_graph_region: private graphs are reclaimed whether discarded, kept, or cycled. ---
 
-// iso_graph_cycled links a node to itself and clears the link before returning.
-@allow_cycle
 class iso_GraphNode {
     public left: Option<iso_GraphNode>;
     public right: Option<iso_GraphNode>;
@@ -101,11 +99,38 @@ fun iso_graph_kept(): int {
     return iso_graph_count(keep[0]) + iso_graph_count(keep[1]);
 }
 
+// A node that owns itself must be shared; iso_graph_cycled clears the link before returning.
+@allow_cycle
+shared class iso_CycleNode {
+    public left: Option<iso_CycleNode>;
+    public right: Option<iso_CycleNode>;
+
+    public constructor(left: Option<iso_CycleNode>, right: Option<iso_CycleNode>) {
+        this.left = left;
+        this.right = right;
+    }
+}
+
+fun iso_cycle_make(depth: int): Option<iso_CycleNode> {
+    let none: Option<iso_CycleNode> = Option.None;
+    if depth <= 0 {
+        return none;
+    }
+    return Option.Some(iso_CycleNode(iso_cycle_make(depth - 1), iso_cycle_make(depth - 1)));
+}
+
+fun iso_cycle_count(tree: Option<iso_CycleNode>): int {
+    switch (tree) {
+        Some(node) => { return 1 + iso_cycle_count(node.left) + iso_cycle_count(node.right); }
+        None => { return 0; }
+    }
+}
+
 fun iso_graph_cycled(): int {
-    switch (iso_graph_make(3)) {
+    switch (iso_cycle_make(3)) {
         Some(root) => {
             root.right = Option.Some(root);
-            let result = iso_graph_count(root.left);
+            let result = iso_cycle_count(root.left);
             root.right = Option.None;
             return result;
         }
@@ -158,7 +183,7 @@ fun iso_private_escaped(): int {
 
 // iso_private_callback links a node to itself and clears the link before returning.
 @allow_cycle
-class iso_CallbackTree {
+shared class iso_CallbackTree {
     public next: Option<iso_CallbackTree>;
     public constructor() {
         this.next = Option.None;
@@ -589,7 +614,7 @@ class iso_Label {
     }
 }
 
-class iso_Pair {
+shared class iso_Pair {
     public name: string;
     public label: Option<iso_Label>;
     public n: int;
@@ -1114,7 +1139,7 @@ fun iso_native_callback_local(): void {
 
 // --- region_mutual_escape: mutually recursive allocators publishing into a global. ---
 
-class iso_RegionNode {
+shared class iso_RegionNode {
     public value: int;
     public constructor(value: int) { this.value = value; }
 }

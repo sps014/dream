@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// Statements belonging to a function body, in source order.
+@copy
 public class GenBody {
     /// Statements in source order.
     public statements: List<GenStmt>;

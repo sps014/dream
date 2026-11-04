@@ -2,80 +2,50 @@ module system.gpu;
 
 /// Records GPU work, such as render passes, compute passes and copies, to submit together.
 ///
-/// Get one from `GpuDevice.command_encoder` or a window frame's `GpuFrame.encoder`. Passes
-/// run in the order they were begun; end each pass before beginning the next. Mistakes such
-/// as a resource from another device do not fail immediately: the first one is returned by
-/// `GpuDevice.submit`.
+/// Get one from `GpuDevice.command_encoder` or a window frame's `GpuFrame.encoder`. Work
+/// runs in the order it was recorded. Each pass is recorded by a function that receives the
+/// pass and ends when that function returns. Mistakes such as a resource from another device
+/// do not fail immediately: the first one is returned by `GpuDevice.submit`.
+///
+/// Resources only need to exist while their commands are recorded: the encoder keeps every
+/// resource its commands name alive until the GPU finished with it.
 public class GpuCommandEncoder {
-    internal device_id: int;
-    internal words: List<int>;
-    internal data: List<byte>;
-    internal error: Option<GpuError>;
-    internal in_pass: bool;
-
-    // Every resource the recorded commands name, kept alive until `GpuDevice.submit` hands
-    // the commands to the host, which then retains them until the GPU finished.
-    internal keep: List<GpuOwnedHandle>;
+    internal recording: GpuRecording;
+    in_pass: bool;
 
     internal constructor(device_id: int) {
-        this.device_id = device_id;
-        this.words = List<int>();
-        this.data = List<byte>();
-        this.error = Option.None;
+        this.recording = GpuRecording(device_id, 0);
         this.in_pass = false;
-        this.keep = List<GpuOwnedHandle>();
     }
 
-    /// Begins drawing into the targets of `desc`. End the pass with `GpuRenderPass.end`.
-    public fun begin_render_pass(desc: GpuRenderPassDesc): GpuRenderPass {
-        this.start_pass();
-        this.check(desc.color_target.owner, desc.color_target.device_id, "color target");
-        this.op(GpuOp.BeginRenderPass);
-        this.words.push(desc.color_target.handle);
-        switch (desc.color_load) {
-            Clear(color) => {
-                this.words.push(1);
-                this.words.push(GpuCommandEncoder.bits(color.x));
-                this.words.push(GpuCommandEncoder.bits(color.y));
-                this.words.push(GpuCommandEncoder.bits(color.z));
-                this.words.push(GpuCommandEncoder.bits(color.w));
-            }
-            Keep => {
-                this.words.push_all([0, 0, 0, 0, 0]);
-            }
+    /// Records a render pass into the targets of `desc`: `body` receives the pass, and the
+    /// pass ends when `body` returns.
+    public fun render_pass(desc: GpuRenderPassDesc, body: fun(GpuRenderPass): void): void {
+        if !this.start_pass("render_pass") {
+            return;
         }
-        switch (desc.depth_target) {
-            Some(depth) => {
-                this.check(depth.owner, depth.device_id, "depth target");
-                this.words.push(depth.handle);
-            }
-            None => {
-                this.words.push(0);
-            }
-        }
-        switch (desc.depth_load) {
-            Clear(value) => {
-                this.words.push(1);
-                this.words.push(GpuCommandEncoder.bits(value));
-            }
-            Keep => {
-                this.words.push_all([0, 0]);
-            }
-        }
-        return GpuRenderPass(this);
+        let pass = GpuRenderPass(this.pass_recording());
+        pass.begin(desc);
+        body(pass);
+        pass.finish(this.recording);
+        this.in_pass = false;
     }
 
-    /// Begins a compute pass. Record dispatches into it with the generated
-    /// `GpuShaders.<name>.encode`, then end it with `GpuComputePass.end`.
-    public fun begin_compute_pass(): GpuComputePass {
-        this.start_pass();
-        this.op(GpuOp.BeginComputePass);
-        return GpuComputePass(this);
+    /// Records a compute pass: `body` receives the pass, and the pass ends when `body`
+    /// returns. Record dispatches into it with the generated `GpuShaders.<name>.encode`.
+    public fun compute_pass(body: fun(GpuComputePass): void): void {
+        if !this.start_pass("compute_pass") {
+            return;
+        }
+        let pass = GpuComputePass(this.pass_recording());
+        body(pass);
+        pass.finish(this.recording);
+        this.in_pass = false;
     }
 
     /// Copies `count` elements from `source`, starting at element `source_offset`, into
     /// `destination` starting at `destination_offset`. Both ranges must lie inside their
-    /// buffers. Record copies outside passes.
+    /// buffers. Copies cannot be recorded while a pass is being recorded.
     public fun copy_buffer<T: unmanaged>(
         source: GpuBuffer<T>,
         source_offset: int,
@@ -84,22 +54,24 @@ public class GpuCommandEncoder {
         count: int
     ): void {
         if this.in_pass {
-            this.fail(GpuError.Validation("copy_buffer was recorded inside a pass"));
+            this.recording.fail(GpuError.Validation("copy_buffer was recorded inside a pass"));
             return;
         }
-        this.check(source.owner, source.device_id, "copy source");
-        this.check(destination.owner, destination.device_id, "copy destination");
+        if !this.recording.check(source.handle, source.device_id, "copy source")
+            || !this.recording.check(destination.handle, destination.device_id, "copy destination") {
+            return;
+        }
         if count < 0
             || source_offset < 0
             || destination_offset < 0
             || source_offset
             + count > source.length || destination_offset + count > destination.length {
-            this.fail(GpuError.InvalidResource("copy range lies outside a buffer"));
+            this.recording.fail(GpuError.InvalidResource("copy range lies outside a buffer"));
             return;
         }
         let stride = GpuBuffer<T>.stride();
-        this.op(GpuOp.CopyBuffer);
-        this.words.push_all(
+        this.recording.op(GpuOp.CopyBuffer);
+        this.recording.words.push_all(
             [
                 source.handle,
                 source_offset * stride,
@@ -112,82 +84,25 @@ public class GpuCommandEncoder {
 
     /// Ends recording. Pass the result to `GpuDevice.submit`.
     public fun finish(): GpuCommandBuffer {
-        if this.in_pass {
-            this.fail(GpuError.Validation("a pass was not ended before finish"));
-        }
-        let keep = this.keep;
-        this.keep = List<GpuOwnedHandle>();
-        return GpuCommandBuffer(
-            this.device_id,
-            this.words.take_array(),
-            this.data.take_array(),
-            this.error,
-            keep
-        );
+        let recording = GpuRecording(this.recording.device_id, 0);
+        recording.absorb(this.recording);
+        return GpuCommandBuffer(recording);
     }
 
-    fun start_pass(): void {
+    fun start_pass(what: string): bool {
         if this.in_pass {
-            this.fail(GpuError.Validation("a pass was begun before the previous one ended"));
+            this.recording.fail(
+                GpuError.Validation(what + " was recorded inside another pass")
+            );
+            return false;
         }
         this.in_pass = true;
-    }
-
-    internal fun op(code: GpuOp): void {
-        let word: int = code;
-        this.words.push(word);
-    }
-
-    // Records the first failure only, so the reported error is the earliest mistake.
-    internal fun fail(error: GpuError): void {
-        if this.error.is_none() {
-            this.error = Option.Some(error);
-        }
-    }
-
-    internal fun check(owner: GpuOwnedHandle, device_id: int, what: string): bool {
-        this.keep.push(owner);
-        if owner.handle == 0 {
-            this.fail(GpuError.InvalidResource("the " + what + " was destroyed"));
-            return false;
-        }
-        if device_id != this.device_id {
-            this.fail(GpuError.WrongDevice(what));
-            return false;
-        }
         return true;
     }
 
-    // Appends `args` as Bind commands for the shader parameters of `stage`.
-    internal fun bind_args(stage: GpuStage, args: GpuArgs): void {
-        switch (args.check(this.device_id)) {
-            Some(e) => {
-                this.fail(e);
-                return;
-            }
-            None => {}
-        }
-        for (let resource in args.keep) {
-            this.keep.push(resource);
-        }
-        let base = this.data.length;
-        for (let b in args.data) {
-            this.data.push(b);
-        }
-        let stage_code: int = stage;
-        let count = args.items.length / 3;
-        for (let i = 0; i < count; i = i + 1) {
-            let kind = args.items[i * 3];
-            let a = args.items[i * 3 + 1];
-            if kind == GpuArgKind.Value {
-                a = a + base;
-            }
-            this.op(GpuOp.Bind);
-            this.words.push_all([stage_code, i, kind, a, args.items[i * 3 + 2]]);
-        }
-    }
-
-    internal static fun bits(value: float): int {
-        return Bytes.to<int>(Bytes.of(value));
+    // A pass records on its own and is appended when it ends, so its values sit after the
+    // encoder's bytes so far; nothing else is recorded while the pass is open.
+    fun pass_recording(): GpuRecording {
+        return GpuRecording(this.recording.device_id, this.recording.data.length);
     }
 }

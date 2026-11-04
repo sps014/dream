@@ -85,7 +85,7 @@ class Routes {
         }
         let form = parsed.unwrap();
         let album = form.get("album").unwrap_or("untitled");
-        let photos = form.files("photo");
+        let photos = form.take_files("photo");
         return HttpOutgoing.text(album + ": " + photos.length.to_string() + " photos");
     }
 }
@@ -101,11 +101,11 @@ async fun main(): void {
 | --- | --- |
 | `get(name)` | The first text field named `name`, or `None`. |
 | `get_all(name)` | Every text field named `name`, in the order sent. |
-| `file(name)` | The first file part named `name`, or `None`. |
-| `files(name)` | Every file part named `name`, in the order sent. |
+| `take_file(name)` | Takes the first file part named `name` out of the form, or `None`. |
+| `take_files(name)` | Takes every file part named `name`, in the order sent. |
 | `close()` | Closes every uploaded file now. |
 
-The parsed form is cached on the request: a later `form` call, including the one an `@form` or `@file` parameter makes, returns the same `FormData` whatever limits it passes.
+A request's form can be read once. The caller owns the returned `FormData`, and a later `form` call fails with `ECLOSED`. A handler with `@form` or `@file` parameters has already read the form, so read it yourself only in handlers without them. Taking a file moves it out of the form, so the handler owns it from then on.
 
 ## Uploads larger than a form
 

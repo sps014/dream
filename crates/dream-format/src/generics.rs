@@ -147,7 +147,9 @@ fn in_type_position(tokens: &[SyntaxToken], open_idx: usize) -> bool {
             | TokenKind::DataTypeToken
             | TokenKind::DotToken
             | TokenKind::OpenBracketToken
-            | TokenKind::CloseBracketToken => continue,
+            | TokenKind::CloseBracketToken
+            | TokenKind::BorrowToken
+            | TokenKind::RefToken => continue,
             TokenKind::ColonToken
             | TokenKind::SmallerThanToken
             | TokenKind::GreaterThanToken
@@ -191,6 +193,7 @@ mod tests {
         assert_eq!(regions("let m: Map<string, int> = a;").len(), 1);
         assert_eq!(regions("Map.new<string, int>();").len(), 1);
         assert_eq!(regions("Pair<Box<int>, string> p;").len(), 2);
+        assert_eq!(regions("public fun get(borrow key: K): borrow Option<V>").len(), 1);
     }
 
     #[test]

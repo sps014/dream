@@ -8,6 +8,7 @@ use crate::error::{Code, HostError, HostResult};
 use crate::ffi;
 use dream_host_abi::handles::HandleTable;
 use crate::waiter::{Finish, Job, Waiter};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
@@ -234,6 +235,10 @@ pub struct State {
     pub handles: HandleTable<Entry>,
     /// Released by the guest, still referenced by unfinished GPU work.
     deferred: Vec<Entry>,
+    /// Recorded commands pin the handles they name, so a resource the guest drops before
+    /// submitting stays alive until the recording that uses it is gone.
+    pins: BTreeMap<i32, u32>,
+    released_while_pinned: BTreeSet<i32>,
 }
 
 static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| Mutex::new(State::default()));
@@ -294,8 +299,31 @@ impl State {
         }
     }
 
+    pub fn pin(&mut self, handle: i32) {
+        if self.handles.get(handle).is_some() {
+            *self.pins.entry(handle).or_insert(0) += 1;
+        }
+    }
+
+    pub fn unpin(&mut self, handle: i32) {
+        let Some(count) = self.pins.get_mut(&handle) else {
+            return;
+        };
+        *count -= 1;
+        if *count == 0 {
+            self.pins.remove(&handle);
+            if self.released_while_pinned.remove(&handle) {
+                self.release(handle);
+            }
+        }
+    }
+
     /// Drops the guest's reference. Resources stay alive until their last submission finished.
     pub fn release(&mut self, handle: i32) {
+        if self.pins.contains_key(&handle) {
+            self.released_while_pinned.insert(handle);
+            return;
+        }
         let Some(entry) = self.handles.remove(handle) else {
             return;
         };

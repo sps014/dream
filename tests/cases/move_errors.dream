@@ -1,6 +1,5 @@
 // Each use after a move names where the value went and what to use instead.
 import system;
-import system.task;
 
 class Node {
     public name: string;
@@ -30,12 +29,31 @@ fun slot(holder: Holder, node: Node): void {
     System.println(node.name);
 }
 
-async fun spawned(): void {
-    let node = Node("task");
-    let _ = Task.spawn(() => {
-        return node.name;
-    }).await;
-    System.println(node.name);
+fun rebind(): void {
+    let first = Node("first");
+    let second = first;
+    System.println(first.name + second.name);
+}
+
+fun construct(): void {
+    let inner = Node("inner");
+    let holder = Holder(inner);
+    System.println(inner.name + holder.node.name);
+}
+
+fun branch(flag: bool, holder: Holder): void {
+    let maybe = Node("maybe");
+    if flag {
+        holder.node = maybe;
+    }
+    System.println(maybe.name);
+}
+
+fun repeat(holder: Holder): void {
+    let looped = Node("loop");
+    for (let i = 0; i < 2; i++) {
+        holder.node = looped;
+    }
 }
 
 fun main(): void {}

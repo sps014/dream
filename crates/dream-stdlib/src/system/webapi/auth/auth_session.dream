@@ -1,6 +1,7 @@
 module system.webapi.auth;
 
 /// A refresh-token record. Stores contain only the digest of the bearer secret.
+@copy
 public class AuthSession {
     /// Hash of the refresh token; the raw refresh token is not stored.
     public hash: string;

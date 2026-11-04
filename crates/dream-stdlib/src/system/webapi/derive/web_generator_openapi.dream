@@ -7,10 +7,10 @@ import system.validation.derive;
 import system.json;
 
 extend WebGenerator {
-    internal fun schema(ty: GenTypeRef, active: Map<string, bool>): JsonValue {
+    internal fun schema(ctx: GenContext, ty: GenTypeRef, active: Map<string, bool>): JsonValue {
         let schema = JsonValue.dict();
         if ty.is_option() {
-            schema = this.schema(ty.arg(0), active);
+            schema = this.schema(ctx, ty.arg(0), active);
             schema["nullable"] = JsonValue.from_bool(true);
             return schema;
         }
@@ -18,7 +18,7 @@ extend WebGenerator {
             == TypeRefKind.Array
             || ty.collection() == CollectionKind.List || ty.collection() == CollectionKind.Set {
             schema["type"] = JsonValue.from_string("array");
-            schema["items"] = this.schema(ty.arg(0), active);
+            schema["items"] = this.schema(ctx, ty.arg(0), active);
             return schema;
         }
         let kind = "object";
@@ -35,7 +35,7 @@ extend WebGenerator {
         if kind != "object" || active.contains(ty.decl) {
             return schema;
         }
-        let declaration = this.declaration(ty);
+        let declaration = this.declaration(ctx, ty);
         if declaration.is_none() {
             return schema;
         }
@@ -43,7 +43,7 @@ extend WebGenerator {
         if !d.has<JsonAttribute>() {
             return schema;
         }
-        return ValidationGenerator.type_schema(ty, this.ctx, this.schemas);
+        return ValidationGenerator.type_schema(ty, ctx, this.schemas);
     }
 
     internal fun security(
@@ -88,7 +88,7 @@ extend WebGenerator {
             flows["authorizationCode"] = code;
             scheme["flows"] = flows;
             this.security_schemes[attribute.id] = scheme;
-            requirement[attribute.id] = scopes;
+            requirement[attribute.id] = scopes.copy();
         }
         for (let p in f.params) {
             if !p.has<DepAttribute>() {
@@ -106,7 +106,8 @@ extend WebGenerator {
             if value.contains("$ref") {
                 value["$ref"] = JsonValue.from_string(
                     "#/components/schemas/"
-                        + value.get("$ref").unwrap_or(JsonValue.null())
+                        + value.get("$ref")
+                        .unwrap_or(JsonValue.null())
                         .as_string()
                         .unwrap_or("")
                 );
@@ -122,6 +123,7 @@ extend WebGenerator {
     }
 
     internal fun openapi_parameters(
+        ctx: GenContext,
         f: GenFunction,
         route: WebRoute,
         parameters: JsonValue,
@@ -139,6 +141,7 @@ extend WebGenerator {
                 let dep = this.functions.get(p.attribute<DepAttribute>().unwrap().provider.symbol);
                 if dep.is_some() {
                     this.openapi_parameters(
+                        ctx,
                         dep.unwrap(),
                         route,
                         parameters,
@@ -155,14 +158,14 @@ extend WebGenerator {
             if p.has<BodyAttribute>() {
                 let media = JsonValue.dict();
                 let entry = JsonValue.dict();
-                entry["schema"] = this.schema(p.ty, Map<string, bool>());
+                entry["schema"] = this.schema(ctx, p.ty, Map<string, bool>());
                 media["application/json"] = entry;
                 body["content"] = media;
                 body["required"] = JsonValue.from_bool(true);
                 continue;
             }
             if p.has<FormAttribute>() || p.has<FileAttribute>() {
-                let schema = this.schema(web_inner(p.ty), Map<string, bool>());
+                let schema = this.schema(ctx, web_inner(p.ty), Map<string, bool>());
                 if p.has<FileAttribute>() {
                     name = p.attribute<FileAttribute>().unwrap().name.unwrap_or(name);
                     schema = JsonValue.dict();
@@ -198,7 +201,7 @@ extend WebGenerator {
             parameter["name"] = JsonValue.from_string(name);
             parameter["in"] = JsonValue.from_string(where);
             parameter["required"] = JsonValue.from_bool(where == "path" || !p.ty.is_option());
-            let parameter_schema = this.schema(p.ty, Map<string, bool>());
+            let parameter_schema = this.schema(ctx, p.ty, Map<string, bool>());
             ValidationGenerator.constraints(p.attributes, parameter_schema);
             if p.has<DefaultJsonAttribute>() {
                 parameter["required"] = JsonValue.from_bool(false);
@@ -208,7 +211,7 @@ extend WebGenerator {
         }
     }
 
-    internal fun openapi(owner: string): string {
+    internal fun openapi(ctx: GenContext, owner: string): string {
         this.schemas = JsonValue.dict();
         this.security_schemes = JsonValue.dict();
         let paths = JsonValue.dict();
@@ -255,11 +258,11 @@ extend WebGenerator {
                     }
                 }
             }
+            let requirement = JsonValue.dict();
+            this.security(route.function, requirement, Map<string, bool>(), scopes);
             if scopes.length > 0 {
                 operation["x-required-scopes"] = scopes;
             }
-            let requirement = JsonValue.dict();
-            this.security(route.function, requirement, Map<string, bool>(), scopes);
             if requirement.length > 0 {
                 let security = JsonValue.array();
                 security.push(requirement);
@@ -270,6 +273,7 @@ extend WebGenerator {
             let required = JsonValue.array();
             let body = JsonValue.dict();
             this.openapi_parameters(
+                ctx,
                 route.function,
                 route,
                 parameters,
@@ -325,11 +329,12 @@ extend WebGenerator {
             }
             let response = JsonValue.dict();
             response["description"] = JsonValue.from_string("Success");
+            let has_content = ty.kind != TypeRefKind.Void && ty.name != nameof(HttpOutgoing);
             let entry = JsonValue.dict();
-            entry["schema"] = this.schema(ty, Map<string, bool>());
+            entry["schema"] = this.schema(ctx, ty, Map<string, bool>());
             let content = JsonValue.dict();
             content[content_type] = entry;
-            if ty.kind != TypeRefKind.Void && ty.name != nameof(HttpOutgoing) {
+            if has_content {
                 response["content"] = content;
             }
             let responses = JsonValue.dict();
@@ -337,29 +342,24 @@ extend WebGenerator {
             let validation = JsonValue.dict();
             validation["description"] = JsonValue.from_string("Input validation failed");
             responses["422"] = validation;
-            operation["responses"] = responses;
             for (let metadata in GenAttributes.decode_all<ResponseAttribute>(
                 route.function.attributes
             )) {
                 let documented = JsonValue.dict();
                 documented["description"] = JsonValue.from_string(metadata.description);
                 if metadata.model.is_some() {
-                    let symbol = this.ctx.find_symbol(metadata.model.unwrap().symbol);
+                    let symbol = ctx.find_symbol(metadata.model.unwrap().symbol);
                     if symbol.is_none() || symbol.unwrap().declaration.is_none() {
-                        this.ctx.error_at(
+                        ctx.error_at(
                             route.function.id,
                             "@response model must resolve to an @json declaration"
                         );
                     } else {
                         let declaration = symbol.unwrap().declaration.unwrap();
                         if !declaration.has<JsonAttribute>() {
-                            this.ctx.error_at(route.function.id, "@response model must be @json");
+                            ctx.error_at(route.function.id, "@response model must be @json");
                         } else {
-                            let model = ValidationGenerator.model(
-                                declaration,
-                                this.ctx,
-                                this.schemas
-                            );
+                            let model = ValidationGenerator.model(declaration, ctx, this.schemas);
                             this.schemas[declaration.id] = model;
                             let reference = JsonValue.dict();
                             reference["$ref"] = JsonValue.from_string(declaration.id);
@@ -373,6 +373,7 @@ extend WebGenerator {
                 }
                 responses[metadata.status.to_string()] = documented;
             }
+            operation["responses"] = responses;
             let path = paths.get(route.path).unwrap_or(JsonValue.dict());
             path[route.method.to_lower()] = operation;
             paths[route.path] = path;

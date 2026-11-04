@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// Every type in the program (user and stdlib), names and kinds only.
+@copy
 public class GenIndexEntry {
     /// `module::name` identity of the type (`system.collections::List`).
     public id: string;

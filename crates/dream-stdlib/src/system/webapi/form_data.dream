@@ -72,22 +72,28 @@ public class FormData {
         return result;
     }
 
-    /// Returns the first file part named `name`.
-    public fun file(name: string): Option<UploadedFile> {
+    /// Takes the first file part named `name` out of the form, so the caller owns it. A later
+    /// call returns the next file part with that name.
+    public fun take_file(name: string): Option<UploadedFile> {
         for (let i = 0; i < this.file_names.length; i = i + 1) {
             if this.file_names[i] == name {
-                return Option.Some(this.uploads[i]);
+                this.file_names.remove_at(i);
+                return this.uploads.remove_at(i);
             }
         }
         return Option.None;
     }
 
-    /// Returns every file part named `name`, in the order they were sent.
-    public fun files(name: string): List<UploadedFile> {
+    /// Takes every file part named `name` out of the form, in the order they were sent.
+    public fun take_files(name: string): List<UploadedFile> {
         let result = List<UploadedFile>();
-        for (let i = 0; i < this.file_names.length; i = i + 1) {
+        let i = 0;
+        while i < this.file_names.length {
             if this.file_names[i] == name {
-                result.push(this.uploads[i]);
+                this.file_names.remove_at(i);
+                result.push(this.uploads.remove_at(i).unwrap());
+            } else {
+                i = i + 1;
             }
         }
         return result;

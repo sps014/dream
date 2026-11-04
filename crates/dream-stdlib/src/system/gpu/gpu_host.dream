@@ -163,6 +163,14 @@ internal static class GpuHost {
     @runtime("gpuRelease")
     internal static extern fun release(handle: int): void;
 
+    // Keeps `handle` alive while recorded commands name it: a release while pinned waits for
+    // the last unpin.
+    @runtime("gpuPin")
+    internal static extern fun pin(handle: int): void;
+
+    @runtime("gpuUnpin")
+    internal static extern fun unpin(handle: int): void;
+
     // The current host failure as a GpuError.
     internal static fun error(): GpuError {
         return gpu_error_from_host(GpuHost.last_error());

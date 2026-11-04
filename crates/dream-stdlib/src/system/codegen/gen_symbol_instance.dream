@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// Concrete semantic members, including inherited defaults and substituted generic arguments.
+@copy
 public class GenSymbolInstance {
     /// Type of this declaration or expression.
     public ty: GenTypeRef;

@@ -3,7 +3,7 @@ import system.collections;
 import system.task;
 import system.testing;
 
-class StructuredCounter {
+shared class StructuredCounter {
     public count: int;
     public active: int;
     public maximum: int;

@@ -76,7 +76,7 @@ if v.contains("error") {
 }
 ```
 
-`is_*` / `kind()` are an integer tag check. `as_bool` / `as_int` / `as_double` wrap a scalar in `Option`. `as_string` clones the string. `as_map` / `as_array` return the existing container.
+`is_*` / `kind()` are an integer tag check. `as_bool` / `as_int` / `as_double` wrap a scalar in `Option`. `as_string` clones the string. `as_array` returns the existing list. Call `copy()` on a value to keep an independent copy.
 
 ### Walk with `kind()`
 
@@ -101,11 +101,9 @@ switch (v.kind()) {
     }
     default:
 }
-
-let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
 ```
 
-`Json.serialize(dict)` round-trips that map. Iterating `as_map()` is unordered; `key_at` / `value_at` follow JSON key order.
+`key_at` / `value_at` follow JSON key order, and `keys()` returns a new list of the keys in that order.
 
 ### Nested values
 
@@ -137,7 +135,7 @@ System.println(Json.serialize(mixed)); // {"n":42,"s":"text"}
 
 | Kind | Test | Read | Build |
 | --- | --- | --- | --- |
-| object `{...}` | `kind()` / `is_object` | `get_str` / `get_int` / `get` / `has` / `key_at` / `as_map` | `JsonValue.dict()`, then `set` |
+| object `{...}` | `kind()` / `is_object` | `get_str` / `get_int` / `get` / `has` / `key_at` / `value_at` | `JsonValue.dict()`, then `set` |
 | array `[...]` | `kind()` / `is_array` | `at(index)` / `as_array` / `.length` | `JsonValue.array()`, then `push` |
 | string / number / bool / null | `kind()` / `is_null` | `str_or` / `int_or` / `as_string` / `as_int` / `as_double` / `as_bool` | `from_string` / `from_int` / `number` / `boolean` / `none` |
 

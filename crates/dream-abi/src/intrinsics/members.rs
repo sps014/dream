@@ -101,6 +101,7 @@ pub const INTRINSIC_MEMBERS: &[(&str, &str)] = &[
     ("ArraySlotSwap", "array_slot_swap"),
     ("BufferIsString", "buffer_is_string"),
     ("ArraySlotTake", "array_slot_take"),
+    ("CopyOf", "copy_of"),
     ("RegexTest", "regex_test"),
     ("DreamChannelNew", "dream_channel_new"),
     ("DreamChannelFree", "dream_channel_free"),

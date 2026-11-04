@@ -101,13 +101,11 @@ async fun render(device: GpuDevice): Result<byte[], GpuError> {
     )?;
 
     let encoder = device.command_encoder();
-    let pass = encoder.begin_render_pass(
-        GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f)))
-    );
-    pass.set_pipeline(pipeline);
-    pass.set_vertex_buffer(0, vertices);
-    pass.draw(3);
-    pass.end();
+    encoder.render_pass(GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f, 0.0f, 0.0f, 1.0f))), (pass: GpuRenderPass) => {
+        pass.set_pipeline(pipeline);
+        pass.set_vertex_buffer(0, vertices);
+        pass.draw(3);
+    });
     device.submit(encoder.finish()).await?;
 
     return target.read(0).await;
@@ -145,8 +143,13 @@ The pieces:
 - `GpuRenderPipelineDesc.defaults(format)` draws triangle lists without blending or depth. Chain
   `with_topology`, `with_cull_mode`, `with_blend_mode`, `with_depth` or `with_samples` to change
   that.
+- `encoder.render_pass(desc, body)` records one render pass. `body` receives the pass, and the
+  pass ends when `body` returns. Passes record one at a time: recording a pass or a copy inside
+  another pass's `body` is reported by `submit`.
 - A render pass clears its target with `GpuLoad.Clear(color)`, or keeps what is there with
   `GpuLoad.Keep`.
+- Resources only have to exist while they are recorded. The encoder keeps every buffer, texture
+  and pipeline its commands use alive until the GPU finished with them.
 - `target.read(0)` returns mip level 0 as tightly packed RGBA bytes, row 0 first.
 
 ## Shader parameters in a render pass
@@ -249,10 +252,11 @@ async fun run(window: Window): Result<Unit, GpuError> {
 
         angle = angle + input.delta_seconds;
         let frame = surface.begin_frame(GpuVec4(0.05f, 0.05f, 0.1f, 1.0f)).await?;
-        let pass = frame.pass;
-        pass.set_pipeline(pipeline);
-        pass.bind_value(GpuShaders.spin_vertex.angle, angle);
-        pass.draw(3);
+        frame.pass((pass: GpuRenderPass) => {
+            pass.set_pipeline(pipeline);
+            pass.bind_value(GpuShaders.spin_vertex.angle, angle);
+            pass.draw(3);
+        });
         frame.present().await?;
     }
     return Result.Ok(Unit());
@@ -278,8 +282,10 @@ The triangle turns one radian per second until you press Escape or close the win
 - `create_surface` picks the window's color format; create pipelines with `surface.color_format`.
 - `begin_frame` waits for the next image to draw into and clears it. With vsync on, this is where
   the loop waits for the display, so the loop runs at the monitor's refresh rate.
-- `frame.pass` is the render pass for the frame. `frame.draw(pipeline, count)` is a shortcut for
-  shaders without parameters, and `frame.encoder` records extra passes such as post-processing.
+- `frame.pass(body)` records a render pass into the frame's target; the frame's first pass clears
+  it. `frame.draw(pipeline, count)` is a shortcut for shaders without parameters, and
+  `frame.encoder` records extra passes such as post-processing.
+- Keep the device and the surface until the frame was presented.
 - Nothing appears until `present`.
 - Pass the size from `WindowEvent.Resized` to `surface.resize`. It is in physical pixels, which is
   what the surface needs on high-DPI displays.

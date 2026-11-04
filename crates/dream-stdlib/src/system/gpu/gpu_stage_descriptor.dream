@@ -4,8 +4,9 @@ module system.gpu;
 /// `@closest_hit`, `@any_hit`, `@miss`, `@intersection` or `@callable`. The shader generator
 /// creates one for every such shader as `GpuShaders.<name>`; pass it to
 /// `GpuDevice.render_pipeline` or `GpuDevice.ray_tracing_pipeline`.
+@copy
 public class GpuStageDescriptor {
-    internal library: GpuShaderLibrary;
+    internal library: int;
     entry: string;
     shader_stage: GpuStage;
     internal inputs: List<int>;
@@ -13,7 +14,7 @@ public class GpuStageDescriptor {
 
     // `inputs` and `outputs` are the stage interface's @location indexes.
     internal constructor(
-        library: GpuShaderLibrary,
+        library: int,
         entry: string,
         stage: GpuStage,
         inputs: int[],

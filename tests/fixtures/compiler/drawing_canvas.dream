@@ -61,27 +61,27 @@ async fun check_existing_gpu_presentation(): void {
         .await
         .unwrap();
     cpu_drawing.render(canvas).unwrap();
-    cpu_drawing.present(surface).await.unwrap();
+    cpu_drawing.present(device, surface).await.unwrap();
     cpu_drawing.close();
     let drawing = DrawingSurface.create(surface.width, surface.height, DrawingBackend.Gpu)
         .await
         .unwrap();
     drawing.render(canvas).unwrap();
     js.global.drawingDirectBegin();
-    drawing.present(surface).await.unwrap();
+    drawing.present(device, surface).await.unwrap();
     js.global.drawingDirectEnd();
     canvas.clear(Color.rgb(40, 100, 200));
     drawing.render(canvas).unwrap();
     js.global.drawingDirectBegin();
-    drawing.present(surface).await.unwrap();
+    drawing.present(device, surface).await.unwrap();
     js.global.drawingDirectEnd();
     js.global.drawingCheckpoint().await;
     let wrong_size = DrawingSurface.create(1, 1, DrawingBackend.Cpu).await.unwrap();
-    if wrong_size.present(surface).await.is_ok() {
+    if wrong_size.present(device, surface).await.is_ok() {
         System.panic("presentation accepted mismatched dimensions");
     }
     drawing.close();
-    if drawing.present(surface).await.is_ok() {
+    if drawing.present(device, surface).await.is_ok() {
         System.panic("presentation accepted a closed drawing surface");
     }
 }

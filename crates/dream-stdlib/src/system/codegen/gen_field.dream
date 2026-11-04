@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A field of a class, struct or union variant.
+@copy
 public class GenField {
     /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;

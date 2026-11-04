@@ -318,6 +318,10 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/copy_attribute.dream"),
+            ),
+            (
+                "system.core",
                 include_str!("../../../dream-stdlib/src/system/core/consuming_attribute.dream"),
             ),
             (

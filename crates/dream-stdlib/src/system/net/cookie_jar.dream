@@ -2,7 +2,7 @@ module system.net;
 
 /// In-memory HTTP cookies shared by one or more native clients. Cookies are never saved to disk.
 /// Node, browsers, and WASI components do not expose managed jars; operations return ENOTSUP there.
-public class CookieJar {
+public shared class CookieJar {
     internal id: int;
 
     /// Creates an empty jar. Resource exhaustion is reported by its operations and client sends.

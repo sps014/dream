@@ -1,0 +1,21 @@
+// A local a task body captures belongs to the task.
+import system;
+import system.task;
+
+class Node {
+    public name: string;
+
+    public constructor(name: string) {
+        this.name = name;
+    }
+}
+
+async fun spawned(): void {
+    let node = Node("task");
+    let _ = Task.spawn(() => {
+        return node.name;
+    }).await;
+    System.println(node.name);
+}
+
+fun main(): void {}

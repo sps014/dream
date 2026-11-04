@@ -52,19 +52,4 @@ public class WebAppOptions {
         this.terms_of_service = terms_of_service;
         this.swagger = SwaggerOptions();
     }
-
-    internal fun copy(): WebAppOptions {
-        let result = WebAppOptions(
-            this.title,
-            this.version,
-            this.docs_url,
-            this.openapi_url,
-            this.redoc_url,
-            this.summary,
-            this.description,
-            this.terms_of_service
-        );
-        result.swagger = this.swagger.copy();
-        return result;
-    }
 }

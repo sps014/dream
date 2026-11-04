@@ -78,6 +78,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/allow_cycle_attribute.dream"),
         ),
         (
+            "<std>/system/core/copy_attribute.dream",
+            include_str!("../system/core/copy_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/copy.dream",
+            include_str!("../system/core/copy.dream"),
+        ),
+        (
             "<std>/system/core/consuming_attribute.dream",
             include_str!("../system/core/consuming_attribute.dream"),
         ),

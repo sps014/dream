@@ -7,6 +7,7 @@ import system.json;
 /// A user module whose `module` declaration carries one of the generator's trigger attributes.
 /// Module attributes hold settings that apply to every declaration in the module; combine them
 /// with per-declaration attributes through `GenContext.module_of`.
+@copy
 public class GenModule {
     /// Stable identifier of the module (`module:<path>`). Pass it to `GenContext.error_at` to
     /// report a diagnostic at the module declaration.

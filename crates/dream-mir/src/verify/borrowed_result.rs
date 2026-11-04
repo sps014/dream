@@ -57,7 +57,8 @@ pub(crate) fn prepare(
             if let Statement::Assign(Place::Local(dest), _) = stmt {
                 assert!(
                     !i.is_rc_tracked(f.local_ty(*dest)) || rooted.contains(dest),
-                    "getter cannot construct an unrelated owning local"
+                    "getter cannot construct an unrelated owning local: {}",
+                    f.name
                 );
             }
             let call = match stmt {
@@ -71,7 +72,9 @@ pub(crate) fn prepare(
                 assert!(
                     callee.borrowed_result
                         || (!i.is_rc_tracked(callee.ret) && !i.is_value_type(callee.ret)),
-                    "getter may only produce borrowed references"
+                    "getter may only produce borrowed references: {} calls {:?}",
+                    f.name,
+                    callee.def
                 );
                 if !effects.call(callee).is_quiet() {
                     let live_snapshot = rooted.iter().filter(|local| {
@@ -83,7 +86,8 @@ pub(crate) fn prepare(
                     });
                     assert!(
                         !live_snapshot,
-                        "slot snapshot cannot cross an effectful getter call"
+                        "slot snapshot cannot cross an effectful getter call: {}",
+                        f.name
                     );
                 }
             }

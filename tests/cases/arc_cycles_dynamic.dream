@@ -1,25 +1,25 @@
 import system;
 
 @allow_cycle
-class ClosureNode {
+shared class ClosureNode {
     public action: Option<fun(): int>;
     public constructor() { this.action = Option.None; }
     del() { System.println("closure"); }
 }
 @allow_cycle
-class FutureNode {
+shared class FutureNode {
     public future: Option<Future<int>>;
     public constructor() { this.future = Option.None; }
     del() { System.println("future"); }
 }
 @allow_cycle
-class ContainerNode {
+shared class ContainerNode {
     public children: List<ContainerNode>;
     public constructor() { this.children = List<ContainerNode>(); }
     del() { System.println("container"); }
 }
 @allow_cycle
-class ValueFrameNode {
+shared class ValueFrameNode {
     public future: Option<Future<int>>;
     public constructor() { this.future = Option.None; }
     del() { System.println("value-frame"); }

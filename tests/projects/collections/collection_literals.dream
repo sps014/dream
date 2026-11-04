@@ -72,13 +72,13 @@ fun collection_print(): void {
     let row = List<int>();
     row.push(32);
     let c = List<List<int>>();
-    c.push(row);
+    c.push(row.copy());
 
     Assert.eq(c.to_string(), "[[32]]");
     Assert.eq(c[0][0], 32);
     c[0][0] = 31;
     Assert.eq(c[0][0], 31);
-    Assert.eq(row[0], 31);
+    Assert.eq(row[0], 32);
 
     let grid = Array.alloc<int[]>(2);
     let r = 0;

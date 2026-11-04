@@ -28,15 +28,15 @@ public class GpuRayTracingPipeline {
         if this.device_id != device.id {
             return Result.Err(GpuError.WrongDevice("ray tracing pipeline"));
         }
-        let encoder = device.command_encoder();
-        encoder.op(GpuOp.BeginComputePass);
-        encoder.op(GpuOp.SetPipeline);
-        encoder.keep.push(this.owner);
-        encoder.words.push(this.handle);
-        encoder.bind_args(GpuStage.RayGeneration, args);
-        encoder.op(GpuOp.TraceRays);
-        encoder.words.push_all([width, height, depth]);
-        encoder.op(GpuOp.EndPass);
-        return device.submit(encoder.finish()).await;
+        let recording = GpuRecording(device.id, 0);
+        recording.op(GpuOp.BeginComputePass);
+        recording.check(this.handle, this.device_id, "ray tracing pipeline");
+        recording.op(GpuOp.SetPipeline);
+        recording.words.push(this.handle);
+        recording.bind_args(GpuStage.RayGeneration, args);
+        recording.op(GpuOp.TraceRays);
+        recording.words.push_all([width, height, depth]);
+        recording.op(GpuOp.EndPass);
+        return device.submit(GpuCommandBuffer(recording)).await;
     }
 }

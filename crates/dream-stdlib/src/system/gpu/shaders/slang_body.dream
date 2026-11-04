@@ -8,9 +8,6 @@ import system.gpu;
 // Statements and expressions of one GPU function, written through a `SlangWriter` with every
 // node mapped back to its Dream source.
 internal class SlangBody {
-    internal ctx: GenContext;
-    internal program: ShaderProgram;
-    internal shader_module: ShaderModule;
     internal w: SlangWriter;
 
     // Dream local name -> Slang expression, for parameters and hoisted workgroup arrays.
@@ -29,16 +26,8 @@ internal class SlangBody {
     internal function_id: string;
     internal atomic_params: List<string>;
 
-    internal constructor(
-        ctx: GenContext,
-        program: ShaderProgram,
-        shader_module: ShaderModule,
-        w: SlangWriter
-    ) {
-        this.ctx = ctx;
-        this.program = program;
-        this.shader_module = shader_module;
-        this.w = w;
+    internal constructor(borrow program: ShaderProgram) {
+        this.w = SlangWriter();
         this.names = Map<string, string>();
         this.atomics = List<string>();
         this.float_atomics = List<string>();
@@ -46,7 +35,7 @@ internal class SlangBody {
         this.coop_uses = Map<string, string>();
         this.declaring = "";
         this.function_id = "";
-        this.atomic_params = ShaderAnalysis.find_atomic_params(this.program);
+        this.atomic_params = ShaderAnalysis.find_atomic_params(program);
     }
 
     // Keys handled in code rather than by a `Builtins` template.
@@ -62,14 +51,14 @@ internal class SlangBody {
             || key == "GpuCoopVec.zeros" || key == "GpuCoopMat.zeros" || key == "GpuCoopMat.load";
     }
 
-    internal fun begin(borrow id: string): void {
+    internal fun begin(program: ShaderProgram, borrow id: string): void {
         this.function_id = id;
         this.names = Map<string, string>();
         this.atomics = List<string>();
         this.float_atomics = List<string>();
         this.storage_textures = List<string>();
         this.coop_uses = Map<string, string>();
-        for (let n in this.program.nodes(id)) {
+        for (let n in program.nodes(id)) {
             if Builtins.key_of(n) == "GpuCoopMat.multiply_add" && n.children.length >= 4 {
                 if n.child(1).is_expr(ExprKind.Identifier) {
                     this.coop_uses[n.child(1).text] = "MatrixA";
@@ -118,58 +107,73 @@ internal class SlangBody {
         return SlangTypes.of(ty, coop);
     }
 
-    internal fun block(borrow statements: List<ShaderNode>): void {
+    internal fun block(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow statements: List<ShaderNode>
+    ): void {
         let w = this.w;
         w.line_of("{");
         w.indent();
         for (let s in statements) {
-            this.statement(s);
+            this.statement(ctx, program, shader_module, s);
         }
         w.dedent();
         w.line_of("}");
     }
 
-    fun nested(borrow n: ShaderNode): void {
+    fun nested(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         if n.is_statement(StmtKind.Block) {
-            this.block(n.children);
+            this.block(ctx, program, shader_module, n.children);
         } else {
-            this.block(List<ShaderNode>([n]));
+            this.block(ctx, program, shader_module, List<ShaderNode>([n]));
         }
     }
 
-    internal fun statement(borrow n: ShaderNode): void {
+    internal fun statement(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         if !n.is_stmt {
             w.open();
-            this.expr(n);
+            this.expr(ctx, program, shader_module, n);
             w.text(";");
             w.close(n.id);
             w.newline();
             return;
         }
         if n.stmt == StmtKind.Block {
-            this.block(n.children);
+            this.block(ctx, program, shader_module, n.children);
         } else if n.stmt == StmtKind.If {
-            this.if_statement(n);
+            this.if_statement(ctx, program, shader_module, n);
         } else if n.stmt == StmtKind.While {
             w.open();
             w.text("while (");
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
             w.text(")");
             w.close(n.id);
             w.newline();
-            this.nested(n.child(1));
+            this.nested(ctx, program, shader_module, n.child(1));
         } else if n.stmt == StmtKind.DoWhile {
             w.line_of("do");
-            this.nested(n.child(1));
+            this.nested(ctx, program, shader_module, n.child(1));
             w.open();
             w.text("while (");
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
             w.text(");");
             w.close(n.id);
             w.newline();
         } else if n.stmt == StmtKind.For {
-            this.for_statement(n);
+            this.for_statement(ctx, program, shader_module, n);
         } else if n.stmt == StmtKind.ForEach {
             let range = n.child(0);
             let name = Names.ident(n.text);
@@ -183,22 +187,22 @@ internal class SlangBody {
             }
             w.open();
             w.text("for (" + ty + " " + name + " = ");
-            this.expr(range.child(0));
+            this.expr(ctx, program, shader_module, range.child(0));
             w.text("; " + name + compare);
-            this.expr(range.child(1));
+            this.expr(ctx, program, shader_module, range.child(1));
             w.text("; " + name + "++)");
             w.close(n.id);
             w.newline();
-            this.nested(n.child(1));
+            this.nested(ctx, program, shader_module, n.child(1));
         } else if n.stmt == StmtKind.Switch {
-            this.switch_statement(n);
+            this.switch_statement(ctx, program, shader_module, n);
         } else if n.stmt
             == StmtKind.Declaration
             && n.children.length > 0 && Builtins.key_of(n.child(0)) == "workgroup_array" {
             return;
         } else {
             w.open();
-            this.simple(n);
+            this.simple(ctx, program, shader_module, n);
             w.text(";");
             w.close(n.id);
             w.newline();
@@ -206,65 +210,75 @@ internal class SlangBody {
     }
 
     // A statement that fits on one line, without its `;`: also the parts of a `for` header.
-    fun simple(borrow n: ShaderNode): void {
+    fun simple(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         if !n.is_stmt {
-            this.expr(n);
+            this.expr(ctx, program, shader_module, n);
             return;
         }
         if n.stmt == StmtKind.Declaration {
-            this.declaration(n);
+            this.declaration(ctx, program, shader_module, n);
         } else if n.stmt == StmtKind.Assignment {
             w.text(this.local(n.text) + " = ");
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
         } else if n.stmt == StmtKind.IndexAssignment {
             let target = n.child(0);
             if this.is_atomic(target) {
-                this.expr(target);
+                this.expr(ctx, program, shader_module, target);
                 w.text("[");
-                this.expr(n.child(1));
+                this.expr(ctx, program, shader_module, n.child(1));
                 w.text("].store(");
                 if this.float_atomics.contains(target.text) {
                     w.text("asuint(");
-                    this.expr(n.child(2));
+                    this.expr(ctx, program, shader_module, n.child(2));
                     w.text(")");
                 } else {
-                    this.expr(n.child(2));
+                    this.expr(ctx, program, shader_module, n.child(2));
                 }
                 w.text(")");
                 return;
             }
-            this.expr(target);
+            this.expr(ctx, program, shader_module, target);
             w.text("[");
-            this.index(target, n.child(1));
+            this.index(ctx, program, shader_module, target, n.child(1));
             w.text("] = ");
-            this.expr(n.child(2));
+            this.expr(ctx, program, shader_module, n.child(2));
         } else if n.stmt == StmtKind.MemberAssignment {
-            this.member(n.child(0), n.text);
+            this.member(ctx, program, shader_module, n.child(0), n.text);
             w.text(" = ");
-            this.expr(n.child(1));
+            this.expr(ctx, program, shader_module, n.child(1));
         } else if n.stmt == StmtKind.FunctionInvocation {
-            SlangCalls.call(this, n);
+            this.call(ctx, program, shader_module, n);
         } else if n.stmt == StmtKind.MethodInvocation {
-            SlangCalls.call(this, n);
+            this.call(ctx, program, shader_module, n);
         } else if n.stmt == StmtKind.Expression {
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
         } else if n.stmt == StmtKind.Return {
             w.text("return");
             if !n.children.is_empty() {
                 w.text(" ");
-                this.expr(n.child(0));
+                this.expr(ctx, program, shader_module, n.child(0));
             }
         } else if n.stmt == StmtKind.Break {
             w.text("break");
         } else if n.stmt == StmtKind.Continue {
             w.text("continue");
         } else {
-            this.ctx.error_at(n.id, "this statement is not supported in GPU shaders");
+            ctx.error_at(n.id, "this statement is not supported in GPU shaders");
         }
     }
 
-    fun declaration(borrow n: ShaderNode): void {
+    fun declaration(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         let name = Names.ident(n.text);
         if n.children.is_empty() {
@@ -282,7 +296,7 @@ internal class SlangBody {
             if !init.children.is_empty() && init.child(0).is_expr(ExprKind.Member) {
                 flags = Builtins.ray_flag_value(init.child(0).text).to_string();
             } else {
-                this.ctx.error_at(
+                ctx.error_at(
                     init.id,
                     "GpuRayQuery needs a GpuRayFlags member such as GpuRayFlags.None"
                 );
@@ -302,11 +316,16 @@ internal class SlangBody {
         }
         w.text(ty + " " + name + " = ");
         this.declaring = n.text;
-        this.expr(init);
+        this.expr(ctx, program, shader_module, init);
         this.declaring = "";
     }
 
-    fun if_statement(borrow n: ShaderNode): void {
+    fun if_statement(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         let i = 0;
         let first = true;
@@ -319,22 +338,27 @@ internal class SlangBody {
                 } else {
                     w.text("else if (");
                 }
-                this.expr(c);
+                this.expr(ctx, program, shader_module, c);
                 w.text(")");
                 w.close(c.id);
                 w.newline();
-                this.nested(n.child(i + 1));
+                this.nested(ctx, program, shader_module, n.child(i + 1));
                 first = false;
                 i = i + 2;
             } else {
                 w.line_of("else");
-                this.nested(c);
+                this.nested(ctx, program, shader_module, c);
                 i = i + 1;
             }
         }
     }
 
-    fun for_statement(borrow n: ShaderNode): void {
+    fun for_statement(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         let scope = n.child(0);
         let init = -1;
@@ -355,27 +379,32 @@ internal class SlangBody {
         w.open();
         w.text("for (");
         if init >= 0 {
-            this.simple(scope.child(init));
+            this.simple(ctx, program, shader_module, scope.child(init));
         }
         w.text("; ");
         if condition >= 0 {
-            this.expr(scope.child(condition));
+            this.expr(ctx, program, shader_module, scope.child(condition));
         }
         w.text("; ");
         if step >= 0 {
-            this.simple(scope.child(step));
+            this.simple(ctx, program, shader_module, scope.child(step));
         }
         w.text(")");
         w.close(n.id);
         w.newline();
-        this.nested(scope.child(scope.children.length - 1));
+        this.nested(ctx, program, shader_module, scope.child(scope.children.length - 1));
     }
 
-    fun switch_statement(borrow n: ShaderNode): void {
+    fun switch_statement(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         w.open();
         w.text("switch (");
-        this.expr(n.child(0));
+        this.expr(ctx, program, shader_module, n.child(0));
         w.text(")");
         w.close(n.id);
         w.newline();
@@ -387,7 +416,7 @@ internal class SlangBody {
             if !c.is_stmt {
                 w.open();
                 w.text("case ");
-                this.expr(c);
+                this.expr(ctx, program, shader_module, c);
                 w.text(":");
                 w.close(c.id);
                 w.newline();
@@ -397,7 +426,7 @@ internal class SlangBody {
                     w.line_of("default:");
                 }
                 w.indent();
-                this.nested(c);
+                this.nested(ctx, program, shader_module, c);
                 w.line_of("break;");
                 w.dedent();
                 labels = 0;
@@ -422,13 +451,19 @@ internal class SlangBody {
         return target.is_expr(ExprKind.Identifier) && this.atomics.contains(target.text);
     }
 
-    fun index(borrow target: ShaderNode, borrow index: ShaderNode): void {
+    fun index(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow target: ShaderNode,
+        borrow index: ShaderNode
+    ): void {
         if SlangTypes.is_named(target.ty, "GpuStorageTexture") {
             this.w.text("uint2(");
-            this.expr(index);
+            this.expr(ctx, program, shader_module, index);
             this.w.text(")");
             return;
         }
-        this.expr(index);
+        this.expr(ctx, program, shader_module, index);
     }
 }

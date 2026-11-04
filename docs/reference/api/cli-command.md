@@ -101,7 +101,7 @@ public fun choices(name: string, values: string[]): Command
 
 ## `subcommand`
 
-Snapshots a child definition. Later edits to the child do not mutate its attached copy.
+Attaches a child definition. The command takes ownership of `command`.
 
 ```dream
 public fun subcommand(command: Command): Command

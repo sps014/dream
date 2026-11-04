@@ -6,6 +6,7 @@ import system.json;
 
 /// One attribute use. Prefer the typed `GenAttributes.decode<A>()` (via `attribute<A>()` on a
 /// node); the positional readers below are what decoders are built from.
+@copy
 public class GenAttribute {
     /// `module::name` of the `@attribute` type (`system.json::JsonAttribute`).
     public id: string;

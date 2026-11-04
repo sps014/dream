@@ -260,6 +260,17 @@ impl<'a> Analyzer<'a> {
             }
             return Ok(Type::Unknown);
         }
+        if intrinsics::IntrinsicOp::from_attributes(&template.attributes)
+            == Some(intrinsics::IntrinsicOp::CopyOf)
+        {
+            return Ok(self.analyze_copy_of(
+                method.position,
+                generic_args.as_ref().and_then(|g| g.first()),
+                params_types,
+                arg_hirs,
+                diagnostics,
+            ));
+        }
         // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
         // HIR coverage regardless of which sub-branch handles the call.
         self.hir_none();

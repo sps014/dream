@@ -65,7 +65,7 @@ public class MemoryAuthStore: AuthSessionStore {
             return Result.Err(AuthError("EINVAL", "invalid refresh replacement"));
         }
         original.consumed = true;
-        this.sessions[replacement.hash] = replacement;
+        this.sessions[replacement.hash] = replacement.copy();
         return Result.Ok(replacement);
     }
 

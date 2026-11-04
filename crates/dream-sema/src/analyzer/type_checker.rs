@@ -24,6 +24,12 @@ impl<'a> Analyzer<'a> {
             self.add_function_param_table(function, diagnostics)?,
         ));
         let errors_before = diagnostics.errors().count();
+        if self.is_derived_copy(function) {
+            self.hir_begin_function(function);
+            self.hir_emit_derived_copy();
+            self.hir_finish_function(diagnostics, errors_before);
+            return Ok(param_table);
+        }
         let outer_context = self.enter_generator_context(function);
         self.hir_begin_function(function);
         let is_unsafe = dream_abi::attributes::has_unsafe_attr(&function.attributes);

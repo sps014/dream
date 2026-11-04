@@ -4,13 +4,13 @@ import system.codegen;
 import system.webapi;
 
 extend WebGenerator {
-    internal fun validate_dependencies(): void {
+    internal fun validate_dependencies(ctx: GenContext): void {
         for (let entry in this.functions.entries()) {
-            this.visit_dependency(entry.value);
+            this.visit_dependency(ctx, entry.value);
         }
     }
 
-    internal fun visit_dependency(f: GenFunction): void {
+    internal fun visit_dependency(ctx: GenContext, f: GenFunction): void {
         let color = this.colors.get(f.id).unwrap_or(0);
         if color == 2 {
             return;
@@ -23,27 +23,27 @@ extend WebGenerator {
             let path = p.attribute<DepAttribute>().unwrap().provider;
             let dependency = this.functions.get(path.symbol);
             if dependency.is_none() {
-                this.ctx.error_at(f.id, "@dep(" + path.text + ") does not resolve to a function");
+                ctx.error_at(f.id, "@dep(" + path.text + ") does not resolve to a function");
                 continue;
             }
             if this.colors.get(path.symbol).unwrap_or(0) == 1 {
-                this.ctx.error_at(f.id, "@dep(" + path.text + ") forms a cycle");
+                ctx.error_at(f.id, "@dep(" + path.text + ") forms a cycle");
             } else {
-                this.visit_dependency(dependency.unwrap());
+                this.visit_dependency(ctx, dependency.unwrap());
             }
         }
         for (let replacement in this.replacements.get(f.id).unwrap_or(List<GenFunction>())) {
             if this.colors.get(replacement.id).unwrap_or(0) == 1 {
-                this.ctx.error_at(replacement.id, "dependency override forms a cycle");
+                ctx.error_at(replacement.id, "dependency override forms a cycle");
             } else {
-                this.visit_dependency(replacement);
+                this.visit_dependency(ctx, replacement);
             }
         }
         this.colors[f.id] = 2;
     }
 
-    internal fun collect_overrides(): void {
-        for (let d in this.ctx.decls()) {
+    internal fun collect_overrides(ctx: GenContext): void {
+        for (let d in ctx.decls()) {
             let out = CodeBuilder();
             out.line(
                 "public static fun dependencies(): DependencyOverrides { let providers = Map<string, string>();"
@@ -56,11 +56,11 @@ extend WebGenerator {
                 count++;
                 let original = f.attribute<DependencyOverrideAttribute>().unwrap().provider;
                 if !f.is_static {
-                    this.ctx.error_at(f.id, "dependency overrides must be static");
+                    ctx.error_at(f.id, "dependency overrides must be static");
                     continue;
                 }
                 if !this.functions.contains(original.symbol) {
-                    this.ctx.error_at(f.id, "dependency override does not resolve to a provider");
+                    ctx.error_at(f.id, "dependency override does not resolve to a provider");
                     continue;
                 }
                 let expected = web_dependency_type(
@@ -68,7 +68,7 @@ extend WebGenerator {
                 );
                 let actual = web_dependency_type(f.ret);
                 if expected.decl != actual.decl || expected.display != actual.display {
-                    this.ctx.error_at(
+                    ctx.error_at(
                         f.id,
                         "dependency override must return the original provider's value type"
                     );
@@ -76,21 +76,26 @@ extend WebGenerator {
                 }
                 let replacements = this.replacements.get(original.symbol)
                     .unwrap_or(List<GenFunction>());
-                replacements.push(f);
-                this.replacements[original.symbol] = replacements;
                 out.line(
                     "providers[" + web_quote(original.symbol) + "] = " + web_quote(f.id) + ";"
                 );
+                replacements.push(f);
+                this.replacements[original.symbol] = replacements;
             }
             out.line("return DependencyOverrides(providers); }");
             if count > 0 {
-                this.ctx.emit_extend(d, out.to_string());
+                ctx.emit_extend(d, out.to_string());
             }
         }
     }
 
-    internal fun provider_value(f: GenFunction, out: CodeBuilder, route: WebRoute): string {
-        let args = this.arguments(f, out, Map<string, string>(), route);
+    internal fun provider_value(
+        ctx: GenContext,
+        f: GenFunction,
+        out: CodeBuilder,
+        route: WebRoute
+    ): string {
+        let args = this.arguments(ctx, f, out, Map<string, string>(), route);
         let call = this.calls.get(f.id).unwrap() + "(" + args + ")";
         if f.is_async {
             call = call + ".await";
@@ -127,6 +132,7 @@ extend WebGenerator {
     }
 
     internal fun dependency(
+        ctx: GenContext,
         p: GenParam,
         out: CodeBuilder,
         memo: Map<string, string>,
@@ -138,7 +144,7 @@ extend WebGenerator {
         let ty = web_dependency_type(f.ret);
         let value = this.fresh();
         let cache = attr.cache.unwrap_or(true);
-        out.line("let " + value + ": Option<" + this.type_code(ty) + "> = Option.None;");
+        out.line("let " + value + ": Option<" + this.type_code(ctx, ty) + "> = Option.None;");
         if cache {
             out.line(
                 "if ctx.dependencies.contains("
@@ -146,7 +152,7 @@ extend WebGenerator {
                     + ") { "
                     + value
                     + " = Option.Some(((DependencyValue<"
-                    + this.type_code(ty)
+                    + this.type_code(ctx, ty)
                     + ">)ctx.dependencies.get("
                     + web_quote(path.symbol) + ").unwrap()).value); } else {"
             );
@@ -158,10 +164,10 @@ extend WebGenerator {
                     + web_quote(path.symbol)
                     + ").unwrap_or(\"\") == " + web_quote(replacement.id) + " {"
             );
-            let replacement_value = this.provider_value(replacement, out, route);
+            let replacement_value = this.provider_value(ctx, replacement, out, route);
             out.line(value + " = Option.Some(" + replacement_value + "); } else {");
         }
-        let original = this.provider_value(f, out, route);
+        let original = this.provider_value(ctx, f, out, route);
         out.line(value + " = Option.Some(" + original + ");");
         for (let replacement in candidates) {
             out.line("}");
@@ -170,7 +176,8 @@ extend WebGenerator {
             out.line(
                 "ctx.dependencies["
                     + web_quote(path.symbol)
-                    + "] = DependencyValue<" + this.type_code(ty) + ">(" + value + ".unwrap()); }"
+                    + "] = DependencyValue<"
+                    + this.type_code(ctx, ty) + ">(" + value + ".unwrap()); }"
             );
         }
         return value + ".unwrap()";

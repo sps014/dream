@@ -22,24 +22,24 @@ import system.json;
     DependencyOverrideAttribute
 )
 internal fun webapi_derive(ctx: GenContext): void {
-    let gen = WebGenerator(ctx);
-    gen.collect();
-    gen.collect_overrides();
-    gen.validate_dependencies();
+    let gen = WebGenerator();
+    gen.collect(ctx);
+    gen.collect_overrides(ctx);
+    gen.validate_dependencies(ctx);
     if ctx.has_errors() {
         return;
     }
     for (let route in gen.routes) {
-        gen.validate_route(route);
+        gen.validate_route(ctx, route);
     }
     if ctx.has_errors() {
         return;
     }
-    gen.emit_routes();
+    gen.emit_routes(ctx);
     if ctx.has_errors() {
         return;
     }
-    gen.emit_routers();
+    gen.emit_routers(ctx);
     ctx.emit_file("routes.dream", gen.imports.to_string() + gen.source.to_string());
 }
 
@@ -51,11 +51,11 @@ internal fun web_return_type(f: GenFunction): GenTypeRef {
     return f.ret;
 }
 
-internal fun web_inner(ty: GenTypeRef): GenTypeRef {
+internal fun web_inner(borrow ty: GenTypeRef): GenTypeRef {
     if ty.is_option() {
         return ty.arg(0);
     }
-    return ty;
+    return ty.copy();
 }
 
 internal fun web_scalar(ty: GenTypeRef): bool {

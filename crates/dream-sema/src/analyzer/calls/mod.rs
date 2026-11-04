@@ -146,7 +146,7 @@ impl<'a> Analyzer<'a> {
         sig.parameter_types.clone()
     }
 
-    fn current_function_is_trusted_prelude(&self) -> bool {
+    pub(in crate::analyzer) fn current_function_is_trusted_prelude(&self) -> bool {
         self.current_file
             .as_deref()
             .is_some_and(dream_stdlib::is_std_source)

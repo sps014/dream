@@ -305,6 +305,10 @@ pub(super) fn rvalue_region_safe(cx: &mut SafeCx<'_>, rv: &Rvalue) -> bool {
         | Rvalue::EnumName { .. } => true,
         Rvalue::Call { callee, .. } => callee_safe(cx, callee),
         Rvalue::New { ty, ctor, .. } => {
+            // The runtime never region-allocates a shared instance, so a leave would leak it.
+            if cx.interner.is_shared_type(*ty) {
+                return false;
+            }
             let Some(layout) = cx.mir.layouts.get(*ty) else {
                 return false;
             };

@@ -227,6 +227,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/gpu/gpu_ray_tracing_pipeline.dream"),
         ),
         (
+            "<std>/system/gpu/gpu_recording.dream",
+            include_str!("../system/gpu/gpu_recording.dream"),
+        ),
+        (
             "<std>/system/gpu/gpu_render_pass.dream",
             include_str!("../system/gpu/gpu_render_pass.dream"),
         ),

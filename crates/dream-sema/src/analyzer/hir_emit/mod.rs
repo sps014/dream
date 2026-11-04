@@ -610,6 +610,19 @@ impl<'a> Analyzer<'a> {
         self.hir.last.take()
     }
 
+    /// Records `position` as the source of the most-recently-analyzed expression, unless an
+    /// inner expression already claimed it.
+    pub(in crate::analyzer) fn hir_mark_span(&mut self, position: TextSpan) {
+        if let Some(last) = self.hir.last.as_mut()
+            && last.span.is_none()
+        {
+            last.span = dream_hir::HSpan {
+                start: position.start as u32,
+                end: position.end as u32,
+            };
+        }
+    }
+
     /// Constant-label validation needs resolved expression HIR even in check-only functions.
     /// Isolate that capture so it cannot emit a consumed function or change its enclosing state.
     pub(in crate::analyzer) fn hir_expression_probe_begin(&mut self) -> Option<HirEmit> {
@@ -644,6 +657,11 @@ impl<'a> Analyzer<'a> {
             .iter()
             .find(|(_, (lid, _))| *lid == id)
             .map(|(name, _)| name.as_str())
+    }
+
+    /// The slot and type of the current function's local or parameter `name`.
+    pub(in crate::analyzer) fn hir_local_slot(&self, name: &str) -> Option<(LocalId, TypeId)> {
+        self.hir.locals.get(name).copied()
     }
 
     /// Marks the most-recent expression as not representable in HIR (clears `last`).

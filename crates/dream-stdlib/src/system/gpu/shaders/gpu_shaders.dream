@@ -106,7 +106,7 @@ fun translate(ctx: GenContext, borrow program: ShaderProgram): void {
     }
     for (let m in program.modules) {
         check_webgpu_storage(ctx, m);
-        let artifact = SlangEmit(ctx, program, m).emit();
+        let artifact = SlangEmit(program).emit(ctx, program, m);
         if ctx.has_errors() {
             return;
         }

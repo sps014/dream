@@ -67,9 +67,9 @@ internal class ShaderProgram {
                 ctx.error_at(e.function.id, "a function can carry only one shader stage attribute");
                 continue;
             }
-            program.entries.push(e);
             program.functions.push(e.function);
             program.bodies[e.function.id] = e.body;
+            program.entries.push(e);
         }
         let index = 0;
         while index < program.functions.length {
@@ -83,14 +83,12 @@ internal class ShaderProgram {
                     == GenSymbolKind.Type
                     && SlangTypes.is_user(n.ty) && !program.constructor_bodies.contains(n.overload) {
                     let constructor_nodes = List<ShaderNode>();
-                    program.constructor_bodies[n.overload] = constructor_nodes;
                     switch (ctx.find_decl(n.ty.decl)) {
                         Some(declaration) => {
                             for (let method in declaration.methods) {
                                 if method.name == "constructor" && method.overload == n.overload {
                                     for (let statement in ShaderNode.body_of(method)) {
-                                        constructor_nodes.push(statement);
-                                        statement.walk(constructor_nodes);
+                                        statement.flatten_into(constructor_nodes);
                                     }
                                 }
                             }
@@ -100,6 +98,7 @@ internal class ShaderProgram {
                     for (let node in constructor_nodes) {
                         nodes.push(node);
                     }
+                    program.constructor_bodies[n.overload] = constructor_nodes;
                 }
                 if !Builtins.key_of(n).is_empty() || n.symbol_kind == GenSymbolKind.Type {
                     continue;
@@ -113,8 +112,8 @@ internal class ShaderProgram {
                 switch (ctx.find_function(n.symbol)) {
                     Some(helper) => {
                         if !helper.id.starts_with("system.") && helper.body.is_some() {
-                            program.functions.push(helper);
                             program.bodies[helper.id] = ShaderNode.body_of(helper);
+                            program.functions.push(helper);
                         }
                     }
                     None => {}
@@ -192,8 +191,7 @@ internal class ShaderProgram {
     internal fun nodes(borrow id: string): List<ShaderNode> {
         let out = List<ShaderNode>();
         for (let s in this.body(id)) {
-            out.push(s);
-            s.walk(out);
+            s.flatten_into(out);
         }
         let seen = List<string>();
         let index = 0;

@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// Signature views allow program-wide queries without including unrelated function bodies.
+@copy
 public class GenSymbol {
     /// Concrete uses of this generic symbol.
     public instances: List<GenSymbolInstance>;

@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A function parameter and its type and attributes.
+@copy
 public class GenParam {
     /// Parameter name as declared.
     public name: string;

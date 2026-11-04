@@ -129,6 +129,8 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "gpuSurfacePresent",
             "gpuSubmit",
             "gpuRelease",
+            "gpuPin",
+            "gpuUnpin",
         ],
         HostCapability::Timezone => &["dateZoneOffsetMinutes", "dateLocalZoneName"],
     }

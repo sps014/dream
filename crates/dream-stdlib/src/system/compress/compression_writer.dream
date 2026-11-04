@@ -1,14 +1,15 @@
 module system.compress;
 
-/// Incremental compressor over a borrowed Writer; finish explicitly to write and validate the trailer.
-public class CompressionWriter: Writer {
-    destination: Writer;
+/// Incremental compressor over the Writer it owns; finish explicitly to write and validate the
+/// trailer.
+public class CompressionWriter<W: Writer>: Writer {
+    destination: W;
     deflater: Deflater;
     limit: long;
     written: long;
     closed: bool;
 
-    internal constructor(destination: Writer, deflater: Deflater, limit: long) {
+    internal constructor(destination: W, deflater: Deflater, limit: long) {
         this.destination = destination;
         this.deflater = deflater;
         this.limit = limit;
@@ -31,7 +32,7 @@ public class CompressionWriter: Writer {
         return Result.Ok(count);
     }
 
-    /// Emits a synchronization boundary and flushes the borrowed destination without ending the stream.
+    /// Emits a synchronization boundary and flushes the destination without ending the stream.
     public fun flush(): Result<Unit, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
@@ -40,7 +41,7 @@ public class CompressionWriter: Writer {
         return this.destination.flush();
     }
 
-    /// Finishes the trailer, releases encoder state, and flushes the borrowed destination.
+    /// Finishes the trailer, releases encoder state, and flushes the destination.
     public fun finish(): Result<Unit, IoError> {
         if this.closed {
             return Result.Err(IoError.closed("compression stream"));
@@ -50,7 +51,7 @@ public class CompressionWriter: Writer {
         return this.destination.flush();
     }
 
-    /// Abandons the stream without finishing or closing the borrowed destination; later writes fail.
+    /// Abandons the stream without finishing or closing the destination; later writes fail.
     public fun close(): void {
         this.closed = true;
     }
@@ -66,5 +67,10 @@ public class CompressionWriter: Writer {
             this.close();
         }
         return result;
+    }
+
+    /// The compressed output written so far. It is a complete stream only after `finish`.
+    public get inner(): borrow W {
+        return this.destination;
     }
 }

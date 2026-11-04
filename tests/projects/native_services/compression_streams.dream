@@ -10,14 +10,13 @@ fun compression_streams(): void {
         input[i] = (byte)(i % 251);
     }
     for (let format in [CompressionFormat.Gzip, CompressionFormat.Zlib]) {
-        let encoded = MemoryStream();
-        let writer = Compression.writer(encoded, format).unwrap();
+        let writer = Compression.writer(MemoryStream(), format).unwrap();
         writer.write_all(input).unwrap();
         writer.flush().unwrap();
         writer.finish().unwrap();
         Assert.is_true(writer.write(input).is_err());
-        encoded.seek(0L).unwrap();
-        let reader = Compression.reader(encoded, format).unwrap();
+        let compressed = writer.inner.to_bytes().unwrap();
+        let reader = Compression.reader(MemoryStream(compressed), format).unwrap();
         Assert.eq(reader.read(0).unwrap().length, 0);
         let decoded = MemoryStream();
         Assert.eq(Streams.copy(reader, decoded).unwrap(), 100000L);
@@ -29,13 +28,14 @@ fun compression_streams(): void {
         reader.close();
         Assert.is_true(reader.read(1).is_err());
 
-        encoded.seek(0L).unwrap();
-        let limited = Compression.reader(encoded, format, max_output_bytes: 100L).unwrap();
+        let limited = Compression.reader(
+            MemoryStream(compressed),
+            format,
+            max_output_bytes: 100L
+        ).unwrap();
         Assert.is_true(Streams.copy(limited, MemoryStream()).is_err());
         limited.close();
 
-        encoded.seek(0L).unwrap();
-        let compressed = encoded.read(100000).unwrap();
         let truncated = Compression.reader(
             MemoryStream(Span<byte>(compressed, 0, compressed.length - 1).to_array()),
             format

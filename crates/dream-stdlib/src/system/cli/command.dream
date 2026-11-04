@@ -1,7 +1,6 @@
 module system.cli;
 
 /// Declarative CLI definition. Parsing consumes arguments without an executable name and never exits.
-// `subcommand` stores copies, so a command tree never refers back to an ancestor.
 public class Command {
     internal name: string;
     internal about: string;
@@ -47,8 +46,15 @@ public class Command {
         multiple: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, CliArgumentKind.Positional, "", required, description);
-        argument.multiple = multiple;
+        this.argument(
+            name,
+            CliArgumentKind.Positional,
+            "",
+            required,
+            description,
+            multiple,
+            Option.None
+        );
         return this;
     }
 
@@ -60,10 +66,11 @@ public class Command {
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, CliArgumentKind.String, short, required, description);
+        let fallback: Option<string> = Option.None;
         if !required {
-            argument.default_value = Option.Some(default_value);
+            fallback = Option.Some(default_value);
         }
+        this.argument(name, CliArgumentKind.String, short, required, description, false, fallback);
         return this;
     }
 
@@ -75,16 +82,17 @@ public class Command {
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, CliArgumentKind.Int, short, required, description);
+        let fallback: Option<string> = Option.None;
         if !required {
-            argument.default_value = Option.Some(default_value.to_string());
+            fallback = Option.Some(default_value.to_string());
         }
+        this.argument(name, CliArgumentKind.Int, short, required, description, false, fallback);
         return this;
     }
 
     /// Adds a boolean option defaulting to false; repeated occurrences remain true.
     public fun flag(name: string, short: string = "", description: string = ""): Command {
-        this.argument(name, CliArgumentKind.Flag, short, false, description);
+        this.argument(name, CliArgumentKind.Flag, short, false, description, false, Option.None);
         return this;
     }
 
@@ -100,13 +108,13 @@ public class Command {
         return this;
     }
 
-    /// Snapshots a child definition. Later edits to the child do not mutate its attached copy.
+    /// Attaches a child definition. The command takes ownership of `command`.
     public fun subcommand(command: Command): Command {
         if command.error != "" {
             this.error = command.error;
             return this;
         }
-        this.children.push(command.copy());
+        this.children.push(command);
         return this;
     }
 
@@ -123,29 +131,18 @@ public class Command {
         return CliParser(this, arguments, this.name, this.name, this.version_text).parse(0);
     }
 
-    fun copy(): Command {
-        let copy = Command(this.name);
-        copy.about = this.about;
-        copy.version_text = this.version_text;
-        copy.subcommand_required = this.subcommand_required;
-        for let argument in this.arguments {
-            copy.arguments.push(argument.copy());
-        }
-        for let child in this.children {
-            copy.children.push(child.copy());
-        }
-        return copy;
-    }
-
     fun argument(
         name: string,
         kind: CliArgumentKind,
         short: string,
         required: bool,
-        description: string
-    ): CliArgument {
+        description: string,
+        multiple: bool,
+        default_value: Option<string>
+    ): void {
         let argument = CliArgument(name, kind, short, required, description);
+        argument.multiple = multiple;
+        argument.default_value = default_value;
         this.arguments.push(argument);
-        return argument;
     }
 }

@@ -99,10 +99,12 @@ fn recursive_safety_resolves_entire_component_before_caching() {
     }
 }
 
-#[test]
-fn wraps_unique_call_that_only_news_del_free_class() {
-    let mut ctx = TypeCtx::new();
+/// `drop_it` calls `alloc_node`, which only constructs a field-less `Node`, then releases it.
+fn alloc_then_release(ctx: &mut TypeCtx, shared: bool) -> Mir {
     let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
+    if shared {
+        ctx.interner.mark_shared_def(node_def);
+    }
     let ty = ctx.interner.struct_ty(node_def, vec![]);
     let alloc_def = ctx.register(DefKind::Function, "alloc_node", vec![]);
     let drop_def = ctx.register(DefKind::Function, "drop_it", vec![]);
@@ -143,11 +145,17 @@ fn wraps_unique_call_that_only_news_del_free_class() {
     drop_it.push(Statement::Release(Operand::Copy(Place::Local(x))));
     drop_it.terminate(Terminator::Return(None));
 
-    let mut mir = Mir {
+    Mir {
         functions: vec![alloc.finish(), drop_it.finish()],
         layouts,
         ..Default::default()
-    };
+    }
+}
+
+#[test]
+fn wraps_unique_call_that_only_news_del_free_class() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = alloc_then_release(&mut ctx, false);
     assert!(UniqueRegion.run(&mut mir, &ctx.interner));
     let drop_fn = &mir.functions[1];
     assert!(
@@ -169,6 +177,14 @@ fn wraps_unique_call_that_only_news_del_free_class() {
             .iter()
             .any(|s| matches!(s, Statement::Release(_))),
     );
+}
+
+#[test]
+fn does_not_wrap_call_that_news_a_shared_class() {
+    let mut ctx = TypeCtx::new();
+    let mut mir = alloc_then_release(&mut ctx, true);
+    assert!(!UniqueRegion.run(&mut mir, &ctx.interner));
+    assert!(!has_region_enter(&mir.functions[1]));
 }
 
 #[test]
@@ -255,6 +271,92 @@ fn wraps_switch_join_of_unique_call() {
         matches!(drop_fn.block(join_id).stmts[0], Statement::RegionLeave),
         "{:?}",
         drop_fn.block(join_id).stmts
+    );
+}
+
+#[test]
+fn switch_join_clears_arm_locals_that_hold_the_region() {
+    use crate::BlockId;
+
+    let mut ctx = TypeCtx::new();
+    let node_def = ctx.register(DefKind::Struct, "Node", vec![]);
+    let ty = ctx.interner.struct_ty(node_def, vec![]);
+    let alloc_def = ctx.register(DefKind::Function, "alloc_node", vec![]);
+    let drop_def = ctx.register(DefKind::Function, "drop_it", vec![]);
+    let mut layouts = LayoutTable::default();
+    layouts.insert(ty, TypeLayout::from_fields(&ctx.interner, "Node", vec![]));
+
+    let mut alloc = FunctionBuilder::new("alloc_node", ty);
+    alloc.set_def(alloc_def, vec![]);
+    let t = alloc.new_local(ty, Some("t".into()));
+    alloc.assign(
+        Place::Local(t),
+        Rvalue::New {
+            def: node_def,
+            ty,
+            ctor: None,
+            args: vec![],
+        },
+    );
+    alloc.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(t)))));
+
+    let mut drop_it = FunctionBuilder::new("drop_it", ctx.interner.void());
+    drop_it.set_def(drop_def, vec![]);
+    let x = drop_it.new_local(ty, Some("x".into()));
+    let held = drop_it.new_local(ty, Some("held".into()));
+    drop_it.assign(
+        Place::Local(x),
+        Rvalue::Call {
+            callee: Callee {
+                borrowed_result: false,
+                def: alloc_def,
+                args: vec![],
+                ret: ty,
+                take_params: vec![],
+            },
+            args: vec![],
+        },
+    );
+    let some = drop_it.new_block();
+    let none = drop_it.new_block();
+    let join = drop_it.new_block();
+    drop_it.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(x)),
+        then_blk: some,
+        else_blk: none,
+    });
+    drop_it.switch_to(some);
+    drop_it.assign(
+        Place::Local(held),
+        Rvalue::Select {
+            cond: Operand::Copy(Place::Local(x)),
+            then_val: Operand::Copy(Place::Local(x)),
+            else_val: Operand::Const(Const::Null),
+        },
+    );
+    drop_it.push(Statement::Retain(Operand::Copy(Place::Local(held))));
+    drop_it.terminate(Terminator::Goto(join));
+    drop_it.switch_to(none);
+    drop_it.terminate(Terminator::Goto(join));
+    drop_it.switch_to(join);
+    drop_it.push(Statement::Release(Operand::Copy(Place::Local(held))));
+    drop_it.terminate(Terminator::Return(None));
+
+    let mut mir = Mir {
+        functions: vec![alloc.finish(), drop_it.finish()],
+        layouts,
+        ..Default::default()
+    };
+    assert!(UniqueRegion.run(&mut mir, &ctx.interner));
+    let leave = &mir.functions[1].block(BlockId(3)).stmts;
+    assert!(matches!(leave[0], Statement::RegionLeave), "{leave:?}");
+    assert!(
+        leave.iter().any(|s| matches!(
+            s,
+            Statement::Assign(Place::Local(l), Rvalue::Use(Operand::Const(Const::Null)))
+                if *l == held
+        )),
+        "{leave:?}"
     );
 }
 

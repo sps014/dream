@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A class, struct, union, enum or interface the generator's triggers selected.
+@copy
 public class GenDecl {
     /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;

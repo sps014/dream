@@ -39,10 +39,10 @@ impl<'a> Analyzer<'a> {
         let elements = bytes
             .iter()
             .map(|b| {
-                Some(dream_hir::HExpr {
+                Some(dream_hir::HExpr::new(
                     ty,
-                    kind: dream_hir::HExprKind::IntLit(*b as i64),
-                })
+                    dream_hir::HExprKind::IntLit(*b as i64),
+                ))
             })
             .collect();
         self.hir_set_array_lit(elements, &result);

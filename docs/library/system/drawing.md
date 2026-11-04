@@ -191,8 +191,8 @@ internally. `draw_image` accepts an optional source rectangle, opacity and neare
 ## Existing GPU windows
 
 Import `system.drawing.gpu` to display a drawing through an existing `GpuSurface` with
-`drawing.present(surface).await`. The drawing and window surface dimensions must match. The first
-presentation creates a pipeline and texture; later calls reuse them. `close()` releases
+`drawing.present(device, surface).await`, where `device` is the `GpuDevice` that created the
+surface. The drawing and window surface dimensions must match. The first presentation creates a pipeline and texture; later calls reuse them. `close()` releases
 those cached resources. Presenting to another surface replaces the cache.
 
 ```dream
@@ -219,7 +219,7 @@ async fun main(): void {
         if !window.is_open {
             break;
         }
-        drawing.present(screen).await.unwrap();
+        drawing.present(device, screen).await.unwrap();
     }
     drawing.close();
 }
@@ -325,7 +325,7 @@ async fun main(): void {
         if !window.is_open {
             break;
         }
-        drawing.present(screen).await.unwrap();
+        drawing.present(device, screen).await.unwrap();
     }
     drawing.close();
 }

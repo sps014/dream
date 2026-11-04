@@ -139,6 +139,14 @@ fun json_value_walk(): void {
     let meta = v.get("meta").unwrap();
     Assert.eq(meta.get("id").and_then((item: JsonValue) => item.as_int()).unwrap_or(0), 9);
 
-    let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
-    Assert.eq(Json.serialize(dict), "{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}");
+    Assert.eq(v.keys().join(","), "name,tags,on,meta");
+    Assert.is_true(v.remove("tags"));
+    v["on"] = JsonValue.from_bool(false);
+    v["extra"] = JsonValue.from_int(3);
+    Assert.eq(Json.serialize(v), "{\"name\":\"ada\",\"on\":false,\"meta\":{\"id\":9},\"extra\":3}");
+    Assert.eq(v.get("meta").unwrap()["id"].as_int().unwrap_or(0), 9);
+    let copied = v.copy();
+    copied["name"] = JsonValue.from_string("grace");
+    Assert.eq(v["name"].as_string().unwrap_or(""), "ada");
+    Assert.eq(copied["name"].as_string().unwrap_or(""), "grace");
 }

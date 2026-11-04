@@ -87,6 +87,11 @@ pub const CONSTRUCTOR_NAME: &str = "constructor";
 /// scope exit. Single source of truth shared by parser/semantics/codegen.
 pub const DESTRUCTOR_NAME: &str = "del";
 
+/// Member names of indexer declarations (`fun this[key]: V` / `fun this[key] = value: V`); a
+/// user identifier cannot start with `__`, so they never collide with ordinary methods.
+pub const GET_INDEXER_NAME: &str = "__get_indexer";
+pub const SET_INDEXER_NAME: &str = "__set_indexer";
+
 /// True if `name` is a reserved member declaration keyword (`constructor`/`del`) that the parser
 /// accepts without the leading `fun` and that cannot carry a return type.
 pub fn is_special_member_name(name: &str) -> bool {

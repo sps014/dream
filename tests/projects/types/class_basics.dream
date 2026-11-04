@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 
+@copy
 class c79_Point {
     public x: int;
     public y: int;
@@ -74,7 +75,7 @@ fun classes(): void {
     p2.y = 40;
 
     let r = c79_Rect();
-    r.p1 = p1;
+    r.p1 = p1.copy();
     r.p2 = p2;
 
     Assert.eq((r.p1.x).to_string(), "10");
@@ -84,7 +85,7 @@ fun classes(): void {
 
     r.p1.x = 100;
     Assert.eq((r.p1.x).to_string(), "100");
-    Assert.eq((p1.x).to_string(), "100");
+    Assert.eq((p1.x).to_string(), "10");
 }
 
 @test

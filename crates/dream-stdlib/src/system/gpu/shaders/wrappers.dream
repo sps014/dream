@@ -32,7 +32,7 @@ internal static class Wrappers {
         // of this file that builds it. Top-level variable names are program-wide, so they carry
         // the module's stem.
         let library = "gpu_shaders_" + shader_module.stem() + "_library";
-        b.line("let " + library + ": GpuShaderLibrary = gpu_shaders_register();");
+        b.line("let " + library + ": int = gpu_shaders_register();");
         for (let e in shader_module.entries) {
             b.line(
                 "let "
@@ -41,7 +41,7 @@ internal static class Wrappers {
             );
         }
         b.line("");
-        b.line("fun gpu_shaders_register(): GpuShaderLibrary {");
+        b.line("fun gpu_shaders_register(): int {");
         b.indent();
         b.line("return GpuShaderLibrary.register(");
         b.indent();
@@ -103,7 +103,7 @@ internal static class Wrappers {
         b.line("/// The backends this module has shader code for in this build.");
         b.line("public static fun backends(): List<GpuBackend> {");
         b.indent();
-        b.line("return " + library + ".backends.clone();");
+        b.line("return GpuShaderLibrary.backends_of(" + library + ");");
         b.dedent();
         b.line("}");
         for (let e in shader_module.entries) {
@@ -114,7 +114,7 @@ internal static class Wrappers {
                     + " static get " + e.name() + "(): " + Wrappers.class_name(e) + " {"
             );
             b.indent();
-            b.line("return " + Wrappers.global_name(shader_module, e) + ";");
+            b.line("return " + Wrappers.global_name(shader_module, e) + ".copy();");
             b.dedent();
             b.line("}");
         }
@@ -288,6 +288,7 @@ internal static class Wrappers {
         let name = Wrappers.class_name(e);
         let visibility = Wrappers.visibility(e);
         b.line("/// The typed entry point of the `@compute` shader `" + e.name() + "`.");
+        b.line("@copy");
         b.line(visibility + " class " + name + " {");
         b.indent();
         b.line("shader: GpuComputeShader;");
@@ -344,6 +345,7 @@ internal static class Wrappers {
     static fun stage_wrapper(b: CodeBuilder, borrow e: ShaderEntry): void {
         let name = Wrappers.class_name(e);
         b.line("/// The " + e.attribute_name() + " shader `" + e.name() + "`.");
+        b.line("@copy");
         b.line(Wrappers.visibility(e) + " class " + name + ": GpuStageShader {");
         b.indent();
         b.line("stage: GpuStageDescriptor;");
@@ -357,7 +359,7 @@ internal static class Wrappers {
         b.line("/// The compiled shader stage.");
         b.line("public fun descriptor(): GpuStageDescriptor {");
         b.indent();
-        b.line("return this.stage;");
+        b.line("return this.stage.copy();");
         b.dedent();
         b.line("}");
         if e.stage == GpuStage.RayGeneration {

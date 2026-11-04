@@ -196,8 +196,8 @@ public class Canvas {
     ): void {
         this.values.push(9.0f);
         this.values.push((float)this.resources.length);
-        this.resources.push(image);
         let crop = source.unwrap_or(Rect(0.0f, 0.0f, (float)image.width, (float)image.height));
+        this.resources.push(image);
         this.encode_rect(crop);
         this.encode_rect(target);
         this.values.push(opacity);

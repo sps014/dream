@@ -5,7 +5,6 @@ import system.webapi;
 import system.json;
 
 internal class WebGenerator {
-    internal ctx: GenContext;
     internal functions: Map<string, GenFunction>;
     internal calls: Map<string, string>;
     internal declarations: Map<string, GenDecl>;
@@ -20,8 +19,7 @@ internal class WebGenerator {
     internal sequence: int;
     internal colors: Map<string, int>;
 
-    internal constructor(ctx: GenContext) {
-        this.ctx = ctx;
+    internal constructor() {
         this.functions = Map<string, GenFunction>();
         this.calls = Map<string, string>();
         this.declarations = Map<string, GenDecl>();
@@ -48,7 +46,6 @@ internal class WebGenerator {
         if this.functions.contains(f.id) {
             return;
         }
-        this.functions[f.id] = f;
         let call = f.name;
         if !owner.is_empty() {
             call = owner + "." + f.name;
@@ -61,6 +58,7 @@ internal class WebGenerator {
             }
         }
         this.calls[f.id] = call;
+        this.functions[f.id] = f;
     }
 
     internal fun owner_name(d: GenDecl): string {
@@ -77,9 +75,9 @@ internal class WebGenerator {
         return alias;
     }
 
-    internal fun type_code(ty: GenTypeRef): string {
+    internal fun type_code(ctx: GenContext, ty: GenTypeRef): string {
         if ty.kind == TypeRefKind.Array {
-            return this.type_code(ty.arg(0)) + "[]";
+            return this.type_code(ctx, ty.arg(0)) + "[]";
         }
         if ty.kind == TypeRefKind.Tuple || ty.kind == TypeRefKind.Function {
             let result = "(";
@@ -95,18 +93,18 @@ internal class WebGenerator {
                 if i > 0 {
                     result = result + ", ";
                 }
-                result = result + this.type_code(ty.arg(i));
+                result = result + this.type_code(ctx, ty.arg(i));
                 i++;
             }
             result = result + ")";
             if ty.kind == TypeRefKind.Function {
-                result = result + ": " + this.type_code(ty.arg(end));
+                result = result + ": " + this.type_code(ctx, ty.arg(end));
             }
             return result;
         }
         let name = ty.name;
         if !ty.decl.is_empty() {
-            let declaration = this.declaration(ty);
+            let declaration = this.declaration(ctx, ty);
             if declaration.is_some() {
                 name = this.owner_name(declaration.unwrap());
             }
@@ -118,7 +116,7 @@ internal class WebGenerator {
                 if i > 0 {
                     name = name + ", ";
                 }
-                name = name + this.type_code(arg);
+                name = name + this.type_code(ctx, arg);
                 i++;
             }
             name = name + ">";
@@ -126,14 +124,14 @@ internal class WebGenerator {
         return name;
     }
 
-    internal fun declaration(ty: GenTypeRef): Option<GenDecl> {
+    internal fun declaration(ctx: GenContext, ty: GenTypeRef): Option<GenDecl> {
         if ty.decl.is_empty() {
             return Option.None;
         }
         if this.declarations.contains(ty.decl) {
             return this.declarations.get(ty.decl);
         }
-        let symbol = this.ctx.find_symbol(ty.decl);
+        let symbol = ctx.find_symbol(ty.decl);
         if symbol.is_none() {
             return Option.None;
         }

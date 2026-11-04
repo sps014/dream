@@ -66,7 +66,7 @@ fun collection_query(): void {
     let filtered = xs.seq().filter(c8b_gt_one).map(c8b_plus_ten).to_list();
     Assert.eq((filtered.seq().reduce(0, c8b_add)).to_string(), "39");
 
-    let from_iface: Collection<int> = xs;
+    let from_iface: Collection<int> = xs.copy();
     Assert.eq((from_iface.seq().to_list().length).to_string(), "4");
     Assert.eq(from_iface.length.to_string() + ":" + from_iface.is_empty().to_string(), "4:false");
 

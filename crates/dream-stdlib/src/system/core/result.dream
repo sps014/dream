@@ -1,6 +1,7 @@
 module system.core;
 
 /// `Result<T, E>` - the outcome of an operation that may fail.
+@copy
 public enum Result<T, E> {
     /// Contains the successful result.
     Ok(T),
@@ -20,6 +21,15 @@ public enum Result<T, E> {
         return switch (this) {
             Ok(v) => false,
             Err(e) => true,
+        };
+    }
+
+    /// An independent result holding a copy of its value or error. Each side that holds a
+    /// class must be `@copy`.
+    public fun copy(): Result<T, E> {
+        return switch (this) {
+            Ok(v) => Result.Ok(Copy.of(v)),
+            Err(e) => Result.Err(Copy.of(e)),
         };
     }
 

@@ -78,7 +78,7 @@ fun priority_queue_basic(): void {
 
 let pq_drops = 0;
 
-class PqOwned: Comparable<PqOwned> {
+shared class PqOwned: Comparable<PqOwned> {
     public key: int;
 
     public constructor(key: int) {

@@ -132,7 +132,7 @@ A method’s implicit `this` is **never** a sink. Calling `obj.foo()` does not c
 
 ### Results marked `borrow`
 
-A few standard library methods, such as `Map.get` and `JsonValue.as_map`, show `borrow` before
+A few standard library methods, such as `Map.get` and `JsonValue.as_array`, show `borrow` before
 their return type (`fun get(borrow key: K): borrow Option<V>`). The result is read straight out
 of the collection instead of being copied for the call. You use and keep it like any other
 value; Dream adds the copy only when the value outlives the line that reads it.
@@ -179,7 +179,7 @@ The error names the place that owns the value now and what to write instead:
 error: use of 'items' after it was moved
 note: 'items' was moved into 'this.items' on line 6; 'this.items' owns it now
 help: use 'this.items' here instead of 'items'
-help: or read what you need from 'items' before the line that stores it
+help: or read what you need from 'items' before the line that moves it
 ```
 
 Giving a new value to the same name (`items = List<int>();`) makes the name usable again.

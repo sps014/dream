@@ -205,6 +205,8 @@ internal enum Intrinsic {
     BufferIsString,
     /// Identifies the array slot take operation for an `@intrinsic` declaration.
     ArraySlotTake,
+    /// Identifies the deep copy operation for an `@intrinsic` declaration.
+    CopyOf,
     /// Identifies the regex test operation for an `@intrinsic` declaration.
     RegexTest,
     /// Identifies the channel new operation for an `@intrinsic` declaration.

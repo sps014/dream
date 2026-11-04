@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A file, line, and column identifying a source location.
+@copy
 public class GenLocation {
     /// Project-relative path (`src/models.dream`), or `<std>/...` for stdlib sources.
     public file: string;

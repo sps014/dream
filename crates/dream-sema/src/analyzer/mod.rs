@@ -23,6 +23,7 @@ use std::rc::Rc;
 mod await_rules;
 mod borrow_check;
 mod calls;
+mod copy;
 mod cycles;
 mod declarations;
 mod expressions;
@@ -31,6 +32,7 @@ mod hir_emit;
 pub mod ide;
 mod iterators;
 mod js_interop;
+mod move_check;
 mod ownership;
 mod param_inference;
 mod receiver_modes;
@@ -348,6 +350,10 @@ pub struct Analyzer<'a> {
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
     /// any of these; compiler-synthesized extends (interface defaults) are exempt.
     sealed_types: HashSet<dream_types::DefId>,
+    /// Classes and unions marked `@copy`; generic templates are keyed by their base def.
+    copy_types: HashSet<dream_types::DefId>,
+    /// `copy` methods whose body the compiler derives instead of analyzing source.
+    derived_copies: HashSet<dream_types::DefId>,
     /// File/module-level visibility for enums and interfaces (types not tracked in the struct
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
@@ -503,6 +509,8 @@ impl<'a> Analyzer<'a> {
             interface_extensions_attached: HashSet::new(),
             array_collections_attached: HashSet::new(),
             sealed_types: HashSet::new(),
+            copy_types: HashSet::new(),
+            derived_copies: HashSet::new(),
             type_visibility: HashMap::new(),
             implements: HashMap::new(),
             operator_overloads: HashMap::new(),

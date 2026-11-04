@@ -1,16 +1,13 @@
 module system.gpu;
 
 // The arguments of one shader invocation in parameter order, built by generated typed
-// `dispatch` wrappers. Resources become handles; scalar and struct values become bytes the
+// `dispatch` wrappers. Resources become pinned handles; scalar and struct values become bytes the
 // host places at the parameter's reflected offset.
 internal class GpuArgs {
     internal items: List<int>;
     internal devices: List<int>;
     internal names: List<string>;
     internal data: List<byte>;
-
-    // The argument resources, kept alive until the commands that use them are submitted.
-    internal keep: List<GpuOwnedHandle>;
 
     // The first argument whose shape differs from the shader's, found while adding it.
     internal mismatch: Option<GpuError>;
@@ -20,13 +17,14 @@ internal class GpuArgs {
         this.devices = List<int>();
         this.names = List<string>();
         this.data = List<byte>();
-        this.keep = List<GpuOwnedHandle>();
         this.mismatch = Option.None;
     }
 
-    fun resource(kind: GpuArgKind, owner: GpuOwnedHandle, device_id: int, name: string): GpuArgs {
-        this.keep.push(owner);
-        return this.add(kind, owner.handle, 0, device_id, name);
+    // The handle is pinned while the arguments exist, since the resource itself may be dropped
+    // before the dispatch that uses it is recorded.
+    fun resource(kind: GpuArgKind, handle: int, device_id: int, name: string): GpuArgs {
+        GpuHost.pin(handle);
+        return this.add(kind, handle, 0, device_id, name);
     }
 
     fun add(kind: GpuArgKind, a: int, b: int, device_id: int, name: string): GpuArgs {
@@ -40,30 +38,30 @@ internal class GpuArgs {
     }
 
     internal fun buffer<T: unmanaged>(buffer: GpuBuffer<T>): GpuArgs {
-        return this.resource(GpuArgKind.Buffer, buffer.owner, buffer.device_id, "buffer");
+        return this.resource(GpuArgKind.Buffer, buffer.handle, buffer.device_id, "buffer");
     }
 
     internal fun texture(texture: GpuTexture): GpuArgs {
-        return this.resource(GpuArgKind.Texture, texture.owner, texture.device_id, "texture");
+        return this.resource(GpuArgKind.Texture, texture.handle, texture.device_id, "texture");
     }
 
     internal fun storage_texture<T: unmanaged>(texture: GpuStorageTexture<T>): GpuArgs {
         return this.resource(
             GpuArgKind.StorageTexture,
-            texture.owner,
+            texture.handle,
             texture.device_id,
             "storage texture"
         );
     }
 
     internal fun sampler(sampler: GpuSampler): GpuArgs {
-        return this.resource(GpuArgKind.Sampler, sampler.owner, sampler.device_id, "sampler");
+        return this.resource(GpuArgKind.Sampler, sampler.handle, sampler.device_id, "sampler");
     }
 
     internal fun acceleration_structure(scene: GpuAccelerationStructure): GpuArgs {
         return this.resource(
             GpuArgKind.AccelerationStructure,
-            scene.owner,
+            scene.handle,
             scene.device_id,
             "acceleration structure"
         );
@@ -91,7 +89,7 @@ internal class GpuArgs {
         }
         return this.resource(
             GpuArgKind.MlpWeights,
-            weights.owner,
+            weights.handle,
             weights.device_id,
             "MLP weights"
         );
@@ -126,5 +124,14 @@ internal class GpuArgs {
             }
         }
         return Option.None;
+    }
+
+    del() {
+        let count = this.devices.length;
+        for (let i = 0; i < count; i = i + 1) {
+            if this.items[i * 3] != GpuArgKind.Value {
+                GpuHost.unpin(this.items[i * 3 + 1]);
+            }
+        }
     }
 }

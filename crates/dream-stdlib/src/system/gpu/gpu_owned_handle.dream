@@ -1,9 +1,8 @@
 module system.gpu;
 
-// The host handle of one GPU resource. Resource classes keep theirs in one of these, and
-// command encoders keep every handle their commands name, so a resource whose last user
-// reference is gone stays alive until its commands are submitted. The host then keeps it
-// until the GPU finished with it. It holds no references, so it never forms a cycle.
+// The host handle of one GPU resource, released when its resource is gone. Recorded
+// commands pin the handles they name, so the host keeps a released resource until no
+// recording uses it and the GPU finished with it.
 internal class GpuOwnedHandle {
     internal handle: int;
     owned: bool;

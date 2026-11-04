@@ -184,8 +184,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::IdentifierToken,
                 this_tok.position,
                 match indexer_kind {
-                    Some(crate::nodes::function::IndexerKind::Set) => "__set_indexer".to_string(),
-                    _ => "__get_indexer".to_string(),
+                    Some(crate::nodes::function::IndexerKind::Set) => {
+                        crate::nodes::types::SET_INDEXER_NAME.to_string()
+                    }
+                    _ => crate::nodes::types::GET_INDEXER_NAME.to_string(),
                 },
             );
             params = ps;

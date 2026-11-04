@@ -93,13 +93,7 @@ fn harness_source(group: &ExeGroup<'_>) -> String {
     for (i, registered) in group.gens.iter().enumerate() {
         let kw = if i == 0 { "if" } else { "} else if" };
         let _ = writeln!(src, "            {kw} name == \"{}\" {{", registered.id);
-        // A sink `ctx: GenContext` parameter moves `arg`, so `gen_ctx` still owns the
-        // context for `finish()`.
-        let _ = writeln!(
-            src,
-            "                let arg = gen_ctx;\n                {}(arg);",
-            registered.name
-        );
+        let _ = writeln!(src, "                {}(gen_ctx);", registered.name);
     }
     src.push_str("            } else {\n");
     src.push_str("                gen_ctx.error(\"no generator named '\" + name + \"' in this executable\");\n");

@@ -9,18 +9,28 @@ import system.gpu;
 extend SlangBody {
     // Wraps operands that are themselves operators, so precedence never depends on Slang's
     // operator table.
-    fun operand(borrow n: ShaderNode): void {
+    fun operand(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let wrap = n.is_expr(ExprKind.Binary) || n.is_expr(ExprKind.Ternary);
         if wrap {
             this.w.text("(");
         }
-        this.expr(n);
+        this.expr(ctx, program, shader_module, n);
         if wrap {
             this.w.text(")");
         }
     }
 
-    internal fun expr(borrow n: ShaderNode): void {
+    internal fun expr(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         w.open();
         if n.expr == ExprKind.Literal {
@@ -33,75 +43,80 @@ extend SlangBody {
             }
         } else if n.expr == ExprKind.Parenthesized {
             w.text("(");
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
             w.text(")");
         } else if n.expr == ExprKind.Binary {
-            this.binary(n);
+            this.binary(ctx, program, shader_module, n);
         } else if n.expr == ExprKind.Unary {
             w.text(n.op);
-            this.operand(n.child(0));
+            this.operand(ctx, program, shader_module, n.child(0));
         } else if n.expr == ExprKind.IncDec {
             let child = n.child(0);
             let prefix = n.line < child.line || (n.line == child.line && n.column < child.column);
             if prefix {
                 w.text(n.op);
-                this.expr(child);
+                this.expr(ctx, program, shader_module, child);
             } else {
-                this.expr(child);
+                this.expr(ctx, program, shader_module, child);
                 w.text(n.op);
             }
         } else if n.expr == ExprKind.Ternary {
-            this.operand(n.child(0));
+            this.operand(ctx, program, shader_module, n.child(0));
             w.text(" ? ");
-            this.operand(n.child(1));
+            this.operand(ctx, program, shader_module, n.child(1));
             w.text(" : ");
-            this.operand(n.child(2));
+            this.operand(ctx, program, shader_module, n.child(2));
         } else if n.expr == ExprKind.Cast {
             let ty = "";
             if !n.types.is_empty() {
                 ty = SlangTypes.of(n.types[0], List<int>());
             }
             if ty.is_empty() {
-                this.expr(n.child(0));
+                this.expr(ctx, program, shader_module, n.child(0));
             } else {
                 w.text(ty + "(");
-                this.expr(n.child(0));
+                this.expr(ctx, program, shader_module, n.child(0));
                 w.text(")");
             }
         } else if n.expr == ExprKind.Member {
-            this.member(n.child(0), n.text);
+            this.member(ctx, program, shader_module, n.child(0), n.text);
         } else if n.expr == ExprKind.Index {
             let target = n.child(0);
             if this.is_atomic(target) {
                 if this.float_atomics.contains(target.text) {
                     w.text("asfloat(");
                 }
-                this.expr(target);
+                this.expr(ctx, program, shader_module, target);
                 w.text("[");
-                this.expr(n.child(1));
+                this.expr(ctx, program, shader_module, n.child(1));
                 w.text("].load()");
                 if this.float_atomics.contains(target.text) {
                     w.text(")");
                 }
             } else {
-                this.expr(target);
+                this.expr(ctx, program, shader_module, target);
                 w.text("[");
-                this.index(target, n.child(1));
+                this.index(ctx, program, shader_module, target, n.child(1));
                 w.text("]");
             }
         } else if n.expr == ExprKind.Ref {
-            this.expr(n.child(0));
+            this.expr(ctx, program, shader_module, n.child(0));
         } else if n.expr == ExprKind.FunctionCall {
-            SlangCalls.call(this, n);
+            this.call(ctx, program, shader_module, n);
         } else if n.expr == ExprKind.MethodCall {
-            SlangCalls.call(this, n);
+            this.call(ctx, program, shader_module, n);
         } else {
-            this.ctx.error_at(n.id, "this expression is not supported in GPU shaders");
+            ctx.error_at(n.id, "this expression is not supported in GPU shaders");
         }
         w.close(n.id);
     }
 
-    fun binary(borrow n: ShaderNode): void {
+    fun binary(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow n: ShaderNode
+    ): void {
         let w = this.w;
         let left = n.child(0);
         let right = n.child(1);
@@ -109,9 +124,9 @@ extend SlangBody {
             // Dream matrices are column-major values stored as Slang rows, so `m * v` is
             // `mul(v, m)` and `a * b` is `mul(b, a)`.
             w.text("mul(");
-            this.expr(right);
+            this.expr(ctx, program, shader_module, right);
             w.text(", ");
-            this.expr(left);
+            this.expr(ctx, program, shader_module, left);
             w.text(")");
             return;
         }
@@ -121,18 +136,24 @@ extend SlangBody {
             } else {
                 w.text("any(");
             }
-            this.operand(left);
+            this.operand(ctx, program, shader_module, left);
             w.text(" " + n.op + " ");
-            this.operand(right);
+            this.operand(ctx, program, shader_module, right);
             w.text(")");
             return;
         }
-        this.operand(left);
+        this.operand(ctx, program, shader_module, left);
         w.text(" " + n.op + " ");
-        this.operand(right);
+        this.operand(ctx, program, shader_module, right);
     }
 
-    fun member(borrow receiver: ShaderNode, borrow name: string): void {
+    fun member(
+        ctx: GenContext,
+        program: ShaderProgram,
+        shader_module: ShaderModule,
+        borrow receiver: ShaderNode,
+        borrow name: string
+    ): void {
         let w = this.w;
         if receiver.is_type_name() {
             if receiver.text == "GpuRayFlags" {
@@ -144,11 +165,11 @@ extend SlangBody {
         }
         let ty = receiver.ty;
         if SlangTypes.is_named(ty, "GpuMat4") && name.starts_with("c") {
-            this.expr(receiver);
+            this.expr(ctx, program, shader_module, receiver);
             w.text("[" + name.substring(1, name.length) + "]");
             return;
         }
-        this.expr(receiver);
+        this.expr(ctx, program, shader_module, receiver);
         if SlangTypes.is_named(ty, "GpuRay") {
             if name == "origin" {
                 w.text(".Origin");

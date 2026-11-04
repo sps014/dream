@@ -35,6 +35,9 @@ impl<'a> Analyzer<'a> {
             if enum_decl.is_sealed {
                 self.sealed_types.insert(def);
             }
+            if dream_abi::attributes::is_copy(&enum_decl.attributes) {
+                self.copy_types.insert(def);
+            }
             self.type_visibility
                 .insert(def, (enum_decl.file_path.clone(), enum_decl.visibility));
             let ty = self.type_ctx.instantiate(def, vec![]);

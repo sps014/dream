@@ -2,19 +2,31 @@ module system.drawing;
 
 import system.gpu;
 
+// Shows drawings on one window surface, named by its host handle, through a texture and
+// pipeline created for that surface.
 internal class GpuDrawingPresentation: DrawingPresentation {
-    surface: GpuSurface;
+    device_id: int;
+    surface: int;
+    width: int;
+    height: int;
+    format: GpuTextureFormat;
     texture: GpuTexture;
     pipeline: GpuRenderPipeline;
 
     constructor(surface: GpuSurface, texture: GpuTexture, pipeline: GpuRenderPipeline) {
-        this.surface = surface;
+        this.device_id = surface.device;
+        this.surface = surface.handle;
+        this.width = surface.width;
+        this.height = surface.height;
+        this.format = surface.color_format;
         this.texture = texture;
         this.pipeline = pipeline;
     }
 
-    internal static fun create(surface: GpuSurface): Result<GpuDrawingPresentation, DrawingError> {
-        let device = surface.device;
+    internal static fun create(
+        device: GpuDevice,
+        surface: GpuSurface
+    ): Result<GpuDrawingPresentation, DrawingError> {
         let format = GpuTextureFormat.Rgba8Unorm;
         if surface.color_format
             == GpuTextureFormat.Rgba8UnormSrgb
@@ -32,16 +44,24 @@ internal class GpuDrawingPresentation: DrawingPresentation {
     }
 
     internal get target_handle(): int {
-        return this.surface.handle;
+        return this.surface;
     }
 
     internal async fun present(drawing: DrawingSurface): Result<Unit, DrawingError> {
         drawing.copy_to(this.texture).await?;
-        let frame = this.surface.begin_frame(GpuVec4(0, 0, 0, 0)).await.map_err(drawing_gpu_error)?;
-        let pass = frame.pass;
-        pass.set_pipeline(this.pipeline);
-        pass.bind(GpuShaders.drawing_present_fragment.texture, this.texture);
-        pass.draw(3);
+        let frame = GpuSurface.frame(
+            this.device_id,
+            this.surface,
+            this.width,
+            this.height,
+            this.format,
+            GpuVec4(0, 0, 0, 0)
+        ).await.map_err(drawing_gpu_error)?;
+        frame.pass((pass: GpuRenderPass) => {
+            pass.set_pipeline(this.pipeline);
+            pass.bind(GpuShaders.drawing_present_fragment.texture, this.texture);
+            pass.draw(3);
+        });
         return frame.present().await.map_err(drawing_gpu_error);
     }
 }

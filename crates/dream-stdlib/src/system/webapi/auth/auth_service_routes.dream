@@ -71,18 +71,19 @@ extend AuthService {
             );
         }
         for (let entry in this.providers.entries()) {
-            let provider = entry.value;
+            let begin_provider = entry.value.copy();
+            let complete_provider = entry.value.copy();
             let begin: fun(
                 RequestContext,
                 Map<string, string>
             ): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => {
-                return AuthService.handle_oidc(service, ctx, provider, false).await;
+                return AuthService.handle_oidc(service, ctx, begin_provider, false).await;
             };
             let complete: fun(
                 RequestContext,
                 Map<string, string>
             ): Future<HttpOutgoing> = async (ctx: RequestContext, params: Map<string, string>) => {
-                return AuthService.handle_oidc(service, ctx, provider, true).await;
+                return AuthService.handle_oidc(service, ctx, complete_provider, true).await;
             };
             routes.push(
                 WebEndpoint(

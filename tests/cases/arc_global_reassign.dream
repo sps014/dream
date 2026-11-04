@@ -62,8 +62,8 @@ fun main() {
     slot = Tracked(1);
     System.println("a");
     let x = Tracked(2);
-    slot = x;
     System.println(x.id);
+    slot = x;
     System.println(slot.id);
     slot = Tracked(3);
     System.println("b");

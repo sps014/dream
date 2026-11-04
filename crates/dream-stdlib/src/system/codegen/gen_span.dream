@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A source range described by its starting location and length.
+@copy
 public class GenSpan {
     /// Source file path.
     public file: string;

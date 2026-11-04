@@ -27,7 +27,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::isolated(
         "arc_global_reassign",
-        "drop 10\ng\ndrop 20\ndrop 21\no\ndrop 0\na\ndrop 1\n2\n2\ndrop 2\nb\ndrop 3\ndrop 4\nc\ndrop 5\nd\ne\ndrop 15\ndrop 11",
+        "drop 10\ng\ndrop 20\ndrop 21\no\ndrop 0\na\n2\ndrop 1\n2\ndrop 2\nb\ndrop 3\ndrop 4\nc\ndrop 5\nd\ne\ndrop 15\ndrop 11",
         true,
         "destructor ordering and exit cleanup",
     ),

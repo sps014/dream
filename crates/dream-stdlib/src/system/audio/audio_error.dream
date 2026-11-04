@@ -1,6 +1,7 @@
 module system.audio;
 
 /// A stable audio failure code and a readable explanation.
+@copy
 public class AudioError: Error {
     value_code: string;
     value_message: string;

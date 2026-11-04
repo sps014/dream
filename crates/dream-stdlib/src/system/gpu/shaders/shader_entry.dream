@@ -31,7 +31,7 @@ internal class ShaderEntry {
     internal body: List<ShaderNode>;
 
     internal constructor(borrow f: GenFunction, stage: GpuStage, module_name: string) {
-        this.function = f;
+        this.function = f.copy();
         this.stage = stage;
         this.module_name = module_name;
         this.declared = List<GpuTarget>();

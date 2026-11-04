@@ -76,6 +76,9 @@ impl<'a> Analyzer<'a> {
                 &struct_decl.name.text,
                 generic_param_names(&struct_decl.generic_parameters),
             );
+            if dream_abi::attributes::is_copy(&struct_decl.attributes) {
+                self.copy_types.insert(def);
+            }
             if struct_decl.is_sealed && !struct_decl.is_static {
                 self.sealed_types.insert(def);
             }

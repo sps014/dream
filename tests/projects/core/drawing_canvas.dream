@@ -142,7 +142,6 @@ async fun drawing_effects(): void {
     canvas.save_layer(effects: Option.Some(effects));
     canvas.fill_rect(8, 8, 12, 12, Color.rgba(255, 0, 0, 0.5f));
     canvas.restore();
-    effects.brightness(0);
     let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
     surface.render(canvas).unwrap();
     let pixels = surface.read_pixels().await.unwrap();

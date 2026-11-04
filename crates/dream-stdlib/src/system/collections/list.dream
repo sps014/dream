@@ -7,6 +7,7 @@ module system.collections;
 /// A growable, ordered sequence with zero-based indexed access. Adding elements may increase
 /// its capacity.
 @slot_walk("length", "at_unchecked", "")
+@copy
 public class List<T>: IndexedCollection<T> {
     items: T[];
     count: int;
@@ -227,9 +228,16 @@ public class List<T>: IndexedCollection<T> {
         return result;
     }
 
-    /// A shallow copy of the live elements.
-    public fun clone(): List<T> {
-        return this.slice(0, this.count);
+    /// An independent list holding a copy of every element, so changing either list or its
+    /// elements never affects the other. Copying a `List<Node>` requires `Node` to be `@copy`.
+    public fun copy(): List<T> {
+        let result = List<T>(this.count);
+        let i = 0;
+        while i < this.count {
+            result.push(Copy.of(Buffer.get_unchecked<T>(this.items, i)));
+            i = i + 1;
+        }
+        return result;
     }
 
     /// Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass
@@ -254,10 +262,9 @@ public class List<T>: IndexedCollection<T> {
     @inline
     public fun clear(): void {
         if this.count > 0 {
-            let z = CollectionStorage.zero<T>();
             let i = 0;
             while i < this.count {
-                Buffer.set_unchecked<T>(this.items, i, z);
+                Buffer.set_unchecked<T>(this.items, i, CollectionStorage.zero<T>());
                 i = i + 1;
             }
         }
@@ -309,12 +316,13 @@ public class List<T>: IndexedCollection<T> {
         return true;
     }
 
-    /// Removes the element at `index`, shifting later elements left. Returns true on success, or
-    /// false if `index` is out of range (the list is left unchanged in that case).
-    public fun remove_at(index: int): bool {
+    /// Removes and returns the element at `index`, shifting later elements left. Returns `None`
+    /// if `index` is out of range, leaving the list unchanged.
+    public fun remove_at(index: int): Option<T> {
         if (index < 0) || (index >= this.count) {
-            return false;
+            return Option.None;
         }
+        let removed = CollectionStorage.take<T>(this.items, index);
         let n = this.count - index - 1;
         if n > 0 {
             Span<T>(this.items, index, n).copy_from(Span<T>(this.items, index + 1, n));
@@ -323,13 +331,13 @@ public class List<T>: IndexedCollection<T> {
         // Zero the vacated tail slot: it still holds a second reference to the last shifted
         // element and would retain it past the next overwrite.
         Buffer.set_unchecked<T>(this.items, this.count, CollectionStorage.zero<T>());
-        return true;
+        return Option.Some(removed);
     }
 
     /// Removes the first occurrence of `value` (by equality). Returns true when something was removed.
     public fun remove(borrow value: T): bool {
         return switch (this.index_of(value)) {
-            Some(i) => this.remove_at(i),
+            Some(i) => this.remove_at(i).is_some(),
             None => false,
         };
     }

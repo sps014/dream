@@ -161,7 +161,7 @@ async fun async_file_copy_and_read_ahead(): void {
     File.delete("async_copy_destination.tmp");
 }
 
-class StreamingShortWriter: Writer {
+shared class StreamingShortWriter: Writer {
     public memory: MemoryStream;
     public fail: bool;
 
@@ -188,29 +188,27 @@ class StreamingShortWriter: Writer {
 
 @test
 fun streaming_io(): void {
-    let input = MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast"));
-    let reader = BufferedReader(input, 2);
+    let reader = BufferedReader(MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast")), 2);
     Assert.eq(reader.read_line().unwrap().unwrap(), "a");
     Assert.eq(reader.read_line().unwrap().unwrap(), "b\rc");
     Assert.eq(reader.read_line().unwrap().unwrap(), "last");
     Assert.is_true(reader.read_line().unwrap().is_none());
-    Assert.eq(input.read(0).unwrap().length, 0);
-    Assert.is_true(input.read_exact(1).is_err());
+    Assert.eq(reader.inner.read(0).unwrap().length, 0);
+    Assert.is_true(reader.inner.read_exact(1).is_err());
 
-    let destination = StreamingShortWriter();
-    let buffered = BufferedWriter(destination, 3);
+    let buffered = BufferedWriter(StreamingShortWriter(), 3);
     buffered.write_all(Encoding.utf8_encode("abcdefg")).unwrap();
-    destination.fail = true;
+    buffered.inner.fail = true;
     Assert.is_true(buffered.finish().is_err());
-    destination.fail = false;
+    buffered.inner.fail = false;
     buffered.finish().unwrap();
     buffered.finish().unwrap();
-    Assert.eq(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
+    Assert.eq(Encoding.utf8_decode(buffered.inner.memory.to_bytes().unwrap()), "abcdefg");
     Assert.is_true(buffered.write([(byte)1]).is_err());
 
-    input.seek(0L).unwrap();
+    reader.inner.seek(0L).unwrap();
     let output = MemoryStream();
-    Assert.eq(Streams.copy(input, output, 1).unwrap(), 11L);
+    Assert.eq(Streams.copy(reader.inner, output, 1).unwrap(), 11L);
     Assert.eq(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
     output.seek(15L).unwrap();
     output.write([(byte)65]).unwrap();
@@ -219,8 +217,8 @@ fun streaming_io(): void {
     Assert.eq((int)sparse[14], 0);
     output.close().unwrap();
     Assert.is_true(output.read(1).is_err());
-    Assert.is_true(BufferedReader(input, 0).read(1).is_err());
-    Assert.is_true(BufferedWriter(destination, 0).finish().is_err());
+    Assert.is_true(BufferedReader(MemoryStream(), 0).read(1).is_err());
+    Assert.is_true(BufferedWriter(StreamingShortWriter(), 0).finish().is_err());
     let seek_source = MemoryStream(Encoding.utf8_encode("first\nsecond\n"));
     let seek_reader = BufferedReader(seek_source, 8192);
     Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");

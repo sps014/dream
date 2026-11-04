@@ -113,7 +113,7 @@ struct c8c_Point {
     }
 }
 
-class c8c_User {
+shared class c8c_User {
     public name: string;
 
     public constructor(name: string) {

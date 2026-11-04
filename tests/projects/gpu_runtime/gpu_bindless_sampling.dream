@@ -172,13 +172,11 @@ async fun gpu_bindless_sampling(): void {
                     "pipeline on " + label
                 );
                 let encoder = device.command_encoder();
-                let pass = encoder.begin_render_pass(
-                    GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f)))
-                );
-                pass.set_pipeline(pipeline);
-                pass.bind_buffer(GpuShaders.bindless_fragment.materials, materials);
-                pass.draw(3);
-                pass.end();
+                encoder.render_pass(GpuRenderPassDesc.color(target, GpuLoad.Clear(GpuVec4(0.0f))), (pass: GpuRenderPass) => {
+                    pass.set_pipeline(pipeline);
+                    pass.bind_buffer(GpuShaders.bindless_fragment.materials, materials);
+                    pass.draw(3);
+                });
                 bindless_ok(device.submit(encoder.finish()).await, "draw on " + label);
 
                 let bytes = bindless_ok(target.read(0).await, "read on " + label);

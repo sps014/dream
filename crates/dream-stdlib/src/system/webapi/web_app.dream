@@ -6,7 +6,7 @@ import system.task;
 // The serving loop and in-flight request futures hold the app while it holds them; `wait`
 // breaks those cycles by clearing `serving` and `requests`.
 @allow_cycle
-public class WebApp {
+public shared class WebApp {
     options: WebAppOptions;
     middlewares: List<Middleware>;
     routes: List<WebEndpoint>;
@@ -46,7 +46,7 @@ public class WebApp {
 
     /// Creates a `WebApp` with `options`.
     public constructor(options: WebAppOptions) {
-        this.options = options.copy();
+        this.options = options;
         this.middlewares = List<Middleware>();
         this.routes = List<WebEndpoint>();
         this.table = RouteNode();
@@ -250,12 +250,9 @@ public class WebApp {
         return middleware.invoke(ctx, next).await;
     }
 
-    internal static async fun watch_disconnect(
-        req: HttpIncoming,
-        source: CancellationSource
-    ): void {
+    internal static async fun watch_disconnect(id: int, source: CancellationSource): void {
         WebOperation.submit(
-            WebOperation.request(WebAction.Disconnect, req.req_id),
+            WebOperation.request(WebAction.Disconnect, id),
             [],
             Option.None
         ).await;
@@ -335,8 +332,9 @@ public class WebApp {
     }
 
     static async fun handle(app: WebApp, req: HttpIncoming): void {
+        let id = req.req_id;
         let source = CancellationSource();
-        let watcher = WebApp.watch_disconnect(req, source);
+        let watcher = WebApp.watch_disconnect(id, source);
         Promise.start(watcher);
         let ctx = RequestContext(req);
         ctx.app_state = app.state;
@@ -344,7 +342,7 @@ public class WebApp {
         Task.scope<Unit, string>(
             async (scope: TaskScope<string>) => {
                 ctx.cancellation_token = Option.Some(scope.token);
-                req.cancellation_token = ctx.cancellation_token;
+                ctx.incoming.cancellation_token = ctx.cancellation_token;
                 WebApp.respond(app, ctx).await;
                 let result: Result<Unit, TaskFailure<string>> = Result.Ok(Unit());
                 return result;
@@ -353,7 +351,7 @@ public class WebApp {
         ).await;
         RequestContext.finish(ctx).await;
         Promise.cancel(watcher);
-        app.requests.remove(req.req_id);
+        app.requests.remove(id);
     }
 
     static async fun serve(app: WebApp, id: int, token: Option<CancellationToken>): void {
@@ -373,8 +371,9 @@ public class WebApp {
                 app.shutdown();
                 return;
             }
+            let id = req.req_id;
             let handler = WebApp.handle(app, req);
-            app.requests[req.req_id] = handler;
+            app.requests[id] = handler;
             Promise.start(handler);
         }
     }

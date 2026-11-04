@@ -28,15 +28,6 @@ internal class CliArgument {
         this.description = description;
     }
 
-    /// An independent copy, so later edits to the original definition do not reach it.
-    internal fun copy(): CliArgument {
-        let copy = CliArgument(this.name, this.kind, this.short, this.required, this.description);
-        copy.multiple = this.multiple;
-        copy.default_value = this.default_value;
-        copy.choices = this.choices;
-        return copy;
-    }
-
     internal fun is_positional(): bool {
         return this.kind == CliArgumentKind.Positional;
     }

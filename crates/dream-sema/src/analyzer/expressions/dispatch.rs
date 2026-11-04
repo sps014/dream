@@ -23,6 +23,9 @@ impl<'a> Analyzer<'a> {
     ) -> Result<Type, SemanticError> {
         let result =
             self.analyze_expression_inner(expression, parent_function, symbol_table, diagnostics);
+        if let Some(position) = expression.position() {
+            self.hir_mark_span(position);
+        }
         self.record_generator_type(
             expression,
             result.as_ref().cloned().unwrap_or(Type::Unknown),

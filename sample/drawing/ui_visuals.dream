@@ -63,7 +63,7 @@ async fun main(): void {
         if !window.is_open {
             break;
         }
-        drawing.present(screen).await.unwrap();
+        drawing.present(device, screen).await.unwrap();
     }
     drawing.close();
 }

@@ -3,28 +3,30 @@ module system.drawing;
 import system.gpu;
 
 extend DrawingSurface {
-    /// Displays the rendered image through an existing GPU window surface. Dimensions must match. Caches texture and pipeline resources until close or a different target is used. Browser GPU rendering stays on the GPU; CPU and native rendering use a pixel upload.
-    public async fun present(surface: GpuSurface): Result<Unit, DrawingError> {
+    /// Displays the rendered image through `surface`, a window surface of `device`. Dimensions must match. Caches texture and pipeline resources until close or a different target is used. Browser GPU rendering stays on the GPU; CPU and native rendering use a pixel upload.
+    public async fun present(device: GpuDevice, surface: GpuSurface): Result<Unit, DrawingError> {
         if surface.width != this.width || surface.height != this.height {
             return Result.Err(DrawingError("EINVAL\ndrawing and window surface dimensions differ"));
         }
         if this.handle == 0 {
             return Result.Err(DrawingError("EINVAL\ndrawing surface is closed"));
         }
-        let cached = this.presentation;
-        switch (cached) {
+        let stale = switch (this.presentation) {
+            Some(presenter) => presenter.target_handle != surface.handle,
+            None => true,
+        };
+        if stale {
+            let created: DrawingPresentation = GpuDrawingPresentation.create(device, surface)?;
+            this.presentation = Option.Some(created);
+        }
+        switch (this.presentation) {
             Some(presenter) => {
-                if presenter.target_handle != surface.handle {
-                    this.presentation = Option.None;
-                }
+                return presenter.present(this).await;
             }
-            None => {}
+            None => {
+                return Result.Ok(Unit());
+            }
         }
-        if this.presentation.is_none() {
-            this.presentation = Option.Some(GpuDrawingPresentation.create(surface)?);
-        }
-        let presenter = this.presentation.unwrap();
-        return presenter.present(this).await;
     }
 
     /// Copies this surface into mip zero of an equally sized RGBA8 or BGRA8 GPU texture. Requires import system.drawing.gpu. Browser GPU rendering copies on the GPU; CPU and native rendering use a pixel upload. The target must be single-sampled.

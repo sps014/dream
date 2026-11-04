@@ -7,6 +7,7 @@ import system.validation.derive;
 
 extend WebGenerator {
     internal fun arguments(
+        ctx: GenContext,
         f: GenFunction,
         out: CodeBuilder,
         memo: Map<string, string>,
@@ -14,7 +15,7 @@ extend WebGenerator {
     ): string {
         let args = "";
         for (let p in f.params) {
-            let value = this.extract(p, out, memo, route, f.id != route.function.id);
+            let value = this.extract(ctx, p, out, memo, route, f.id != route.function.id);
             if !args.is_empty() {
                 args = args + ", ";
             }
@@ -24,6 +25,7 @@ extend WebGenerator {
     }
 
     internal fun extract(
+        ctx: GenContext,
         p: GenParam,
         out: CodeBuilder,
         memo: Map<string, string>,
@@ -37,21 +39,19 @@ extend WebGenerator {
             return "ctx";
         }
         if p.has<DepAttribute>() {
-            return this.dependency(p, out, memo, route);
+            return this.dependency(ctx, p, out, memo, route);
         }
         let value = this.fresh();
         if p.ty.name == nameof(ServerWebSocket) {
             out.line(
                 "if !ServerWebSocket.is_handshake(ctx.incoming) { return HttpOutgoing.detail(\"websocket upgrade required\", 400); }"
             );
-            out.line(
-                "let " + value + " = ServerWebSocket(ctx.incoming, ctx.cancellation_token);"
-            );
+            out.line("let " + value + " = ServerWebSocket(ctx.incoming, ctx.cancellation_token);");
             memo[nameof(ServerWebSocket)] = value;
             return value;
         }
         if p.has<BodyAttribute>() {
-            let bytes = this.type_code(p.ty) == "byte[]";
+            let bytes = this.type_code(ctx, p.ty) == "byte[]";
             let read = "read_body_text";
             if bytes {
                 read = "read_body_bytes";
@@ -76,7 +76,8 @@ extend WebGenerator {
                     "let "
                         + value
                         + "_json = "
-                        + decode + "<" + this.type_code(p.ty) + ">(" + value + "_body.unwrap());"
+                        + decode
+                        + "<" + this.type_code(ctx, p.ty) + ">(" + value + "_body.unwrap());"
                 );
                 if p.ty.name == nameof(JsonValue) {
                     out.line(
@@ -103,28 +104,13 @@ extend WebGenerator {
             } else {
                 name = p.attribute<FormAttribute>().unwrap().name.unwrap_or(name);
             }
-            out.line(
-                "let "
-                    + value + "_form = ctx.incoming.form(token: ctx.cancellation_token).await;"
-            );
-            out.line(
-                "if "
-                    + value
-                    + "_form.is_err() { return HttpOutgoing.from_body_error("
-                    + value + "_form.unwrap_err()); }"
-            );
+            let form = this.form(out, memo);
             if p.has<FileAttribute>() {
                 out.line(
-                    "let "
-                        + value + "_option = " + value + "_form.unwrap().file(" + web_quote(name)
-                        + ");"
+                    "let " + value + "_option = " + form + ".take_file(" + web_quote(name) + ");"
                 );
             } else {
-                out.line(
-                    "let "
-                        + value + "_option = " + value + "_form.unwrap().get(" + web_quote(name)
-                        + ");"
-                );
+                out.line("let " + value + "_option = " + form + ".get(" + web_quote(name) + ");");
             }
             if p.has<FileAttribute>() {
                 if p.ty.is_option() {
@@ -138,7 +124,7 @@ extend WebGenerator {
                 );
                 return value + "_option.unwrap()";
             }
-            return this.scalar(p.ty, value + "_option", value, name, out, p.attributes);
+            return this.scalar(ctx, p.ty, value + "_option", value, name, out, p.attributes);
         }
         let name = p.name;
         let option = "";
@@ -161,10 +147,33 @@ extend WebGenerator {
         if dependency && p.has<HeaderAttribute>() {
             missing_status = 401;
         }
-        return this.scalar(p.ty, option, value, name, out, p.attributes, missing_status);
+        return this.scalar(ctx, p.ty, option, value, name, out, p.attributes, missing_status);
+    }
+
+    // The handler's parsed form, read on first use: a request's form can be read once, so every
+    // `@form` and `@file` parameter takes from the same `FormData`.
+    fun form(out: CodeBuilder, memo: Map<string, string>): string {
+        switch (memo.get(nameof(FormData))) {
+            Some(existing) => {
+                return existing;
+            }
+            None => {}
+        }
+        let form = this.fresh();
+        out.line("let " + form + "_read = ctx.incoming.form(token: ctx.cancellation_token).await;");
+        out.line(
+            "if "
+                + form
+                + "_read.is_err() { return HttpOutgoing.from_body_error("
+                + form + "_read.unwrap_err()); }"
+        );
+        out.line("let " + form + " = " + form + "_read.unwrap();");
+        memo[nameof(FormData)] = form;
+        return form;
     }
 
     internal fun scalar(
+        ctx: GenContext,
         ty: GenTypeRef,
         option: string,
         value: string,
@@ -189,7 +198,7 @@ extend WebGenerator {
             }
         }
         if ty.is_option() {
-            out.line("let " + value + ": " + this.type_code(ty) + " = Option.None;");
+            out.line("let " + value + ": " + this.type_code(ctx, ty) + " = Option.None;");
             out.line("if " + value + "_text.is_some() {");
         } else {
             if missing_status == 401 {
@@ -211,7 +220,7 @@ extend WebGenerator {
         let parsed = text;
         if core.name != "string" {
             out.line(
-                "let " + value + "_parsed = " + this.type_code(core) + ".parse(" + text + ");"
+                "let " + value + "_parsed = " + this.type_code(ctx, core) + ".parse(" + text + ");"
             );
             out.line(
                 "if "

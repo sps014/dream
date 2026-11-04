@@ -5,6 +5,7 @@ use super::*;
 
 pub const CONSUMING: &str = "consuming";
 pub const ALLOW_CYCLE: &str = "allow_cycle";
+pub const COPY: &str = "copy";
 
 pub const OWNED: &str = "owned";
 
@@ -44,4 +45,11 @@ pub fn owned_result(attributes: &[AttributeNode]) -> OwnedResult<'_> {
 /// analysis accepts stores whose every cycle passes through one. It never changes runtime ARC.
 pub fn allows_cycle(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, ALLOW_CYCLE)
+}
+
+/// The type's values can be duplicated with `.copy()`: the compiler derives a deep copy for a
+/// class, and a type that cannot be derived (a union, or a class over raw storage) writes its own
+/// `copy()`.
+pub fn is_copy(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, COPY)
 }

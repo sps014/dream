@@ -1,6 +1,7 @@
 module system.core;
 
 /// `Option<T>` - a value that is either present (`Some`) or absent (`None`).
+@copy
 public enum Option<T> {
     /// Contains a value of type `T`.
     Some(T),
@@ -20,6 +21,15 @@ public enum Option<T> {
         return switch (this) {
             Some(v) => false,
             None => true,
+        };
+    }
+
+    /// An independent option: `Some` holds a copy of the value. Copying an `Option<Node>`
+    /// requires `Node` to be `@copy`.
+    public fun copy(): Option<T> {
+        return switch (this) {
+            Some(v) => Option.Some(Copy.of(v)),
+            None => Option.None,
         };
     }
 

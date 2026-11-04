@@ -101,9 +101,10 @@ public class Audio {
                 return Result.Err(state.fail(error.code(), error.message(), "load", true));
             }
             let feed = opened.unwrap();
+            let has_duration = feed.duration.is_some();
             state.feed = Option.Some(feed);
             state.events.push(AudioEvent.LoadedMetadata(AudioEvents.now()));
-            if feed.duration.is_some() {
+            if has_duration {
                 state.events.push(AudioEvent.DurationChange(AudioEvents.now()));
             }
             state.events.push(AudioEvent.CanPlay(AudioEvents.now()));

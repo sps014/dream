@@ -14,6 +14,17 @@ enum Use {
     Escape,
 }
 
+/// Which parameters a walk is deciding.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Question {
+    /// The calling convention: an argument whose callee or ownership the walk cannot see is
+    /// assumed kept, because a wrong borrow would free a value the callee still holds.
+    Convention,
+    /// What the body keeps, for use-after-move: calls through an interface, a function value or
+    /// JS, and calls to functions without a body, only read their arguments.
+    Keeps,
+}
+
 /// What one function body does with each of its candidate parameters.
 pub(super) struct BodyFacts {
     /// Parameter index of each candidate parameter's local.
@@ -35,6 +46,8 @@ impl BodyFacts {
         body: &[HStmt],
         inferable: &IndexSet<DefId>,
         refs: &IndexMap<DefId, Vec<bool>>,
+        question: Question,
+        scratch: &IndexSet<LocalId>,
     ) -> Self {
         let mut facts = BodyFacts {
             candidates,
@@ -46,6 +59,9 @@ impl BodyFacts {
             facts: &mut facts,
             inferable,
             refs,
+            question,
+            scratch,
+            closure_envs: IndexSet::new(),
         };
         walker.stmts(body);
         facts
@@ -58,6 +74,14 @@ struct Walker<'f> {
     /// `ref` positions of every lowered function; a callee missing here may take any argument
     /// by `ref`.
     refs: &'f IndexMap<DefId, Vec<bool>>,
+    question: Question,
+    /// Compiler temporaries (for-each sequences and the like): binding a parameter to one only
+    /// lends it for the statement that reads it, so it does not keep the argument.
+    scratch: &'f IndexSet<LocalId>,
+    /// Environment arrays of closures capturing several values. A capture shares the value with
+    /// the closure, as a single capture passed to the environment word does, so storing into one
+    /// does not keep the value.
+    closure_envs: IndexSet<LocalId>,
 }
 
 impl Walker<'_> {
@@ -69,10 +93,31 @@ impl Walker<'_> {
 
     fn stmt(&mut self, stmt: &HStmt) {
         match stmt {
-            HStmt::Let { value, .. } => self.expr(value, Use::Escape),
+            HStmt::Let { local, value, .. } => {
+                if matches!(
+                    value.kind,
+                    HExprKind::ArrayNew {
+                        closure_env: true,
+                        ..
+                    }
+                ) {
+                    self.closure_envs.insert(*local);
+                }
+                self.expr(value, self.binding_use(*local));
+            }
             HStmt::Assign { place, value } => {
                 self.place(place);
-                self.expr(value, Use::Escape);
+                let use_ = match place {
+                    HPlace::Local(local) => self.binding_use(*local),
+                    HPlace::Index { array, .. }
+                        if matches!(&array.kind, HExprKind::Var(Binding::Local(env))
+                            if self.closure_envs.contains(env)) =>
+                    {
+                        Use::Read
+                    }
+                    _ => Use::Escape,
+                };
+                self.expr(value, use_);
             }
             HStmt::Expr(e) => self.expr(e, Use::Read),
             HStmt::Return(e) => {
@@ -139,10 +184,15 @@ impl Walker<'_> {
                 self.stmts(default);
             }
             HStmt::Await { future, .. } => self.expr(future, Use::Escape),
-            HStmt::Break(_)
-            | HStmt::Continue(_)
-            | HStmt::DebugLine(_)
-            | HStmt::SourceLine(_) => {}
+            HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) | HStmt::SourceLine(_) => {}
+        }
+    }
+
+    fn binding_use(&self, local: LocalId) -> Use {
+        if self.question == Question::Keeps && self.scratch.contains(&local) {
+            Use::Read
+        } else {
+            Use::Escape
         }
     }
 
@@ -209,7 +259,7 @@ impl Walker<'_> {
         {
             self.mutate(arg);
         }
-        if !take {
+        if !take && self.question == Question::Convention {
             self.expr(arg, Use::Read);
             return;
         }
@@ -220,7 +270,23 @@ impl Walker<'_> {
             self.facts.forwards.push((index, def, param));
             return;
         }
-        self.expr(arg, Use::Escape);
+        let unseen = match self.question {
+            Question::Convention => Use::Escape,
+            Question::Keeps => Use::Read,
+        };
+        self.expr(arg, unseen);
+    }
+
+    /// Arguments of a call whose callee the walk cannot see.
+    fn opaque_args(&mut self, args: &[HExpr]) {
+        match self.question {
+            Question::Convention => self.escapes(args),
+            Question::Keeps => {
+                for arg in args {
+                    self.expr(arg, Use::Read);
+                }
+            }
+        }
     }
 
     fn call_args(&mut self, callee: &Callee, args: &[HExpr], offset: usize) {
@@ -279,12 +345,12 @@ impl Walker<'_> {
                 self.mutate(receiver);
                 self.expr(receiver, Use::Read);
                 args.iter().for_each(|arg| self.mutate(arg));
-                self.escapes(args);
+                self.opaque_args(args);
             }
             K::IndirectCall { target, args, .. } => {
                 self.expr(target, Use::Read);
                 args.iter().for_each(|arg| self.mutate(arg));
-                self.escapes(args);
+                self.opaque_args(args);
             }
             K::JsCall {
                 target,
@@ -300,7 +366,7 @@ impl Walker<'_> {
                 if let Some(method) = method {
                     self.expr(method, Use::Read);
                 }
-                self.escapes(args);
+                self.opaque_args(args);
             }
             K::UnionNew { args, .. } => self.escapes(args),
             K::ArrayLit { elems, .. } | K::Tuple { elems } => self.escapes(elems),

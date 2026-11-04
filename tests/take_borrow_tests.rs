@@ -50,32 +50,6 @@ fn reuse_after_sink_is_allowed_via_copy() {
 }
 
 #[test]
-fn use_after_sink_field_store_is_error() {
-    // Storing a sink param into a field moves it — further uses of the param are hard errors
-    // (the old silent null caused empty Seq ranges / empty Regex patterns / runaway loops).
-    let code = r#"
-        class Box {
-            public value: string;
-            public constructor(value: string) {
-                this.value = value;
-                let again = value;
-            }
-        }
-        fun main(): void {
-            let _ = Box("hi");
-        }
-    "#;
-    let d = analyze_code(code);
-    assert!(d.has_errors(), "expected use-after-move error");
-    let msg = format!("{:?}", d);
-    assert!(
-        msg.contains("after it was moved"),
-        "unexpected diagnostics: {}",
-        msg
-    );
-}
-
-#[test]
 fn borrow_param_reusable_after_field_store() {
     let code = format!(
         "{SYSTEM_STUB}

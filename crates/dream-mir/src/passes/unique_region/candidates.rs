@@ -152,7 +152,8 @@ pub(super) fn wrap_sites(
             continue;
         }
         if let Some(join) = switch_join(f, bbi, bsi, &aliases) {
-            if payload_used_after_join(f, join, bbi, &aliases) {
+            let held = arm_holders(f, interner, bbi, bsi, &aliases);
+            if payload_used_after_join(f, join, bbi, &held) {
                 continue;
             }
             if used_death.contains(&(join, 0)) {
@@ -160,7 +161,7 @@ pub(super) fn wrap_sites(
             }
             used_birth.insert((bbi, bsi));
             used_death.insert((join, 0));
-            let null_locals: Vec<u32> = aliases.iter().copied().collect();
+            let null_locals: Vec<u32> = held.iter().copied().collect();
             out.push(WrapSite {
                 birth_bi: bbi,
                 birth_si: bsi,
@@ -291,6 +292,42 @@ pub(super) fn switch_join(
         return None;
     }
     Some(join)
+}
+
+/// The region root's aliases plus every reference local a switch arm loads from them: an arm may
+/// park the payload in a local declared outside the switch, which still points into the region
+/// after it is left.
+fn arm_holders(
+    f: &MirFunction,
+    interner: &TypeInterner,
+    bbi: usize,
+    bsi: usize,
+    aliases: &BTreeSet<u32>,
+) -> BTreeSet<u32> {
+    let mut held = aliases.clone();
+    let Some(sbi) = find_switch_after(f, bbi, bsi + 1, aliases) else {
+        return held;
+    };
+    let arms = f.blocks[sbi].terminator.successors();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for arm in &arms {
+            for stmt in &f.blocks[arm.0 as usize].stmts {
+                if let Statement::Assign(Place::Local(d), _) = stmt
+                    && !held.contains(&d.0)
+                    && interner.is_rc_tracked(f.local_ty(*d))
+                    && held
+                        .iter()
+                        .any(|h| crate::passes::rc::stmt_reads_local(stmt, *h))
+                {
+                    held.insert(d.0);
+                    changed = true;
+                }
+            }
+        }
+    }
+    held
 }
 
 pub(super) fn payload_used_after_join(

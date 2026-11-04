@@ -12,11 +12,9 @@ async fun main(): int {
     let original = Uuid.v4().unwrap();
     let restored = Uuid.parse(original.to_string()).unwrap();
     if original != restored || original.hash_code() != restored.hash_code() { return 2; }
-    let memory = MemoryStream();
-    let writer = CsvWriter(memory);
+    let writer = CsvWriter(MemoryStream());
     writer.write_record(["a,b", "line\nnext", "こんにちは"]).unwrap();
-    memory.seek(0L).unwrap();
-    let reader = CsvReader(memory);
+    let reader = CsvReader(MemoryStream(writer.inner.to_bytes().unwrap()));
     let row = reader.read_record().unwrap().unwrap();
     if row[0] != "a,b" || row[1] != "line\nnext" || row[2] != "こんにちは" { return 3; }
     if !reader.read_record().unwrap().is_none() { return 4; }
@@ -24,12 +22,10 @@ async fun main(): int {
     let parsed = command.parse(["--port", "8080"]).unwrap();
     let config = ConfigBuilder().default_value("port", "80").cli(parsed).build().unwrap();
     if config.get_int("port").unwrap() != 8080 { return 5; }
-    let compressed = MemoryStream();
-    let encoder = Compression.writer(compressed).unwrap();
+    let encoder = Compression.writer(MemoryStream()).unwrap();
     encoder.write_all(Encoding.utf8_encode("hello browser compression")).unwrap();
     encoder.finish().unwrap();
-    compressed.seek(0L).unwrap();
-    let decoder = Compression.reader(compressed).unwrap();
+    let decoder = Compression.reader(MemoryStream(encoder.inner.to_bytes().unwrap())).unwrap();
     let decoded = MemoryStream();
     Streams.copy(decoder, decoded).unwrap();
     decoded.seek(0L).unwrap();

@@ -1,12 +1,11 @@
 module system.json;
 
-// Native JSON value tree. `items` / `obj_map` can hold nested `JsonValue`s; trees are
-// represented by exact ownership metadata; recursive types are supported by ARC.
-//
 // Container fields are `Option` so scalars allocate no List/Map. Arrays own `items` only;
-// objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
+// objects own `obj_keys` + `obj_vals` (insertion order); `obj_map` indexes into both.
 /// A JSON value: null, boolean, number, string, array, or object. Arrays and objects can
-/// contain nested values. Object properties retain insertion order when serialized.
+/// contain nested values. Object properties retain insertion order when serialized. Each
+/// value has one owner; `copy()` makes an independent deep copy.
+@copy
 public class JsonValue {
     internal kind: int;
     internal bool_val: bool;
@@ -20,8 +19,8 @@ public class JsonValue {
     // Values parallel to `obj_keys` (avoids map re-hash during stringify).
     obj_vals: Option<List<JsonValue>>;
 
-    // O(1) object field lookup.
-    obj_map: Option<Map<string, JsonValue>>;
+    // Key -> position in `obj_keys` / `obj_vals`.
+    obj_map: Option<Map<string, int>>;
 
     internal constructor(
         kind: int,
@@ -31,7 +30,7 @@ public class JsonValue {
         items: Option<List<JsonValue>>,
         obj_keys: Option<List<string>>,
         obj_vals: Option<List<JsonValue>>,
-        obj_map: Option<Map<string, JsonValue>>
+        obj_map: Option<Map<string, int>>
     ) {
         this.kind = kind;
         this.bool_val = bool_val;
@@ -48,7 +47,7 @@ public class JsonValue {
         let none_items: Option<List<JsonValue>> = Option.None;
         let none_keys: Option<List<string>> = Option.None;
         let none_vals: Option<List<JsonValue>> = Option.None;
-        let none_map: Option<Map<string, JsonValue>> = Option.None;
+        let none_map: Option<Map<string, int>> = Option.None;
         return JsonValue(k, bool_val, num_val, str_val, none_items, none_keys, none_vals, none_map);
     }
 
@@ -81,7 +80,7 @@ public class JsonValue {
     public static fun array(): JsonValue {
         let none_keys: Option<List<string>> = Option.None;
         let none_vals: Option<List<JsonValue>> = Option.None;
-        let none_map: Option<Map<string, JsonValue>> = Option.None;
+        let none_map: Option<Map<string, int>> = Option.None;
         return JsonValue(
             4,
             false,
@@ -106,7 +105,7 @@ public class JsonValue {
             none_items,
             Option.Some(List<string>()),
             Option.Some(List<JsonValue>()),
-            Option.Some(Map<string, JsonValue>())
+            Option.Some(Map<string, int>())
         );
     }
 
@@ -185,56 +184,63 @@ public class JsonValue {
         return this.items;
     }
 
-    /// Returns the entries when this is an object, otherwise `None`.
-    public fun as_map(): borrow Option<Map<string, JsonValue>> {
-        if this.kind != 5 {
-            return Option.None;
-        }
-        return this.obj_map;
-    }
-
     /// Removes the named object property; returns whether it existed.
     public fun remove(borrow key: string): bool {
-        let mopt = this.obj_map;
-        if mopt.is_none() {
-            return false;
+        switch (this.obj_map) {
+            Some(m) => {
+                let found = m.get(key);
+                if found.is_none() {
+                    return false;
+                }
+                let index = found.unwrap();
+                m.remove(key);
+                switch (this.obj_keys) {
+                    Some(keys) => {
+                        keys.remove_at(index);
+                        let i = index;
+                        while i < keys.length {
+                            m[keys[i]] = i;
+                            i = i + 1;
+                        }
+                    },
+                    None => {},
+                }
+                switch (this.obj_vals) {
+                    Some(vals) => {
+                        vals.remove_at(index);
+                    },
+                    None => {},
+                }
+                return true;
+            },
+            None => {
+                return false;
+            },
         }
-        let m = mopt.unwrap_or(Map<string, JsonValue>());
-        if m.contains(key) == false {
-            return false;
-        }
-        m.remove(key);
-        let keys_opt = this.obj_keys;
-        let vals_opt = this.obj_vals;
-        if keys_opt.is_some() && vals_opt.is_some() {
-            let keys = keys_opt.unwrap_or(List<string>());
-            let vals = vals_opt.unwrap_or(List<JsonValue>());
-            let idx = keys.index_of(key);
-            if idx.is_some() {
-                let i = idx.unwrap_or(0);
-                keys.remove_at(i);
-                vals.remove_at(i);
-            }
-        }
-        return true;
     }
 
     /// Returns whether this is an object with a property named `key`. Always `false` for
     /// arrays and scalars.
     public fun contains(borrow key: string): bool {
-        return switch (this.obj_map) {
-            Some(m) => m.contains(key),
-            None => false,
-        };
+        return this.index_of_key(key) >= 0;
     }
 
     /// Returns the property named `key`, or `None` when this is not an object or the
     /// property is absent. Chain `as_string`, `as_int`, and similar readers through
     /// `and_then` to read a typed property.
     public fun get(borrow key: string): Option<JsonValue> {
+        let index = this.index_of_key(key);
+        if index < 0 {
+            return Option.None;
+        }
+        return this.value_at(index);
+    }
+
+    // Position of `key` in `obj_keys` / `obj_vals`, or -1.
+    fun index_of_key(borrow key: string): int {
         return switch (this.obj_map) {
-            Some(m) => m.get(key),
-            None => Option.None,
+            Some(m) => m.get(key).unwrap_or(-1),
+            None => -1,
         };
     }
 
@@ -248,29 +254,30 @@ public class JsonValue {
         return found.unwrap_or(JsonValue.null());
     }
 
-    /// Sets the value for `key` (objects only).
+    /// Sets the value for `key` (objects only), replacing an existing property in place.
     public fun this[key: string] = value: JsonValue {
         switch (this.obj_map) {
             Some(m) => {
+                let found = m.get(key);
+                if found.is_some() {
+                    switch (this.obj_vals) {
+                        Some(vals) => {
+                            vals[found.unwrap()] = value;
+                        },
+                        None => {},
+                    }
+                    return;
+                }
                 switch (this.obj_keys) {
                     Some(keys) => {
-                        switch (this.obj_vals) {
-                            Some(vals) => {
-                                if m.contains(key) == false {
-                                    keys.push(key);
-                                    vals.push(value);
-                                } else {
-                                    switch (keys.index_of(key)) {
-                                        Some(idx) => {
-                                            vals[idx] = value;
-                                        },
-                                        None => {},
-                                    }
-                                }
-                                m[key] = value;
-                            },
-                            None => {},
-                        }
+                        m[key] = keys.length;
+                        keys.push(key);
+                    },
+                    None => {},
+                }
+                switch (this.obj_vals) {
+                    Some(vals) => {
+                        vals.push(value);
                     },
                     None => {},
                 }
@@ -296,37 +303,32 @@ public class JsonValue {
 
     /// The object value at insertion index `index`, or `None`.
     public fun value_at(index: int): Option<JsonValue> {
-        switch (this.obj_vals) {
-            Some(vals) => {
-                if index < 0 || index >= vals.length {
-                    return Option.None;
-                }
-                return Option.Some(vals[index]);
-            },
-            None => {
-                return Option.None;
-            },
+        if this.kind != 5 || index < 0 || index >= this.length {
+            return Option.None;
         }
+        return switch (this.obj_vals) {
+            Some(vals) => Option.Some(vals[index]),
+            None => Option.None,
+        };
     }
 
-    /// The keys of the object (empty list when not an object).
+    /// A new list of the object's keys in insertion order (empty when not an object).
     public fun keys(): List<string> {
-        return this.obj_keys.unwrap_or(List<string>());
+        return switch (this.obj_keys) {
+            Some(keys) => keys.copy(),
+            None => List<string>(),
+        };
     }
 
     /// The array element at `index`, or `None`.
     public fun at(index: int): Option<JsonValue> {
-        switch (this.items) {
-            Some(items) => {
-                if index < 0 || index >= items.length {
-                    return Option.None;
-                }
-                return Option.Some(items[index]);
-            },
-            None => {
-                return Option.None;
-            },
+        if this.kind != 4 || index < 0 || index >= this.length {
+            return Option.None;
         }
+        return switch (this.items) {
+            Some(items) => Option.Some(items[index]),
+            None => Option.None,
+        };
     }
 
     /// Appends a value to the array.

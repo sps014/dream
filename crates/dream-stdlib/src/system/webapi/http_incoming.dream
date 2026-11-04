@@ -28,7 +28,7 @@ public class HttpIncoming {
     /// `X-Forwarded-Proto`.
     public scheme: string;
 
-    form_data: Option<FormData>;
+    form_read: bool;
     internal cancellation_token: Option<CancellationToken>;
 
     // Decodes the host's request record after its version byte: `[id][method code][method
@@ -44,7 +44,7 @@ public class HttpIncoming {
         this.client_host = metadata.text();
         this.client_port = metadata.i32();
         this.scheme = metadata.text();
-        this.form_data = Option.None;
+        this.form_read = false;
         this.cancellation_token = Option.None;
     }
 
@@ -157,8 +157,9 @@ public class HttpIncoming {
 
     /// Parses a `multipart/form-data` body. Text fields larger than `max_part_size` bytes, more
     /// than `max_fields` text fields or more than `max_files` files fail with `EINVAL`; file
-    /// parts have no size limit and spool to disk past 1 MiB. Later calls return the same
-    /// `FormData`, whatever limits they pass. Fails with `ECLOSED` after `stream` was read.
+    /// parts have no size limit and spool to disk past 1 MiB. The form can be read once: the
+    /// caller owns the returned `FormData`, and later calls fail with `ECLOSED`, as they do after
+    /// `stream` was read. Handlers with `@form` or `@file` parameters have already read it.
     @native
     public fun form(
         max_files: int = 1000,
@@ -183,8 +184,8 @@ public class HttpIncoming {
         token: Option<CancellationToken>
     ): Result<FormData, IoError> {
         let lifetime = [incoming];
-        if lifetime[0].form_data.is_some() {
-            return Result.Ok(lifetime[0].form_data.unwrap());
+        if lifetime[0].form_read {
+            return Result.Err(IoError.closed("the form was already read"));
         }
         if max_files < 0 || max_fields < 0 || max_part_size < 0 {
             return Result.Err(IoError.invalid("", "form limits must not be negative"));
@@ -193,9 +194,8 @@ public class HttpIncoming {
         request.i32(max_files);
         request.i32(max_fields);
         request.i32(max_part_size);
+        lifetime[0].form_read = true;
         let bytes = WebOperation.submit(request, [], token).await?;
-        let form = FormData(WebOperation.parse(bytes)?);
-        lifetime[0].form_data = Option.Some(form);
-        return Result.Ok(form);
+        return Result.Ok(FormData(WebOperation.parse(bytes)?));
     }
 }

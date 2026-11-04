@@ -1,35 +1,28 @@
 module system.gpu;
 
-/// A compute pass being recorded by `GpuCommandEncoder.begin_compute_pass`. Generated
+/// A compute pass being recorded by `GpuCommandEncoder.compute_pass`. The pass is handed to
+/// the function that records it and ends when that function returns. Generated
 /// `GpuShaders.<name>.encode` calls record dispatches into it; dispatches in one pass run in
 /// order, each seeing the previous ones' writes.
 public class GpuComputePass {
-    internal encoder: GpuCommandEncoder;
-    ended: bool;
+    internal recording: GpuRecording;
 
-    internal constructor(encoder: GpuCommandEncoder) {
-        this.encoder = encoder;
-        this.ended = false;
+    internal constructor(recording: GpuRecording) {
+        this.recording = recording;
+        this.recording.op(GpuOp.BeginComputePass);
     }
 
     internal fun dispatch(pipeline: int, groups: GpuIVec3, args: GpuArgs): void {
-        if this.ended {
-            this.encoder.fail(GpuError.Validation("dispatch was recorded after the pass ended"));
-            return;
-        }
-        this.encoder.op(GpuOp.SetPipeline);
-        this.encoder.words.push(pipeline);
-        this.encoder.bind_args(GpuStage.Compute, args);
-        this.encoder.op(GpuOp.Dispatch);
-        this.encoder.words.push_all([groups.x, groups.y, groups.z]);
+        this.recording.op(GpuOp.SetPipeline);
+        this.recording.words.push(pipeline);
+        this.recording.bind_args(GpuStage.Compute, args);
+        this.recording.op(GpuOp.Dispatch);
+        this.recording.words.push_all([groups.x, groups.y, groups.z]);
     }
 
-    /// Ends the pass. Ending it twice does nothing.
-    public fun end(): void {
-        if !this.ended {
-            this.ended = true;
-            this.encoder.op(GpuOp.EndPass);
-            this.encoder.in_pass = false;
-        }
+    // Ends the pass and appends what it recorded to `into`.
+    internal fun finish(into: GpuRecording): void {
+        this.recording.op(GpuOp.EndPass);
+        into.absorb(this.recording);
     }
 }

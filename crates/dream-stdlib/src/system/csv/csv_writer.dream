@@ -1,13 +1,13 @@
 module system.csv;
 
-/// CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.
-public class CsvWriter {
-    destination: Writer;
+/// CSV writer over the byte stream it owns; records use CRLF and standard doubled-quote escaping.
+public class CsvWriter<W: Writer> {
+    destination: W;
     delimiter: char;
     limit: int;
 
-    /// Borrows destination; callers retain responsibility for closure and explicit flushing.
-    public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576) {
+    /// Writes records to `destination`; callers remain responsible for explicit flushing.
+    public constructor(destination: W, delimiter: char = ',', max_record_bytes: int = 1048576) {
         this.destination = destination;
         this.delimiter = delimiter;
         this.limit = max_record_bytes;
@@ -37,12 +37,17 @@ public class CsvWriter {
         return Result.Ok(Unit());
     }
 
-    /// Flushes the borrowed destination and reports underlying failures.
+    /// Flushes the destination and reports underlying failures.
     public fun flush(): Result<Unit, CsvError> {
         let result = this.destination.flush();
         if result.is_err() {
             return Result.Err(CsvError(0L, 0L, result.unwrap_err().message()));
         }
         return Result.Ok(Unit());
+    }
+
+    /// The wrapped writer, holding every record written so far.
+    public get inner(): borrow W {
+        return this.destination;
     }
 }

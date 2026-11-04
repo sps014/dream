@@ -291,3 +291,13 @@ pub unsafe extern "C" fn gpuSubmitAsync(
 pub extern "C" fn gpuRelease(handle: i32) {
     crate::state::lock().release(handle);
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gpuPin(handle: i32) {
+    crate::state::lock().pin(handle);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gpuUnpin(handle: i32) {
+    crate::state::lock().unpin(handle);
+}

@@ -2,17 +2,22 @@ module system.gpu;
 
 /// The color and depth targets of a render pass, and how each starts.
 ///
-/// Start from `GpuRenderPassDesc.color` and add a depth buffer with `with_depth`.
+/// Start from `GpuRenderPassDesc.color` and add a depth buffer with `with_depth`. The
+/// description only names its targets: they must still exist when the pass is recorded.
 public class GpuRenderPassDesc {
-    internal color_target: GpuTexture;
+    internal color_target: int;
+    internal color_device: int;
     internal color_load: GpuLoad<GpuVec4>;
-    internal depth_target: Option<GpuTexture>;
+    internal depth_target: int;
+    internal depth_device: int;
     internal depth_load: GpuLoad<float>;
 
     constructor(target: GpuTexture, load: GpuLoad<GpuVec4>) {
-        this.color_target = target;
+        this.color_target = target.handle;
+        this.color_device = target.device_id;
         this.color_load = load;
-        this.depth_target = Option.None;
+        this.depth_target = 0;
+        this.depth_device = 0;
         this.depth_load = GpuLoad.Keep;
     }
 
@@ -24,7 +29,8 @@ public class GpuRenderPassDesc {
     /// Adds `depth` as the pass's depth buffer, which starts as `load` says, and returns
     /// this description. The texture needs a depth format and must be a render target.
     public fun with_depth(depth: GpuTexture, load: GpuLoad<float>): GpuRenderPassDesc {
-        this.depth_target = Option.Some(depth);
+        this.depth_target = depth.handle;
+        this.depth_device = depth.device_id;
         this.depth_load = load;
         return this;
     }

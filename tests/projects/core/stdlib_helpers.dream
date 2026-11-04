@@ -31,7 +31,7 @@ fun c20a_body(): void {
     let bytes = rng.next_bytes(4);
     c20a_verify_observation((bytes.length).to_string());
     let j = Json.deserialize<JsonValue>("{\"k\":[1]}").unwrap();
-    c20a_verify_observation((j.as_map().is_some()).to_string());
+    c20a_verify_observation((j.is_object()).to_string());
     switch (j.get("k")) {
         Some(arr) => c20a_verify_observation((arr.as_array().unwrap().length).to_string()),
         None => c20a_verify_observation((0).to_string()),

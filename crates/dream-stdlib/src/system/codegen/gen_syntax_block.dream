@@ -5,6 +5,7 @@ import system.collections;
 import system.json;
 
 /// A `name { ... }` site of this generator (`@syntax_block` generators only).
+@copy
 public class GenSyntaxBlock {
     /// Identity of this model node; pass it to `GenContext.error_at` to report a diagnostic here.
     public id: string;

@@ -1,12 +1,12 @@
 module system.compress;
 
 /// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
-public class CompressionReader: Reader {
-    inflater: Inflater;
+public class CompressionReader<R: Reader>: Reader {
+    inflater: Inflater<R>;
     finished: bool;
     closed: bool;
 
-    internal constructor(inflater: Inflater) {
+    internal constructor(inflater: Inflater<R>) {
         this.inflater = inflater;
         this.finished = false;
         this.closed = false;
@@ -41,8 +41,13 @@ public class CompressionReader: Reader {
         return next;
     }
 
-    /// Stops decoding without closing the borrowed source; later reads fail.
+    /// Stops decoding without closing the source; later reads fail.
     public fun close(): void {
         this.closed = true;
+    }
+
+    /// The compressed source. Reading from it directly skips input the decoder already buffered.
+    public get inner(): borrow R {
+        return this.inflater.source;
     }
 }

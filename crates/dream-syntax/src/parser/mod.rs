@@ -37,7 +37,16 @@ pub struct Parser<'a, 'b> {
     in_condition: bool,
     /// Members of a `@generator_only` type name no host symbol, like the type itself.
     in_generator_only_type: bool,
+    /// Recursive-descent depth of the expression, statement, type, and pattern parsers.
+    nesting_depth: u32,
+    /// The nesting-limit diagnostic is reported once per file.
+    nesting_reported: bool,
 }
+
+/// How deep expressions, statements, types, and patterns may nest. Past this the parser reports
+/// one error and stops recursing, so a hostile file cannot overflow the thread stack. The limit
+/// is far above any program a person writes; generated code that needs more should be split.
+const MAX_NESTING_DEPTH: u32 = 256;
 
 impl<'a, 'b> Parser<'a, 'b> {
     ///creates a new instance of the parser from a lexer instance
@@ -53,6 +62,59 @@ impl<'a, 'b> Parser<'a, 'b> {
             type_aliases: HashMap::new(),
             in_condition: false,
             in_generator_only_type: false,
+            nesting_depth: 0,
+            nesting_reported: false,
+        }
+    }
+
+    /// Enters one recursive-descent level. Returns false when the file is already too deep; the
+    /// caller returns a placeholder and does not recurse. Tokens belonging to the rejected nest
+    /// are consumed so the parent can match its own closing delimiter.
+    fn enter_nesting(&mut self) -> bool {
+        if self.nesting_depth >= MAX_NESTING_DEPTH {
+            if !self.nesting_reported {
+                self.nesting_reported = true;
+                let span = self.current_token().position;
+                self.diagnostics
+                    .report_error("Nesting is too deep".to_string(), Some(span));
+            }
+            self.recover_past_nesting();
+            return false;
+        }
+        self.nesting_depth += 1;
+        true
+    }
+
+    fn leave_nesting(&mut self) {
+        self.nesting_depth = self.nesting_depth.saturating_sub(1);
+    }
+
+    /// Consumes the rejected nest, leaving a closing delimiter or semicolon for the parent.
+    fn recover_past_nesting(&mut self) {
+        let mut balance: i32 = 0;
+        loop {
+            match self.current_token().kind {
+                TokenKind::EndOfFileToken => return,
+                TokenKind::OpenParenthesisToken
+                | TokenKind::CurlyOpenBracketToken
+                | TokenKind::OpenBracketToken => {
+                    balance += 1;
+                    self.next_token();
+                }
+                TokenKind::CloseParenthesisToken
+                | TokenKind::CurlyCloseBracketToken
+                | TokenKind::CloseBracketToken => {
+                    if balance == 0 {
+                        return;
+                    }
+                    balance -= 1;
+                    self.next_token();
+                }
+                TokenKind::SemicolonToken if balance == 0 => return,
+                _ => {
+                    self.next_token();
+                }
+            }
         }
     }
     //returns the new eof token

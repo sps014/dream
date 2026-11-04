@@ -149,8 +149,16 @@ fn web_task_and_websocket_soak() {
     }
     drop(service);
 
-    assert_eq!(totals.server_errors.load(Ordering::Relaxed), 0, "5xx responses");
-    assert_eq!(totals.failures.load(Ordering::Relaxed), 0, "failed requests");
+    assert_eq!(
+        totals.server_errors.load(Ordering::Relaxed),
+        0,
+        "5xx responses"
+    );
+    assert_eq!(
+        totals.failures.load(Ordering::Relaxed),
+        0,
+        "failed requests"
+    );
     let settled: Vec<&Sample> = samples.iter().filter(|s| s.at >= warmup).collect();
     assert!(settled.len() >= 2, "too few samples after the warm-up");
     let first = settled[0];
@@ -163,10 +171,16 @@ fn web_task_and_websocket_soak() {
         peak_live
     );
     if let (Some(before), Some(after)) = (first.threads, last.threads) {
-        assert!(after <= before + THREAD_SLACK, "threads grew from {before} to {after}");
+        assert!(
+            after <= before + THREAD_SLACK,
+            "threads grew from {before} to {after}"
+        );
     }
     if let (Some(before), Some(after)) = (first.handles, last.handles) {
-        assert!(after <= before + HANDLE_SLACK, "handles grew from {before} to {after}");
+        assert!(
+            after <= before + HANDLE_SLACK,
+            "handles grew from {before} to {after}"
+        );
     }
     let slope = rss_slope_mb_per_hour(&settled);
     eprintln!("[soak] post-warm-up RSS slope {slope:.2} MB/h");
@@ -181,13 +195,24 @@ fn web_task_and_websocket_soak() {
 /// Least-squares slope of RSS over time.
 fn rss_slope_mb_per_hour(samples: &[&Sample]) -> f64 {
     let n = samples.len() as f64;
-    let hours: Vec<f64> = samples.iter().map(|s| s.at.as_secs_f64() / 3600.0).collect();
+    let hours: Vec<f64> = samples
+        .iter()
+        .map(|s| s.at.as_secs_f64() / 3600.0)
+        .collect();
     let mb: Vec<f64> = samples.iter().map(|s| s.rss as f64 / 1e6).collect();
     let mean_h = hours.iter().sum::<f64>() / n;
     let mean_mb = mb.iter().sum::<f64>() / n;
-    let covariance: f64 = hours.iter().zip(&mb).map(|(h, m)| (h - mean_h) * (m - mean_mb)).sum();
+    let covariance: f64 = hours
+        .iter()
+        .zip(&mb)
+        .map(|(h, m)| (h - mean_h) * (m - mean_mb))
+        .sum();
     let variance: f64 = hours.iter().map(|h| (h - mean_h).powi(2)).sum();
-    if variance == 0.0 { 0.0 } else { covariance / variance }
+    if variance == 0.0 {
+        0.0
+    } else {
+        covariance / variance
+    }
 }
 
 async fn run_load(addr: SocketAddr, until: Instant, totals: Arc<Totals>) {
@@ -216,7 +241,11 @@ async fn keep_alive_worker(addr: SocketAddr, until: Instant, totals: Arc<Totals>
             if Instant::now() >= until {
                 break;
             }
-            let body = if round % 16 == 0 { large.clone() } else { small.clone() };
+            let body = if round % 16 == 0 {
+                large.clone()
+            } else {
+                small.clone()
+            };
             for (method, path, body) in [
                 ("GET", "/plain", Bytes::new()),
                 ("POST", "/echo", body),
@@ -274,7 +303,8 @@ async fn websocket_worker(addr: SocketAddr, until: Instant, totals: Arc<Totals>)
 
 async fn websocket_round(addr: SocketAddr) -> Result<(), Failure> {
     let stream = TcpStream::connect(addr).await?;
-    let (mut socket, _) = tokio_tungstenite::client_async(format!("ws://{addr}/ws"), stream).await?;
+    let (mut socket, _) =
+        tokio_tungstenite::client_async(format!("ws://{addr}/ws"), stream).await?;
     for i in 0..10 {
         let text = format!("message {i}");
         socket.send(Message::text(text.clone())).await?;
@@ -337,7 +367,13 @@ async fn heap_stats(addr: SocketAddr) -> Result<(i64, i64), Failure> {
         .uri("/stats")
         .header(hyper::header::HOST, "127.0.0.1")
         .body(Full::new(Bytes::new()))?;
-    let body = sender.send_request(request).await?.into_body().collect().await?.to_bytes();
+    let body = sender
+        .send_request(request)
+        .await?
+        .into_body()
+        .collect()
+        .await?
+        .to_bytes();
     let text = String::from_utf8(body.to_vec())?;
     let mut fields = text.split(' ').map(str::parse::<i64>);
     let committed = fields.next().ok_or("missing committed bytes")??;
@@ -407,15 +443,18 @@ impl Service {
         let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
         // SAFETY: the child's process handle stays open for `self`'s lifetime.
         let ok = unsafe { GetProcessMemoryInfo(self.child.as_raw_handle(), &mut counters, size) };
-        if ok == 0 { 0 } else { counters.WorkingSetSize as u64 }
+        if ok == 0 {
+            0
+        } else {
+            counters.WorkingSetSize as u64
+        }
     }
 
     #[cfg(windows)]
     fn threads(&self) -> Option<u64> {
         use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
         use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First,
-            Thread32Next,
+            CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
         };
         // SAFETY: the snapshot handle is closed below, and `entry.dwSize` is set as required.
         unsafe {
@@ -455,7 +494,12 @@ impl Service {
             .output()
             .ok();
         output
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok())
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+            })
             .unwrap_or(0)
             * 1024
     }

@@ -73,7 +73,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = hash & (cap - 1);
+        let idx = mix_hash(hash) & (cap - 1);
         let result = -1;
         let done = false;
         while done == false {
@@ -104,7 +104,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = key.hash_code() & (cap - 1);
+        let idx = mix_hash(key.hash_code()) & (cap - 1);
         while true {
             let s = slots[idx].state;
             if (s != epoch) && (s != tomb) {
@@ -125,7 +125,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = hash & (cap - 1);
+        let idx = mix_hash(hash) & (cap - 1);
         let first_tomb = -1;
         let done = false;
         while done == false {
@@ -175,7 +175,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
             if old[i].state == this.epoch {
                 let hash = old[i].key.hash_code();
                 if can_transfer {
-                    let target = hash & (new_cap - 1);
+                    let target = mix_hash(hash) & (new_cap - 1);
                     while this.slots[target].state == this.epoch {
                         target = (target + 1) & (new_cap - 1);
                     }
@@ -200,7 +200,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
                 this.rehash(hash_capacity_for(this.cap + 1));
             }
         }
-        let idx = hash & (this.cap - 1);
+        let idx = mix_hash(hash) & (this.cap - 1);
         let slot_state = this.slots[idx].state;
         let epoch = this.epoch;
         if slot_state == epoch && this.slots[idx].key == key {

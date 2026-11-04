@@ -1,6 +1,10 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
 
+#ifndef __wasm__
+#include <stdio.h>
+#endif
+
 #define PANIC_MESSAGE_MAX 1024
 
 static dream_panic_hook panic_hook;
@@ -28,6 +32,12 @@ void dream_panic_at(dream_ptr msg, const char *location) {
             dream_platform_current->write(2, "\n", 1, DREAM_TEXT_UTF8);
         }
     }
+    /* abort does not flush, and a panic must not hide the output that led to it.
+     * Wasm has no hosted stdio buffer; its writes already go straight to the host. */
+#ifndef __wasm__
+    fflush(stdout);
+    fflush(stderr);
+#endif
     dream_platform_abort();
 }
 

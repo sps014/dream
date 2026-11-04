@@ -61,35 +61,55 @@ impl Compiler {
         let llvm = self.toolchain();
         let quiet = crate::driver::quiet_panic::QuietPanics::new();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
-            let interner = analyzer.interner();
-            let mut mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
-            if self.output_kind.is_library() {
-                library::relativize_sources(&mut mir, main_file_path)?;
-            }
-            let mir = self.optimize_mir(mir, interner, &mut dump);
-            let live_imports: Vec<_> = mir
-                .imports
-                .iter()
-                .map(|imp| (imp.module.clone(), imp.field.clone()))
-                .collect();
-            if let Some(environment) = self.target.spec().execution_environment.component() {
-                if !mir.exports.is_empty()
-                    || self.crate_type == dream_sema::analyzer::CrateType::Lib
-                {
-                    diagnostics.report_error("standalone WASI emits command components; exported libraries require a WIT world".into(), None);
+            // Analysis and lowering recurse with the tree. A fresh stack keeps that recursion
+            // off the (often small) main thread of an installed binary or the language server.
+            stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
+                let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
+                let interner = analyzer.interner();
+                let mut mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
+                if self.output_kind.is_library() {
+                    library::relativize_sources(&mut mir, main_file_path)?;
                 }
-                for (module, field) in &live_imports {
-                    if !dream_abi::runtime_hosts::component_host_supported(module, field) {
-                        diagnostics.report_error(
+                let mir = self.optimize_mir(mir, interner, &mut dump);
+                let live_imports: Vec<_> = mir
+                    .imports
+                    .iter()
+                    .map(|imp| (imp.module.clone(), imp.field.clone()))
+                    .collect();
+                if let Some(environment) = self.target.spec().execution_environment.component() {
+                    if !mir.exports.is_empty()
+                        || self.crate_type == dream_sema::analyzer::CrateType::Lib
+                    {
+                        diagnostics.report_error("standalone WASI emits command components; exported libraries require a WIT world".into(), None);
+                    }
+                    for (module, field) in &live_imports {
+                        if !dream_abi::runtime_hosts::component_host_supported(module, field) {
+                            diagnostics.report_error(
                             format!(
                                 "capability '{module}.{field}' is not available on {environment}"
                             ),
                             None,
                         );
+                        }
+                    }
+                    if diagnostics.has_errors() {
+                        return Err(fail_diagnostics(
+                            self.render_diagnostics,
+                            CompileError::Semantic,
+                            &diagnostics,
+                            &loaded.acc.file_contents,
+                        ));
                     }
                 }
-                if diagnostics.has_errors() {
+                if self.target.spec().capabilities.linear_memory
+                    && report_wasm_c_imports(
+                        &loaded.graph.view(),
+                        &live_imports,
+                        &loaded.cpp_bridge,
+                        &loaded.native_graph,
+                        &mut diagnostics,
+                    )
+                {
                     return Err(fail_diagnostics(
                         self.render_diagnostics,
                         CompileError::Semantic,
@@ -97,25 +117,9 @@ impl Compiler {
                         &loaded.acc.file_contents,
                     ));
                 }
-            }
-            if self.target.spec().capabilities.linear_memory
-                && report_wasm_c_imports(
-                    &loaded.graph.view(),
-                    &live_imports,
-                    &loaded.cpp_bridge,
-                    &loaded.native_graph,
-                    &mut diagnostics,
-                )
-            {
-                return Err(fail_diagnostics(
-                    self.render_diagnostics,
-                    CompileError::Semantic,
-                    &diagnostics,
-                    &loaded.acc.file_contents,
-                ));
-            }
-            let emitted = self.emit_module(&mir, interner, live_imports, llvm.as_deref())?;
-            Ok((emitted, mir.layouts))
+                let emitted = self.emit_module(&mir, interner, live_imports, llvm.as_deref())?;
+                Ok((emitted, mir.layouts))
+            })
         }));
         drop(quiet);
         if self.emit_mir.is_some() {

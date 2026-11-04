@@ -33,7 +33,12 @@ fn cross_toolchain() -> (std::path::PathBuf, std::ffi::OsString) {
 }
 
 /// A stand-in capability library: only its exported symbols matter to the link.
-fn foreign_library(clang: &std::path::Path, triple: &str, source: &std::path::Path, out: &std::path::Path) {
+fn foreign_library(
+    clang: &std::path::Path,
+    triple: &str,
+    source: &std::path::Path,
+    out: &std::path::Path,
+) {
     let name = out.file_name().unwrap().to_string_lossy();
     checked(
         Command::new(clang)

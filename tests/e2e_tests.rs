@@ -209,7 +209,11 @@ fn native_binary_is_deterministic() {
         );
         builds.push(fs::read(&bin).unwrap());
     }
-    assert!(builds[0] == builds[1], "relinking changed {}", bin.display());
+    assert!(
+        builds[0] == builds[1],
+        "relinking changed {}",
+        bin.display()
+    );
 }
 
 /// Every Node-capable project and isolated program must produce reproducible artifacts.

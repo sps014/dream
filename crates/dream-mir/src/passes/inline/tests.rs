@@ -156,10 +156,28 @@ fn unflagged_fat_callee_is_not_inlined() {
     let int = ctx.interner.int();
     let callee_def = ctx.register(DefKind::Function, "fat", vec![]);
     let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+    let mut caller = FunctionBuilder::new("caller", int);
+    caller.set_def(caller_def, vec![]);
+    let arg = caller.new_param(int, Some("arg".into()));
+    let r = caller.new_temp(int);
+    caller.assign(
+        Place::Local(r),
+        Rvalue::Call {
+            callee: crate::Callee {
+                borrowed_result: false,
+                def: callee_def,
+                args: vec![],
+                ret: int,
+                take_params: vec![],
+            },
+            args: vec![Operand::Copy(Place::Local(arg))],
+        },
+    );
+    caller.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(r)))));
     let mut mir = crate::Mir {
         functions: vec![
             fat_int_callee("fat", callee_def, int, dream_hir::InlineHint::Default),
-            caller_of(callee_def, caller_def, int),
+            caller.finish(),
         ],
         ..Default::default()
     };
@@ -167,6 +185,26 @@ fn unflagged_fat_callee_is_not_inlined() {
     assert!(
         caller_still_calls(&mir),
         "unflagged fat callee should stay a call"
+    );
+}
+
+#[test]
+fn constant_argument_inlines_past_the_default_budget() {
+    let mut ctx = TypeCtx::new();
+    let int = ctx.interner.int();
+    let callee_def = ctx.register(DefKind::Function, "fat", vec![]);
+    let caller_def = ctx.register(DefKind::Function, "caller", vec![]);
+    let mut mir = crate::Mir {
+        functions: vec![
+            fat_int_callee("fat", callee_def, int, dream_hir::InlineHint::Default),
+            caller_of(callee_def, caller_def, int),
+        ],
+        ..Default::default()
+    };
+    assert!(Inliner.run(&mut mir, &ctx.interner));
+    assert!(
+        !caller_still_calls(&mir),
+        "a constant argument raises the inline budget"
     );
 }
 

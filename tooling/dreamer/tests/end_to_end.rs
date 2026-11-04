@@ -55,7 +55,7 @@ fn publish_fixture_package(registry_dir: &Path, name: &str, version: &str, body_
         .join(format!("{}-{}.tar.gz", name, version));
     let bytes = dreamer::fetch::package_project(&pkg_dir, &tarball_path).unwrap();
 
-    let registry = open_registry(&format!("file://{}", registry_dir.display()));
+    let registry = open_registry(&format!("file://{}", registry_dir.display())).unwrap();
     let entry = IndexEntry {
         name: name.to_string(),
         vers: version.to_string(),

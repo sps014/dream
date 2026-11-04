@@ -201,7 +201,7 @@ impl Workspace {
                         tarball: tarball.clone(),
                         ..Default::default()
                     };
-                    let client = open_registry(url);
+                    let client = open_registry(url)?;
                     fetch::fetch_and_extract(client.as_ref(), &entry)?
                 }
             };

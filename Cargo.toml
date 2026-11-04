@@ -53,6 +53,9 @@ clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["unbounded_depth"] }
 serde_stacker = "0.1"
+# Grows the host stack for semantic analysis so a deep (but accepted) tree cannot abort the
+# compiler. The parser's nesting limit is what rejects hostile input.
+stacker = "0.1"
 base64 = "0.22"
 tempfile = { version = "3", optional = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }

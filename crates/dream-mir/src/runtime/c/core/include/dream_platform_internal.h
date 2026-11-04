@@ -9,4 +9,6 @@ void *dream_raw_calloc(size_t count, size_t size);
 _Noreturn void dream_platform_abort(void);
 int32_t dream_utf8_chunk(const uint16_t *units, int32_t len, char *out, size_t cap, int32_t start, size_t *written, int c_string);
 void dream_write_utf16(int stream, const uint16_t *units, int32_t len);
+/* Line-buffered when stdout is a terminal, fully buffered otherwise. Idempotent. */
+void dream_configure_stdout(void);
 #endif

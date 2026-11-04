@@ -12,9 +12,9 @@ use crate::execution::native::bundle::{link_runtime, stage_runtime};
 use crate::execution::native::c_link::{
     cc_link_flags, read_c_libs_from_abi, search_roots_for_artifact,
 };
+use crate::execution::native::driver::{Lang, Linker};
 use crate::execution::native::native_c::{NativeObjects, compile_sets, read_c_sources_from_abi};
 use crate::execution::native::pgo::{clear_raw_profiles, llvm_pgo};
-use crate::execution::native::driver::{Lang, Linker};
 use crate::execution::native::{Pgo, host_library_dir, native_bin_fresh, read_host_capabilities};
 #[path = "library.rs"]
 mod library;
@@ -336,14 +336,7 @@ pub fn compile_llvm(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join("native-c");
-        compile_sets(
-            config,
-            &tools.clang()?,
-            &spec,
-            &c_sources,
-            &cache,
-            debug,
-        )?
+        compile_sets(config, &tools.clang()?, &spec, &c_sources, &cache, debug)?
     };
     let stamp_path = bin.with_extension("flags");
     let linker = match output_kind {

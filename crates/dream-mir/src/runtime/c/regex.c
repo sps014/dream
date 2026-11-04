@@ -5,6 +5,9 @@
 #include "pcre2.h"
 #include "dream_guest.h"
 
+void dream_panic(dream_ptr msg);
+dream_ptr dream_utf8_to_string(const char *utf8);
+
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -28,6 +31,31 @@ static uint32_t compile_opts(int32_t flags) {
         opt |= PCRE2_DOTALL;
     }
     return opt;
+}
+
+/* Hostile patterns must not look like "no match". These caps are far above any pattern a
+ * program uses on purpose; exceeding them panics instead of returning a false negative. */
+#define DREAM_REGEX_MATCH_LIMIT 10000000u
+#define DREAM_REGEX_DEPTH_LIMIT 10000u
+
+static pcre2_match_context *match_limits(void) {
+    static _Thread_local pcre2_match_context *context;
+    if (context == NULL) {
+        context = pcre2_match_context_create(NULL);
+        if (context != NULL) {
+            pcre2_set_match_limit(context, DREAM_REGEX_MATCH_LIMIT);
+            pcre2_set_depth_limit(context, DREAM_REGEX_DEPTH_LIMIT);
+        }
+    }
+    return context;
+}
+
+static void reject_match_limit(int rc) {
+    if (rc == PCRE2_ERROR_MATCHLIMIT || rc == PCRE2_ERROR_DEPTHLIMIT ||
+        rc == PCRE2_ERROR_HEAPLIMIT || rc == PCRE2_ERROR_JIT_STACKLIMIT) {
+        dream_panic(dream_utf8_to_string(
+            "panic: regular expression exceeded its match limit"));
+    }
 }
 
 static DreamRe *as_re(uintptr_t h) {
@@ -164,8 +192,9 @@ dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos) {
         return dream_array_i32(0);
     }
     sub = (const PCRE2_UCHAR *)dream_str_units(input);
-    rc = pcre2_match(re->code, sub, (PCRE2_SIZE)n, (PCRE2_SIZE)pos, 0, md, NULL);
+    rc = pcre2_match(re->code, sub, (PCRE2_SIZE)n, (PCRE2_SIZE)pos, 0, md, match_limits());
     if (rc < 0) {
+        reject_match_limit(rc);
         pcre2_match_data_free(md);
         return dream_array_i32(0);
     }
@@ -198,8 +227,12 @@ dream_ptr regex_find_all(uintptr_t h, dream_ptr input) {
     md = pcre2_match_data_create_from_pattern(re->code, NULL);
     if (md == NULL) { return dream_array_i32(0); }
     subject = (const PCRE2_UCHAR *)dream_str_units(input);
-    while (pos <= (PCRE2_SIZE)n && pcre2_match(re->code, subject, (PCRE2_SIZE)n,
-                                             pos, options, md, NULL) >= 0) {
+    while (pos <= (PCRE2_SIZE)n) {
+        int rc = pcre2_match(re->code, subject, (PCRE2_SIZE)n, pos, options, md, match_limits());
+        if (rc < 0) {
+            reject_match_limit(rc);
+            break;
+        }
         PCRE2_SIZE *ov = pcre2_get_ovector_pointer(md);
         if (count == capacity) {
             int32_t next;
@@ -243,6 +276,11 @@ int32_t regex_test(uintptr_t h, dream_ptr input) {
     if (md == NULL && (md = pcre2_match_data_create(1, NULL)) == NULL) {
         return 0;
     }
-    return pcre2_match(re->code, (const PCRE2_UCHAR *)dream_str_units(input),
-                       (PCRE2_SIZE)dream_str_len(input), 0, 0, md, NULL) >= 0;
+    int rc = pcre2_match(re->code, (const PCRE2_UCHAR *)dream_str_units(input),
+                         (PCRE2_SIZE)dream_str_len(input), 0, 0, md, match_limits());
+    if (rc < 0) {
+        reject_match_limit(rc);
+        return 0;
+    }
+    return 1;
 }

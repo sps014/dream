@@ -230,6 +230,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             type_aliases: self.type_aliases.clone(),
             in_condition: false,
             in_generator_only_type: false,
+            nesting_depth: self.nesting_depth,
+            nesting_reported: self.nesting_reported,
         };
         let expr = sub.parse_expression(0)?;
         if sub.current_token().kind != EndOfFileToken {
@@ -242,6 +244,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some(pos),
             );
         }
+        self.nesting_reported = sub.nesting_reported;
         self.node_spans.extend(std::mem::take(&mut sub.node_spans));
         Ok(expr)
     }

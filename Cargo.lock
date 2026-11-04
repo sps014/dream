@@ -1219,6 +1219,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_stacker",
+ "stacker",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -1477,6 +1478,7 @@ dependencies = [
  "indexmap 2.14.0",
  "serde",
  "serde_json",
+ "stacker",
  "tokio",
  "tower-lsp",
 ]
@@ -1497,6 +1499,7 @@ dependencies = [
  "half",
  "indexmap 2.14.0",
  "pretty_assertions",
+ "rayon",
  "tracing",
  "wasmprinter",
 ]

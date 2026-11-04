@@ -135,3 +135,25 @@ jobs:
             target/bench-gate/**/*.remarks.yaml
           retention-days: 30
           if-no-files-found: warn
+
+  # ubuntu-24.04 is x86-64. Manual: the Dream binary is a release build, then one loop is
+  # timed against Rust and Go. Results are an artifact, not a merge gate.
+  compare-languages:
+    name: Loop vs Rust and Go (x86-64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Build the compiler
+        run: cargo build --release -p dream
+      - name: Compare the integer loop
+        run: python3 scripts/benchmarks/compare_languages.py | tee target/language-compare.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: language-compare-${{ github.sha }}
+          path: target/language-compare.json

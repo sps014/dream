@@ -549,3 +549,13 @@ jobs:
       - run: "cargo test --test integration runtime_weak:: -- --nocapture"
       - run: "cargo test --test integration runtime_callback:: -- --nocapture"
       - run: "cargo test --test integration runtime_cancellation:: -- --nocapture"
+
+  supply-chain:
+    name: cargo-deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources

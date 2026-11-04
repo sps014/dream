@@ -1531,6 +1531,57 @@ fn fuzz_unbalanced_delimiters_never_panic() {
 }
 
 #[test]
+fn fuzz_deep_nesting_reports_instead_of_overflowing() {
+    // Well under the nesting limit: still a normal program.
+    let mut shallow = String::from("fun main(): void { let x = ");
+    shallow.push_str(&"(".repeat(64));
+    shallow.push('1');
+    shallow.push_str(&")".repeat(64));
+    shallow.push_str("; }");
+    let arena = bumpalo::Bump::new();
+    let (_, diagnostics) = parse_code(&shallow, &arena);
+    assert!(
+        !diagnostics.has_errors(),
+        "nesting under the limit should parse: {:?}",
+        diagnostics.diagnostics
+    );
+
+    // Far past the limit: one diagnostic, a tree, and no stack overflow.
+    let mut deep = String::from("fun main(): void { let x = ");
+    deep.push_str(&"(".repeat(10_000));
+    deep.push('1');
+    deep.push_str(&")".repeat(10_000));
+    deep.push_str("; }");
+    assert_parses_without_panic(&deep);
+    let arena = bumpalo::Bump::new();
+    let (_, diagnostics) = parse_code(&deep, &arena);
+    assert!(
+        diagnostics
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("Nesting is too deep")),
+        "expected a nesting diagnostic, got {:?}",
+        diagnostics.diagnostics
+    );
+
+    let mut deep_type = String::from("fun main(): void { let x: ");
+    for _ in 0..4_000 {
+        deep_type.push_str("List<");
+    }
+    deep_type.push_str("int");
+    deep_type.push_str(&">".repeat(4_000));
+    deep_type.push_str("; }");
+    assert_parses_without_panic(&deep_type);
+
+    let mut deep_block = String::from("fun main(): void { ");
+    deep_block.push_str(&"if (true) { ".repeat(4_000));
+    deep_block.push_str("return; ");
+    deep_block.push_str(&"} ".repeat(4_000));
+    deep_block.push('}');
+    assert_parses_without_panic(&deep_block);
+}
+
+#[test]
 fn test_parse_interface_declaration() {
     let code = "interface Animal { fun Call(): string; fun Legs(): int; }";
     let arena = bumpalo::Bump::new();

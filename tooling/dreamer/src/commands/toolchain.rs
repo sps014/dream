@@ -8,7 +8,37 @@ pub fn install(component: Option<String>) -> Result<()> {
     };
     toolchain::install(&tools)?;
     prewarm_generators();
+    prewarm_runtime();
     Ok(())
+}
+
+/// Compiles a tiny program natively and to wasm so the runtime objects and signature cache exist
+/// before the first real build. Best effort, like [`prewarm_generators`].
+fn prewarm_runtime() {
+    let Ok(dream) = crate::dream_bin::locate() else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("dream-prewarm-{}", std::process::id()));
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let file = dir.join("prewarm.dream");
+    if std::fs::write(&file, "fun main(): void { }\n").is_err() {
+        return;
+    }
+    for flag in ["--emit-llvm", "--wasm"] {
+        let ok = std::process::Command::new(&dream)
+            .arg(flag)
+            .arg(&file)
+            .status()
+            .is_ok_and(|status| status.success());
+        if !ok {
+            eprintln!(
+                "note: the {flag} runtime was not prebuilt; the first build of that kind builds it"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Builds the std generator executables so the first `@json` build only launches one. Best

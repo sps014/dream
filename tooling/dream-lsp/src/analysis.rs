@@ -223,15 +223,17 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         // The snapshot is extracted inside the same scope as the analyzer (it borrows the
         // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let target = dream_abi::target::TargetSpec::host();
-            let mut analyzer = Analyzer::new(&graph, &arena)
-                .with_target_layout(dream_hir::TargetLayout {
-                    ptr_size: target.ptr_size,
-                    ptr_align: target.ptr_align,
-                })
-                .with_unverified_consumption();
-            let _ = analyzer.analyze(&mut diagnostics);
-            analyzer.ide_snapshot()
+            stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
+                let target = dream_abi::target::TargetSpec::host();
+                let mut analyzer = Analyzer::new(&graph, &arena)
+                    .with_target_layout(dream_hir::TargetLayout {
+                        ptr_size: target.ptr_size,
+                        ptr_align: target.ptr_align,
+                    })
+                    .with_unverified_consumption();
+                let _ = analyzer.analyze(&mut diagnostics);
+                analyzer.ide_snapshot()
+            })
         }));
         match result {
             Ok(mut snapshot) => {

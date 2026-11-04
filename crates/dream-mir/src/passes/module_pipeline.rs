@@ -154,11 +154,46 @@ pub fn run_function_pipelines(
     poll_pipeline: &PassManager,
     dump: &mut MirDump,
 ) {
-    for f in &mut mir.functions {
-        pipeline.run_layouts_dumped(f, interner, &mir.layouts, dump);
-    }
-    for p in &mut mir.polls {
-        poll_pipeline.run_layouts_dumped(p, interner, &mir.layouts, dump);
+    // Per-function passes only read the interner and layouts, so they can run together. Results
+    // stay in function order. A dump is sequential so its trace order does not depend on threads.
+    if dump.is_active() {
+        for f in &mut mir.functions {
+            pipeline.run_layouts_dumped(f, interner, &mir.layouts, dump);
+        }
+        for p in &mut mir.polls {
+            poll_pipeline.run_layouts_dumped(p, interner, &mir.layouts, dump);
+        }
+    } else {
+        use rayon::prelude::*;
+        // The shipped pipelines are stateless unit structs. `PassManager` is not `Sync` because a
+        // test pass may hold `Rc`, and those pipelines never reach this branch (they call
+        // `PassManager::run` on one function). Sharing the reference across function threads is
+        // sound for the pipelines this function is called with.
+        struct Share<'a>(&'a PassManager);
+        // SAFETY: see the comment above. The reference is only used to call `&self` pass methods,
+        // and those passes do not share interior mutable state.
+        unsafe impl Send for Share<'_> {}
+        unsafe impl Sync for Share<'_> {}
+        impl Share<'_> {
+            fn run(
+                &self,
+                func: &mut MirFunction,
+                interner: &TypeInterner,
+                layouts: &dream_hir::LayoutTable,
+            ) {
+                self.0
+                    .run_layouts_dumped(func, interner, layouts, &mut MirDump::disabled());
+            }
+        }
+        let layouts = &mir.layouts;
+        let pipeline = Share(pipeline);
+        let poll_pipeline = Share(poll_pipeline);
+        mir.functions.par_iter_mut().for_each(|f| {
+            pipeline.run(f, interner, layouts);
+        });
+        mir.polls.par_iter_mut().for_each(|p| {
+            poll_pipeline.run(p, interner, layouts);
+        });
     }
     dump.module(STAGE_FIXPOINT, mir, interner);
 }

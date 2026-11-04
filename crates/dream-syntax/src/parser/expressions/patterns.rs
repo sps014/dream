@@ -68,6 +68,20 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// [`Self::parse_pattern_atom`]s separated by `|`, collapsing to a single [`PatternNode::Or`]
     /// only when there is more than one alternative.
     pub(crate) fn parse_pattern(&mut self) -> Result<PatternNode, Error> {
+        if !self.enter_nesting() {
+            let span = self.current_token().position;
+            return Ok(PatternNode::Wildcard(SyntaxToken::new(
+                TokenKind::IdentifierToken,
+                span,
+                "_".to_string(),
+            )));
+        }
+        let result = self.parse_pattern_limited();
+        self.leave_nesting();
+        result
+    }
+
+    fn parse_pattern_limited(&mut self) -> Result<PatternNode, Error> {
         let first = self.parse_pattern_atom()?;
         if self.current_token().kind != TokenKind::BitWisePipeToken {
             return Ok(first);

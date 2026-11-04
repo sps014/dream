@@ -41,6 +41,8 @@ struct CachedIndex {
     /// AST-index heuristics.
     sema: Option<Arc<dream_sema::analyzer::IdeSnapshot>>,
     consumed: Arc<Vec<analysis::ConsumedFunction>>,
+    /// Protocol diagnostics for this version, so the debounced publisher does not analyze again.
+    diagnostics: Arc<Vec<Diagnostic>>,
 }
 
 #[derive(Debug)]
@@ -235,19 +237,8 @@ impl Backend {
             (doc.text.clone(), doc.version)
         };
 
-        let index = Arc::new(Index::build(file_path, &text));
-        let outcome = analysis::analyze_document(file_path, &text);
-        let sema = outcome.sema.map(Arc::new);
-        self.index_cache.insert(
-            uri.to_string(),
-            CachedIndex {
-                version,
-                index: index.clone(),
-                sema: sema.clone(),
-                consumed: Arc::new(outcome.consumed),
-            },
-        );
-        Some((index, sema))
+        let cached = shared_models(&self.index_cache, uri, file_path, &text, version, false);
+        Some((cached.index, cached.sema))
     }
 
     /// Functions in the document that generators consumed, for the version [`Self::models_for`]
@@ -278,6 +269,7 @@ impl Backend {
 
         let client = self.client.clone();
         let pending = self.pending_diagnostics.clone();
+        let cache = self.index_cache.clone();
         let file_path = Self::file_path_of(&uri);
 
         tokio::spawn(async move {
@@ -286,11 +278,80 @@ impl Backend {
             if pending.get(&key).map(|v| *v) != Some(version) {
                 return;
             }
-            let diagnostics = compute_diagnostics(file_path.as_deref(), &text);
+            let publish_key = key.clone();
+            let diagnostics = match tokio::task::spawn_blocking(move || {
+                shared_models(
+                    &cache,
+                    &publish_key,
+                    file_path.as_deref(),
+                    &text,
+                    version,
+                    true,
+                )
+                .diagnostics
+            })
+            .await
+            {
+                Ok(diagnostics) => Arc::unwrap_or_clone(diagnostics),
+                Err(_) => return,
+            };
+            if pending.get(&key).map(|v| *v) != Some(version) {
+                return;
+            }
             client
                 .publish_diagnostics(uri, diagnostics, Some(version))
                 .await;
         });
+    }
+}
+
+/// One front-end pass per document version, shared by navigation and diagnostics.
+/// `already_blocking` is set when the caller is a `spawn_blocking` task; otherwise the pass
+/// uses `block_in_place` so it does not occupy a tokio worker.
+fn shared_models(
+    cache: &DashMap<String, CachedIndex>,
+    uri: &str,
+    file_path: Option<&str>,
+    text: &str,
+    version: i32,
+    already_blocking: bool,
+) -> CachedIndex {
+    if let Some(cached) = cache.get(uri)
+        && cached.version == version
+    {
+        return cached.clone();
+    }
+    let file_path = file_path.map(str::to_string);
+    let text = text.to_string();
+    let built = if already_blocking {
+        build_models(file_path.as_deref(), &text, version)
+    } else {
+        tokio::task::block_in_place(|| build_models(file_path.as_deref(), &text, version))
+    };
+    match cache.entry(uri.to_string()) {
+        dashmap::mapref::entry::Entry::Occupied(mut occupied) => {
+            if occupied.get().version >= version {
+                return occupied.get().clone();
+            }
+            occupied.insert(built.clone());
+        }
+        dashmap::mapref::entry::Entry::Vacant(vacant) => {
+            vacant.insert(built.clone());
+        }
+    }
+    built
+}
+
+fn build_models(file_path: Option<&str>, text: &str, version: i32) -> CachedIndex {
+    let index = Arc::new(Index::build(file_path, text));
+    let outcome = analysis::analyze_document(file_path, text);
+    let diagnostics = Arc::new(lsp_diagnostics(&outcome.diagnostics));
+    CachedIndex {
+        version,
+        index,
+        sema: outcome.sema.map(Arc::new),
+        consumed: Arc::new(outcome.consumed),
+        diagnostics,
     }
 }
 
@@ -335,10 +396,10 @@ pub fn consumed_lenses(consumed: &[analysis::ConsumedFunction], text: &str) -> V
     lenses
 }
 
-/// Runs the front-end and maps its output to protocol diagnostics.
-fn compute_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnostic> {
-    analysis::collect_diagnostics(file_path, text)
-        .into_iter()
+/// Maps front-end diagnostics to the language-server protocol.
+fn lsp_diagnostics(diagnostics: &[analysis::DiagnosticOut]) -> Vec<Diagnostic> {
+    diagnostics
+        .iter()
         .map(|d| Diagnostic {
             source: Some("dream".to_string()),
             range: map_range(d.range),
@@ -346,7 +407,7 @@ fn compute_diagnostics(file_path: Option<&str>, text: &str) -> Vec<Diagnostic> {
                 "warning" => DiagnosticSeverity::WARNING,
                 _ => DiagnosticSeverity::ERROR,
             }),
-            message: d.message,
+            message: d.message.clone(),
             code: d.code.map(|c| NumberOrString::String(c.to_string())),
             ..Default::default()
         })

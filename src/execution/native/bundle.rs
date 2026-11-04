@@ -237,8 +237,9 @@ mod tests {
         );
         for capability in HostCapability::ALL {
             assert!(args.iter().any(|arg| {
-                Path::new(arg) == Path::new(".")
-                    .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
+                Path::new(arg)
+                    == Path::new(".")
+                        .join(capability.library_name(&dream_abi::target::TargetSpec::host()))
             }));
         }
         assert!(!args.iter().any(|arg| arg == "-L."));

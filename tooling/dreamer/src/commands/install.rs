@@ -27,6 +27,7 @@ pub fn run(start_dir: &Path) -> Result<()> {
     let lockfile = shell.install(&resolved)?;
     lockfile.save(&lock_path)?;
 
+    warn_unsandboxed_generators(&install_root);
     println!(
         "Installed {} package(s) into {}",
         lockfile.packages.len(),
@@ -36,6 +37,27 @@ pub fn run(start_dir: &Path) -> Result<()> {
         println!("  {} {}", pkg.name, pkg.version);
     }
     Ok(())
+}
+
+/// Generators from dependencies run during `dream build` with the permissions of the build.
+/// The warning is the install-time signal; the generator guide states the same trust rule.
+fn warn_unsandboxed_generators(install_root: &Path) {
+    let packages = install_root.join(PACKAGES_DIR_NAME);
+    let Ok(entries) = std::fs::read_dir(&packages) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let manifest = entry.path().join(dream_abi::project::MANIFEST_FILE_NAME);
+        let Ok(text) = std::fs::read_to_string(&manifest) else {
+            continue;
+        };
+        if text.lines().any(|line| line.trim() == "[[generators]]") {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            eprintln!(
+                "warning: dependency '{name}' ships a source generator. Generators run unsandboxed at build time, with the same trust as a build script."
+            );
+        }
+    }
 }
 
 fn install_shell(

@@ -99,7 +99,9 @@ pub(crate) fn png_to_ico(png: &[u8]) -> Result<Vec<u8>, String> {
 pub(super) fn resource_command(
     tools: &super::tools::LlvmTools,
 ) -> Result<std::process::Command, String> {
-    tools.optional_tool("llvm-rc").map(std::process::Command::new)
+    tools
+        .optional_tool("llvm-rc")
+        .map(std::process::Command::new)
 }
 
 /// Resource files have no machine code, so the same resource compiler serves each Windows target.

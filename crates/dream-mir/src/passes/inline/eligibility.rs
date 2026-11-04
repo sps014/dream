@@ -7,6 +7,7 @@ use crate::Place;
 use crate::Rvalue;
 use crate::Statement;
 use crate::analysis::function_key::FunctionKeyRef;
+use dream_types::TyKind;
 use dream_types::TypeInterner;
 use indexmap::IndexMap as HashMap;
 use indexmap::IndexSet as HashSet;
@@ -99,14 +100,24 @@ fn eligible(
     let g = &mir.functions[ci];
     let caller = &mir.functions[fi];
     // Program callbacks keep their own panic locations when called from stdlib code.
-    // SourceLine cannot carry a different file through an inlined body.
+    // SourceLine cannot carry a different file through an inlined body. A callback with no
+    // source markers has nothing to mis-label, so a `fun` argument may be inlined.
+    let user_callee = g
+        .file
+        .as_deref()
+        .is_some_and(|file| !dream_stdlib::is_std_source(file));
+    let callee_has_locations = g.blocks.iter().any(|block| {
+        block
+            .stmts
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::SourceLine(_)))
+    });
     if caller
         .file
         .as_deref()
         .is_some_and(dream_stdlib::is_std_source)
-        && g.file
-            .as_deref()
-            .is_some_and(|file| !dream_stdlib::is_std_source(file))
+        && user_callee
+        && callee_has_locations
     {
         return false;
     }
@@ -147,11 +158,16 @@ fn eligible(
     }
     let stmt_count: usize = g.blocks.iter().map(|b| b.stmts.len()).sum();
     let prefer = g.inline == dream_hir::InlineHint::Prefer;
-    let (max_stmts, max_blocks) = if prefer {
-        (128, 24)
-    } else if mir.optimize_for_size && call_counts.get(key).copied().unwrap_or(0) > 1 {
+    // A constant or function argument is worth a larger body: inlining then exposes the value to
+    // folding, which a fixed 64-statement budget would leave as a call. Size builds keep the
+    // tight shared-body budget; only `@inline` lifts that one.
+    let beneficial = argument_benefits_inlining(caller, args, interner);
+    let shared_size = mir.optimize_for_size && call_counts.get(key).copied().unwrap_or(0) > 1;
+    let (max_stmts, max_blocks) = if shared_size && !prefer {
         // LLVM can still inline shared bodies after propagation gives it a target-level cost.
         (8, 2)
+    } else if prefer || beneficial {
+        (128, 24)
     } else {
         (MAX_INLINE_STMTS, MAX_INLINE_BLOCKS)
     };
@@ -180,4 +196,20 @@ fn eligible(
         }
     }
     true
+}
+
+/// True when inlining is likely to fold the call: a constant operand, or a `fun` value
+/// (a callback or closure) the callee can call directly.
+fn argument_benefits_inlining(
+    caller: &crate::MirFunction,
+    args: &[Operand],
+    interner: &TypeInterner,
+) -> bool {
+    args.iter().any(|arg| match arg {
+        Operand::Const(_) => true,
+        Operand::Copy(Place::Local(local)) => {
+            matches!(interner.kind(caller.local_ty(*local)), TyKind::Func(..))
+        }
+        Operand::Copy(_) => false,
+    })
 }

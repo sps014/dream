@@ -67,18 +67,19 @@ try {
     $SumUrl = "$Base/SHA256SUMS"
     try {
         $sums = Invoke-WebRequest -Uri $SumUrl
-        $line = ($sums.Content -split "`n" | Where-Object { $_ -match [regex]::Escape($Archive) } | Select-Object -First 1)
-        if ($line) {
-            $expected = ($line -split '\s+')[0].Trim()
-            $actual = (Get-FileHash -Algorithm SHA256 -Path $ArchivePath).Hash.ToLowerInvariant()
-            if ($actual -ne $expected.ToLowerInvariant()) {
-                throw "checksum mismatch for $Archive (expected $expected, got $actual)"
-            }
-            Write-Host "Checksum OK"
-        }
     } catch {
-        # SHA256SUMS optional
+        throw "failed to download $SumUrl"
     }
+    $line = ($sums.Content -split "`n" | Where-Object { $_ -match [regex]::Escape($Archive) } | Select-Object -First 1)
+    if (-not $line) {
+        throw "SHA256SUMS has no entry for $Archive"
+    }
+    $expected = ($line -split '\s+')[0].Trim()
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $ArchivePath).Hash.ToLowerInvariant()
+    if ($actual -ne $expected.ToLowerInvariant()) {
+        throw "checksum mismatch for $Archive (expected $expected, got $actual)"
+    }
+    Write-Host "Checksum OK"
 
     Expand-Archive -Path $ArchivePath -DestinationPath (Join-Path $Work "out") -Force
     $extractedDream = Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |

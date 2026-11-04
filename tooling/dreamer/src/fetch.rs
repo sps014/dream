@@ -253,7 +253,7 @@ mod tests {
         std::fs::write(project.join("src/pkg.dream"), text).unwrap();
         let tarball = root.join("staging.tar.gz");
         let bytes = package_project(&project, &tarball).unwrap();
-        let client = crate::registry::open_registry(&format!("file://{}", root.display()));
+        let client = crate::registry::open_registry(&format!("file://{}", root.display())).unwrap();
         let entry = IndexEntry {
             name: "pkg".into(),
             vers: "1.0.0".into(),

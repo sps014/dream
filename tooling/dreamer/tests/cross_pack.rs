@@ -41,7 +41,8 @@ fn packages_foreign_elf_and_its_target_libraries() {
             ))
         });
     let clang = llvm.join(if cfg!(windows) { "clang.exe" } else { "clang" });
-    let sysroot = std::env::var_os("DREAM_SYSROOT").expect("set DREAM_SYSROOT to a foreign Linux sysroot");
+    let sysroot =
+        std::env::var_os("DREAM_SYSROOT").expect("set DREAM_SYSROOT to a foreign Linux sysroot");
     let dream = std::env::current_exe()
         .unwrap()
         .parent()

@@ -61,6 +61,14 @@ internal fun grow_capacity(old: int, need: int): int {
     return c;
 }
 
+// Spreads sequential and aligned hashes across slots. The multiply is odd, so it is a bijection
+// on 32-bit values and lookup still finds every key; only the low bits used as the slot change.
+// Identity hashes (integers, enums, 16-byte-aligned pointers) otherwise pile into a few slots.
+internal fun mix_hash(hash: int): int {
+    let mixed = (uint)hash * 2654435769u;
+    return (int)mixed;
+}
+
 // Smallest power-of-two hash-table capacity (at least `hash_min_capacity()`) that is `>= need`.
 // The largest representable power of two is 2^30; asking for more panics instead of wrapping.
 internal fun hash_capacity_for(need: int): int {

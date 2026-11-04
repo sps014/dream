@@ -246,7 +246,11 @@ impl<'l, 'a> Fx<'l, 'a> {
             Rvalue::ToBytes { value, ty, wire } => {
                 let sz = elem_size(&self.l.cx, *ty) as i64;
                 let v = self.operand(value);
-                let helper = if *wire { "dream_to_wire" } else { "dream_to_bytes" };
+                let helper = if *wire {
+                    "dream_to_wire"
+                } else {
+                    "dream_to_bytes"
+                };
                 match self.interner.kind(*ty) {
                     TyKind::Prim(PrimTy::String) => self.call_v(helper, &[v, V::i32(sz)]),
                     TyKind::Prim(_) | TyKind::Enum(_) => {
@@ -278,10 +282,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                     }
                     _ => {
                         let tag = self.l.cx.type_tag(*ty);
-                        self.call_v(
-                            "dream_from_wire_box",
-                            &[b, V::i64(sz), V::i32(tag as i64)],
-                        )
+                        self.call_v("dream_from_wire_box", &[b, V::i64(sz), V::i32(tag as i64)])
                     }
                 }
             }

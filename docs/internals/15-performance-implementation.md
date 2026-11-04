@@ -330,7 +330,11 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 - Prove List backing-storage transfer for `take_array`, including live views and retained aliases;
   retain the correct copy path when transfer cannot be proven. Isolate realloc costs and managed
   element movement. Audit rehash ownership transfer before removing ARC traffic.
-- Measure Map/Set probes, equality calls, live load/tombstones and rehash frequency. Tune growth
+- `Map`/`Set` mix hashes with a Fibonacci multiply before probing (`mix_hash`). Sequential
+  integers and 16-byte-aligned identity hashes no longer share a handful of slots.
+  `tests/bench/map_phases.dream` reports lookup time for sequential, stride-16, and scattered
+  keys; similar times mean probes stayed short. Tombstone compaction stays rejected (above).
+  Still open: equality-call counts and rehash frequency. Tune growth
   and compaction with churn/working-set evidence before considering representation changes.
 - Complete reverse search and comparison work, allocation-free text paths and concatenation
   fusion while preserving evaluation order, Unicode, mutation and snapshot semantics.

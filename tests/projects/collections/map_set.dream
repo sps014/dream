@@ -161,3 +161,42 @@ fun collections_advanced(): void {
     Assert.is_true(pointSet.add(pt));
     Assert.is_false(pointSet.contains(pt));
 }
+
+// Sequential and stride-16 keys used to share a handful of slots. Mixing must keep every key
+// reachable across inserts, tombstones, and growth.
+@test
+fun hash_mix_keeps_clustered_keys() {
+    let map = Map<int, int>();
+    let set = Set<int>();
+    let i = 0;
+    while i < 4096 {
+        map[i] = i;
+        Assert.is_true(set.add(i * 16));
+        i = i + 1;
+    }
+    let removed = 0;
+    i = 0;
+    while i < 4096 {
+        Assert.eq(map[i], i);
+        Assert.is_true(set.contains(i * 16));
+        if i % 3 == 0 {
+            map.remove(i);
+            set.remove(i * 16);
+            removed = removed + 1;
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while i < 4096 {
+        if i % 3 == 0 {
+            Assert.is_false(map.contains(i));
+            Assert.is_false(set.contains(i * 16));
+        } else {
+            Assert.eq(map[i], i);
+            Assert.is_true(set.contains(i * 16));
+        }
+        i = i + 1;
+    }
+    Assert.eq(map.length, 4096 - removed);
+    Assert.eq(set.length, 4096 - removed);
+}

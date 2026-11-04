@@ -267,7 +267,7 @@ impl Resolver {
                 let entries = match self.index_cache.get(&cache_key) {
                     Some(e) => e.clone(),
                     None => {
-                        let client = open_registry(&url);
+                        let client = open_registry(&url)?;
                         let entries = client.fetch_index(&name).with_context(|| {
                             format!("fetching index for '{}' from {}", name, url)
                         })?;
@@ -322,6 +322,7 @@ impl Resolver {
                     );
                 };
 
+                let checksum = self.authoritative_checksum(&name, &url, chosen)?;
                 let already_current = self
                     .resolved
                     .get(&name)
@@ -339,7 +340,7 @@ impl Resolver {
                         source: ResolvedSource::Registry {
                             url: url.clone(),
                             tarball: chosen.tarball.clone(),
-                            checksum: chosen.cksum.clone(),
+                            checksum,
                         },
                         dependencies: chosen.deps.iter().map(|d| d.name.clone()).collect(),
                     },
@@ -365,6 +366,31 @@ impl Resolver {
         }
         Ok(())
     }
+
+    /// The checksum recorded in `dream.lock` is the one install will verify. A registry that
+    /// republishes a locked version with different bytes fails here, even when its index and
+    /// tarball agree with each other.
+    fn authoritative_checksum(&self, name: &str, url: &str, chosen: &IndexEntry) -> Result<String> {
+        let Some(locked) = self.preferred.get(name) else {
+            return Ok(chosen.cksum.clone());
+        };
+        if locked.version != chosen.vers || locked.source != format!("registry+{url}") {
+            return Ok(chosen.cksum.clone());
+        }
+        let Some(locked_checksum) = locked.checksum.as_deref() else {
+            bail!(
+                "dream.lock entry for {name} {} is missing its checksum",
+                chosen.vers
+            );
+        };
+        if locked_checksum != chosen.cksum {
+            bail!(
+                "checksum for {name} {} does not match dream.lock; the registry changed a locked package",
+                chosen.vers
+            );
+        }
+        Ok(locked_checksum.to_string())
+    }
 }
 
 enum ResolvedKind {
@@ -386,7 +412,7 @@ mod tests {
 
     fn publish(registry_dir: &Path, name: &str, vers: &str, deps: &[(&str, &str)]) {
         let registry =
-            crate::registry::open_registry(&format!("file://{}", registry_dir.display()));
+            crate::registry::open_registry(&format!("file://{}", registry_dir.display())).unwrap();
         let tarball_src = registry_dir.join(format!("staging-{}-{}.tar.gz", name, vers));
         std::fs::write(&tarball_src, b"unused in resolver tests").unwrap();
         let entry = IndexEntry {
@@ -474,7 +500,9 @@ mod tests {
                 name: "pkg".to_string(),
                 version: "1.0.0".to_string(),
                 source: format!("registry+{registry_url}"),
-                checksum: None,
+                checksum: Some(crate::registry::checksum::sha256_of(
+                    b"unused in resolver tests",
+                )),
                 git_selector: None,
                 dependencies: Vec::new(),
             },
@@ -485,6 +513,31 @@ mod tests {
         // Without a preference, the newest compatible version wins.
         let resolved = resolve(&manifest, tmp.path(), false, &BTreeMap::new()).unwrap();
         assert_eq!(resolved[0].version, "1.2.0");
+    }
+
+    #[test]
+    fn locked_checksum_must_match_the_registry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let registry_url = format!("file://{}", tmp.path().display());
+        publish(tmp.path(), "pkg", "1.0.0", &[]);
+        let manifest = manifest_with_deps(&[("pkg", "1.0.0")], &registry_url);
+        let mut preferred = BTreeMap::new();
+        preferred.insert(
+            "pkg".to_string(),
+            crate::lockfile::LockedPackage {
+                name: "pkg".to_string(),
+                version: "1.0.0".to_string(),
+                source: format!("registry+{registry_url}"),
+                checksum: Some(
+                    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .to_string(),
+                ),
+                git_selector: None,
+                dependencies: Vec::new(),
+            },
+        );
+        let err = resolve(&manifest, tmp.path(), false, &preferred).unwrap_err();
+        assert!(err.to_string().contains("does not match dream.lock"));
     }
 
     #[test]

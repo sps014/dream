@@ -182,10 +182,16 @@ def workload(name):
         return STDLIB_SOURCE, '\\"seed\\": 42'
     if name == "webapi":
         return (ROOT / "sample/webapi/app.dream").read_text().replace("8000", "8042"), "8042"
+    # A large generated program standing in for the compiler, so cold, edited and unchanged
+    # times are recorded before a self-hosted build exists.
+    if name == "selfhost":
+        return generated_source(8000), "Node(42)"
     match = re.fullmatch(r"gen(\d+)", name)
     if match and int(match[1]) > 0:
         return generated_source(int(match[1])), "Node(42)"
-    raise argparse.ArgumentTypeError(f"unknown workload {name!r}: use hello, genN, stdlib or webapi")
+    raise argparse.ArgumentTypeError(
+        f"unknown workload {name!r}: use hello, genN, stdlib, webapi or selfhost"
+    )
 
 
 def install_wrappers(work: Path, llvm: Path) -> Path:
@@ -310,7 +316,7 @@ def main():
     parser.add_argument("--runtime", type=Path, default=ROOT / "crates/dream-mir/src/runtime/c")
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--workload", default="hello",
-                        help="hello, genN (N generated functions), stdlib (json/regex/collections) or webapi")
+                        help="hello, genN (N generated functions), stdlib, webapi, or selfhost")
     parser.add_argument("--profiles", type=csv_choice(PROFILES), default=list(PROFILES))
     parser.add_argument("--targets", type=csv_choice(TARGETS), default=["native"])
     parser.add_argument("--plain", action="store_true",

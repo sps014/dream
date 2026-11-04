@@ -27,11 +27,12 @@ impl HttpRegistry {
         }
     }
 
-    fn tarball_url(&self, tarball: &str) -> String {
+    fn tarball_url(&self, tarball: &str) -> Result<String> {
         if tarball.starts_with("http://") || tarball.starts_with("https://") {
-            tarball.to_string()
+            super::ensure_registry_transport(tarball)?;
+            Ok(tarball.to_string())
         } else {
-            format!("{}/{}", self.base, tarball.trim_start_matches('/'))
+            Ok(format!("{}/{}", self.base, tarball.trim_start_matches('/')))
         }
     }
 }
@@ -68,7 +69,7 @@ impl RegistryClient for HttpRegistry {
     }
 
     fn fetch_tarball(&self, entry: &IndexEntry, dest_file: &Path) -> Result<()> {
-        let url = self.tarball_url(&entry.tarball);
+        let url = self.tarball_url(&entry.tarball)?;
         let resp = ureq::get(&url)
             .call()
             .with_context(|| format!("downloading tarball {}", url))?;

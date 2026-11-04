@@ -64,8 +64,13 @@ static void platform_write(int stream, const void *bytes, size_t size, int encod
         return;
     }
     FILE *file = stream == 2 ? stderr : stdout;
+    if (file == stdout) {
+        dream_configure_stdout();
+    }
     fwrite(bytes, 1, size, file);
-    fflush(file);
+    if (file != stdout) {
+        fflush(file);
+    }
 }
 static void platform_object_drop(void *ptr) { dream_lock_forget((dream_ptr)ptr); }
 const dream_platform dream_default_platform = {

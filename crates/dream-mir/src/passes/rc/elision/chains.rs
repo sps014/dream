@@ -43,10 +43,13 @@ pub(super) fn chains_transparent(func: &MirFunction, chain: &[BlockId]) -> bool 
 }
 
 pub(super) fn block_stmts_transparent(func: &MirFunction, b: BlockId) -> bool {
-    func.blocks[b.0 as usize]
-        .stmts
-        .iter()
-        .all(is_transparent_stmt)
+    let block = &func.blocks[b.0 as usize];
+    // A suspension hands the frame to the scheduler. A retain before `Await` is not paired with
+    // a release after resume, even when the statements in between look side-effect-free.
+    if matches!(block.terminator, Terminator::Await { .. }) {
+        return false;
+    }
+    block.stmts.iter().all(is_transparent_stmt)
 }
 
 /// True when `b` is the unique successor of a unique predecessor that ends in `Goto(b)`.

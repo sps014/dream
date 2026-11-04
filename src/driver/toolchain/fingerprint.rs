@@ -27,10 +27,7 @@ impl ToolchainConfig {
                     &self.user_home
                 )
             ),
-            format!(
-                "{:?}",
-                (&self.path, &self.targets, &self.sysroot)
-            ),
+            format!("{:?}", (&self.path, &self.targets, &self.sysroot)),
             format!(
                 "{:?}",
                 (

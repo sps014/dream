@@ -2,10 +2,10 @@
 
 mod cleanup;
 mod closure;
-mod elements;
 #[cfg(test)]
 #[path = "closure_tests.rs"]
 mod closure_tests;
+mod elements;
 mod intrinsics;
 mod local;
 mod model;

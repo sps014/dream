@@ -289,7 +289,10 @@ fn editing_a_trigger_input_misses_the_program_cache() {
     compile(&dir);
     let edited = JSON_PROGRAM
         .replace("public y: int;", "public renamed: int;")
-        .replace("constructor(x: int, y: int)", "constructor(x: int, renamed: int)")
+        .replace(
+            "constructor(x: int, y: int)",
+            "constructor(x: int, renamed: int)",
+        )
         .replace("this.y = y", "this.renamed = renamed");
     std::fs::write(dir.join("main.dream"), edited).unwrap();
     let (log, _) = compile(&dir);

@@ -200,7 +200,8 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "webapi_collect_errors",
-        "dependency override must return the original provider's value type\n@dep(cyclic_provider) forms a cycle\n@dep(a) forms a cycle\nduplicate GET route '/same'\nHTTP route methods on a class must be static",
+        // The reported edge is the one `Map` visits second. Hash mixing puts `b` ahead of `a`.
+        "dependency override must return the original provider's value type\n@dep(cyclic_provider) forms a cycle\n@dep(b) forms a cycle\nduplicate GET route '/same'\nHTTP route methods on a class must be static",
         false,
     ),
     Case::error(

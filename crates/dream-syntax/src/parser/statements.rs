@@ -287,15 +287,24 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     pub(super) fn parse_statement(&mut self) -> Result<StatementNode<'a>, Error> {
-        let start = self.current_token().position;
-        let node = self.parse_statement_inner()?;
-        self.record_node_span(
-            false,
-            node.syntax_kind(),
-            node.position().map(|s| s.start),
-            start,
-        );
-        Ok(node)
+        if !self.enter_nesting() {
+            return Ok(StatementNode::ExpressionStatement(ExpressionNode::Literal(
+                Type::Unknown,
+            )));
+        }
+        let result = (|| {
+            let start = self.current_token().position;
+            let node = self.parse_statement_inner()?;
+            self.record_node_span(
+                false,
+                node.syntax_kind(),
+                node.position().map(|s| s.start),
+                start,
+            );
+            Ok(node)
+        })();
+        self.leave_nesting();
+        result
     }
 
     fn parse_statement_inner(&mut self) -> Result<StatementNode<'a>, Error> {

@@ -3,6 +3,7 @@ use super::super::is_transparent_stmt;
 use crate::BlockId;
 use crate::MirFunction;
 use crate::Statement;
+use crate::Terminator;
 use crate::passes::cfg;
 use std::collections::BTreeSet;
 
@@ -138,6 +139,9 @@ pub(super) fn region_all(
         let b = BlockId(bi as u32);
         if !dom.dominates(rb, b) || !pdom.postdominates(eb, b) {
             continue;
+        }
+        if matches!(func.blocks[bi].terminator, Terminator::Await { .. }) {
+            return false;
         }
         let stmts = &func.blocks[bi].stmts;
         if b == rb && b == eb {

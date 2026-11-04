@@ -21,6 +21,7 @@ mod index;
 pub use client::RegistryClient;
 pub use index::{IndexDependency, IndexEntry};
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Maximum published package tarball size (10 MiB). Enforced by dreamer and by GitHub-registry
@@ -99,24 +100,65 @@ pub fn registry_token(explicit: Option<String>) -> Option<String> {
 /// (`raw.githubusercontent.com/...` or `*.github.io/...`) use the Contents API for publish;
 /// other `http(s)://` URLs use the generic HTTP client; `file://` / bare paths use the
 /// local-filesystem implementation.
-pub fn open_registry(url: &str) -> Box<dyn RegistryClient> {
+pub fn open_registry(url: &str) -> Result<Box<dyn RegistryClient>> {
     open_registry_with_token(url, registry_token(None))
 }
 
 /// Like [`open_registry`], but uses `token` for GitHub Contents API publishes when provided
 /// (otherwise falls back to env vars via [`registry_token`]).
-pub fn open_registry_with_token(url: &str, token: Option<String>) -> Box<dyn RegistryClient> {
+pub fn open_registry_with_token(
+    url: &str,
+    token: Option<String>,
+) -> Result<Box<dyn RegistryClient>> {
+    ensure_registry_transport(url)?;
     let token = token
         .filter(|t| !t.is_empty())
         .or_else(|| registry_token(None));
     if let Some(gh) = github_registry::GithubRegistry::try_parse(url, token) {
-        return Box::new(gh);
+        return Ok(Box::new(gh));
     }
     if let Some(path) = url.strip_prefix("file://") {
-        Box::new(file_registry::FileRegistry::new(path.into()))
+        Ok(Box::new(file_registry::FileRegistry::new(path.into())))
     } else if url.starts_with("http://") || url.starts_with("https://") {
-        Box::new(http_registry::HttpRegistry::new(url.to_string()))
+        Ok(Box::new(http_registry::HttpRegistry::new(url.to_string())))
     } else {
-        Box::new(file_registry::FileRegistry::new(url.into()))
+        Ok(Box::new(file_registry::FileRegistry::new(url.into())))
+    }
+}
+
+/// `http://` registries are only accepted for loopback hosts, so a remote registry cannot be
+/// swapped in transit. `https://`, `file://`, and filesystem paths are unchanged.
+pub fn ensure_registry_transport(url: &str) -> Result<()> {
+    let Some(rest) = url.trim().strip_prefix("http://") else {
+        return Ok(());
+    };
+    let hostport = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = if let Some(host) = hostport.strip_prefix('[') {
+        host.split(']').next().unwrap_or("")
+    } else {
+        hostport.split(':').next().unwrap_or("")
+    };
+    if matches!(host, "127.0.0.1" | "localhost" | "::1") {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "registry URL '{url}' must use https:// (http:// is only allowed for loopback)"
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_registry_transport;
+
+    #[test]
+    fn http_registries_are_loopback_only() {
+        assert!(ensure_registry_transport("https://example.com/reg").is_ok());
+        assert!(ensure_registry_transport("http://127.0.0.1:8080/reg").is_ok());
+        assert!(ensure_registry_transport("http://localhost/reg").is_ok());
+        assert!(ensure_registry_transport("http://[::1]:9/reg").is_ok());
+        assert!(ensure_registry_transport("file:///tmp/reg").is_ok());
+        let err = ensure_registry_transport("http://example.com/reg").unwrap_err();
+        assert!(err.to_string().contains("https://"));
     }
 }

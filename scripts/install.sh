@@ -111,28 +111,30 @@ EOF
   exit 1
 fi
 
-if curl -fsSL "$SUM_URL" -o "${WORK}/SHA256SUMS" 2>/dev/null; then
-  EXPECTED="$(grep -E "  ${ARCHIVE}\$" "${WORK}/SHA256SUMS" | awk '{print $1}' || true)"
-  if [ -n "$EXPECTED" ]; then
-    if command -v shasum >/dev/null 2>&1; then
-      ACTUAL="$(shasum -a 256 "${WORK}/${ARCHIVE}" | awk '{print $1}')"
-    elif command -v sha256sum >/dev/null 2>&1; then
-      ACTUAL="$(sha256sum "${WORK}/${ARCHIVE}" | awk '{print $1}')"
-    else
-      echo "warning: no shasum/sha256sum; skipping checksum verify" >&2
-      ACTUAL=""
-    fi
-    if [ -n "$ACTUAL" ] && [ "$ACTUAL" != "$EXPECTED" ]; then
-      echo "error: checksum mismatch for ${ARCHIVE}" >&2
-      echo "  expected ${EXPECTED}" >&2
-      echo "  got      ${ACTUAL}" >&2
-      exit 1
-    fi
-    if [ -n "$ACTUAL" ]; then
-      echo "Checksum OK"
-    fi
-  fi
+if ! curl -fsSL "$SUM_URL" -o "${WORK}/SHA256SUMS"; then
+  echo "error: failed to download ${SUM_URL}" >&2
+  exit 1
 fi
+EXPECTED="$(grep -E "  ${ARCHIVE}\$" "${WORK}/SHA256SUMS" | awk '{print $1}' || true)"
+if [ -z "$EXPECTED" ]; then
+  echo "error: SHA256SUMS has no entry for ${ARCHIVE}" >&2
+  exit 1
+fi
+if command -v shasum >/dev/null 2>&1; then
+  ACTUAL="$(shasum -a 256 "${WORK}/${ARCHIVE}" | awk '{print $1}')"
+elif command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL="$(sha256sum "${WORK}/${ARCHIVE}" | awk '{print $1}')"
+else
+  echo "error: shasum or sha256sum is required to verify ${ARCHIVE}" >&2
+  exit 1
+fi
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "error: checksum mismatch for ${ARCHIVE}" >&2
+  echo "  expected ${EXPECTED}" >&2
+  echo "  got      ${ACTUAL}" >&2
+  exit 1
+fi
+echo "Checksum OK"
 
 mkdir -p "${WORK}/out"
 if [ "$EXTRACT" = tar ]; then

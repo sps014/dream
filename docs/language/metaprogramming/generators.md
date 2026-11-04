@@ -23,7 +23,7 @@ A source generator writes or replaces Dream code while your program is being bui
     - A generator writes or replaces Dream code while your program builds.
     - Generators ship as ordinary packages, like `@json` in `system.json`.
 
-A generator is an ordinary Dream function compiled into a small cached executable. It runs before type-checking and does one of two things:
+A generator is an ordinary Dream function compiled into a small cached executable. It runs before type-checking, in the same process environment as the build, and is not sandboxed. A generator from a dependency can read files and start programs, the same trust you give a build script. `dreamer install` warns when an installed dependency ships one. It does one of two things:
 
 1. **Replace** custom syntax — `quote { … }` or `html { … }` become ordinary Dream expressions at call sites. Use this when the braced body is a domain-specific shape the main parser does not understand.
 2. **Emit** new Dream source — for example `@json` adds `to_json` / `from_json` to your types. Use this when call sites stay ordinary Dream and the generated code is methods or helpers.

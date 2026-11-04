@@ -101,6 +101,38 @@ fun run_suite(): void {
         i = i + 1;
     }
     report("map_clear_reserved_batch", clear_nanos, rounds * batch, checksum);
+    lookup_pattern("map_lookup_sequential", 1);
+    lookup_pattern("map_lookup_stride16", 16);
+    lookup_pattern("map_lookup_scattered", 997);
+}
+
+// Lookup cost for keys that used to share a few slots (sequential integers, 16-byte strides)
+// versus a scattered stride. Similar ns_per_op means probes stayed short.
+fun lookup_pattern(name: string, stride: int): void {
+    let count = 4096;
+    let rounds = 64;
+    let map = Map<int, int>(count);
+    let i = 0;
+    while i < count {
+        let key = i * stride;
+        map[key] = i;
+        i = i + 1;
+    }
+    let nanos = 0L;
+    let checksum = 0;
+    let r = 0;
+    while r < rounds {
+        let sw = Stopwatch();
+        i = 0;
+        while i < count {
+            checksum = checksum + map[i * stride];
+            i = i + 1;
+        }
+        sw.stop();
+        nanos = nanos + sw.elapsed_nanos;
+        r = r + 1;
+    }
+    report(name, nanos, rounds * count, checksum);
 }
 
 fun main(): void {

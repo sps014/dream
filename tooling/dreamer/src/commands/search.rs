@@ -12,7 +12,7 @@ pub fn run(start_dir: &Path, query: &str) -> Result<()> {
         Err(_) => crate::registry::DEFAULT_REGISTRY.to_string(),
     };
 
-    let client = open_registry(&url);
+    let client = open_registry(&url)?;
     let results = client.search(query)?;
     if results.is_empty() {
         println!("No packages found matching '{}' in {}", query, url);

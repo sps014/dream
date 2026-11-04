@@ -46,16 +46,17 @@ def sample(functions: int) -> str:
     return ''.join(parts)
 
 
-def measure(compiler: Path, source: Path, output: Path) -> dict:
+def measure(compiler: Path, source: Path, output: Path, link: bool) -> dict:
     # Missing artifacts force a fresh compile while preserving warmed runtime/toolchain caches.
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir()
+    if link:
+        command = [str(compiler), str(source), '-o', str(output / 'sample.bin')]
+    else:
+        command = [str(compiler), '--emit-llvm', str(source), '-o', str(output / 'sample.ll')]
     with (output / 'stdout.log').open('wb') as stdout, (output / 'stderr.log').open('wb') as stderr:
         start = time.perf_counter()
-        process = subprocess.Popen(
-            [str(compiler), '--emit-llvm', str(source), '-o', str(output / 'sample.ll')],
-            stdout=stdout, stderr=stderr,
-        )
+        process = subprocess.Popen(command, stdout=stdout, stderr=stderr)
         _, status, usage = os.wait4(process.pid, 0)
         process.returncode = os.waitstatus_to_exitcode(status)
         elapsed = time.perf_counter() - start
@@ -85,6 +86,8 @@ def main() -> int:
     parser.add_argument('--candidate', type=Path, required=True)
     parser.add_argument('--baseline-revision')
     parser.add_argument('--candidate-revision')
+    parser.add_argument('--link', action='store_true',
+                        help='time a full native link instead of --emit-llvm')
     parser.add_argument('--functions', type=positive_int, default=200)
     parser.add_argument('--runs', type=positive_int, default=5)
     parser.add_argument('--time-ratio', type=ratio, default=1.25)
@@ -101,16 +104,17 @@ def main() -> int:
         source = root / 'sample.dream'
         source.write_text(text)
         for compiler in compilers.values():
-            measure(compiler, source, root / 'out')
+            measure(compiler, source, root / 'out', args.link)
         for iteration in range(args.runs):
             order = list(compilers) if iteration % 2 == 0 else list(reversed(compilers))
             for label in order:
-                reading = measure(compilers[label], source, root / 'out')
+                reading = measure(compilers[label], source, root / 'out', args.link)
                 readings[label].append(reading)
                 print(f'{label} {iteration + 1}: {reading}', flush=True)
     metrics = compare(readings['baseline'], readings['candidate'], args.time_ratio, args.memory_ratio)
     report = {'scope': 'compiler and waited-for toolchain children; peak is largest resident high-water mark, not concurrent tree RSS',
-              'functions': args.functions, 'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
+              'functions': args.functions, 'link': args.link,
+              'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
               'compilers': {key: str(value) for key, value in compilers.items()},
               'revisions': {'baseline': args.baseline_revision, 'candidate': args.candidate_revision},
               'readings': readings, 'metrics': metrics}

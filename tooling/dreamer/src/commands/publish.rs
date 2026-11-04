@@ -81,7 +81,7 @@ pub fn run(
         keywords: pkg.keywords.clone(),
     };
 
-    let client = open_registry_with_token(&url, token);
+    let client = open_registry_with_token(&url, token)?;
     client.publish(&entry, &tarball_path)?;
 
     println!(

@@ -24,6 +24,15 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     /// Parses a Type from the token stream, including array types
     pub(crate) fn parse_type(&mut self) -> Result<Type, Error> {
+        if !self.enter_nesting() {
+            return Ok(Type::Unknown);
+        }
+        let result = self.parse_type_inner();
+        self.leave_nesting();
+        result
+    }
+
+    fn parse_type_inner(&mut self) -> Result<Type, Error> {
         // Function type: `fun(param, ...): ret` (the return annotation is optional, defaulting to
         // void). Used for first-class function values and function parameters.
         if self.current_token().kind == TokenKind::FunToken {

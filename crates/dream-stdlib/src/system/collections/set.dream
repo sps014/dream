@@ -72,7 +72,7 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = hash & (cap - 1);
+        let idx = mix_hash(hash) & (cap - 1);
         let result = -1;
         let done = false;
         while done == false {
@@ -105,7 +105,7 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = hash & (cap - 1);
+        let idx = mix_hash(hash) & (cap - 1);
         let first_tomb = -1;
         let added = false;
         let done = false;
@@ -162,7 +162,7 @@ public class Set<T>: Collection<T> {
             if old_states[i] == this.epoch {
                 let hash = old_keys[i].hash_code();
                 if can_transfer {
-                    let target = hash & (new_cap - 1);
+                    let target = mix_hash(hash) & (new_cap - 1);
                     while this.states[target] == this.epoch {
                         target = (target + 1) & (new_cap - 1);
                     }
@@ -203,7 +203,7 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = value.hash_code() & (cap - 1);
+        let idx = mix_hash(value.hash_code()) & (cap - 1);
         while true {
             let s = states[idx];
             if (s != epoch) && (s != tomb) {

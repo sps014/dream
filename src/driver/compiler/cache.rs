@@ -310,7 +310,8 @@ impl Compiler {
             .map(|name| tools.tool(name))
             .to_vec();
             if !spec.capabilities.linear_memory {
-                let linker = crate::execution::native::driver::Linker::resolve(&tools, spec).ok()?;
+                let linker =
+                    crate::execution::native::driver::Linker::resolve(&tools, spec).ok()?;
                 paths.extend(linker.executables().map(std::path::Path::to_path_buf));
                 let directories = if spec.can_link_on_host() {
                     toolchain.host_library_dirs()

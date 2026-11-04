@@ -28,7 +28,7 @@ impl ModulePass for Devirt {
             return false;
         }
         let mut changed = false;
-        for f in &mut mir.functions {
+        for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
             changed |= devirt_function(f, &targets, interner);
         }
         changed

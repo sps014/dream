@@ -11,15 +11,22 @@ impl<'a, 'b> Parser<'a, 'b> {
         &mut self,
         parent_precedence: i32,
     ) -> Result<ExpressionNode<'a>, Error> {
-        let start = self.current_token().position;
-        let node = self.parse_expression_inner(parent_precedence)?;
-        self.record_node_span(
-            true,
-            node.syntax_kind(),
-            node.position().map(|s| s.start),
-            start,
-        );
-        Ok(node)
+        if !self.enter_nesting() {
+            return Ok(ExpressionNode::Literal(Type::Unknown));
+        }
+        let result = (|| {
+            let start = self.current_token().position;
+            let node = self.parse_expression_inner(parent_precedence)?;
+            self.record_node_span(
+                true,
+                node.syntax_kind(),
+                node.position().map(|s| s.start),
+                start,
+            );
+            Ok(node)
+        })();
+        self.leave_nesting();
+        result
     }
 
     fn parse_expression_inner(

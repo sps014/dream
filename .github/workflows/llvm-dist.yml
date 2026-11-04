@@ -68,7 +68,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check pinned version
         shell: bash

@@ -33,13 +33,13 @@ jobs:
       matrix:
         revision: ${{ fromJSON(inputs.revisions) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.revision }}
           fetch-depth: 0
       # The harness and this workflow come from the dispatching ref so older revisions
       # are measured the same way as the current one.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: harness
       - name: Install native build dependencies and perf

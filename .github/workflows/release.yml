@@ -58,7 +58,7 @@ jobs:
             cmake ninja-build python3 clang libclang-dev \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libfontconfig1-dev
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
@@ -223,7 +223,7 @@ jobs:
   vscode:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -257,7 +257,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v4
         with:

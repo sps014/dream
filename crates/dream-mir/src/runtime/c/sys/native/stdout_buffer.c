@@ -35,7 +35,14 @@ void dream_configure_stdout(void) {
 #endif
     if (!__atomic_load_n(&ready, __ATOMIC_RELAXED)) {
         int line = tty || stdout_is_pipe();
+#ifdef _WIN32
+        /* UCRT rejects a zero size and fast-fails the process, and its _IOLBF is full
+         * buffering. A console or pipe has to stay unbuffered so a reader is not stuck
+         * behind 8 KiB; a regular file can fill that buffer. */
+        setvbuf(stdout, NULL, line ? _IONBF : _IOFBF, line ? 2 : 8192);
+#else
         setvbuf(stdout, NULL, line ? _IOLBF : _IOFBF, line ? 0 : 8192);
+#endif
         __atomic_store_n(&ready, 1, __ATOMIC_RELEASE);
     }
 #ifdef _WIN32

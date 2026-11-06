@@ -35,8 +35,8 @@ def summarize(samples, rss, arms, passes, rounds, threshold=0.10):
         bench_gate.validate_memory(rss[arm], rounds)
     names = set().union(*(set(p) for p in processed.values()))
     if "baseline" in arms and "current" in arms:
-        if processed["baseline"].keys() != processed["current"].keys():
-            raise ValueError("Dream arms have different workload inventories")
+        if not processed["baseline"].keys() <= processed["current"].keys():
+            raise ValueError("current arm is missing workloads the baseline arm reported")
     summary = {}
     rng = random.Random(0x5eed)
     for name in sorted(names):

@@ -263,7 +263,7 @@ class MeasurementTests(unittest.TestCase):
         self.fixture.write_text('report("work", elapsed, iterations);')
 
     def run_measurement(self, total=230000, claim=None, comparison=False, suite="micro", filters=(),
-                        baseline_benchmark=None):
+                        baseline_benchmark=None, outputs=None):
         args = argparse.Namespace(
             suite=suite, counters=False, gate=None, save_baseline=None, arms=['current'],
             fail_on_regression=False, function_alignment=0, loop_alignment=0,
@@ -287,8 +287,14 @@ class MeasurementTests(unittest.TestCase):
             stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
             stack.enter_context(patch.object(bench, 'parse_args', return_value=args))
             stack.enter_context(patch.object(bench, 'tool_versions', return_value={}))
-            stack.enter_context(patch.object(bench, 'prepare_dream', return_value=[str(self.binary)]))
-            stack.enter_context(patch.object(bench, 'run_once', side_effect=lambda command, env: (self.environments.append(dict(env)) or stdout, 1000)))
+            if outputs is None:
+                stack.enter_context(patch.object(bench, 'prepare_dream', return_value=[str(self.binary)]))
+                stack.enter_context(patch.object(bench, 'run_once', side_effect=lambda command, env: (self.environments.append(dict(env)) or stdout, 1000)))
+            else:
+                for arm in outputs:
+                    (self.root / arm).write_bytes(arm.encode())
+                stack.enter_context(patch.object(bench, 'prepare_dream', side_effect=lambda arm, *_: [str(self.root / arm)]))
+                stack.enter_context(patch.object(bench, 'run_once', side_effect=lambda command, env: (outputs[Path(command[0]).name], 1000)))
             stack.enter_context(patch.object(bench_gate, 'load', return_value=({'tools': {}}, [str(self.binary)])))
             save = stack.enter_context(patch.object(bench_gate, 'save'))
             evaluate = stack.enter_context(patch.object(bench_gate, 'evaluate', return_value=(1, {})))
@@ -327,11 +333,26 @@ class MeasurementTests(unittest.TestCase):
                 self.assertEqual((self.root / 'output' / arm / 'microbenches.dream').read_bytes(),
                                  expected)
 
-    def test_revision_fixtures_require_matching_workloads(self):
+    def test_revision_fixtures_cannot_drop_workloads(self):
         baseline = self.root / 'base.dream'
-        baseline.write_text('report("other", elapsed, iterations);')
-        with self.assertRaisesRegex(ValueError, 'different workload names'):
+        baseline.write_text('report("work", elapsed, iterations);\nreport("other", elapsed, iterations);')
+        with self.assertRaisesRegex(ValueError, 'drops baseline workloads: other'):
             self.run_measurement(comparison=True, baseline_benchmark=baseline)
+
+    def test_added_workload_runs_ungated(self):
+        baseline = self.root / 'base.dream'
+        baseline.write_text('report("work", elapsed, iterations);')
+        self.fixture.write_text('report("work", elapsed, iterations);\nreport("added", elapsed, iterations);')
+        row = 'bench work ns_total=1000000 iters=1000000 checksum=42\n'
+        added = 'bench added ns_total=9000000 iters=1000000 checksum=7\n'
+        outputs = {'baseline': row + 'sink 123\n', 'current': row + added + 'sink 123\n'}
+        self.assertEqual(self.run_measurement(comparison=True, baseline_benchmark=baseline,
+                                              outputs=outputs), 0)
+        summary = json.loads((self.root / 'output/summary.json').read_text())['benchmarks']
+        self.assertIn('baseline', summary['work']['comparisons'])
+        self.assertNotIn('baseline', summary['added'])
+        self.assertEqual(summary['added']['comparisons'], {})
+        self.assertIn('new, not gated', self.output.getvalue())
 
     def test_revision_fixture_cannot_override_saved_reference_identity(self):
         with self.assertRaisesRegex(ValueError, 'paired comparison without saved references'):

@@ -273,7 +273,8 @@ def print_table(summary: dict, peak: dict, arms: list[str]) -> None:
         if "current" in arms and "baseline" in arms:
             comparison = row["comparisons"].get("baseline")
             cell = (f"{comparison['ratio']:.2f} [{comparison['ci_low']:.2f}, {comparison['ci_high']:.2f}] "
-                    f"{comparison['decision']}" if comparison else "-")
+                    f"{comparison['decision']}" if comparison
+                    else "new, not gated" if "baseline" not in row else "-")
             line += f"{cell:>39}"
 
         print(line)
@@ -312,8 +313,11 @@ def main() -> int:
         baseline_identity = bench_gate.identity(args.baseline_benchmark, args.runner_id,
                                                args.input_seed, args.passes, args.target,
                                                args.baseline_benchmark_source)
-        if baseline_identity["names"] != compatibility["names"]:
-            raise ValueError("baseline fixture has different workload names")
+        # A revision may add workloads, which run ungated; dropping one would let a regressed row
+        # pass by disappearing.
+        removed = sorted(set(baseline_identity["names"]) - set(compatibility["names"]))
+        if removed:
+            raise ValueError("current fixture drops baseline workloads: " + ", ".join(removed))
         compatibility["baseline_benchmark"] = baseline_identity["benchmark"]
     if args.suite == "macro" and args.filter:
         unknown = sorted(set(args.filter) - set(compatibility["names"]))

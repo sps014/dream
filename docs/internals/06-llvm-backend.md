@@ -392,7 +392,7 @@ proof was written:
 | Item | Result |
 |------|--------|
 | Whole-program runtime | Shipped. `dream_rt.bc` is linked before `opt`, and everything except the entry points is internalized. This removes `NoDefinition` and lets LLVM infer the runtime's memory effects |
-| TBAA | Not shipped. Only `map_clear_reuse` gains (0.63×). LLVM TBAA has no effective-type model, and the inlined allocator reuses a freed block for a different type, so the tags are not provably valid |
+| TBAA | Not shipped. Only `map_clear_reuse` gains (0.63×). LLVM TBAA has no effective-type model, and the inlined allocator reuses a freed block for a different type, so the tags are not provably valid. A later, narrower trial tagged only the `T[]` length word apart from elements, which the array layout does prove. It was neutral (`arr_add`, `matmul_64` within noise) once the array bounds-check pass removed the in-loop checks, so it was not kept either |
 | `invariant.load` / `!range` | `invariant.load` on string lengths is unsound (`_into` rewrites the length word in place). `!range` gained nothing. Shipped instead: string literal blocks are `constant` |
 | Memory effects / allocation attributes | Redundant with the whole-program runtime |
 | `nsw` from a MIR no-wrap proof | Gained nothing on any kernel |

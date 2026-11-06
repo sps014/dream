@@ -117,6 +117,37 @@ fn rc_golden_last_use_return_bounded() {
 }
 
 #[test]
+fn rc_golden_literal_locals_are_rc_free() {
+    let code = r#"
+        @noinline
+        fun show(label: string, n: int): void {
+            System.println(label + n.to_string());
+        }
+        fun main(): void {
+            let a = "alpha";
+            let b = "beta";
+            let i = 0;
+            while i < 3 {
+                let name = i == 0 ? a : b;
+                show(name, i);
+                i = i + 1;
+            }
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let main = ir_func_defs(&c)
+        .into_iter()
+        .find(|f| f.name == "main" || f.name.ends_with("_main"))
+        .expect("main body");
+    assert_eq!(
+        count_in(&main.body, "@dream_retain(") + count_in(&main.body, "@dream_release("),
+        0,
+        "literal-only locals need no refcounting:\n{}",
+        main.body
+    );
+}
+
+#[test]
 fn rc_golden_transparent_if_else_bounded() {
     let code = r#"
         fun pick(c: bool): string {

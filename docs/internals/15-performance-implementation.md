@@ -297,6 +297,62 @@ and spawn and pool round trips to 0.77–0.92x. Against .NET, `task_parallel` mo
 dominated by machine power states: a single process moves between plateaus 2–3x apart, so these
 rows need interleaved rounds rather than a single median.
 
+### Go comparison round
+
+`scripts/benchmarks/go_report.py` compares the micro and macro suites against an optimized Go
+build. At the start of this round Go was faster on `arr_add` (1.69x), `string_builder` (1.98x),
+`split_span` (1.28x), `alloc_churn` (1.24x) and `matmul_64` (1.23x). Disassembly of the release
+binary traced each row to one cause.
+
+Accepted:
+
+- **Array allocations seen through moves.** Lowering allocates into a temporary and moves it into
+  the user's local (`_31 = array_new(256); _2 = move _31`), so the bounds-check pass never saw a
+  constant-length array. `sole_array_news` now follows moves and copies into locals that are
+  never redefined. Every `arr_add` and `matmul_64` access becomes unchecked and LLVM vectorizes
+  the loops: `arr_add` 300 → 62 ns per operation, `matmul_64` 124k → 64k.
+- **Offset loop versioning.** Versioning also covers `a[base + i]` where `base` is loop-invariant
+  and the sum is formed in the same block as the access. The guard is `base >= 0`, `i >= 0` and
+  `bound <= len(a) - base` per array. A trap fixture checks that an out-of-range window still
+  panics at the original index.
+- **Literal RC elision.** `Retain`/`Release` of a string literal, or of a local whose every
+  definition is a literal or null, is removed in MIR. Literal blocks are immortal.
+- **`StringBuilder.build` hands over its buffer.** When the buffer is at most a quarter unused,
+  the built string is a slice over it and `viewed` is set. Units are only written past `count`,
+  growth always moves to a new block, and `clear` swaps buffers once viewed, so the string stays a
+  snapshot. A roomier buffer is still copied so its spare capacity is not kept alive. The rest of
+  the gap is first-touch page faults on a buffer twice Go's size, because strings are UTF-16.
+- **Frame arrays.** `frame_alloc` also places `ArrayNew` with a constant length, elements that
+  hold no references and at most 512 bytes in the frame. In a loop, the release of the previous
+  iteration's array follows the next allocation. It is hoisted above the allocation when only
+  holder copies sit between them, and `lifetime` accepts a release that is a death on one path
+  and an ordinary decrement on another when the death releases nothing. `alloc_churn` drops from
+  9 ns per operation to under 1.
+
+Measured and rejected:
+
+- **Array header TBAA.** Separate tags for the length word and the elements were neutral once
+  the bounds checks were gone (see `06-llvm-backend.md`).
+- **Immortal counts known at compile time, in the runtime.** Testing `__builtin_constant_p` on
+  the count word in the inline fast paths removes the dead relaxed loads of literal counts (358
+  to 4 in the micro binary) and speeds `split_span` up by 11%. Clang folds the test to 0 inside
+  its own pipeline, though, so it only survives when `core/inlines.c` reaches the whole-program
+  `opt` unoptimized. That changes how every runtime fast path is inlined: `list_push`,
+  `list_clear_reuse` and `wordcount` slowed by about 20%.
+- **Immortal counts known at compile time, in emitted IR.** Guarding each emitted
+  `Retain`/`Release` with `llvm.is.constant` is sound, because only null and static blocks have
+  constant addresses. It removed 4 of 81 dead loads; the rest sit inside inlined runtime code. It
+  was neutral to slightly slower.
+
+After the round, `go_report.py --rounds 3` reports Go faster on 2 micro rows: `split_span`
+(1.18–1.24x across runs) and `nbody` (a tie to 1.24x across runs). Go fuses `x*y+z` into one
+instruction, which Dream's strict IEEE semantics do not allow. Paired against the pre-round
+compiler, `split_span` is 0.97x and no row regresses. Each `split_span` piece runs an
+inline scan with no ARC. Each outer iteration still releases the iterator's two span sources.
+Those are literals, but they arrive through value-struct fields, which the literal elision does
+not follow. The remaining relaxed loads of literal counts come from runtime span helpers inlined
+with a value LLVM only later proves to be a literal.
+
 Suspension-aware `RcElision` stays a design, not an implementation. Each owning local live across
 an `Await` is a frame slot the scheduler may drop through the future's drop function on
 cancellation. Elision may pair a retain and release only within one suspension-free region (no

@@ -5,6 +5,9 @@
 //! `a`) selects the clone, where those accesses are unchecked; otherwise the original loop runs
 //! with its checks. Inside the clone, `i < n <= a.length` holds at every access that no increment of
 //! `i` can precede within the iteration, and `i` only grows from a non-negative start.
+//!
+//! An offset index `a[t]` with `t = base + i` formed earlier in the same block, `base` invariant,
+//! is guarded by `base >= 0 && n <= a.length - base` instead.
 
 use super::facts::{self, Defs};
 use super::{
@@ -25,13 +28,27 @@ const MAX_CLONE_STMTS: usize = 96;
 const MAX_FUNC_BLOCKS: usize = 2048;
 const MAX_ARRAYS: usize = 4;
 
+/// One guarded index shape: `array[iv]` (`offset` is `None`) or `array[t]` with `t = base + iv`
+/// (`offset` is `(t, base)`), `base` loop-invariant.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Target {
+    array: Local,
+    offset: Option<(Local, Local)>,
+}
+
+impl Target {
+    fn index(&self, iv: Local) -> Local {
+        self.offset.map_or(iv, |(t, _)| t)
+    }
+}
+
 struct Plan {
     preheader: usize,
     iv: Local,
     bound: Operand,
-    arrays: Vec<Local>,
-    /// `(block, Some(stmt))` or `(block, None)` for the terminator.
-    sites: BTreeSet<(usize, Option<usize>)>,
+    targets: Vec<Target>,
+    /// Accesses proven at `(block, Some(stmt))`, or at `(block, None)` for the terminator.
+    sites: BTreeMap<(usize, Option<usize>), Vec<Target>>,
 }
 
 /// Versions at most one loop; the pass manager's fixpoint picks up the rest.
@@ -157,27 +174,35 @@ fn plan_loop(
     }
     let redef_in = redefined_since_header(func, &body, h, s, iv, analyses);
     let invariant = |a: Local| !defs.blocks(a.0).iter().any(|b| body.contains(b)) && available(a);
-    let mut arrays: BTreeSet<Local> = BTreeSet::new();
-    let mut sites = BTreeSet::new();
+    let int_base = |x: Local| func.local_ty(x) == int && invariant(x);
+    let mut sites: BTreeMap<(usize, Option<usize>), Vec<Target>> = BTreeMap::new();
     for &b in &body {
         if b == h {
             continue;
         }
         let mut redef = redef_in[&b];
+        // `t = base + iv` computed earlier in this block from this iteration's `iv`.
+        let mut offsets: BTreeMap<Local, Local> = BTreeMap::new();
         let block = &func.blocks[b];
         for (si, stmt) in block.stmts.iter().enumerate() {
             if !redef {
-                let mut hit = false;
+                let mut hits = Vec::new();
                 visit_stmt_accesses(stmt, &mut |acc| {
-                    if let Some(a) = versionable(&acc, iv)
-                        && invariant(a)
+                    if let Some(t) = versionable(&acc, iv, &offsets)
+                        && invariant(t.array)
                     {
-                        arrays.insert(a);
-                        hit = true;
+                        hits.push(t);
                     }
                 });
-                if hit {
-                    sites.insert((b, Some(si)));
+                if !hits.is_empty() {
+                    sites.insert((b, Some(si)), hits);
+                }
+                if let Some((t, base)) = offset_def(stmt, iv)
+                    && defs.count(t.0) == 1
+                    && func.local_ty(t) == int
+                    && int_base(base)
+                {
+                    offsets.insert(t, base);
                 }
             }
             if matches!(stmt, Statement::Assign(Place::Local(d), _) if *d == iv) {
@@ -185,26 +210,28 @@ fn plan_loop(
             }
         }
         if !redef {
-            let mut hit = false;
+            let mut hits = Vec::new();
             visit_terminator_accesses(&block.terminator, &mut |acc| {
-                if let Some(a) = versionable(&acc, iv)
-                    && invariant(a)
+                if let Some(t) = versionable(&acc, iv, &offsets)
+                    && invariant(t.array)
                 {
-                    arrays.insert(a);
-                    hit = true;
+                    hits.push(t);
                 }
             });
-            if hit {
-                sites.insert((b, None));
+            if !hits.is_empty() {
+                sites.insert((b, None), hits);
             }
         }
     }
-    if arrays.is_empty() || arrays.len() > MAX_ARRAYS {
+    let targets: BTreeSet<Target> = sites.values().flatten().copied().collect();
+    if targets.is_empty() || targets.len() > MAX_ARRAYS {
         return None;
     }
     if const_int(&bound).is_some()
         && facts::sole_array_news(func, defs).iter().any(|(a, rv)| {
-            arrays.contains(&Local(*a))
+            targets
+                .iter()
+                .any(|t| t.offset.is_none() && t.array == Local(*a))
                 && match rv {
                     Rvalue::ArrayNew { len, .. } => defs.const_value(func, len).is_some(),
                     Rvalue::ArrayLit { .. } => true,
@@ -218,9 +245,26 @@ fn plan_loop(
         preheader,
         iv,
         bound,
-        arrays: arrays.into_iter().collect(),
+        targets: targets.into_iter().collect(),
         sites,
     })
+}
+
+/// `t = base + iv` (either operand order) as `(t, base)`.
+fn offset_def(stmt: &Statement, iv: Local) -> Option<(Local, Local)> {
+    let Statement::Assign(
+        Place::Local(t),
+        Rvalue::Binary(BinOp::Add, a, b) | Rvalue::CheckedBinary(BinOp::Add, a, b),
+    ) = stmt
+    else {
+        return None;
+    };
+    let (a, b) = (as_local(a)?, as_local(b)?);
+    match (a == iv, b == iv) {
+        (true, false) => Some((*t, b)),
+        (false, true) => Some((*t, a)),
+        _ => None,
+    }
 }
 
 /// `c = i < n` (or `n > i`) as the header's last definition of `c`, with neither side redefined
@@ -293,15 +337,26 @@ fn loop_block_clonable(block: &BasicBlock) -> bool {
     })
 }
 
-fn versionable(acc: &Access<'_>, iv: Local) -> Option<Local> {
-    match acc {
-        Access::Index {
-            base,
-            index,
-            unchecked: false,
-        } if as_local(index) == Some(iv) => Some(*base),
-        _ => None,
+fn versionable(acc: &Access<'_>, iv: Local, offsets: &BTreeMap<Local, Local>) -> Option<Target> {
+    let Access::Index {
+        base,
+        index,
+        unchecked: false,
+    } = acc
+    else {
+        return None;
+    };
+    let index = as_local(index)?;
+    if index == iv {
+        return Some(Target {
+            array: *base,
+            offset: None,
+        });
     }
+    offsets.get(&index).map(|&b| Target {
+        array: *base,
+        offset: Some((index, b)),
+    })
 }
 
 /// Whether `iv` may already have been incremented this iteration on entry to each non-header loop
@@ -353,12 +408,12 @@ fn apply(func: &mut MirFunction, interner: &TypeInterner, l: &NaturalLoop, plan:
         let mut block = func.blocks[old].clone();
         remap_successors(&mut block.terminator, &map);
         for (si, stmt) in block.stmts.iter_mut().enumerate() {
-            if plan.sites.contains(&(old, Some(si))) {
-                mark_stmt(stmt, &plan.arrays, plan.iv);
+            if let Some(proven) = plan.sites.get(&(old, Some(si))) {
+                mark_stmt(stmt, proven, plan.iv);
             }
         }
-        if plan.sites.contains(&(old, None)) {
-            mark_terminator(&mut block.terminator, &plan.arrays, plan.iv);
+        if let Some(proven) = plan.sites.get(&(old, None)) {
+            mark_terminator(&mut block.terminator, proven, plan.iv);
         }
         func.blocks.push(block);
     }
@@ -378,48 +433,67 @@ fn apply(func: &mut MirFunction, interner: &TypeInterner, l: &NaturalLoop, plan:
     };
     let int = interner.int();
     let boolean = interner.bool();
-    let mut guards: Vec<BasicBlock> = Vec::new();
-    for &a in &plan.arrays {
-        let len = new_local(int);
-        let ok = new_local(boolean);
-        guards.push(BasicBlock {
-            stmts: vec![
-                Statement::Assign(
-                    Place::Local(len),
-                    Rvalue::ArrayLen(Operand::Copy(Place::Local(a))),
-                ),
-                Statement::Assign(
-                    Place::Local(ok),
-                    Rvalue::Binary(
-                        BinOp::Le,
-                        plan.bound.clone(),
-                        Operand::Copy(Place::Local(len)),
-                    ),
-                ),
-            ],
-            terminator: Terminator::If {
-                cond: Operand::Copy(Place::Local(ok)),
-                then_blk: header,
-                else_blk: header,
-            },
-        });
-    }
-    let start_ok = new_local(boolean);
-    guards.push(BasicBlock {
-        stmts: vec![Statement::Assign(
-            Place::Local(start_ok),
-            Rvalue::Binary(
-                BinOp::Ge,
-                Operand::Copy(Place::Local(plan.iv)),
-                Operand::Const(Const::Int(0)),
-            ),
-        )],
+    let guard = |stmts: Vec<Statement>, ok: Local| BasicBlock {
+        stmts,
         terminator: Terminator::If {
-            cond: Operand::Copy(Place::Local(start_ok)),
+            cond: Operand::Copy(Place::Local(ok)),
             then_blk: header,
             else_blk: header,
         },
-    });
+    };
+    let non_negative = |x: Local, ok: Local| {
+        Statement::Assign(
+            Place::Local(ok),
+            Rvalue::Binary(
+                BinOp::Ge,
+                Operand::Copy(Place::Local(x)),
+                Operand::Const(Const::Int(0)),
+            ),
+        )
+    };
+    let mut guards: Vec<BasicBlock> = Vec::new();
+    let mut bases: BTreeSet<Local> = BTreeSet::new();
+    for t in &plan.targets {
+        let len = new_local(int);
+        let ok = new_local(boolean);
+        let mut stmts = vec![Statement::Assign(
+            Place::Local(len),
+            Rvalue::ArrayLen(Operand::Copy(Place::Local(t.array))),
+        )];
+        // With `base >= 0` checked separately and `len >= 0`, `len - base` cannot wrap, and
+        // `0 <= iv < bound <= len - base` keeps `base + iv` in `[0, len)` without wrapping.
+        let room = match t.offset {
+            None => len,
+            Some((_, base)) => {
+                bases.insert(base);
+                let room = new_local(int);
+                stmts.push(Statement::Assign(
+                    Place::Local(room),
+                    Rvalue::Binary(
+                        BinOp::Sub,
+                        Operand::Copy(Place::Local(len)),
+                        Operand::Copy(Place::Local(base)),
+                    ),
+                ));
+                room
+            }
+        };
+        stmts.push(Statement::Assign(
+            Place::Local(ok),
+            Rvalue::Binary(
+                BinOp::Le,
+                plan.bound.clone(),
+                Operand::Copy(Place::Local(room)),
+            ),
+        ));
+        guards.push(guard(stmts, ok));
+    }
+    for base in bases {
+        let ok = new_local(boolean);
+        guards.push(guard(vec![non_negative(base, ok)], ok));
+    }
+    let start_ok = new_local(boolean);
+    guards.push(guard(vec![non_negative(plan.iv, start_ok)], start_ok));
     let first_guard = func.blocks.len();
     let count = guards.len();
     for (k, mut g) in guards.into_iter().enumerate() {
@@ -462,49 +536,51 @@ fn remap_successors(t: &mut Terminator, map: &BTreeMap<usize, usize>) {
     }
 }
 
-fn mark_place(place: &mut Place, arrays: &[Local], iv: Local) {
+fn mark_place(place: &mut Place, targets: &[Target], iv: Local) {
     if let Place::Index {
         base,
         index,
         unchecked,
     } = place
     {
-        if as_local(index) == Some(iv) && arrays.contains(base) {
+        if let Some(i) = as_local(index)
+            && targets.iter().any(|t| t.array == *base && t.index(iv) == i)
+        {
             *unchecked = true;
         }
-        mark_operand(index, arrays, iv);
+        mark_operand(index, targets, iv);
     }
 }
 
-fn mark_operand(op: &mut Operand, arrays: &[Local], iv: Local) {
+fn mark_operand(op: &mut Operand, targets: &[Target], iv: Local) {
     if let Operand::Copy(p) = op {
-        mark_place(p, arrays, iv);
+        mark_place(p, targets, iv);
     }
 }
 
-fn mark_stmt(stmt: &mut Statement, arrays: &[Local], iv: Local) {
+fn mark_stmt(stmt: &mut Statement, targets: &[Target], iv: Local) {
     match stmt {
         Statement::Assign(place, rv) => {
-            mark_place(place, arrays, iv);
+            mark_place(place, targets, iv);
             for op in rvalue_operands_mut(rv) {
-                mark_operand(op, arrays, iv);
+                mark_operand(op, targets, iv);
             }
         }
         Statement::Call { args, .. }
         | Statement::IndirectCall { args, .. }
         | Statement::InterfaceCall { args, .. } => {
             for a in args {
-                mark_operand(a, arrays, iv);
+                mark_operand(a, targets, iv);
             }
         }
         _ => {}
     }
 }
 
-fn mark_terminator(t: &mut Terminator, arrays: &[Local], iv: Local) {
+fn mark_terminator(t: &mut Terminator, targets: &[Target], iv: Local) {
     match t {
         Terminator::If { cond: o, .. } | Terminator::Switch { value: o, .. } => {
-            mark_operand(o, arrays, iv)
+            mark_operand(o, targets, iv)
         }
         _ => {}
     }

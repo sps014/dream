@@ -31,6 +31,16 @@ fun c0_sum_prefix(a: int[], n: int): int {
     return total;
 }
 
+fun c0_sum_window(a: int[], start: int, n: int): int {
+    let total = 0;
+    let i = 0;
+    while i < n {
+        total = total + a[start + i];
+        i = i + 1;
+    }
+    return total;
+}
+
 class c142_Particle {
     public x: double;
     public velocity: double;
@@ -261,10 +271,52 @@ fun abc_loop_shapes(): void {
     Assert.eq(c0_sum_inclusive(a), 31);
     Assert.eq(c0_sum_prefix(a, 5), 14);
     Assert.eq(c0_sum_prefix(a, 0), 0);
+    Assert.eq(c0_sum_window(a, 2, 4), 19);
+    Assert.eq(c0_sum_window(a, 0, 8), 31);
+    Assert.eq(c0_sum_window(a, 7, 1), 6);
+    Assert.eq(c0_sum_window(a, 8, 0), 0);
 
     let empty: int[] = [];
     Assert.eq(c0_sum_down(empty), 0);
     Assert.eq(c0_sum_inclusive(empty), 0);
+}
+
+fun c0f_fill(buf: double[], seed: int): void {
+    let i = 0;
+    while i < buf.length {
+        buf[i] = (double)(seed + i);
+        i = i + 1;
+    }
+}
+
+// Small arrays that never leave their function may live in its frame; each iteration's array still
+// starts zeroed and holds its own values.
+@test
+@timeout(180000)
+fun frame_array_reuse(): void {
+    let total = 0;
+    let stale = 0;
+    let r = 0;
+    while r < 5 {
+        let buf = Array.alloc<int>(16);
+        stale = stale + buf[3] + buf[15];
+        buf[3] = r;
+        buf[15] = r * 10;
+        total = total + buf[3] + buf[15] + buf.length;
+        r = r + 1;
+    }
+    Assert.eq(stale, 0);
+    Assert.eq(total, 190);
+
+    let sum = 0.0d;
+    let k = 0;
+    while k < 3 {
+        let d = Array.alloc<double>(4);
+        c0f_fill(d, k);
+        sum = sum + d[0] + d[3];
+        k = k + 1;
+    }
+    Assert.eq(sum, 15.0d);
 }
 
 @test

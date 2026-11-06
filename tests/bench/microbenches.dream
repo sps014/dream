@@ -390,6 +390,13 @@ fun bench_set_clear_reuse(iters: int): void {
     sink_int(set.capacity);
 }
 
+// Matches Go's `//go:noinline touchBuf`: the array must exist each iteration even when it lives in
+// the frame.
+@noinline
+fun touch_buf(buf: int[]): int {
+    return buf[0];
+}
+
 fun bench_alloc_churn(iters: int): void {
     let sw = Stopwatch();
     let acc = 0;
@@ -397,7 +404,7 @@ fun bench_alloc_churn(iters: int): void {
     while i < iters {
         let buf = Array.alloc<int>(64);
         buf[0] = i;
-        acc = acc + buf[0];
+        acc = acc + touch_buf(buf);
         i = i + 1;
     }
     sw.stop();

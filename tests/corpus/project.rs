@@ -76,6 +76,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("span_read_only_api", "collections", true),
     Case::project("stdlib_helpers", "core", true),
     Case::project("string_builder", "text", true),
+    Case::project("string_builder_build", "text", true),
     Case::project("string_hash_cache", "text", true),
     Case::project("string_methods", "text", true),
     Case::project("string_span_api", "text", true),

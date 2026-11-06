@@ -126,7 +126,7 @@ public fun as_span(): ReadOnlySpan<char>
 
 ## `build`
 
-Snapshot into a new string. `from_builder` copies once; do not stage through a second `byte[]` (that doubled the finish memcpy).
+Returns everything appended so far as a string. Later appends and `clear` leave the returned string unchanged. A nearly full buffer becomes the string's storage without copying; otherwise the text is copied so unused capacity is not kept alive.
 
 ```dream
 public fun build(): string

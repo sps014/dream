@@ -27,6 +27,8 @@ impl MirPass for RcElision {
     /// **any** statement that could call into other code, allocate, or itself retain/release a
     /// (possibly aliased) object is a hard barrier. Only a small whitelist may pass through.
     /// Rule: never under-retain.
+    ///
+    /// Retains and releases of string literals are dropped outright (see `literals`).
     fn transform(
         &self,
         func: &mut MirFunction,
@@ -34,7 +36,7 @@ impl MirPass for RcElision {
         _layouts: &dream_hir::LayoutTable,
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
-        let mut changed = false;
+        let mut changed = super::literals::elide_literal_rc(func);
         // Fixpoint: diamond/loop/postdom elision can expose new Goto-chain pairs and vice versa.
         const MAX_ROUNDS: usize = 8;
         for iteration in 0..MAX_ROUNDS {

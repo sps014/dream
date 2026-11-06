@@ -633,23 +633,49 @@ fn same_block_since(
             .any(|s| matches!(s, Statement::Assign(Place::Local(d), _) if d.0 == l))
 }
 
-/// Arrays whose only non-null definition is an `ArrayNew` or array literal
-/// ([`Defs::stable_until_cleared`]).
+/// Arrays whose only non-null definition is an `ArrayNew` or array literal, directly or through
+/// moves and copies of such a local ([`Defs::stable_until_cleared`] at every hop).
 pub(super) fn sole_array_news<'f>(func: &'f MirFunction, defs: &Defs) -> Vec<(u32, &'f Rvalue)> {
-    let mut out = Vec::new();
+    let mut news: BTreeMap<u32, &'f Rvalue> = BTreeMap::new();
+    let mut copies: Vec<(u32, u32)> = Vec::new();
     for block in &func.blocks {
         for stmt in &block.stmts {
-            if let Statement::Assign(
-                Place::Local(a),
-                rv @ (Rvalue::ArrayNew { .. } | Rvalue::ArrayLit { .. }),
-            ) = stmt
-            {
-                out.push((a.0, rv));
+            match stmt {
+                Statement::Assign(
+                    Place::Local(a),
+                    rv @ (Rvalue::ArrayNew { .. } | Rvalue::ArrayLit { .. }),
+                ) => {
+                    news.insert(a.0, rv);
+                }
+                Statement::Assign(
+                    Place::Local(a),
+                    Rvalue::Move { src, cast: None }
+                    | Rvalue::Use(Operand::Copy(Place::Local(src))),
+                ) => copies.push((a.0, src.0)),
+                _ => {}
             }
         }
     }
-    out.retain(|(a, _)| defs.stable_until_cleared(*a));
-    out
+    news.retain(|a, _| defs.stable_until_cleared(*a));
+    if news.is_empty() {
+        return Vec::new();
+    }
+    for _ in 0..4 {
+        let mut grew = false;
+        for &(a, src) in &copies {
+            if !news.contains_key(&a)
+                && defs.stable_until_cleared(a)
+                && let Some(rv) = news.get(&src).copied()
+            {
+                news.insert(a, rv);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    news.into_iter().collect()
 }
 
 /// Single-definition arrays with a constant length, paired with that length.

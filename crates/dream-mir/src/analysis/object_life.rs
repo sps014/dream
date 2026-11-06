@@ -1,10 +1,11 @@
 //! Static reference count of one allocation whose every holder is a local of its function.
 //!
-//! Given the alias class of `o = New …` (see [`super::escape`]), every definition of a member must
-//! be that `New`, a copy of a member, or null, so each member either holds the object, holds
+//! Given the alias class of `o = New …` or `o = ArrayNew …` (see [`super::escape`]), every
+//! definition of a member must be that allocation, a copy of a member, or null, so each member either holds the object, holds
 //! null, or is a stale alias of an instance already dead. A forward dataflow then tracks the
 //! object's count through the members' `Retain`, preserving alternative holder states at joins.
-//! A release must have the same destruction role in every incoming state. The statements that
+//! A release must have the same destruction role in every incoming state, unless the death
+//! releases nothing. The statements that
 //! drop the last count are the object's deaths;
 //! a fresh `New` is only allowed once the previous instance is dead, and every return must leave
 //! it dead. Handing a member to a `take` parameter moves a count out of sight and is refused.
@@ -44,7 +45,14 @@ enum Rc {
     Op,
 }
 
-pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> Option<Lifetime> {
+/// `free_deaths`: the object's death releases nothing, so a `Release` may be its death on one
+/// path and an ordinary count change on another (reported in `rc_ops`).
+pub(crate) fn lifetime(
+    f: &MirFunction,
+    members: &[Local],
+    new_local: Local,
+    free_deaths: bool,
+) -> Option<Lifetime> {
     let pos: HashMap<Local, usize> = members.iter().enumerate().map(|(i, &m)| (m, i)).collect();
     if members
         .iter()
@@ -56,7 +64,8 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
     let mut news = 0;
     for b in &f.blocks {
         for s in &b.stmts {
-            if let Statement::Assign(Place::Local(d), Rvalue::New { .. }) = s
+            if let Statement::Assign(Place::Local(d), rv) = s
+                && is_alloc(rv)
                 && pos.contains_key(d)
             {
                 news += 1;
@@ -88,7 +97,7 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
     while let Some(bi) = work.pop() {
         let mut states = entry_state[bi].clone();
         for s in &f.blocks[bi].stmts {
-            states = advance(s, &pos, &states)?.0;
+            states = advance(s, &pos, &states, free_deaths)?.0;
         }
         let term = &f.blocks[bi].terminator;
         if matches!(term, Terminator::Return(_) | Terminator::AsyncComplete(_))
@@ -121,7 +130,7 @@ pub(crate) fn lifetime(f: &MirFunction, members: &[Local], new_local: Local) -> 
             continue;
         }
         for (si, s) in b.stmts.iter().enumerate() {
-            let (next, role) = advance(s, &pos, &states)?;
+            let (next, role) = advance(s, &pos, &states, free_deaths)?;
             states = next;
             match role {
                 Rc::Other => {}
@@ -137,6 +146,7 @@ fn advance(
     stmt: &Statement,
     pos: &HashMap<Local, usize>,
     states: &BTreeSet<State>,
+    free_deaths: bool,
 ) -> Option<(BTreeSet<State>, Rc)> {
     let mut next = BTreeSet::new();
     let mut role = None;
@@ -157,15 +167,32 @@ fn advance(
             let mut state = state.clone();
             let current = step(&alternative, pos, &mut state)?;
             // Cleanup is unconditional at this MIR site; choosing a runtime branch here
-            // would replace the ownership proof with a new runtime ownership test.
-            if role.is_some_and(|previous| previous != current) {
-                return None;
-            }
-            role = Some(current);
+            // would replace the ownership proof with a new runtime ownership test. A death
+            // that releases nothing is indistinguishable from any other count change.
+            role = match role {
+                Some(previous) if previous != current => {
+                    if !free_deaths || previous == Rc::Other || current == Rc::Other {
+                        return None;
+                    }
+                    Some(Rc::Op)
+                }
+                _ => Some(current),
+            };
             next.insert(state);
         }
     }
     Some((next, role.unwrap_or(Rc::Other)))
+}
+
+fn is_alloc(rv: &Rvalue) -> bool {
+    matches!(
+        rv,
+        Rvalue::New { .. }
+            | Rvalue::ArrayNew {
+                closure_env: false,
+                ..
+            }
+    )
 }
 
 fn member_of(op: &Operand, pos: &HashMap<Local, usize>) -> Option<Local> {
@@ -193,7 +220,7 @@ fn step(s: &Statement, pos: &HashMap<Local, usize>, st: &mut State) -> Option<Rc
     match s {
         Statement::Assign(Place::Local(d), rv) if pos.contains_key(d) => {
             let hold = match rv {
-                Rvalue::New { .. } => {
+                _ if is_alloc(rv) => {
                     if st.count != 0 {
                         return None;
                     }

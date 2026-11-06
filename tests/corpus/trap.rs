@@ -13,6 +13,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::trap(
+        "abc_versioned_offset_trap",
+        "9\n0\npanic: index out of bounds\nabc_versioned_offset_trap.dream:9",
+        true,
+    ),
+    Case::trap(
         "arc_acyclic_resurrection",
         "resurrection of a dying object\nexit code 1",
         true,

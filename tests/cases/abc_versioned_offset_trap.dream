@@ -1,0 +1,21 @@
+// An offset window past the array end, or starting before it, must still trap: the unchecked
+// clone only runs when `start >= 0` and `start + n` fits the length.
+import system;
+
+fun sum_window(a: int[], start: int, n: int): int {
+    let total = 0;
+    let i = 0;
+    while i < n {
+        total = total + a[start + i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fun main(): void {
+    let a: int[] = [1, 2, 3, 4];
+    System.println(sum_window(a, 1, 3));
+    System.println(sum_window(a, -1, 0));
+    System.println(sum_window(a, 2, 3));
+    System.println("after");
+}

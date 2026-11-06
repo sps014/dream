@@ -214,6 +214,88 @@ fn const_alloc_len_survives_release_null_out() {
     }
 }
 
+/// Lowering allocates into a temporary and moves it into the named local; the constant length
+/// follows the move.
+#[test]
+fn const_alloc_len_follows_move_into_local() {
+    let mut i = TypeInterner::new();
+    let arr_ty = i.array(i.float());
+    let mut b = FunctionBuilder::new("f", i.int());
+    let tmp = b.new_temp(arr_ty);
+    let arr = b.new_temp(arr_ty);
+    let idx = b.new_temp(i.int());
+    let cmp = b.new_temp(i.bool());
+    let elem = b.new_temp(i.float());
+    b.assign(Place::Local(tmp), Rvalue::Use(Operand::Const(Const::Null)));
+    b.assign(
+        Place::Local(tmp),
+        Rvalue::ArrayNew {
+            elem_ty: i.float(),
+            len: Operand::Const(Const::Int(64)),
+            closure_env: false,
+        },
+    );
+    b.assign(
+        Place::Local(arr),
+        Rvalue::Move {
+            src: tmp,
+            cast: None,
+        },
+    );
+    b.assign(Place::Local(tmp), Rvalue::Use(Operand::Const(Const::Null)));
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Use(Operand::Const(Const::Int(0))),
+    );
+    let cond = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(cond);
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(
+            BinOp::Lt,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Const(Const::Int(64)),
+        ),
+    );
+    b.terminate(Terminator::If {
+        cond: Operand::Copy(Place::Local(cmp)),
+        then_blk: body,
+        else_blk: after,
+    });
+    b.switch_to(body);
+    b.assign(
+        Place::Local(elem),
+        Rvalue::Use(Operand::Copy(Place::index(
+            arr,
+            Operand::Copy(Place::Local(idx)),
+        ))),
+    );
+    b.assign(
+        Place::Local(idx),
+        Rvalue::Binary(
+            BinOp::Add,
+            Operand::Copy(Place::Local(idx)),
+            Operand::Const(Const::Int(1)),
+        ),
+    );
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(after);
+    b.terminate(Terminator::Return(Some(Operand::Const(Const::Int(0)))));
+    let mut func = b.finish();
+    let blocks_before = func.blocks.len();
+    assert!(Abc.run(&mut func, &i));
+    assert_eq!(func.blocks.len(), blocks_before, "proven loop must not be versioned");
+    match &func.blocks[body.0 as usize].stmts[0] {
+        Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked, .. }))) => {
+            assert!(*unchecked);
+        }
+        other => panic!("expected unchecked index, got {:?}", other),
+    }
+}
+
 #[test]
 fn char_at_scan_shape_is_unchecked() {
     let i = TypeInterner::new();
@@ -1196,6 +1278,100 @@ fn released_take_param_is_still_versioned() {
 #[test]
 fn nulled_array_is_not_versioned() {
     let (mut func, i) = foreign_bound_loop(true, false);
+    Abc.run(&mut func, &i);
+    assert_eq!(all_index_flags(&func), vec![false]);
+}
+
+/// `while i < n { t = base + i; x = a[t]; i = i + 1 }` over parameters `a`, `base` and `n`.
+/// `offset_in_body` = false forms `t` in the header instead of the access's block.
+fn offset_loop(offset_in_body: bool, base_redefined: bool) -> (MirFunction, TypeInterner) {
+    let mut i = TypeInterner::new();
+    let arr_ty = i.array(i.int());
+    let mut b = FunctionBuilder::new("f", i.int());
+    let arr = b.new_param(arr_ty, Some("a".into()));
+    let base = b.new_param(i.int(), Some("base".into()));
+    let n = b.new_param(i.int(), Some("n".into()));
+    let idx = b.new_temp(i.int());
+    let t = b.new_temp(i.int());
+    let cmp = b.new_temp(i.bool());
+    let elem = b.new_temp(i.int());
+    b.assign(Place::Local(idx), Rvalue::Use(int(0)));
+    let cond = b.new_block();
+    let body = b.new_block();
+    let after = b.new_block();
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(cond);
+    let offset = Rvalue::Binary(BinOp::Add, copy(base), copy(idx));
+    if !offset_in_body {
+        b.assign(Place::Local(t), offset.clone());
+    }
+    b.assign(
+        Place::Local(cmp),
+        Rvalue::Binary(BinOp::Lt, copy(idx), copy(n)),
+    );
+    b.terminate(Terminator::If {
+        cond: copy(cmp),
+        then_blk: body,
+        else_blk: after,
+    });
+    b.switch_to(body);
+    if offset_in_body {
+        b.assign(Place::Local(t), offset);
+    }
+    load(&mut b, elem, arr, t);
+    if base_redefined {
+        b.assign(
+            Place::Local(base),
+            Rvalue::Binary(BinOp::Add, copy(base), int(1)),
+        );
+    }
+    increment(&mut b, idx);
+    b.terminate(Terminator::Goto(cond));
+    b.switch_to(after);
+    b.terminate(Terminator::Return(Some(copy(elem))));
+    (b.finish(), i)
+}
+
+#[test]
+fn offset_index_is_versioned_with_a_base_guard() {
+    let (mut func, i) = offset_loop(true, false);
+    let before = func.blocks.len();
+    assert!(Abc.run(&mut func, &i));
+    let mut flags = all_index_flags(&func);
+    flags.sort();
+    assert_eq!(flags, vec![false, true]);
+    let guards: Vec<&crate::BasicBlock> = func.blocks[before + 2..].iter().collect();
+    let checks_base = guards.iter().any(|g| {
+        g.stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Assign(_, Rvalue::Binary(BinOp::Ge, Operand::Copy(Place::Local(l)), _))
+                    if l.0 == 1
+            )
+        })
+    });
+    let subtracts_base = guards.iter().any(|g| {
+        g.stmts.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Assign(_, Rvalue::Binary(BinOp::Sub, _, Operand::Copy(Place::Local(l))))
+                    if l.0 == 1
+            )
+        })
+    });
+    assert!(checks_base && subtracts_base, "guards: base >= 0 and n <= len - base");
+}
+
+#[test]
+fn offset_formed_in_another_block_stays_checked() {
+    let (mut func, i) = offset_loop(false, false);
+    Abc.run(&mut func, &i);
+    assert_eq!(all_index_flags(&func), vec![false]);
+}
+
+#[test]
+fn offset_with_a_varying_base_stays_checked() {
+    let (mut func, i) = offset_loop(true, true);
     Abc.run(&mut func, &i);
     assert_eq!(all_index_flags(&func), vec![false]);
 }

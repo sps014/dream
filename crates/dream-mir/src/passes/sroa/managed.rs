@@ -70,7 +70,7 @@ fn promote_one(f: &mut MirFunction, interner: &TypeInterner, layouts: &LayoutTab
         if members.iter().any(|&m| f.local_ty(m) != ty) || !only_field_uses(f, &members) {
             continue;
         }
-        let Some(life) = lifetime(f, &members.iter().copied().collect::<Vec<_>>(), o) else {
+        let Some(life) = lifetime(f, &members.iter().copied().collect::<Vec<_>>(), o, false) else {
             continue;
         };
         let deaths: BTreeSet<(usize, usize)> =

@@ -1,0 +1,35 @@
+import system.testing;
+import system;
+import system.text;
+
+// A full builder hands its buffer to `build`; later appends, growth, and `clear` must leave the
+// built string unchanged, and a mostly empty buffer is copied instead.
+@test
+@timeout(180000)
+fun string_builder_build_snapshot(): void {
+    let sb = StringBuilder(10);
+    sb.append("abcde");
+    let full = sb.build();
+    sb.append("fgh");
+    Assert.eq(full, "abcde");
+    let i = 0;
+    while i < 40 {
+        sb.append_char('z');
+        i = i + 1;
+    }
+    Assert.eq(full, "abcde");
+    Assert.eq(sb.length, 48);
+    let grown = sb.build();
+    sb.clear();
+    sb.append("QQQQQQQQ");
+    Assert.eq(full + "|" + grown.substring(0, 9) + "|" + sb.build(), "abcde|abcdefghz|QQQQQQQQ");
+    Assert.eq(grown.length, 48);
+    Assert.eq(full.hash_code(), "abcde".hash_code());
+
+    let roomy = StringBuilder(4096);
+    roomy.append("tiny");
+    let copied = roomy.build();
+    roomy.clear();
+    roomy.append("XXXX");
+    Assert.eq(copied + roomy.build(), "tinyXXXX");
+}

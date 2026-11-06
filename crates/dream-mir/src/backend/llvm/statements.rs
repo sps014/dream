@@ -6,7 +6,7 @@ use super::ir::{Ty, Value};
 use crate::backend::shared::abi_types::{elem_size, native_scalar_size, runtime_c_name};
 use crate::backend::shared::glue::{release_into_sym, release_sym, retain_sym};
 use crate::backend::shared::place_policy::{
-    has_frame_buffer, is_alias_value_local, is_value_place_alias,
+    frame_buffer_payload, has_frame_buffer, is_alias_value_local, is_value_place_alias,
 };
 use crate::backend::shared::protocol_names::to_string_fn;
 use crate::{Callee, Operand, Place, Rvalue, Statement};
@@ -278,6 +278,24 @@ impl<'l, 'a> Fx<'l, 'a> {
             let n = self.operand(len);
             let r = self.call_v("dream_closure_env_array_new", &[n, V::i32(es as i64)]);
             self.store(place, rv, r);
+            return;
+        }
+        if let (Place::Local(l), Rvalue::ArrayNew { len, .. }) = (place, rv)
+            && let Some(payload) = frame_buffer_payload(self.mir, self.f, *l)
+        {
+            let buf = self.frame_buf(*l);
+            let n = self.operand(len);
+            let a = self.call_v(
+                "dream_frame_object",
+                &[
+                    V::s(buf),
+                    V::i64(payload as i64),
+                    V::i32(crate::abi::TAG_ARRAY as i64),
+                ],
+            );
+            let p = self.ptr(&a);
+            self.store_ty(&Ty::I32, &p, &n, 4);
+            self.write_local(*l, &a);
             return;
         }
         if let (

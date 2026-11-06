@@ -3,6 +3,7 @@
 mod branches;
 mod chains;
 mod effects;
+mod literals;
 mod pipeline;
 mod postdom;
 #[cfg(test)]

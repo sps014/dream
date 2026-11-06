@@ -47,6 +47,56 @@ fn postdom_pairs_keep_their_value_identity_across_rebinding() {
     assert!(!RcElision.run(&mut f, &i));
 }
 
+fn literal_rc_function(other_def: bool) -> (crate::MirFunction, TypeInterner) {
+    let i = TypeInterner::new();
+    let mut b = FunctionBuilder::new("literal", i.void());
+    let p = b.new_param(i.string(), None);
+    let s = b.new_temp(i.string());
+    let call = b.new_block();
+    b.assign(
+        Place::Local(s),
+        Rvalue::Use(Operand::Const(crate::Const::Str("lit".into()))),
+    );
+    if other_def {
+        b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(p))));
+    }
+    b.push(Statement::Retain(Operand::Copy(Place::Local(s))));
+    b.push(Statement::Retain(Operand::Const(crate::Const::Str("x".into()))));
+    b.terminate(Terminator::Goto(call));
+    b.switch_to(call);
+    b.push(Statement::Print {
+        arg: Operand::Copy(Place::Local(s)),
+        ty: i.string(),
+        newline: true,
+    });
+    b.push(Statement::Release(Operand::Copy(Place::Local(s))));
+    b.assign(Place::Local(s), Rvalue::Use(Operand::Const(crate::Const::Null)));
+    b.terminate(Terminator::Return(None));
+    (b.finish(), i)
+}
+
+fn rc_ops(f: &crate::MirFunction) -> usize {
+    f.blocks
+        .iter()
+        .flat_map(|b| &b.stmts)
+        .filter(|s| matches!(s, Statement::Retain(_) | Statement::Release(_)))
+        .count()
+}
+
+#[test]
+fn literal_only_local_drops_its_retain_and_release() {
+    let (mut f, i) = literal_rc_function(false);
+    assert!(RcElision.run(&mut f, &i));
+    assert_eq!(rc_ops(&f), 0);
+}
+
+#[test]
+fn local_with_a_non_literal_definition_keeps_its_rc() {
+    let (mut f, _) = literal_rc_function(true);
+    assert!(super::literals::elide_literal_rc(&mut f));
+    assert_eq!(rc_ops(&f), 2, "only the bare literal retain goes");
+}
+
 #[test]
 fn elides_adjacent_retain_release() {
     let i = TypeInterner::new();

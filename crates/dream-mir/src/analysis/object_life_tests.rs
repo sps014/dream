@@ -32,7 +32,7 @@ fn run(body: impl FnOnce(&mut FunctionBuilder, &TypeInterner, Local, Local)) -> 
     b.assign(Place::Local(a), Rvalue::Use(copy(o)));
     body(&mut b, &i, o, a);
     let f = b.finish();
-    lifetime(&f, &[o, a], o)
+    lifetime(&f, &[o, a], o, false)
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_stale_alias_joins_null_at_a_loop_header() {
     b.switch_to(exit);
     b.terminate(Terminator::Return(None));
     let f = b.finish();
-    let life = lifetime(&f, &[o, a], o).expect("one death per iteration");
+    let life = lifetime(&f, &[o, a], o, false).expect("one death per iteration");
     assert_eq!(life.deaths, vec![(body.0 as usize, 2, o)]);
     assert!(life.rc_ops.is_empty());
 }

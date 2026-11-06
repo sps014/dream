@@ -2,6 +2,7 @@
 //! theme, and locale notifications. Platform callbacks only enqueue; the guest drains the
 //! queue on its scheduler through `appNextEvent`.
 
+#[cfg(any(target_os = "macos", windows))]
 mod clock;
 mod events;
 mod exports;

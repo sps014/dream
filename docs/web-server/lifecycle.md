@@ -22,17 +22,21 @@ class Routes {
 }
 
 async fun main(): int {
-    return Application.run(async () => {
-        let app = WebApp();
-        app.include_router(Routes.router()).unwrap();
-        app.state["service"] = "ready";
-        Application.on_stop(async () => {
-            app.state.clear();
-        });
+    return Application.run(
+        async () => {
+            let app = WebApp();
+            app.include_router(Routes.router()).unwrap();
+            app.state["service"] = "ready";
+            Application.on_stop(
+                async () => {
+                    app.state.clear();
+                }
+            );
 
-        app.run("127.0.0.1", 8000).await?;
-        return Result.Ok(Unit());
-    }).await;
+            app.run("127.0.0.1", 8000).await?;
+            return Result.Ok(Unit());
+        }
+    ).await;
 }
 ```
 
@@ -42,10 +46,12 @@ To start the server without blocking `start`, call `listen` and register the dra
 
 ```dream
 let port = app.listen("127.0.0.1", 0).await?;
-Application.on_stop(async () => {
-    app.shutdown();
-    app.wait().await;
-});
+Application.on_stop(
+    async () => {
+        app.shutdown();
+        app.wait().await;
+    }
+);
 ```
 
 | `WebApp` member | Effect |

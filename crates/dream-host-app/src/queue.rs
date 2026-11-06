@@ -4,7 +4,9 @@
 use crate::events::Events;
 use dream_host_abi::{ForeignFuture, complete_foreign_future, lock};
 use std::sync::{Condvar, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(any(target_os = "macos", windows))]
+use std::time::Instant;
 
 struct Channel {
     running: bool,
@@ -103,6 +105,7 @@ pub fn post(kind: i32, value: i32) -> bool {
 
 /// Posts an event whose outcome the operating system is waiting for, then blocks the calling
 /// platform thread until the guest replies, the run stops, or `limit` passes.
+#[cfg(any(target_os = "macos", windows))]
 pub fn post_and_wait(kind: i32, value: i32, limit: Duration) -> Option<i32> {
     {
         let mut channel = lock(&CHANNEL);
@@ -143,6 +146,7 @@ pub fn reply(value: i32) {
 
 /// Blocks a platform thread that must not return before cleanups finish (a final session-end
 /// notice or a console close) until the run stops or the shutdown timeout passes.
+#[cfg(any(target_os = "macos", windows))]
 pub fn wait_for_stop() {
     let mut channel = lock(&CHANNEL);
     let deadline = Instant::now() + channel.shutdown_timeout;

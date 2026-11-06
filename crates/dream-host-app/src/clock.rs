@@ -5,29 +5,20 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 static SLEPT_AT: AtomicI64 = AtomicI64::new(-1);
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 fn now_ms() -> Option<i64> {
     let mut time = libc::timespec {
         tv_sec: 0,
         tv_nsec: 0,
     };
-    // macOS CLOCK_MONOTONIC counts time asleep; on Linux only CLOCK_BOOTTIME does.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    let clock = libc::CLOCK_BOOTTIME;
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    let clock = libc::CLOCK_MONOTONIC;
-    let status = unsafe { libc::clock_gettime(clock, &mut time) };
+    // macOS CLOCK_MONOTONIC, unlike Linux's, counts time asleep.
+    let status = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time) };
     (status == 0).then(|| time.tv_sec * 1000 + time.tv_nsec / 1_000_000)
 }
 
 #[cfg(windows)]
 fn now_ms() -> Option<i64> {
     Some(unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() } as i64)
-}
-
-#[cfg(not(any(unix, windows)))]
-fn now_ms() -> Option<i64> {
-    None
 }
 
 pub fn mark_sleep() {

@@ -47,5 +47,5 @@ public bottom_left: float
 Creates radii in clockwise order starting at the top-left corner. Zero gives a square corner.
 
 ```dream
-public constructor( top_left: float, top_right: float, bottom_right: float, bottom_left: float )
+public constructor(top_left: float, top_right: float, bottom_right: float, bottom_left: float)
 ```

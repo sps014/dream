@@ -5,15 +5,23 @@ use crate::events;
 use crate::queue;
 use std::sync::atomic::{AtomicI32, Ordering};
 
+#[cfg(any(target_os = "macos", windows))]
 pub const SESSION_LOCKED: usize = 0;
+#[cfg(any(target_os = "macos", windows))]
 pub const DISPLAYS_ON: usize = 1;
 pub const ACTIVE: usize = 2;
+#[cfg(any(target_os = "macos", windows))]
 pub const POWER_SOURCE: usize = 3;
+#[cfg(any(target_os = "macos", windows))]
 pub const THEME: usize = 4;
 
+#[cfg(any(target_os = "macos", windows))]
 pub const POWER_AC: i32 = 1;
+#[cfg(any(target_os = "macos", windows))]
 pub const POWER_BATTERY: i32 = 2;
+#[cfg(any(target_os = "macos", windows))]
 pub const THEME_LIGHT: i32 = 0;
+#[cfg(any(target_os = "macos", windows))]
 pub const THEME_DARK: i32 = 1;
 #[cfg(windows)]
 pub const THEME_HIGH_CONTRAST: i32 = 2;
@@ -42,6 +50,7 @@ pub fn get(fact: i32) -> i32 {
 }
 
 /// Records a value read at startup without reporting it as a change.
+#[cfg(any(target_os = "macos", windows))]
 pub fn seed(fact: usize, value: i32) {
     VALUES[fact].store(value, Ordering::SeqCst);
 }

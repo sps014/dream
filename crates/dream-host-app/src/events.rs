@@ -6,8 +6,11 @@ use std::collections::VecDeque;
 pub const INTERRUPT: i32 = 1;
 pub const TERMINATE: i32 = 2;
 /// Value 0 asks whether the session may end and waits for a reply; 1 is the final notice.
+#[cfg(any(target_os = "macos", windows))]
 pub const SESSION_ENDING: i32 = 3;
+#[cfg(any(target_os = "macos", windows))]
 pub const SLEEPING: i32 = 4;
+#[cfg(any(target_os = "macos", windows))]
 pub const WOKE: i32 = 5;
 pub const DISPLAY_POWER: i32 = 6;
 pub const SESSION_LOCK: i32 = 7;

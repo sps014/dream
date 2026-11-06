@@ -31,14 +31,18 @@ async fun heartbeat(): void {
 }
 
 async fun main(): int {
-    return Application.run(async () => {
-        System.println("starting");
-        Application.on_stop(async () => {
-            System.println("releasing resources");
-        });
-        heartbeat().await;
-        return Result.Ok(Unit());
-    }).await;
+    return Application.run(
+        async () => {
+            System.println("starting");
+            Application.on_stop(
+                async () => {
+                    System.println("releasing resources");
+                }
+            );
+            heartbeat().await;
+            return Result.Ok(Unit());
+        }
+    ).await;
 }
 ```
 
@@ -87,12 +91,14 @@ says why, and lets a desktop program keep running, for example while a document 
 changes:
 
 ```dream
-Application.on_shutdown_requested((request) => {
-    if request.can_veto && editor.has_unsaved_changes() {
-        request.veto();
-        editor.show_save_prompt();
+Application.on_shutdown_requested(
+    (request) => {
+        if request.can_veto && editor.has_unsaved_changes() {
+            request.veto();
+            editor.show_save_prompt();
+        }
     }
-});
+);
 ```
 
 | `ShutdownReason` | Sent when | Can veto |
@@ -137,18 +143,26 @@ import system;
 import system.app;
 
 async fun main(): int {
-    return Application.run(async () => {
-        Application.on_sleep(() => {
-            System.println("pausing sync");
-        });
-        Application.on_wake((slept_ms) => {
-            System.println("slept for " + slept_ms.to_string() + " ms, refreshing");
-        });
-        Application.on_theme((theme) => {
-            System.println("dark mode: " + (theme == SystemTheme.Dark).to_string());
-        });
-        return Result.Ok(Unit());
-    }).await;
+    return Application.run(
+        async () => {
+            Application.on_sleep(
+                () => {
+                    System.println("pausing sync");
+                }
+            );
+            Application.on_wake(
+                (slept_ms) => {
+                    System.println("slept for " + slept_ms.to_string() + " ms, refreshing");
+                }
+            );
+            Application.on_theme(
+                (theme) => {
+                    System.println("dark mode: " + (theme == SystemTheme.Dark).to_string());
+                }
+            );
+            return Result.Ok(Unit());
+        }
+    ).await;
 }
 ```
 
@@ -184,18 +198,22 @@ import system.testing;
 
 @test
 async fun pauses_while_asleep(): void {
-    let code = Application.run(async () => {
-        let paused = false;
-        Application.on_sleep(() => {
-            paused = true;
-        });
-        Assert.is_true(Application.simulate(AppEvent.Sleeping));
-        Assert.is_true(paused);
-        Assert.is_true(Application.phase == AppPhase.Asleep);
-        Assert.is_false(Application.simulate(AppEvent.Sleeping));
-        Application.quit(0);
-        return Result.Ok(Unit());
-    }).await;
+    let code = Application.run(
+        async () => {
+            let paused = false;
+            Application.on_sleep(
+                () => {
+                    paused = true;
+                }
+            );
+            Assert.is_true(Application.simulate(AppEvent.Sleeping));
+            Assert.is_true(paused);
+            Assert.is_true(Application.phase == AppPhase.Asleep);
+            Assert.is_false(Application.simulate(AppEvent.Sleeping));
+            Application.quit(0);
+            return Result.Ok(Unit());
+        }
+    ).await;
     Assert.eq(code, 0);
 }
 ```

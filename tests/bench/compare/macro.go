@@ -382,6 +382,66 @@ func benchGraph(iters int, class bool) {
 	report(name, start, iters, acc)
 }
 
+// Heap-allocated graph: one allocation per vertex and per edge, matching Dream's class graph.
+type heapVertex struct {
+	id  int32
+	out []*edge
+}
+
+func makeHeapGraph(rng *lcg, n, degree int) []*heapVertex {
+	g := make([]*heapVertex, n)
+	for i := 0; i < n; i++ {
+		g[i] = &heapVertex{id: int32(i)}
+	}
+	for i := 0; i < n; i++ {
+		for k := 0; k < degree; k++ {
+			g[i].out = append(g[i].out, &edge{rng.next(int32(n)), 1 + rng.next(100)})
+		}
+		g[(i+1)%n].out = append(g[(i+1)%n].out, &edge{int32(i), 50})
+	}
+	return g
+}
+
+func shortestHeap(g []*heapVertex, src int32) int32 {
+	dist := make([]int32, len(g))
+	for i := range dist {
+		dist[i] = 2147483647
+	}
+	var pq heap4ptr
+	dist[src] = 0
+	pq.push(&visit{src, 0})
+	for v, ok := pq.pop(); ok; v, ok = pq.pop() {
+		if v.dist <= dist[v.node] {
+			for _, e := range g[v.node].out {
+				nd := v.dist + e.w
+				if nd < dist[e.to] {
+					dist[e.to] = nd
+					pq.push(&visit{e.to, nd})
+				}
+			}
+		}
+	}
+	total := int32(0)
+	for _, d := range dist {
+		if d != 2147483647 {
+			total += d
+		}
+	}
+	return total
+}
+
+func benchGraphHeap(iters int) {
+	rng := lcg{41 + seedBit()}
+	g := makeHeapGraph(&rng, 2000, 6)
+	start := time.Now()
+	acc := int32(0)
+	for i := 0; i < iters; i++ {
+		acc += shortestHeap(g, int32((i*37)%2000))
+	}
+	sinkInt(acc)
+	report("graph_paths_heap", start, iters, acc)
+}
+
 func leaf(i int32) int32 { return (i * 31) & 1023 }
 
 func benchFanout(iters int) {
@@ -472,6 +532,7 @@ func runSuite(s int) {
 	benchLog(s / 10)
 	benchGraph(s/4, true)
 	benchGraph(s/4, false)
+	benchGraphHeap(s / 4)
 	benchFanout(s * 2)
 	benchTasks(s / 2)
 }
